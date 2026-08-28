@@ -209,6 +209,30 @@ export namespace SessionProcessor {
     }
   }
 
+  /** A provider policy finish is a terminal response, but it is not a usable
+   * response when the provider supplied no text, file, or action. Preserve the
+   * provider's finish reason while giving the durable message (and therefore
+   * every client) an explicit error instead of completing an invisible turn. */
+  export function emptyContentFilterError(finish: string | undefined, parts: MessageV2.Part[]) {
+    if (finish !== "content-filter") return
+    const hasOutput = parts.some(
+      (part) =>
+        (part.type === "text" && !part.ignored && part.text.trim().length > 0) ||
+        part.type === "file" ||
+        part.type === "tool",
+    )
+    if (hasOutput) return
+    return new MessageV2.APIError({
+      message:
+        "The provider blocked this response with its content filter and returned no content. Retry the request or choose another model.",
+      isRetryable: true,
+      metadata: {
+        action: "retry",
+        provider_finish_reason: "content-filter",
+      },
+    })
+  }
+
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
 
@@ -978,6 +1002,29 @@ export namespace SessionProcessor {
                   continue
               }
               if (needsCompaction || overflow) break
+            }
+
+            const filtered = emptyContentFilterError(
+              input.assistantMessage.finish,
+              await MessageV2.parts(input.assistantMessage.id),
+            )
+            if (filtered) {
+              const error = MessageV2.fromError(filtered, { providerID: input.model.providerID })
+              input.assistantMessage.error = error
+              void OutboundTelemetry.error({
+                sessionID: input.sessionID,
+                messageID: input.assistantMessage.id,
+                attempt: attempt + 1,
+                route: traceRoute,
+                provider: input.model.providerID,
+                model: input.model.id,
+                error: filtered,
+                context: { normalized: error },
+              }).catch(() => undefined)
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.assistantMessage.sessionID,
+                error,
+              })
             }
           } catch (e: any) {
             log.error("process", {

@@ -26,4 +26,30 @@ describe("session processor snapshot routing", () => {
       },
     })
   })
+
+  test("turns only an empty content-filter finish into a retryable provider error", () => {
+    const error = SessionProcessor.emptyContentFilterError("content-filter", [])
+    expect(error && MessageV2.fromError(error, { providerID: "openrouter" })).toEqual({
+      name: "APIError",
+      data: {
+        message:
+          "The provider blocked this response with its content filter and returned no content. Retry the request or choose another model.",
+        isRetryable: true,
+        metadata: { action: "retry", provider_finish_reason: "content-filter" },
+      },
+    })
+
+    expect(
+      SessionProcessor.emptyContentFilterError("content-filter", [
+        {
+          id: "part_text",
+          sessionID: "session",
+          messageID: "message",
+          type: "text",
+          text: "A safe partial response.",
+        },
+      ]),
+    ).toBeUndefined()
+    expect(SessionProcessor.emptyContentFilterError("stop", [])).toBeUndefined()
+  })
 })
