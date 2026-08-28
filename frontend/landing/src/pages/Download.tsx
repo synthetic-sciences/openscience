@@ -284,8 +284,8 @@ export default function Download() {
               <div className="mt-3 text-[12.5px] leading-5 text-foreground/55">
                 {download.kind} · latest release · free and open source
                 <br />
-                Unsigned release. macOS and Windows may show security prompts; macOS builds are ad-hoc signed and
-                not notarized.
+                Unsigned release. macOS and Windows may show security prompts; macOS builds are ad-hoc signed and not
+                notarized.
               </div>
             </div>
           </div>
