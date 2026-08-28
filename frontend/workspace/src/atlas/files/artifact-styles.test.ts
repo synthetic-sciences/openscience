@@ -26,6 +26,7 @@ describe("artifact grid styles", () => {
       "--color-text-weak",
       "--syntax-critical",
       "--font-code",
+      "--font-family-sans",
       "--font-weight-emphasis",
       "--font-weight-medium",
       "--letter-spacing-normal",
@@ -68,7 +69,7 @@ describe("artifact grid styles", () => {
     const styles = css()
 
     expect(styles).toMatch(/\.files-browser__toolbar\s*\{[^}]*display: flex;[^}]*min-width: 0/s)
-    expect(styles).toMatch(/\.files-browser__toolbar \.files-source\s*\{[^}]*max-width: min\(48cqi, 210px\)/s)
+    expect(styles).toMatch(/\.files-browser__toolbar \.files-source\s*\{[^}]*max-width: min\(34cqi, 160px\)/s)
     expect(styles).toMatch(/\.files-search\s*\{[^}]*flex: 1 1 160px;[^}]*min-height: 30px/s)
     expect(styles).toMatch(
       /\.artifact-grid\s*\{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(min\(164px, 100%\), 1fr\)\)/s,

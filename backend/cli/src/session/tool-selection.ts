@@ -36,6 +36,7 @@ export namespace ToolSelection {
     /\b(?:api|backend|bash|branch|bug|build|cli|code|codebase|commit|compile|endpoint|frontend|git|github|golang|java|javascript|kotlin|lint|package manager|php|pull request|python|refactor|repo|repository|ruby|rust|sdk|server|shell|source code|swift|test suite|typecheck|typescript|working tree)\b/i
   const science =
     /\b(?:benchmark|bioinformatics|biology|cell|chemistry|clinical|data analysis|dataset|evidence|evaluation|experiment|gene|genomic|hypothesis|literature|machine learning|metric|model comparison|molecule|neural|paper|physics|protein|reproducibility|research|rna|science|scientific|simulation|statistics?|study|validation)\b/i
+  const scientificCatalog = /\b(?:alphafold ?2|biopython|matplotlib|rdkit|scipy|scikit[- ]learn)\b/i
   const work =
     /\b(?:analy[sz]e|attached|calculate|cite|create|current|dataset|document|download|fetch|file|find|inspect|latest|load|look up|open|paper|plot|read|review|run|save|source|today|verify|write)\b|\bsearch\s+(?:for|my|our|the|this|these|those)\b|https?:\/\/|\.[a-z0-9]{1,5}\b/i
   const browse = new Set(["glob", "grep", "invalid", "read"])
@@ -173,7 +174,9 @@ export namespace ToolSelection {
     const capabilities = input.capabilities ?? new Set<string>()
     const capability = [...capabilities].join(" ")
     const scientific =
-      science.test(text) || /protein|biology|interpretability|literature|scientific|modal/i.test(capability)
+      science.test(text) ||
+      scientificCatalog.test(text) ||
+      /protein|biology|interpretability|literature|scientific|modal/i.test(capability)
     const analysis =
       /\b(?:analy[sz](?:e|is)|benchmark|calculate|chart|data|dataset|experiment|fit|model|plot|simulation|statistics?|visuali[sz])\b/i.test(
         text,
@@ -183,6 +186,9 @@ export namespace ToolSelection {
         text,
       ) || /scientific-writing|paper-writing/i.test(capability)
 
+    // Keep the compact catalog available for scientific work without paying
+    // its schema cost on unrelated repository or product-UI turns.
+    if (tool === "scientific_capability") return scientific
     if (edits.has(tool)) return writing || analysis || code.test(text)
     if (codeTools.has(tool)) return code.test(text)
     if (python.has(tool)) return analysis || /\bpython\b|\bnotebook\b/i.test(text)

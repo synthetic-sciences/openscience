@@ -74,6 +74,62 @@ async function processParent(pid: number): Promise<number> {
 }
 
 describe("Storage Settings integration", () => {
+  test("returns promptly while scanning and counts hard-linked allocated bytes once", async () => {
+    const workspace = await root()
+    const source = [
+      `import { StorageRoutes } from ${JSON.stringify(routes)}`,
+      `import { Global } from ${JSON.stringify(globalModule)}`,
+      'import fs from "node:fs/promises"',
+      'import path from "node:path"',
+      'const payload = path.join(Global.Path.data, "payload")',
+      "await fs.mkdir(payload, { recursive: true })",
+      'const original = path.join(payload, "original.bin")',
+      "await fs.writeFile(original, Buffer.alloc(8192, 1))",
+      'await fs.link(original, path.join(payload, "linked.bin"))',
+      'const sparse = path.join(payload, "sparse.bin")',
+      'await fs.writeFile(sparse, "")',
+      "await fs.truncate(sparse, 256 * 1024 * 1024)",
+      "const started = Date.now()",
+      'let response = await StorageRoutes().request("/")',
+      'if (Date.now() - started > 1000) throw new Error("initial usage request blocked on the full scan")',
+      "let body = await response.json()",
+      'for (let attempt = 0; body.scanning && attempt < 200; attempt++) { await Bun.sleep(10); response = await StorageRoutes().request("/"); body = await response.json() }',
+      'if (body.scanning) throw new Error("usage scan did not settle")',
+      'const entry = body.entries.find((item) => item.name === "payload")',
+      'if (!entry) throw new Error("payload entry missing")',
+      "const stat = await fs.stat(original)",
+      "const sparseStat = await fs.stat(sparse)",
+      "const expected = stat.blocks * 512 + sparseStat.blocks * 512",
+      "if (entry.bytes !== expected) throw new Error(`hard link counted more than once: ${entry.bytes} !== ${expected}`)",
+      'if (sparseStat.blocks === 0 && entry.bytes >= sparseStat.size) throw new Error("sparse logical bytes were reported as allocated disk usage")',
+      'if (!body.updated_at || body.scan_error !== null) throw new Error("usage result did not expose truthful scan state")',
+    ].join("\n")
+    await script(workspace, source)
+  })
+
+  test("reports scan failures instead of presenting unreadable storage as empty", async () => {
+    if (process.platform === "win32") return
+    const workspace = await root()
+    const source = [
+      `import { StorageRoutes } from ${JSON.stringify(routes)}`,
+      `import { Global } from ${JSON.stringify(globalModule)}`,
+      'import fs from "node:fs/promises"',
+      'import path from "node:path"',
+      'const blocked = path.join(Global.Path.data, "blocked")',
+      "await fs.mkdir(blocked, { recursive: true })",
+      'await fs.writeFile(path.join(blocked, "payload.bin"), "payload")',
+      "await fs.chmod(blocked, 0)",
+      "try {",
+      '  let body = await (await StorageRoutes().request("/")).json()',
+      "  const deadline = Date.now() + 10_000",
+      '  while (body.scanning && Date.now() < deadline) { await Bun.sleep(20); body = await (await StorageRoutes().request("/")).json() }',
+      '  if (body.scanning) throw new Error("usage scan did not settle")',
+      '  if (!body.scan_error) throw new Error("unreadable storage was silently reported as a successful scan")',
+      "} finally { await fs.chmod(blocked, 0o700) }",
+    ].join("\n")
+    await script(workspace, source)
+  })
+
   test("rejects relative and nested destinations", async () => {
     const workspace = await root()
     const source = [

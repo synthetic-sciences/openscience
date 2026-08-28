@@ -219,320 +219,335 @@ const Sandbox: Component = () => {
               </button>
             </div>
           </Show>
-          <Section
-            title="Protection"
-            description="Permissions approve a command; the sandbox limits what it can reach."
-          >
-            <div class="settings-card settings-preferences-card">
-              <div class="settings-row settings-sandbox-control-row settings-sandbox-enable-row">
-                <div class="settings-row-copy">
-                  <strong>Sandbox agent commands</strong>
-                  <span>
-                    {config().enabled !== false
-                      ? "On — reads and writes stay within the workspace and approved paths."
-                      : "Off — trusted projects may run with your full user authority; untrusted projects remain blocked."}
-                  </span>
+          <Show
+            when={!data.loading && !data.error}
+            fallback={
+              <Show when={data.loading}>
+                <div class="settings-panel-loading__rows" role="status" aria-label="Loading sandbox settings">
+                  <span />
+                  <span />
+                  <span />
                 </div>
-                <Switch
-                  hideLabel
-                  checked={config().enabled !== false}
-                  disabled={busy("enabled") || unavailable()}
-                  onChange={(checked) => patch({ enabled: checked }, "enabled", "Couldn't update the sandbox setting")}
-                >
-                  Sandbox agent commands
-                </Switch>
-              </div>
-              <Show
-                when={status()}
-                fallback={<div class="settings-panel-loading-copy">Checking native containment…</div>}
-              >
-                {(s) => (
-                  <>
-                    <button
-                      type="button"
-                      class="settings-row settings-sandbox-status-row"
-                      aria-expanded={showBackendDetails()}
-                      aria-controls={backendDetailsId}
-                      onClick={() => setShowBackendDetails((value) => !value)}
-                    >
-                      <span
-                        class="settings-sandbox-status-mark"
-                        data-tone={s().available ? "success" : "warning"}
-                        aria-hidden="true"
-                      >
-                        <Icon name={s().available ? "check" : "stop"} size="small" />
-                      </span>
-                      <span class="settings-row-copy">
-                        <strong>{s().available ? "Native containment available" : "Sandbox unavailable"}</strong>
-                        <span>
-                          {s().available
-                            ? `${s().backend} on ${s().platform}`
-                            : `No supported backend on ${s().platform}`}
-                        </span>
-                      </span>
-                      <span class="settings-preference-status" data-tone={s().available ? "success" : "warning"}>
-                        {s().available ? "Available" : "Unavailable"}
-                      </span>
-                      <Icon
-                        name="chevron-down"
-                        size="small"
-                        class="settings-sandbox-disclosure-icon"
-                        classList={{ "settings-sandbox-disclosure-icon--open": showBackendDetails() }}
-                      />
-                    </button>
-                    <Show when={showBackendDetails()}>
-                      <div id={backendDetailsId} class="settings-sandbox-backend-details">
-                        <dl>
-                          <div>
-                            <dt>Backend</dt>
-                            <dd>{s().backend}</dd>
-                          </div>
-                          <div>
-                            <dt>Platform</dt>
-                            <dd>{s().platform}</dd>
-                          </div>
-                          <div>
-                            <dt>Tool</dt>
-                            <dd>{s().tool ?? "Not available"}</dd>
-                          </div>
-                          <div>
-                            <dt>File access</dt>
-                            <dd>
-                              {grantOnlyEnforced()
-                                ? "Reads and writes are limited to the workspace and approved paths."
-                                : "Grant-only read isolation is unavailable."}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Network</dt>
-                            <dd>
-                              {networkDenyEnforced()
-                                ? "All network access is denied."
-                                : "Network isolation is unavailable."}
-                            </dd>
-                          </div>
-                          <Show when={s().reason}>
-                            <div>
-                              <dt>Reason</dt>
-                              <dd>{s().reason}</dd>
-                            </div>
-                          </Show>
-                        </dl>
-                      </div>
-                    </Show>
-                  </>
-                )}
               </Show>
-            </div>
-          </Section>
-
-          <Show when={config().enabled !== false}>
+            }
+          >
             <Section
-              title="Policy"
-              description="Choose the default autonomy and containment policy for local commands."
+              title="Protection"
+              description="Permissions approve a command; the sandbox limits what it can reach."
             >
               <div class="settings-card settings-preferences-card">
-                <div class="settings-row settings-sandbox-control-row">
+                <div class="settings-row settings-sandbox-control-row settings-sandbox-enable-row">
                   <div class="settings-row-copy">
-                    <strong>Require project trust</strong>
+                    <strong>Sandbox agent commands</strong>
                     <span>
-                      {config().requireProjectTrust === true
-                        ? "Every project must be trusted before it can start terminals, kernels, or local jobs."
-                        : "Sandboxed terminals, kernels, and local jobs can run immediately. Remote jobs, kernel environment changes, project extensions, and unsandboxed execution still require trust."}
+                      {config().enabled !== false
+                        ? "On — reads and writes stay within the workspace and approved paths."
+                        : "Off — trusted projects may run with your full user authority; untrusted projects remain blocked."}
                     </span>
                   </div>
                   <Switch
                     hideLabel
-                    checked={config().requireProjectTrust === true}
-                    disabled={busy("trust") || unavailable()}
+                    checked={config().enabled !== false}
+                    disabled={busy("enabled") || unavailable()}
                     onChange={(checked) =>
-                      patch({ requireProjectTrust: checked }, "trust", "Couldn't update the project trust policy")
+                      patch({ enabled: checked }, "enabled", "Couldn't update the sandbox setting")
                     }
                   >
-                    Require project trust
+                    Sandbox agent commands
                   </Switch>
                 </div>
-
-                <div class="settings-row settings-sandbox-control-row">
-                  <div class="settings-row-copy">
-                    <strong>Network access</strong>
-                    <span>
-                      {networkDenyEnforced()
-                        ? "This backend always denies network access, including loopback, LAN, link-local, and metadata endpoints."
-                        : "Allow permits outbound network access while loopback remains blocked."}
-                    </span>
-                  </div>
-                  <Select
-                    options={NETWORK_OPTS}
-                    current={NETWORK_OPTS.find((o) => o.value === effectiveNetwork())}
-                    value={(o) => o.value}
-                    label={(o) => o.label}
-                    disabled={busy("network") || unavailable() || networkDenyEnforced()}
-                    onSelect={(o) => o && patch({ network: o.value }, "network", "Couldn't update network policy")}
-                    variant="secondary"
-                    size="small"
-                    triggerVariant="settings"
-                  />
-                </div>
-
-                <div class="settings-row settings-sandbox-control-row">
-                  <div class="settings-row-copy">
-                    <strong>Fallback behavior</strong>
-                    <span>Choose what happens if filesystem isolation cannot start.</span>
-                  </div>
-                  <Select
-                    options={UNAVAILABLE_OPTS}
-                    current={UNAVAILABLE_OPTS.find((o) => o.value === (config().onUnavailable ?? "error"))}
-                    value={(o) => o.value}
-                    label={(o) => o.label}
-                    disabled={busy("fallback") || unavailable()}
-                    onSelect={(o) =>
-                      o && patch({ onUnavailable: o.value }, "fallback", "Couldn't update fallback behavior")
-                    }
-                    variant="secondary"
-                    size="small"
-                    triggerVariant="settings"
-                  />
-                </div>
-              </div>
-            </Section>
-
-            <Section
-              title="Extra writable paths"
-              count={(config().allowWrite ?? []).length}
-              description="Absolute paths outside the workspace and temporary directories that the sandbox may modify."
-            >
-              <div class="settings-card settings-preferences-card">
                 <Show
-                  when={(config().allowWrite ?? []).length > 0}
-                  fallback={
-                    <div class="settings-row settings-sandbox-control-row settings-sandbox-empty-paths">
-                      <div class="settings-row-copy">
-                        <strong>Workspace only</strong>
-                        <span>No extra writable paths are approved.</span>
-                      </div>
+                  when={status()}
+                  fallback={<div class="settings-panel-loading-copy">Checking native containment…</div>}
+                >
+                  {(s) => (
+                    <>
                       <button
                         type="button"
-                        class="settings-preference-action"
-                        aria-expanded={showPathEditor()}
-                        aria-controls={pathEditorId}
-                        disabled={busy("paths") || unavailable()}
-                        onClick={() => setShowPathEditor((value) => !value)}
+                        class="settings-row settings-sandbox-status-row"
+                        aria-expanded={showBackendDetails()}
+                        aria-controls={backendDetailsId}
+                        onClick={() => setShowBackendDetails((value) => !value)}
                       >
-                        {showPathEditor() ? "Cancel" : "Add path"}
-                      </button>
-                    </div>
-                  }
-                >
-                  <For each={config().allowWrite ?? []}>
-                    {(p) => (
-                      <div class="settings-row settings-sandbox-path-row">
-                        <code title={p}>{p}</code>
-                        <button
-                          type="button"
-                          class="settings-preference-action"
-                          data-variant="danger"
-                          disabled={busy("paths")}
-                          aria-label={`Remove writable path ${p}`}
-                          onClick={() => removePath(p)}
+                        <span
+                          class="settings-sandbox-status-mark"
+                          data-tone={s().available ? "success" : "warning"}
+                          aria-hidden="true"
                         >
-                          Remove
-                        </button>
-                      </div>
-                    )}
-                  </For>
-                </Show>
-                <Show when={showPathEditor() || (config().allowWrite ?? []).length > 0}>
-                  <div id={pathEditorId} class="settings-sandbox-path-editor">
-                    <input
-                      class="settings-field"
-                      aria-label="Add writable path"
-                      placeholder="/absolute/path"
-                      value={newPath()}
-                      disabled={busy("paths") || unavailable()}
-                      onInput={(e) => setNewPath(e.currentTarget.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addPath()}
-                    />
-                    <Button
-                      class="settings-panel-action settings-panel-action--quiet"
-                      size="small"
-                      variant="secondary"
-                      disabled={busy("paths") || unavailable() || !newPath().trim()}
-                      onClick={addPath}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                </Show>
-              </div>
-            </Section>
-
-            <Section
-              title="Containment test"
-              description="Run real sandboxed commands to verify the boundaries this backend claims to enforce."
-            >
-              <div class="settings-card settings-preferences-card">
-                <div class="settings-row settings-sandbox-control-row settings-sandbox-test-row">
-                  <div class="settings-row-copy">
-                    <strong>Verify containment</strong>
-                    <span>
-                      Tests read and write boundaries plus effective network isolation with real sandboxed commands.
-                    </span>
-                  </div>
-                  <Button
-                    size="small"
-                    variant="secondary"
-                    disabled={testing() || unavailable() || !status()?.available}
-                    onClick={runTest}
-                  >
-                    {testing() ? "Testing…" : "Run self-test"}
-                  </Button>
-                </div>
-                <Show when={test()}>
-                  {(t) => (
-                    <div class="settings-sandbox-result" aria-live="polite">
-                      <div class="settings-sandbox-result__summary" role="status">
-                        <span class="settings-sandbox-result__dot" data-tone={t().ok ? "success" : "danger"} />
-                        <span classList={{ "text-text-success": t().ok, "text-text-danger": !t().ok }}>
-                          {t().ok ? "Containment verified." : "Containment failed — do not rely on the sandbox."}
+                          <Icon name={s().available ? "check" : "stop"} size="small" />
                         </span>
-                        <button
-                          type="button"
-                          class="settings-preference-action"
-                          data-variant="quiet"
-                          aria-expanded={showTestDetails()}
-                          aria-controls={testDetailsId}
-                          onClick={() => setShowTestDetails((value) => !value)}
-                        >
-                          {showTestDetails() ? "Hide checks" : `Show ${t().checks.length} checks`}
-                        </button>
-                      </div>
-                      <Show when={showTestDetails()}>
-                        <div id={testDetailsId} class="settings-sandbox-checks">
-                          <For each={t().checks}>
-                            {(c) => (
-                              <div class="settings-sandbox-check">
-                                <Icon
-                                  name={c.skipped ? "dash" : c.pass ? "check" : "close"}
-                                  class={
-                                    c.skipped ? "text-text-weak" : c.pass ? "text-text-success" : "text-text-danger"
-                                  }
-                                  size="small"
-                                />
-                                <span>{c.name}</span>
-                                <Show when={c.detail}>
-                                  <code class="settings-sandbox-check__detail">{c.detail}</code>
-                                </Show>
+                        <span class="settings-row-copy">
+                          <strong>{s().available ? "Native containment available" : "Sandbox unavailable"}</strong>
+                          <span>
+                            {s().available
+                              ? `${s().backend} on ${s().platform}`
+                              : `No supported backend on ${s().platform}`}
+                          </span>
+                        </span>
+                        <span class="settings-preference-status" data-tone={s().available ? "success" : "warning"}>
+                          {s().available ? "Available" : "Unavailable"}
+                        </span>
+                        <Icon
+                          name="chevron-down"
+                          size="small"
+                          class="settings-sandbox-disclosure-icon"
+                          classList={{ "settings-sandbox-disclosure-icon--open": showBackendDetails() }}
+                        />
+                      </button>
+                      <Show when={showBackendDetails()}>
+                        <div id={backendDetailsId} class="settings-sandbox-backend-details">
+                          <dl>
+                            <div>
+                              <dt>Backend</dt>
+                              <dd>{s().backend}</dd>
+                            </div>
+                            <div>
+                              <dt>Platform</dt>
+                              <dd>{s().platform}</dd>
+                            </div>
+                            <div>
+                              <dt>Tool</dt>
+                              <dd>{s().tool ?? "Not available"}</dd>
+                            </div>
+                            <div>
+                              <dt>File access</dt>
+                              <dd>
+                                {grantOnlyEnforced()
+                                  ? "Reads and writes are limited to the workspace and approved paths."
+                                  : "Grant-only read isolation is unavailable."}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Network</dt>
+                              <dd>
+                                {networkDenyEnforced()
+                                  ? "All network access is denied."
+                                  : "Network isolation is unavailable."}
+                              </dd>
+                            </div>
+                            <Show when={s().reason}>
+                              <div>
+                                <dt>Reason</dt>
+                                <dd>{s().reason}</dd>
                               </div>
-                            )}
-                          </For>
+                            </Show>
+                          </dl>
                         </div>
                       </Show>
-                    </div>
+                    </>
                   )}
                 </Show>
               </div>
             </Section>
+
+            <Show when={config().enabled !== false}>
+              <Section
+                title="Policy"
+                description="Choose the default autonomy and containment policy for local commands."
+              >
+                <div class="settings-card settings-preferences-card">
+                  <div class="settings-row settings-sandbox-control-row">
+                    <div class="settings-row-copy">
+                      <strong>Require project trust</strong>
+                      <span>
+                        {config().requireProjectTrust === true
+                          ? "Every project must be trusted before it can start terminals, kernels, or local jobs."
+                          : "Sandboxed terminals, kernels, and local jobs can run immediately. Remote jobs, kernel environment changes, project extensions, and unsandboxed execution still require trust."}
+                      </span>
+                    </div>
+                    <Switch
+                      hideLabel
+                      checked={config().requireProjectTrust === true}
+                      disabled={busy("trust") || unavailable()}
+                      onChange={(checked) =>
+                        patch({ requireProjectTrust: checked }, "trust", "Couldn't update the project trust policy")
+                      }
+                    >
+                      Require project trust
+                    </Switch>
+                  </div>
+
+                  <div class="settings-row settings-sandbox-control-row">
+                    <div class="settings-row-copy">
+                      <strong>Network access</strong>
+                      <span>
+                        {networkDenyEnforced()
+                          ? "This backend always denies network access, including loopback, LAN, link-local, and metadata endpoints."
+                          : "Allow permits outbound network access while loopback remains blocked."}
+                      </span>
+                    </div>
+                    <Select
+                      options={NETWORK_OPTS}
+                      current={NETWORK_OPTS.find((o) => o.value === effectiveNetwork())}
+                      value={(o) => o.value}
+                      label={(o) => o.label}
+                      disabled={busy("network") || unavailable() || networkDenyEnforced()}
+                      onSelect={(o) => o && patch({ network: o.value }, "network", "Couldn't update network policy")}
+                      variant="secondary"
+                      size="small"
+                      triggerVariant="settings"
+                    />
+                  </div>
+
+                  <div class="settings-row settings-sandbox-control-row">
+                    <div class="settings-row-copy">
+                      <strong>Fallback behavior</strong>
+                      <span>Choose what happens if filesystem isolation cannot start.</span>
+                    </div>
+                    <Select
+                      options={UNAVAILABLE_OPTS}
+                      current={UNAVAILABLE_OPTS.find((o) => o.value === (config().onUnavailable ?? "error"))}
+                      value={(o) => o.value}
+                      label={(o) => o.label}
+                      disabled={busy("fallback") || unavailable()}
+                      onSelect={(o) =>
+                        o && patch({ onUnavailable: o.value }, "fallback", "Couldn't update fallback behavior")
+                      }
+                      variant="secondary"
+                      size="small"
+                      triggerVariant="settings"
+                    />
+                  </div>
+                </div>
+              </Section>
+
+              <Section
+                title="Extra writable paths"
+                count={(config().allowWrite ?? []).length}
+                description="Absolute paths outside the workspace and temporary directories that the sandbox may modify."
+              >
+                <div class="settings-card settings-preferences-card">
+                  <Show
+                    when={(config().allowWrite ?? []).length > 0}
+                    fallback={
+                      <div class="settings-row settings-sandbox-control-row settings-sandbox-empty-paths">
+                        <div class="settings-row-copy">
+                          <strong>Workspace only</strong>
+                          <span>No extra writable paths are approved.</span>
+                        </div>
+                        <button
+                          type="button"
+                          class="settings-preference-action"
+                          aria-expanded={showPathEditor()}
+                          aria-controls={pathEditorId}
+                          disabled={busy("paths") || unavailable()}
+                          onClick={() => setShowPathEditor((value) => !value)}
+                        >
+                          {showPathEditor() ? "Cancel" : "Add path"}
+                        </button>
+                      </div>
+                    }
+                  >
+                    <For each={config().allowWrite ?? []}>
+                      {(p) => (
+                        <div class="settings-row settings-sandbox-path-row">
+                          <code title={p}>{p}</code>
+                          <button
+                            type="button"
+                            class="settings-preference-action"
+                            data-variant="danger"
+                            disabled={busy("paths")}
+                            aria-label={`Remove writable path ${p}`}
+                            onClick={() => removePath(p)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                  </Show>
+                  <Show when={showPathEditor() || (config().allowWrite ?? []).length > 0}>
+                    <div id={pathEditorId} class="settings-sandbox-path-editor">
+                      <input
+                        class="settings-field"
+                        aria-label="Add writable path"
+                        placeholder="/absolute/path"
+                        value={newPath()}
+                        disabled={busy("paths") || unavailable()}
+                        onInput={(e) => setNewPath(e.currentTarget.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addPath()}
+                      />
+                      <Button
+                        class="settings-panel-action settings-panel-action--quiet"
+                        size="small"
+                        variant="secondary"
+                        disabled={busy("paths") || unavailable() || !newPath().trim()}
+                        onClick={addPath}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </Show>
+                </div>
+              </Section>
+
+              <Section
+                title="Containment test"
+                description="Run real sandboxed commands to verify the boundaries this backend claims to enforce."
+              >
+                <div class="settings-card settings-preferences-card">
+                  <div class="settings-row settings-sandbox-control-row settings-sandbox-test-row">
+                    <div class="settings-row-copy">
+                      <strong>Verify containment</strong>
+                      <span>
+                        Tests read and write boundaries plus effective network isolation with real sandboxed commands.
+                      </span>
+                    </div>
+                    <Button
+                      size="small"
+                      variant="secondary"
+                      disabled={testing() || unavailable() || !status()?.available}
+                      onClick={runTest}
+                    >
+                      {testing() ? "Testing…" : "Run self-test"}
+                    </Button>
+                  </div>
+                  <Show when={test()}>
+                    {(t) => (
+                      <div class="settings-sandbox-result" aria-live="polite">
+                        <div class="settings-sandbox-result__summary" role="status">
+                          <span class="settings-sandbox-result__dot" data-tone={t().ok ? "success" : "danger"} />
+                          <span classList={{ "text-text-success": t().ok, "text-text-danger": !t().ok }}>
+                            {t().ok ? "Containment verified." : "Containment failed — do not rely on the sandbox."}
+                          </span>
+                          <button
+                            type="button"
+                            class="settings-preference-action"
+                            data-variant="quiet"
+                            aria-expanded={showTestDetails()}
+                            aria-controls={testDetailsId}
+                            onClick={() => setShowTestDetails((value) => !value)}
+                          >
+                            {showTestDetails() ? "Hide checks" : `Show ${t().checks.length} checks`}
+                          </button>
+                        </div>
+                        <Show when={showTestDetails()}>
+                          <div id={testDetailsId} class="settings-sandbox-checks">
+                            <For each={t().checks}>
+                              {(c) => (
+                                <div class="settings-sandbox-check">
+                                  <Icon
+                                    name={c.skipped ? "dash" : c.pass ? "check" : "close"}
+                                    class={
+                                      c.skipped ? "text-text-weak" : c.pass ? "text-text-success" : "text-text-danger"
+                                    }
+                                    size="small"
+                                  />
+                                  <span>{c.name}</span>
+                                  <Show when={c.detail}>
+                                    <code class="settings-sandbox-check__detail">{c.detail}</code>
+                                  </Show>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                      </div>
+                    )}
+                  </Show>
+                </div>
+              </Section>
+            </Show>
           </Show>
         </PanelBody>
       </div>

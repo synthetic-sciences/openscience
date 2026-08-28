@@ -1,7 +1,16 @@
 import path from "path"
 import crypto from "crypto"
 import fs from "fs/promises"
-import { ModalClient, type Sandbox } from "modal"
+import {
+  ClientClosedError,
+  InternalFailure,
+  InvalidError,
+  ModalClient,
+  NotFoundError,
+  SandboxTimeoutError,
+  TimeoutError,
+  type Sandbox,
+} from "modal"
 import { Filesystem } from "../../util/filesystem"
 import { ModalUpload } from "./upload"
 import { ModalVolume } from "./volume"
@@ -62,7 +71,7 @@ export namespace ModalAdapter {
   export type Hooks = {
     created: (id: string) => Promise<void>
     log: (value: string) => Promise<void>
-    output: (value: string) => Promise<void>
+    output: (value: string, mode?: "append" | "replace") => Promise<void>
   }
 
   export class HarvestError extends Error {
@@ -75,6 +84,58 @@ export namespace ModalAdapter {
     }
   }
 
+  export class OwnershipError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = "ModalOwnershipError"
+    }
+  }
+
+  export type RecoveryFailure =
+    | { retryable: true }
+    | {
+        retryable: false
+        kind: "unauthorized" | "quota_exhausted" | "ownership_mismatch" | "invalid_request" | "not_found"
+      }
+
+  /**
+   * Modal already retries transient gRPC failures inside the SDK. Classify
+   * failures that cannot improve with time so a recovered job does not reserve
+   * local concurrency forever. Unknown transport failures remain retryable.
+   */
+  export function recoveryFailure(error: unknown): RecoveryFailure {
+    if (error instanceof OwnershipError) return { retryable: false, kind: "ownership_mismatch" }
+    if (error instanceof NotFoundError) return { retryable: false, kind: "not_found" }
+    if (error instanceof InvalidError) return { retryable: false, kind: "invalid_request" }
+    if (
+      error instanceof InternalFailure ||
+      error instanceof TimeoutError ||
+      error instanceof SandboxTimeoutError ||
+      error instanceof ClientClosedError
+    ) {
+      return { retryable: true }
+    }
+    if (!error || typeof error !== "object") return { retryable: true }
+    const value = error as { code?: unknown; status?: unknown }
+    const code = typeof value.code === "number" ? value.code : undefined
+    const status = typeof value.status === "number" ? value.status : undefined
+    // gRPC status codes: INVALID_ARGUMENT=3, NOT_FOUND=5,
+    // PERMISSION_DENIED=7, RESOURCE_EXHAUSTED=8, FAILED_PRECONDITION=9,
+    // UNAUTHENTICATED=16. Some HTTP transports expose 401/403/404 instead.
+    if (code === 16 || code === 7 || status === 401 || status === 403) {
+      return { retryable: false, kind: "unauthorized" }
+    }
+    if (code === 5 || status === 404) return { retryable: false, kind: "not_found" }
+    // RESOURCE_EXHAUSTED and HTTP 429 cover transient rate/concurrency
+    // throttles as well as hard account quotas. Without a provider-specific
+    // hard-quota signal, preserve recovery and let the bounded backoff retry.
+    if (code === 8 || status === 429) return { retryable: true }
+    if (code === 3 || code === 9 || status === 400 || status === 422) {
+      return { retryable: false, kind: "invalid_request" }
+    }
+    return { retryable: true }
+  }
+
   export function volume(project: string, id: string) {
     const digest = crypto.createHash("sha256").update(`${project}\0${id}`).digest("hex").slice(0, 32)
     return `openscience-job-${digest}`
@@ -82,12 +143,80 @@ export namespace ModalAdapter {
 
   const clean = (value: string) => value.split(path.sep).join("/").replace(/^\.\//, "")
 
+  type ClosableClient = Pick<ModalClient, "close">
+
+  /**
+   * modal@0.9.0's public `close()` does not currently tear down the client's
+   * underlying gRPC channels. Reusing one process-scoped client per credential
+   * identity therefore prevents every status poll, recovery, and release call
+   * from opening another live transport in the long-running OpenScience server.
+   *
+   * Keep the pool deliberately small. Changing credentials or environments is
+   * rare and a process restart is safer than silently accumulating transports
+   * after repeated profile churn. Keys are one-way digests, never raw tokens.
+   */
+  export class ClientPool<T extends ClosableClient> {
+    private readonly values = new Map<string, T>()
+    private disposed = false
+
+    constructor(
+      private readonly create: (context: Pick<Context, "tokenId" | "tokenSecret" | "environment">) => T,
+      private readonly limit = 4,
+    ) {}
+
+    acquire(context: Pick<Context, "tokenId" | "tokenSecret" | "environment">): T {
+      if (this.disposed) throw new Error("Modal client pool is disposed; restart OpenScience before using Modal again")
+      const key = crypto
+        .createHash("sha256")
+        .update(`${context.tokenId}\0${context.tokenSecret}\0${context.environment ?? ""}`)
+        .digest("hex")
+      const existing = this.values.get(key)
+      if (existing) return existing
+      if (this.values.size >= this.limit) {
+        throw new Error(
+          `Modal credentials or environments changed more than ${this.limit} times in this OpenScience process. Restart OpenScience before using Modal again.`,
+        )
+      }
+      const created = this.create(context)
+      this.values.set(key, created)
+      return created
+    }
+
+    get size() {
+      return this.values.size
+    }
+
+    dispose() {
+      if (this.disposed) return
+      this.disposed = true
+      for (const value of this.values.values()) value.close()
+      this.values.clear()
+    }
+  }
+
+  const clients = new ClientPool(
+    (context) =>
+      new ModalClient({
+        tokenId: context.tokenId,
+        tokenSecret: context.tokenSecret,
+        environment: context.environment,
+      }),
+  )
+  process.once("exit", () => clients.dispose())
+
   function client(context: Context) {
-    return new ModalClient({
-      tokenId: context.tokenId,
-      tokenSecret: context.tokenSecret,
-      environment: context.environment,
-    })
+    return clients.acquire(context)
+  }
+
+  /** Terminal process-lifecycle cleanup for tests and one-shot hosts.
+   *
+   * The current Modal SDK exposes no transport-disposal API: `close()` only
+   * resets SDK auth state and does not close gRPC channels. OpenScience's
+   * long-running servers therefore reuse this bounded pool, while their
+   * existing explicit process-exit path performs the actual socket teardown.
+   * Do not call this and then try to dispatch more Modal work. */
+  export function dispose() {
+    clients.dispose()
   }
 
   function quote(value: string) {
@@ -120,39 +249,88 @@ export namespace ModalAdapter {
     return recovered
   }
 
-  async function outcome(sandbox: Sandbox, output: Hooks["output"]) {
-    const state = { value: "" }
-    const emit = async () => {
-      const read = await sandbox.filesystem.readText(RUN_LOG).then(
-        (value) => ({ ok: true as const, value }),
-        () => ({ ok: false as const }),
-      )
-      if (!read.ok) return
-      if (read.value === state.value) return
-      state.value = read.value
-      await output(read.value)
+  export async function consumeOutput(
+    stream: ReadableStream<string>,
+    output: Hooks["output"],
+    firstMode: "append" | "replace" = "append",
+  ) {
+    const reader = stream.getReader()
+    const maxLine = 1024 * 1024
+    const omitted = `[OpenScience omitted an output line larger than ${maxLine} characters]`
+    const state = { first: true, pending: "", discarding: false }
+    const emit = async (value: string) => {
+      if (!value) return
+      await output(value, state.first ? firstMode : "append")
+      state.first = false
     }
-    for (;;) {
-      const status = await sandbox.poll()
-      await emit()
-      if (status !== null) {
-        await Bun.sleep(100)
-        await emit()
-        return { code: status, log: state.value }
+    const consume = async (value: string) => {
+      let cursor = 0
+      while (cursor < value.length) {
+        const newline = value.indexOf("\n", cursor)
+        const end = newline < 0 ? value.length : newline + 1
+        const segment = value.slice(cursor, end)
+        cursor = end
+        if (state.discarding) {
+          if (newline >= 0) {
+            state.discarding = false
+            await emit(`${omitted}\n`)
+          }
+          continue
+        }
+        if (state.pending.length + segment.length > maxLine) {
+          state.pending = ""
+          if (newline >= 0) await emit(`${omitted}\n`)
+          else state.discarding = true
+          continue
+        }
+        state.pending += segment
+        if (newline >= 0) {
+          const complete = state.pending
+          state.pending = ""
+          await emit(complete)
+        }
       }
-      await Bun.sleep(250)
     }
+    try {
+      for (;;) {
+        const item = await reader.read()
+        if (item.done) break
+        await consume(item.value)
+      }
+    } finally {
+      try {
+        if (state.discarding) await emit(omitted)
+        else await emit(state.pending)
+        if (state.first && firstMode === "replace") await output("", "replace")
+      } finally {
+        reader.releaseLock()
+      }
+    }
+  }
+
+  async function outcome(sandbox: Sandbox, output: Hooks["output"], reattach = false) {
+    const [code] = await Promise.all([
+      sandbox.wait(),
+      consumeOutput(sandbox.stdout, output, reattach ? "replace" : "append"),
+    ])
+    return { code }
+  }
+
+  async function replay(log: string, output: Hooks["output"]) {
+    const stream = Bun.file(log).stream().pipeThrough(new TextDecoderStream())
+    await consumeOutput(stream, output, "replace")
   }
 
   async function harvest(
     context: Context,
     spec: Spec,
-    fallback?: { code: number; log: string },
-    options: { partial?: boolean } = {},
-  ): Promise<Result & { log: string }> {
-    if (fallback && !spec.outputs.length) return { code: fallback.code, outputs: [], log: fallback.log }
+    fallback?: { code: number },
+    options: { partial?: boolean; log?: boolean } = {},
+  ): Promise<Result & { log?: string }> {
+    if (fallback && !spec.outputs.length && !options.log) return { code: fallback.code, outputs: [] }
     const codePath = path.posix.basename(EXIT_CODE)
     const logPath = path.posix.basename(RUN_LOG)
+    const wantLog = options.log || fallback === undefined
     const entries = options.partial
       ? await ModalVolume.list(context, spec.volume, "/", true)
       : await ModalVolume.wait(context, spec.volume, codePath)
@@ -173,7 +351,7 @@ export namespace ModalAdapter {
     const paths = [
       ...new Set([
         ...(complete ? [codePath] : []),
-        ...(sizes.has(logPath) ? [logPath] : []),
+        ...(wantLog && sizes.has(logPath) ? [logPath] : []),
         ...selected.map((entry) => clean(entry.path)),
       ]),
     ]
@@ -189,7 +367,7 @@ export namespace ModalAdapter {
     const files = new Map(downloaded.map((entry) => [entry.path, entry]))
     const saved = files.get(codePath)
     const logged = files.get(logPath)
-    if ((!logged && !options.partial) || (!saved && fallback === undefined)) {
+    if ((wantLog && !logged && !options.partial) || (!saved && fallback === undefined)) {
       throw new Error("Modal output Volume is missing its result metadata")
     }
     const code = saved
@@ -204,7 +382,7 @@ export namespace ModalAdapter {
     if (outputs.reduce((sum, entry) => sum + entry.size, 0) > 20 * 1024 * 1024 * 1024) {
       throw new Error("Modal outputs exceed the 20 GiB recovery limit")
     }
-    return { code, outputs, log: logged ? await Bun.file(logged.staging).text() : (fallback?.log ?? "") }
+    return { code, outputs, ...(logged ? { log: logged.staging } : {}) }
   }
 
   export function validateUploads(files: File[]) {
@@ -255,107 +433,103 @@ export namespace ModalAdapter {
     const tags = await sandbox.getTags()
     const owner = crypto.createHash("sha256").update(project).digest("hex").slice(0, 20)
     if (tags.openscience !== "true" || tags.openscience_job !== id || tags.openscience_project !== owner) {
-      throw new Error(`Modal sandbox ${sandbox.sandboxId} is not owned by OpenScience job ${id}`)
+      throw new OwnershipError(`Modal sandbox ${sandbox.sandboxId} is not owned by OpenScience job ${id}`)
     }
   }
 
   export async function check(context: Context) {
     const modal = client(context)
-    return Promise.resolve()
-      .then(async () => {
-        const iterator = modal.sandboxes.list({ environment: context.environment })[Symbol.asyncIterator]()
-        await iterator.next()
-        await iterator.return?.(undefined)
-        return { ok: true as const, sdk: modal.version() }
-      })
-      .finally(() => modal.close())
+    return Promise.resolve().then(async () => {
+      const iterator = modal.sandboxes.list({ environment: context.environment })[Symbol.asyncIterator]()
+      await iterator.next()
+      await iterator.return?.(undefined)
+      return { ok: true as const, sdk: modal.version() }
+    })
   }
 
   export async function run(context: Context, spec: Spec, hooks: Hooks): Promise<Result> {
     const modal = client(context)
-    return Promise.resolve()
-      .then(async () => {
-        const bridge = await ModalVolume.check(context)
-        await hooks.log(`Local Modal Volume bridge ready: Python SDK ${bridge}`)
-        await hooks.log(`Resolving Modal app ${context.app}`)
-        const app = await modal.apps.fromName(context.app, {
-          environment: context.environment,
-          createIfMissing: true,
-        })
-        const count = spec.gpus ?? 1
-        const gpu = spec.gpu === "none" || count <= 1 ? spec.gpu : `${spec.gpu}:${count}`
-        const base = modal.images.fromRegistry(spec.image)
-        const commands = layers(spec.packages)
-        const image = commands.length ? base.dockerfileCommands(commands) : base
-        await hooks.log(
-          commands.length
-            ? `Building image ${spec.image} with ${spec.packages.length} Python package${spec.packages.length === 1 ? "" : "s"}`
-            : `Resolving image ${spec.image}`,
-        )
-        const ready = await image.build(app).catch((error) => {
-          const detail = error instanceof Error ? error.message.trim() : String(error).trim()
-          const guidance = commands.length
-            ? "The selected image must provide python and pip for the requested packages; omit image to use the configured Python image."
-            : "Verify that the image name and registry are publicly accessible."
-          throw new Error(
-            `Modal could not build image ${spec.image}. ${guidance}${detail ? ` Provider detail: ${detail}` : ""}`,
-            { cause: error },
-          )
-        })
-        const volume = await modal.volumes.fromName(spec.volume, {
-          environment: context.environment,
-          createIfMissing: true,
-        })
-        await hooks.log(`Image ready: ${ready.imageId}`)
-        await hooks.log(`Creating ${gpu === "none" ? "CPU" : gpu} sandbox`)
-        const secrets =
-          spec.secrets && Object.keys(spec.secrets).length ? [await modal.secrets.fromObject(spec.secrets)] : undefined
-        const sandbox = await modal.sandboxes.create(app, ready, {
-          command: ["bash", "-lc", script(spec.command)],
-          workdir: ROOT,
-          gpu: gpu === "none" ? undefined : gpu,
-          cpu: spec.cpus,
-          memoryMiB: spec.memoryGb ? Math.ceil(spec.memoryGb * 1024) : undefined,
-          timeoutMs: (spec.timeoutMinutes ?? context.timeoutMinutes) * 60_000,
-          secrets,
-          blockNetwork: context.network === "none",
-          volumes: { [ROOT]: volume },
-          name: `os-${spec.id}`,
-          tags: {
-            openscience: "true",
-            openscience_job: spec.id,
-            openscience_project: crypto.createHash("sha256").update(spec.project).digest("hex").slice(0, 20),
-          },
-        })
-        await hooks.created(sandbox.sandboxId).catch(async (error) => {
-          await sandbox.terminate().catch(() => undefined)
-          throw error
-        })
-        await hooks.log(`Sandbox ready: ${sandbox.sandboxId}`)
-        await upload(sandbox, spec).catch(async (error) => {
-          await sandbox.terminate().catch(() => undefined)
-          throw error
-        })
-        await hooks.log(
-          `Uploaded ${spec.uploads.length} input file${spec.uploads.length === 1 ? "" : "s"} (${spec.uploads.reduce((sum, file) => sum + file.size, 0)} bytes)`,
-        )
-        await hooks.log(`Running command: ${spec.command}`)
-        const settled = await outcome(sandbox, hooks.output)
-        await hooks.log(`Command exited with code ${settled.code}; GPU sandbox released`)
-        const recovered = await harvest(context, spec, settled).catch((error) => {
-          throw new HarvestError(settled.code, error)
-        })
-        if (recovered.log !== settled.log) await hooks.output(recovered.log)
-        if (settled.code === 124 && recovered.code !== settled.code) {
-          await hooks.log(`Sandbox exit ${settled.code} overrides durable command marker ${recovered.code}`)
-        }
-        const result = reconcile(settled.code, recovered)
-        await hooks.log(
-          `Downloaded ${recovered.outputs.length} output file${recovered.outputs.length === 1 ? "" : "s"} directly from Modal Volume`,
-        )
-        return result
+    return Promise.resolve().then(async () => {
+      const bridge = await ModalVolume.check(context)
+      await hooks.log(`Local Modal Volume bridge ready: Python SDK ${bridge}`)
+      await hooks.log(`Resolving Modal app ${context.app}`)
+      const app = await modal.apps.fromName(context.app, {
+        environment: context.environment,
+        createIfMissing: true,
       })
-      .finally(() => modal.close())
+      const count = spec.gpus ?? 1
+      const gpu = spec.gpu === "none" || count <= 1 ? spec.gpu : `${spec.gpu}:${count}`
+      const base = modal.images.fromRegistry(spec.image)
+      const commands = layers(spec.packages)
+      const image = commands.length ? base.dockerfileCommands(commands) : base
+      await hooks.log(
+        commands.length
+          ? `Building image ${spec.image} with ${spec.packages.length} Python package${spec.packages.length === 1 ? "" : "s"}`
+          : `Resolving image ${spec.image}`,
+      )
+      const ready = await image.build(app).catch((error) => {
+        const detail = error instanceof Error ? error.message.trim() : String(error).trim()
+        const guidance = commands.length
+          ? "The selected image must provide python and pip for the requested packages; omit image to use the configured Python image."
+          : "Verify that the image name and registry are publicly accessible."
+        throw new Error(
+          `Modal could not build image ${spec.image}. ${guidance}${detail ? ` Provider detail: ${detail}` : ""}`,
+          { cause: error },
+        )
+      })
+      const volume = await modal.volumes.fromName(spec.volume, {
+        environment: context.environment,
+        createIfMissing: true,
+      })
+      await hooks.log(`Image ready: ${ready.imageId}`)
+      await hooks.log(`Creating ${gpu === "none" ? "CPU" : gpu} sandbox`)
+      const secrets =
+        spec.secrets && Object.keys(spec.secrets).length ? [await modal.secrets.fromObject(spec.secrets)] : undefined
+      const sandbox = await modal.sandboxes.create(app, ready, {
+        command: ["bash", "-lc", script(spec.command)],
+        workdir: ROOT,
+        gpu: gpu === "none" ? undefined : gpu,
+        cpu: spec.cpus,
+        memoryMiB: spec.memoryGb ? Math.ceil(spec.memoryGb * 1024) : undefined,
+        timeoutMs: (spec.timeoutMinutes ?? context.timeoutMinutes) * 60_000,
+        secrets,
+        blockNetwork: context.network === "none",
+        volumes: { [ROOT]: volume },
+        name: `os-${spec.id}`,
+        tags: {
+          openscience: "true",
+          openscience_job: spec.id,
+          openscience_project: crypto.createHash("sha256").update(spec.project).digest("hex").slice(0, 20),
+        },
+      })
+      await hooks.created(sandbox.sandboxId).catch(async (error) => {
+        await sandbox.terminate({ wait: true }).catch(() => undefined)
+        throw error
+      })
+      await hooks.log(`Sandbox ready: ${sandbox.sandboxId}`)
+      await upload(sandbox, spec).catch(async (error) => {
+        await sandbox.terminate({ wait: true }).catch(() => undefined)
+        throw error
+      })
+      await hooks.log(
+        `Uploaded ${spec.uploads.length} input file${spec.uploads.length === 1 ? "" : "s"} (${spec.uploads.reduce((sum, file) => sum + file.size, 0)} bytes)`,
+      )
+      await hooks.log(`Running command: ${spec.command}`)
+      const settled = await outcome(sandbox, hooks.output)
+      await hooks.log(`Command exited with code ${settled.code}; compute sandbox released`)
+      const recovered = await harvest(context, spec, settled).catch((error) => {
+        throw new HarvestError(settled.code, error)
+      })
+      if (recovered.log) await replay(recovered.log, hooks.output)
+      if (settled.code === 124 && recovered.code !== settled.code) {
+        await hooks.log(`Sandbox exit ${settled.code} overrides durable command marker ${recovered.code}`)
+      }
+      const result = reconcile(settled.code, recovered)
+      await hooks.log(
+        `Downloaded ${recovered.outputs.length} output file${recovered.outputs.length === 1 ? "" : "s"} directly from Modal Volume`,
+      )
+      return result
+    })
   }
 
   export async function recover(
@@ -365,41 +539,42 @@ export namespace ModalAdapter {
     hooks: Pick<Hooks, "log" | "output">,
   ): Promise<Result> {
     const modal = client(context)
-    return Promise.resolve()
-      .then(async () => {
-        const sandbox = sandboxId ? await modal.sandboxes.fromId(sandboxId).catch(() => undefined) : undefined
-        if (!sandbox) {
-          await hooks.log(
-            sandboxId
-              ? `Sandbox ${sandboxId} ended; harvesting durable volume ${spec.volume}`
-              : `No live sandbox found; harvesting durable volume ${spec.volume}`,
-          )
-          const recovered = await harvest(context, spec)
-          if (recovered.log) await hooks.output(recovered.log)
-          await hooks.log(`Recovered command exit code ${recovered.code}`)
-          await hooks.log(
-            `Recovered ${recovered.outputs.length} output file${recovered.outputs.length === 1 ? "" : "s"}`,
-          )
-          return recovered
-        }
-        await own(sandbox, spec.id, spec.project)
-        await hooks.log(`Reattached to sandbox ${sandboxId}`)
-        const settled = await outcome(sandbox, hooks.output)
-        const recovered = await harvest(context, spec, settled).catch((error) => {
-          throw new HarvestError(settled.code, error)
-        })
-        if (recovered.log !== settled.log) await hooks.output(recovered.log)
-        if (settled.code === 124 && recovered.code !== settled.code) {
-          await hooks.log(`Sandbox exit ${settled.code} overrides durable command marker ${recovered.code}`)
-        }
-        const result = reconcile(settled.code, recovered)
-        await hooks.log(`Recovered command exit code ${result.code}`)
+    return Promise.resolve().then(async () => {
+      const sandbox = sandboxId
+        ? await modal.sandboxes.fromId(sandboxId).catch((error) => {
+            if (error instanceof NotFoundError) return undefined
+            throw error
+          })
+        : undefined
+      if (!sandbox) {
         await hooks.log(
-          `Recovered ${recovered.outputs.length} output file${recovered.outputs.length === 1 ? "" : "s"} directly from Modal Volume`,
+          sandboxId
+            ? `Sandbox ${sandboxId} ended; harvesting durable volume ${spec.volume}`
+            : `No live sandbox found; harvesting durable volume ${spec.volume}`,
         )
-        return result
+        const recovered = await harvest(context, spec)
+        if (recovered.log) await replay(recovered.log, hooks.output)
+        await hooks.log(`Recovered command exit code ${recovered.code}`)
+        await hooks.log(`Recovered ${recovered.outputs.length} output file${recovered.outputs.length === 1 ? "" : "s"}`)
+        return recovered
+      }
+      await own(sandbox, spec.id, spec.project)
+      await hooks.log(`Reattached to sandbox ${sandboxId}`)
+      const settled = await outcome(sandbox, hooks.output, true)
+      const recovered = await harvest(context, spec, settled).catch((error) => {
+        throw new HarvestError(settled.code, error)
       })
-      .finally(() => modal.close())
+      if (recovered.log) await replay(recovered.log, hooks.output)
+      if (settled.code === 124 && recovered.code !== settled.code) {
+        await hooks.log(`Sandbox exit ${settled.code} overrides durable command marker ${recovered.code}`)
+      }
+      const result = reconcile(settled.code, recovered)
+      await hooks.log(`Recovered command exit code ${result.code}`)
+      await hooks.log(
+        `Recovered ${recovered.outputs.length} output file${recovered.outputs.length === 1 ? "" : "s"} directly from Modal Volume`,
+      )
+      return result
+    })
   }
 
   /** Collect declared files from a stopped sandbox without requiring the
@@ -407,50 +582,41 @@ export namespace ModalAdapter {
    * Volume, so partially written scientific outputs can still be delivered
    * before an explicit release deletes that Volume. */
   export async function collect(context: Context, spec: Spec, hooks: Pick<Hooks, "log" | "output">): Promise<Result> {
-    const modal = client(context)
-    return Promise.resolve()
-      .then(async () => {
-        await hooks.log(`Collecting partial output from durable volume ${spec.volume}`)
-        const recovered = await harvest(context, spec, { code: 130, log: "" }, { partial: true })
-        if (recovered.log) await hooks.output(recovered.log)
-        await hooks.log(
-          `Recovered ${recovered.outputs.length} partial output file${recovered.outputs.length === 1 ? "" : "s"}`,
-        )
-        return recovered
-      })
-      .finally(() => modal.close())
+    await hooks.log(`Collecting partial output from durable volume ${spec.volume}`)
+    const recovered = await harvest(context, spec, { code: 130 }, { partial: true, log: true })
+    if (recovered.log) await replay(recovered.log, hooks.output)
+    await hooks.log(
+      `Recovered ${recovered.outputs.length} partial output file${recovered.outputs.length === 1 ? "" : "s"}`,
+    )
+    return recovered
   }
 
   export async function find(context: Context, jobId: string, project: string) {
     const modal = client(context)
-    return Promise.resolve()
-      .then(async () => {
-        const owner = crypto.createHash("sha256").update(project).digest("hex").slice(0, 20)
-        for await (const sandbox of modal.sandboxes.list({
-          environment: context.environment,
-          tags: {
-            openscience: "true",
-            openscience_job: jobId,
-            openscience_project: owner,
-          },
-        })) {
-          await own(sandbox, jobId, project)
-          return sandbox.sandboxId
-        }
-        return undefined
-      })
-      .finally(() => modal.close())
+    return Promise.resolve().then(async () => {
+      const owner = crypto.createHash("sha256").update(project).digest("hex").slice(0, 20)
+      for await (const sandbox of modal.sandboxes.list({
+        environment: context.environment,
+        tags: {
+          openscience: "true",
+          openscience_job: jobId,
+          openscience_project: owner,
+        },
+      })) {
+        await own(sandbox, jobId, project)
+        return sandbox.sandboxId
+      }
+      return undefined
+    })
   }
 
   export async function close(context: Context, sandboxId: string, jobId: string, project: string) {
     const modal = client(context)
-    return Promise.resolve()
-      .then(async () => {
-        const sandbox = await modal.sandboxes.fromId(sandboxId)
-        await own(sandbox, jobId, project)
-        await sandbox.terminate()
-      })
-      .finally(() => modal.close())
+    return Promise.resolve().then(async () => {
+      const sandbox = await modal.sandboxes.fromId(sandboxId)
+      await own(sandbox, jobId, project)
+      await sandbox.terminate({ wait: true })
+    })
   }
 
   export async function release(context: Context, spec: Pick<Spec, "id" | "project" | "volume">, sandboxId?: string) {
@@ -458,17 +624,18 @@ export namespace ModalAdapter {
     if (spec.volume !== expected)
       throw new Error(`Modal volume ${spec.volume} is not owned by OpenScience job ${spec.id}`)
     const modal = client(context)
-    return Promise.resolve()
-      .then(async () => {
-        if (sandboxId) {
-          const sandbox = await modal.sandboxes.fromId(sandboxId).catch(() => undefined)
-          if (sandbox) {
-            await own(sandbox, spec.id, spec.project)
-            await sandbox.terminate()
-          }
+    return Promise.resolve().then(async () => {
+      if (sandboxId) {
+        const sandbox = await modal.sandboxes.fromId(sandboxId).catch((error) => {
+          if (error instanceof NotFoundError) return undefined
+          throw error
+        })
+        if (sandbox) {
+          await own(sandbox, spec.id, spec.project)
+          await sandbox.terminate({ wait: true })
         }
-        await modal.volumes.delete(spec.volume, { environment: context.environment, allowMissing: true })
-      })
-      .finally(() => modal.close())
+      }
+      await modal.volumes.delete(spec.volume, { environment: context.environment, allowMissing: true })
+    })
   }
 }

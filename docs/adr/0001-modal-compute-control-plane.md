@@ -22,11 +22,12 @@ The following rules are mandatory:
 1. Saving a credential does not enable a provider.
 2. A disabled provider never resolves credentials and never constructs a provider client.
 3. Provider credentials are resolved only for an approved dispatch, an explicit lifecycle operation on an owned job (recovery, cancellation, delivery retry, or resource release), or an explicit control-plane browse of the user's Modal Volumes, inside the trusted adapter. Merely opening settings, listing settled jobs, or answering an availability question does not resolve them. They are never added to a generic agent, shell, kernel, or job environment.
-4. The agent may call the first-class `modal` tool, but it cannot authorize dispatch. The tool must show a one-run paid-dispatch approval whose digest still matches its command, inputs, image, packages, resources, timeout, network policy, and output contract. Credentials resolve only after this approval.
+4. The agent may call the provider-neutral `compute_job` tool with a Modal target, but it cannot authorize dispatch. The tool must show a one-run paid-dispatch approval whose digest still matches its command, inputs, image, packages, resources, timeout, network policy, and output contract. Credentials resolve only after this approval.
 5. Job inputs are explicit snapshots. The remote job does not inherit arbitrary host files, environment variables, or credentials.
 6. Provider resources carry durable OpenScience ownership metadata. Recovery and teardown verify that ownership before acting.
 7. Execution, output delivery, and resource state are tracked independently. A resource cannot close while it holds the only recoverable output unless the user explicitly abandons that recovery path.
 8. Existing `queued`, `running`, `succeeded`, `failed`, `cancelled`, and `interrupted` statuses remain a compatibility projection while clients migrate to the richer lifecycle.
+9. The configured concurrency value is an admission limit, not a persistent queue. A start beyond that limit fails visibly and may be retried after capacity becomes available; OpenScience does not autonomously hold paid work for later dispatch.
 
 Modal job files live in a named per-job Volume mounted at `/workspace`, not only in the execution container filesystem. The public JavaScript SDK does not expose direct Volume reads, so a pinned Python control-plane bridge uses `Volume.listdir` and `Volume.read_file` after the execution sandbox exits. The bridge never creates a Function or Sandbox. Successful delivery deletes the Volume; failed delivery, unconfirmed cancellation, or an unknown remote resource retains the job record and recovery identity.
 
@@ -43,3 +44,5 @@ Both SDK versions are exact pins. Dependency updates must be reviewed as adapter
 Connecting Modal is intentionally inert until it is enabled. Turning it off blocks new credential resolution even if a credential remains encrypted on disk. Existing jobs keep their recorded ownership and recovery state so disabling a provider does not silently destroy recoverable work.
 
 This introduces a small compatibility layer in `ComputeJobs`, but it prevents provider details and ambiguous lifecycle transitions from spreading through routes, UI, and agent prompts.
+
+The lack of an autonomous waiting queue is intentional for the current release. Queueing requires a separate durable scheduling policy, including cancellation, restart, fairness, and cost semantics, rather than an implicit retry loop inside the provider adapter.

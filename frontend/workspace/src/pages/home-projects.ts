@@ -5,6 +5,7 @@ export type ProjectRecord = {
   time: {
     created: number
     updated?: number
+    archived?: number
   }
 }
 
@@ -39,7 +40,14 @@ export function prepareProjects(
   favorites: ReadonlySet<string> = new Set(),
 ) {
   const indexed = projects.reduce((result, project) => {
-    if (!project.id || !project.worktree || hidden.has(project.id) || hidden.has(project.worktree)) return result
+    if (
+      !project.id ||
+      !project.worktree ||
+      project.time.archived ||
+      hidden.has(project.id) ||
+      hidden.has(project.worktree)
+    )
+      return result
     const current = result.get(project.id)
     if (current && timestamp(current) >= timestamp(project)) return result
     result.set(project.id, project)
@@ -55,6 +63,26 @@ export function prepareProjects(
       }),
     )
     .sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.updatedAt - left.updatedAt)
+}
+
+export function prepareArchivedProjects(projects: ProjectRecord[]) {
+  const indexed = projects.reduce((result, project) => {
+    if (!project.id || !project.worktree || !project.time.archived) return result
+    const current = result.get(project.id)
+    if (current && timestamp(current) >= timestamp(project)) return result
+    result.set(project.id, project)
+    return result
+  }, new Map<string, ProjectRecord>())
+
+  return Array.from(indexed.values())
+    .map(
+      (project): PreparedProject => ({
+        ...project,
+        updatedAt: project.time.archived ?? timestamp(project),
+        pinned: false,
+      }),
+    )
+    .sort((left, right) => right.updatedAt - left.updatedAt)
 }
 
 export function filterProjects(projects: PreparedProject[], query: string) {

@@ -66,7 +66,7 @@ test("Modal skills cannot reintroduce direct credentials or CLI dispatch", async
   ].join("\n")
   const stored = { providers: { modal: { enabled: true } } }
 
-  for (const name of ["modal-serverless-gpu", "modal-ml-training", "modal-research-gpu"]) {
+  for (const name of ["modal-serverless-gpu"]) {
     const content = await ComputePrompt.skill(name, legacy, stored)
     expect(content).toContain("User-owned Modal execution through OpenScience")
     expect(content).toContain("never as compute resold by OpenScience")

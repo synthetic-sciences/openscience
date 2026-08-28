@@ -28,8 +28,8 @@ describe("launch settings truth pass", () => {
       "connectors",
       "research-tools",
       "compute",
-      "network",
       "permissions",
+      "network",
       "sandbox",
       "credentials",
       "storage",
@@ -44,14 +44,14 @@ describe("launch settings truth pass", () => {
     expect(ids).toContain("skills")
     expect(ids.indexOf("skills")).toBe(ids.indexOf("local-models") + 1)
     expect(panel.title).toBe("Skills")
-    expect(panel.section).toBe("capabilities")
+    expect(panel.section).toBe("workspace")
     expect(panel.icon).toBe("flask")
     expect(source("Skills.tsx")).toContain("<SkillsPage embedded />")
   })
 
-  test("groups Customize by inference, capabilities, runtime, and app", () => {
-    expect(SETTINGS_PANELS.find((item) => item.id === "models")?.section).toBe("inference")
-    expect(SETTINGS_PANELS.find((item) => item.id === "connectors")?.section).toBe("capabilities")
+  test("groups Customize by workspace, runtime, and app", () => {
+    expect(SETTINGS_PANELS.find((item) => item.id === "models")?.section).toBe("workspace")
+    expect(SETTINGS_PANELS.find((item) => item.id === "connectors")?.section).toBe("workspace")
     expect(SETTINGS_PANELS.find((item) => item.id === "compute")?.section).toBe("runtime")
     expect(SETTINGS_PANELS.find((item) => item.id === "general")?.section).toBe("app")
   })
@@ -65,9 +65,9 @@ describe("launch settings truth pass", () => {
     expect(compute).toContain("call<Info>()")
     expect(compute).toContain('call<Info>("/ssh"')
     expect(compute).toContain('title="Local runtimes"')
-    expect(compute).toContain('title="Python and R kernels"')
-    expect(compute).toContain('title="Shell and local jobs"')
-    expect(compute).toContain("Session-owned kernels preserve in-memory state")
+    expect(compute).toContain('title="Python starter"')
+    expect(compute).toContain('title="R starter"')
+    expect(compute).toContain("Variables persist for the session")
     expect(compute).toContain('title="Remote hosts"')
     expect(compute).toContain("Ready to dispatch")
     expect(compute).toContain("Pin a host key, then dispatch staged jobs")
@@ -84,7 +84,7 @@ describe("launch settings truth pass", () => {
 
     expect(compute).toContain("Modal CLI configuration found at ~/.modal.toml.")
     expect(compute).toContain('call<Info>("/modal/configure"')
-    expect(compute).toContain('source: "stored" | "modal_toml" | null')
+    expect(compute).toContain('source: "stored" | "account" | "modal_toml" | null')
     expect(compute).toContain('label="Modal token ID"')
     expect(compute).toContain('label="Modal token secret"')
     expect(compute).toContain('type="password"')
@@ -118,7 +118,8 @@ describe("launch settings truth pass", () => {
     expect(storage).toContain("Change location")
     expect(storage).toContain("Move data")
     expect(storage).toContain('method: "DELETE"')
-    expect(storage).toContain("switches every running server")
+    expect(storage).toContain("pauses active writes")
+    expect(storage).toContain("server together")
     expect(storage).toContain("settings-storage-location-input")
     expect(styles).toContain(".settings-dialog .settings-storage-location-input")
     expect(styles).toContain("font-family: var(--font-family-mono)")
@@ -147,6 +148,7 @@ describe("launch settings truth pass", () => {
     expect(connectors).toContain('sdk.client.mcp.config.set({ name, config: next, scope: "global" })')
     expect(connectors).toContain("sdk.client.mcp.auth.authenticate({ name })")
     expect(connectors).toContain("sdk.client.mcp.auth.remove({ name })")
+    expect(connectors).toContain('detail()?.auth === "authenticated" || s()?.status === "connected"')
     expect(connectors).toContain("saved, but could not connect")
     expect(connectors).toContain("<ConnectorInspection detail={detail()} />")
     expect(connectors).toContain("Stored header values are masked")

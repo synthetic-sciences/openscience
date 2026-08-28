@@ -10,7 +10,6 @@
   flex: 0 0 auto;
   margin: 8px 10px 6px;
   padding: 8px 10px;
-  border: 1px solid var(--color-border);
   border-radius: var(--atlas-radius-sm);
   background: color-mix(in srgb, var(--color-bg-subtle) 72%, transparent);
 }

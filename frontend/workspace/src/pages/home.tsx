@@ -23,7 +23,14 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { ProjectsWorkbench, type HomeProject } from "./home-workbench"
-import { filterProjects, launcherState, prepareProjects, projectName, type ProjectRecord } from "./home-projects"
+import {
+  filterProjects,
+  launcherState,
+  prepareArchivedProjects,
+  prepareProjects,
+  projectName,
+  type ProjectRecord,
+} from "./home-projects"
 import { projectHref } from "@/utils/project-route"
 import { NativeDirectoryPickerUnavailable } from "@/utils/native-picker"
 
@@ -47,13 +54,14 @@ export default function Home(): JSX.Element {
       return { ...project, sessions: child.sessionTotal }
     }),
   )
+  const archivedProjects = createMemo(() => prepareArchivedProjects(sync.data.project))
   const filtered = createMemo(() => filterProjects(projects(), query()))
   const state = createMemo(() =>
     launcherState({
       ready: sync.ready,
       healthy: server.healthy(),
       error: sync.error,
-      projectCount: projects().length,
+      projectCount: projects().length + archivedProjects().length,
     }),
   )
   const status = createMemo(() => {
@@ -73,19 +81,46 @@ export default function Home(): JSX.Element {
     projectPrefs.toggleFavorite(project.id, project.worktree)
   }
 
-  async function removeProject(project: ProjectRecord) {
+  async function archiveProject(project: ProjectRecord) {
     const name = projectName(project)
     const ok = await confirmDialog(dialog, {
-      title: `Remove ${name}?`,
-      message:
-        "This removes the project from your home list. Its files and sessions stay on disk, and importing the folder restores it.",
-      confirmLabel: "Remove",
-      danger: true,
+      title: `Archive ${name}?`,
+      message: "This hides the project from Home until you restore it. Its files and sessions stay on disk.",
+      confirmLabel: "Archive",
     })
     if (!ok) return
-    projectPrefs.hide(project.id, project.worktree)
-    layout.projects.close(project.worktree)
-    showToast({ variant: "success", title: "Project removed from home" })
+    try {
+      await settingsApi<ProjectRecord>(sdk.url, platform.fetch ?? fetch, `/project/${encodeURIComponent(project.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ archived: true }),
+      })
+      projectPrefs.hide(project.id, project.worktree)
+      layout.projects.close(project.worktree)
+      showToast({ variant: "success", title: "Project archived" })
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: "Could not archive project",
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  async function restoreProject(project: ProjectRecord) {
+    try {
+      await settingsApi<ProjectRecord>(sdk.url, platform.fetch ?? fetch, `/project/${encodeURIComponent(project.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ archived: false }),
+      })
+      projectPrefs.unhide(project.id, project.worktree)
+      showToast({ variant: "success", title: `${projectName(project)} restored` })
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: "Could not restore project",
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   async function createProject(input: ProjectCreateInput) {
@@ -196,6 +231,7 @@ export default function Home(): JSX.Element {
       <ProjectsWorkbench
         state={state()}
         projects={filtered()}
+        archivedProjects={archivedProjects()}
         totalProjects={projects().length}
         query={query()}
         refreshing={!sync.ready}
@@ -210,7 +246,8 @@ export default function Home(): JSX.Element {
         onQuery={setQuery}
         onOpen={openProject}
         onPin={pinProject}
-        onRemove={(project) => void removeProject(project)}
+        onArchive={(project) => void archiveProject(project)}
+        onRestore={(project) => void restoreProject(project)}
         onCreate={showCreateProject}
         onRetry={() => void server.refresh()}
         onSettings={() => dialog.show(() => <DialogSettings />)}

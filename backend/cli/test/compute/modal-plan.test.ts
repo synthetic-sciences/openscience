@@ -101,6 +101,44 @@ describe("ModalPlan", () => {
     )
   })
 
+  test("default staging skips common credentials, environments, and generated caches", async () => {
+    const root = await project()
+    const files = [
+      [".aws/credentials", "aws_secret_access_key=secret\n"],
+      [".kube/config", "token: secret\n"],
+      [".venv/lib/python/site.py", "generated\n"],
+      [".cache/huggingface/token", "secret\n"],
+      [".config/gcloud/application_default_credentials.json", "secret\n"],
+      ["node_modules/library/index.js", "generated\n"],
+      ["src/__pycache__/train.pyc", "generated\n"],
+      [".npmrc", "//registry.example.org/:_authToken=secret\n"],
+    ] as const
+    await Promise.all(
+      files.map(async ([relative, value]) => {
+        const target = path.join(root, relative)
+        await fs.mkdir(path.dirname(target), { recursive: true })
+        await fs.writeFile(target, value)
+      }),
+    )
+
+    const staged = await ModalPlan.stagingFiles(root, ["**/*"], "Modal staging", { denied: "skip" })
+
+    expect(staged.files.map((file) => file.path)).toEqual(["src/train.py"])
+  })
+
+  test("explicit uploads into default-excluded paths still fail closed", async () => {
+    const root = await project()
+    await fs.mkdir(path.join(root, ".aws"), { recursive: true })
+    await fs.writeFile(path.join(root, ".aws", "credentials"), "aws_secret_access_key=secret\n")
+
+    await expect(ModalPlan.prepare({ ...input(root), uploads: [".aws/credentials"] })).rejects.toThrow(
+      "Modal upload policy denied: .aws/credentials",
+    )
+    await expect(
+      ModalPlan.stagingFiles(root, [".aws/credentials"], "Modal staging", { denied: "error" }),
+    ).rejects.toThrow("Modal staging upload policy denied: .aws")
+  })
+
   test("a symlink alias cannot disguise a denied credential file", async () => {
     const root = await project()
     await fs.writeFile(path.join(root, ".env"), "PRIVATE_TOKEN=secret\n")

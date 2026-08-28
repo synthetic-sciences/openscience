@@ -24,6 +24,7 @@ export type Project = {
     created: number
     updated: number
     initialized?: number
+    archived?: number
   }
   sandboxes: Array<string>
 }
@@ -3169,6 +3170,9 @@ export type SettingsStorageUsageResponses = {
     state_dir: string
     pointer: string | null
     total_bytes: number
+    scanning: boolean
+    updated_at: string | null
+    scan_error: string | null
     entries: Array<{
       name: string
       path: string
@@ -3301,6 +3305,10 @@ export type SettingsComputeGetResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+      status: "absent" | "invalid" | "ready"
+      profile?: string
+      environment?: string
+      error?: string
     }
     environments: {
       status: "absent" | "installing" | "ready" | "failed"
@@ -3374,6 +3382,10 @@ export type SettingsComputeEnvironmentsRepairResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+      status: "absent" | "invalid" | "ready"
+      profile?: string
+      environment?: string
+      error?: string
     }
     environments: {
       status: "absent" | "installing" | "ready" | "failed"
@@ -3450,6 +3462,10 @@ export type SettingsComputeProviderDisconnectResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+      status: "absent" | "invalid" | "ready"
+      profile?: string
+      environment?: string
+      error?: string
     }
     environments: {
       status: "absent" | "installing" | "ready" | "failed"
@@ -3538,6 +3554,10 @@ export type SettingsComputeProviderConnectResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+      status: "absent" | "invalid" | "ready"
+      profile?: string
+      environment?: string
+      error?: string
     }
     environments: {
       status: "absent" | "installing" | "ready" | "failed"
@@ -3626,6 +3646,10 @@ export type SettingsComputeProviderEnabledResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+      status: "absent" | "invalid" | "ready"
+      profile?: string
+      environment?: string
+      error?: string
     }
     environments: {
       status: "absent" | "installing" | "ready" | "failed"
@@ -3715,6 +3739,10 @@ export type SettingsComputeModalUpdateResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+      status: "absent" | "invalid" | "ready"
+      profile?: string
+      environment?: string
+      error?: string
     }
     environments: {
       status: "absent" | "installing" | "ready" | "failed"
@@ -3896,6 +3924,10 @@ export type SettingsComputeModalConfigureResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+      status: "absent" | "invalid" | "ready"
+      profile?: string
+      environment?: string
+      error?: string
     }
     environments: {
       status: "absent" | "installing" | "ready" | "failed"
@@ -4020,6 +4052,10 @@ export type SettingsComputeSshAddResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+      status: "absent" | "invalid" | "ready"
+      profile?: string
+      environment?: string
+      error?: string
     }
     environments: {
       status: "absent" | "installing" | "ready" | "failed"
@@ -4134,6 +4170,10 @@ export type SettingsComputeSshRemoveResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+      status: "absent" | "invalid" | "ready"
+      profile?: string
+      environment?: string
+      error?: string
     }
     environments: {
       status: "absent" | "installing" | "ready" | "failed"
@@ -4225,6 +4265,10 @@ export type SettingsComputeSshUpdateResponses = {
     modal_file: {
       found: boolean
       ready: boolean
+      status: "absent" | "invalid" | "ready"
+      profile?: string
+      environment?: string
+      error?: string
     }
     environments: {
       status: "absent" | "installing" | "ready" | "failed"
@@ -4994,6 +5038,7 @@ export type SettingsComputeJobsStartData = {
     secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
     approval?: string
     sessionID: string
+    default_uploads?: boolean
   }
   path?: never
   query?: {
@@ -5754,6 +5799,7 @@ export type SettingsComputeJobsPlanData = {
     secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
     approval?: string
     sessionID: string
+    default_uploads?: boolean
   }
   path?: never
   query?: {
@@ -9040,6 +9086,7 @@ export type ProjectUpdateData = {
        */
       start?: string
     }
+    archived?: boolean
   }
   path: {
     projectID: string

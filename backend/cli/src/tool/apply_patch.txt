@@ -31,3 +31,5 @@ It is important to remember:
 
 - You must include a header with your intended action (Add/Delete/Update)
 - You must prefix new lines with `+` even when creating a new file
+- Update hunks match complete physical lines. Re-read long prose or LaTeX lines before editing them; a sentence fragment is not a removable line.
+- If verification fails, use the reported failed-hunk number, current SHA-256, and bounded context to construct a revised patch. An unchanged duplicate is blocked, while a materially revised patch is safely preflighted again.

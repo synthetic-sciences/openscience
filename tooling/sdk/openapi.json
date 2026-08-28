@@ -1762,6 +1762,29 @@
                     "total_bytes": {
                       "type": "number"
                     },
+                    "scanning": {
+                      "type": "boolean"
+                    },
+                    "updated_at": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "scan_error": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "entries": {
                       "type": "array",
                       "items": {
@@ -1801,6 +1824,9 @@
                     "state_dir",
                     "pointer",
                     "total_bytes",
+                    "scanning",
+                    "updated_at",
+                    "scan_error",
                     "entries"
                   ]
                 }
@@ -2203,11 +2229,29 @@
                         },
                         "ready": {
                           "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "invalid",
+                            "ready"
+                          ]
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "found",
-                        "ready"
+                        "ready",
+                        "status"
                       ]
                     },
                     "environments": {
@@ -2531,11 +2575,29 @@
                         },
                         "ready": {
                           "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "invalid",
+                            "ready"
+                          ]
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "found",
-                        "ready"
+                        "ready",
+                        "status"
                       ]
                     },
                     "environments": {
@@ -2859,11 +2921,29 @@
                         },
                         "ready": {
                           "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "invalid",
+                            "ready"
+                          ]
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "found",
-                        "ready"
+                        "ready",
+                        "status"
                       ]
                     },
                     "environments": {
@@ -3223,11 +3303,29 @@
                         },
                         "ready": {
                           "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "invalid",
+                            "ready"
+                          ]
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "found",
-                        "ready"
+                        "ready",
+                        "status"
                       ]
                     },
                     "environments": {
@@ -3561,11 +3659,29 @@
                         },
                         "ready": {
                           "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "invalid",
+                            "ready"
+                          ]
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "found",
-                        "ready"
+                        "ready",
+                        "status"
                       ]
                     },
                     "environments": {
@@ -3926,11 +4042,29 @@
                         },
                         "ready": {
                           "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "invalid",
+                            "ready"
+                          ]
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "found",
-                        "ready"
+                        "ready",
+                        "status"
                       ]
                     },
                     "environments": {
@@ -4484,11 +4618,29 @@
                         },
                         "ready": {
                           "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "invalid",
+                            "ready"
+                          ]
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "found",
-                        "ready"
+                        "ready",
+                        "status"
                       ]
                     },
                     "environments": {
@@ -4869,11 +5021,29 @@
                         },
                         "ready": {
                           "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "invalid",
+                            "ready"
+                          ]
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "found",
-                        "ready"
+                        "ready",
+                        "status"
                       ]
                     },
                     "environments": {
@@ -5357,11 +5527,29 @@
                         },
                         "ready": {
                           "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "invalid",
+                            "ready"
+                          ]
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "found",
-                        "ready"
+                        "ready",
+                        "status"
                       ]
                     },
                     "environments": {
@@ -5731,11 +5919,29 @@
                         },
                         "ready": {
                           "type": "boolean"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "absent",
+                            "invalid",
+                            "ready"
+                          ]
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "error": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "found",
-                        "ready"
+                        "ready",
+                        "status"
                       ]
                     },
                     "environments": {
@@ -10878,6 +11084,9 @@
                   "sessionID": {
                     "type": "string",
                     "pattern": "^ses_.*"
+                  },
+                  "default_uploads": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -11484,6 +11693,9 @@
                   "sessionID": {
                     "type": "string",
                     "pattern": "^ses_.*"
+                  },
+                  "default_uploads": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -21901,6 +22113,9 @@
                         "type": "string"
                       }
                     }
+                  },
+                  "archived": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -48862,6 +49077,9 @@
                 "type": "number"
               },
               "initialized": {
+                "type": "number"
+              },
+              "archived": {
                 "type": "number"
               }
             },

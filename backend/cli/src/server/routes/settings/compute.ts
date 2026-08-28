@@ -206,8 +206,13 @@ export namespace ComputeSettings {
   export const ModalFile = z.object({
     found: z.boolean(),
     ready: z.boolean(),
+    status: z.enum(["absent", "invalid", "ready"]),
+    profile: z.string().optional(),
+    environment: z.string().optional(),
+    error: z.string().optional(),
   })
   export type ModalFile = z.infer<typeof ModalFile>
+  type ModalProfileFile = ModalFile & { token?: string; secret?: string }
 
   export const Info = z.object({
     providers: Provider.array().default([]),
@@ -277,6 +282,7 @@ export namespace ComputeSettings {
         active: z.boolean().optional(),
         token_id: z.string().optional(),
         token_secret: z.string().optional(),
+        environment: z.string().optional(),
       })
       .passthrough(),
   )
@@ -342,31 +348,80 @@ export namespace ComputeSettings {
     return Object.fromEntries((PROVIDER_ENV[target] ?? []).map((name) => [name, key]))
   }
 
-  async function readModal(filepath = path.join(os.homedir(), ".modal.toml")) {
+  async function readModal(filepath = path.join(os.homedir(), ".modal.toml")): Promise<ModalProfileFile> {
     const info = await fs.stat(filepath).catch(() => undefined)
-    if (!info?.isFile()) return { found: false, token: undefined, secret: undefined }
+    if (!info?.isFile())
+      return {
+        found: false as const,
+        ready: false as const,
+        status: "absent" as const,
+        error: "Modal config file was not found.",
+      }
     const text = await Bun.file(filepath)
       .text()
       .catch(() => undefined)
-    if (!text) return { found: true, token: undefined, secret: undefined }
+    if (!text)
+      return {
+        found: true as const,
+        ready: false as const,
+        status: "invalid" as const,
+        error: "Modal config file could not be read or is empty.",
+      }
     const value = await Promise.resolve()
       .then(() => Bun.TOML.parse(text))
       .catch(() => undefined)
     const parsed = ModalProfiles.safeParse(value)
-    if (!parsed.success) return { found: true, token: undefined, secret: undefined }
-    const profile = Object.values(parsed.data).find((item) => item.active)
+    if (!parsed.success)
+      return {
+        found: true as const,
+        ready: false as const,
+        status: "invalid" as const,
+        error: "Modal config file is not valid TOML profile configuration.",
+      }
+    const entries = Object.entries(parsed.data)
+    const active = entries.filter(([, item]) => item.active)
+    if (active.length > 1)
+      return {
+        found: true as const,
+        ready: false as const,
+        status: "invalid" as const,
+        error: "Modal config has more than one active profile.",
+      }
+    const selected = active[0] ?? (entries.length === 1 && entries[0]?.[0] === "default" ? entries[0] : undefined)
+    if (!selected)
+      return {
+        found: true as const,
+        ready: false as const,
+        status: "invalid" as const,
+        error: "Modal config does not identify one active profile.",
+      }
+    const [profile, settings] = selected
+    const token = settings.token_id?.trim() || undefined
+    const secret = settings.token_secret?.trim() || undefined
+    if (!token || !secret)
+      return {
+        found: true as const,
+        ready: false as const,
+        status: "invalid" as const,
+        profile,
+        environment: settings.environment?.trim() || undefined,
+        error: "Selected Modal profile is missing token_id or token_secret.",
+      }
     return {
-      found: true,
-      token: profile?.token_id?.trim() || undefined,
-      secret: profile?.token_secret?.trim() || undefined,
+      found: true as const,
+      ready: true as const,
+      status: "ready" as const,
+      profile,
+      environment: settings.environment?.trim() || undefined,
+      token,
+      secret,
     }
   }
 
   export async function modalFile(filepath?: string): Promise<ModalFile> {
     const target = filepath ?? path.join(os.homedir(), ".modal.toml")
-    const info = await fs.stat(target).catch(() => undefined)
-    const found = info?.isFile() ?? false
-    return { found, ready: found }
+    const { token: _token, secret: _secret, ...file } = await readModal(target)
+    return ModalFile.parse(file)
   }
 
   export async function providerEnv(target: string): Promise<Record<string, string>> {
@@ -572,7 +627,10 @@ export namespace ComputeSettings {
 
   export async function configureModal(filepath = path.join(os.homedir(), ".modal.toml")): Promise<Info> {
     const file = await modalFile(filepath)
-    if (!file.found) throw new HTTPException(400, { message: "Modal config was not found at ~/.modal.toml." })
+    if (!file.ready)
+      throw new HTTPException(400, {
+        message: file.error ?? "Modal config does not contain one usable profile.",
+      })
     const stored = await update((current) => {
       const existing = current.providers.modal
       current.providers.modal = {
@@ -651,11 +709,14 @@ export namespace ComputeSettings {
 
   export async function modalConfig(): Promise<ModalAdapter.Config> {
     const stored = await read()
-    if (!stored.providers.modal?.enabled) throw new Error("Compute provider modal is disabled")
+    const provider = stored.providers.modal
+    if (!provider?.enabled) throw new Error("Compute provider modal is disabled")
+    const file = provider.source === "modal_toml" && provider.path ? await readModal(provider.path) : undefined
+    if (file && !file.ready) throw new Error(file.error ?? "Modal config does not contain one usable profile")
     return {
       app: stored.modal.app,
       image: stored.modal.image,
-      environment: undefined,
+      environment: file?.environment,
       network: stored.modal.network,
       timeoutMinutes: stored.modal.timeout_minutes,
       concurrency: stored.modal.concurrency,

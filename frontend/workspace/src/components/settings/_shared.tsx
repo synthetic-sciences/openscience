@@ -99,9 +99,13 @@ export const SectionLabel: Component<{ label: string; count?: number }> = (props
 export const Card: ParentComponent = (props) => <div class="settings-card min-w-0 w-full">{props.children}</div>
 
 export const Row: ParentComponent<{ onClick?: () => void }> = (props) => (
-  <div class="settings-row min-w-0" data-interactive={props.onClick ? "true" : undefined} onClick={props.onClick}>
-    {props.children}
-  </div>
+  <Show when={props.onClick} fallback={<div class="settings-row min-w-0">{props.children}</div>}>
+    {(onClick) => (
+      <button type="button" class="settings-row min-w-0" data-interactive="true" onClick={() => onClick()()}>
+        {props.children}
+      </button>
+    )}
+  </Show>
 )
 
 export const EmptyState: Component<{ icon: IconProps["name"]; title: string; hint?: string }> = (props) => (

@@ -261,6 +261,23 @@
   font-size: 12px;
 }
 
+.connectors-inspection-state {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-weak);
+  font-size: 12px;
+}
+
+.connectors-inspection-state button {
+  min-height: 32px;
+  padding-inline: 8px;
+  color: var(--text-base);
+  font-weight: var(--font-weight-medium);
+}
+
 .connectors-inspection__grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

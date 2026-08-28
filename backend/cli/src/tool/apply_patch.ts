@@ -86,20 +86,57 @@ async function assertAbsent(filepath: string) {
   if (exists) throw new Error(`Refusing to overwrite an existing file: ${filepath}`)
 }
 
-function patchFailureSnapshot(filePath: string, content: string, chunks: Patch.UpdateFileChunk[]) {
+function patchFailureSnapshot(
+  filePath: string,
+  content: string,
+  chunks: Patch.UpdateFileChunk[],
+  failedChunkIndex?: number,
+  searchStart?: number,
+) {
   const lines = content.split(/\r?\n/)
   if (lines.at(-1) === "") lines.pop()
 
-  const candidates = chunks.flatMap((chunk) =>
-    [chunk.change_context, ...chunk.old_lines].filter((line): line is string => Boolean(line?.trim())),
-  )
+  const candidates = chunks
+    .flatMap((chunk) =>
+      [chunk.change_context, ...chunk.old_lines].filter((line): line is string => Boolean(line?.trim())),
+    )
+    .toSorted((left, right) => right.trim().length - left.trim().length)
   const anchor = candidates.reduce((found, candidate) => {
     if (found >= 0) return found
     const exact = lines.findIndex((line) => line === candidate)
     if (exact >= 0) return exact
     return lines.findIndex((line) => line.trim() === candidate.trim())
   }, -1)
-  const start = Math.max(0, anchor >= 0 ? anchor - 4 : 0)
+
+  const tokenSet = (value: string) =>
+    new Set(
+      (value.toLocaleLowerCase().match(/[\p{L}\p{N}_.$/-]+/gu) ?? []).filter(
+        (token) => token.length >= 3 || /^\d+$/.test(token),
+      ),
+    )
+  const candidateTokens = candidates.map(tokenSet).filter((tokens) => tokens.size >= 3)
+  const fuzzy =
+    anchor >= 0
+      ? undefined
+      : lines.reduce(
+          (best, line, index) => {
+            const current = tokenSet(line)
+            if (current.size < 2) return best
+            for (const expected of candidateTokens) {
+              const shared = Array.from(expected).filter((token) => current.has(token)).length
+              if (shared < 3) continue
+              const dice = (2 * shared) / (expected.size + current.size)
+              const coverage = shared / Math.min(expected.size, current.size)
+              const score = Math.max(dice, coverage * 0.65)
+              if (score >= 0.24 && score > best.score) best = { index, score }
+            }
+            return best
+          },
+          { index: -1, score: 0 },
+        )
+  const hinted = searchStart && searchStart > 0 ? Math.min(searchStart, Math.max(lines.length - 1, 0)) : -1
+  const located = anchor >= 0 ? anchor : fuzzy && fuzzy.index >= 0 ? fuzzy.index : hinted
+  const start = Math.max(0, located >= 0 ? located - 4 : 0)
   const end = Math.min(lines.length, start + 20)
   const preview = lines
     .slice(start, end)
@@ -108,10 +145,13 @@ function patchFailureSnapshot(filePath: string, content: string, chunks: Patch.U
   const sha256 = crypto.createHash("sha256").update(content).digest("hex")
 
   return [
+    failedChunkIndex === undefined ? undefined : `Failed update hunk: ${failedChunkIndex + 1}`,
     `Re-read ${filePath} before retrying; its current contents do not match the patch context.`,
     `Current SHA-256: ${sha256}`,
     preview ? `Current bounded context (lines ${start + 1}-${end}):\n${preview}` : "The current file is empty.",
-  ].join("\n")
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n")
 }
 
 async function assertApprovedFile(filepath: string, approved: ApprovedFile) {
@@ -391,8 +431,15 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             const fileUpdate = Patch.deriveNewContentsFromChunks(filePath, hunk.chunks, oldContent)
             newContent = fileUpdate.content
           } catch (error) {
+            const mismatch = error instanceof Patch.UpdateChunkMismatch ? error : undefined
             throw new Error(
-              `apply_patch verification failed: ${error}\n${patchFailureSnapshot(filePath, oldContent, hunk.chunks)}`,
+              `apply_patch verification failed: ${error}\n${patchFailureSnapshot(
+                filePath,
+                oldContent,
+                mismatch ? [mismatch.chunk] : hunk.chunks,
+                mismatch?.chunkIndex,
+                mismatch?.searchStart,
+              )}`,
             )
           }
 

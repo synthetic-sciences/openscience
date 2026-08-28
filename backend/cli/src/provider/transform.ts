@@ -3,6 +3,7 @@ import { mergeDeep, unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
+import { normalizeDeepSeekToolSchema } from "./tool-schema"
 import { iife } from "@/util/iife"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
@@ -35,6 +36,8 @@ export namespace ProviderTransform {
         return "gateway"
       case "@openrouter/ai-sdk-provider":
         return "openrouter"
+      case "@ai-sdk/deepseek":
+        return "deepseek"
     }
     return undefined
   }
@@ -135,7 +138,11 @@ export namespace ProviderTransform {
       return result
     }
 
-    if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
+    if (
+      model.api.npm !== "@ai-sdk/deepseek" &&
+      typeof model.capabilities.interleaved === "object" &&
+      model.capabilities.interleaved.field
+    ) {
       const field = model.capabilities.interleaved.field
       return msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -536,6 +543,16 @@ export namespace ProviderTransform {
         ]),
       )
 
+    // DeepSeek V4 has three canonical effort values. The native adapter maps
+    // these to reasoning_effort and preserves reasoning_content through tool
+    // loops; do not surface its accepted compatibility aliases as UI tiers.
+    if (model.api.npm === "@ai-sdk/deepseek") {
+      if (!/deepseek-v[4-9]/.test(id)) return {}
+      const canonical = ["low", "high", "max"]
+      const values = exact?.filter((effort) => canonical.includes(effort)) ?? canonical
+      return efforts(values)
+    }
+
     // https://www.kimi.com/help/kimi-api/api-model-selection
     if (/kimi-k3\b/.test(id)) return efforts(exact ?? ["low", "high", "max"])
 
@@ -908,6 +925,14 @@ export namespace ProviderTransform {
       }
     }
 
+    if (
+      input.model.api.npm === "@ai-sdk/deepseek" &&
+      /deepseek-v[4-9]/.test(input.model.api.id.toLowerCase()) &&
+      !input.model.capabilities.reasoning
+    ) {
+      result["thinking"] = { type: "disabled" }
+    }
+
     if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
       result["promptCacheKey"] = input.sessionID
     }
@@ -1032,6 +1057,9 @@ export namespace ProviderTransform {
       }
       return { thinkingConfig: { thinkingBudget: 0 } }
     }
+    if (model.api.npm === "@ai-sdk/deepseek" && /deepseek-v[4-9]/.test(apiID)) {
+      return { thinking: { type: "disabled" } }
+    }
     return {}
   }
 
@@ -1131,6 +1159,10 @@ export namespace ProviderTransform {
       }
 
       schema = sanitizeGemini(schema)
+    }
+
+    if (model.api.npm === "@ai-sdk/deepseek") {
+      schema = normalizeDeepSeekToolSchema(schema)
     }
 
     return schema

@@ -32,7 +32,7 @@
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: var(--font-weight-emphasis);
   letter-spacing: -0.015em;
 }
 
@@ -90,15 +90,14 @@
   margin: 0 0 6px;
   color: var(--text-weak);
   font-size: 10px;
-  font-weight: 650;
+  font-weight: var(--font-weight-emphasis);
   letter-spacing: 0.11em;
-  text-transform: uppercase;
 }
 
 .desktop-onboarding__intro h1 {
   margin: 0 0 8px;
   font-size: clamp(26px, 4vw, 36px);
-  font-weight: 570;
+  font-weight: var(--font-weight-medium);
   letter-spacing: -0.04em;
   line-height: 1.08;
   text-wrap: balance;
@@ -177,7 +176,7 @@
 .desktop-onboarding__summary strong,
 .desktop-onboarding__account-copy strong {
   font-size: 13px;
-  font-weight: 620;
+  font-weight: var(--font-weight-emphasis);
 }
 
 .desktop-onboarding__choices em {
@@ -187,7 +186,7 @@
   color: var(--text-weak);
   font-size: 9px;
   font-style: normal;
-  font-weight: 650;
+  font-weight: var(--font-weight-emphasis);
   letter-spacing: 0.02em;
 }
 
@@ -270,9 +269,8 @@
   gap: 6px;
   color: var(--text-weak);
   font-size: 10px;
-  font-weight: 620;
+  font-weight: var(--font-weight-emphasis);
   letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .desktop-onboarding__status i {
@@ -322,7 +320,7 @@
   border-radius: 7px;
   color: var(--text-weak);
   font-size: 10px;
-  font-weight: 650;
+  font-weight: var(--font-weight-emphasis);
   font-variant-numeric: tabular-nums;
 }
 

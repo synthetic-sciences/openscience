@@ -4,7 +4,7 @@ This document explains how OpenScience is put together, so you can find your way
 
 ## The shape of the system
 
-When you run `openscience`, the CLI starts a local server and opens a workspace in your browser. Everything runs on your machine.
+When you run `openscience`, the CLI starts a local server and opens a workspace in your browser. The workspace, durable state, permissions, and compute control plane run on your machine. Model calls, scientific connectors, and explicitly approved remote-compute jobs may use the provider you configure.
 
 ```
   Browser workspace  (frontend/workspace, SolidJS)
@@ -16,6 +16,7 @@ When you run `openscience`, the CLI starts a local server and opens a workspace 
         +--  Tool layer         shell, edit, LSP, MCP, science connectors
         +--  Skills             bundled and user-installed skill packs
         +--  Providers          Anthropic, OpenAI, Google, and 75+ more
+        +--  Compute jobs       local, SSH, scheduler, and governed Modal runs
         |
         +--  Gateway client     optional: managed models, wallet, search, graphs
 ```
@@ -47,8 +48,9 @@ The backend is a Bun and TypeScript application compiled to a single native bina
 - `src/server` is a Hono server. It serves the embedded workspace UI, exposes the session and tool APIs, and streams events back to the browser over SSE.
 - `src/session` is the agent runtime: the message loop, tool dispatch, compaction, provenance, durable runtime events, and explicit read-only review passes for sessions or immutable artifact versions.
 - `src/agent` holds the agent registry and prompts. `research` is the single user-facing agent; it loads domain knowledge through skills and may delegate independent Explore or Execute work internally. Delegation posture changes how readily it parallelizes, while runtime capacity provides the actual concurrency boundary. Domain and legacy helper profiles remain hidden compatibility aliases; `plan` is a read-only mode.
-- `src/provider` routes each request to a model. Model definitions come from [models.dev](https://models.dev), cached locally with a bundled snapshot as a fallback.
-- `src/tool` and `src/science` implement the tools the agent can call, including the shell, editor, LSP bridge, MCP client, and the scientific database connectors.
+- `src/provider` routes each request to a model. Model definitions come from [models.dev](https://models.dev), cached locally with a bundled snapshot as a fallback. Native direct-key routes stay distinct from relays: DeepSeek direct BYOK uses the official adapter, while selecting an explicit OpenRouter model keeps that request on OpenRouter.
+- `src/tool` and `src/science` implement the tools the agent can call, including the shell, editor, LSP bridge, MCP client, and the scientific database connectors. The versioned scientific capability registry is deliberately small: five pinned-package plans are experimental and AlphaFold2 remains blocked until its runtime assets are reviewed. Planning a capability compiles an ordinary `compute_job` proposal; it never dispatches work or grants authority.
+- `src/compute` owns durable local and remote job lifecycles. Modal dispatch is bound to an approved digest, explicit files and secrets, durable ownership, and recoverable output delivery. Its concurrency setting is an admission limit: starts beyond the limit fail visibly rather than entering an autonomous waiting queue.
 - `src/openscience` is the Gateway client. It is optional; the base install and every bring-your-own-key flow work without it.
 
 ### Prompt architecture
@@ -80,4 +82,4 @@ Synthetic Sciences is a separate managed service; only its client lives here. No
 
 ## Build and release
 
-`backend/cli/script/build.ts` fetches the model catalog, builds the workspace UI, and compiles the CLI to native binaries for Linux, macOS, and Windows. Each platform binary is published as its own npm package (`@synsci/openscience-<platform>`), and a small meta package (`@synsci/openscience`) selects the right one at install time. The `npx synsci` launcher installs that meta package. Releases run through `.github/workflows/publish.yml`.
+`backend/cli/script/build.ts` fetches the model catalog, builds the workspace UI, and compiles the CLI to native binaries for Linux, macOS, and Windows. Each platform binary is published as its own npm package (`@synsci/openscience-<platform>`), and a small meta package (`@synsci/openscience`) selects the right one at install time. The `npx synsci` launcher installs that meta package. Releases run through `.github/workflows/publish.yml`. Signed mode requires Developer ID and notarization credentials; unsigned mode publishes clearly labeled archives and installers, with macOS apps ad-hoc signed but not notarized.

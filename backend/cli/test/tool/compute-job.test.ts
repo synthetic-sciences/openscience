@@ -668,6 +668,54 @@ test("explicit remote uploads narrow or disable the Project-files snapshot", asy
   })
 })
 
+test("Modal stages the session workspace when cwd and uploads are omitted", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const root = path.join(tmp.path, "compute")
+  const modal = {
+    app: "openscience-test",
+    image: "python:3.12-slim",
+    network: "none" as const,
+    timeoutMinutes: 10,
+    concurrency: 1,
+  }
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trustProject()
+      const session = await Session.create({})
+      const workspace = await SessionFilesystem.workspace(session.id)
+      await Promise.all([
+        Bun.write(path.join(workspace, "analysis.py"), "print('session input')\n"),
+        Bun.write(path.join(workspace, ".env"), "PRIVATE_TOKEN=secret\n"),
+      ])
+      const tool = await createComputeJobTool({
+        root,
+        modal,
+        credentials: { ...modal, tokenId: "ak", tokenSecret: "as" },
+      }).init()
+      const workload = {
+        name: "Session root inputs",
+        purpose: "Use the prepared session script without an artificial cwd.",
+        command: "python analysis.py",
+        target: { kind: "modal" as const },
+        gpu: "none" as const,
+      }
+
+      const defaults = await tool.execute({ action: "plan", ...workload }, context(session.id, []))
+      const defaultPlan = defaults.metadata.compute_job.plan
+      if (defaultPlan?.provider !== "modal") throw new Error("compute_job did not return its Modal plan")
+      expect(defaultPlan.workspace_cwd).toBe(".")
+      expect(defaultPlan.uploads.map((file) => file.path)).toEqual(["analysis.py"])
+
+      const disabled = await tool.execute({ action: "plan", ...workload, uploads: [] }, context(session.id, []))
+      const disabledPlan = disabled.metadata.compute_job.plan
+      if (disabledPlan?.provider !== "modal") throw new Error("compute_job did not return its Modal plan")
+      expect(disabledPlan.uploads).toEqual([])
+    },
+  })
+})
+
 test("rejects an unavailable or absolute compute cwd before approval and dispatch", async () => {
   await using tmp = await tmpdir({ git: true })
   const root = path.join(tmp.path, "compute")

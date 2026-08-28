@@ -500,7 +500,7 @@ async function request(
 ): Promise<PreparedRequest> {
   const uploads =
     input.uploads ??
-    (input.target.kind === "modal" && input.cwd
+    (input.target.kind === "modal"
       ? ["**/*"]
       : input.target.kind === "ssh" && input.cwd
         ? [`${input.cwd.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/$/, "")}/**/*`]
@@ -529,6 +529,7 @@ async function request(
       artifacts: input.artifacts,
       checkpoint: input.checkpoint,
       uploads,
+      default_uploads: input.target.kind === "modal" && input.uploads === undefined,
       packages: input.packages,
       image: input.image,
       gpu: input.target.kind === "modal" ? (input.gpu ?? "none") : input.gpu,

@@ -1,5 +1,9 @@
 # Deferred work & owner decisions
 
+> Historical Atlas-polish snapshot from 2026-07-06. This is not the current
+> release matrix; use the changelog and current security documentation for
+> shipped behavior.
+
 Companion to `docs/plans/`. Records what the Atlas-polish sprint deliberately did
 **not** ship, and why — so nothing silently reads as "done." Anything here needs
 either an owner/Atlas-team decision or a follow-up sprint. Updated 2026-07-06.
@@ -29,15 +33,14 @@ session — the one remaining verification gap.
 
 ## Deferred — needs owner sign-off
 
-### WS10 — agent sandboxing (design-only)
+### Former WS10 — agent sandboxing
 
-`docs/plans/10-agent-sandboxing.md` is a design, not an implementation. The agent
-runs tools with the user's own permissions; there is no isolation boundary.
-Shipping real sandboxing (seatbelt/landlock/container per platform) changes the
-security and execution model and must not be flipped on without the owner
-choosing the substrate and default posture. **Unblock:** owner picks the isolation
-mechanism + whether it's default-on. Left entirely as design per explicit
-instruction.
+This item was open in the 2026-07-06 snapshot. Current OpenScience ships native
+containment through macOS Seatbelt and Linux bubblewrap for supported local
+execution paths, with fail-closed behavior when the selected boundary is
+unavailable. This is operating-system containment, not a VM or a complete jail;
+actively hostile code should still run inside a container or VM. See the current
+security and sandbox documentation for the authoritative posture.
 
 ### WS7 A3 — BYOK key source of truth
 
@@ -81,5 +84,6 @@ a bug. Left as-is.
 
 CLI: `bun run typecheck` clean; `bun test` (backend/cli) 882 pass / 0 fail; the
 hang fix and unified `status` verified live against the real backend. The Atlas PR
-is a **draft** — nothing merged there. Sandboxing (WS10) remains unshipped by
-design.
+is a **draft** — nothing merged there. The sandboxing statement in this historical
+snapshot has since been superseded; current containment is described in the
+security and sandbox documentation.

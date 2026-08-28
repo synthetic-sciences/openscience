@@ -25,6 +25,10 @@ describe("seamless workspace surfaces", () => {
     expect(rule(compute, ".compute-surface__atlas")).not.toContain("border:")
     expect(rule(compute, ".compute-surface__atlas-icon")).not.toContain("border:")
     expect(rule(host, ".host-strip")).not.toContain("border:")
+    expect(rule(host, ".host-strip")).toContain("border-radius: var(--atlas-radius-sm)")
+    expect(rule(host, ".host-strip")).toContain(
+      "background: color-mix(in srgb, var(--color-bg-subtle) 72%, transparent)",
+    )
     expect(rule(trace, ".session-trace__intro")).not.toContain("border-bottom")
 
     for (const selector of [".session-trace__metrics", ".session-trace__counts", ".session-trace__route"]) {

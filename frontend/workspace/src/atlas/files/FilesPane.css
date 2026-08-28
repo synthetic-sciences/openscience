@@ -1288,8 +1288,10 @@
 }
 .artifact-thumb--notebook small {
   color: var(--color-text-faint);
-  font: 600 8px/1 var(--font-sans);
-  text-transform: uppercase;
+  font-family: var(--font-family-sans);
+  font-size: 8px;
+  font-weight: var(--font-weight-emphasis);
+  line-height: 1;
 }
 .artifact-thumb--notebook pre {
   margin: 0;

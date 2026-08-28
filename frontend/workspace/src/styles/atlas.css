@@ -54,6 +54,7 @@
   --atlas-radius-sm: 10px;
   --atlas-radius-md: 12px;
   --atlas-radius-lg: 20px;
+  --atlas-radius-pill: 999px;
   --workspace-composer-reserve: 116px;
 
   --color-success: var(--surface-success-strong);

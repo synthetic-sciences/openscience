@@ -217,10 +217,17 @@ test("Modal can use an active ~/.modal.toml profile without copying its tokens",
       "active = true",
       'token_id = "ak-from-toml"',
       'token_secret = "as-from-toml"',
+      'environment = "research-lab"',
     ].join("\n"),
   )
 
-  expect(await ComputeSettings.modalFile(file)).toEqual({ found: true, ready: true })
+  expect(await ComputeSettings.modalFile(file)).toEqual({
+    found: true,
+    ready: true,
+    status: "ready",
+    profile: "openscience",
+    environment: "research-lab",
+  })
   const info = await ComputeSettings.configureModal(file)
   const modal = info.providers.find((item) => item.id === "modal")
   expect(modal).toMatchObject({ connected: true, enabled: true, source: "modal_toml" })
@@ -231,6 +238,7 @@ test("Modal can use an active ~/.modal.toml profile without copying its tokens",
     MODAL_TOKEN_ID: "ak-from-toml",
     MODAL_TOKEN_SECRET: "as-from-toml",
   })
+  expect(await ComputeSettings.modalConfig()).toMatchObject({ environment: "research-lab" })
 
   await ComputeSettings.setProviderEnabled("modal", false)
   await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("disabled")
@@ -281,21 +289,61 @@ test("configuring Modal migrates legacy compute defaults", async () => {
   })
 })
 
-test("Modal config discovery defers inactive profile resolution until an enabled operation", async () => {
+test("Modal config discovery validates and selects the default profile", async () => {
   await using tmp = await tmpdir()
   const missing = path.join(tmp.path, ".modal.toml")
-  expect(await ComputeSettings.modalFile(missing)).toEqual({ found: false, ready: false })
+  expect(await ComputeSettings.modalFile(missing)).toMatchObject({
+    found: false,
+    ready: false,
+    status: "absent",
+  })
 
   await Bun.write(missing, '[default]\ntoken_id = "ak-id"\ntoken_secret = "as-secret"\n')
-  expect(await ComputeSettings.modalFile(missing)).toEqual({ found: true, ready: true })
+  expect(await ComputeSettings.modalFile(missing)).toEqual({
+    found: true,
+    ready: true,
+    status: "ready",
+    profile: "default",
+  })
   const configured = await ComputeSettings.configureModal(missing)
   expect(configured.providers.find((item) => item.id === "modal")).toMatchObject({
     connected: true,
     enabled: true,
     source: "modal_toml",
   })
-  await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("invalid credentials")
+  expect(await ComputeSettings.providerEnv("modal")).toEqual({
+    MODAL_TOKEN_ID: "ak-id",
+    MODAL_TOKEN_SECRET: "as-secret",
+  })
   await ComputeSettings.disconnectProvider("modal")
+})
+
+test("Modal config discovery rejects ambiguous or incomplete profiles before enabling", async () => {
+  await using tmp = await tmpdir()
+  const ambiguous = path.join(tmp.path, "ambiguous.toml")
+  const incomplete = path.join(tmp.path, "incomplete.toml")
+  await Promise.all([
+    Bun.write(
+      ambiguous,
+      '[first]\ntoken_id = "ak-one"\ntoken_secret = "as-one"\n[second]\ntoken_id = "ak-two"\ntoken_secret = "as-two"\n',
+    ),
+    Bun.write(incomplete, '[default]\ntoken_id = "ak-only"\n'),
+  ])
+
+  expect(await ComputeSettings.modalFile(ambiguous)).toMatchObject({
+    found: true,
+    ready: false,
+    status: "invalid",
+    error: "Modal config does not identify one active profile.",
+  })
+  expect(await ComputeSettings.modalFile(incomplete)).toMatchObject({
+    found: true,
+    ready: false,
+    status: "invalid",
+    profile: "default",
+  })
+  await expect(ComputeSettings.configureModal(ambiguous)).rejects.toThrow("one active profile")
+  await expect(ComputeSettings.configureModal(incomplete)).rejects.toThrow("missing token_id or token_secret")
 })
 
 test("Modal Volume browser downloads stream past the retired cap and clean up on cancel or abort", async () => {

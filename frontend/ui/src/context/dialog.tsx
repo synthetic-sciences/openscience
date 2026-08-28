@@ -68,6 +68,8 @@ function init() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
+      const target = event.target
+      if (target instanceof Element && target.closest('[data-dialog-escape-scope="true"]')) return
       close()
       event.preventDefault()
       event.stopPropagation()

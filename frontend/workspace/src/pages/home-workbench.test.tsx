@@ -51,6 +51,7 @@ const props = {
       sessions: 4,
     },
   ],
+  archivedProjects: [],
   totalProjects: 1,
   query: "",
   serverName: "Local server",
@@ -58,7 +59,8 @@ const props = {
   onQuery: (_value: string) => {},
   onOpen: (_project: { id: string }) => {},
   onPin: (_project: { id: string }) => {},
-  onRemove: (_project: { id: string }) => {},
+  onArchive: (_project: { id: string }) => {},
+  onRestore: (_project: { id: string }) => {},
   onCreate: () => {},
   onRetry: () => {},
   onSettings: () => {},
@@ -121,7 +123,7 @@ describe("ProjectsWorkbench", () => {
     expect(filtered.querySelector(".science-home__results-summary")?.textContent).toBe("1 of 43 projects")
   })
 
-  test("exposes independent pin and remove controls without opening the project", async () => {
+  test("exposes independent pin and archive controls without opening the project", async () => {
     const calls: string[] = []
     const host = mount(() =>
       subject.ProjectsWorkbench({
@@ -129,15 +131,55 @@ describe("ProjectsWorkbench", () => {
         projects: [{ ...props.projects[0], pinned: true }],
         onOpen: (project) => calls.push(`open:${project.id}`),
         onPin: (project) => calls.push(`pin:${project.id}`),
-        onRemove: (project) => calls.push(`remove:${project.id}`),
+        onArchive: (project) => calls.push(`archive:${project.id}`),
       }),
     )
 
     host.querySelector<HTMLButtonElement>('button[aria-label="Unpin Gateway"]')?.click()
-    host.querySelector<HTMLButtonElement>('button[aria-label="Remove Gateway from home"]')?.click()
+    host.querySelector<HTMLButtonElement>('button[aria-label="Archive Gateway"]')?.click()
 
     expect(host.querySelector('[data-pinned="true"]')).toBeTruthy()
-    expect(calls).toEqual(["pin:prj_atlas", "remove:prj_atlas"])
+    expect(calls).toEqual(["pin:prj_atlas", "archive:prj_atlas"])
+  })
+
+  test("discloses archived projects and restores them without exposing their path", async () => {
+    const restored: string[] = []
+    const host = mount(() =>
+      subject.ProjectsWorkbench({
+        ...props,
+        archivedProjects: [
+          {
+            ...props.projects[0],
+            id: "prj_archived",
+            name: "Archived study",
+            worktree: "/Users/aayam/Research/private-path",
+            time: { created: 1, archived: 2 },
+          },
+        ],
+        onRestore: (project) => restored.push(project.id),
+      }),
+    )
+
+    expect(host.querySelector(".science-home__archived")?.textContent).toContain("Archived")
+    expect(host.textContent).toContain("Archived study")
+    expect(host.textContent).not.toContain("/Users/aayam")
+    host.querySelector<HTMLButtonElement>(".science-home__archived button")?.click()
+    expect(restored).toEqual(["prj_archived"])
+  })
+
+  test("keeps an archived-only home recoverable instead of calling it a search miss", async () => {
+    const host = mount(() =>
+      subject.ProjectsWorkbench({
+        ...props,
+        projects: [],
+        totalProjects: 0,
+        archivedProjects: [{ ...props.projects[0], time: { created: 1, archived: 2 } }],
+      }),
+    )
+
+    expect(host.textContent).toContain("No active projects")
+    expect(host.textContent).not.toContain("No matching projects")
+    expect(host.querySelector(".science-home__archived")).toBeTruthy()
   })
 
   test("keeps loading, error, empty, and no-match recovery explicit", async () => {

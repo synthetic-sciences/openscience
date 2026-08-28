@@ -44,6 +44,26 @@ describe("tool selection", () => {
   })
 
   test("activates scientific capabilities only when the request needs them", () => {
+    for (const capability of ["SciPy", "Matplotlib", "scikit-learn", "Biopython", "RDKit", "AlphaFold2"]) {
+      expect(
+        ToolSelection.relevant("scientific_capability", {
+          agent: "research",
+          message: `Use ${capability} for this workflow.`,
+        }),
+      ).toBe(true)
+    }
+    expect(
+      ToolSelection.relevant("scientific_capability", {
+        agent: "research",
+        message: "Run this research workflow with the best supported scientific package.",
+      }),
+    ).toBe(true)
+    expect(
+      ToolSelection.relevant("scientific_capability", {
+        agent: "research",
+        message: "Fix the CSS in this repository and run its test suite.",
+      }),
+    ).toBe(false)
     expect(
       ToolSelection.relevant("compute_job", {
         agent: "research",

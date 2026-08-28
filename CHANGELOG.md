@@ -18,6 +18,14 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Added a conversation-first Research harness with model-directed delegation,
   persistent Python and R analysis, governed remote compute, and a reproducible
   trajectory dashboard for harness evaluation.
+- Added native DeepSeek direct-BYOK routing through the official adapter, while
+  keeping explicit OpenRouter models on OpenRouter and normalizing strict tool
+  schemas at the provider boundary. Deterministic contract tests cover the
+  route; a live provider canary is still pending.
+- Added a versioned six-entry scientific capability registry as an experimental
+  foundation: five pinned-package `compute_job` plans and one blocked AlphaFold2
+  entry. The registry describes and compiles plans only; it neither dispatches
+  work nor claims parity with a hosted 54-tool catalog.
 
 ### Changed
 
@@ -50,8 +58,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   for new local projects and explicit or managed restrictions preserved.
 - Simplified the project sidebar, model and effort controls, chat typography,
   sent-message surfaces, and Compute into a quieter results-first workspace.
+- Reorganized Customize around seven focused top-level destinations with
+  secondary settings disclosed in context, shared panel chrome, and no dead
+  controls.
 - Unified logical model names while keeping API-key and ChatGPT access routes
   explicit in both the composer and Settings.
+- Consolidated Modal guidance into one governed `compute_job` workflow. Omitted
+  uploads stage safe session files, an explicit empty upload list stages none,
+  and the configured concurrency value is an admission limit rather than a
+  hidden waiting queue.
 - Let untrusted projects run routine terminal, kernel, shell, and local-compute
   work immediately inside the enforced native sandbox, while keeping project
   extensions, remote compute, package installation, and host execution behind
@@ -143,6 +158,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   work and delegated handoffs without broadening external-directory access.
 - Restored the v2 Review settings API, truthful runtime progress capture, and
   hermetic browser and publication workflows for release validation.
+- Made project removal a recoverable archive operation, kept archived projects
+  out of the active Home list, and added an explicit Restore action so local
+  project discovery cannot make intentionally removed projects reappear.
+- Made stale-patch diagnostics identify the exact failed hunk and show useful
+  bounded context near its intended location, including in long files whose
+  target text changed completely.
+- Made storage scans report allocated disk use without double-counting hard
+  links, finish in the background, and keep their loading and error states
+  truthful.
 
 ## v2.0.23 — 2026-08-09
 

@@ -1,4 +1,5 @@
 import type { Component } from "solid-js"
+import type { FilePart } from "@synsci/sdk/v2"
 
 export interface ToolProps {
   input: Record<string, any>
@@ -7,6 +8,7 @@ export interface ToolProps {
   output?: string
   status?: string
   partID?: string
+  attachments?: FilePart[]
   title?: string
   hideDetails?: boolean
   defaultOpen?: boolean

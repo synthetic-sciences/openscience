@@ -58,7 +58,8 @@ describe("public Synthetic Sciences branding", () => {
 
     expect(combined).toContain("Synthetic Sciences account")
     expect(combined).toContain("Ace wallet")
-    expect(combined).toContain('title: "Credits"')
+    expect(combined).toContain('title: "Managed"')
+    expect(combined).toContain("Use your Ace balance")
     expect(combined).not.toContain("Add Ace credits")
     expect(combined).toContain("Connected to Synthetic Sciences")
     expect(combined).toContain("openscience login")

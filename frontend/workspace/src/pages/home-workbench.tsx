@@ -1,7 +1,16 @@
 import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { DateTime } from "luxon"
 import { AppHeader } from "@/atlas/AppHeader"
-import { IconPin, IconPinFilled, IconPlus, IconSearch, IconSettings, IconTrash, IconX } from "@/atlas/shared/Icon"
+import {
+  IconArchive,
+  IconChevronRight,
+  IconPin,
+  IconPinFilled,
+  IconPlus,
+  IconSearch,
+  IconSettings,
+  IconX,
+} from "@/atlas/shared/Icon"
 import { Wordmark } from "@/atlas/Wordmark"
 import { projectName, type LauncherState, type PreparedProject } from "./home-projects"
 import { preloadSession } from "./session-loader"
@@ -14,6 +23,7 @@ export type HomeProject = PreparedProject & {
 export function ProjectsWorkbench(props: {
   state: LauncherState
   projects: HomeProject[]
+  archivedProjects: HomeProject[]
   totalProjects: number
   query: string
   refreshing?: boolean
@@ -24,7 +34,8 @@ export function ProjectsWorkbench(props: {
   onQuery: (query: string) => void
   onOpen: (project: HomeProject) => void
   onPin: (project: HomeProject) => void
-  onRemove: (project: HomeProject) => void
+  onArchive: (project: HomeProject) => void
+  onRestore: (project: HomeProject) => void
   onCreate: () => void
   onRetry: () => void
   onSettings: () => void
@@ -170,19 +181,35 @@ export function ProjectsWorkbench(props: {
               <Show
                 when={props.projects.length > 0}
                 fallback={
-                  <section
-                    id="science-home-project-list"
-                    class="science-home__state science-home__state--empty"
-                    aria-live="polite"
+                  <Show
+                    when={props.query.trim()}
+                    fallback={
+                      <section
+                        id="science-home-project-list"
+                        class="science-home__state science-home__state--empty"
+                        aria-live="polite"
+                      >
+                        <div>
+                          <strong>No active projects</strong>
+                          <span>Restore an archived project below or start a new one.</span>
+                        </div>
+                      </section>
+                    }
                   >
-                    <div>
-                      <strong>No matching projects</strong>
-                      <span>No projects match “{props.query.trim()}”. Try another search or clear this one.</span>
-                    </div>
-                    <button class="science-home__button" type="button" onClick={clearSearch}>
-                      Clear search
-                    </button>
-                  </section>
+                    <section
+                      id="science-home-project-list"
+                      class="science-home__state science-home__state--empty"
+                      aria-live="polite"
+                    >
+                      <div>
+                        <strong>No matching projects</strong>
+                        <span>No projects match “{props.query.trim()}”. Try another search or clear this one.</span>
+                      </div>
+                      <button class="science-home__button" type="button" onClick={clearSearch}>
+                        Clear search
+                      </button>
+                    </section>
+                  </Show>
                 }
               >
                 <ul
@@ -233,19 +260,41 @@ export function ProjectsWorkbench(props: {
                             </Show>
                           </button>
                           <button
-                            class="science-home__project-action science-home__project-remove"
+                            class="science-home__project-action science-home__project-archive"
                             type="button"
-                            aria-label={`Remove ${projectName(project)} from home`}
-                            title="Remove project from home"
-                            onClick={() => props.onRemove(project)}
+                            aria-label={`Archive ${projectName(project)}`}
+                            title="Archive project"
+                            onClick={() => props.onArchive(project)}
                           >
-                            <IconTrash size={14} strokeWidth={1.4} />
+                            <IconArchive size={14} strokeWidth={1.4} />
                           </button>
                         </div>
                       </li>
                     )}
                   </For>
                 </ul>
+              </Show>
+              <Show when={props.archivedProjects.length > 0}>
+                <details class="science-home__archived">
+                  <summary>
+                    <IconArchive size={14} strokeWidth={1.45} />
+                    <span>Archived</span>
+                    <span class="science-home__archived-count">{props.archivedProjects.length}</span>
+                    <IconChevronRight class="science-home__archived-chevron" size={12} strokeWidth={1.45} />
+                  </summary>
+                  <ul aria-label="Archived projects">
+                    <For each={props.archivedProjects}>
+                      {(project) => (
+                        <li>
+                          <span>{projectName(project)}</span>
+                          <button type="button" onClick={() => props.onRestore(project)}>
+                            Restore
+                          </button>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </details>
               </Show>
             </Match>
           </Switch>

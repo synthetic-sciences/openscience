@@ -986,6 +986,31 @@
   }
 }
 
+[data-component="tool-part-wrapper"][data-tool-family="sources"]
+  > [data-component="collapsible"]
+  [data-component="tool-trigger"]
+  > [data-slot="icon-svg"],
+[data-component="tool-part-wrapper"][data-tool-family="sources"]
+  > [data-component="collapsible"]
+  [data-slot="basic-tool-tool-trigger-content"]
+  > [data-slot="icon-svg"] {
+  color: var(--icon-interactive-base);
+}
+
+[data-component="tool-part-wrapper"][data-tool-family="changes"]
+  > [data-component="collapsible"]
+  [data-slot="basic-tool-tool-trigger-content"]
+  > [data-slot="icon-svg"] {
+  color: var(--icon-success-base);
+}
+
+[data-component="tool-part-wrapper"][data-tool-family="images"]
+  > [data-component="collapsible"]
+  [data-slot="basic-tool-tool-trigger-content"]
+  > [data-slot="icon-svg"] {
+  color: var(--syntax-keyword);
+}
+
 [data-component="kernel-tool"] {
   border-top: 1px solid var(--border-weak-base);
   background: var(--background-base);
@@ -1015,6 +1040,9 @@
     border-top: 1px solid var(--border-weak-base);
 
     summary {
+      display: grid;
+      grid-template-columns: 66px minmax(0, 1fr);
+      align-items: center;
       padding: 7px 12px;
       color: var(--text-weak);
       font-family: var(--font-family-sans);
@@ -1023,10 +1051,17 @@
       user-select: none;
     }
 
-    & > pre {
+    [data-slot="kernel-tool-input-cell"] {
+      display: grid;
+      grid-template-columns: 66px minmax(0, 1fr);
+      align-items: start;
+      padding: 10px 12px;
+      border-top: 1px solid var(--border-weaker-base);
+    }
+
+    [data-slot="kernel-tool-input-cell"] > pre {
       max-height: calc(5 * 1.55em + 20px);
       margin: 0;
-      padding: 10px 12px;
       overflow: auto;
       color: var(--text-base);
       font-family: var(--font-family-mono);
@@ -1041,13 +1076,35 @@
     }
   }
 
-  [data-slot="kernel-tool-result"] {
+  [data-slot="kernel-tool-output-cell"] {
+    display: grid;
+    grid-template-columns: 66px minmax(0, 1fr);
+    align-items: start;
+    padding: 10px 12px;
     border-top: 1px solid var(--border-weak-base);
+  }
 
+  [data-slot="kernel-tool-prompt"] {
+    color: var(--syntax-keyword);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-x-small);
+    line-height: 1.55;
+    white-space: nowrap;
+  }
+
+  &[data-language="r"] [data-slot="kernel-tool-prompt"] {
+    color: var(--icon-interactive-base);
+  }
+
+  [data-slot="kernel-tool-output-body"] {
+    min-width: 0;
+  }
+
+  [data-slot="kernel-tool-result"] {
     & > pre {
       max-height: 260px;
       margin: 0;
-      padding: 10px 12px;
+      padding: 0;
       overflow: auto;
       color: var(--text-base);
       font-family: var(--font-family-mono);
@@ -1061,8 +1118,7 @@
   [data-slot="kernel-tool-images"] {
     display: grid;
     gap: 8px;
-    padding: 10px 12px 12px;
-    border-top: 1px solid var(--border-weak-base);
+    padding-top: 8px;
 
     img {
       display: block;
@@ -1071,6 +1127,75 @@
       border: 1px solid var(--border-weak-base);
       border-radius: var(--radius-xs);
     }
+  }
+}
+
+@media (max-width: 560px) {
+  [data-component="kernel-tool"] {
+    [data-slot="kernel-tool-output-cell"],
+    [data-slot="kernel-tool-source"] [data-slot="kernel-tool-input-cell"] {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+
+    [data-slot="kernel-tool-source"] summary {
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+    }
+  }
+}
+
+[data-component="generated-image-preview"] {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--border-weak-base);
+  background: var(--surface-inset-base);
+
+  [data-slot="generated-image-preview-button"] {
+    display: grid;
+    width: 100%;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-weak-base);
+    border-radius: var(--radius-sm);
+    background: var(--background-base);
+    cursor: zoom-in;
+  }
+
+  [data-slot="generated-image-preview-button"]:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 1px;
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    max-height: min(56dvh, 560px);
+    object-fit: contain;
+  }
+
+  [data-slot="generated-image-placeholder"] {
+    min-height: 112px;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 7px;
+    padding: 18px;
+    border: 1px dashed var(--border-base);
+    border-radius: var(--radius-sm);
+    color: var(--text-weak);
+    text-align: center;
+  }
+
+  [data-slot="generated-image-meta"] {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--text-weaker);
+    font-size: var(--font-size-x-small);
   }
 }
 
@@ -1145,14 +1270,14 @@
   flex-wrap: wrap;
   gap: 8px 12px;
   min-height: 44px;
-  padding: 6px 10px 6px 12px;
+  padding: 8px 10px 8px 12px;
   background-color: var(--surface-raised-base);
   border-top: 1px solid var(--border-weaker-base);
   border-radius: 0 0 var(--radius-xs) var(--radius-xs);
 
   [data-slot="permission-context"] {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
     min-width: 0;
     flex: 1 1 220px;
@@ -1164,9 +1289,9 @@
   }
 
   [data-slot="permission-copy"] {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
+    display: grid;
+    align-items: start;
+    gap: 1px;
     min-width: 0;
   }
 
@@ -1197,7 +1322,10 @@
   }
 
   &[data-expanded="true"] [data-slot="permission-actions"] {
-    gap: 2px;
+    gap: 4px;
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-inset-base);
   }
 
   [data-slot="permission-summary"][data-kind="remote-compute"],
@@ -1260,8 +1388,20 @@
     border-top: 0;
 
     [data-slot="permission-actions"] {
-      gap: 8px;
+      gap: 4px;
+      align-self: flex-end;
     }
+  }
+}
+
+@media (max-width: 560px) {
+  [data-component="permission-prompt"] [data-slot="permission-actions"] {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  [data-component="permission-prompt"] [data-slot="permission-actions"] [data-component="button"] {
+    flex: 1 1 auto;
   }
 }
 

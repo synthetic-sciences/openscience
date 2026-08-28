@@ -336,7 +336,7 @@
   justify-content: flex-end;
   gap: 5px;
   overflow: hidden;
-  color: var(--color-text-faint);
+  color: var(--color-text-muted);
   font-family: var(--font-family-mono);
   font-size: 9.5px;
   font-variant-numeric: tabular-nums;
