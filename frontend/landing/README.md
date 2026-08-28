@@ -17,5 +17,5 @@ bun run build            # production build → dist/
 `curl -fsSL https://openscience.sh/install | bash` works. Screenshots in
 `src/assets/` are captured from the real workspace UI.
 
-Deployed via Vercel (project `openscience-landing-page`, which owns the
-`openscience.sh` domain): `vercel deploy --prod`.
+Merges to `main` deploy automatically through the linked Vercel project. For
+a manual production deployment, run `vercel deploy --prod`.
