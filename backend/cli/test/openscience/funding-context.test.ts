@@ -132,7 +132,7 @@ describe("organization funding context", () => {
         api_key: "thk_org-scoped.secret",
         user_id: "user-context",
         organization_id: alpha.organization_id,
-        organization_locked: true,
+        workspace_locked: true,
       }),
     )
     globalThis.fetch = (async () => {
@@ -153,7 +153,7 @@ describe("organization funding context", () => {
     expect(personal.status).toBe(400)
     expect(other.status).toBe(400)
     expect(await personal.json()).toEqual({
-      error: "This sign-in is tied to one organization. Sign in again to choose another account.",
+      error: "This sign-in is tied to one workspace. Sign in again to choose another account.",
     })
     expect((await Bun.file(session).json()).organization_id).toBe(alpha.organization_id)
   })
@@ -181,8 +181,90 @@ describe("organization funding context", () => {
       api_key: "thk_old-client.secret",
       user_id: "user-context",
       organization_id: alpha.organization_id,
-      organization_locked: true,
+      workspace_locked: true,
     })
+  })
+
+  test("repairs a locked Personal key saved by an older client", async () => {
+    await Bun.write(session, JSON.stringify({ api_key: "thk_old-personal.secret", user_id: "user-context" }))
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("X-Organization-ID")).toBeNull()
+      return Response.json({
+        api_key: { organization_id: null, workspace_locked: true },
+        organizations: [],
+        funding_context: { type: "personal", locked: true },
+      })
+    }) as typeof fetch
+
+    expect(await OpenScience.getFundingContext()).toEqual({
+      type: "personal",
+      available: true,
+      locked: true,
+      organizations: [],
+    })
+    expect(await Bun.file(session).json()).toEqual({
+      api_key: "thk_old-personal.secret",
+      user_id: "user-context",
+      workspace_locked: true,
+    })
+  })
+
+  test("repairs a wrongly selected old-client organization back to locked Personal", async () => {
+    await Bun.write(
+      session,
+      JSON.stringify({
+        api_key: "thk_old-personal-selected.secret",
+        user_id: "user-context",
+        organization_id: alpha.organization_id,
+      }),
+    )
+    const headers: Array<string | null> = []
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      const organization = new Headers(init?.headers).get("X-Organization-ID")
+      headers.push(organization)
+      if (organization) return new Response("workspace mismatch", { status: 403 })
+      return Response.json({
+        api_key: { organization_id: null, workspace_locked: true },
+        organizations: [],
+        funding_context: { type: "personal", locked: true },
+      })
+    }) as typeof fetch
+
+    expect(await OpenScience.getFundingContext()).toEqual({
+      type: "personal",
+      available: true,
+      locked: true,
+      organizations: [],
+    })
+    expect(headers).toEqual([alpha.organization_id, null])
+    expect(await Bun.file(session).json()).toEqual({
+      api_key: "thk_old-personal-selected.secret",
+      user_id: "user-context",
+      workspace_locked: true,
+    })
+  })
+
+  test("does not unlock a locally locked Personal workspace during a status outage", async () => {
+    await Bun.write(
+      session,
+      JSON.stringify({
+        api_key: "thk_personal-outage.secret",
+        user_id: "user-context",
+        workspace_locked: true,
+      }),
+    )
+    globalThis.fetch = (async () => {
+      throw new Error("offline")
+    }) as unknown as typeof fetch
+
+    expect(await OpenScience.getFundingContext()).toEqual({
+      type: "personal",
+      available: true,
+      locked: true,
+      organizations: [],
+    })
+    await expect(OpenScience.setFundingContext(alpha.organization_id)).rejects.toThrow("tied to one workspace")
+    expect((await Bun.file(session).json()).workspace_locked).toBe(true)
   })
 
   test("repairs a removed member's old-client session without falling back to Personal", async () => {
@@ -203,7 +285,7 @@ describe("organization funding context", () => {
     })
     expect(await Bun.file(session).json()).toMatchObject({
       organization_id: alpha.organization_id,
-      organization_locked: true,
+      workspace_locked: true,
     })
   })
 
@@ -233,6 +315,28 @@ describe("organization funding context", () => {
     expect(await Bun.file(session).json()).toEqual({ api_key: "thk_new-account.secret", user_id: "new-user" })
   })
 
+  test("does not let a delayed Personal-lock repair overwrite a concurrent login", async () => {
+    await Bun.write(session, JSON.stringify({ api_key: "thk_old-personal.secret", user_id: "old-user" }))
+    const gate = Promise.withResolvers<void>()
+    const started = Promise.withResolvers<void>()
+    globalThis.fetch = (async () => {
+      started.resolve()
+      await gate.promise
+      return Response.json({
+        api_key: { organization_id: null, workspace_locked: true },
+        organizations: [],
+        funding_context: { type: "personal", locked: true },
+      })
+    }) as unknown as typeof fetch
+
+    const pending = OpenScience.getFundingContext()
+    await started.promise
+    await Bun.write(session, JSON.stringify({ api_key: "thk_new-personal.secret", user_id: "new-user" }))
+    gate.resolve()
+    expect(await pending).toMatchObject({ type: "personal", locked: true })
+    expect(await Bun.file(session).json()).toEqual({ api_key: "thk_new-personal.secret", user_id: "new-user" })
+  })
+
   test("keeps legacy unpinned keys flexible when Atlas reports Personal scope", async () => {
     await Bun.write(session, JSON.stringify({ api_key: "thk_flexible.secret", user_id: "user-context" }))
     globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
@@ -253,7 +357,7 @@ describe("organization funding context", () => {
     expect(await Bun.file(session).json()).toMatchObject({
       organization_id: alpha.organization_id,
     })
-    expect((await Bun.file(session).json()).organization_locked).toBeUndefined()
+    expect((await Bun.file(session).json()).workspace_locked).toBeUndefined()
   })
 
   test("keeps a revoked organization selected and lets Atlas reject it instead of falling back to Personal", async () => {

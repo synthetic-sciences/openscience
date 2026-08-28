@@ -161,8 +161,10 @@ export interface OpenScienceSession {
    *  An organization selection is always forwarded explicitly; it is never
    *  erased merely because a later Atlas status read is unavailable. */
   organization_id?: string
-  /** True when Atlas issued this API key for one immutable organization.
-   *  Changing that scope requires a fresh browser approval and a new key. */
+  /** True when Atlas issued this API key for one immutable workspace,
+   *  including Personal. Changing scope requires a fresh browser approval. */
+  workspace_locked?: boolean
+  /** Legacy on-disk name written by organization-only locking releases. */
   organization_locked?: boolean
   /** Last-seen ``/api/cli/sync/version`` value. Background refresh fires
    *  when the server returns a higher value. */
@@ -256,10 +258,12 @@ interface AuthStatusResponse {
   available_organizations?: unknown
   api_key?: {
     organization_id?: unknown
+    workspace_locked?: unknown
   }
   funding_context?: {
     type?: "personal" | "organization"
     organization_id?: string
+    locked?: boolean
   }
 }
 
@@ -267,6 +271,7 @@ interface BrowserLoginResponse {
   api_key?: unknown
   key?: unknown
   organization_id?: unknown
+  workspace_locked?: unknown
   user_id?: unknown
   user?: {
     id?: unknown
@@ -545,12 +550,13 @@ export namespace OpenScience {
       if (data.organization_locked === true && !organizationID) {
         throw new Error("organization-locked OpenScience session is missing its organization_id")
       }
+      const locked = data.workspace_locked === true || data.organization_locked === true
       return {
         api_key: data.api_key,
         user_id: data.user_id || "",
         device_name: data.device_name,
         organization_id: organizationID,
-        organization_locked: data.organization_locked === true ? true : undefined,
+        workspace_locked: locked ? true : undefined,
         // Sync bookkeeping. Dropping these made refreshIfStale's TTL and
         // version dedupe dead code: every message fired a version probe
         // plus a full background sync, and updateSession (getSession +
@@ -656,19 +662,32 @@ export namespace OpenScience {
   async function authStatus(snapshot: FundingSnapshot): Promise<{
     organizations: FundingOrganization[]
     pinned_organization_id?: string
+    workspace_locked: boolean
     funding_context?: AuthStatusResponse["funding_context"]
   } | null> {
-    const response = await fundedAtlasFetch(snapshot, `${API_BASE}/api/v1/auth/status`, {
-      headers: { Accept: "application/json" },
-    }).catch(() => undefined)
+    const request = (operation: FundingSnapshot) =>
+      fundedAtlasFetch(operation, `${API_BASE}/api/v1/auth/status`, {
+        headers: { Accept: "application/json" },
+      }).catch(() => undefined)
+    const first = await request(snapshot)
+    // An older client could have attached a local organization selection to a
+    // newly locked Personal key. Retry this read without that header so Atlas
+    // can report the immutable scope and repair the local session.
+    const response =
+      first?.status === 403 && snapshot.organization_id
+        ? await request(Object.freeze({ ...snapshot, organization_id: undefined }))
+        : first
     if (!response?.ok) return null
     return response
       .json()
       .then((value) => {
         const body = value as AuthStatusResponse
+        const pinned = loginOrganizationID(body.api_key?.organization_id)
         return {
           organizations: organizations(body.organizations ?? body.available_organizations),
-          pinned_organization_id: loginOrganizationID(body.api_key?.organization_id),
+          pinned_organization_id: pinned,
+          workspace_locked:
+            body.api_key?.workspace_locked === true || body.funding_context?.locked === true || !!pinned,
           funding_context: body.funding_context,
         }
       })
@@ -676,28 +695,26 @@ export namespace OpenScience {
   }
 
   /** Persist the immutable scope reported by Atlas for sessions written by an
-   * older OpenScience client that discarded the browser-login organization.
+   * older OpenScience client that discarded the browser-login workspace.
    * The compare-under-lock prevents a slow status response for account A from
    * relabeling account B after a concurrent sign-in. */
-  async function reconcileOrganizationScope(apiKey: string, organizationID: string): Promise<boolean> {
+  async function reconcileWorkspaceScope(apiKey: string, organizationID?: string): Promise<boolean> {
     const changed = { value: false }
     await CredentialLifecycle.serialized(async () => {
       using _ = await Lock.write(filepath)
       const current = await getSession()
       if (!current || current.api_key !== apiKey) return
-      if (current.organization_locked && current.organization_id === organizationID) return
-      if (current.organization_id && current.organization_id !== organizationID) return
+      if (current.workspace_locked && current.organization_id === organizationID) return
+      const next = {
+        ...current,
+        organization_id: organizationID,
+        workspace_locked: true,
+      }
+      delete next.organization_locked
+      if (!organizationID) delete next.organization_id
       await atomicWrite(
         filepath,
-        JSON.stringify(
-          {
-            ...current,
-            organization_id: organizationID,
-            organization_locked: true,
-          },
-          null,
-          2,
-        ),
+        JSON.stringify(next, null, 2),
         { mode: 0o600 },
       )
       changed.value = true
@@ -720,8 +737,18 @@ export namespace OpenScience {
     if (!snapshot) return { type: "personal", available: true, locked: false, organizations: [] }
     const status = await authStatus(snapshot)
     const pinned = status?.pinned_organization_id
-    if (!snapshot.organization_id && pinned) {
-      await reconcileOrganizationScope(snapshot.api_key, pinned)
+    if (status?.workspace_locked) {
+      await reconcileWorkspaceScope(snapshot.api_key, pinned)
+      if (!pinned) {
+        const echoed = status.funding_context
+        const matches = !echoed || echoed.type === "personal"
+        return {
+          type: "personal",
+          available: matches,
+          locked: true,
+          organizations: status.organizations,
+        }
+      }
       const row = status.organizations.find((item) => item.organization_id === pinned)
       const echoed = status.funding_context
       const matches = !echoed || (echoed.type === "organization" && echoed.organization_id === pinned)
@@ -734,12 +761,9 @@ export namespace OpenScience {
       }
     }
     const connected = await getSession()
-    const locked = connected?.api_key === snapshot.api_key && connected.organization_locked === true
+    const locked = connected?.api_key === snapshot.api_key && connected.workspace_locked === true
     if (!snapshot.organization_id) {
       return { type: "personal", available: true, locked, organizations: status?.organizations ?? [] }
-    }
-    if (pinned === snapshot.organization_id && !locked) {
-      await reconcileOrganizationScope(snapshot.api_key, pinned)
     }
     const row = status?.organizations.find((item) => item.organization_id === snapshot.organization_id)
     const echoed = status?.funding_context
@@ -748,7 +772,7 @@ export namespace OpenScience {
       type: "organization",
       organization_id: snapshot.organization_id,
       available: organizationAvailable(row) && matches,
-      locked: locked || pinned === snapshot.organization_id,
+      locked,
       organizations: status?.organizations ?? [],
     }
   }
@@ -763,11 +787,13 @@ export namespace OpenScience {
     if (organizationID !== null && !/^[A-Za-z0-9_-]{1,128}$/.test(organizationID)) {
       throw new FundingContextError("Invalid organization id.")
     }
-    if (connected.organization_locked && organizationID !== connected.organization_id) {
+    const requested = organizationID ?? undefined
+    if (connected.workspace_locked && requested !== connected.organization_id) {
       throw new FundingContextError(
-        "This sign-in is tied to one organization. Sign in again to choose another account.",
+        "This sign-in is tied to one workspace. Sign in again to choose another account.",
       )
     }
+    if (connected.workspace_locked) return getFundingContext()
     const snapshot = Object.freeze({
       api_key: connected.api_key,
       user_id: connected.user_id,
@@ -788,12 +814,12 @@ export namespace OpenScience {
       if (!current || current.api_key !== snapshot.api_key) {
         throw new FundingContextError("The connected account changed while the funding selection was being saved.")
       }
-      if (current.organization_locked && organizationID !== current.organization_id) {
+      if (current.workspace_locked && requested !== current.organization_id) {
         throw new FundingContextError(
-          "This sign-in is tied to one organization. Sign in again to choose another account.",
+          "This sign-in is tied to one workspace. Sign in again to choose another account.",
         )
       }
-      const next = { ...current, organization_id: organizationID ?? undefined }
+      const next = { ...current, organization_id: requested }
       await atomicWrite(filepath, JSON.stringify(next, null, 2), { mode: 0o600 })
     })
     cachedProfile = undefined
@@ -1310,6 +1336,7 @@ export namespace OpenScience {
         throw new Error("Login did not return a valid OpenScience API key.")
       }
       const organizationID = loginOrganizationID(redeemed.organization_id)
+      const workspaceLocked = redeemed.workspace_locked === true || !!organizationID
       const identity = redeemed.user?.user_id || redeemed.user?.id || redeemed.user_id
 
       const session: OpenScienceSession = {
@@ -1317,7 +1344,7 @@ export namespace OpenScience {
         user_id: typeof identity === "string" ? identity : "",
         device_name: name,
         ...(organizationID ? { organization_id: organizationID } : {}),
-        ...(organizationID ? { organization_locked: true } : {}),
+        ...(workspaceLocked ? { workspace_locked: true } : {}),
       }
       await saveSession(session)
       return session
@@ -1370,12 +1397,14 @@ export namespace OpenScience {
       if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) return undefined
       return value
     })()
+    const workspaceLocked =
+      status?.api_key?.workspace_locked === true || status?.funding_context?.locked === true || !!organizationID
     const session: OpenScienceSession = {
       api_key: key,
       user_id: profile?.user?.user_id || "",
       device_name: deviceName(),
       ...(organizationID ? { organization_id: organizationID } : {}),
-      ...(organizationID ? { organization_locked: true } : {}),
+      ...(workspaceLocked ? { workspace_locked: true } : {}),
     }
     await saveSession(session)
     return session

@@ -17,16 +17,29 @@ describe("OpenScience session file", () => {
       user_id: "u1",
       device_name: "dev",
       organization_id: "org_test",
-      organization_locked: true,
+      workspace_locked: true,
     })
     const s = await OpenScience.getSession()
     expect(s?.api_key).toBe("thk_test.secret")
     expect(s?.user_id).toBe("u1")
     expect(s?.organization_id).toBe("org_test")
-    expect(s?.organization_locked).toBe(true)
+    expect(s?.workspace_locked).toBe(true)
 
     await OpenScience.clearSession()
     expect(await OpenScience.getSession()).toBeNull()
+  })
+
+  test("reads the legacy organization-only lock as a workspace lock", async () => {
+    await OpenScience.saveSession({
+      api_key: "thk_legacy-lock.secret",
+      user_id: "u2",
+      organization_id: "org_legacy",
+      organization_locked: true,
+    })
+    const value = await OpenScience.getSession()
+    expect(value?.organization_id).toBe("org_legacy")
+    expect(value?.workspace_locked).toBe(true)
+    expect(value?.organization_locked).toBeUndefined()
   })
 
   test("a session without an api_key is treated as no session", async () => {

@@ -27,6 +27,7 @@ type Reply = {
   api_key?: string
   key?: string
   organization_id?: unknown
+  workspace_locked?: unknown
   user?: { id?: string; user_id?: string }
   user_id?: string
 }
@@ -66,8 +67,23 @@ async function gateway(reply: Reply) {
         const key = request.headers.get("Authorization")
         if (key === "Bearer thk_browser-org.secret" || key === "Bearer thk_pasted-org.secret") {
           return Response.json({
+            api_key: { organization_id: alpha.organization_id, workspace_locked: true },
             organizations: [alpha],
-            funding_context: { type: "organization", organization_id: alpha.organization_id },
+            funding_context: { type: "organization", organization_id: alpha.organization_id, locked: true },
+          })
+        }
+        if (key === "Bearer thk_browser-personal.secret") {
+          return Response.json({
+            api_key: { organization_id: null, workspace_locked: true },
+            organizations: [],
+            funding_context: { type: "personal", locked: true },
+          })
+        }
+        if (key === "Bearer thk_pasted-personal.secret") {
+          return Response.json({
+            api_key: { organization_id: null, workspace_locked: true },
+            organizations: [],
+            funding_context: { type: "personal", locked: true },
           })
         }
         if (key === "Bearer thk_legacy-personal.secret") return new Response("not found", { status: 404 })
@@ -143,6 +159,7 @@ describe("browser login funding context", () => {
     const atlas = await gateway({
       api_key: "thk_browser-org.secret",
       organization_id: alpha.organization_id,
+      workspace_locked: true,
       user: { user_id: "user-browser-org" },
     })
     try {
@@ -151,7 +168,7 @@ describe("browser login funding context", () => {
         api_key: "thk_browser-org.secret",
         user_id: "user-browser-org",
         organization_id: alpha.organization_id,
-        organization_locked: true,
+        workspace_locked: true,
       })
       expect(await OpenScience.getFundingContext()).toEqual({
         type: "organization",
@@ -176,7 +193,7 @@ describe("browser login funding context", () => {
       const personal = await login()
       expect(personal).toMatchObject({ api_key: "thk_legacy-personal.secret", user_id: "user-legacy" })
       expect(personal.organization_id).toBeUndefined()
-      expect(personal.organization_locked).toBeUndefined()
+      expect(personal.workspace_locked).toBeUndefined()
       expect(await OpenScience.getFundingContext()).toMatchObject({ type: "personal", available: true })
       await OpenScience.getCredits()
 
@@ -191,6 +208,36 @@ describe("browser login funding context", () => {
       expect(await Bun.file(settings).exists()).toBe(false)
       expect(await Bun.file(queue).exists()).toBe(false)
       expect(process.env.GITHUB_TOKEN).toBeUndefined()
+    } finally {
+      await atlas.close()
+    }
+  })
+
+  test("persists a new browser-approved Personal workspace as immutable", async () => {
+    const atlas = await gateway({
+      api_key: "thk_browser-personal.secret",
+      workspace_locked: true,
+      user: { user_id: "user-browser-personal" },
+    })
+    try {
+      const personal = await login()
+      expect(personal).toMatchObject({
+        api_key: "thk_browser-personal.secret",
+        user_id: "user-browser-personal",
+        workspace_locked: true,
+      })
+      expect(personal.organization_id).toBeUndefined()
+      expect(await OpenScience.getFundingContext()).toEqual({
+        type: "personal",
+        available: true,
+        locked: true,
+        organizations: [],
+      })
+      expect(await OpenScience.setFundingContext(null)).toMatchObject({ type: "personal", locked: true })
+      await expect(OpenScience.setFundingContext(alpha.organization_id)).rejects.toThrow(
+        "tied to one workspace",
+      )
+      expect((await Bun.file(session).json()).workspace_locked).toBe(true)
     } finally {
       await atlas.close()
     }
@@ -219,7 +266,7 @@ describe("browser login funding context", () => {
         api_key: "thk_pasted-org.secret",
         user_id: "user-pasted-org",
         organization_id: alpha.organization_id,
-        organization_locked: true,
+        workspace_locked: true,
       })
       expect((await OpenScience.getFundingSnapshot())?.organization_id).toBe(alpha.organization_id)
 
@@ -227,6 +274,17 @@ describe("browser login funding context", () => {
       expect(personal).toMatchObject({ api_key: "thk_legacy-personal.secret", user_id: "user-legacy" })
       expect(personal.organization_id).toBeUndefined()
       expect((await OpenScience.getFundingSnapshot())?.organization_id).toBeUndefined()
+
+      const locked = await OpenScience.loginWithKey("thk_pasted-personal.secret")
+      expect(locked).toMatchObject({
+        api_key: "thk_pasted-personal.secret",
+        workspace_locked: true,
+      })
+      expect(locked.organization_id).toBeUndefined()
+      expect(await OpenScience.getFundingContext()).toMatchObject({
+        type: "personal",
+        locked: true,
+      })
     } finally {
       await atlas.close()
     }
