@@ -11,6 +11,7 @@ import { normalizeServerUrl } from "@/context/server"
 import { resolveDefaultServerUrl, resolveDesktopServerUrl, resolveServerRoute } from "@/config/server-url"
 import pkg from "../package.json"
 import { waitForUpdatedServer, type UpdateHealth } from "@/utils/update-restart"
+import { updateError } from "@/utils/update-error"
 
 const DEFAULT_SERVER_URL_KEY = "openscience.settings.dat:defaultServerUrl"
 const desktopUrl = resolveDesktopServerUrl(location.search, window.location.origin)
@@ -122,8 +123,8 @@ const platform: Platform = {
       headers: { Accept: "application/json" },
     })
     if (!response.ok) {
-      const detail = (await response.json().catch(() => undefined)) as { error?: string } | undefined
-      throw new Error(detail?.error ?? `Update install failed (${response.status})`)
+      const detail = await response.json().catch(() => undefined)
+      throw new Error(updateError(detail, response.status))
     }
     const result = (await response.json()) as {
       installed: boolean

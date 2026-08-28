@@ -9,12 +9,13 @@ const exec = promisify(execFile)
 function decode(value) {
   const payload = JSON.parse(Buffer.from(value, "base64url").toString("utf8"))
   if (!Number.isInteger(payload.parent) || payload.parent <= 0) throw new Error("Invalid update parent process")
-  for (const key of ["current", "staged", "backup", "root"]) {
+  for (const key of ["target", "staged", "backup", "root"]) {
     if (typeof payload[key] !== "string" || !path.isAbsolute(payload[key])) throw new Error(`Invalid update ${key}`)
   }
-  if (!payload.current.endsWith(".app") || !payload.staged.endsWith(".app") || !payload.backup.endsWith(".app")) {
+  if (!payload.target.endsWith(".app") || !payload.staged.endsWith(".app") || !payload.backup.endsWith(".app")) {
     throw new Error("Desktop update paths must be application bundles")
   }
+  if (typeof payload.replace !== "boolean") throw new Error("Invalid update replacement mode")
   return payload
 }
 
@@ -36,18 +37,24 @@ async function wait(pid, attempt = 0) {
 
 async function install(payload) {
   await wait(payload.parent)
-  await rename(payload.current, payload.backup)
+  if (payload.replace) await rename(payload.target, payload.backup)
   try {
-    await exec("/usr/bin/ditto", [payload.staged, payload.current])
-    await exec("/usr/bin/codesign", ["--verify", "--deep", "--strict", payload.current])
-    await rm(payload.backup, { recursive: true, force: true })
+    await exec("/usr/bin/ditto", [payload.staged, payload.target])
+    await exec("/usr/bin/codesign", ["--verify", "--deep", "--strict", payload.target])
+    await exec("/usr/bin/xattr", ["-dr", "com.apple.quarantine", payload.target]).catch(() => undefined)
+    const quarantined = await exec("/usr/bin/xattr", ["-p", "com.apple.quarantine", payload.target]).then(
+      () => true,
+      () => false,
+    )
+    if (quarantined) throw new Error("The verified OpenScience update is still quarantined")
+    if (payload.replace) await rm(payload.backup, { recursive: true, force: true })
   } catch (error) {
-    await rm(payload.current, { recursive: true, force: true })
-    await rename(payload.backup, payload.current)
+    await rm(payload.target, { recursive: true, force: true })
+    if (payload.replace) await rename(payload.backup, payload.target)
     throw error
   }
   if (process.env.OPENSCIENCE_UPDATE_SKIP_LAUNCH !== "1") {
-    await exec("/usr/bin/open", ["-n", payload.current])
+    await exec("/usr/bin/open", ["-n", payload.target])
   }
   await rm(payload.root, { recursive: true, force: true })
 }

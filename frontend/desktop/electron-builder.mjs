@@ -34,6 +34,18 @@ export default {
     entitlements: "build/entitlements.mac.plist",
     entitlementsInherit: "build/entitlements.mac.plist",
     notarize: signed && process.env.APPLE_ID ? true : false,
+    extendInfo: {
+      NSDesktopFolderUsageDescription:
+        "OpenScience accesses Desktop files only when you choose a project or file there.",
+      NSDocumentsFolderUsageDescription:
+        "OpenScience accesses Documents files only when you choose a project or file there.",
+      NSDownloadsFolderUsageDescription:
+        "OpenScience accesses Downloads files only when you choose a project or file there.",
+      NSRemovableVolumesUsageDescription:
+        "OpenScience accesses removable volumes only when you choose a project or file there.",
+      NSNetworkVolumesUsageDescription:
+        "OpenScience accesses network volumes only when you choose a project or file there.",
+    },
   },
   dmg: { sign: false },
   win: {

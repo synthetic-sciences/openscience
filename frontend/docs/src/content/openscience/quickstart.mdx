@@ -14,6 +14,14 @@ Five minutes from zero to a running research session. Sign in once with a free S
 
     Or without a global install, `npx synsci` runs the same workbench in one step. The install script (`curl -fsSL https://openscience.sh/install | bash`) drops a standalone `openscience` binary into `~/.openscience/bin`, and platform binaries are attached to every [GitHub release](https://github.com/synthetic-sciences/openscience/releases).
 
+    On macOS, the desktop app can be installed without opening Security Settings:
+
+    ```bash
+    curl -fsSL https://openscience.sh/install-desktop | bash
+    ```
+
+    This verifies the published release checksum and app identity before installing OpenScience in Applications and removing the download quarantine attribute. Until OpenScience is distributed with an Apple Developer ID certificate, direct browser downloads remain subject to Gatekeeper.
+
     Linux requires kernel 5.1 or newer. Glibc builds require glibc 2.17 or newer, and musl builds are selected separately. CentOS 7's stock 3.10 kernel is not supported; use a newer host kernel or VM.
   </Step>
   <Step title="Connect your free account">

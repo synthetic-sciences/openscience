@@ -2,7 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { asset, checksum, release, stage } from "../../../../frontend/desktop/src/updater.mjs"
+import {
+  asset,
+  checksum,
+  destination,
+  portable,
+  release,
+  stage,
+  stageCurrent,
+} from "../../../../frontend/desktop/src/updater.mjs"
 
 const roots: string[] = []
 
@@ -40,6 +48,12 @@ describe("desktop update release contract", () => {
     })
     server.stop(true)
   })
+
+  test("recognizes both mounted disk images and App Translocation as portable installs", () => {
+    expect(portable("/Volumes/OpenScience/OpenScience.app")).toBe(true)
+    expect(portable("/private/var/folders/x/AppTranslocation/ABC/d/OpenScience.app")).toBe(true)
+    expect(portable("/Applications/OpenScience.app")).toBe(false)
+  })
 })
 
 describe.skipIf(process.platform !== "darwin")("macOS desktop update integration", () => {
@@ -67,6 +81,30 @@ describe.skipIf(process.platform !== "darwin")("macOS desktop update integration
     await Bun.write(binary, "#!/bin/sh\nexit 0\n")
     await chmod(binary, 0o755)
     expect((await Bun.$`codesign --force --deep --sign - ${bundle}`.quiet()).exitCode).toBe(0)
+    expect((await Bun.$`xattr -w com.apple.quarantine "0081;test;OpenScience;" ${bundle}`.quiet()).exitCode).toBe(0)
+
+    const install = await stageCurrent({ current: bundle, cache: path.join(root, "install-cache") })
+    const installed = path.join(root, "Applications", "OpenScience.app")
+    await mkdir(path.dirname(installed))
+    const helper = new URL("../../../../frontend/desktop/src/update-helper.mjs", import.meta.url)
+    const installPayload = Buffer.from(
+      JSON.stringify({
+        parent: 2_147_483_647,
+        target: installed,
+        staged: install.bundle,
+        backup: path.join(root, "Applications", "OpenScience.previous.app"),
+        root: install.root,
+        replace: false,
+      }),
+    ).toString("base64url")
+    const installChild = Bun.spawn([process.execPath, helper.pathname, installPayload], {
+      env: { ...process.env, OPENSCIENCE_UPDATE_SKIP_LAUNCH: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    expect(await installChild.exited).toBe(0)
+    expect((await Bun.$`codesign --verify --deep --strict ${installed}`.quiet()).exitCode).toBe(0)
+    expect((await Bun.$`xattr -p com.apple.quarantine ${installed}`.quiet().nothrow()).exitCode).not.toBe(0)
 
     const archive = path.join(root, asset(process.arch))
     expect((await Bun.$`ditto -c -k --sequesterRsrc --keepParent ${bundle} ${archive}`.quiet()).exitCode).toBe(0)
@@ -100,14 +138,14 @@ describe.skipIf(process.platform !== "darwin")("macOS desktop update integration
 
     const current = path.join(root, "Installed.app")
     await Bun.$`ditto ${bundle} ${current}`.quiet()
-    const helper = new URL("../../../../frontend/desktop/src/update-helper.mjs", import.meta.url)
     const payload = Buffer.from(
       JSON.stringify({
         parent: 2_147_483_647,
-        current,
+        target: current,
         staged: update.bundle,
         backup: path.join(root, "Installed.previous.app"),
         root: update.root,
+        replace: true,
       }),
     ).toString("base64url")
     const child = Bun.spawn([process.execPath, helper.pathname, payload], {
@@ -122,5 +160,20 @@ describe.skipIf(process.platform !== "darwin")("macOS desktop update integration
       ).trim(),
     ).toBe("9.8.7")
     expect((await Bun.$`codesign --verify --deep --strict ${current}`.quiet()).exitCode).toBe(0)
+    expect((await Bun.$`xattr -p com.apple.quarantine ${current}`.quiet().nothrow()).exitCode).not.toBe(0)
+  })
+
+  test("chooses a writable Applications folder for portable installs", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "openscience-desktop-destination-test-"))
+    roots.push(root)
+    const applications = path.join(root, "Applications")
+    await mkdir(applications)
+
+    expect(
+      await destination("/Volumes/OpenScience/OpenScience.app", {
+        applications,
+        userApplications: path.join(root, "User Applications"),
+      }),
+    ).toBe(path.join(applications, "OpenScience.app"))
   })
 })

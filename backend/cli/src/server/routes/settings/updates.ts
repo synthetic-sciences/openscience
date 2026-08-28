@@ -33,6 +33,8 @@ const InstallResult = Result.extend({
   restartScheduled: z.boolean().default(false),
 })
 
+const Failure = z.object({ error: z.string() })
+
 type UpdateResult = z.infer<typeof Result>
 type UpdateInstallResult = z.infer<typeof InstallResult>
 
@@ -169,10 +171,19 @@ export const UpdatesSettingsRoutes = lazy(() =>
             description: "Installation result",
             content: { "application/json": { schema: resolver(InstallResult) } },
           },
+          409: {
+            description: "The current installation cannot be updated automatically",
+            content: { "application/json": { schema: resolver(Failure) } },
+          },
         },
       }),
       async (c) => {
-        const result = await install()
+        const outcome = await install().then(
+          (value) => ({ value }),
+          (error) => ({ error: error instanceof Error ? error.message : String(error) }),
+        )
+        if ("error" in outcome) return c.json(Failure.parse({ error: outcome.error }), 409)
+        const result = outcome.value
         const restartScheduled = result.installed ? result.method === "desktop" || SelfRestart.schedule() : false
         return c.json(InstallResult.parse({ ...result, restartScheduled }))
       },

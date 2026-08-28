@@ -5,8 +5,14 @@ import { createServer } from "node:http"
 import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { app, BrowserWindow, Menu, shell } from "electron"
-import { apply as applyUpdate, stage as stageUpdate } from "./updater.mjs"
+import { app, BrowserWindow, dialog, Menu, shell } from "electron"
+import {
+  apply as applyUpdate,
+  current as currentUpdate,
+  portable as portableUpdate,
+  stage as stageUpdate,
+  stageCurrent,
+} from "./updater.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
 const windows = new Set()
@@ -170,6 +176,44 @@ async function updates() {
   state.updateAddress = `http://127.0.0.1:${address.port}`
 }
 
+async function bootstrap(splash) {
+  if (!app.isPackaged || process.platform !== "darwin") return false
+  const bundle = currentUpdate()
+  if (!portableUpdate(bundle)) return false
+  const prompt = await dialog.showMessageBox(splash, {
+    type: "info",
+    buttons: ["Install OpenScience", "Run from Disk Image"],
+    defaultId: 0,
+    cancelId: 1,
+    message: "Finish installing OpenScience",
+    detail:
+      "OpenScience is running from the downloaded disk image. Install it in Applications now so future updates work automatically.",
+  })
+  if (prompt.response !== 0) return false
+  await splash.loadURL(
+    `data:text/html,${encodeURIComponent('<main style="background:#11110f;color:#e8e5dc;display:grid;font:14px system-ui;height:100vh;margin:0;place-items:center"><div><h1 style="font-size:20px;margin:0 0 8px">OpenScience</h1><p style="color:#9d998f;margin:0">Installing in Applications…</p></div></main>')}`,
+  )
+  const result = await stageCurrent({ cache: path.join(app.getPath("userData"), "updates"), current: bundle })
+    .then((update) => applyUpdate(update, { current: bundle }))
+    .then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    )
+  if ("error" in result) {
+    await dialog.showMessageBox(splash, {
+      type: "error",
+      buttons: ["Continue from Disk Image"],
+      message: "OpenScience could not finish installing",
+      detail: result.error instanceof Error ? result.error.message : String(result.error),
+    })
+    return false
+  }
+  splash.destroy()
+  const timer = setTimeout(stop, 250)
+  timer.unref?.()
+  return true
+}
+
 function dock() {
   if (process.platform !== "darwin" || !app.dock) return
   const entries = [...windows].map((window, index) => ({
@@ -314,6 +358,7 @@ app.whenReady().then(async () => {
     `data:text/html,${encodeURIComponent('<main style="background:#11110f;color:#e8e5dc;display:grid;font:14px system-ui;height:100vh;margin:0;place-items:center"><div><h1 style="font-size:20px;margin:0 0 8px">OpenScience</h1><p style="color:#9d998f;margin:0">Starting your local workspace…</p></div></main>')}`,
   )
   splash.show()
+  if (await bootstrap(splash)) return
   if (process.platform === "win32") {
     app.setUserTasks([
       {

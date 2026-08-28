@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from "node:crypto"
 import { execFile, spawn } from "node:child_process"
 import { constants, createReadStream, createWriteStream } from "node:fs"
-import { access, chmod, copyFile, mkdir, mkdtemp, readdir, rm } from "node:fs/promises"
+import { access, chmod, copyFile, lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 import { Readable } from "node:stream"
 import { pipeline } from "node:stream/promises"
@@ -77,6 +78,12 @@ export async function verify(bundle, version) {
   await exec("/usr/bin/codesign", ["--verify", "--deep", "--strict", bundle])
 }
 
+async function identity(bundle) {
+  const plist = path.join(bundle, "Contents", "Info.plist")
+  const result = await exec("/usr/bin/plutil", ["-extract", "CFBundleIdentifier", "raw", plist])
+  if (result.stdout.trim() !== id) throw new Error("The existing Applications item is not OpenScience")
+}
+
 export async function stage(version, options = {}) {
   if ((options.platform ?? process.platform) !== "darwin") throw new Error("Desktop self-updates require macOS")
   const info = await release(version, options)
@@ -110,22 +117,82 @@ export function current(executable = process.execPath) {
   return bundle
 }
 
+export function portable(bundle) {
+  return bundle.startsWith("/Volumes/") || bundle.includes("/AppTranslocation/")
+}
+
+async function writable(directory) {
+  return access(directory, constants.W_OK).then(
+    () => true,
+    () => false,
+  )
+}
+
+export async function destination(bundle, options = {}) {
+  if (!portable(bundle)) {
+    await access(path.dirname(bundle), constants.W_OK)
+    return bundle
+  }
+  const system = options.applications ?? "/Applications"
+  if (await writable(system)) return path.join(system, "OpenScience.app")
+  const user = options.userApplications ?? path.join(os.homedir(), "Applications")
+  await mkdir(user, { recursive: true, mode: 0o755 })
+  await access(user, constants.W_OK)
+  return path.join(user, "OpenScience.app")
+}
+
+async function replacement(bundle) {
+  const result = await lstat(bundle).then(
+    (value) => value,
+    (error) => error,
+  )
+  if (result instanceof Error) {
+    if ("code" in result && result.code === "ENOENT") return false
+    throw result
+  }
+  if (!result.isDirectory() || result.isSymbolicLink()) {
+    throw new Error(`OpenScience cannot replace the existing item at ${bundle}`)
+  }
+  await identity(bundle)
+  return true
+}
+
+export async function stageCurrent(options = {}) {
+  const bundle = options.current ?? current(options.executable)
+  const plist = path.join(bundle, "Contents", "Info.plist")
+  const value = await exec("/usr/bin/plutil", ["-extract", "CFBundleShortVersionString", "raw", plist])
+  const version = value.stdout.trim()
+  if (!valid(version)) throw new Error(`Invalid installed OpenScience version: ${version}`)
+  await mkdir(options.cache, { recursive: true, mode: 0o700 })
+  const root = await mkdtemp(path.join(options.cache, "install-"))
+  const staged = path.join(root, "app", "OpenScience.app")
+  const prepare = async () => {
+    await mkdir(path.dirname(staged), { recursive: true, mode: 0o700 })
+    await exec("/usr/bin/ditto", [bundle, staged])
+    await verify(staged, version)
+    return { root, bundle: staged, version }
+  }
+  return prepare().catch(async (error) => {
+    await rm(root, { recursive: true, force: true })
+    throw error
+  })
+}
+
 export async function apply(update, options = {}) {
   const active = options.current ?? current(options.executable)
-  if (active.startsWith("/Volumes/")) {
-    throw new Error("Move OpenScience to Applications before installing an update")
-  }
-  await access(path.dirname(active), constants.W_OK)
+  const target = await destination(active, options)
+  const replace = await replacement(target)
   const helper = path.join(update.root, "update-helper.mjs")
   await copyFile(new URL("./update-helper.mjs", import.meta.url), helper)
   await chmod(helper, 0o700)
   const payload = Buffer.from(
     JSON.stringify({
       parent: process.pid,
-      current: active,
+      target,
       staged: update.bundle,
-      backup: `${active.slice(0, -4)}.previous-${randomBytes(8).toString("hex")}.app`,
+      backup: `${target.slice(0, -4)}.previous-${randomBytes(8).toString("hex")}.app`,
       root: update.root,
+      replace,
     }),
   ).toString("base64url")
   const child = spawn(options.executable ?? process.execPath, [helper, payload], {
@@ -134,4 +201,5 @@ export async function apply(update, options = {}) {
     stdio: "ignore",
   })
   child.unref()
+  return { target, installed: target !== active }
 }

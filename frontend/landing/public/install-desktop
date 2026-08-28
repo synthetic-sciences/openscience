@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  printf 'OpenScience install failed: %s\n' "$1" >&2
+  exit 1
+}
+
+[ "$(uname -s)" = "Darwin" ] || fail "the desktop installer requires macOS"
+
+arch="$(uname -m)"
+if [ "$arch" = "x86_64" ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || printf 0)" = "1" ]; then
+  arch="arm64"
+fi
+if [ "$arch" = "x86_64" ]; then
+  arch="x64"
+fi
+case "$arch" in
+  arm64|x64) ;;
+  *) fail "unsupported Mac architecture: $arch" ;;
+esac
+
+asset="OpenScience-mac-${arch}.zip"
+base="${OPENSCIENCE_DESKTOP_RELEASE_ROOT:-https://github.com/synthetic-sciences/openscience/releases/latest/download}"
+case "$base" in
+  https://*|http://127.0.0.1:*|http://localhost:*) ;;
+  *) fail "the release source must use HTTPS" ;;
+esac
+
+root="$(mktemp -d "${TMPDIR:-/tmp}/openscience-desktop.XXXXXX")"
+cleanup() {
+  rm -rf "$root"
+}
+trap cleanup EXIT HUP INT TERM
+
+archive="$root/$asset"
+manifest="$root/desktop-checksums.txt"
+unpack="$root/unpack"
+mkdir -p "$unpack"
+
+printf 'Downloading the latest OpenScience desktop app...\n'
+curl -fsSL --retry 3 "$base/$asset" -o "$archive" || fail "could not download $asset"
+curl -fsSL --retry 3 "$base/desktop-checksums.txt" -o "$manifest" || fail "could not download checksums"
+
+expected="$(awk -v file="$asset" '$2 == file { print $1 }' "$manifest")"
+case "$expected" in
+  *[!0-9a-f]*|'') fail "the release checksum for $asset is invalid" ;;
+esac
+[ "${#expected}" -eq 64 ] || fail "the release checksum for $asset is invalid"
+actual="$(shasum -a 256 "$archive" | awk '{ print $1 }')"
+[ "$actual" = "$expected" ] || fail "the downloaded app does not match its published checksum"
+
+/usr/bin/ditto -x -k "$archive" "$unpack" || fail "the downloaded app could not be unpacked"
+bundles=()
+for bundle in "$unpack"/*.app; do
+  [ -d "$bundle" ] || continue
+  bundles[${#bundles[@]}]="$bundle"
+done
+[ "${#bundles[@]}" -eq 1 ] || fail "the release archive must contain exactly one app"
+source="${bundles[0]}"
+
+verify() {
+  local bundle="$1"
+  local plist="$bundle/Contents/Info.plist"
+  [ -f "$plist" ] || return 1
+  [ "$(/usr/bin/plutil -extract CFBundleIdentifier raw "$plist" 2>/dev/null)" = "ai.syntheticsciences.openscience" ] || return 1
+  /usr/bin/codesign --verify --deep --strict "$bundle" >/dev/null 2>&1
+}
+
+verify "$source" || fail "the downloaded app failed identity or signature verification"
+version="$(/usr/bin/plutil -extract CFBundleShortVersionString raw "$source/Contents/Info.plist" 2>/dev/null)"
+if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  fail "the downloaded app has an invalid version"
+fi
+
+if [ -n "${OPENSCIENCE_DESKTOP_DESTINATION:-}" ]; then
+  target="$OPENSCIENCE_DESKTOP_DESTINATION"
+elif [ -w /Applications ]; then
+  target="/Applications/OpenScience.app"
+else
+  mkdir -p "$HOME/Applications"
+  target="$HOME/Applications/OpenScience.app"
+fi
+case "$target" in
+  /*.app) ;;
+  *) fail "the application destination must be an absolute .app path" ;;
+esac
+
+parent="$(dirname "$target")"
+mkdir -p "$parent"
+[ -w "$parent" ] || fail "$parent is not writable"
+
+backup=""
+store=""
+if [ -e "$target" ] || [ -L "$target" ]; then
+  [ -d "$target" ] && [ ! -L "$target" ] || fail "the existing destination is not an application bundle"
+  verify "$target" || fail "the existing destination is not OpenScience"
+  store="$(mktemp -d "$parent/.openscience-backup.XXXXXX")"
+  backup="$store/OpenScience.app"
+  mv "$target" "$backup"
+fi
+
+restore() {
+  rm -rf "$target"
+  if [ -n "$backup" ] && [ -d "$backup" ]; then
+    mv "$backup" "$target"
+  fi
+  if [ -n "$store" ]; then
+    rmdir "$store" 2>/dev/null || true
+  fi
+}
+
+if ! /usr/bin/ditto "$source" "$target"; then
+  restore
+  fail "the app could not be copied to $target"
+fi
+if ! verify "$target"; then
+  restore
+  fail "the installed app failed identity or signature verification"
+fi
+
+/usr/bin/xattr -dr com.apple.quarantine "$target" 2>/dev/null || true
+if /usr/bin/xattr -p com.apple.quarantine "$target" >/dev/null 2>&1; then
+  restore
+  fail "macOS quarantine could not be removed from the verified app"
+fi
+
+if [ -n "$store" ]; then
+  rm -rf "$store"
+fi
+if [ "${OPENSCIENCE_DESKTOP_SKIP_LAUNCH:-0}" != "1" ]; then
+  /usr/bin/open -n "$target"
+fi
+printf 'OpenScience %s is installed at %s\n' "$version" "$target"
