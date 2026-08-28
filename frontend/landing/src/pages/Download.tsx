@@ -12,31 +12,36 @@ const DOWNLOADS = {
     platform: "mac",
     label: "macOS",
     detail: "Apple Silicon",
-    file: "openscience-darwin-arm64.zip",
+    kind: "Disk image",
+    file: "OpenScience-mac-arm64.dmg",
   },
   "mac-x64": {
     platform: "mac",
     label: "macOS",
     detail: "Intel",
-    file: "openscience-darwin-x64.zip",
+    kind: "Disk image",
+    file: "OpenScience-mac-x64.dmg",
   },
   "windows-x64": {
     platform: "windows",
     label: "Windows",
     detail: "64-bit",
-    file: "openscience-windows-x64.zip",
+    kind: "Installer",
+    file: "OpenScience-windows-x64.exe",
   },
   "linux-x64": {
     platform: "linux",
     label: "Linux",
     detail: "x86_64",
-    file: "openscience-linux-x64.tar.gz",
+    kind: "AppImage",
+    file: "OpenScience-linux-x64.AppImage",
   },
   "linux-arm64": {
     platform: "linux",
     label: "Linux",
     detail: "ARM64",
-    file: "openscience-linux-arm64.tar.gz",
+    kind: "AppImage",
+    file: "OpenScience-linux-arm64.AppImage",
   },
 } as const
 
@@ -277,7 +282,7 @@ export default function Download() {
                 Download for {download.label} ({download.detail})
               </a>
               <div className="mt-3 text-[12.5px] text-foreground/55">
-                Portable archive · latest release · free and open source
+                {download.kind} · latest release · free and open source
               </div>
             </div>
           </div>
@@ -344,7 +349,7 @@ export default function Download() {
             <h2 className="sr-only">Quick start</h2>
             <div className="grid gap-px border-y border-border/45 bg-border/45 sm:grid-cols-3">
               {[
-                ["01", "Unpack", "Extract the archive and add OpenScience to your PATH."],
+                ["01", "Install", "Open the installer. On Linux, make the AppImage executable."],
                 ["02", "Connect", "Run openscience login once."],
                 ["03", "Launch", "Run openscience in any project."],
               ].map((step) => (
