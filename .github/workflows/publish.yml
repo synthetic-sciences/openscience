@@ -420,27 +420,55 @@ jobs:
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
 
-      - name: Build desktop installer
+      - name: Build signed desktop installer
+        if: inputs.release_mode == 'signed'
         shell: bash
         run: bun --cwd frontend/desktop run dist -- --${{ matrix.target }} --${{ matrix.arch }}
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_DESKTOP_SIGNED: ${{ inputs.release_mode == 'signed' && matrix.signing != 'none' && 'true' || 'false' }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.release_mode == 'signed' && 'true' || 'false' }}
-          CSC_LINK: ${{ inputs.release_mode == 'signed' && matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_BASE64 || inputs.release_mode == 'signed' && matrix.signing == 'windows' && secrets.WINDOWS_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ inputs.release_mode == 'signed' && matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || inputs.release_mode == 'signed' && matrix.signing == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
-          APPLE_ID: ${{ inputs.release_mode == 'signed' && secrets.APPLE_NOTARY_APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ inputs.release_mode == 'signed' && secrets.APPLE_NOTARY_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ inputs.release_mode == 'signed' && secrets.APPLE_TEAM_ID || '' }}
+          OPENSCIENCE_DESKTOP_SIGNED: "true"
+          CSC_IDENTITY_AUTO_DISCOVERY: "true"
+          CSC_LINK: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_BASE64 || matrix.signing == 'windows' && secrets.WINDOWS_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || matrix.signing == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Upload desktop installer to draft release
+      - name: Build unsigned desktop installer
+        if: inputs.release_mode == 'unsigned'
         shell: bash
-        run: gh release upload "$OPENSCIENCE_TAG" "frontend/desktop/dist/$DESKTOP_ASSET" --clobber
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_DESKTOP_SIGNED: "false"
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          set -euo pipefail
+          unset CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
+          unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+          bun --cwd frontend/desktop run dist -- --${{ matrix.target }} --${{ matrix.arch }}
+
+      - name: Verify or upload immutable desktop installer
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
           DESKTOP_ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          installer="frontend/desktop/dist/$DESKTOP_ASSET"
+          [[ -s "$installer" ]]
+          existing="$(gh release view "$OPENSCIENCE_TAG" --json assets --jq '.assets[] | select(.name == env.DESKTOP_ASSET) | .digest' || true)"
+          if [[ -z "$existing" ]]; then
+            gh release upload "$OPENSCIENCE_TAG" "$installer"
+            exit 0
+          fi
+          actual="sha256:$(node -e 'const fs=require("fs"),c=require("crypto");const h=c.createHash("sha256");h.update(fs.readFileSync(process.argv[1]));process.stdout.write(h.digest("hex"))' "$installer")"
+          [[ "$actual" == "$existing" ]] || {
+            echo "::error::$DESKTOP_ASSET already exists with different bytes; refusing to clobber"
+            exit 1
+          }
 
   verify-native-cli:
     needs:
