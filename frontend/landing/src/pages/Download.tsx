@@ -281,8 +281,11 @@ export default function Download() {
                 </svg>
                 Download for {download.label} ({download.detail})
               </a>
-              <div className="mt-3 text-[12.5px] text-foreground/55">
+              <div className="mt-3 text-[12.5px] leading-5 text-foreground/55">
                 {download.kind} · latest release · free and open source
+                <br />
+                Unsigned release. macOS and Windows may show security prompts; macOS builds are ad-hoc signed and
+                not notarized.
               </div>
             </div>
           </div>
@@ -349,9 +352,9 @@ export default function Download() {
             <h2 className="sr-only">Quick start</h2>
             <div className="grid gap-px border-y border-border/45 bg-border/45 sm:grid-cols-3">
               {[
-                ["01", "Install", "Open the installer. On Linux, make the AppImage executable."],
-                ["02", "Connect", "Run openscience login once."],
-                ["03", "Launch", "Run openscience in any project."],
+                ["01", "Install", "Open the download and follow your operating system's install prompt."],
+                ["02", "Connect", "Sign in or choose your own model provider during onboarding."],
+                ["03", "Research", "Open a project and start your first research session."],
               ].map((step) => (
                 <div key={step[0]} className="min-h-[150px] bg-background px-6 py-7 sm:px-7">
                   <div className="font-terminal text-[10px] tracking-[0.12em] text-[hsl(var(--accent-coral)/0.8)]">

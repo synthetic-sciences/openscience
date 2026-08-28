@@ -81,6 +81,8 @@ describe("OpenScience landing contract", () => {
     expect(download).not.toContain("openscience-linux-x64.tar.gz")
     expect(download).not.toContain("openscience-linux-arm64.tar.gz")
     expect(download).not.toContain("Portable archive")
+    expect(download).toContain("Unsigned release")
+    expect(download).toContain("ad-hoc signed")
     expect(download).toContain("npm i -g @synsci/openscience")
     expect(download).toContain("curl -fsSL https://openscience.sh/install | bash")
     expect(download).toContain('role="group"')
