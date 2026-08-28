@@ -116,7 +116,7 @@ test("production release keeps signed publishing as the default and ships instal
   const preflight = workflow.slice(workflow.indexOf("\n  macos-signing-preflight:"), workflow.indexOf("\n  version:"))
   const sign = workflow.slice(workflow.indexOf("\n  sign-macos-cli:"), workflow.indexOf("\n  verify-native-cli:"))
   const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
-  const desktopUpload = desktop.slice(desktop.indexOf("Verify or upload immutable desktop installer"))
+  const desktopUpload = desktop.slice(desktop.indexOf("Verify or upload immutable desktop artifacts"))
   const prepare = workflow.slice(workflow.indexOf("\n  prepare-npm:"), workflow.indexOf("\n  publish:"))
   const publish = workflow.slice(workflow.indexOf("\n  publish:"), workflow.indexOf("\n  deployment:"))
 
@@ -163,8 +163,10 @@ test("production release keeps signed publishing as the default and ships instal
   expect(desktopUpload).toContain('produced="frontend/desktop/dist/OpenScience-linux-x86_64.AppImage"')
   expect(desktopUpload).toContain('mv "$produced" "$installer"')
   expect(desktopUpload.indexOf('mv "$produced" "$installer"')).toBeLessThan(
-    desktopUpload.indexOf('existing="$(gh release view "$OPENSCIENCE_TAG"'),
+    desktopUpload.indexOf('release="$(gh release view "$OPENSCIENCE_TAG"'),
   )
+  expect(desktop).toContain("OpenScience-mac-arm64.dmg OpenScience-mac-arm64.zip")
+  expect(desktop).toContain("OpenScience-mac-x64.dmg OpenScience-mac-x64.zip")
   expect(prepare).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
   expect(publish).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
   expect(publish).toContain("!cancelled() &&")
@@ -178,7 +180,7 @@ test("production desktop resume freezes an exact reviewed asset set before any r
   const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
   const steps = desktop.split("\n      - ").slice(1)
   const findStep = (marker: string) => steps.find((step) => step.includes(marker)) ?? ""
-  const check = findStep("Check for an existing immutable desktop installer")
+  const check = findStep("Check for existing immutable desktop artifacts")
 
   expect(plan).toContain("DESKTOP_RESUME_MANIFEST: ${{ inputs.desktop_resume_manifest }}")
   expect(plan).toContain(".version == $version")
@@ -190,7 +192,7 @@ test("production desktop resume freezes an exact reviewed asset set before any r
   expect(plan).toContain('all(.assets[]; type == "string"')
   expect(plan).toContain('echo "trusted_assets=$expected"')
   expect(desktop).toContain("- desktop-resume")
-  expect(desktop.indexOf("Check for an existing immutable desktop installer")).toBeLessThan(
+  expect(desktop.indexOf("Check for existing immutable desktop artifacts")).toBeLessThan(
     desktop.indexOf("uses: actions/checkout@"),
   )
   expect(check).toContain("GH_REPO: ${{ github.repository }}")
@@ -215,7 +217,7 @@ test("production desktop resume freezes an exact reviewed asset set before any r
     "name: Make sidecar executable",
     "name: Build signed desktop installer",
     "name: Build unsigned desktop installer",
-    "name: Verify or upload immutable desktop installer",
+    "name: Verify or upload immutable desktop artifacts",
   ]) {
     expect(findStep(marker)).toContain("steps.existing.outputs.found != 'true'")
   }
@@ -230,7 +232,9 @@ test("production publish finalizes a complete immutable desktop checksum manifes
   )
 
   expect(finalize).toContain("OpenScience-mac-arm64.dmg")
+  expect(finalize).toContain("OpenScience-mac-arm64.zip")
   expect(finalize).toContain("OpenScience-mac-x64.dmg")
+  expect(finalize).toContain("OpenScience-mac-x64.zip")
   expect(finalize).toContain("OpenScience-windows-x64.exe")
   expect(finalize).toContain("OpenScience-linux-x64.AppImage")
   expect(finalize).toContain("OpenScience-linux-arm64.AppImage")
@@ -250,6 +254,7 @@ test("desktop packaging explicitly separates signed and unsigned installers", as
 
   expect(config).toContain('process.env.OPENSCIENCE_DESKTOP_SIGNED === "true"')
   expect(config).toContain('executableName: "openscience"')
+  expect(config).toContain('target: ["dmg", "zip"]')
   expect(config).toContain('identity: signed ? undefined : "-"')
   expect(config).toContain("forceCodeSigning: signed")
   expect(config).toContain("hardenedRuntime: true")

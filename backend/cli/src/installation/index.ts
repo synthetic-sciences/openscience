@@ -93,6 +93,8 @@ export namespace Installation {
   }
 
   export async function method() {
+    if (process.env.OPENSCIENCE_DESKTOP_UPDATE_URL && process.env.OPENSCIENCE_DESKTOP_UPDATE_TOKEN)
+      return "desktop" as const
     return methodFromPaths({ execPath: process.execPath, scriptPath: process.argv[1] })
   }
 
@@ -112,6 +114,26 @@ export namespace Installation {
   }
 
   export async function upgrade(method: Method, target: string) {
+    if (method === "desktop") {
+      const url = process.env.OPENSCIENCE_DESKTOP_UPDATE_URL
+      const token = process.env.OPENSCIENCE_DESKTOP_UPDATE_TOKEN
+      if (!url || !token) throw new Error("The desktop update service is unavailable")
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ version: target }),
+        signal: AbortSignal.timeout(30 * 60_000),
+      })
+      if (!response.ok) {
+        const message = await response
+          .json()
+          .then((value) => value.error)
+          .catch(() => undefined)
+        throw new UpgradeFailedError({ stderr: message ?? `Desktop update failed (${response.status})` })
+      }
+      log.info("desktop update staged", { target })
+      return
+    }
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-upgrade-"))
     const allowed = [
       "PATH",

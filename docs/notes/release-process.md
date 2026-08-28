@@ -20,7 +20,10 @@ branch.
    Use `release_mode=unsigned` only for a deliberately unsigned release. In
    that mode the macOS apps are ad-hoc signed but not notarized, the Windows
    installer is unsigned, and the workflow adds the required warning to the
-   release notes.
+   release notes. The first unsigned macOS install requires Apple's explicit
+   **Open Anyway** flow. Later desktop updates verify the architecture-specific
+   release ZIP's GitHub SHA-256 digest and app bundle identity, version, and
+   signature before replacing the installed bundle and restarting.
 
    The next version is derived from the current npm `latest`, so there is no
    manual version editing in `package.json` and no risk of a tag collision.

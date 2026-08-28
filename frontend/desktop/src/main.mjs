@@ -1,13 +1,24 @@
+import { randomBytes } from "node:crypto"
 import { spawn } from "node:child_process"
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs"
+import { createServer } from "node:http"
 import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { app, BrowserWindow, Menu, shell } from "electron"
+import { apply as applyUpdate, stage as stageUpdate } from "./updater.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
 const windows = new Set()
-const state = { service: undefined, address: undefined, exiting: false }
+const state = {
+  service: undefined,
+  address: undefined,
+  exiting: false,
+  updateServer: undefined,
+  updateAddress: undefined,
+  updateToken: undefined,
+  update: undefined,
+}
 
 function external(value) {
   if (!URL.canParse(value)) return
@@ -75,6 +86,15 @@ async function start() {
   state.address = `http://127.0.0.1:${selected}`
   state.service = spawn(executable, ["serve", "--port", String(selected), "--print-logs"], {
     cwd: workspace,
+    env: {
+      ...process.env,
+      ...(state.updateAddress && state.updateToken
+        ? {
+            OPENSCIENCE_DESKTOP_UPDATE_URL: `${state.updateAddress}/update`,
+            OPENSCIENCE_DESKTOP_UPDATE_TOKEN: state.updateToken,
+          }
+        : {}),
+    },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   })
@@ -93,6 +113,61 @@ async function start() {
     }
   })
   await ready(state.address)
+}
+
+function respond(response, status, value) {
+  response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" })
+  response.end(JSON.stringify(value))
+}
+
+async function updateRequest(request, response) {
+  if (request.method !== "POST" || request.url !== "/update") {
+    respond(response, 404, { error: "Not found" })
+    return
+  }
+  if (request.headers.authorization !== `Bearer ${state.updateToken}`) {
+    respond(response, 401, { error: "Unauthorized" })
+    return
+  }
+  const chunks = []
+  for await (const chunk of request) {
+    chunks.push(chunk)
+    if (chunks.reduce((size, value) => size + value.length, 0) > 16_384) {
+      respond(response, 413, { error: "Update request is too large" })
+      return
+    }
+  }
+  const input = JSON.parse(Buffer.concat(chunks).toString("utf8"))
+  if (typeof input.version !== "string") throw new Error("The desktop update version is missing")
+  const pending = state.update ?? stageUpdate(input.version, { cache: path.join(app.getPath("userData"), "updates") })
+  state.update = pending
+  const update = await pending
+  if (update.version !== input.version) throw new Error("A different desktop update is already pending")
+  await applyUpdate(update)
+  respond(response, 200, { installed: true, version: update.version })
+  const timer = setTimeout(() => {
+    stop()
+  }, 500)
+  timer.unref?.()
+}
+
+async function updates() {
+  if (!app.isPackaged || process.platform !== "darwin") return
+  state.updateToken = randomBytes(32).toString("hex")
+  state.updateServer = createServer((request, response) => {
+    void updateRequest(request, response).catch((error) => {
+      respond(response, 500, { error: error instanceof Error ? error.message : String(error) })
+      state.update = undefined
+    })
+  })
+  state.updateServer.unref()
+  await new Promise((resolve, reject) => {
+    state.updateServer.once("error", reject)
+    state.updateServer.listen(0, "127.0.0.1", resolve)
+  })
+  const address = state.updateServer.address()
+  if (typeof address !== "object" || !address) throw new Error("The desktop update service did not start")
+  state.updateAddress = `http://127.0.0.1:${address.port}`
 }
 
 function dock() {
@@ -116,6 +191,7 @@ function dock() {
 function stop() {
   if (state.exiting) return
   state.exiting = true
+  state.updateServer?.close()
   state.service?.kill()
   for (const window of windows) window.destroy()
   setTimeout(() => app.exit(0), 0)
@@ -220,6 +296,7 @@ app.on("second-instance", () => {
 app.whenReady().then(async () => {
   app.name = "OpenScience"
   applicationMenu()
+  await updates()
   const splash = new BrowserWindow({
     width: 520,
     height: 300,

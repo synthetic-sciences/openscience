@@ -24,7 +24,7 @@ export default {
   ],
   asar: true,
   mac: {
-    target: ["dmg"],
+    target: ["dmg", "zip"],
     icon: "build/icon.icns",
     category: "public.app-category.developer-tools",
     identity: signed ? undefined : "-",

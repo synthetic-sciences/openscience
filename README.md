@@ -47,7 +47,7 @@ The command is `openscience`, and it opens the workspace in your browser. The fi
 npx synsci
 ```
 
-Platform binaries and desktop installers are also attached to [GitHub Releases](https://github.com/synthetic-sciences/OpenScience/releases); see the [changelog](CHANGELOG.md) for what's new in each version. Release notes identify unsigned builds. In unsigned mode, the macOS apps are ad-hoc signed but not notarized, so verify the published checksum before using macOS's explicit **Open Anyway** flow.
+Platform binaries and desktop installers are also attached to [GitHub Releases](https://github.com/synthetic-sciences/OpenScience/releases); see the [changelog](CHANGELOG.md) for what's new in each version. Release notes identify unsigned builds. In unsigned mode, the macOS apps are ad-hoc signed but not notarized, so verify the published checksum before using macOS's explicit **Open Anyway** flow once. Releases after the first self-update-capable install can update and restart from inside OpenScience without downloading another DMG.
 
 Linux installs require kernel 5.1 or newer. Glibc builds require glibc 2.17 or newer, and musl builds are published separately. CentOS 7's stock 3.10 kernel is not supported even though its glibc version meets the minimum; use a newer host kernel or VM.
 

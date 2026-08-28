@@ -37,7 +37,7 @@ type UpdateResult = z.infer<typeof Result>
 type UpdateInstallResult = z.infer<typeof InstallResult>
 
 export function supportsAutomaticUpdate(method: string) {
-  return ["curl", "npm", "pnpm", "yarn", "bun", "brew", "choco", "scoop"].includes(method)
+  return ["curl", "npm", "pnpm", "yarn", "bun", "brew", "choco", "scoop", "desktop"].includes(method)
 }
 
 export function createUpdateInstaller(input: {
@@ -173,7 +173,7 @@ export const UpdatesSettingsRoutes = lazy(() =>
       }),
       async (c) => {
         const result = await install()
-        const restartScheduled = result.installed ? SelfRestart.schedule() : false
+        const restartScheduled = result.installed ? result.method === "desktop" || SelfRestart.schedule() : false
         return c.json(InstallResult.parse({ ...result, restartScheduled }))
       },
     )
