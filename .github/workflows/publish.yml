@@ -17,7 +17,7 @@ on:
         required: false
         type: string
       release_mode:
-        description: "Signed adds notarized macOS CLI archives and desktop installers; unsigned publishes native CLI archives and npm packages only"
+        description: "Signed notarizes macOS and signs Windows; unsigned publishes native archives and unsigned desktop installers"
         required: true
         default: signed
         type: choice
@@ -112,9 +112,9 @@ jobs:
         if: inputs.release_mode == 'unsigned'
         shell: bash
         run: |
-          echo "::warning::Publishing unsigned native CLI archives and npm packages; desktop installers are intentionally excluded."
+          echo "::warning::Publishing unsigned native CLI archives and desktop installers; operating systems may show security prompts."
           echo "### Unsigned native release" >> "$GITHUB_STEP_SUMMARY"
-          echo "Native CLI archives and npm packages will be published without code signing. Desktop installers are excluded." >> "$GITHUB_STEP_SUMMARY"
+          echo "Native CLI archives and desktop installers will be published without trusted code signing. macOS Gatekeeper and Windows SmartScreen may show security prompts." >> "$GITHUB_STEP_SUMMARY"
 
   version:
     needs:
@@ -321,9 +321,9 @@ jobs:
         run: |
           set -euo pipefail
           notice='> [!WARNING]
-          > The native CLI archives in this release are unsigned. macOS and Windows may show operating-system security prompts. Desktop installers are not included.'
+          > The native CLI archives and desktop installers in this release are unsigned. macOS Gatekeeper and Windows SmartScreen may show security prompts. The macOS apps are ad-hoc signed but are not notarized.'
           body="$(gh release view "$OPENSCIENCE_TAG" --json body --jq .body)"
-          if ! grep -Fq 'The native CLI archives in this release are unsigned.' <<<"$body"; then
+          if ! grep -Fq 'The native CLI archives and desktop installers in this release are unsigned.' <<<"$body"; then
             notes="$RUNNER_TEMP/openscience-unsigned-release-notes.txt"
             printf '%s\n\n%s\n' "$body" "$notice" > "$notes"
             gh release edit "$OPENSCIENCE_TAG" --notes-file "$notes"
@@ -333,7 +333,6 @@ jobs:
       cache_key: ${{ inputs.release_mode == 'signed' && format('cli-build-signed-{0}', needs.version.outputs.version) || format('cli-build-{0}', needs.version.outputs.version) }}
 
   build-desktop:
-    if: inputs.release_mode == 'signed'
     needs:
       - version
       - sign-macos-cli
@@ -391,13 +390,13 @@ jobs:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-signed-${{ needs.version.outputs.version }}
+          key: ${{ needs.sign-macos-cli.outputs.cache_key }}
           fail-on-cache-miss: true
 
       - run: bun install --frozen-lockfile
 
       - name: Require release signing credentials
-        if: matrix.signing != 'none'
+        if: inputs.release_mode == 'signed' && matrix.signing != 'none'
         shell: bash
         run: |
           test -n "$CSC_LINK" || { echo "::error::Missing desktop code-signing certificate"; exit 1; }
@@ -421,24 +420,26 @@ jobs:
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
 
-      - name: Build signed desktop installer
+      - name: Build desktop installer
         shell: bash
         run: bun --cwd frontend/desktop run dist -- --${{ matrix.target }} --${{ matrix.arch }}
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          CSC_LINK: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_BASE64 || matrix.signing == 'windows' && secrets.WINDOWS_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || matrix.signing == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
-          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          OPENSCIENCE_DESKTOP_SIGNED: ${{ inputs.release_mode == 'signed' && matrix.signing != 'none' && 'true' || 'false' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.release_mode == 'signed' && 'true' || 'false' }}
+          CSC_LINK: ${{ inputs.release_mode == 'signed' && matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_BASE64 || inputs.release_mode == 'signed' && matrix.signing == 'windows' && secrets.WINDOWS_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ inputs.release_mode == 'signed' && matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || inputs.release_mode == 'signed' && matrix.signing == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ inputs.release_mode == 'signed' && secrets.APPLE_NOTARY_APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ inputs.release_mode == 'signed' && secrets.APPLE_NOTARY_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ inputs.release_mode == 'signed' && secrets.APPLE_TEAM_ID || '' }}
 
       - name: Upload desktop installer to draft release
         shell: bash
-        run: gh release upload "$OPENSCIENCE_RELEASE" "frontend/desktop/dist/$DESKTOP_ASSET" --clobber
+        run: gh release upload "$OPENSCIENCE_TAG" "frontend/desktop/dist/$DESKTOP_ASSET" --clobber
         env:
           GH_TOKEN: ${{ github.token }}
-          OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
           DESKTOP_ASSET: ${{ matrix.asset }}
 
   verify-native-cli:
@@ -574,7 +575,7 @@ jobs:
       needs.version.result == 'success' &&
       needs.prepare-npm.result == 'success' &&
       needs.sign-macos-cli.result == 'success' &&
-      (inputs.release_mode == 'unsigned' || needs.build-desktop.result == 'success')
+      needs.build-desktop.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

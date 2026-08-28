@@ -102,7 +102,7 @@ test("production release caches exact builds and packed npm artifacts by version
   )
 })
 
-test("production release keeps signed publishing as the default and exposes an explicit unsigned native-only path", async () => {
+test("production release keeps signed publishing as the default and ships installers in unsigned mode", async () => {
   const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
   const input = workflow.slice(workflow.indexOf("      release_mode:"), workflow.indexOf("# One release at a time"))
   const preflight = workflow.slice(workflow.indexOf("\n  macos-signing-preflight:"), workflow.indexOf("\n  version:"))
@@ -116,7 +116,7 @@ test("production release keeps signed publishing as the default and exposes an e
   expect(input).toContain("- unsigned")
   expect(workflow.indexOf("macos-signing-preflight:")).toBeLessThan(workflow.indexOf("\n  version:"))
   expect(preflight).toContain("if: inputs.release_mode == 'signed'")
-  expect(preflight).toContain("Publishing unsigned native CLI archives and npm packages")
+  expect(preflight).toContain("Publishing unsigned native CLI archives and desktop installers")
   expect(sign).toContain("Developer ID sign and notarize macOS binaries")
   expect(sign).toContain("if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'")
   expect(sign).toContain("--identifier ai.syntheticsciences.openscience")
@@ -124,8 +124,8 @@ test("production release keeps signed publishing as the default and exposes an e
   expect(sign).toContain("xcrun notarytool submit")
   expect(sign).toContain("TeamIdentifier=$APPLE_TEAM_ID")
   expect(sign).toContain("if: inputs.release_mode == 'unsigned'")
-  expect(sign).toContain("The native CLI archives in this release are unsigned.")
-  expect(sign).toContain("Desktop installers are not included.")
+  expect(sign).toContain("The native CLI archives and desktop installers in this release are unsigned.")
+  expect(sign).not.toContain("Desktop installers are not included.")
   expect(sign.indexOf("xcrun notarytool submit")).toBeLessThan(sign.indexOf("Cache immutable signed CLI build"))
   expect(sign.indexOf("Cache immutable signed CLI build")).toBeLessThan(
     sign.indexOf("Verify or upload immutable draft assets"),
@@ -135,11 +135,29 @@ test("production release keeps signed publishing as the default and exposes an e
   )
   expect(sign).toContain("format('cli-build-signed-{0}', needs.version.outputs.version)")
   expect(sign).toContain("format('cli-build-{0}', needs.version.outputs.version)")
-  expect(desktop).toContain("if: inputs.release_mode == 'signed'")
+  expect(desktop).not.toContain("build-desktop:\n    if: inputs.release_mode == 'signed'")
+  expect(desktop).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
+  expect(desktop).toContain("if: inputs.release_mode == 'signed' && matrix.signing != 'none'")
+  expect(desktop).toContain("OPENSCIENCE_DESKTOP_SIGNED:")
+  expect(desktop).toContain("CSC_IDENTITY_AUTO_DISCOVERY:")
+  expect(desktop).toContain('gh release upload "$OPENSCIENCE_TAG"')
+  expect(desktop).not.toContain('gh release upload "$OPENSCIENCE_RELEASE"')
   expect(prepare).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
   expect(publish).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
   expect(publish).toContain("!cancelled() &&")
-  expect(publish).toContain("inputs.release_mode == 'unsigned' || needs.build-desktop.result == 'success'")
+  expect(publish).toContain("needs.build-desktop.result == 'success'")
+  expect(publish).not.toContain("inputs.release_mode == 'unsigned' || needs.build-desktop.result == 'success'")
+})
+
+test("desktop packaging explicitly separates signed and unsigned installers", async () => {
+  const config = await Bun.file(path.join(import.meta.dir, "../../../../frontend/desktop/electron-builder.mjs")).text()
+
+  expect(config).toContain('process.env.OPENSCIENCE_DESKTOP_SIGNED === "true"')
+  expect(config).toContain("identity: signed ? undefined : null")
+  expect(config).toContain("forceCodeSigning: signed")
+  expect(config).toContain("hardenedRuntime: signed")
+  expect(config).toContain("notarize: signed && process.env.APPLE_ID ? true : false")
+  expect(config).toContain("signExecutable: signed")
 })
 
 test("desktop backfill wraps the immutable public runtime without release or npm mutation", async () => {
