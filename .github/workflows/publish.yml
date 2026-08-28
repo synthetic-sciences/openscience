@@ -423,7 +423,7 @@ jobs:
       - name: Build signed desktop installer
         if: inputs.release_mode == 'signed'
         shell: bash
-        run: bun --cwd frontend/desktop run dist -- --${{ matrix.target }} --${{ matrix.arch }}
+        run: bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
@@ -447,7 +447,7 @@ jobs:
           set -euo pipefail
           unset CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
           unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
-          bun --cwd frontend/desktop run dist -- --${{ matrix.target }} --${{ matrix.arch }}
+          bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
 
       - name: Verify or upload immutable desktop installer
         shell: bash

@@ -176,7 +176,16 @@ jobs:
             exit 1
           }
           mkdir -p .desktop-sidecar
-          tar -xf "$OPENSCIENCE_ARCHIVE" -C .desktop-sidecar "$OPENSCIENCE_BINARY"
+          if [[ "$OPENSCIENCE_ARCHIVE" == *.zip ]]; then
+            if [[ "$RUNNER_OS" == "Windows" ]]; then
+              powershell.exe -NoProfile -NonInteractive -Command \
+                "Expand-Archive -LiteralPath '$OPENSCIENCE_ARCHIVE' -DestinationPath '.desktop-sidecar'"
+            else
+              unzip -q "$OPENSCIENCE_ARCHIVE" "$OPENSCIENCE_BINARY" -d .desktop-sidecar
+            fi
+          else
+            tar -xf "$OPENSCIENCE_ARCHIVE" -C .desktop-sidecar "$OPENSCIENCE_BINARY"
+          fi
 
       - name: Verify runtime sidecar
         if: steps.existing.outputs.found != 'true'
@@ -212,7 +221,7 @@ jobs:
           elif [[ "${{ matrix.target }}" == "win" ]]; then
             args+=("-c.win.signExecutable=false")
           fi
-          bun --cwd frontend/desktop run dist -- "${args[@]}"
+          bun run --cwd frontend/desktop dist -- "${args[@]}"
 
       - name: Upload immutable desktop installer
         if: steps.existing.outputs.found != 'true'
