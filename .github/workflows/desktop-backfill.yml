@@ -1,0 +1,294 @@
+name: Desktop installer backfill
+run-name: Desktop installers v${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing stable release version
+        required: true
+        type: string
+
+concurrency:
+  group: desktop-backfill-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      source: ${{ steps.release.outputs.source }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/v${{ inputs.version }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Validate immutable public release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$OPENSCIENCE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::version must be a stable semantic version"
+            exit 1
+          }
+
+          tag="v$OPENSCIENCE_VERSION"
+          release="$(gh release view "$tag" --json tagName,isDraft,isPrerelease,targetCommitish,body)"
+          [[ "$(jq -r .tagName <<<"$release")" == "$tag" ]]
+          [[ "$(jq -r .isDraft <<<"$release")" == "false" ]] || {
+            echo "::error::$tag is still a draft"
+            exit 1
+          }
+          [[ "$(jq -r .isPrerelease <<<"$release")" == "false" ]] || {
+            echo "::error::$tag is a prerelease"
+            exit 1
+          }
+
+          source="$(git rev-parse HEAD)"
+          parent="$(git rev-parse HEAD^)"
+          marker="$(jq -r .body <<<"$release" | sed -n 's/.*openscience-release-source:\([0-9a-f]\{40\}\).*/\1/p' | head -1)"
+          target="$(jq -r .targetCommitish <<<"$release")"
+          [[ -n "$marker" ]] || {
+            echo "::error::$tag is missing its immutable source marker"
+            exit 1
+          }
+          [[ "$target" == "$source" || "$target" == "$marker" ]] || {
+            echo "::error::$tag target no longer matches its release source"
+            exit 1
+          }
+          if [[ "$source" != "$marker" ]]; then
+            [[ "$(git show -s --format=%s HEAD)" == "release: $tag" && "$parent" == "$marker" ]] || {
+              echo "::error::$tag is not the version-only child of its recorded source"
+              exit 1
+            }
+          fi
+          [[ "$(jq -r .version frontend/desktop/package.json)" == "$OPENSCIENCE_VERSION" ]] || {
+            echo "::error::desktop package version does not match $OPENSCIENCE_VERSION"
+            exit 1
+          }
+
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: mac
+            arch: arm64
+            archive: openscience-darwin-arm64.zip
+            binary: openscience
+            asset: OpenScience-mac-arm64.dmg
+          - runner: macos-15
+            target: mac
+            arch: x64
+            archive: openscience-darwin-x64.zip
+            binary: openscience
+            asset: OpenScience-mac-x64.dmg
+          - runner: windows-2025
+            target: win
+            arch: x64
+            archive: openscience-windows-x64.zip
+            binary: openscience.exe
+            asset: OpenScience-windows-x64.exe
+          - runner: ubuntu-24.04
+            target: linux
+            arch: x64
+            archive: openscience-linux-x64.tar.gz
+            binary: openscience
+            asset: OpenScience-linux-x64.AppImage
+          - runner: ubuntu-24.04-arm
+            target: linux
+            arch: arm64
+            archive: openscience-linux-arm64.tar.gz
+            binary: openscience
+            asset: OpenScience-linux-arm64.AppImage
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - name: Check for an existing immutable installer
+        id: existing
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.resolve.outputs.tag }}
+          DESKTOP_ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          existing="$(gh release view "$OPENSCIENCE_TAG" --json assets --jq '.assets[] | select(.name == env.DESKTOP_ASSET)' || true)"
+          if [[ -z "$existing" ]]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$(jq -r .state <<<"$existing")" == "uploaded" ]]
+          (( $(jq -r .size <<<"$existing") > 0 ))
+          [[ "$(jq -r .digest <<<"$existing")" == sha256:* ]]
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.existing.outputs.found != 'true'
+        with:
+          ref: ${{ needs.resolve.outputs.source }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-bun
+        if: steps.existing.outputs.found != 'true'
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.existing.outputs.found != 'true'
+        with:
+          node-version: "24"
+
+      - name: Restore exact published runtime sidecar
+        if: steps.existing.outputs.found != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.resolve.outputs.tag }}
+          OPENSCIENCE_ARCHIVE: ${{ matrix.archive }}
+          OPENSCIENCE_BINARY: ${{ matrix.binary }}
+        run: |
+          set -euo pipefail
+          gh release download "$OPENSCIENCE_TAG" --pattern "$OPENSCIENCE_ARCHIVE"
+          expected="$(gh release view "$OPENSCIENCE_TAG" --json assets --jq '.assets[] | select(.name == env.OPENSCIENCE_ARCHIVE) | .digest')"
+          actual="sha256:$(node -e 'const fs=require("fs"),c=require("crypto");const h=c.createHash("sha256");h.update(fs.readFileSync(process.argv[1]));process.stdout.write(h.digest("hex"))' "$OPENSCIENCE_ARCHIVE")"
+          [[ -n "$expected" && "$actual" == "$expected" ]] || {
+            echo "::error::$OPENSCIENCE_ARCHIVE does not match the public release digest"
+            exit 1
+          }
+          mkdir -p .desktop-sidecar
+          tar -xf "$OPENSCIENCE_ARCHIVE" -C .desktop-sidecar "$OPENSCIENCE_BINARY"
+
+      - name: Verify runtime sidecar
+        if: steps.existing.outputs.found != 'true'
+        shell: bash
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/.desktop-sidecar/${{ matrix.binary }}
+          OPENSCIENCE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.target }}" != "win" ]]; then
+            chmod +x "$OPENSCIENCE_DESKTOP_SIDECAR"
+          fi
+          [[ "$($OPENSCIENCE_DESKTOP_SIDECAR --version)" == "$OPENSCIENCE_VERSION" ]]
+
+      - name: Install desktop dependencies
+        if: steps.existing.outputs.found != 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Build unsigned desktop installer
+        if: steps.existing.outputs.found != 'true'
+        shell: bash
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/.desktop-sidecar/${{ matrix.binary }}
+          OPENSCIENCE_VERSION: ${{ inputs.version }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          set -euo pipefail
+          unset CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
+          unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+          args=("--${{ matrix.target }}" "--${{ matrix.arch }}")
+          if [[ "${{ matrix.target }}" == "mac" ]]; then
+            args+=("-c.mac.identity=-" "-c.mac.notarize=false")
+          elif [[ "${{ matrix.target }}" == "win" ]]; then
+            args+=("-c.win.signExecutable=false")
+          fi
+          bun --cwd frontend/desktop run dist -- "${args[@]}"
+
+      - name: Upload immutable desktop installer
+        if: steps.existing.outputs.found != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.resolve.outputs.tag }}
+          DESKTOP_ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          installer="frontend/desktop/dist/$DESKTOP_ASSET"
+          [[ -s "$installer" ]] || {
+            echo "::error::electron-builder did not produce $DESKTOP_ASSET"
+            exit 1
+          }
+          gh release upload "$OPENSCIENCE_TAG" "$installer"
+
+  finalize:
+    needs:
+      - resolve
+      - build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Verify complete desktop release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.resolve.outputs.tag }}
+          OPENSCIENCE_SOURCE: ${{ needs.resolve.outputs.source }}
+        run: |
+          set -euo pipefail
+          current="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$OPENSCIENCE_TAG" | awk '{print $1}')"
+          [[ "$current" == "$OPENSCIENCE_SOURCE" ]] || {
+            echo "::error::$OPENSCIENCE_TAG moved during desktop packaging"
+            exit 1
+          }
+
+          assets="$(gh release view "$OPENSCIENCE_TAG" --json assets,body)"
+          expected=(
+            OpenScience-mac-arm64.dmg
+            OpenScience-mac-x64.dmg
+            OpenScience-windows-x64.exe
+            OpenScience-linux-x64.AppImage
+            OpenScience-linux-arm64.AppImage
+          )
+          : > desktop-checksums.txt
+          for name in "${expected[@]}"; do
+            asset="$(jq -c --arg name "$name" '.assets[] | select(.name == $name)' <<<"$assets")"
+            [[ "$(jq -r .state <<<"$asset")" == "uploaded" ]]
+            (( $(jq -r .size <<<"$asset") > 0 ))
+            digest="$(jq -r .digest <<<"$asset")"
+            [[ "$digest" == sha256:* ]]
+            printf '%s  %s\n' "${digest#sha256:}" "$name" >> desktop-checksums.txt
+          done
+
+          checksum_asset="$(jq -c '.assets[] | select(.name == "desktop-checksums.txt")' <<<"$assets" || true)"
+          if [[ -n "$checksum_asset" ]]; then
+            gh release download "$OPENSCIENCE_TAG" --pattern desktop-checksums.txt --dir "$RUNNER_TEMP"
+            cmp --silent desktop-checksums.txt "$RUNNER_TEMP/desktop-checksums.txt" || {
+              echo "::error::desktop-checksums.txt already exists with different bytes"
+              exit 1
+            }
+          else
+            gh release upload "$OPENSCIENCE_TAG" desktop-checksums.txt
+          fi
+
+          body="$(jq -r .body <<<"$assets")"
+          old='The native CLI archives in this release are unsigned. macOS and Windows may show operating-system security prompts. Desktop installers are not included.'
+          new='The native CLI archives and desktop installers in this release are unsigned. macOS and Windows may show operating-system security prompts. The macOS apps are ad-hoc signed but are not notarized.'
+          if [[ "$body" == *"$old"* ]]; then
+            body="${body//$old/$new}"
+          elif [[ "$body" != *"$new"* ]]; then
+            body="$body
+
+          > [!WARNING]
+          > $new"
+          fi
+          printf '%s\n' "$body" > release-notes.md
+          gh release edit "$OPENSCIENCE_TAG" --notes-file release-notes.md

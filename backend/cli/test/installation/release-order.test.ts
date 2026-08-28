@@ -142,6 +142,31 @@ test("production release keeps signed publishing as the default and exposes an e
   expect(publish).toContain("inputs.release_mode == 'unsigned' || needs.build-desktop.result == 'success'")
 })
 
+test("desktop backfill wraps the immutable public runtime without release or npm mutation", async () => {
+  const workflow = await Bun.file(
+    path.join(import.meta.dir, "../../../../.github/workflows/desktop-backfill.yml"),
+  ).text()
+
+  expect(workflow).toContain("ref: refs/tags/v${{ inputs.version }}")
+  expect(workflow).toContain("openscience-release-source:")
+  expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"')
+  expect(workflow).toContain('args+=("-c.mac.identity=-" "-c.mac.notarize=false")')
+  expect(workflow).toContain('args+=("-c.win.signExecutable=false")')
+  expect(workflow).toContain('gh release upload "$OPENSCIENCE_TAG" "$installer"')
+  expect(workflow).not.toContain("--clobber")
+  expect(workflow).not.toContain("NPM_TOKEN")
+  expect(workflow).not.toContain("id-token: write")
+  expect(workflow).not.toContain("version.ts")
+  expect(workflow).not.toContain("publish.ts")
+  expect(workflow).not.toContain("git tag")
+  expect(workflow).not.toContain("--target")
+  expect(workflow).toContain("OpenScience-mac-arm64.dmg")
+  expect(workflow).toContain("OpenScience-mac-x64.dmg")
+  expect(workflow).toContain("OpenScience-windows-x64.exe")
+  expect(workflow).toContain("OpenScience-linux-x64.AppImage")
+  expect(workflow).toContain("OpenScience-linux-arm64.AppImage")
+})
+
 test("production npm writes stage the complete set before latest promotion and release publication", async () => {
   const publish = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/publish.ts")).text()
   const helper = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/npm-release.ts")).text()
