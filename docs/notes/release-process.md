@@ -10,21 +10,28 @@ branch.
    CI workflow: Typecheck, Format, the Linux test suite, web/docs and landing
    builds, migration and runtime ownership checks on their platform matrices,
    launcher/release-script smoke tests, and workflow linting.
-2. Trigger the `publish` workflow with a bump level:
+2. Trigger the `publish` workflow with a bump level and an explicit release
+   mode:
 
    ```bash
-   gh workflow run publish.yml --ref main -f bump=patch   # or minor / major
+   gh workflow run publish.yml --ref main -f bump=patch -f release_mode=signed
    ```
+
+   Use `release_mode=unsigned` only for a deliberately unsigned release. In
+   that mode the macOS apps are ad-hoc signed but not notarized, the Windows
+   installer is unsigned, and the workflow adds the required warning to the
+   release notes.
 
    The next version is derived from the current npm `latest`, so there is no
    manual version editing in `package.json` and no risk of a tag collision.
 
 3. The workflow then, in order: computes the version and opens a draft GitHub
-   release → builds the platform binaries and uploads their checksum manifest →
-   verifies the Linux x64 and ARM64 npm wrappers on native runners → publishes
-   the CLI, SDK, plugin, and launcher packages to npm with provenance → attempts
-   the Homebrew tap update → makes the release public only after required npm
-   publishes succeed → records an npm deployment.
+   release → builds the platform binaries and desktop installers → uploads and
+   verifies their checksum manifests → verifies the Linux x64 and ARM64 npm
+   wrappers on native runners → publishes the CLI, SDK, plugin, and launcher
+   packages to npm with provenance → attempts the Homebrew tap update → makes
+   the release public only after required npm publishes and desktop assets
+   succeed → records an npm deployment.
 
    The publish job commits the generated package-version changes. It pushes that
    commit to `main` when the workflow identity may bypass branch protection;
@@ -35,9 +42,11 @@ branch.
 
 - The repo bundles features into **patch** bumps unless a change is breaking —
   a feature release does not automatically imply a minor bump here.
-- `bump` accepts `patch`, `minor`, or `major`. Production releases do not
-  accept an arbitrary version override; the workflow derives the next stable
-  version from the current npm `latest` so it is monotonic.
+- `bump` accepts `patch`, `minor`, or `major`. A reviewed resume or retry may
+  provide an exact stable `version`; new releases normally derive the next
+  stable version from npm `latest`. An exact-version resume must run from its
+  immutable `v<version>` tag and may bind pre-existing desktop assets only with
+  a reviewed digest manifest.
 - The tag (`vX.Y.Z`) points at the exact tree that was published.
 
 ## Verifying a release
@@ -52,10 +61,13 @@ gh release view vX.Y.Z --json isDraft,tagName,targetCommitish,assets
 
 Confirm that all four npm packages report the new version, the GitHub release
 is not a draft, the tag targets the release commit, and the assets include the
-platform archives plus `checksums.txt`. Inspect the publish run for Homebrew or
-launcher warnings. Homebrew updates remain non-fatal and may need owner
-follow-up. Publishing the `synsci` launcher is required in both test and
-production releases; a launcher failure leaves the GitHub release as a draft.
+platform archives, `checksums.txt`, `desktop-checksums.txt`, two macOS DMGs, one
+Windows EXE, and two Linux AppImages. Inspect the publish run for Homebrew,
+launcher, signing, or notarization warnings. Homebrew updates remain non-fatal
+and may need owner follow-up. Publishing the `synsci` launcher is required in
+both test and production releases; a launcher failure leaves the GitHub release
+as a draft. For unsigned mode, verify that the release warning is present and
+do not describe the installers as signed or notarized.
 
 See [verification.md](verification.md) for the local gates to run before you
 push to `main`.

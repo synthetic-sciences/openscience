@@ -41,3 +41,20 @@ Notes:
   offline; a nightly job checks the live catalog for delistings separately.
 - Synthetic Sciences account routes degrade gracefully when signed out or
   offline — exercise both states when touching them.
+
+## Release-specific evidence boundaries
+
+- Native DeepSeek direct-BYOK routing and strict tool-schema normalization have
+  deterministic contract coverage. A live official-API canary has not yet been
+  recorded, so release claims must not describe that route as live-verified.
+- The scientific capability registry is a six-entry experimental foundation:
+  five pinned-package plans plus a blocked AlphaFold2 entry. Verify registry and
+  planning tests, and do not claim hosted 54-tool parity or automatic dispatch.
+- Modal concurrency is an admission limit. A start beyond capacity should fail
+  visibly; autonomous waiting-queue behavior is deferred and must not appear in
+  product or release copy.
+- An unsigned release must retain its GitHub warning and the five desktop asset
+  checks. macOS artifacts are ad-hoc signed but not notarized; the Windows
+  installer is unsigned.
+- Organization funding and team billing are not part of this release tree. PR
+  #413 remains unmerged and must not be included in shipped-feature claims.

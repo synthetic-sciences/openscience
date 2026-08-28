@@ -1,5 +1,9 @@
 # OpenScience Roadmap
 
+> Historical audit snapshot against commit `52845c3`. Its counts and statuses
+> are not the current release matrix; consult the changelog and current product
+> documentation before making shipped-capability claims.
+
 110 agreed features and fixes, ranked by when they should ship, each with an audited status.
 
 Ranking is **findings-first**: every item was checked against the tree at `52845c3` before being placed,

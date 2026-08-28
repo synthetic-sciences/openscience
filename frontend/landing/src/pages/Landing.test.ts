@@ -30,8 +30,9 @@ if (!asset) throw new Error("Built docs index does not reference a JavaScript bu
 const bundle = await Bun.file(new URL(`../../public/docs/assets/${asset}`, import.meta.url)).text()
 
 test("keeps the public bundled-skill count current", () => {
-  expect(readme).toContain("311 bundled skills")
-  expect(bundle).toContain("311 bundled skills")
+  expect(readme).toContain("309 bundled skills")
+  expect(bundle).toContain("309 bundled skills")
+  expect(`${readme}\n${bundle}`).not.toContain("311 bundled")
   expect(`${readme}\n${bundle}`).not.toContain("310 bundled")
   expect(`${readme}\n${bundle}`).not.toContain("295 bundled")
   expect(`${readme}\n${bundle}`).not.toContain("295-skill")
