@@ -177,6 +177,7 @@ test("desktop backfill wraps the immutable public runtime without release or npm
   expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"')
   expect(workflow).toContain('args+=("-c.mac.identity=-" "-c.mac.notarize=false")')
   expect(workflow).toContain('args+=("-c.win.signExecutable=false")')
+  expect(workflow).toContain('args+=("-c.executableName=openscience")')
   expect(workflow).toContain('bun run --cwd frontend/desktop dist -- "${args[@]}"')
   expect(workflow).toContain("Expand-Archive")
   expect(workflow).toContain('unzip -q "$OPENSCIENCE_ARCHIVE"')

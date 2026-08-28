@@ -220,6 +220,8 @@ jobs:
             args+=("-c.mac.identity=-" "-c.mac.notarize=false")
           elif [[ "${{ matrix.target }}" == "win" ]]; then
             args+=("-c.win.signExecutable=false")
+          else
+            args+=("-c.executableName=openscience")
           fi
           bun run --cwd frontend/desktop dist -- "${args[@]}"
 
