@@ -16,6 +16,14 @@ on:
         description: "Exact stable version to publish or resume (overrides bump, for example 2.0.32)"
         required: false
         type: string
+      release_mode:
+        description: "Signed adds notarized macOS CLI archives and desktop installers; unsigned publishes native CLI archives and npm packages only"
+        required: true
+        default: signed
+        type: choice
+        options:
+          - signed
+          - unsigned
 
 # One release at a time. Keying the group on the inputs let a `patch` and a
 # `minor` dispatch run concurrently and race on tags and the GitHub release.
@@ -81,6 +89,7 @@ jobs:
       contents: read
     steps:
       - name: Require Developer ID and notarization credentials
+        if: inputs.release_mode == 'signed'
         shell: bash
         env:
           APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
@@ -98,6 +107,14 @@ jobs:
             echo "::error::macOS release signing is not configured. Missing repository secrets: ${missing[*]}"
             exit 1
           fi
+
+      - name: Record unsigned native release mode
+        if: inputs.release_mode == 'unsigned'
+        shell: bash
+        run: |
+          echo "::warning::Publishing unsigned native CLI archives and npm packages; desktop installers are intentionally excluded."
+          echo "### Unsigned native release" >> "$GITHUB_STEP_SUMMARY"
+          echo "Native CLI archives and npm packages will be published without code signing. Desktop installers are excluded." >> "$GITHUB_STEP_SUMMARY"
 
   version:
     needs:
@@ -189,6 +206,7 @@ jobs:
 
       - name: Restore signed CLI build
         id: signed-cli-cache
+        if: inputs.release_mode == 'signed'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -197,7 +215,7 @@ jobs:
           key: cli-build-signed-${{ needs.version.outputs.version }}
 
       - name: Restore unsigned CLI build
-        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
+        if: inputs.release_mode == 'unsigned' || steps.signed-cli-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -207,7 +225,7 @@ jobs:
           fail-on-cache-miss: true
 
       - name: Developer ID sign and notarize macOS binaries
-        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
+        if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'
         shell: bash
         env:
           APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
@@ -277,7 +295,7 @@ jobs:
           done < <(find backend/cli/dist -maxdepth 1 -type f \( -name 'openscience-*.zip' -o -name 'openscience-*.tar.gz' \) | sort)
 
       - name: Cache immutable signed CLI build
-        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
+        if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -285,8 +303,8 @@ jobs:
             frontend/workspace/dist/version.json
           key: cli-build-signed-${{ needs.version.outputs.version }}
 
-      # Remote assets must be derived from the signed, notarization-accepted
-      # bytes. Uploading in build-cli would permanently expose unsigned assets.
+      # Signed mode uploads notarization-accepted bytes; unsigned mode uploads
+      # the same immutable native archives proven by the v2.0.49 release path.
       - name: Verify or upload immutable draft assets
         run: ./tooling/repo/release-assets.ts backend/cli/dist
         env:
@@ -294,7 +312,28 @@ jobs:
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
           GH_TOKEN: ${{ github.token }}
 
+      - name: Mark unsigned CLI archives in the release notes
+        if: inputs.release_mode == 'unsigned'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          notice='> [!WARNING]
+          > The native CLI archives in this release are unsigned. macOS and Windows may show operating-system security prompts. Desktop installers are not included.'
+          body="$(gh release view "$OPENSCIENCE_TAG" --json body --jq .body)"
+          if ! grep -Fq 'The native CLI archives in this release are unsigned.' <<<"$body"; then
+            notes="$RUNNER_TEMP/openscience-unsigned-release-notes.txt"
+            printf '%s\n\n%s\n' "$body" "$notice" > "$notes"
+            gh release edit "$OPENSCIENCE_TAG" --notes-file "$notes"
+          fi
+
+    outputs:
+      cache_key: ${{ inputs.release_mode == 'signed' && format('cli-build-signed-{0}', needs.version.outputs.version) || format('cli-build-{0}', needs.version.outputs.version) }}
+
   build-desktop:
+    if: inputs.release_mode == 'signed'
     needs:
       - version
       - sign-macos-cli
@@ -435,7 +474,7 @@ jobs:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-signed-${{ needs.version.outputs.version }}
+          key: ${{ needs.sign-macos-cli.outputs.cache_key }}
           fail-on-cache-miss: true
 
       - name: Install the native npm distribution
@@ -491,7 +530,7 @@ jobs:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-signed-${{ needs.version.outputs.version }}
+          key: ${{ needs.sign-macos-cli.outputs.cache_key }}
           fail-on-cache-miss: true
 
       - name: Restore immutable npm artifacts
@@ -528,7 +567,14 @@ jobs:
     needs:
       - version
       - prepare-npm
+      - sign-macos-cli
       - build-desktop
+    if: >-
+      !cancelled() &&
+      needs.version.result == 'success' &&
+      needs.prepare-npm.result == 'success' &&
+      needs.sign-macos-cli.result == 'success' &&
+      (inputs.release_mode == 'unsigned' || needs.build-desktop.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -568,7 +614,7 @@ jobs:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-signed-${{ needs.version.outputs.version }}
+          key: ${{ needs.sign-macos-cli.outputs.cache_key }}
           fail-on-cache-miss: true
 
       - name: Publish
