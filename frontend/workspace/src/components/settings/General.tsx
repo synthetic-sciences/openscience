@@ -26,6 +26,7 @@ type Account = {
     type: "personal" | "organization"
     organization_id?: string
     available: boolean
+    locked: boolean
     organizations: Array<{
       organization_id: string
       name: string
@@ -115,6 +116,7 @@ export default function General() {
     const context = account()?.funding_context
     return context?.type === "organization" && context.organization_id ? context.organization_id : "personal"
   }
+  const fundingLabel = () => fundingOptions().find((option) => option.id === fundingID())?.label ?? "Personal"
   const setFunding = async (id: string) => {
     if (fundingBusy() || id === fundingID()) return
     setFundingBusy(true)
@@ -131,6 +133,30 @@ export default function General() {
       const detail = cause instanceof Error ? cause.message : String(cause)
       setError(detail)
       showToast({ variant: "error", title: "Funding account unchanged", description: detail })
+    } finally {
+      setFundingBusy(false)
+    }
+  }
+  const changeAccount = async () => {
+    if (fundingBusy()) return
+    setFundingBusy(true)
+    setError(undefined)
+    try {
+      const response = await sdk.client.account.loginBrowser()
+      if (!response.data?.ok) {
+        throw new Error(typeof response.data?.error === "string" ? response.data.error : "Sign in did not complete")
+      }
+      window.dispatchEvent(new Event("openscience:account-changed"))
+      await loadAccount()
+      showToast({
+        variant: "success",
+        title: "Workspace connected",
+        description: "This device now uses the selected account.",
+      })
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause)
+      setError(detail)
+      showToast({ variant: "error", title: "Account unchanged", description: detail })
     } finally {
       setFundingBusy(false)
     }
@@ -162,19 +188,38 @@ export default function General() {
               <Show when={account()?.session === true}>
                 <Row
                   icon="home"
-                  title="Ace funding"
-                  description="Managed models and research search use this Wallet. Your keys and subscriptions stay personal."
+                  title="Workspace"
+                  description="Managed models and research search use this workspace. Provider keys and subscriptions stay personal."
                 >
-                  <FilterMenu
-                    ariaLabel="Ace funding account"
-                    options={fundingOptions()}
-                    value={fundingID()}
-                    onSelect={(id) => void setFunding(id)}
-                  />
+                  <Show
+                    when={account()?.funding_context?.locked !== true}
+                    fallback={
+                      <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
+                        <span class="settings-account-value">{fundingLabel()}</span>
+                        <Button
+                          size="small"
+                          variant="secondary"
+                          disabled={fundingBusy()}
+                          onClick={() => void changeAccount()}
+                        >
+                          {fundingBusy() ? "Waiting for browser…" : "Change account"}
+                        </Button>
+                      </div>
+                    }
+                  >
+                    <FilterMenu
+                      ariaLabel="Ace funding account"
+                      options={fundingOptions()}
+                      value={fundingID()}
+                      onSelect={(id) => void setFunding(id)}
+                    />
+                  </Show>
                 </Row>
                 <Show when={account()?.funding_context?.available === false}>
                   <div class="px-4 py-3 text-12-regular text-text-weak" role="status">
-                    This team is no longer available. Choose Personal or another team before using Ace.
+                    {account()?.funding_context?.locked
+                      ? "This workspace is no longer available. Sign in again to choose Personal or another team."
+                      : "This team is no longer available. Choose Personal or another team before using Ace."}
                   </div>
                 </Show>
               </Show>

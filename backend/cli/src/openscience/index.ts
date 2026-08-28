@@ -244,6 +244,9 @@ export interface FundingContext {
   type: "personal" | "organization"
   organization_id?: string
   available: boolean
+  /** True when the connected API key itself is pinned to this workspace.
+   *  A different workspace therefore requires a fresh browser approval. */
+  locked: boolean
   organizations: FundingOrganization[]
 }
 
@@ -251,6 +254,9 @@ interface AuthStatusResponse {
   organizations?: unknown
   /** Compatibility input only. Local APIs always emit `organizations`. */
   available_organizations?: unknown
+  api_key?: {
+    organization_id?: unknown
+  }
   funding_context?: {
     type?: "personal" | "organization"
     organization_id?: string
@@ -649,6 +655,7 @@ export namespace OpenScience {
 
   async function authStatus(snapshot: FundingSnapshot): Promise<{
     organizations: FundingOrganization[]
+    pinned_organization_id?: string
     funding_context?: AuthStatusResponse["funding_context"]
   } | null> {
     const response = await fundedAtlasFetch(snapshot, `${API_BASE}/api/v1/auth/status`, {
@@ -661,10 +668,47 @@ export namespace OpenScience {
         const body = value as AuthStatusResponse
         return {
           organizations: organizations(body.organizations ?? body.available_organizations),
+          pinned_organization_id: loginOrganizationID(body.api_key?.organization_id),
           funding_context: body.funding_context,
         }
       })
       .catch(() => null)
+  }
+
+  /** Persist the immutable scope reported by Atlas for sessions written by an
+   * older OpenScience client that discarded the browser-login organization.
+   * The compare-under-lock prevents a slow status response for account A from
+   * relabeling account B after a concurrent sign-in. */
+  async function reconcileOrganizationScope(apiKey: string, organizationID: string): Promise<boolean> {
+    const changed = { value: false }
+    await CredentialLifecycle.serialized(async () => {
+      using _ = await Lock.write(filepath)
+      const current = await getSession()
+      if (!current || current.api_key !== apiKey) return
+      if (current.organization_locked && current.organization_id === organizationID) return
+      if (current.organization_id && current.organization_id !== organizationID) return
+      await atomicWrite(
+        filepath,
+        JSON.stringify(
+          {
+            ...current,
+            organization_id: organizationID,
+            organization_locked: true,
+          },
+          null,
+          2,
+        ),
+        { mode: 0o600 },
+      )
+      changed.value = true
+    })
+    if (!changed.value) return false
+    cachedProfile = undefined
+    invalidateResearchEntitlements()
+    invalidateBalance()
+    const { Provider } = await import("../provider/provider")
+    Provider.invalidate()
+    return true
   }
 
   /** Read the local selection plus the organizations Atlas currently allows.
@@ -673,10 +717,29 @@ export namespace OpenScience {
    * Atlas rejects them instead of charging the personal account. */
   export async function getFundingContext(operation?: FundingSnapshot): Promise<FundingContext> {
     const snapshot = operation ?? (await getFundingSnapshot())
-    if (!snapshot) return { type: "personal", available: true, organizations: [] }
+    if (!snapshot) return { type: "personal", available: true, locked: false, organizations: [] }
     const status = await authStatus(snapshot)
+    const pinned = status?.pinned_organization_id
+    if (!snapshot.organization_id && pinned) {
+      await reconcileOrganizationScope(snapshot.api_key, pinned)
+      const row = status.organizations.find((item) => item.organization_id === pinned)
+      const echoed = status.funding_context
+      const matches = !echoed || (echoed.type === "organization" && echoed.organization_id === pinned)
+      return {
+        type: "organization",
+        organization_id: pinned,
+        available: organizationAvailable(row) && matches,
+        locked: true,
+        organizations: status.organizations,
+      }
+    }
+    const connected = await getSession()
+    const locked = connected?.api_key === snapshot.api_key && connected.organization_locked === true
     if (!snapshot.organization_id) {
-      return { type: "personal", available: true, organizations: status?.organizations ?? [] }
+      return { type: "personal", available: true, locked, organizations: status?.organizations ?? [] }
+    }
+    if (pinned === snapshot.organization_id && !locked) {
+      await reconcileOrganizationScope(snapshot.api_key, pinned)
     }
     const row = status?.organizations.find((item) => item.organization_id === snapshot.organization_id)
     const echoed = status?.funding_context
@@ -685,6 +748,7 @@ export namespace OpenScience {
       type: "organization",
       organization_id: snapshot.organization_id,
       available: organizationAvailable(row) && matches,
+      locked: locked || pinned === snapshot.organization_id,
       organizations: status?.organizations ?? [],
     }
   }
@@ -742,9 +806,10 @@ export namespace OpenScience {
           type: "organization",
           organization_id: organizationID,
           available: true,
+          locked: false,
           organizations: status?.organizations ?? [],
         }
-      : { type: "personal", available: true, organizations: [] }
+      : { type: "personal", available: true, locked: false, organizations: [] }
   }
 
   /**

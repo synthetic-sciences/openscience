@@ -2777,6 +2777,7 @@ export type AccountGetResponses = {
       type: "personal" | "organization"
       organization_id?: string
       available: boolean
+      locked: boolean
       organizations: Array<{
         organization_id: string
         name: string
@@ -2809,6 +2810,7 @@ export type AccountFundingContextGetResponses = {
     type: "personal" | "organization"
     organization_id?: string
     available: boolean
+    locked: boolean
     organizations: Array<{
       organization_id: string
       name: string
@@ -2854,6 +2856,7 @@ export type AccountFundingContextSetResponses = {
     type: "personal" | "organization"
     organization_id?: string
     available: boolean
+    locked: boolean
     organizations: Array<{
       organization_id: string
       name: string

@@ -560,6 +560,9 @@
                         "available": {
                           "type": "boolean"
                         },
+                        "locked": {
+                          "type": "boolean"
+                        },
                         "organizations": {
                           "type": "array",
                           "items": {
@@ -613,6 +616,7 @@
                       "required": [
                         "type",
                         "available",
+                        "locked",
                         "organizations"
                       ]
                     }
@@ -662,95 +666,7 @@
                     "available": {
                       "type": "boolean"
                     },
-                    "organizations": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "organization_id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "slug": {
-                            "type": "string"
-                          },
-                          "status": {
-                            "type": "string"
-                          },
-                          "role": {
-                            "type": "string"
-                          },
-                          "membership_status": {
-                            "type": "string"
-                          },
-                          "seat_assigned": {
-                            "type": "boolean"
-                          },
-                          "funding_available": {
-                            "type": "boolean"
-                          },
-                          "effective_permissions": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": [
-                          "organization_id",
-                          "name",
-                          "slug",
-                          "status",
-                          "role",
-                          "membership_status",
-                          "seat_assigned",
-                          "funding_available",
-                          "effective_permissions"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "available",
-                    "organizations"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.fundingContext.get({\n  ...\n})"
-          }
-        ]
-      },
-      "put": {
-        "operationId": "account.fundingContext.set",
-        "summary": "Choose the funding account for managed operations",
-        "responses": {
-          "200": {
-            "description": "Updated funding context",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "organization"
-                      ]
-                    },
-                    "organization_id": {
-                      "type": "string"
-                    },
-                    "available": {
+                    "locked": {
                       "type": "boolean"
                     },
                     "organizations": {
@@ -806,6 +722,102 @@
                   "required": [
                     "type",
                     "available",
+                    "locked",
+                    "organizations"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.fundingContext.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "account.fundingContext.set",
+        "summary": "Choose the funding account for managed operations",
+        "responses": {
+          "200": {
+            "description": "Updated funding context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "organization"
+                      ]
+                    },
+                    "organization_id": {
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "organizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "organization_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "membership_status": {
+                            "type": "string"
+                          },
+                          "seat_assigned": {
+                            "type": "boolean"
+                          },
+                          "funding_available": {
+                            "type": "boolean"
+                          },
+                          "effective_permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "organization_id",
+                          "name",
+                          "slug",
+                          "status",
+                          "role",
+                          "membership_status",
+                          "seat_assigned",
+                          "funding_available",
+                          "effective_permissions"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "available",
+                    "locked",
                     "organizations"
                   ]
                 }

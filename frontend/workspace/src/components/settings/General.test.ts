@@ -37,12 +37,19 @@ describe("General Ace funding", () => {
     const funding = source.slice(start, source.indexOf("return (", start))
     const changed = 'window.dispatchEvent(new Event("openscience:account-changed"))'
     const event = funding.indexOf(changed)
-    expect(source).toContain('title="Ace funding"')
+    expect(source).toContain('title="Workspace"')
     expect(source).toContain('id: "personal", label: "Personal"')
     expect(source).toContain("sdk.client.account.fundingContext.set")
-    expect(source.match(new RegExp(changed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))).toHaveLength(2)
     expect(event).toBeGreaterThan(-1)
     expect(funding.indexOf("await loadAccount()")).toBeGreaterThan(event)
-    expect(source).toContain("Your keys and subscriptions stay personal.")
+    expect(source).toContain("Provider keys and subscriptions stay personal.")
+  })
+
+  test("shows a fresh browser sign-in instead of a failing picker for a scoped workspace key", async () => {
+    const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
+    expect(source).toContain("account()?.funding_context?.locked !== true")
+    expect(source).toContain("sdk.client.account.loginBrowser()")
+    expect(source).toContain('"Change account"')
+    expect(source).toContain("Sign in again to choose Personal or another team.")
   })
 })

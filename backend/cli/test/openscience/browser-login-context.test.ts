@@ -157,6 +157,7 @@ describe("browser login funding context", () => {
         type: "organization",
         organization_id: alpha.organization_id,
         available: true,
+        locked: true,
         organizations: [alpha],
       })
       expect((await OpenScience.getFundingSnapshot())?.organization_id).toBe(alpha.organization_id)

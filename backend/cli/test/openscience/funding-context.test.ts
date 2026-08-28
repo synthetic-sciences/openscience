@@ -77,7 +77,12 @@ describe("organization funding context", () => {
 
     const initial = await AccountRoutes().request("/funding-context")
     expect(initial.status).toBe(200)
-    expect(await initial.json()).toEqual({ type: "personal", available: true, organizations: [alpha, beta] })
+    expect(await initial.json()).toEqual({
+      type: "personal",
+      available: true,
+      locked: false,
+      organizations: [alpha, beta],
+    })
 
     const selected = await AccountRoutes().request("/funding-context", {
       method: "PUT",
@@ -112,7 +117,7 @@ describe("organization funding context", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ organization_id: null }),
     })
-    expect(await personal.json()).toEqual({ type: "personal", available: true, organizations: [] })
+    expect(await personal.json()).toEqual({ type: "personal", available: true, locked: false, organizations: [] })
     expect((await Bun.file(session).json()).organization_id).toBeUndefined()
 
     // Reads use the selected context. Validation of a new choice deliberately
@@ -153,6 +158,104 @@ describe("organization funding context", () => {
     expect((await Bun.file(session).json()).organization_id).toBe(alpha.organization_id)
   })
 
+  test("repairs an organization key saved by an older client before displaying its workspace", async () => {
+    await Bun.write(session, JSON.stringify({ api_key: "thk_old-client.secret", user_id: "user-context" }))
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input).endsWith("/api/v1/auth/status")).toBe(true)
+      expect(new Headers(init?.headers).get("X-Organization-ID")).toBeNull()
+      return Response.json({
+        api_key: { organization_id: alpha.organization_id },
+        organizations: [alpha],
+        funding_context: { type: "organization", organization_id: alpha.organization_id },
+      })
+    }) as typeof fetch
+
+    expect(await OpenScience.getFundingContext()).toEqual({
+      type: "organization",
+      organization_id: alpha.organization_id,
+      available: true,
+      locked: true,
+      organizations: [alpha],
+    })
+    expect(await Bun.file(session).json()).toMatchObject({
+      api_key: "thk_old-client.secret",
+      user_id: "user-context",
+      organization_id: alpha.organization_id,
+      organization_locked: true,
+    })
+  })
+
+  test("repairs a removed member's old-client session without falling back to Personal", async () => {
+    await Bun.write(session, JSON.stringify({ api_key: "thk_removed-member.secret", user_id: "user-context" }))
+    globalThis.fetch = (async () =>
+      Response.json({
+        api_key: { organization_id: alpha.organization_id },
+        organizations: [],
+        funding_context: { type: "organization", organization_id: alpha.organization_id },
+      })) as unknown as typeof fetch
+
+    expect(await OpenScience.getFundingContext()).toEqual({
+      type: "organization",
+      organization_id: alpha.organization_id,
+      available: false,
+      locked: true,
+      organizations: [],
+    })
+    expect(await Bun.file(session).json()).toMatchObject({
+      organization_id: alpha.organization_id,
+      organization_locked: true,
+    })
+  })
+
+  test("does not let a delayed scope repair overwrite a concurrent account change", async () => {
+    await Bun.write(session, JSON.stringify({ api_key: "thk_old-client.secret", user_id: "old-user" }))
+    const gate = Promise.withResolvers<void>()
+    const started = Promise.withResolvers<void>()
+    globalThis.fetch = (async () => {
+      started.resolve()
+      await gate.promise
+      return Response.json({
+        api_key: { organization_id: alpha.organization_id },
+        organizations: [alpha],
+        funding_context: { type: "organization", organization_id: alpha.organization_id },
+      })
+    }) as unknown as typeof fetch
+
+    const pending = OpenScience.getFundingContext()
+    await started.promise
+    await Bun.write(session, JSON.stringify({ api_key: "thk_new-account.secret", user_id: "new-user" }))
+    gate.resolve()
+    expect(await pending).toMatchObject({
+      type: "organization",
+      organization_id: alpha.organization_id,
+      locked: true,
+    })
+    expect(await Bun.file(session).json()).toEqual({ api_key: "thk_new-account.secret", user_id: "new-user" })
+  })
+
+  test("keeps legacy unpinned keys flexible when Atlas reports Personal scope", async () => {
+    await Bun.write(session, JSON.stringify({ api_key: "thk_flexible.secret", user_id: "user-context" }))
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      const organization = new Headers(init?.headers).get("X-Organization-ID")
+      return Response.json({
+        api_key: { organization_id: null },
+        organizations: [alpha],
+        funding_context: organization ? { type: "organization", organization_id: organization } : { type: "personal" },
+      })
+    }) as typeof fetch
+
+    expect(await OpenScience.getFundingContext()).toMatchObject({ type: "personal", locked: false })
+    expect(await OpenScience.setFundingContext(alpha.organization_id)).toMatchObject({
+      type: "organization",
+      organization_id: alpha.organization_id,
+      locked: false,
+    })
+    expect(await Bun.file(session).json()).toMatchObject({
+      organization_id: alpha.organization_id,
+    })
+    expect((await Bun.file(session).json()).organization_locked).toBeUndefined()
+  })
+
   test("keeps a revoked organization selected and lets Atlas reject it instead of falling back to Personal", async () => {
     await Bun.write(
       session,
@@ -178,6 +281,7 @@ describe("organization funding context", () => {
       type: "organization",
       organization_id: alpha.organization_id,
       available: false,
+      locked: false,
       organizations: [],
     })
     expect(await OpenScience.getCredits()).toBeNull()

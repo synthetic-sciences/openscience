@@ -42,6 +42,7 @@ const FundingContext = z.object({
   type: z.enum(["personal", "organization"]),
   organization_id: z.string().optional(),
   available: z.boolean(),
+  locked: z.boolean(),
   organizations: z.array(FundingOrganization),
 })
 
@@ -111,7 +112,7 @@ export const AccountRoutes = lazy(() =>
               OpenScience.getBillingMode(session),
               OpenScience.getFundingContext(session),
             ])
-          : [null, null, null, { type: "personal", available: true, organizations: [] } as const]
+          : [null, null, null, { type: "personal", available: true, locked: false, organizations: [] } as const]
         return c.json({
           session: !!session,
           user: user ?? (session?.user_id ? { user_id: session.user_id } : undefined),
