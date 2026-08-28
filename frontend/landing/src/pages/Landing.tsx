@@ -747,7 +747,7 @@ export default function Landing() {
       <section id="models" className="relative w-full overflow-hidden border-t border-border/40">
         <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
           <div className="grid gap-8 lg:grid-cols-2 lg:items-stretch lg:gap-12">
-            <Reveal className="dither-purple flex min-h-[470px] items-center border border-border/40 p-8 sm:min-h-[520px] sm:p-12 lg:p-14">
+            <Reveal className="dither-ace flex min-h-[470px] items-center border border-border/40 p-8 sm:min-h-[520px] sm:p-12 lg:p-14">
               <div className="dither-content max-w-[520px]">
                 <h2 className={`text-balance ${H_HUGE} text-foreground`}>Model agnostic.</h2>
                 <p className={`mt-7 max-w-[38ch] ${P_BIG} text-foreground/85`}>
@@ -868,14 +868,14 @@ export default function Landing() {
       <section id="ace" className="relative w-full overflow-hidden border-t border-border/40">
         <div className="mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
           <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-stretch lg:gap-12">
-            <Reveal className="dither-ace relative flex min-h-[430px] items-center overflow-hidden border border-border/40 p-8 sm:p-12 lg:p-14">
+            <Reveal className="dither-purple relative flex min-h-[430px] items-center overflow-hidden border border-border/40 p-8 sm:p-12 lg:p-14">
               <div className="dither-content max-w-[580px]">
                 <h2 className={`text-balance ${H_HUGE} text-foreground`}>OpenScience Ace.</h2>
                 <p className={`mt-7 max-w-[42ch] ${P_BIG} text-foreground/85`}>
                   Add funds for Ace models and research search. You pay only when you use it. OpenScience remains free.
                 </p>
                 <div className="mt-9">
-                  <Cta href={`${APP}/billing?checkout=ace`}>Add funds</Cta>
+                  <Cta href={`${APP}/billing?checkout=ace`}>Get Ace</Cta>
                 </div>
               </div>
             </Reveal>

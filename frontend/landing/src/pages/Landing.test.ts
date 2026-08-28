@@ -141,8 +141,8 @@ describe("OpenScience landing contract", () => {
     expect(sources.indexOf("<ProjectContextVisual")).toBeLessThan(sources.indexOf("dither-red"))
 
     expect(models).toContain("Model agnostic.")
-    expect(models).toContain("dither-purple flex min-h-[470px]")
-    expect(models.indexOf("dither-purple")).toBeLessThan(models.indexOf("<ModelRouteVisual"))
+    expect(models).toContain("dither-ace flex min-h-[470px]")
+    expect(models.indexOf("dither-ace")).toBeLessThan(models.indexOf("<ModelRouteVisual"))
     expect(modelIndex).toBeGreaterThan(-1)
     expect(modelIndex).toBeLessThan(workflowIndex)
     expect(workflowIndex).toBeLessThan(sourceIndex)
@@ -165,8 +165,8 @@ describe("OpenScience landing contract", () => {
     expect(ace).toBeGreaterThan(-1)
     expect(faq).toBeGreaterThan(ace)
     expect(landing.slice(ace, faq)).toContain("${APP}/billing?checkout=ace")
-    expect(landing.slice(ace, faq)).toContain("Add funds")
-    expect(landing.slice(ace, faq)).toContain("dither-ace")
+    expect(landing.slice(ace, faq)).toContain("Get Ace")
+    expect(landing.slice(ace, faq)).toContain("dither-purple")
   })
 
   test("keeps Ace pricing concise", () => {
