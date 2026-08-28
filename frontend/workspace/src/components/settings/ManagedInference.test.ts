@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { commitBilling, formatCreditBalance, walletBalanceLabel } from "./ManagedInference"
+import { canSelectManaged, commitBilling, formatCreditBalance, walletBalanceLabel } from "./ManagedInference"
 
 const source = await Bun.file(new URL("./ManagedInference.tsx", import.meta.url)).text()
 
@@ -25,6 +25,22 @@ test("formats the purchased-credit balance to exact cents", () => {
   expect(formatCreditBalance(984)).toBe("$984.00")
   expect(formatCreditBalance(984.6)).toBe("$984.60")
   expect(formatCreditBalance(0)).toBe("$0.00")
+})
+
+test("allows Managed whenever the server authorizes Wallet or reload access", () => {
+  expect(canSelectManaged(undefined)).toBe(false)
+  expect(
+    canSelectManaged({ signedIn: false, managedSupported: true, aceEnabled: true, balanceUsd: 20, billingMode: null }),
+  ).toBe(false)
+  expect(
+    canSelectManaged({ signedIn: true, managedSupported: false, aceEnabled: true, balanceUsd: 20, billingMode: null }),
+  ).toBe(false)
+  expect(
+    canSelectManaged({ signedIn: true, managedSupported: true, aceEnabled: false, balanceUsd: 20, billingMode: null }),
+  ).toBe(true)
+  expect(
+    canSelectManaged({ signedIn: true, managedSupported: true, aceEnabled: true, balanceUsd: 0, billingMode: null }),
+  ).toBe(true)
 })
 
 // The provider catalog is intentionally not part of this helper. It is a

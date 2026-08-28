@@ -132,6 +132,19 @@ export function DesktopOnboarding(props: ParentProps) {
     setBusy(false)
   }
 
+  const skip = async () => {
+    if (busy()) return
+    setBusy(true)
+    setError(undefined)
+    await settingsApi(server.url, fetcher(), "/settings/preferences", {
+      method: "PATCH",
+      body: JSON.stringify({ desktop_onboarding_version: 1 }),
+    })
+      .then(() => setComplete(true))
+      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
+    setBusy(false)
+  }
+
   return (
     <Show when={ready()} fallback={<main class="desktop-onboarding" aria-label="Loading desktop setup" />}>
       <Show
@@ -199,7 +212,7 @@ export function DesktopOnboarding(props: ParentProps) {
                   <div class="desktop-onboarding__intro">
                     <p>Model access</p>
                     <h1 id="desktop-onboarding-title">How should OpenScience run models?</h1>
-                    <span>Choose one path now. You can change models, providers, and billing from Customize.</span>
+                    <span>Your account is connected. Choose a path now, or set up models later from Customize.</span>
                   </div>
 
                   <div class="desktop-onboarding__choices" role="group" aria-label="Model access">
@@ -295,14 +308,18 @@ export function DesktopOnboarding(props: ParentProps) {
                             : accountState() === "error"
                               ? "Account check failed"
                               : canUseManaged(wallet())
-                                ? "Ace ready"
+                                ? wallet()?.aceEnabled
+                                  ? "Ace ready"
+                                  : "Wallet ready"
                                 : "Ace setup required"}
                         </span>
                         <strong>{connectedIdentity()}</strong>
                         <small>
                           {wallet()?.aceEnabled
                             ? `${formatBalance(wallet()?.balanceUsd)} · Ace is ready`
-                            : "Ace is managed at app.syntheticsciences.ai"}
+                            : wallet()?.managedSupported
+                              ? `${formatBalance(wallet()?.balanceUsd)} · Auto reload is off`
+                              : "Ace is managed at app.syntheticsciences.ai"}
                         </small>
                       </div>
                       <Button
@@ -317,7 +334,11 @@ export function DesktopOnboarding(props: ParentProps) {
                           platform.openLink(URLS.dashboardBilling)
                         }}
                       >
-                        {accountState() === "error" ? "Retry" : canUseManaged(wallet()) ? "Manage Ace" : "Set up Ace"}
+                        {accountState() === "error"
+                          ? "Retry"
+                          : canUseManaged(wallet())
+                            ? "Manage Wallet"
+                            : "Set up Ace"}
                       </Button>
                     </div>
                   </Show>
@@ -331,9 +352,18 @@ export function DesktopOnboarding(props: ParentProps) {
               </Show>
 
               <footer class="desktop-onboarding__footer">
-                <Button variant="secondary" size="small" disabled={step() === 1 || busy()} onClick={() => setStep(1)}>
-                  Back
-                </Button>
+                <Show
+                  when={step() === 1}
+                  fallback={
+                    <Button variant="secondary" size="small" disabled={busy()} onClick={() => setStep(1)}>
+                      Back
+                    </Button>
+                  }
+                >
+                  <Button variant="secondary" size="small" disabled={busy()} onClick={() => void skip()}>
+                    Set up models later
+                  </Button>
+                </Show>
                 <Button
                   variant="primary"
                   size="small"

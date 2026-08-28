@@ -5,5 +5,4 @@ export type ManagedWallet = {
   aceEnabled: boolean
 }
 
-export const canUseManaged = (wallet: ManagedWallet | undefined) =>
-  Boolean(wallet?.signedIn && wallet.managedSupported && wallet.aceEnabled)
+export const canUseManaged = (wallet: ManagedWallet | undefined) => Boolean(wallet?.signedIn && wallet.managedSupported)

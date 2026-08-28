@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { FirecrawlSearch } from "../src/research/firecrawl"
 import { ResearchRouting } from "../src/research/routing"
 
-test("research routing spends through managed search only for an unlocked Ace account", () => {
+test("research routing spends through managed search for Wallet or reload access", () => {
   expect(ResearchRouting.select({ mode: "managed", aceEnabled: true, managedUnlocked: true, firecrawl: true })).toBe(
     "managed",
   )
@@ -10,7 +10,7 @@ test("research routing spends through managed search only for an unlocked Ace ac
     "firecrawl_byok",
   )
   expect(ResearchRouting.select({ mode: "managed", aceEnabled: false, managedUnlocked: true, firecrawl: true })).toBe(
-    "community",
+    "managed",
   )
   expect(ResearchRouting.select({ mode: "managed", aceEnabled: true, managedUnlocked: false, firecrawl: false })).toBe(
     "community",
