@@ -341,7 +341,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: read
+      # GitHub's release-by-tag API hides draft releases from read-only tokens.
+      contents: write
     outputs:
       trusted_assets: ${{ steps.plan.outputs.trusted_assets }}
     steps:

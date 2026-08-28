@@ -43,6 +43,7 @@ test("production release preparation jobs can write their draft GitHub release",
   const jobs = [
     ["version", "build-cli"],
     ["sign-macos-cli", "verify-native-cli"],
+    ["desktop-resume", "build-desktop"],
   ]
 
   for (const item of jobs) {
