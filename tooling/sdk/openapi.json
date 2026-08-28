@@ -543,12 +543,81 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "funding_context": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "personal",
+                            "organization"
+                          ]
+                        },
+                        "organization_id": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "organizations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "organization_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "slug": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "membership_status": {
+                                "type": "string"
+                              },
+                              "seat_assigned": {
+                                "type": "boolean"
+                              },
+                              "effective_permissions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "organization_id",
+                              "name",
+                              "slug",
+                              "status",
+                              "role",
+                              "membership_status",
+                              "seat_assigned",
+                              "effective_permissions"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "available",
+                        "organizations"
+                      ]
                     }
                   },
                   "required": [
                     "session",
                     "balance_usd",
-                    "billing_mode"
+                    "billing_mode",
+                    "funding_context"
                   ]
                 }
               }
@@ -559,6 +628,227 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account/funding-context": {
+      "get": {
+        "operationId": "account.fundingContext.get",
+        "summary": "Get the local funding account selection",
+        "description": "List available Synthetic Sciences organizations and the Personal or organization context used by managed operations.",
+        "responses": {
+          "200": {
+            "description": "Funding context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "organization"
+                      ]
+                    },
+                    "organization_id": {
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "organizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "organization_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "membership_status": {
+                            "type": "string"
+                          },
+                          "seat_assigned": {
+                            "type": "boolean"
+                          },
+                          "effective_permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "organization_id",
+                          "name",
+                          "slug",
+                          "status",
+                          "role",
+                          "membership_status",
+                          "seat_assigned",
+                          "effective_permissions"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "available",
+                    "organizations"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.fundingContext.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "account.fundingContext.set",
+        "summary": "Choose the funding account for managed operations",
+        "responses": {
+          "200": {
+            "description": "Updated funding context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "organization"
+                      ]
+                    },
+                    "organization_id": {
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "organizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "organization_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "membership_status": {
+                            "type": "string"
+                          },
+                          "seat_assigned": {
+                            "type": "boolean"
+                          },
+                          "effective_permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "organization_id",
+                          "name",
+                          "slug",
+                          "status",
+                          "role",
+                          "membership_status",
+                          "seat_assigned",
+                          "effective_permissions"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "available",
+                    "organizations"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unavailable organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organization_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "organization_id"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.fundingContext.set({\n  ...\n})"
           }
         ]
       }

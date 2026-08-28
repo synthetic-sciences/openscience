@@ -379,8 +379,9 @@ export const GenerateImageTool = Tool.define("generate_image", {
         "OpenScience refused to send your connected OpenRouter key to the managed wallet proxy. Reconnect OpenRouter and retry.",
       )
     }
+    const funding = managed ? await OpenScience.managedRequestSnapshot(key) : undefined
     if (managed) {
-      const balance = await OpenScience.getBalance().catch(() => null)
+      const balance = await OpenScience.getBalance(funding).catch(() => null)
       if (balance !== null && balance <= 0) {
         OpenScience.invalidateBalance()
         throw new Error(
@@ -413,6 +414,7 @@ export const GenerateImageTool = Tool.define("generate_image", {
       "Content-Type": "application/json",
       "HTTP-Referer": "https://syntheticsciences.ai",
       "X-Title": "OpenScience",
+      ...(funding ? OpenScience.fundingHeaders(funding) : {}),
     }
     const request = async (endpoint: string, payload: Record<string, unknown>) => {
       const response = await fetch(`${base}/${endpoint}`, {

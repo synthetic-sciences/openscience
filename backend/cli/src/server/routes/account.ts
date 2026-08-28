@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
-import { OpenScience } from "@/openscience"
+import { FundingContextError, OpenScience } from "@/openscience"
 import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
 import { GlobalBus } from "@/bus/global"
@@ -24,6 +24,24 @@ const BillingMode = z.object({
   balance_usd: z.number(),
   managed_supported: z.boolean(),
   managed_unlocked: z.boolean(),
+})
+
+const FundingOrganization = z.object({
+  organization_id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  status: z.string(),
+  role: z.string(),
+  membership_status: z.string(),
+  seat_assigned: z.boolean(),
+  effective_permissions: z.array(z.string()),
+})
+
+const FundingContext = z.object({
+  type: z.enum(["personal", "organization"]),
+  organization_id: z.string().optional(),
+  available: z.boolean(),
+  organizations: z.array(FundingOrganization),
 })
 
 function emitDisposed() {
@@ -75,6 +93,7 @@ export const AccountRoutes = lazy(() =>
                     user: z.unknown().optional(),
                     balance_usd: z.number().nullable(),
                     billing_mode: BillingMode.nullable(),
+                    funding_context: FundingContext,
                   }),
                 ),
               },
@@ -83,16 +102,64 @@ export const AccountRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const session = await OpenScience.getSession()
-        const [user, credits, billing] = session
-          ? await Promise.all([OpenScience.getProfile(), OpenScience.getCredits(), OpenScience.getBillingMode()])
-          : [null, null, null]
+        const session = await OpenScience.getFundingSnapshot()
+        const [user, credits, billing, funding] = session
+          ? await Promise.all([
+              OpenScience.getProfile(session),
+              OpenScience.getCredits(session),
+              OpenScience.getBillingMode(session),
+              OpenScience.getFundingContext(session),
+            ])
+          : [null, null, null, { type: "personal", available: true, organizations: [] } as const]
         return c.json({
           session: !!session,
           user: user ?? (session?.user_id ? { user_id: session.user_id } : undefined),
           balance_usd: credits?.balanceUsd ?? null,
           billing_mode: billing,
+          funding_context: funding,
         })
+      },
+    )
+    .get(
+      "/funding-context",
+      describeRoute({
+        summary: "Get the local funding account selection",
+        description:
+          "List available Synthetic Sciences organizations and the Personal or organization context used by managed operations.",
+        operationId: "account.fundingContext.get",
+        responses: {
+          200: {
+            description: "Funding context",
+            content: { "application/json": { schema: resolver(FundingContext) } },
+          },
+        },
+      }),
+      async (c) => c.json(await OpenScience.getFundingContext()),
+    )
+    .put(
+      "/funding-context",
+      describeRoute({
+        summary: "Choose the funding account for managed operations",
+        operationId: "account.fundingContext.set",
+        responses: {
+          200: {
+            description: "Updated funding context",
+            content: { "application/json": { schema: resolver(FundingContext) } },
+          },
+          400: {
+            description: "Unavailable organization",
+            content: { "application/json": { schema: resolver(z.object({ error: z.string() })) } },
+          },
+        },
+      }),
+      validator("json", z.object({ organization_id: z.string().min(1).max(128).nullable() })),
+      async (c) => {
+        try {
+          return c.json(await OpenScience.setFundingContext(c.req.valid("json").organization_id))
+        } catch (error) {
+          if (!(error instanceof FundingContextError)) throw error
+          return c.json({ error: error.message }, 400)
+        }
       },
     )
     .get(

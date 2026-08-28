@@ -1,4 +1,5 @@
 import { test, expect, describe, mock } from "bun:test"
+import { streamText } from "ai"
 
 // Mock BunProc + default auth plugins so importing Provider never shells out or
 // hits the network (mirrors test/provider/provider.test.ts).
@@ -26,7 +27,7 @@ import { Provider } from "../../src/provider/provider"
 import { Inference } from "../../src/provider/inference"
 import { Env } from "../../src/env"
 import { Auth } from "../../src/auth"
-import { API_BASE } from "../../src/openscience"
+import { API_BASE, OpenScience } from "../../src/openscience"
 import { Config } from "../../src/config/config"
 import { BillingSettingsRoutes } from "../../src/server/routes/settings/billing"
 import { Global } from "../../src/global"
@@ -116,6 +117,122 @@ describe("Provider.isManagedProxyBaseURL (pure)", () => {
     expect(Provider.isManagedProxyBaseURL("https://openrouter.ai/api/v1")).toBe(false)
     expect(Provider.isManagedProxyBaseURL(`${PROXY}/openrouter/v1?key=value`)).toBe(false)
   })
+})
+
+describe("Provider.requestFundingHeaders (pure)", () => {
+  const funding = {
+    api_key: "thk_openrouter",
+    user_id: "user-1",
+    account: "user-1",
+    organization_id: "org_alpha",
+  }
+
+  test("attaches the snapshotted organization to the exact managed proxy", () => {
+    const headers = Provider.requestFundingHeaders({
+      baseURL: `${PROXY}/openrouter/v1`,
+      apiKey: "thk_openrouter",
+      headers: { "X-Organization-ID": "org_untrusted", Accept: "application/json" },
+      funding,
+    })
+    expect(headers.get("X-Organization-ID")).toBe("org_alpha")
+    expect(headers.get("Accept")).toBe("application/json")
+  })
+
+  test("strips organization attribution from BYOK, OAuth, local, and lookalike routes", () => {
+    for (const [baseURL, apiKey] of [
+      ["https://openrouter.ai/api/v1", "sk-or-user"],
+      ["https://api.openai.com/v1", "oauth-access"],
+      ["http://127.0.0.1:11434/v1", "local-key"],
+      ["https://evil.test/api/llm/proxy/openrouter/v1", "thk_openrouter"],
+    ]) {
+      const headers = Provider.requestFundingHeaders({
+        baseURL,
+        apiKey,
+        headers: { "X-Organization-ID": "org_untrusted" },
+        funding,
+      })
+      expect(headers.has("X-Organization-ID"), baseURL).toBe(false)
+    }
+  })
+
+  test("fails closed when managed inference has no matching operation snapshot", () => {
+    expect(() =>
+      Provider.requestFundingHeaders({
+        baseURL: `${PROXY}/openrouter/v1`,
+        apiKey: "thk_openrouter",
+      }),
+    ).toThrow("no funding-account snapshot")
+    expect(() =>
+      Provider.requestFundingHeaders({
+        baseURL: `${PROXY}/openrouter/v1`,
+        apiKey: "thk_other",
+        funding,
+      }),
+    ).toThrow("connected account changed")
+  })
+})
+
+test("managed inference sends the operation snapshot through the real provider fetch hook", async () => {
+  await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
+  const file = path.join(Global.Path.data, "openscience-session.json")
+  const original = globalThis.fetch
+  const seen: Array<string | null> = []
+  const chunks = [
+    {
+      id: "chatcmpl_context",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: "anthropic/claude-sonnet-4.6",
+      choices: [{ index: 0, delta: { role: "assistant", content: "ok" }, finish_reason: null }],
+    },
+    {
+      id: "chatcmpl_context",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: "anthropic/claude-sonnet-4.6",
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    },
+  ]
+  const body = chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n"
+  try {
+    await Bun.write(
+      file,
+      JSON.stringify({ api_key: "thk_openrouter", user_id: "user-1", organization_id: "org_alpha" }),
+    )
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      seen.push(new Headers(init?.headers).get("X-Organization-ID"))
+      return new Response(body, { headers: { "content-type": "text/event-stream" } })
+    }) as typeof fetch
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+        Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const model = await Provider.getModel("openrouter", "anthropic/claude-sonnet-4.6")
+        const language = await Provider.getLanguage(model)
+        const funding = await OpenScience.getFundingSnapshot()
+        expect(funding).not.toBeNull()
+        const context = { sessionID: "session-1", messageID: "message-1", attempt: 1, funding: funding! }
+        const result = Provider.withRequestContext(context, () => streamText({ model: language, prompt: "hello" }))
+        for await (const _part of Provider.withRequestContextIterable(context, result.fullStream)) {
+          // Consuming the real adapter stream drives its custom fetch hook.
+        }
+        expect(await result.text).toBe("ok")
+      },
+    })
+    expect(seen).toEqual(["org_alpha"])
+  } finally {
+    globalThis.fetch = original
+    await fs.rm(file, { force: true })
+    delete process.env["OPENROUTER_API_KEY"]
+    delete process.env["OPENROUTER_BASE_URL"]
+    Provider.invalidate()
+  }
 })
 
 // ── Availability filter (hermetic, catalog-backed) ───────────────────────────

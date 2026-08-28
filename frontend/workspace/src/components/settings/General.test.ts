@@ -29,3 +29,13 @@ describe("General preference writes", () => {
     expect(applyCalls).toBe(0)
   })
 })
+
+describe("General Ace funding", () => {
+  test("offers Personal and team Wallet contexts without changing provider credentials", async () => {
+    const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
+    expect(source).toContain('title="Ace funding"')
+    expect(source).toContain('id: "personal", label: "Personal"')
+    expect(source).toContain("sdk.client.account.fundingContext.set")
+    expect(source).toContain("Your keys and subscriptions stay personal.")
+  })
+})

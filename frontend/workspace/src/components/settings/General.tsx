@@ -2,7 +2,7 @@
 // real endpoint:
 //   • Account   → client.account.get / client.account.logout, billing link.
 //   • Appearance → the extracted AppearanceSections (display mode, sounds, updates, …).
-import { Component, Show, createSignal, onMount, type JSX } from "solid-js"
+import { Component, Show, createMemo, createSignal, onMount, type JSX } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon, type IconProps } from "@synsci/ui/icon"
 import { useDialog } from "@synsci/ui/context/dialog"
@@ -12,7 +12,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { URLS } from "@/config/urls"
 import { AppearanceSections } from "../settings-general"
-import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
+import { FilterMenu, PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { walletBalanceLabel } from "./credit-balance"
 import { DataUse } from "./DataUse"
 import "./preference-panels.css"
@@ -22,6 +22,17 @@ type Account = {
   user?: Record<string, unknown> & { email?: string }
   balance_usd?: number | null
   billing_mode?: { mode: "byok" | "managed" } | null
+  funding_context?: {
+    type: "personal" | "organization"
+    organization_id?: string
+    available: boolean
+    organizations: Array<{
+      organization_id: string
+      name: string
+      status: string
+      membership_status: string
+    }>
+  }
 }
 
 export default function General() {
@@ -32,6 +43,7 @@ export default function General() {
   const [account, setAccount] = createSignal<Account | undefined>()
   const [error, setError] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
+  const [fundingBusy, setFundingBusy] = createSignal(false)
   const [showAdvanced, setShowAdvanced] = createSignal(false)
 
   const loadAccount = async () => {
@@ -83,9 +95,45 @@ export default function General() {
     if (!current.session) return "No Synthetic Sciences account is connected to this device."
     return "Connected to Synthetic Sciences on this device."
   }
-  const org = () => {
-    const u = account()?.user ?? {}
-    return (u.organization ?? u.org ?? u.team ?? u.organization_name) as string | undefined
+  const fundingOptions = createMemo(() => {
+    const context = account()?.funding_context
+    const organizations = context?.organizations ?? []
+    const options = [
+      { id: "personal", label: "Personal" },
+      ...organizations.map((organization) => ({ id: organization.organization_id, label: organization.name })),
+    ]
+    if (
+      context?.type === "organization" &&
+      context.organization_id &&
+      !organizations.some((organization) => organization.organization_id === context.organization_id)
+    ) {
+      options.push({ id: context.organization_id, label: "Unavailable team" })
+    }
+    return options
+  })
+  const fundingID = () => {
+    const context = account()?.funding_context
+    return context?.type === "organization" && context.organization_id ? context.organization_id : "personal"
+  }
+  const setFunding = async (id: string) => {
+    if (fundingBusy() || id === fundingID()) return
+    setFundingBusy(true)
+    setError(undefined)
+    try {
+      const result = await sdk.client.account.fundingContext.set({ organization_id: id === "personal" ? null : id })
+      const issue = (result as { error?: unknown }).error
+      if (issue) {
+        throw new Error(typeof issue === "string" ? issue : "The funding account could not be changed")
+      }
+      await loadAccount()
+      window.dispatchEvent(new Event("openscience:account-changed"))
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause)
+      setError(detail)
+      showToast({ variant: "error", title: "Funding account unchanged", description: detail })
+    } finally {
+      setFundingBusy(false)
+    }
   }
 
   return (
@@ -111,10 +159,24 @@ export default function General() {
               <Row icon="star" title="Wallet">
                 <span class="settings-account-value">{wallet()}</span>
               </Row>
-              <Show when={org()}>
-                <Row icon="home" title="Organization">
-                  <span class="settings-account-value">{org()}</span>
+              <Show when={account()?.session === true}>
+                <Row
+                  icon="home"
+                  title="Ace funding"
+                  description="Managed models and research search use this Wallet. Your keys and subscriptions stay personal."
+                >
+                  <FilterMenu
+                    ariaLabel="Ace funding account"
+                    options={fundingOptions()}
+                    value={fundingID()}
+                    onSelect={(id) => void setFunding(id)}
+                  />
                 </Row>
+                <Show when={account()?.funding_context?.available === false}>
+                  <div class="px-4 py-3 text-12-regular text-text-weak" role="status">
+                    This team is no longer available. Choose Personal or another team before using Ace.
+                  </div>
+                </Show>
               </Show>
               <Row icon="bolt" title="Wallet and billing" description="Manage Ace, payment methods, and receipts.">
                 <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>

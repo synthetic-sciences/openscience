@@ -8,6 +8,9 @@ import type {
   AccountBillingModeSetResponses,
   AccountDeviceRevokeResponses,
   AccountDevicesResponses,
+  AccountFundingContextGetResponses,
+  AccountFundingContextSetErrors,
+  AccountFundingContextSetResponses,
   AccountGetResponses,
   AccountLoginBrowserResponses,
   AccountLoginKeyResponses,
@@ -611,6 +614,46 @@ export class Global extends HeyApiClient {
   }
 }
 
+export class FundingContext extends HeyApiClient {
+  /**
+   * Get the local funding account selection
+   *
+   * List available Synthetic Sciences organizations and the Personal or organization context used by managed operations.
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AccountFundingContextGetResponses, unknown, ThrowOnError>({
+      url: "/account/funding-context",
+      ...options,
+    })
+  }
+
+  /**
+   * Choose the funding account for managed operations
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters: {
+      organization_id: string | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "organization_id" }] }])
+    return (options?.client ?? this.client).put<
+      AccountFundingContextSetResponses,
+      AccountFundingContextSetErrors,
+      ThrowOnError
+    >({
+      url: "/account/funding-context",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Device extends HeyApiClient {
   /**
    * Revoke device
@@ -749,6 +792,11 @@ export class Account extends HeyApiClient {
       url: "/account/logout",
       ...options,
     })
+  }
+
+  private _fundingContext?: FundingContext
+  get fundingContext(): FundingContext {
+    return (this._fundingContext ??= new FundingContext({ client: this.client }))
   }
 
   private _device?: Device

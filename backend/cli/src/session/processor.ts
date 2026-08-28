@@ -556,6 +556,10 @@ export namespace SessionProcessor {
       },
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
+        // One immutable account/funding choice spans balance preflight, every
+        // retry of this provider operation, and its compatibility usage report.
+        // A Settings change therefore applies to the next operation only.
+        const funding = await OpenScience.getFundingSnapshot()
         const tracking = tracks({ tools: streamInput.tools, toolcall: input.model.capabilities.toolcall })
         needsCompaction = false
         overflow = false
@@ -580,7 +584,12 @@ export namespace SessionProcessor {
             // and local calls keep working from the cached account session during
             // a control-plane outage and never spend Ace credits.
             if (requiresWalletBalance(credentialSource)) {
-              const balance = await OpenScience.getBalance()
+              if (!funding) {
+                throw managedPauseError(
+                  "Managed access is paused because OpenScience could not snapshot the connected funding account. Retry after signing in again, or switch to a direct BYOK, ChatGPT, or local model.",
+                )
+              }
+              const balance = await OpenScience.getBalance(funding)
               if (balance === null) {
                 throw managedPauseError(
                   "Managed access is paused because OpenScience could not verify your Ace balance. Existing responses, Results, checkpoints, and remote jobs are preserved. Retry when the connection returns, or switch to a direct BYOK, ChatGPT, or local model.",
@@ -613,6 +622,7 @@ export namespace SessionProcessor {
               sessionID: input.sessionID,
               messageID: input.assistantMessage.id,
               attempt: attempt + 1,
+              ...(credentialSource === "managed" && funding ? { funding } : {}),
             }
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
@@ -847,26 +857,29 @@ export namespace SessionProcessor {
                   // reported (regardless of the model's nominal models.dev price).
                   const usageResult = !shouldReportUsage(credentialSource)
                     ? null
-                    : await OpenScience.reportUsage({
-                        service: "llm",
-                        event_type: "chat",
-                        model: input.model.id,
-                        tokens_used: TokenUsage.uncached(usage.tokens),
-                        metadata: {
-                          provider: input.model.providerID,
-                          input_tokens: usage.tokens.input,
-                          output_tokens: usage.tokens.output,
-                          reasoning_tokens: usage.tokens.reasoning,
-                          cache_read: usage.tokens.cache.read,
-                          cache_write: usage.tokens.cache.write,
-                          cost_usd: usage.cost,
-                          session_id: input.sessionID,
-                          message_id: input.assistantMessage.id,
-                          idempotency_key: stepPartID,
+                    : await OpenScience.reportUsage(
+                        {
+                          service: "llm",
+                          event_type: "chat",
+                          model: input.model.id,
+                          tokens_used: TokenUsage.uncached(usage.tokens),
+                          metadata: {
+                            provider: input.model.providerID,
+                            input_tokens: usage.tokens.input,
+                            output_tokens: usage.tokens.output,
+                            reasoning_tokens: usage.tokens.reasoning,
+                            cache_read: usage.tokens.cache.read,
+                            cache_write: usage.tokens.cache.write,
+                            cost_usd: usage.cost,
+                            session_id: input.sessionID,
+                            message_id: input.assistantMessage.id,
+                            idempotency_key: stepPartID,
+                          },
                         },
-                      })
+                        funding ?? undefined,
+                      )
                   if (usageResult && "modelBlocked" in usageResult) {
-                    const balance = await OpenScience.getBalance().catch(() => null)
+                    const balance = await OpenScience.getBalance(funding ?? undefined).catch(() => null)
                     if (balance !== null && balance > 0) {
                       // The managed proxy has already authorized, executed, and
                       // settled this step. A legacy /api/cli/usage response can

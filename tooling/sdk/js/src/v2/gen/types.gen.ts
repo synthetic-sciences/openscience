@@ -2773,10 +2773,100 @@ export type AccountGetResponses = {
       managed_supported: boolean
       managed_unlocked: boolean
     } | null
+    funding_context: {
+      type: "personal" | "organization"
+      organization_id?: string
+      available: boolean
+      organizations: Array<{
+        organization_id: string
+        name: string
+        slug: string
+        status: string
+        role: string
+        membership_status: string
+        seat_assigned: boolean
+        effective_permissions: Array<string>
+      }>
+    }
   }
 }
 
 export type AccountGetResponse = AccountGetResponses[keyof AccountGetResponses]
+
+export type AccountFundingContextGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/funding-context"
+}
+
+export type AccountFundingContextGetResponses = {
+  /**
+   * Funding context
+   */
+  200: {
+    type: "personal" | "organization"
+    organization_id?: string
+    available: boolean
+    organizations: Array<{
+      organization_id: string
+      name: string
+      slug: string
+      status: string
+      role: string
+      membership_status: string
+      seat_assigned: boolean
+      effective_permissions: Array<string>
+    }>
+  }
+}
+
+export type AccountFundingContextGetResponse =
+  AccountFundingContextGetResponses[keyof AccountFundingContextGetResponses]
+
+export type AccountFundingContextSetData = {
+  body?: {
+    organization_id: string | null
+  }
+  path?: never
+  query?: never
+  url: "/account/funding-context"
+}
+
+export type AccountFundingContextSetErrors = {
+  /**
+   * Unavailable organization
+   */
+  400: {
+    error: string
+  }
+}
+
+export type AccountFundingContextSetError = AccountFundingContextSetErrors[keyof AccountFundingContextSetErrors]
+
+export type AccountFundingContextSetResponses = {
+  /**
+   * Updated funding context
+   */
+  200: {
+    type: "personal" | "organization"
+    organization_id?: string
+    available: boolean
+    organizations: Array<{
+      organization_id: string
+      name: string
+      slug: string
+      status: string
+      role: string
+      membership_status: string
+      seat_assigned: boolean
+      effective_permissions: Array<string>
+    }>
+  }
+}
+
+export type AccountFundingContextSetResponse =
+  AccountFundingContextSetResponses[keyof AccountFundingContextSetResponses]
 
 export type AccountBalanceData = {
   body?: never

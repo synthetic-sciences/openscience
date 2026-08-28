@@ -14,7 +14,7 @@ import { Instance } from "../project/instance"
 import { ProjectTrust } from "../project/trust"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
-import { OpenScience } from "../openscience"
+import { OpenScience, type FundingSnapshot } from "../openscience"
 import { isAtlasProxyURL, managedOpenRouterBaseURL } from "../openscience/synced-env-policy"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ProviderTokenCommand } from "./token-command"
@@ -53,6 +53,8 @@ export namespace Provider {
     sessionID: string
     messageID: string
     attempt: number
+    /** Immutable account/funding choice for this provider operation. */
+    funding?: FundingSnapshot
   }
 
   export type RequestTiming = RequestContext & {
@@ -448,6 +450,27 @@ export namespace Provider {
 
   export function isAtlasProxyBaseURL(baseURL: unknown): baseURL is string {
     return isAtlasProxyURL(baseURL)
+  }
+
+  /** Enforce the organization-attribution boundary at the last hop before a
+   * provider request. Non-managed routes have the header removed even if a
+   * plugin or custom provider option supplied it; an Atlas proxy request must
+   * carry the same account key captured by its operation snapshot. */
+  export function requestFundingHeaders(input: {
+    baseURL: unknown
+    apiKey: unknown
+    headers?: HeadersInit
+    funding?: FundingSnapshot
+  }): Headers {
+    const headers = new Headers(input.headers)
+    headers.delete("X-Organization-ID")
+    if (!isAtlasProxyBaseURL(input.baseURL) || !Auth.isAtlasApiKey(input.apiKey)) return headers
+    if (!input.funding) throw new Error("Managed inference has no funding-account snapshot. Retry the operation.")
+    if (input.funding.api_key !== input.apiKey) {
+      throw new Error("The connected account changed during managed inference. Retry the operation.")
+    }
+    if (input.funding.organization_id) headers.set("X-Organization-ID", input.funding.organization_id)
+    return headers
   }
 
   const PUBLIC_PROVIDER_BASE_URLS: Record<string, string> = {
@@ -2245,6 +2268,18 @@ export namespace Provider {
           headers.set("authorization", `Bearer ${token}`)
           opts.headers = headers
         }
+
+        const apiKey = typeof options["apiKey"] === "string" ? options["apiKey"] : undefined
+        const managed = isAtlasProxyBaseURL(options["baseURL"]) && Auth.isAtlasApiKey(apiKey)
+        const funding = managed
+          ? await OpenScience.managedRequestSnapshot(apiKey, requestContext.getStore()?.funding)
+          : undefined
+        opts.headers = requestFundingHeaders({
+          baseURL: options["baseURL"],
+          apiKey,
+          headers: opts.headers as HeadersInit | undefined,
+          funding,
+        })
 
         return fetchWithIdleWatchdog(fetchFn, input, opts, {
           providerID: model.providerID,

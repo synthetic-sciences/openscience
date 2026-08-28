@@ -67,7 +67,7 @@ test("usage stays financially blocking until the server acknowledges the proxy-s
     })
     expect(await Bun.file(capabilities).json()).toMatchObject({
       schema_version: 1,
-      accounts: { "usage-user": { nonfinancial: true } },
+      accounts: { ["usage-user\u0000personal"]: { nonfinancial: true } },
     })
     expect(await OpenScience.reportUsage(usage)).toBeNull()
     expect(await Bun.file(queue).exists()).toBe(false)

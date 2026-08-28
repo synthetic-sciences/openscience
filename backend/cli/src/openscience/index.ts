@@ -149,13 +149,17 @@ const CONTROL_PLANE_ENV_KEYS = new Set(["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"])
  * rather than expiry, so we don't track refresh tokens or expiry locally
  * — a 401 on any request signals "key revoked or expired, re-auth".
  */
-interface OpenScienceSession {
+export interface OpenScienceSession {
   /** Atlas-issued ``thk_<uuid>.<secret>`` Bearer token. */
   api_key: string
   /** Atlas user_id (UUID). Stored for diagnostics; not used for auth. */
   user_id: string
   /** Friendly device label this session was registered under. */
   device_name?: string
+  /** Local, non-secret funding selection. Omitted means the personal account.
+   *  An organization selection is always forwarded explicitly; it is never
+   *  erased merely because a later Atlas status read is unavailable. */
+  organization_id?: string
   /** Last-seen ``/api/cli/sync/version`` value. Background refresh fires
    *  when the server returns a higher value. */
   cached_v?: number
@@ -206,6 +210,41 @@ interface SyncResponse {
 }
 
 export type AccountProfile = SyncResponse["user"]
+
+export interface FundingOrganization {
+  organization_id: string
+  name: string
+  slug: string
+  status: string
+  role: string
+  membership_status: string
+  seat_assigned: boolean
+  effective_permissions: string[]
+}
+
+export interface FundingSnapshot {
+  readonly api_key: string
+  readonly user_id: string
+  readonly account: string
+  readonly organization_id?: string
+}
+
+export interface FundingContext {
+  type: "personal" | "organization"
+  organization_id?: string
+  available: boolean
+  organizations: FundingOrganization[]
+}
+
+interface AuthStatusResponse {
+  organizations?: unknown
+  /** Compatibility input only. Local APIs always emit `organizations`. */
+  available_organizations?: unknown
+  funding_context?: {
+    type?: "personal" | "organization"
+    organization_id?: string
+  }
+}
 
 export interface ResearchEntitlements {
   plan?: string | null
@@ -304,15 +343,22 @@ export class InsufficientCreditsError extends Error {
   }
 }
 
+export class FundingContextError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "FundingContextError"
+  }
+}
+
 export namespace OpenScience {
   let cachedProfile: AccountProfile | null | undefined
   let cachedEntitlements: ResearchEntitlements | undefined
   let cachedEntitlementsAt = 0
-  let cachedEntitlementsAccount: string | undefined
+  let cachedEntitlementsContext: string | undefined
   let cachedEntitlementsFailureAt = 0
-  let cachedEntitlementsFailureAccount: string | undefined
+  let cachedEntitlementsFailureContext: string | undefined
   let entitlementsGeneration = 0
-  let entitlementsRequest: { account: string; promise: Promise<ResearchEntitlements | null> } | undefined
+  let entitlementsRequest: { context: string; promise: Promise<ResearchEntitlements | null> } | undefined
   const ENTITLEMENTS_CACHE_TTL_MS = 30_000
   const ENTITLEMENTS_FAILURE_TTL_MS = 30_000
   const ENTITLEMENTS_FETCH_TIMEOUT_MS = 1_500
@@ -397,6 +443,26 @@ export namespace OpenScience {
     }
   }
 
+  async function accountAtlasFetch(
+    session: Pick<OpenScienceSession, "api_key" | "organization_id">,
+    input: string,
+    init: RequestInit,
+    timeoutMs: number,
+    funding: boolean,
+  ): Promise<Response> {
+    const headers = new Headers(init.headers)
+    headers.set("Authorization", `Bearer ${session.api_key}`)
+    // Callers cannot smuggle a funding selection onto an unrelated endpoint.
+    // Only fundedAtlasFetch may restore this header after the unconditional
+    // removal, which keeps keys/devices/skills/graph/telemetry account-scoped.
+    headers.delete("X-Organization-ID")
+    if (funding && session.organization_id) headers.set("X-Organization-ID", session.organization_id)
+    const response = await atlasFetch(input, { ...init, headers }, timeoutMs)
+    if (response.status === 401) await clearRejectedSession(session.api_key)
+    else await retryPendingTelemetryConsent().catch(() => false)
+    return response
+  }
+
   /** Authenticated Atlas control-plane request. A definitive 401 means this
    * device key was revoked or expired, so clear only that matching session.
    * Network failures, 5xx responses, and 403 policy/consent responses remain
@@ -407,12 +473,19 @@ export namespace OpenScience {
     init: RequestInit = {},
     timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
   ): Promise<Response> {
-    const headers = new Headers(init.headers)
-    headers.set("Authorization", `Bearer ${session.api_key}`)
-    const response = await atlasFetch(input, { ...init, headers }, timeoutMs)
-    if (response.status === 401) await clearRejectedSession(session.api_key)
-    else await retryPendingTelemetryConsent().catch(() => false)
-    return response
+    return accountAtlasFetch(session, input, init, timeoutMs, false)
+  }
+
+  /** Explicitly funded request. This is intentionally separate from the
+   * general authenticated transport so organization attribution cannot leak
+   * onto BYOK credential, device, skill, graph, project, or telemetry calls. */
+  async function fundedAtlasFetch(
+    session: Pick<OpenScienceSession, "api_key" | "organization_id">,
+    input: string,
+    init: RequestInit = {},
+    timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
+  ): Promise<Response> {
+    return accountAtlasFetch(session, input, init, timeoutMs, true)
   }
 
   export async function getSession(): Promise<OpenScienceSession | null> {
@@ -437,6 +510,14 @@ export namespace OpenScience {
         api_key: data.api_key,
         user_id: data.user_id || "",
         device_name: data.device_name,
+        organization_id:
+          data.organization_id === undefined
+            ? undefined
+            : typeof data.organization_id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(data.organization_id)
+              ? data.organization_id
+              : (() => {
+                  throw new Error("invalid organization_id in the local OpenScience session")
+                })(),
         // Sync bookkeeping. Dropping these made refreshIfStale's TTL and
         // version dedupe dead code: every message fired a version probe
         // plus a full background sync, and updateSession (getSession +
@@ -455,14 +536,173 @@ export namespace OpenScience {
     }
   }
 
+  /** Immutable account + funding selection for one managed operation. Callers
+   * keep this object through preflight, proxy dispatch, and usage reporting so
+   * a Settings change affects only the next operation. */
+  export async function getFundingSnapshot(): Promise<FundingSnapshot | null> {
+    const session = await getSession()
+    if (!session) return null
+    return Object.freeze({
+      api_key: session.api_key,
+      user_id: session.user_id,
+      account: accountTag(session),
+      ...(session.organization_id ? { organization_id: session.organization_id } : {}),
+    })
+  }
+
+  /** Resolve the exact context for a managed proxy key. A request cannot use a
+   * new account key with an old operation snapshot, and a corrupt on-disk
+   * session cannot fall back to an un-attributed synced token. A standalone
+   * thk_* environment key remains compatible as an explicitly personal key. */
+  export async function managedRequestSnapshot(
+    apiKey: string,
+    snapshot?: FundingSnapshot | null,
+  ): Promise<FundingSnapshot> {
+    if (!isManagedAtlasKey(apiKey)) throw new FundingContextError("Expected an Atlas managed API key.")
+    const selected = snapshot ?? (await getFundingSnapshot())
+    if (selected) {
+      if (selected.api_key !== apiKey) {
+        throw new FundingContextError("The connected account changed during this managed operation. Retry it.")
+      }
+      return selected
+    }
+    if (existsSync(filepath)) {
+      throw new FundingContextError(
+        "OpenScience could not safely read the selected funding account. Repair the local session or sign in again.",
+      )
+    }
+    return Object.freeze({
+      api_key: apiKey,
+      user_id: "",
+      account: accountTag({ api_key: apiKey, user_id: "" }),
+    })
+  }
+
+  /** Non-secret header projection for an already-snapshotted operation. */
+  export function fundingHeaders(snapshot: FundingSnapshot): Record<string, string> {
+    return snapshot.organization_id ? { "X-Organization-ID": snapshot.organization_id } : {}
+  }
+
+  function organizations(value: unknown): FundingOrganization[] {
+    if (!Array.isArray(value)) return []
+    return value.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return []
+      const row = item as Record<string, unknown>
+      const id = typeof row.organization_id === "string" ? row.organization_id : row.id
+      if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) return []
+      if (typeof row.name !== "string" || !row.name.trim()) return []
+      return [
+        {
+          organization_id: id,
+          name: row.name,
+          slug: typeof row.slug === "string" ? row.slug : "",
+          status: typeof row.status === "string" ? row.status : "active",
+          role: typeof row.role === "string" ? row.role : "member",
+          membership_status: typeof row.membership_status === "string" ? row.membership_status : "active",
+          seat_assigned: row.seat_assigned === true,
+          effective_permissions: Array.isArray(row.effective_permissions)
+            ? row.effective_permissions.filter((permission): permission is string => typeof permission === "string")
+            : [],
+        },
+      ]
+    })
+  }
+
+  function organizationAvailable(row: FundingOrganization | undefined): boolean {
+    return !!row && row.status === "active" && row.membership_status === "active"
+  }
+
+  async function authStatus(snapshot: FundingSnapshot): Promise<{
+    organizations: FundingOrganization[]
+    funding_context?: AuthStatusResponse["funding_context"]
+  } | null> {
+    const response = await fundedAtlasFetch(snapshot, `${API_BASE}/api/v1/auth/status`, {
+      headers: { Accept: "application/json" },
+    }).catch(() => undefined)
+    if (!response?.ok) return null
+    return response
+      .json()
+      .then((value) => {
+        const body = value as AuthStatusResponse
+        return {
+          organizations: organizations(body.organizations ?? body.available_organizations),
+          funding_context: body.funding_context,
+        }
+      })
+      .catch(() => null)
+  }
+
+  /** Read the local selection plus the organizations Atlas currently allows.
+   * If a selected organization disappears or status cannot be verified, keep
+   * its id and mark it unavailable; managed calls continue sending that id so
+   * Atlas rejects them instead of charging the personal account. */
+  export async function getFundingContext(operation?: FundingSnapshot): Promise<FundingContext> {
+    const snapshot = operation ?? (await getFundingSnapshot())
+    if (!snapshot) return { type: "personal", available: true, organizations: [] }
+    const status = await authStatus(snapshot)
+    if (!snapshot.organization_id) {
+      return { type: "personal", available: true, organizations: status?.organizations ?? [] }
+    }
+    const row = status?.organizations.find((item) => item.organization_id === snapshot.organization_id)
+    const echoed = status?.funding_context
+    const matches = !echoed || (echoed.type === "organization" && echoed.organization_id === snapshot.organization_id)
+    return {
+      type: "organization",
+      organization_id: snapshot.organization_id,
+      available: organizationAvailable(row) && matches,
+      organizations: status?.organizations ?? [],
+    }
+  }
+
+  /** Change only the local non-secret funding selection. Organization choices
+   * require a fresh personal-context auth status read; Personal is always an
+   * explicit, offline-safe choice. */
+  export async function setFundingContext(organizationID: string | null): Promise<FundingContext> {
+    const snapshot = await getFundingSnapshot()
+    if (!snapshot) throw new FundingContextError("Sign in before choosing a funding account.")
+    if (organizationID !== null && !/^[A-Za-z0-9_-]{1,128}$/.test(organizationID)) {
+      throw new FundingContextError("Invalid organization id.")
+    }
+    const status = organizationID
+      ? await authStatus(Object.freeze({ ...snapshot, organization_id: undefined }))
+      : undefined
+    const row = status?.organizations.find((item) => item.organization_id === organizationID)
+    if (organizationID && !organizationAvailable(row)) {
+      throw new FundingContextError("That organization is not available to the connected account.")
+    }
+
+    await CredentialLifecycle.serialized(async () => {
+      using _ = await Lock.write(filepath)
+      const current = await getSession()
+      if (!current || current.api_key !== snapshot.api_key) {
+        throw new FundingContextError("The connected account changed while the funding selection was being saved.")
+      }
+      const next = { ...current, organization_id: organizationID ?? undefined }
+      await atomicWrite(filepath, JSON.stringify(next, null, 2), { mode: 0o600 })
+    })
+    cachedProfile = undefined
+    invalidateResearchEntitlements()
+    invalidateBalance()
+    const { Provider } = await import("../provider/provider")
+    Provider.invalidate()
+    return organizationID
+      ? {
+          type: "organization",
+          organization_id: organizationID,
+          available: true,
+          organizations: status?.organizations ?? [],
+        }
+      : { type: "personal", available: true, organizations: [] }
+  }
+
   /**
    * Read the account summary without applying the credential payload returned
    * by Atlas. Settings uses this for display only. Calling syncServices() from
    * a GET handler published a credential revision and disposed every active
    * project instance merely because General was opened.
    */
-  export async function getProfile(): Promise<AccountProfile | null> {
-    const session = await getSession()
+  export async function getProfile(snapshot?: FundingSnapshot): Promise<AccountProfile | null> {
+    const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
     return authenticatedAtlasFetch(session, `${API_BASE}/api/cli/sync`, {
       headers: { Authorization: `Bearer ${session.api_key}` },
@@ -1589,15 +1829,15 @@ export namespace OpenScience {
   }
 
   /** Credit balance cache */
-  let cachedBalance: { value: number; at: number } | null = null
-  let pendingBalance: Promise<number | null> | undefined
+  let cachedBalance: { context: string; value: number; at: number } | null = null
+  let pendingBalance: { context: string; promise: Promise<number | null> } | undefined
   let balanceRevision = 0
   const BALANCE_CACHE_TTL = 30 * 1000
 
-  function publishBalance(value: number) {
+  function publishBalance(value: number, context: string) {
     balanceRevision++
     pendingBalance = undefined
-    cachedBalance = { value, at: Date.now() }
+    cachedBalance = { context, value, at: Date.now() }
   }
 
   /** Drop the cached balance so the next getBalance() refetches. Called when
@@ -1613,38 +1853,45 @@ export namespace OpenScience {
    *  Returns the balance in USD, or null when it can't be determined (no
    *  session, API failure). null is distinct from a real negative balance —
    *  the old -1 sentinel collided with an overdraft of exactly -$1. */
-  export async function getBalance(): Promise<number | null> {
-    if (cachedBalance && Date.now() - cachedBalance.at < BALANCE_CACHE_TTL) {
+  export async function getBalance(snapshot?: FundingSnapshot): Promise<number | null> {
+    const session = snapshot ?? (await getFundingSnapshot())
+    if (!session) return null
+    const context = contextTag(session)
+    if (cachedBalance?.context === context && Date.now() - cachedBalance.at < BALANCE_CACHE_TTL) {
       return cachedBalance.value
     }
-    if (pendingBalance) return pendingBalance
+    if (pendingBalance?.context === context) return pendingBalance.promise
     const revision = balanceRevision
     const request = (async () => {
-      const session = await getSession()
-      if (!session) return null
       try {
-        const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/balance`, {
+        const res = await fundedAtlasFetch(session, `${API_BASE}/api/cli/balance`, {
           headers: { Authorization: `Bearer ${session.api_key}` },
         })
         if (!res.ok) return null
         const data = await res.json()
         const usd =
-          typeof data.balance_usd === "number"
-            ? data.balance_usd
-            : typeof data.balance_cents === "number"
-              ? data.balance_cents / 100
-              : null
+          typeof data.effective_balance_usd === "number"
+            ? data.effective_balance_usd
+            : typeof data.effective_balance_cents === "number"
+              ? data.effective_balance_cents / 100
+              : typeof data.balance_usd === "number"
+                ? data.balance_usd
+                : typeof data.balance_cents === "number"
+                  ? data.balance_cents / 100
+                  : null
         if (usd === null) return null
-        if (revision !== balanceRevision) return cachedBalance?.value ?? null
-        cachedBalance = { value: usd, at: Date.now() }
+        if (revision !== balanceRevision) {
+          return cachedBalance?.context === context ? cachedBalance.value : null
+        }
+        cachedBalance = { context, value: usd, at: Date.now() }
         return usd
       } catch {
         return null
       }
     })()
-    pendingBalance = request
+    pendingBalance = { context, promise: request }
     void request.finally(() => {
-      if (pendingBalance === request) pendingBalance = undefined
+      if (pendingBalance?.promise === request) pendingBalance = undefined
     })
     return request
   }
@@ -1655,9 +1902,9 @@ export namespace OpenScience {
   export function invalidateResearchEntitlements() {
     cachedEntitlements = undefined
     cachedEntitlementsAt = 0
-    cachedEntitlementsAccount = undefined
+    cachedEntitlementsContext = undefined
     cachedEntitlementsFailureAt = 0
-    cachedEntitlementsFailureAccount = undefined
+    cachedEntitlementsFailureContext = undefined
     entitlementsRequest = undefined
     entitlementsGeneration++
   }
@@ -1671,25 +1918,34 @@ export namespace OpenScience {
 
   /** Read the legacy search capability payload for compatibility diagnostics.
    * Local routing never treats its plan ids or counters as billing authority. */
-  export async function getResearchEntitlements(): Promise<ResearchEntitlements | null> {
-    const session = await getSession()
+  export async function getResearchEntitlements(snapshot?: FundingSnapshot): Promise<ResearchEntitlements | null> {
+    const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
     return readResearchEntitlements(session)
   }
 
-  async function readResearchEntitlements(session: OpenScienceSession): Promise<ResearchEntitlements | null> {
-    const account = accountTag(session)
+  async function readResearchEntitlements(
+    session: OpenScienceSession | FundingSnapshot,
+  ): Promise<ResearchEntitlements | null> {
+    const context = contextTag(session)
     if (
-      cachedEntitlementsFailureAccount === account &&
+      cachedEntitlementsContext === context &&
+      cachedEntitlements &&
+      Date.now() - cachedEntitlementsAt < ENTITLEMENTS_CACHE_TTL_MS
+    ) {
+      return cachedEntitlements
+    }
+    if (
+      cachedEntitlementsFailureContext === context &&
       Date.now() - cachedEntitlementsFailureAt < ENTITLEMENTS_FAILURE_TTL_MS
     ) {
       return null
     }
-    if (entitlementsRequest?.account === account) return entitlementsRequest.promise
+    if (entitlementsRequest?.context === context) return entitlementsRequest.promise
     const generation = entitlementsGeneration
     const pending = (async () => {
       try {
-        const res = await authenticatedAtlasFetch(
+        const res = await fundedAtlasFetch(
           session,
           `${API_BASE}/api/v1/entitlements`,
           { headers: { Authorization: `Bearer ${session.api_key}`, Accept: "application/json" } },
@@ -1698,7 +1954,7 @@ export namespace OpenScience {
         if (!res.ok) {
           if (generation === entitlementsGeneration) {
             cachedEntitlementsFailureAt = Date.now()
-            cachedEntitlementsFailureAccount = account
+            cachedEntitlementsFailureContext = context
           }
           return null
         }
@@ -1706,9 +1962,9 @@ export namespace OpenScience {
         if (generation === entitlementsGeneration) {
           cachedEntitlements = value
           cachedEntitlementsAt = Date.now()
-          cachedEntitlementsAccount = account
+          cachedEntitlementsContext = context
           cachedEntitlementsFailureAt = 0
-          cachedEntitlementsFailureAccount = undefined
+          cachedEntitlementsFailureContext = undefined
         }
         if (
           generation === entitlementsGeneration &&
@@ -1721,7 +1977,7 @@ export namespace OpenScience {
       } catch (error) {
         if (generation === entitlementsGeneration) {
           cachedEntitlementsFailureAt = Date.now()
-          cachedEntitlementsFailureAccount = account
+          cachedEntitlementsFailureContext = context
         }
         log.warn("research entitlement read failed", {
           error: error instanceof Error ? error.message : String(error),
@@ -1729,7 +1985,7 @@ export namespace OpenScience {
         return null
       }
     })()
-    entitlementsRequest = { account, promise: pending }
+    entitlementsRequest = { context, promise: pending }
     try {
       return await pending
     } finally {
@@ -1746,8 +2002,9 @@ export namespace OpenScience {
     input: ResearchSearchInput,
     operationID: string,
     signal: AbortSignal,
+    snapshot?: FundingSnapshot,
   ): Promise<{ status: number; body: unknown } | null> {
-    const session = await getSession()
+    const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
     const bodyText = JSON.stringify({ ...input, operation_id: operationID })
     // A transport failure can happen after Atlas has already settled Wallet
@@ -1766,7 +2023,7 @@ export namespace OpenScience {
       const remaining = deadline - Date.now()
       if (remaining <= 0) return null
       try {
-        const res = await authenticatedAtlasFetch(
+        const res = await fundedAtlasFetch(
           session,
           `${API_BASE}/api/v1/research/search`,
           {
@@ -1855,9 +2112,14 @@ export namespace OpenScience {
   /** Stable per-account tag stored with a queued usage row so a later flush can't
    *  bill a DIFFERENT account for it. user_id when known, else a short hash of the
    *  api_key (never the raw key, which must not sit in the queue file). */
-  function accountTag(session: OpenScienceSession): string {
+  function accountTag(session: Pick<OpenScienceSession, "api_key" | "user_id">): string {
     if (session.user_id) return session.user_id
     return "k:" + createHash("sha256").update(session.api_key).digest("hex").slice(0, 16)
+  }
+
+  /** Stable cache/queue key for one account's explicit funding selection. */
+  function contextTag(session: Pick<OpenScienceSession, "api_key" | "user_id" | "organization_id">): string {
+    return `${accountTag(session)}\u0000${session.organization_id ? `organization:${session.organization_id}` : "personal"}`
   }
 
   type UsageCapabilities = {
@@ -1883,9 +2145,9 @@ export namespace OpenScience {
     }
   }
 
-  async function rememberUsageCutover(session: OpenScienceSession): Promise<void> {
+  async function rememberUsageCutover(session: OpenScienceSession | FundingSnapshot): Promise<void> {
     const current = await readUsageCapabilities()
-    current.accounts[accountTag(session)] = { nonfinancial: true, observed_at: new Date().toISOString() }
+    current.accounts[contextTag(session)] = { nonfinancial: true, observed_at: new Date().toISOString() }
     await atomicWrite(usageCapabilityPath, JSON.stringify(current, null, 2), { mode: 0o600 }).catch((error) =>
       log.warn("could not persist usage cutover capability", {
         error: error instanceof Error ? error.message : String(error),
@@ -1893,15 +2155,16 @@ export namespace OpenScience {
     )
   }
 
-  async function usageCutoverReady(session: OpenScienceSession): Promise<boolean> {
+  async function usageCutoverReady(session: OpenScienceSession | FundingSnapshot): Promise<boolean> {
     if (
+      cachedEntitlementsContext === contextTag(session) &&
       cachedEntitlements?.capabilities?.proxy_settlement_authoritative === true &&
       cachedEntitlements.capabilities.cli_usage_financial === false
     ) {
       return true
     }
     const value = await readUsageCapabilities()
-    return value.accounts[accountTag(session)]?.nonfinancial === true
+    return value.accounts[contextTag(session)]?.nonfinancial === true
   }
 
   /** Whether a queued row tagged `rowAccount` may be flushed under `currentAccount`.
@@ -1928,10 +2191,10 @@ export namespace OpenScience {
 
   async function sendReport(
     params: UsageParams,
-    session: OpenScienceSession,
+    session: OpenScienceSession | FundingSnapshot,
   ): Promise<{ ok: boolean; permanent: boolean; data?: any; modelBlocked?: boolean }> {
     try {
-      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/usage`, {
+      const res = await fundedAtlasFetch(session, `${API_BASE}/api/cli/usage`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.api_key}`,
@@ -1988,8 +2251,9 @@ export namespace OpenScience {
    *  On transient failure, persists to a local queue for retry on next startup. */
   export async function reportUsage(
     params: UsageParams,
+    snapshot?: FundingSnapshot,
   ): Promise<{ recorded: boolean; event_id?: string; estimated_cost_usd?: number; modelBlocked?: boolean } | null> {
-    const session = await getSession()
+    const session = snapshot ?? (await getFundingSnapshot())
     if (!session) {
       log.warn("cannot report usage: not authenticated")
       await persistToQueue(params)
@@ -2009,7 +2273,7 @@ export namespace OpenScience {
     }
     // Update balance cache from server response, or invalidate so next check is fresh
     if (result.ok && result.data?.remaining_balance_cents !== undefined) {
-      publishBalance(result.data.remaining_balance_cents / 100)
+      publishBalance(result.data.remaining_balance_cents / 100, contextTag(session))
     } else {
       invalidateBalanceCache()
     }
@@ -2020,7 +2284,7 @@ export namespace OpenScience {
       return { recorded: false, modelBlocked: true }
     }
     if (!result.permanent) {
-      await persistToQueue(params, accountTag(session))
+      await persistToQueue(params, contextTag(session))
     }
     return null
   }
@@ -2038,9 +2302,9 @@ export namespace OpenScience {
       const lines = raw.split("\n").filter(Boolean)
       if (!lines.length) return
 
-      const session = await getSession()
+      const session = await getFundingSnapshot()
       if (!session) return
-      const currentAccount = accountTag(session)
+      const currentAccount = contextTag(session)
       const cutover = await usageCutoverReady(session)
 
       const retry: string[] = []
@@ -2167,17 +2431,17 @@ export namespace OpenScience {
     return d.balance_cents ?? d.cli_balance_cents ?? d.unified_balance_cents ?? 0
   }
 
-  export async function getCredits(): Promise<Credits | null> {
-    const session = await getSession()
+  export async function getCredits(snapshot?: FundingSnapshot): Promise<Credits | null> {
+    const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
     try {
       let currentWallet = true
-      let res = await authenticatedAtlasFetch(session, `${API_BASE}/api/v1/wallet`, {
+      let res = await fundedAtlasFetch(session, `${API_BASE}/api/v1/wallet`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
       if (res.status === 404 || res.status === 405) {
         currentWallet = false
-        res = await authenticatedAtlasFetch(session, `${API_BASE}/api/credits`, {
+        res = await fundedAtlasFetch(session, `${API_BASE}/api/credits`, {
           headers: { Authorization: `Bearer ${session.api_key}` },
         })
       }
@@ -2198,7 +2462,7 @@ export namespace OpenScience {
       let lifetimeSpent = d.lifetime_spent_cents ?? null
       if (currentWallet && lifetimeSpent === null) {
         try {
-          const metadata = await authenticatedAtlasFetch(session, `${API_BASE}/api/credits`, {
+          const metadata = await fundedAtlasFetch(session, `${API_BASE}/api/credits`, {
             headers: { Authorization: `Bearer ${session.api_key}` },
           })
           if (metadata.ok) {
@@ -2237,11 +2501,11 @@ export namespace OpenScience {
     createdAt: string
   }
 
-  export async function getTransactions(limit = 20): Promise<Transaction[] | null> {
-    const session = await getSession()
+  export async function getTransactions(limit = 20, snapshot?: FundingSnapshot): Promise<Transaction[] | null> {
+    const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
     try {
-      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/credits/transactions`, {
+      const res = await fundedAtlasFetch(session, `${API_BASE}/api/credits/transactions`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
       if (!res.ok) return null
@@ -2295,11 +2559,13 @@ export namespace OpenScience {
   let billingMirrorGeneration = 0
   let billingMirrorTail: Promise<void> = Promise.resolve()
 
-  async function readBillingCompatibility(session: OpenScienceSession): Promise<BillingCompatibility> {
+  async function readBillingCompatibility(
+    session: OpenScienceSession | FundingSnapshot,
+  ): Promise<BillingCompatibility> {
     const headers = { Authorization: `Bearer ${session.api_key}` }
     const [accessResult, legacyResult] = await Promise.allSettled([
-      authenticatedAtlasFetch(session, `${API_BASE}/api/cli/access`, { headers }),
-      authenticatedAtlasFetch(session, `${API_BASE}/api/cli/billing-mode`, { headers }),
+      fundedAtlasFetch(session, `${API_BASE}/api/cli/access`, { headers }),
+      fundedAtlasFetch(session, `${API_BASE}/api/cli/billing-mode`, { headers }),
     ])
     const accessResponse = accessResult.status === "fulfilled" ? accessResult.value : undefined
     const legacyResponse = legacyResult.status === "fulfilled" ? legacyResult.value : undefined
@@ -2364,13 +2630,13 @@ export namespace OpenScience {
     await billingMirrorTail
   }
 
-  export async function getBillingMode(): Promise<BillingMode | null> {
-    const session = await getSession()
+  export async function getBillingMode(snapshot?: FundingSnapshot): Promise<BillingMode | null> {
+    const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
     const [{ Config }, access, credits] = await Promise.all([
       import("../config/config"),
       readBillingCompatibility(session),
-      getCredits().catch(() => null),
+      getCredits(session).catch(() => null),
     ])
     const configured = (await Config.getGlobal()).billing?.llm
     const fallback = access.legacy
