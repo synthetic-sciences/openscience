@@ -59,17 +59,39 @@ if (!Script.preview) {
   }
   const sourceExists = await $`git cat-file -e ${source}^{commit}`.quiet().nothrow()
   if (sourceExists.exitCode !== 0) throw new Error(`Draft release source ${source} is not present in the checkout`)
-  if (source !== checkout) {
-    throw new Error(
-      `Release ${tag} is pinned to ${source}, but this workflow runs at ${checkout}. Rerun the original workflow or dispatch it from ${tag} so npm provenance stays truthful.`,
-    )
-  }
   const marker = release.body.match(/<!-- openscience-release-source:([0-9a-f]{40}) -->/i)?.[1]
   if (!marker) throw new Error(`Draft release ${tag} is missing its immutable artifact-source marker`)
   const artifactSource = marker
   const artifactSourceExists = await $`git cat-file -e ${artifactSource}^{commit}`.quiet().nothrow()
   if (artifactSourceExists.exitCode !== 0) {
     throw new Error(`Draft release artifact source ${artifactSource} is not present in the checkout`)
+  }
+  if (source !== checkout) {
+    const exactVersion = process.env.OPENSCIENCE_VERSION?.trim()
+    if (!exactVersion || process.env.GITHUB_REF !== "refs/heads/main" || source !== artifactSource) {
+      throw new Error(
+        `Release ${tag} is pinned to ${source}, but this workflow runs at ${checkout}. Only an exact-version main-branch resume from the unchanged artifact source is allowed.`,
+      )
+    }
+    const ancestor = await $`git merge-base --is-ancestor ${source} ${checkout}`.quiet().nothrow()
+    if (ancestor.exitCode !== 0) {
+      throw new Error(`Release workflow checkout ${checkout} is not descended from immutable source ${source}`)
+    }
+    const changed = await $`git diff --name-only ${source}..${checkout}`
+      .text()
+      .then((value) => value.trim().split("\n").filter(Boolean))
+    const allowed = new Set([
+      ".github/workflows/publish.yml",
+      "backend/cli/test/installation/release-order.test.ts",
+      "tooling/repo/version.ts",
+    ])
+    const unexpected = changed.filter((file) => !allowed.has(file))
+    if (unexpected.length) {
+      throw new Error(
+        `Exact-version resume checkout changes files outside guarded release infrastructure: ${unexpected.join(", ")}`,
+      )
+    }
+    console.log(`Using repaired release workflow ${checkout} to resume immutable artifact source ${source}`)
   }
   if (source !== artifactSource) {
     const subject = await $`git show -s --format=%s ${source}`.text().then((value) => value.trim())

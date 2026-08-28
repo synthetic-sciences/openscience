@@ -24,6 +24,10 @@ on:
         options:
           - signed
           - unsigned
+      desktop_resume_manifest:
+        description: "Optional reviewed JSON binding pre-existing desktop assets to this exact version, source, release mode, and sha256 digests"
+        required: false
+        type: string
 
 # One release at a time. Keying the group on the inputs let a `patch` and a
 # `minor` dispatch run concurrently and race on tags and the GitHub release.
@@ -332,10 +336,77 @@ jobs:
     outputs:
       cache_key: ${{ inputs.release_mode == 'signed' && format('cli-build-signed-{0}', needs.version.outputs.version) || format('cli-build-{0}', needs.version.outputs.version) }}
 
+  desktop-resume:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      trusted_assets: ${{ steps.plan.outputs.trusted_assets }}
+    steps:
+      - name: Bind pre-existing desktop installers to a reviewed resume manifest
+        id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_RELEASE_MODE: ${{ inputs.release_mode }}
+          DESKTOP_RESUME_MANIFEST: ${{ inputs.desktop_resume_manifest }}
+        run: |
+          set -euo pipefail
+          release_assets="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
+          desktop_assets="$(jq -cS '
+            [.assets[] | select(
+              .name == "OpenScience-mac-arm64.dmg" or
+              .name == "OpenScience-mac-x64.dmg" or
+              .name == "OpenScience-windows-x64.exe" or
+              .name == "OpenScience-linux-x64.AppImage" or
+              .name == "OpenScience-linux-arm64.AppImage"
+            )]
+          ' <<<"$release_assets")"
+          jq -e 'all(.[]; .state == "uploaded" and (.size | type == "number" and . > 0) and (.digest | test("^sha256:[0-9a-f]{64}$")))' \
+            <<<"$desktop_assets" >/dev/null || {
+              echo "::error::A pre-existing desktop installer is incomplete or lacks a valid sha256 digest"
+              exit 1
+            }
+          actual="$(jq -cS 'map({key: .name, value: .digest}) | from_entries' <<<"$desktop_assets")"
+
+          if [[ -z "$DESKTOP_RESUME_MANIFEST" ]]; then
+            if [[ "$actual" != "{}" ]]; then
+              echo "::error::Pre-existing desktop installers require a reviewed desktop resume manifest"
+              exit 1
+            fi
+            echo 'trusted_assets={}' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          jq -e \
+            --arg version "$OPENSCIENCE_VERSION" \
+            --arg source "$OPENSCIENCE_SOURCE" \
+            --arg mode "$OPENSCIENCE_RELEASE_MODE" \
+            '.version == $version and .source == $source and .release_mode == $mode and
+             (.assets | type == "object") and
+             all(.assets[]; type == "string" and test("^sha256:[0-9a-f]{64}$"))' \
+            <<<"$DESKTOP_RESUME_MANIFEST" >/dev/null || {
+              echo "::error::Desktop resume manifest does not match this version, source, mode, and digest contract"
+              exit 1
+            }
+          expected="$(jq -cS '.assets' <<<"$DESKTOP_RESUME_MANIFEST")"
+          if [[ "$expected" != "$actual" ]]; then
+            echo "::error::Desktop resume manifest entries must exactly match the pre-existing desktop installers"
+            exit 1
+          fi
+          echo "trusted_assets=$expected" >> "$GITHUB_OUTPUT"
+
   build-desktop:
     needs:
       - version
       - sign-macos-cli
+      - desktop-resume
     strategy:
       fail-fast: false
       matrix:
@@ -375,28 +446,79 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check for an existing immutable desktop installer
+        id: existing
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          DESKTOP_ASSET: ${{ matrix.asset }}
+          TRUSTED_DESKTOP_ASSETS: ${{ needs.desktop-resume.outputs.trusted_assets }}
+        run: |
+          set -euo pipefail
+          existing="$(gh release view "$OPENSCIENCE_TAG" --json assets --jq '.assets[] | select(.name == env.DESKTOP_ASSET)')"
+          expected_digest="$(jq -r --arg name "$DESKTOP_ASSET" '.[$name] // empty' <<<"$TRUSTED_DESKTOP_ASSETS")"
+          if [[ -z "$existing" ]]; then
+            if [[ -n "$expected_digest" ]]; then
+              echo "::error::$DESKTOP_ASSET vanished after the desktop resume plan was frozen"
+              exit 1
+            fi
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ -z "$expected_digest" ]]; then
+            echo "::error::$DESKTOP_ASSET appeared after the desktop resume plan was frozen"
+            exit 1
+          fi
+          if [[ "$(jq -r .state <<<"$existing")" != "uploaded" ]]; then
+            echo "::error::$DESKTOP_ASSET exists but is not fully uploaded"
+            exit 1
+          fi
+          size="$(jq -r .size <<<"$existing")"
+          if [[ ! "$size" =~ ^[0-9]+$ ]] || (( size <= 0 )); then
+            echo "::error::$DESKTOP_ASSET exists but is empty"
+            exit 1
+          fi
+          digest="$(jq -r .digest <<<"$existing")"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::$DESKTOP_ASSET exists without a valid sha256 digest"
+            exit 1
+          fi
+          if [[ ! "$expected_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || [[ "$digest" != "$expected_digest" ]]; then
+            echo "::error::$DESKTOP_ASSET does not match its reviewed desktop resume manifest digest"
+            exit 1
+          fi
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.existing.outputs.found != 'true'
         with:
           ref: ${{ needs.version.outputs.source }}
 
       - uses: ./.github/actions/setup-bun
+        if: steps.existing.outputs.found != 'true'
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.existing.outputs.found != 'true'
         with:
           node-version: "24"
 
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.existing.outputs.found != 'true'
         with:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
           key: ${{ needs.sign-macos-cli.outputs.cache_key }}
+          enableCrossOsArchive: ${{ runner.os == 'Windows' }}
           fail-on-cache-miss: true
 
-      - run: bun install --frozen-lockfile
+      - if: steps.existing.outputs.found != 'true'
+        run: bun install --frozen-lockfile
 
       - name: Require release signing credentials
-        if: inputs.release_mode == 'signed' && matrix.signing != 'none'
+        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing != 'none'
         shell: bash
         run: |
           test -n "$CSC_LINK" || { echo "::error::Missing desktop code-signing certificate"; exit 1; }
@@ -414,14 +536,14 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Make sidecar executable
-        if: matrix.target != 'win'
+        if: steps.existing.outputs.found != 'true' && matrix.target != 'win'
         shell: bash
         run: chmod +x "$OPENSCIENCE_DESKTOP_SIDECAR"
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
 
       - name: Build signed desktop installer
-        if: inputs.release_mode == 'signed'
+        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed'
         shell: bash
         run: bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
         env:
@@ -436,7 +558,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Build unsigned desktop installer
-        if: inputs.release_mode == 'unsigned'
+        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'unsigned'
         shell: bash
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
@@ -450,6 +572,7 @@ jobs:
           bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
 
       - name: Verify or upload immutable desktop installer
+        if: steps.existing.outputs.found != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -458,7 +581,14 @@ jobs:
         run: |
           set -euo pipefail
           installer="frontend/desktop/dist/$DESKTOP_ASSET"
-          [[ -s "$installer" ]]
+          if [[ "${{ matrix.target }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
+            produced="frontend/desktop/dist/OpenScience-linux-x86_64.AppImage"
+            [[ -s "$produced" ]] && mv "$produced" "$installer"
+          fi
+          [[ -s "$installer" ]] || {
+            echo "::error::electron-builder did not produce $DESKTOP_ASSET"
+            exit 1
+          }
           existing="$(gh release view "$OPENSCIENCE_TAG" --json assets --jq '.assets[] | select(.name == env.DESKTOP_ASSET) | .digest' || true)"
           if [[ -z "$existing" ]]; then
             gh release upload "$OPENSCIENCE_TAG" "$installer"
@@ -645,6 +775,65 @@ jobs:
             frontend/workspace/dist/version.json
           key: ${{ needs.sign-macos-cli.outputs.cache_key }}
           fail-on-cache-miss: true
+
+      - name: Verify desktop assets and checksum manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
+          expected=(
+            OpenScience-mac-arm64.dmg
+            OpenScience-mac-x64.dmg
+            OpenScience-windows-x64.exe
+            OpenScience-linux-x64.AppImage
+            OpenScience-linux-arm64.AppImage
+          )
+          : > desktop-checksums.txt
+          for name in "${expected[@]}"; do
+            asset="$(jq -c --arg name "$name" '.assets[] | select(.name == $name)' <<<"$assets")"
+            [[ -n "$asset" ]] || {
+              echo "::error::$OPENSCIENCE_TAG is missing $name"
+              exit 1
+            }
+            [[ "$(jq -r .state <<<"$asset")" == "uploaded" ]] || {
+              echo "::error::$name is not fully uploaded"
+              exit 1
+            }
+            size="$(jq -r .size <<<"$asset")"
+            if [[ ! "$size" =~ ^[0-9]+$ ]] || (( size <= 0 )); then
+              echo "::error::$name is empty"
+              exit 1
+            fi
+            digest="$(jq -r .digest <<<"$asset")"
+            [[ "$digest" == sha256:* ]] || {
+              echo "::error::$name has no sha256 digest"
+              exit 1
+            }
+            printf '%s  %s\n' "${digest#sha256:}" "$name" >> desktop-checksums.txt
+          done
+
+          checksum_asset="$(jq -c '.assets[] | select(.name == "desktop-checksums.txt")' <<<"$assets" || true)"
+          if [[ -z "$checksum_asset" ]]; then
+            gh release upload "$OPENSCIENCE_TAG" desktop-checksums.txt
+            exit 0
+          fi
+
+          [[ "$(jq -r .state <<<"$checksum_asset")" == "uploaded" ]]
+          (( $(jq -r .size <<<"$checksum_asset") > 0 ))
+          existing_digest="$(jq -r .digest <<<"$checksum_asset")"
+          actual_digest="sha256:$(sha256sum desktop-checksums.txt | awk '{print $1}')"
+          [[ "$existing_digest" == "$actual_digest" ]] || {
+            echo "::error::desktop-checksums.txt already exists with different bytes; refusing to clobber"
+            exit 1
+          }
+          gh release download "$OPENSCIENCE_TAG" --pattern desktop-checksums.txt --dir "$RUNNER_TEMP"
+          cmp --silent desktop-checksums.txt "$RUNNER_TEMP/desktop-checksums.txt" || {
+            echo "::error::desktop-checksums.txt digest matched but downloaded bytes differed"
+            exit 1
+          }
 
       - name: Publish
         run: ./tooling/repo/publish.ts

@@ -64,7 +64,7 @@ test("production publish requires the synsci launcher to ship with the wrapper",
   expect(publish).toContain('OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"')
 })
 
-test("exact-version resumes stay pinned to their immutable workflow and artifact sources", async () => {
+test("exact-version resumes keep artifacts pinned while allowing guarded release-infrastructure repairs", async () => {
   const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
   const version = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/version.ts")).text()
 
@@ -77,7 +77,14 @@ test("exact-version resumes stay pinned to their immutable workflow and artifact
   expect(version).toContain("targetCommitish")
   expect(version).toContain("openscience-release-source:${checkout}")
   expect(version).toContain("source !== checkout")
-  expect(version).toContain("dispatch it from ${tag} so npm provenance stays truthful")
+  expect(version).toContain('process.env.GITHUB_REF !== "refs/heads/main"')
+  expect(version).toContain("source !== artifactSource")
+  expect(version).toContain("git merge-base --is-ancestor ${source} ${checkout}")
+  expect(version).toContain("git diff --name-only ${source}..${checkout}")
+  expect(version).toContain('".github/workflows/publish.yml"')
+  expect(version).toContain('"backend/cli/test/installation/release-order.test.ts"')
+  expect(version).toContain('"tooling/repo/version.ts"')
+  expect(version).toContain("changes files outside guarded release infrastructure")
 })
 
 test("production release caches exact builds and packed npm artifacts by version", async () => {
@@ -108,12 +115,14 @@ test("production release keeps signed publishing as the default and ships instal
   const preflight = workflow.slice(workflow.indexOf("\n  macos-signing-preflight:"), workflow.indexOf("\n  version:"))
   const sign = workflow.slice(workflow.indexOf("\n  sign-macos-cli:"), workflow.indexOf("\n  verify-native-cli:"))
   const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
+  const desktopUpload = desktop.slice(desktop.indexOf("Verify or upload immutable desktop installer"))
   const prepare = workflow.slice(workflow.indexOf("\n  prepare-npm:"), workflow.indexOf("\n  publish:"))
   const publish = workflow.slice(workflow.indexOf("\n  publish:"), workflow.indexOf("\n  deployment:"))
 
   expect(input).toContain("default: signed")
   expect(input).toContain("- signed")
   expect(input).toContain("- unsigned")
+  expect(input).toContain("desktop_resume_manifest:")
   expect(workflow.indexOf("macos-signing-preflight:")).toBeLessThan(workflow.indexOf("\n  version:"))
   expect(preflight).toContain("if: inputs.release_mode == 'signed'")
   expect(preflight).toContain("Publishing unsigned native CLI archives and desktop installers")
@@ -137,7 +146,10 @@ test("production release keeps signed publishing as the default and ships instal
   expect(sign).toContain("format('cli-build-{0}', needs.version.outputs.version)")
   expect(desktop).not.toContain("build-desktop:\n    if: inputs.release_mode == 'signed'")
   expect(desktop).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
-  expect(desktop).toContain("if: inputs.release_mode == 'signed' && matrix.signing != 'none'")
+  expect(desktop).toContain("enableCrossOsArchive: ${{ runner.os == 'Windows' }}")
+  expect(desktop).toContain(
+    "if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing != 'none'",
+  )
   expect(desktop).toContain("Build signed desktop installer")
   expect(desktop).toContain("Build unsigned desktop installer")
   expect(desktop).toContain('OPENSCIENCE_DESKTOP_SIGNED: "true"')
@@ -147,11 +159,89 @@ test("production release keeps signed publishing as the default and ships instal
   expect(desktop).toContain('gh release upload "$OPENSCIENCE_TAG"')
   expect(desktop).not.toContain('gh release upload "$OPENSCIENCE_RELEASE"')
   expect(desktop).not.toContain("--clobber")
+  expect(desktopUpload).toContain('produced="frontend/desktop/dist/OpenScience-linux-x86_64.AppImage"')
+  expect(desktopUpload).toContain('mv "$produced" "$installer"')
+  expect(desktopUpload.indexOf('mv "$produced" "$installer"')).toBeLessThan(
+    desktopUpload.indexOf('existing="$(gh release view "$OPENSCIENCE_TAG"'),
+  )
   expect(prepare).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
   expect(publish).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
   expect(publish).toContain("!cancelled() &&")
   expect(publish).toContain("needs.build-desktop.result == 'success'")
   expect(publish).not.toContain("inputs.release_mode == 'unsigned' || needs.build-desktop.result == 'success'")
+})
+
+test("production desktop resume freezes an exact reviewed asset set before any rebuild", async () => {
+  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
+  const plan = workflow.slice(workflow.indexOf("\n  desktop-resume:"), workflow.indexOf("\n  build-desktop:"))
+  const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
+  const steps = desktop.split("\n      - ").slice(1)
+  const findStep = (marker: string) => steps.find((step) => step.includes(marker)) ?? ""
+  const check = findStep("Check for an existing immutable desktop installer")
+
+  expect(plan).toContain("DESKTOP_RESUME_MANIFEST: ${{ inputs.desktop_resume_manifest }}")
+  expect(plan).toContain(".version == $version")
+  expect(plan).toContain(".source == $source")
+  expect(plan).toContain(".release_mode == $mode")
+  expect(plan).toContain("manifest entries must exactly match the pre-existing desktop installers")
+  expect(plan).toContain('actual="$(jq -cS')
+  expect(plan).toContain('expected="$(jq -cS')
+  expect(plan).toContain('all(.assets[]; type == "string"')
+  expect(plan).toContain('echo "trusted_assets=$expected"')
+  expect(desktop).toContain("- desktop-resume")
+  expect(desktop.indexOf("Check for an existing immutable desktop installer")).toBeLessThan(
+    desktop.indexOf("uses: actions/checkout@"),
+  )
+  expect(check).toContain("GH_REPO: ${{ github.repository }}")
+  expect(check).toContain("TRUSTED_DESKTOP_ASSETS: ${{ needs.desktop-resume.outputs.trusted_assets }}")
+  expect(check).toContain('echo "found=false" >> "$GITHUB_OUTPUT"')
+  expect(check).toContain('echo "found=true" >> "$GITHUB_OUTPUT"')
+  expect(check).toContain('$(jq -r .state <<<"$existing")')
+  expect(check).toContain("(( size <= 0 ))")
+  expect(check).toContain("^sha256:[0-9a-f]{64}$")
+  expect(check).toContain("appeared after the desktop resume plan was frozen")
+  expect(check).toContain("vanished after the desktop resume plan was frozen")
+  expect(check).toContain('[[ "$digest" != "$expected_digest" ]]')
+  expect(check).not.toContain("|| true")
+
+  for (const marker of [
+    "uses: actions/checkout@",
+    "uses: ./.github/actions/setup-bun",
+    "uses: actions/setup-node@",
+    "uses: actions/cache/restore@",
+    "run: bun install --frozen-lockfile",
+    "name: Require release signing credentials",
+    "name: Make sidecar executable",
+    "name: Build signed desktop installer",
+    "name: Build unsigned desktop installer",
+    "name: Verify or upload immutable desktop installer",
+  ]) {
+    expect(findStep(marker)).toContain("steps.existing.outputs.found != 'true'")
+  }
+})
+
+test("production publish finalizes a complete immutable desktop checksum manifest", async () => {
+  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
+  const publish = workflow.slice(workflow.indexOf("\n  publish:"), workflow.indexOf("\n  deployment:"))
+  const finalize = publish.slice(
+    publish.indexOf("Verify desktop assets and checksum manifest"),
+    publish.indexOf("      - name: Publish"),
+  )
+
+  expect(finalize).toContain("OpenScience-mac-arm64.dmg")
+  expect(finalize).toContain("OpenScience-mac-x64.dmg")
+  expect(finalize).toContain("OpenScience-windows-x64.exe")
+  expect(finalize).toContain("OpenScience-linux-x64.AppImage")
+  expect(finalize).toContain("OpenScience-linux-arm64.AppImage")
+  expect(finalize).toContain('[[ "$(jq -r .state <<<"$asset")" == "uploaded" ]]')
+  expect(finalize).toContain("(( size <= 0 ))")
+  expect(finalize).toContain('[[ "$digest" == sha256:* ]]')
+  expect(finalize).toContain("printf '%s  %s\\n'")
+  expect(finalize).toContain('actual_digest="sha256:$(sha256sum desktop-checksums.txt')
+  expect(finalize).toContain('[[ "$existing_digest" == "$actual_digest" ]]')
+  expect(finalize).toContain('cmp --silent desktop-checksums.txt "$RUNNER_TEMP/desktop-checksums.txt"')
+  expect(finalize).toContain('gh release upload "$OPENSCIENCE_TAG" desktop-checksums.txt')
+  expect(finalize).not.toContain("--clobber")
 })
 
 test("desktop packaging explicitly separates signed and unsigned installers", async () => {
