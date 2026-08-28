@@ -16,6 +16,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  GH_REPO: ${{ github.repository }}
+
 jobs:
   resolve:
     runs-on: ubuntu-24.04

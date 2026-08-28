@@ -171,6 +171,7 @@ test("desktop backfill wraps the immutable public runtime without release or npm
   ).text()
 
   expect(workflow).toContain("ref: refs/tags/v${{ inputs.version }}")
+  expect(workflow).toContain("GH_REPO: ${{ github.repository }}")
   expect(workflow).toContain("openscience-release-source:")
   expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"')
   expect(workflow).toContain('args+=("-c.mac.identity=-" "-c.mac.notarize=false")')
