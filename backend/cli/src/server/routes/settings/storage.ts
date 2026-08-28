@@ -10,17 +10,54 @@ import { lazy } from "@/util/lazy"
 
 const pointerPath = path.join(Global.Path.config, "data-location")
 
-async function dirSize(target: string): Promise<number> {
-  const entries = await fs.readdir(target, { withFileTypes: true }).catch(() => [])
-  const sizes = await Promise.all(
-    entries.map(async (entry) => {
-      if (entry.isSymbolicLink()) return 0
-      const full = path.join(target, entry.name)
-      if (entry.isDirectory()) return dirSize(full)
-      return (await fs.stat(full).catch(() => undefined))?.size ?? 0
-    }),
-  )
-  return sizes.reduce((sum, size) => sum + size, 0)
+function allocatedBytes(stat: Awaited<ReturnType<typeof fs.stat>>) {
+  const blocks = Number(stat.blocks)
+  const allocated = blocks * 512
+  // A sparse file can legitimately occupy zero blocks while exposing a large
+  // logical size. Disk usage must report the allocated bytes, including zero.
+  if (Number.isSafeInteger(blocks) && blocks >= 0 && Number.isSafeInteger(allocated)) return allocated
+  const size = Number(stat.size)
+  return Number.isSafeInteger(size) && size >= 0 ? size : 0
+}
+
+function missing(error: unknown) {
+  return !!error && typeof error === "object" && "code" in error && error.code === "ENOENT"
+}
+
+async function optional<T>(operation: Promise<T>): Promise<T | undefined> {
+  return operation.catch((error) => {
+    if (missing(error)) return undefined
+    throw error
+  })
+}
+
+async function dirSize(target: string, seen: Set<string>): Promise<number> {
+  const entries = (await optional(fs.readdir(target, { withFileTypes: true }))) ?? []
+  const directories: string[] = []
+  const files: string[] = []
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) continue
+    const full = path.join(target, entry.name)
+    if (entry.isDirectory()) directories.push(full)
+    else files.push(full)
+  }
+
+  let bytes = 0
+  for (let index = 0; index < files.length; index += 64) {
+    const sizes = await Promise.all(
+      files.slice(index, index + 64).map(async (file) => {
+        const stat = await optional(fs.stat(file))
+        if (!stat?.isFile()) return 0
+        const identity = `${stat.dev}:${stat.ino}`
+        if (seen.has(identity)) return 0
+        seen.add(identity)
+        return allocatedBytes(stat)
+      }),
+    )
+    bytes += sizes.reduce((sum, size) => sum + size, 0)
+  }
+  for (const directory of directories) bytes += await dirSize(directory, seen)
+  return bytes
 }
 
 const Usage = z.object({
@@ -31,8 +68,80 @@ const Usage = z.object({
   state_dir: z.string(),
   pointer: z.string().nullable(),
   total_bytes: z.number(),
+  scanning: z.boolean(),
+  updated_at: z.string().nullable(),
+  scan_error: z.string().nullable(),
   entries: z.array(z.object({ name: z.string(), path: z.string(), bytes: z.number(), kind: z.enum(["dir", "file"]) })),
 })
+
+type UsageEntry = z.infer<typeof Usage>["entries"][number]
+type ScanResult = { total_bytes: number; entries: UsageEntry[]; updated_at: string }
+const usageScan: {
+  dataDir?: string
+  value?: ScanResult
+  promise?: Promise<void>
+  error?: string
+  errorAt?: number
+} = {}
+
+async function scanUsage(dataDir: string): Promise<ScanResult> {
+  const dirents = await fs.readdir(dataDir, { withFileTypes: true })
+  const entries: UsageEntry[] = []
+  const seen = new Set<string>()
+  for (const entry of dirents
+    .filter((item) => !item.isSymbolicLink())
+    .toSorted((a, b) => a.name.localeCompare(b.name))) {
+    const full = path.join(dataDir, entry.name)
+    const stat = entry.isDirectory() ? undefined : await optional(fs.stat(full))
+    const identity = stat?.isFile() ? `${stat.dev}:${stat.ino}` : undefined
+    const bytes = entry.isDirectory()
+      ? await dirSize(full, seen)
+      : !stat?.isFile() || (identity && seen.has(identity))
+        ? 0
+        : allocatedBytes(stat)
+    if (identity) seen.add(identity)
+    entries.push({
+      name: entry.name,
+      path: full,
+      bytes,
+      kind: entry.isDirectory() ? "dir" : "file",
+    })
+  }
+  entries.sort((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name))
+  return {
+    total_bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
+    entries,
+    updated_at: new Date().toISOString(),
+  }
+}
+
+function refreshUsage(dataDir: string) {
+  if (usageScan.dataDir !== dataDir) {
+    usageScan.dataDir = dataDir
+    usageScan.value = undefined
+    usageScan.promise = undefined
+    usageScan.error = undefined
+    usageScan.errorAt = undefined
+  }
+  const fresh = usageScan.value && Date.now() - Date.parse(usageScan.value.updated_at) < 30_000
+  const recentError = usageScan.errorAt !== undefined && Date.now() - usageScan.errorAt < 30_000
+  if (fresh || recentError || usageScan.promise) return
+  usageScan.promise = scanUsage(dataDir)
+    .then((value) => {
+      if (usageScan.dataDir !== dataDir) return
+      usageScan.value = value
+      usageScan.error = undefined
+      usageScan.errorAt = undefined
+    })
+    .catch((error) => {
+      if (usageScan.dataDir !== dataDir) return
+      usageScan.error = message(error)
+      usageScan.errorAt = Date.now()
+    })
+    .finally(() => {
+      if (usageScan.dataDir === dataDir) usageScan.promise = undefined
+    })
+}
 
 const Moved = z.object({
   ok: z.literal(true),
@@ -60,24 +169,7 @@ export const StorageRoutes = lazy(() =>
       }),
       async (c) => {
         const dataDir = await fs.realpath(Global.Path.data)
-        const dirents = await fs.readdir(dataDir, { withFileTypes: true }).catch(() => [])
-        const entries = await Promise.all(
-          dirents
-            .filter((entry) => !entry.isSymbolicLink())
-            .map(async (entry) => {
-              const full = path.join(dataDir, entry.name)
-              const bytes = entry.isDirectory()
-                ? await dirSize(full)
-                : ((await fs.stat(full).catch(() => undefined))?.size ?? 0)
-              return {
-                name: entry.name,
-                path: full,
-                bytes,
-                kind: entry.isDirectory() ? ("dir" as const) : ("file" as const),
-              }
-            }),
-        )
-        entries.sort((a, b) => b.bytes - a.bytes)
+        refreshUsage(dataDir)
         const pointer = await Bun.file(pointerPath)
           .text()
           .then((text) => text.trim() || null)
@@ -89,8 +181,11 @@ export const StorageRoutes = lazy(() =>
           cache_dir: Global.Path.cache,
           state_dir: Global.Path.state,
           pointer,
-          total_bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
-          entries,
+          total_bytes: usageScan.value?.total_bytes ?? 0,
+          entries: usageScan.value?.entries ?? [],
+          scanning: Boolean(usageScan.promise),
+          updated_at: usageScan.value?.updated_at ?? null,
+          scan_error: usageScan.error ?? null,
         })
       },
     )

@@ -1326,6 +1326,7 @@ export class Jobs extends HeyApiClient {
       secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       approval?: string
       sessionID: string
+      default_uploads?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1352,6 +1353,7 @@ export class Jobs extends HeyApiClient {
             { in: "body", key: "secret_refs" },
             { in: "body", key: "approval" },
             { in: "body", key: "sessionID" },
+            { in: "body", key: "default_uploads" },
           ],
         },
       ],
@@ -1411,6 +1413,7 @@ export class Jobs extends HeyApiClient {
       secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       approval?: string
       sessionID: string
+      default_uploads?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1437,6 +1440,7 @@ export class Jobs extends HeyApiClient {
             { in: "body", key: "secret_refs" },
             { in: "body", key: "approval" },
             { in: "body", key: "sessionID" },
+            { in: "body", key: "default_uploads" },
           ],
         },
       ],
@@ -2362,6 +2366,7 @@ export class Project2 extends HeyApiClient {
          */
         start?: string
       }
+      archived?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2375,6 +2380,7 @@ export class Project2 extends HeyApiClient {
             { in: "body", key: "name" },
             { in: "body", key: "icon" },
             { in: "body", key: "commands" },
+            { in: "body", key: "archived" },
           ],
         },
       ],

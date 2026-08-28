@@ -84,6 +84,7 @@ export namespace Project {
         created: z.number(),
         updated: z.number(),
         initialized: z.number().optional(),
+        archived: z.number().optional(),
       }),
       sandboxes: z.array(z.string()),
     })
@@ -637,6 +638,7 @@ export namespace Project {
       name: z.string().optional(),
       icon: Info.shape.icon.optional(),
       commands: Info.shape.commands.optional(),
+      archived: z.boolean().optional(),
     }),
     async (input) => {
       const result = await Storage.update<Info>(["project", input.projectID], (draft) => {
@@ -657,6 +659,10 @@ export namespace Project {
           }
           draft.commands.start = start
           if (!draft.commands.start) draft.commands = undefined
+        }
+
+        if (input.archived !== undefined) {
+          draft.time.archived = input.archived ? Date.now() : undefined
         }
 
         draft.time.updated = Date.now()

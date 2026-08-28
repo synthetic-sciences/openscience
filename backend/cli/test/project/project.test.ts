@@ -752,6 +752,20 @@ describe("Project.fromDirectory with worktrees", () => {
   })
 })
 
+describe("Project.update", () => {
+  test("persists and clears the server-owned home archive state", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    const archived = await Project.update({ projectID: project.id, archived: true })
+    expect(archived.time.archived).toBeNumber()
+    expect((await Project.list()).find((item) => item.id === project.id)?.time.archived).toBeNumber()
+
+    const restored = await Project.update({ projectID: project.id, archived: false })
+    expect(restored.time.archived).toBeUndefined()
+  })
+})
+
 describe("Project.discover", () => {
   test("should discover favicon.png in root", async () => {
     await using tmp = await tmpdir({ git: true })

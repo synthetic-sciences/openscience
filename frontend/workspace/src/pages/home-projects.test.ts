@@ -21,6 +21,7 @@ describe("home project preparation", () => {
         { id: "prj_newer", worktree: "/work/newer", time: { created: 20, updated: 50 } },
         { id: "prj_older", worktree: "/work/older", time: { created: 10, updated: 70 } },
         { id: "prj_hidden", worktree: "/work/hidden", time: { created: 100 } },
+        { id: "prj_archived", worktree: "/work/archived", time: { created: 200, archived: 201 } },
       ],
       new Set(["/work/hidden"]),
     )
@@ -48,6 +49,20 @@ describe("home project preparation", () => {
       ["prj_pinned", true],
       ["prj_recent", false],
     ])
+  })
+
+  test("keeps archived projects recoverable without mixing them into active projects", async () => {
+    const subject = await load()
+    if (!subject) return
+
+    const projects = [
+      { id: "prj_active", worktree: "/work/active", time: { created: 30 } },
+      { id: "prj_old", worktree: "/work/old", time: { created: 10, archived: 40 } },
+      { id: "prj_new", name: "Archived study", worktree: "/work/new", time: { created: 20, archived: 60 } },
+    ]
+
+    expect(subject.prepareProjects(projects, new Set()).map((project) => project.id)).toEqual(["prj_active"])
+    expect(subject.prepareArchivedProjects(projects).map((project) => project.id)).toEqual(["prj_new", "prj_old"])
   })
 
   test("filters case-insensitively by project name, folder path, or opaque ID", async () => {
