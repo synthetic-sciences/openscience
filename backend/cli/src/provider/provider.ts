@@ -29,6 +29,7 @@ import { createVertex } from "@ai-sdk/google-vertex"
 import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import { createDeepSeek } from "@ai-sdk/deepseek"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
 import { createXai } from "@ai-sdk/xai"
@@ -423,6 +424,7 @@ export namespace Provider {
     "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
     "@ai-sdk/openai": createOpenAI,
     "@ai-sdk/openai-compatible": createOpenAICompatible,
+    "@ai-sdk/deepseek": createDeepSeek,
     "@openrouter/ai-sdk-provider": createOpenRouter,
     "@ai-sdk/xai": createXai,
     "@ai-sdk/mistral": createMistral,
@@ -455,6 +457,25 @@ export namespace Provider {
     openai: "https://api.openai.com/v1",
     google: "https://generativelanguage.googleapis.com/v1beta",
     xai: "https://api.x.ai/v1",
+    deepseek: "https://api.deepseek.com",
+  }
+
+  /** DeepSeek V4 thinking rejects tool_choice even though the AI SDK's generic
+   * tool preparation emits "auto". Omit only that unsupported wire field;
+   * non-thinking V4 and every other request keep the caller's exact choice. */
+  export function normalizeDeepSeekRequestBody(value: unknown): unknown {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return value
+    const body = value as Record<string, unknown>
+    if (typeof body.model !== "string" || !body.model.includes("deepseek-v4")) return value
+    if (!Array.isArray(body.tools) || body.tools.length === 0) return value
+    const thinking =
+      typeof body.thinking === "object" && body.thinking !== null && !Array.isArray(body.thinking)
+        ? (body.thinking as Record<string, unknown>)
+        : undefined
+    if (thinking?.type === "disabled" || !Object.hasOwn(body, "tool_choice")) return value
+    const normalized = { ...body }
+    delete normalized.tool_choice
+    return normalized
   }
 
   /** Detect a stale managed-proxy path without trusting its origin. This is
@@ -943,6 +964,24 @@ export namespace Provider {
 
       // Neither an own key nor a managed route — nothing to route with.
       return { autoload: false, options: { headers } }
+    },
+    deepseek: async () => {
+      // The official DeepSeek route is BYOK-only. Keep its credential and
+      // endpoint independent from OpenRouter so an explicit OpenRouter model
+      // remains an exact relay choice.
+      const auth = await Auth.get("deepseek").catch(() => undefined)
+      const authKey = auth?.type === "api" ? auth.key : undefined
+      const envKey = Env.get("DEEPSEEK_API_KEY")
+      const apiKey = isByokKey(authKey) ? authKey : isByokKey(envKey) ? envKey : undefined
+      const configured = Env.get("DEEPSEEK_BASE_URL")
+      const baseURL = configured && !hasManagedProxyPath(configured) ? configured : "https://api.deepseek.com"
+      return {
+        autoload: false,
+        options: {
+          ...(apiKey ? { apiKey } : {}),
+          baseURL,
+        },
+      }
     },
     meta: async () => {
       // Meta is BYOK-only in the client. Managed Muse Spark now routes through
@@ -1448,7 +1487,10 @@ export namespace Provider {
       api: {
         id: model.id,
         url: provider.api!,
-        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
+        npm:
+          provider.id === "deepseek"
+            ? "@ai-sdk/deepseek"
+            : (model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible"),
       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
@@ -1657,11 +1699,13 @@ export namespace Provider {
           api: {
             id: model.id ?? existingModel?.api.id ?? modelID,
             npm:
-              model.provider?.npm ??
-              provider.npm ??
-              existingModel?.api.npm ??
-              modelsDev[providerID]?.npm ??
-              "@ai-sdk/openai-compatible",
+              providerID === "deepseek"
+                ? "@ai-sdk/deepseek"
+                : (model.provider?.npm ??
+                  provider.npm ??
+                  existingModel?.api.npm ??
+                  modelsDev[providerID]?.npm ??
+                  "@ai-sdk/openai-compatible"),
             url: baseURL ?? provider.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
@@ -2212,6 +2256,11 @@ export namespace Provider {
         // A configured `timeout` is still an opt-in total wall-clock cap.
         const fetchFn = customFetch ?? fetch
         const opts = { ...(init ?? {}) }
+
+        if (model.api.npm === "@ai-sdk/deepseek" && opts.body && opts.method === "POST") {
+          const body = normalizeDeepSeekRequestBody(JSON.parse(opts.body as string))
+          opts.body = JSON.stringify(body)
+        }
 
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:

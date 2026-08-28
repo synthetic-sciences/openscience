@@ -21,6 +21,7 @@ describe("tool registry agent boundaries", () => {
           expect(ids).not.toContain("notebook")
           expect(ids).not.toContain("rkernel")
           expect(ids).toContain("compute_job")
+          expect(ids).toContain("scientific_capability")
           expect(ids).toContain("research_contract")
           expect(ids).not.toContain("modal")
           expect(ids).not.toContain("query_uniprot")
@@ -39,6 +40,7 @@ describe("tool registry agent boundaries", () => {
         const ids = advertised.map((tool) => tool.id)
 
         expect(ids.filter((id) => id === "compute_job")).toHaveLength(1)
+        expect(ids.filter((id) => id === "scientific_capability")).toHaveLength(1)
         expect(ids).not.toContain("modal")
         expect(await ToolRegistry.ids()).not.toContain("modal")
 

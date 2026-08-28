@@ -38,6 +38,7 @@ import { AtlasTool } from "./atlas"
 import { AtlasRecordTool } from "./atlas-record"
 import { ModalTool } from "./modal"
 import { ComputeJobTool } from "./compute-job"
+import { ScientificCapabilityTool } from "./scientific-capability"
 import { ResearchContractTool } from "./research-contract"
 import { State } from "@/project/state"
 import { ProjectTrust } from "@/project/trust"
@@ -175,6 +176,7 @@ export namespace ToolRegistry {
       GenerateImageTool,
       ArtifactTool,
       ResearchContractTool,
+      ScientificCapabilityTool,
       ComputeJobTool,
       ...custom.filter((tool) => !compatibility.has(tool.id) && tool.id !== PythonTool.id && tool.id !== RTool.id),
     ]
@@ -243,7 +245,7 @@ export namespace ToolRegistry {
             return !!agent?.name && ARTIFACT_AGENTS.includes(agent.name)
           }
 
-          if (t.id === "compute_job") {
+          if (t.id === "compute_job" || t.id === "scientific_capability") {
             return !!agent?.name && (COMPUTE_AGENTS.includes(agent.name) || agent.name === "researchagent-test")
           }
 
