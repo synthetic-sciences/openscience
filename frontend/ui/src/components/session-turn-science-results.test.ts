@@ -79,10 +79,23 @@ test("activity keeps the full provider reasoning mounted while the turn streams"
 })
 
 test("assistant text remains in the literal trace instead of a generated Response block", () => {
+  const parts = readFileSync(fileURLToPath(new URL("./message-part.tsx", import.meta.url)), "utf8")
   expect(source).toContain("hideTools={!props.stepsExpanded}")
   expect(source).not.toContain("hideResponsePart")
   expect(source).not.toContain("ui.sessionTurn.summary.response")
   expect(source).toContain('data-slot="session-turn-response-section"')
+  expect(source).toContain("const traceByID")
+  expect(source).toContain("const traceIDs")
+  expect(source).toContain("<For each={traceIDs()}>")
+  expect(source).not.toContain("<Index each={trace()}")
+  expect(source).toContain("hideCopy />")
+  expect(parts).toContain("<Show when={!props.hideCopy}>")
+})
+
+test("a provider failure has exactly one owner in expanded and collapsed activity", () => {
+  expect(source).toContain("props.stepsExpanded && error()")
+  expect(source).toContain("error() && !props.stepsExpanded")
+  expect(source.match(/<SessionErrorNotice error=\{value\(\)\} \/>/g)).toHaveLength(2)
 })
 
 test("live status skips invisible lifecycle parts and recognizes remote compute", () => {

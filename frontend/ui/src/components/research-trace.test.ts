@@ -45,6 +45,18 @@ describe("research trace presentation", () => {
     expect(trace[0]?.part.type === "reasoning" && trace[0].part.text).toBe("provider-visible reasoning bytes")
   })
 
+  test("deduplicates a streaming text update by part ID without moving its chronological position", () => {
+    const trace = visibleResearchTrace([
+      narrative("reason-1", "reasoning", "First thought", "msg"),
+      narrative("response", "text", "Draft response", "msg"),
+      narrative("reason-2", "reasoning", "Refining the answer", "msg"),
+      narrative("response", "text", "Final response", "msg"),
+    ])
+
+    expect(trace.map((item) => item.part.id)).toEqual(["reason-1", "response", "reason-2"])
+    expect(trace[1]?.part.type === "text" && trace[1].part.text).toBe("Final response")
+  })
+
   test("does not hide reasoning between otherwise related tool families", () => {
     const trace = visibleResearchTrace([
       narrative("reason-1", "reasoning", "First thought", "msg-1"),

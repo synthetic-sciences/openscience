@@ -97,7 +97,22 @@ function skillMatches(entry: CompletedSkillEntry) {
  * compact grouping is reserved for secondary child-agent summaries below.
  */
 export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
-  const visible = entries.filter((entry) => {
+  // Streaming reconciliation can briefly surface the same durable part twice
+  // while an insert and update are coalesced. Keep the first chronological
+  // position but render the newest value for that stable part ID.
+  const positions = new Map<string, number>()
+  const deduped: ResearchTraceEntry[] = []
+  for (const entry of entries) {
+    const position = positions.get(entry.part.id)
+    if (position === undefined) {
+      positions.set(entry.part.id, deduped.length)
+      deduped.push(entry)
+      continue
+    }
+    deduped[position] = entry
+  }
+
+  const visible = deduped.filter((entry) => {
     if (entry.hidden || lifecycle(entry.part)) return false
     if (
       entry.part.type === "reasoning" &&

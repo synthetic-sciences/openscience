@@ -16,19 +16,7 @@ import { findLast } from "@synsci/util/array"
 import { getDirectory, getFilename } from "@synsci/util/path"
 
 import { Binary } from "@synsci/util/binary"
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Index,
-  Match,
-  on,
-  onCleanup,
-  ParentProps,
-  Show,
-  Switch,
-} from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part, QuestionPrompt } from "./message-part"
 import {
@@ -158,8 +146,18 @@ function AssistantTrace(props: {
     })
     return visibleResearchTrace(entries)
   })
+  const traceByID = createMemo(() => new Map(trace().map((entry) => [entry.part.id, entry])))
+  const traceIDs = createMemo(() => trace().map((entry) => entry.part.id), [], { equals: same })
 
-  return <Index each={trace()}>{(entry) => <Part part={entry().part} message={entry().message} />}</Index>
+  return (
+    <For each={traceIDs()}>
+      {(partID) => (
+        <Show when={traceByID().get(partID)}>
+          {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
+        </Show>
+      )}
+    </For>
+  )
 }
 
 type ResearchTraceEntry = { part: PartType; message: AssistantMessage }
