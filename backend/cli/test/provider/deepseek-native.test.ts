@@ -86,7 +86,12 @@ describe("native DeepSeek provider", () => {
   })
 
   test("honors the official BYOK base URL while an explicit OpenRouter selection stays exact", async () => {
-    await using tmp = await tmpdir({ config: { model: "openrouter/deepseek/deepseek-r1" } })
+    await using tmp = await tmpdir({
+      config: {
+        model: "openrouter/deepseek/deepseek-r1",
+        provider: { deepseek: { whitelist: ["deepseek-v4-flash"] } },
+      },
+    })
     await Instance.provide({
       directory: tmp.path,
       init: async () => {
@@ -99,7 +104,9 @@ describe("native DeepSeek provider", () => {
         try {
           const providers = await Provider.list()
           expect(providers.deepseek.options.baseURL).toBe("https://deepseek.example.test")
-          expect(providers.deepseek.models["deepseek-chat"].api.npm).toBe("@ai-sdk/deepseek")
+          const directModels = Object.values(providers.deepseek.models)
+          expect(directModels.length).toBeGreaterThan(0)
+          expect(directModels.every((model) => model.api.npm === "@ai-sdk/deepseek")).toBe(true)
           expect(await Provider.defaultModel()).toEqual({
             providerID: "openrouter",
             modelID: "deepseek/deepseek-r1",
