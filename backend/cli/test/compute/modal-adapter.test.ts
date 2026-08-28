@@ -19,7 +19,145 @@ describe("ModalAdapter image", () => {
   })
 })
 
+describe("ModalAdapter client lifecycle", () => {
+  test("reuses one client for repeated operations under the same credential identity", () => {
+    const created: string[] = []
+    const closed: string[] = []
+    const pool = new ModalAdapter.ClientPool((context) => {
+      const id = `${context.tokenId}:${context.environment ?? "default"}`
+      created.push(id)
+      return { close: () => closed.push(id) }
+    })
+    const context = { tokenId: "token", tokenSecret: "secret", environment: "main" }
+
+    const first = pool.acquire(context)
+    const second = pool.acquire({ ...context })
+
+    expect(second).toBe(first)
+    expect(created).toEqual(["token:main"])
+    expect(pool.size).toBe(1)
+    pool.dispose()
+    expect(closed).toEqual(["token:main"])
+    expect(pool.size).toBe(0)
+    expect(() => pool.acquire(context)).toThrow("Modal client pool is disposed")
+    pool.dispose()
+    expect(closed).toEqual(["token:main"])
+  })
+
+  test("bounds transports across repeated credential or environment changes", () => {
+    const pool = new ModalAdapter.ClientPool(() => ({ close() {} }), 2)
+    pool.acquire({ tokenId: "first", tokenSecret: "secret", environment: "main" })
+    pool.acquire({ tokenId: "first", tokenSecret: "secret", environment: "staging" })
+
+    expect(() => pool.acquire({ tokenId: "second", tokenSecret: "other", environment: "main" })).toThrow(
+      "Restart OpenScience before using Modal again",
+    )
+    expect(pool.size).toBe(2)
+  })
+})
+
 describe("ModalAdapter sandbox lifecycle", () => {
+  test("streams incremental stdout chunks without rereading the full remote log", async () => {
+    const chunks: Array<{ value: string; mode: string | undefined }> = []
+    const stream = new ReadableStream<string>({
+      start(controller) {
+        controller.enqueue("first\n")
+        controller.enqueue("second\n")
+        controller.close()
+      },
+    })
+
+    await ModalAdapter.consumeOutput(
+      stream,
+      async (value, mode) => {
+        chunks.push({ value, mode })
+      },
+      "replace",
+    )
+
+    expect(chunks).toEqual([
+      { value: "first\n", mode: "replace" },
+      { value: "second\n", mode: "append" },
+    ])
+  })
+
+  test("clears a stale recovered snapshot when the durable log is empty", async () => {
+    const chunks: Array<{ value: string; mode: string | undefined }> = []
+    const stream = new ReadableStream<string>({
+      start(controller) {
+        controller.close()
+      },
+    })
+
+    await ModalAdapter.consumeOutput(
+      stream,
+      async (value, mode) => {
+        chunks.push({ value, mode })
+      },
+      "replace",
+    )
+
+    expect(chunks).toEqual([{ value: "", mode: "replace" }])
+  })
+
+  test("holds partial lines so redaction cannot be bypassed across stream chunks", async () => {
+    const chunks: string[] = []
+    const stream = new ReadableStream<string>({
+      start(controller) {
+        controller.enqueue("token=secret-")
+        controller.enqueue("value\nnext")
+        controller.enqueue(" line\n")
+        controller.close()
+      },
+    })
+
+    await ModalAdapter.consumeOutput(stream, async (value) => {
+      chunks.push(value)
+    })
+    expect(chunks).toEqual(["token=secret-value\n", "next line\n"])
+  })
+
+  test("bounds a pathological line without exposing a partial secret or retaining the full log", async () => {
+    const chunks: string[] = []
+    const stream = new ReadableStream<string>({
+      start(controller) {
+        controller.enqueue("x".repeat(700_000))
+        controller.enqueue(`${"y".repeat(700_000)}\nnext\n`)
+        controller.close()
+      },
+    })
+
+    await ModalAdapter.consumeOutput(stream, async (value) => {
+      chunks.push(value)
+    })
+
+    expect(chunks).toEqual(["[OpenScience omitted an output line larger than 1048576 characters]\n", "next\n"])
+  })
+
+  test("classifies permanent recovery failures without treating transient control errors as terminal", () => {
+    expect(ModalAdapter.recoveryFailure(Object.assign(new Error("invalid token"), { code: 16 }))).toEqual({
+      retryable: false,
+      kind: "unauthorized",
+    })
+    expect(ModalAdapter.recoveryFailure(Object.assign(new Error("missing"), { status: 404 }))).toEqual({
+      retryable: false,
+      kind: "not_found",
+    })
+    expect(ModalAdapter.recoveryFailure(new ModalAdapter.OwnershipError("wrong owner"))).toEqual({
+      retryable: false,
+      kind: "ownership_mismatch",
+    })
+    expect(ModalAdapter.recoveryFailure(Object.assign(new Error("resource exhausted"), { code: 8 }))).toEqual({
+      retryable: true,
+    })
+    expect(ModalAdapter.recoveryFailure(Object.assign(new Error("rate limited"), { status: 429 }))).toEqual({
+      retryable: true,
+    })
+    expect(ModalAdapter.recoveryFailure(new Error("temporary control-plane disconnect"))).toEqual({
+      retryable: true,
+    })
+  })
+
   test("assigns each governed job durable storage without exposing its project path", () => {
     const first = ModalAdapter.volume("/work/research/private-project", "job-one")
     const repeat = ModalAdapter.volume("/work/research/private-project", "job-one")

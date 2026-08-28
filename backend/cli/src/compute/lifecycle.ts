@@ -63,7 +63,11 @@ export namespace ComputeLifecycle {
     z.object({ type: z.literal("collect") }),
     z.object({ type: z.literal("deliver") }),
     z.object({ type: z.literal("reject"), message: z.string().optional() }),
-    z.object({ type: z.literal("delivery_fail"), message: z.string().optional() }),
+    z.object({
+      type: z.literal("delivery_fail"),
+      kind: ErrorKind.optional(),
+      message: z.string().optional(),
+    }),
     z.object({ type: z.literal("retry_delivery") }),
     z.object({ type: z.literal("cancel") }),
     z.object({ type: z.literal("interrupt") }),
@@ -171,7 +175,7 @@ export namespace ComputeLifecycle {
         ...state,
         delivery: "failed",
         recoverable: true,
-        error_kind: "harvest_failed",
+        error_kind: event.kind ?? "harvest_failed",
         ...(event.message ? { system_hint: event.message } : {}),
       })
     }

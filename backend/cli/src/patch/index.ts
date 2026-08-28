@@ -33,6 +33,18 @@ export namespace Patch {
     is_end_of_file?: boolean
   }
 
+  export class UpdateChunkMismatch extends Error {
+    constructor(
+      message: string,
+      readonly chunkIndex: number,
+      readonly chunk: UpdateFileChunk,
+      readonly searchStart: number,
+    ) {
+      super(message)
+      this.name = "UpdateChunkMismatch"
+    }
+  }
+
   export interface ApplyPatchAction {
     changes: Map<string, ApplyPatchFileChange>
     patch: string
@@ -361,12 +373,17 @@ export namespace Patch {
     const replacements: Array<[number, number, string[]]> = []
     let lineIndex = 0
 
-    for (const chunk of chunks) {
+    for (const [chunkIndex, chunk] of chunks.entries()) {
       // Handle context-based seeking
       if (chunk.change_context) {
         const contextIdx = seekSequence(originalLines, [chunk.change_context], lineIndex)
         if (contextIdx === -1) {
-          throw new Error(`Failed to find context '${chunk.change_context}' in ${filePath}`)
+          throw new UpdateChunkMismatch(
+            `Failed to find context '${chunk.change_context}' in ${filePath}`,
+            chunkIndex,
+            chunk,
+            lineIndex,
+          )
         }
         lineIndex = contextIdx + 1
       }
@@ -399,7 +416,12 @@ export namespace Patch {
         replacements.push([found, pattern.length, newSlice])
         lineIndex = found + pattern.length
       } else {
-        throw new Error(`Failed to find expected lines in ${filePath}:\n${chunk.old_lines.join("\n")}`)
+        throw new UpdateChunkMismatch(
+          `Failed to find expected lines in ${filePath}:\n${chunk.old_lines.join("\n")}`,
+          chunkIndex,
+          chunk,
+          lineIndex,
+        )
       }
     }
 

@@ -4,6 +4,8 @@ Use Bash for builds, tests, packages, Git, utilities, and scripts. Prefer file t
 
 Use research_search or webfetch for internet retrieval, not curl or wget. Use `compute_job` action `wait` for detached compute instead of shell polling or sleep.
 
+Do not emit timestamp, marker, no-op, or repeated readiness commands. Before a long run, use at most one bounded preflight that checks all necessary inputs together, then launch immediately when it passes.
+
 Quote paths containing spaces. Output beyond ${maxLines} lines or ${maxBytes} bytes is saved automatically. Run independent calls together; join dependent commands only when later work must stop after failure.
 
 Commit, push, or open one PR only when requested. Inspect status and diff, stage only intended paths, never bypass hooks or force-push, and never amend a pushed commit or push directly to `main`/`master`.

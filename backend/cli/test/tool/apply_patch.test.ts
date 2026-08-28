@@ -88,6 +88,70 @@ describe("tool.apply_patch freeform", () => {
     await expect(execute({ patchText: emptyPatch }, ctx)).rejects.toThrow("patch rejected: empty patch")
   })
 
+  test("reports the exact failed update hunk and its nearby context", async () => {
+    await using fixture = await tmpdir({ git: true })
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        await fs.writeFile(
+          path.join(fixture.path, "paper.tex"),
+          ["\\usepackage{doi}", "", "The complete methods paragraph stays on one physical line.", ""].join("\n"),
+          "utf8",
+        )
+        const patchText = [
+          "*** Begin Patch",
+          "*** Update File: paper.tex",
+          "@@",
+          "-\\usepackage{doi}",
+          "+\\usepackage{doi}",
+          "+\\usepackage{xurl}",
+          "@@",
+          "-Sample registry fields came from DOI",
+          "+Sample registry fields came from a verified DOI",
+          "*** End Patch",
+        ].join("\n")
+
+        await expect(execute({ patchText }, ctx)).rejects.toThrow(/Failed update hunk: 2/)
+        await expect(execute({ patchText }, ctx)).rejects.toThrow(
+          /The complete methods paragraph stays on one physical line/,
+        )
+      },
+    })
+  })
+
+  test("anchors a completely stale hunk near its deep-file location instead of the file header", async () => {
+    await using fixture = await tmpdir({ git: true })
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const lines = Array.from({ length: 220 }, (_, index) => `unchanged supporting line ${index + 1}`)
+        lines[172] =
+          "Sample registry records are now loaded from the canonical PANGAEA DOI with verified input checksums."
+        await fs.writeFile(path.join(fixture.path, "long-report.tex"), `${lines.join("\n")}\n`, "utf8")
+        const patchText = [
+          "*** Begin Patch",
+          "*** Update File: long-report.tex",
+          "@@",
+          "-Sample registry fields came from the PANGAEA DOI with reported input checksums.",
+          "+Sample registry fields came from the verified source DOI.",
+          "*** End Patch",
+        ].join("\n")
+
+        const failure = await execute({ patchText }, ctx).catch((error: Error) => error)
+        expect(failure).toBeInstanceOf(Error)
+        if (!(failure instanceof Error)) throw new Error("Expected a stale patch failure")
+        expect(failure.message).toContain("Failed update hunk: 1")
+        expect(failure.message).toContain("Current bounded context (lines 169-188)")
+        expect(failure.message).toContain("173: Sample registry records are now loaded")
+        expect(failure.message).not.toMatch(/(?:^|\n)1: unchanged supporting line 1(?:\n|$)/)
+      },
+    })
+  })
+
   test("applies a fully preflighted multi-file patch in one transaction", async () => {
     await using fixture = await tmpdir({ git: true })
     const { ctx, calls } = makeCtx()

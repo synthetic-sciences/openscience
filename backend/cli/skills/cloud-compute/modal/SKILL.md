@@ -1,99 +1,53 @@
 ---
 name: modal-serverless-gpu
-description: Run governed Modal sandbox jobs through OpenScience's compute_job JobBroker. Use for one-off CPU/GPU commands, explicit file uploads and captures, dependency provisioning, resource selection, approval, dispatch, and results. This skill does not install or invoke the Modal Python SDK or CLI.
+description: Run approved CPU or GPU work through OpenScience compute_job on the user's configured Modal account. Use for isolated scientific scripts, dependency provisioning, durable outputs, logs, status, cancellation, and recovery. Never invoke the Modal SDK or CLI directly.
 category: cloud-compute
-version: 4.0.0
+version: 5.0.0
 author: Synthetic Sciences
 license: MIT
 tags: [Infrastructure, Serverless, GPU, Cloud, Modal, Sandboxes, Compute]
 ---
 
-# Modal through OpenScience Compute
+# Modal through `compute_job`
 
-OpenScience uses Modal as a trusted control-plane provider. The agent prepares ordinary project files and calls `compute_job` with target `{ kind: "modal" }`. The JobBroker presents an exact paid-dispatch approval card, resolves credentials only after approval, creates the sandbox through OpenScience's JavaScript adapter, and returns status and logs.
+Modal is an OpenScience compute target, not an agent-controlled SDK. Prepare ordinary workspace files and call `compute_job` with target `{ kind: "modal" }`. The JobBroker owns credentials, the reviewed dispatch card, sandbox lifecycle, logs, cancellation, recovery, and output delivery.
 
-This is different from developing a standalone Modal Python application. For the OpenScience path:
+## Contract
 
-- Do not inspect `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, or `~/.modal.toml`.
-- Do not install or import the Modal Python package.
-- Do not run or recommend `modal run`, `modal deploy`, `modal serve`, or `modal setup`.
-- Do not use `modal.App`, Modal decorators, functions, volumes, or Python SDK sandboxes.
-- Do not ask for approval in chat. A chat response such as `yes` is not dispatch authorization; the `compute_job` plan card owns approval.
-- Do not send the user to recreate a job manually in Compute when `compute_job` is available.
-- Only claim dispatch, status, or completion reported by the tool or Compute job record.
+- Read `<compute-capability>` for the configured/disabled/unconfigured state. Do not probe availability by launching work.
+- Never inspect Modal credentials or `~/.modal.toml`; never install or invoke the Modal Python SDK or CLI.
+- Commands are ordinary shell commands inside `/workspace`, such as `python analysis.py`.
+- The `packages` list builds Python dependencies into the reviewed image before execution. Pin important versions.
+- With no `cwd`, omitted `uploads` stages safe ordinary files from session scratch. With a `cwd`, it stages from that directory. Pass explicit globs to narrow inputs; pass `uploads: []` only when the job needs no workspace files.
+- Declare every output needed after the run in `artifacts`. Undeclared files are not delivered.
+- Use GPU `none` for CPU work. Choose GPU count, CPU, memory, and timeout from the workload; do not invent price or duration guarantees.
+- Network `none` is the safe default. Use unrestricted network only when the command genuinely needs remote access and the approval card shows it.
+- Refer to stored secrets only by symbolic name. Never place secret values in commands, files, prompts, logs, or plans.
+- The `compute_job` card is the authorization boundary. Do not request a second prose approval or treat chat text as dispatch authorization.
 
-## Availability
+## Workflow
 
-Use the current `<compute-capability>` system section as the authority:
+1. Prepare a reproducible script and small inputs in session scratch.
+2. Call `compute_job` with `action: "plan"` when parameters still need inspection, otherwise `action: "start"`.
+3. Include a clear name, purpose, command, target, packages, resources, upload selection, and artifact globs.
+4. After approval, use the returned job ID for status, logs, artifacts, cancellation, delivery retry, or release. Do not create a duplicate job merely because a long job is still running.
+5. Report only states and outputs returned by `compute_job`. Preserve failures and uncertainty.
 
-- **Configured and enabled:** prepare files and call `compute_job` with the Modal target.
-- **Configured but disabled:** explain that new jobs are blocked until the user enables Modal in **Settings → Compute**.
-- **Not configured:** direct the user to **Settings → Compute**. Never fall back to local credentials or CLI setup.
-
-## Preparing a job
-
-When the user asks to run work on Modal:
-
-1. Create or update ordinary project files when useful. Prefer self-contained scripts that work in the configured image and under its network policy.
-2. Call `compute_job` with `action: "start"`, target `{ kind: "modal" }`, the job name, purpose, ordinary command, explicit `uploads`, `artifacts`, and `packages`, plus image/GPU/resources when needed.
-3. The tool displays the exact app, image, packages, GPU, network, timeout, inputs, outputs, and paid-run warning. Wait for that approval; do not ask for a second confirmation in chat.
-4. Report the status and log returned by the tool. The same job is visible under **Compute → Jobs**.
-
-Commands execute inside the configured sandbox image. They are ordinary shell commands:
-
-```text
-python analysis.py
-```
-
-They are not Modal launch commands.
-
-## CPU and GPU selection
-
-Use GPU type `none` for CPU-only work. Do not request a GPU for small data processing, linear regression, or other CPU-sufficient jobs merely because Modal supports GPUs.
-
-Common GPU starting points:
-
-| Workload | Suggested GPU |
-| --- | --- |
-| CPU-only analysis | `none` |
-| Small inference or CUDA smoke test | `T4` |
-| Cost-conscious modern inference | `L4` |
-| Medium training or inference | `A10G` or `L40S` |
-| Large-model training | `A100-80GB` or `H100` |
-
-Treat GPU prices and availability as provider-controlled and time-sensitive. Do not invent a precise cost or duration estimate.
-
-## Inputs, outputs, and dependencies
-
-Only files matching **Files to upload** are copied into the sandbox. Secrets, `.git`, `node_modules`, and `.openscience` are denied. List every required script, configuration file, and small data input explicitly.
-
-Use **Files to capture** for outputs that must return to the project, for example:
-
-```text
-outputs/**/*.csv, outputs/**/*.png
-```
-
-The default image does not promise third-party Python packages. Put requirements such as `numpy==2.3.2` and `scikit-learn==1.7.1` in the tool's `packages` field. OpenScience installs them into an image layer before the sandbox starts; package installation is part of the signed approval plan and does not depend on runtime network access.
-
-## Example tool call
-
-For a CPU-only regression script already created at `linear_regression.py`:
+Example shape:
 
 ```json
 {
   "action": "start",
-  "name": "Linear regression smoke test",
-  "purpose": "Fit the regression model and save its reviewed evaluation metrics.",
-  "command": "python linear_regression.py",
+  "name": "Fit robustness models",
+  "purpose": "Run the preregistered analysis and preserve tables and figures.",
+  "command": "python analysis.py",
   "target": { "kind": "modal" },
-  "uploads": ["linear_regression.py"],
-  "artifacts": ["outputs/results.json"],
-  "packages": ["numpy==2.3.2", "scikit-learn==1.7.1"],
+  "uploads": ["analysis.py", "data/*.csv"],
+  "artifacts": ["outputs/**/*.csv", "outputs/**/*.png"],
+  "packages": ["numpy==2.3.2", "statsmodels==0.14.5"],
   "gpu": "none",
-  "resources": { "time_minutes": 10 }
+  "resources": { "time_minutes": 30 }
 }
 ```
 
-## Standalone Modal SDK requests
-
-If the user explicitly asks to author an independent Modal Python application, explain that it is a separate workflow outside governed OpenScience Compute. You may discuss architecture conceptually, but do not install the SDK, access credentials, execute Modal CLI commands, or imply that OpenScience's enabled provider authorizes that workflow. The legacy reference files in this skill directory are not execution instructions for OpenScience Compute.
+If the provider reports a control-plane interruption, keep the same job ID and inspect status later. A transient inability to reattach is not evidence that the remote computation failed. Cancel or release only when the user requests it or the scientific workflow explicitly requires it.

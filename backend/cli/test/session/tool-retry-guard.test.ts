@@ -581,7 +581,7 @@ test("an identical failed patch requires a reread before another write", async (
     "A patch already failed verification for analysis.py",
   )
   const revised = patchText.replace("missing old line", "observed current line")
-  await expect(ToolRetryGuard.assertApplyPatch(ctx, revised)).rejects.toThrow("analysis.py")
+  await expect(ToolRetryGuard.assertApplyPatch(ctx, revised)).resolves.toBeUndefined()
   const reread = {
     info: { id: "message_read", sessionID, role: "assistant" },
     parts: [

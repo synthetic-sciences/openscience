@@ -8,8 +8,39 @@ import { ModalUpload } from "./upload"
 import { ComputeSecrets } from "../secrets"
 
 export namespace ModalPlan {
-  const DENY = new Set([".git", "node_modules", ".openscience", ".modal.toml", ".ssh"])
-  const SECRET = /(^|\/)(?:\.env(?:\..*)?|.*\.(?:pem|key|p12|pfx))$/i
+  const DENY = new Set([
+    ".git",
+    ".openscience",
+    ".ssh",
+    ".aws",
+    ".azure",
+    ".kube",
+    ".gnupg",
+    ".docker",
+    ".huggingface",
+    ".cache",
+    ".conda",
+    ".venv",
+    "venv",
+    ".tox",
+    ".nox",
+    "node_modules",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".ipynb_checkpoints",
+    ".next",
+    ".turbo",
+    ".terraform",
+    ".terraform.d",
+    "dist",
+    "build",
+    "target",
+  ])
+  const DENY_PATH = /(^|\/)\.config\/(?:gcloud|gh|hub)(?:\/|$)/i
+  const SECRET =
+    /(^|\/)(?:\.env(?:\..*)?|\.modal\.toml|\.netrc|\.npmrc|\.pypirc|\.git-credentials|credentials(?:\.json)?|.*\.(?:pem|key|p12|pfx))$/i
 
   export const Schema = z.object({
     digest: z.string().length(64),
@@ -58,6 +89,7 @@ export namespace ModalPlan {
     resources?: { cpus?: number; gpus?: number; memory_gb?: number }
     timeoutMinutes: number
     uploads: string[]
+    deniedUploads?: "skip" | "error"
     outputs: string[]
     context: Pick<ModalAdapter.Context, "app" | "environment" | "network">
   }
@@ -83,7 +115,7 @@ export namespace ModalPlan {
 
   function forbidden(file: string) {
     const segments = file.split("/")
-    return segments.some((part) => DENY.has(part)) || SECRET.test(file)
+    return segments.some((part) => DENY.has(part)) || DENY_PATH.test(file) || SECRET.test(file)
   }
 
   function uploadPatterns(patterns: string[], label: string) {
@@ -130,7 +162,12 @@ export namespace ModalPlan {
     return new Set(files.filter((file) => matcher.ignores(file)))
   }
 
-  export async function files(root: string, patterns: string[], label = "Modal") {
+  export async function files(
+    root: string,
+    patterns: string[],
+    label = "Modal",
+    options: Pick<StagingOptions, "denied"> = {},
+  ) {
     const project = await Filesystem.canonical(root)
     if (!project) throw new Error(`${label} project directory is unavailable: ${root}`)
     const files = new Map<string, Omit<ModalAdapter.File, "sha256"> & { snapshot: ModalUpload.Snapshot }>()
@@ -141,7 +178,9 @@ export namespace ModalPlan {
       }
       const scan = new Bun.Glob(pattern).scan({ cwd: project, dot: true, onlyFiles: true, followSymlinks: true })
       for await (const file of scan) {
-        found.add(posix(file))
+        const relative = posix(file)
+        if (options.denied === "skip" && forbidden(relative)) continue
+        found.add(relative)
         if (found.size > ModalUpload.COUNT_LIMIT) {
           throw new Error(`${label} uploads exceed the ${ModalUpload.COUNT_LIMIT}-file approval limit`)
         }
@@ -150,7 +189,10 @@ export namespace ModalPlan {
     const excludes = await ignored(project, [...found])
     for (const relative of found) {
       if (excludes.has(relative)) continue
-      if (forbidden(relative)) throw new Error(`${label} upload policy denied: ${relative}`)
+      if (forbidden(relative)) {
+        if (options.denied === "skip") continue
+        throw new Error(`${label} upload policy denied: ${relative}`)
+      }
       const canonical = await Filesystem.canonical(path.resolve(project, relative))
       if (!canonical || !Filesystem.contains(project, canonical)) {
         throw new Error(`${label} upload escaped the project: ${relative}`)
@@ -159,7 +201,10 @@ export namespace ModalPlan {
       const canonicalIgnored =
         resolved === relative ? excludes.has(resolved) : (await ignored(project, [resolved])).has(resolved)
       if (canonicalIgnored) continue
-      if (forbidden(resolved)) throw new Error(`${label} upload policy denied: ${relative}`)
+      if (forbidden(resolved)) {
+        if (options.denied === "skip") continue
+        throw new Error(`${label} upload policy denied: ${relative}`)
+      }
       if (files.has(canonical)) continue
       const snapshot = await ModalUpload.inspect(canonical, label)
       files.set(canonical, {
@@ -282,7 +327,7 @@ export namespace ModalPlan {
   }
 
   export async function prepare(input: Input): Promise<Prepared> {
-    const upload = await files(input.cwd, input.uploads)
+    const upload = await files(input.cwd, input.uploads, "Modal", { denied: input.deniedUploads })
     const value = {
       provider: "modal" as const,
       purpose: input.purpose?.trim() || "Research computation",

@@ -2009,7 +2009,7 @@ describe("ComputeJobs Modal governance", () => {
     expect((await ComputeJobs.wait(id, { root, workspace: tmp.path, timeout: 5_000 })).status).toBe("succeeded")
   })
 
-  test("fails a running job after the third plain recovery error", async () => {
+  test("keeps a running job recoverable after repeated control-plane errors", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
     const id = "exhausted-recovery"
@@ -2082,21 +2082,132 @@ describe("ComputeJobs Modal governance", () => {
     ])
 
     await ComputeJobs.list({ root, workspace: tmp.path, credentials, provider })
+    const deferred = await (async function poll(attempts = 100): Promise<ComputeJobs.Job> {
+      const current = await ComputeJobs.get(id, { root, workspace: tmp.path })
+      if (current?.recovery_attempts === 3) return current
+      if (!attempts) throw new Error("Timed out waiting for deferred Modal recovery")
+      await Bun.sleep(20)
+      return poll(attempts - 1)
+    })()
+
+    expect(deferred.status).toBe("running")
+    expect(deferred.error).toBeUndefined()
+    expect(deferred.lifecycle).toMatchObject({ execution: "running", resource: "active" })
+    expect(Date.parse(deferred.recovery_retry_at ?? "")).toBeGreaterThan(Date.now())
+    await Bun.sleep(20)
+    await ComputeJobs.list({ root, workspace: tmp.path, credentials, provider })
+    await Bun.sleep(20)
+    expect(calls).toEqual({ recover: 1, close: 0, release: 0 })
+    expect(await Bun.file(path.join(root, "jobs", `${id}.events.log`)).text()).toContain(
+      "Modal recovery attempt 3 deferred",
+    )
+  })
+
+  test("stops retrying a permanent recovery failure without releasing unknown launch admission", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const id = "permanent-recovery-failure"
+    const calls = { recover: 0, close: 0 }
+    const provider = modalProvider({
+      recover: async () => {
+        calls.recover++
+        throw Object.assign(new Error("Modal credentials are not authorized"), { code: 16 })
+      },
+      close: async () => {
+        calls.close++
+      },
+    })
+    const authority = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        return ExecutionAuthority.require({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          capability: "remote_job",
+        })
+      },
+    })
+    const job = ComputeJobs.Job.parse({
+      id,
+      name: "permanent recovery failure",
+      command: "true",
+      cwd: tmp.path,
+      target: { kind: "modal" },
+      target_label: "Modal",
+      scheduler: "none",
+      status: "running",
+      created_at: new Date(Date.now() - 60_000).toISOString(),
+      started_at: new Date(Date.now() - 59_000).toISOString(),
+      remote_id: "sandbox-permanent-recovery-failure",
+      authority,
+      lifecycle: { execution: "running", delivery: "none", resource: "active", recoverable: false },
+      modal: {
+        app: modal.app,
+        image: modal.image,
+        packages: [],
+        gpu: "none",
+        network: modal.network,
+        timeout_minutes: modal.timeoutMinutes,
+        uploads: [],
+        upload_bytes: 0,
+        approval: "a".repeat(64),
+        sdk: ModalAdapter.VERSION,
+        volume: provider.volume(tmp.path, id),
+      },
+    })
+    await fs.mkdir(root, { recursive: true })
+    await Bun.write(path.join(root, "jobs.json"), JSON.stringify([job]))
+
+    await ComputeJobs.list({ root, workspace: tmp.path, credentials, provider })
     const failed = await (async function poll(attempts = 100): Promise<ComputeJobs.Job> {
       const current = await ComputeJobs.get(id, { root, workspace: tmp.path })
-      if (current?.status === "failed") return current
-      if (!attempts) throw new Error("Timed out waiting for exhausted Modal recovery")
+      if (current?.lifecycle?.delivery === "failed") return current
+      if (!attempts) throw new Error("Timed out waiting for permanent Modal recovery failure")
       await Bun.sleep(20)
       return poll(attempts - 1)
     })()
 
     expect(failed.status).toBe("failed")
-    expect(failed.error).toContain("sandbox and volume unavailable")
-    expect(failed.lifecycle).toMatchObject({ delivery: "failed", resource: "unknown", recoverable: true })
-    await Bun.sleep(20)
+    expect(failed.lifecycle).toMatchObject({
+      execution: "failed",
+      delivery: "failed",
+      resource: "unknown",
+      recoverable: true,
+      error_kind: "unauthorized",
+    })
+    expect(failed.modal?.retained_volume).toBe(true)
+    expect(failed.recovery_retry_at).toBeUndefined()
     await ComputeJobs.list({ root, workspace: tmp.path, credentials, provider })
     await Bun.sleep(20)
-    expect(calls).toEqual({ recover: 1, close: 1, release: 0 })
+    expect(calls).toEqual({ recover: 1, close: 0 })
+
+    const request = {
+      name: "replacement after permanent failure",
+      command: "true",
+      target: { kind: "modal" as const },
+      gpu: "none",
+    }
+    const replacement = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const plan = await ComputeJobs.plan({ ...request, sessionID: session.id }, { root, workspace: tmp.path, modal })
+        return { session, plan }
+      },
+    })
+    await expect(
+      Instance.provide({
+        directory: tmp.path,
+        fn: () =>
+          ComputeJobs.start(
+            { ...request, sessionID: replacement.session.id, approval: replacement.plan.digest },
+            { root, workspace: tmp.path, modal, credentials, provider },
+          ),
+      }),
+    ).rejects.toThrow("Modal concurrency limit reached")
   })
 
   test("turns a rejected terminal recovery into one recoverable delivery failure", async () => {

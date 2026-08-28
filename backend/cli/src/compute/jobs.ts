@@ -206,6 +206,7 @@ export namespace ComputeJobs {
 
   export const Request = Input.extend({
     sessionID: z.string().startsWith("ses_"),
+    default_uploads: z.boolean().optional(),
   })
   export type Request = z.infer<typeof Request>
 
@@ -352,7 +353,6 @@ export namespace ComputeJobs {
   const claims = new Set<string>()
   const locks = new Map<string, Promise<void>>()
   const terminal = new Set<Status>(["succeeded", "failed", "cancelled", "interrupted"])
-  const recoveryLimit = 3
   const recoveryDelay = 15_000
 
   async function activate(key: string, runtime: Omit<Runtime, "dataRoot">): Promise<void> {
@@ -440,7 +440,10 @@ export namespace ComputeJobs {
   function reservesModal(job: Job) {
     if (job.target.kind !== "modal") return false
     const lifecycle = job.lifecycle ?? ComputeLifecycle.from(job.status)
-    if (terminal.has(job.status) && job.modal?.retained_volume) return false
+    // A retained Volume is not proof that the compute sandbox stopped. Keep
+    // admission reserved for every unknown resource until Modal confirms
+    // closure; otherwise a credential/control-plane failure can launch another
+    // paid job while the original sandbox is still billing.
     return !terminal.has(job.status) || lifecycle.resource !== "closed"
   }
 
@@ -546,12 +549,13 @@ export namespace ComputeJobs {
       .text()
       .catch(() => "")
     const records = text.split("\n").flatMap((line) => {
-      const match = line.match(/^\[([^\]]+)\] Modal recovery attempt (\d+)\/\d+ deferred/)
+      const match = line.match(/^\[([^\]]+)\] Modal recovery attempt (\d+)(?:\/\d+)? deferred(?: for (\d+) seconds)?/)
       if (!match) return []
       const time = Date.parse(match[1]!)
       const attempt = Number.parseInt(match[2]!, 10)
+      const delay = match[3] ? Number.parseInt(match[3], 10) * 1000 : recoveryDelay
       if (!Number.isFinite(time) || !Number.isSafeInteger(attempt)) return []
-      return [{ attempt, retry: time + recoveryDelay }]
+      return [{ attempt, retry: time + delay }]
     })
     return records.at(-1) ?? { attempt: 0, retry: 0 }
   }
@@ -567,6 +571,12 @@ export namespace ComputeJobs {
         await fs.unlink(temp).catch(() => undefined)
         throw error
       })
+  }
+
+  async function appendSnapshot(filepath: string, value: string) {
+    await using operation = await DataRootBarrier.enter(filepath)
+    await fs.mkdir(path.dirname(filepath), { recursive: true })
+    await fs.appendFile(filepath, OpenScience.redactSecrets(value), { mode: 0o600 })
   }
 
   async function preserve(root: string, error: unknown): Promise<never> {
@@ -1058,30 +1068,44 @@ export namespace ComputeJobs {
                           await deferModal(job, scope, error)
                           return
                         }
+                        const failure = ModalAdapter.recoveryFailure(error)
                         if (current && terminal.has(current.status) && current.lifecycle?.delivery === "pending") {
-                          await failModal(current, scope, credentials, error, provider)
+                          await failModal(
+                            current,
+                            scope,
+                            credentials,
+                            error,
+                            provider,
+                            false,
+                            failure.retryable ? undefined : failure.kind,
+                          )
                           return
                         }
                         if (!current || terminal.has(current.status)) return
+                        if (!failure.retryable) {
+                          await event(
+                            root,
+                            job.id,
+                            `Modal recovery stopped after a permanent ${failure.kind.replaceAll("_", " ")} error; retry after correcting the provider state`,
+                          )
+                          await failModal(current, scope, credentials, error, provider, true, failure.kind)
+                          return
+                        }
                         const message = OpenScience.redactSecrets(
                           error instanceof Error ? error.message : String(error),
                         )
                         const attempt = prior.attempt + 1
-                        if (attempt >= recoveryLimit) {
-                          await event(root, job.id, `Modal recovery failed after ${attempt} attempts: ${message}`)
-                          await failModal(current, scope, credentials, error, provider, true)
-                          return
-                        }
+                        const delay = Math.min(5 * 60_000, recoveryDelay * 2 ** Math.min(attempt - 1, 5))
                         await change(root, (jobs) => {
                           const stored = jobs.find((item) => item.id === job.id)
                           if (!stored) return
                           stored.recovery_attempts = attempt
-                          stored.recovery_retry_at = new Date(Date.now() + recoveryDelay).toISOString()
+                          stored.recovery_retry_at = new Date(Date.now() + delay).toISOString()
                         })
                         await event(
                           root,
                           job.id,
-                          `Modal recovery attempt ${attempt}/${recoveryLimit} deferred for ${recoveryDelay / 1000} seconds: ${message}`,
+                          `Modal recovery attempt ${attempt} deferred for ${delay / 1000} seconds: ${message}`,
                         )
                       })
                     } catch (error) {
@@ -1631,6 +1655,7 @@ export namespace ComputeJobs {
         : undefined,
       timeoutMinutes: timeout,
       uploads: input.uploads ?? [],
+      deniedUploads: input.default_uploads ? "skip" : "error",
       outputs: patterns,
       context,
     })
@@ -2715,8 +2740,8 @@ export namespace ComputeJobs {
       log: async (value) => {
         await event(scope.root, job.id, value)
       },
-      output: async (value) => {
-        await snapshot(log, value)
+      output: async (value, mode) => {
+        await (mode === "append" ? appendSnapshot(log, value) : snapshot(log, value))
       },
     })
     await completeModal(job, scope, context, result, provider)
@@ -2755,8 +2780,8 @@ export namespace ComputeJobs {
       log: async (value) => {
         await event(scope.root, job.id, value)
       },
-      output: async (value) => {
-        await snapshot(log, value)
+      output: async (value, mode) => {
+        await (mode === "append" ? appendSnapshot(log, value) : snapshot(log, value))
       },
     })
     await completeModal(Job.parse({ ...job, remote_id: id }), scope, context, result, provider)
@@ -2775,11 +2800,11 @@ export namespace ComputeJobs {
     const result = await (provider.collect
       ? provider.collect(context, spec, {
           log: async (value) => event(scope.root, job.id, value),
-          output: async (value) => snapshot(log, value),
+          output: async (value, mode) => (mode === "append" ? appendSnapshot(log, value) : snapshot(log, value)),
         })
       : provider.recover(context, spec, undefined, {
           log: async (value) => event(scope.root, job.id, value),
-          output: async (value) => snapshot(log, value),
+          output: async (value, mode) => (mode === "append" ? appendSnapshot(log, value) : snapshot(log, value)),
         }))
     await deliver(job.cwd!, result.outputs, expected, false)
     const captured = await captureModal(job, result.outputs)
@@ -2829,6 +2854,7 @@ export namespace ComputeJobs {
     error: unknown,
     provider: ModalProvider,
     retain = false,
+    kind?: ComputeLifecycle.ErrorKind,
   ): Promise<void> {
     const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
     await fs.mkdir(logsOf(scope.root), { recursive: true })
@@ -2843,7 +2869,7 @@ export namespace ComputeJobs {
         if (index < 0 || jobs[index]!.lifecycle?.delivery !== "pending") return
         const failed = move(
           jobs[index]!,
-          { type: "delivery_fail", message },
+          { type: "delivery_fail", kind, message },
           { capture_error: message, error: message },
         )
         const unknown = move(failed, { type: "lose" })
@@ -2851,25 +2877,31 @@ export namespace ComputeJobs {
       })
       return
     }
-    if (current.remote_id && current.cwd)
+    const closeable = kind !== "unauthorized" && kind !== "not_found" && kind !== "ownership_mismatch"
+    if (closeable && current.remote_id && current.cwd)
       await provider.close(context, current.remote_id, job.id, current.cwd).catch(() => undefined)
     await change(scope.root, (jobs) => {
       const index = jobs.findIndex((item) => item.id === job.id)
       if (index < 0 || terminal.has(jobs[index]!.status)) return
       const draft = move(
         jobs[index]!,
-        { type: "finish", outcome: "failed", message },
+        { type: "finish", outcome: "failed", kind, message },
         { completed_at: new Date().toISOString(), exit_code: null, error: message },
       )
       const ended = (() => {
         if (!retain) return move(draft, { type: "lose" })
         const collecting = move(draft, { type: "collect" })
-        const failed = move(collecting, { type: "delivery_fail", message })
+        const failed = move(collecting, { type: "delivery_fail", kind, message })
         return move(failed, { type: "lose" })
       })()
       jobs[index] = Job.parse({
         ...ended,
-        ...(retain ? { capture_error: message } : {}),
+        ...(retain
+          ? {
+              capture_error: message,
+              modal: jobs[index]!.modal ? { ...jobs[index]!.modal!, retained_volume: true } : undefined,
+            }
+          : {}),
         provenance: provenance(ended),
       })
     })
@@ -2941,7 +2973,11 @@ export namespace ComputeJobs {
             throw new Error(`Compute job ${id} has no recoverable Modal output`)
           }
           const draft = move(current, { type: "retry_delivery" }, { error: undefined, capture_error: undefined })
-          const updated = Job.parse({ ...draft, provenance: provenance(draft) })
+          const base = Job.parse({
+            ...draft,
+            modal: { ...current.modal, retained_volume: undefined },
+          })
+          const updated = Job.parse({ ...base, provenance: provenance(base) })
           jobs[index] = updated
           return updated
         })
@@ -2960,7 +2996,8 @@ export namespace ComputeJobs {
             try {
               await recoverModal(job, scope, context, provider)
             } catch (error) {
-              await failModal(job, scope, context, error, provider)
+              const failure = ModalAdapter.recoveryFailure(error)
+              await failModal(job, scope, context, error, provider, false, failure.retryable ? undefined : failure.kind)
             } finally {
               await deactivate(key)
             }

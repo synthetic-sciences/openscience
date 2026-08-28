@@ -228,12 +228,7 @@ export namespace ToolRetryGuard {
     const targets = patchTargets(patchText)
     const previous = failures.findLast((event) => {
       const priorText = event.input.patchText
-      if (typeof priorText !== "string") return false
-      if (patchHash(priorText) === expected) return true
-      if (!/failed to find expected lines|expected context/i.test(event.error)) return false
-      const priorTargets = patchTargets(priorText)
-      if (targets.length === 0 || priorTargets.length === 0) return false
-      return targets.some((target) => priorTargets.some((prior) => samePath(target, prior)))
+      return typeof priorText === "string" && patchHash(priorText) === expected
     })
     if (!previous) return
     const previousTargets = typeof previous.input.patchText === "string" ? patchTargets(previous.input.patchText) : []
