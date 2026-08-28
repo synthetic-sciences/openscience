@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { SETTINGS_PANELS, SETTINGS_PANEL_IDS, SETTINGS_SECTIONS } from "./registry"
+import { SETTINGS_PANELS, SETTINGS_PANEL_IDS, SETTINGS_PRIMARY_PANELS, SETTINGS_SECTIONS, panelRoot } from "./registry"
 
 const root = new URL("./", import.meta.url)
 const modules: Record<(typeof SETTINGS_PANEL_IDS)[number], string> = {
@@ -27,6 +27,22 @@ describe("settings registry source contract", () => {
         SETTINGS_PANELS.some((panel) => panel.section === section.id),
         section.id,
       ).toBe(true)
+    }
+  })
+
+  test("keeps seven primary destinations and valid progressive-disclosure children", () => {
+    expect(SETTINGS_PRIMARY_PANELS.map((panel) => panel.title)).toEqual([
+      "Models",
+      "Skills",
+      "Connectors",
+      "Compute",
+      "Security & access",
+      "Storage",
+      "General",
+    ])
+    for (const panel of SETTINGS_PANELS) {
+      expect(panelRoot(panel.id).parent).toBeUndefined()
+      if (panel.parent) expect(SETTINGS_PANEL_IDS).toContain(panel.parent)
     }
   })
 

@@ -895,6 +895,18 @@
   }
 }
 
+[data-component="trace-preflight-group"] {
+  [data-slot="trace-preflight-items"] {
+    display: grid;
+    padding: 2px 0 4px 18px;
+    border-left: 1px solid var(--border-weak-base);
+  }
+
+  [data-slot="trace-preflight-items"] > [data-component="tool-part-wrapper"] {
+    min-width: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-component="session-turn"] [data-slot="session-turn-collapsible-trigger-content"],
   [data-component="session-turn"] [data-slot="session-turn-trigger-icon"] {

@@ -61,7 +61,7 @@ import {
   toolErrorDisplay,
 } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
-import { formatTaskDuration, stripTaskMetadata, summarizeTaskActivity } from "./research-trace"
+import { formatTaskDuration, stripTaskMetadata, summarizeTaskActivity, traceFamily } from "./research-trace"
 
 export { ARTIFACT_TOOL, ToolRegistry, type ToolComponent, type ToolProps } from "./tool-registry"
 
@@ -140,6 +140,16 @@ function computeDetails(plan: Record<string, any>) {
 function PermissionActions(props: { respond: (response: PermissionReply) => void; metadata?: Record<string, any> }) {
   const i18n = useI18n()
   const [scopes, setScopes] = createSignal(false)
+  let scopeTrigger: HTMLButtonElement | undefined
+  let scopeBack: HTMLButtonElement | undefined
+  const showScopes = () => {
+    setScopes(true)
+    queueMicrotask(() => scopeBack?.focus())
+  }
+  const hideScopes = () => {
+    setScopes(false)
+    queueMicrotask(() => scopeTrigger?.focus())
+  }
   const compute = () => props.metadata?.compute
   const mutation = () => props.metadata?.environment_mutation
   const boundary = () => compute() ?? mutation()
@@ -192,7 +202,13 @@ function PermissionActions(props: { respond: (response: PermissionReply) => void
                   <Button variant="ghost" size="small" onClick={() => props.respond("reject")}>
                     {i18n.t("ui.permission.deny")}
                   </Button>
-                  <Button variant="secondary" size="small" aria-expanded="false" onClick={() => setScopes(true)}>
+                  <Button
+                    ref={(element: HTMLButtonElement) => (scopeTrigger = element)}
+                    variant="secondary"
+                    size="small"
+                    aria-expanded={scopes()}
+                    onClick={showScopes}
+                  >
                     {i18n.t("ui.permission.allow")}
                   </Button>
                   <Button variant="primary" size="small" onClick={() => props.respond("once")}>
@@ -201,7 +217,12 @@ function PermissionActions(props: { respond: (response: PermissionReply) => void
                 </>
               }
             >
-              <Button variant="ghost" size="small" onClick={() => setScopes(false)}>
+              <Button
+                ref={(element: HTMLButtonElement) => (scopeBack = element)}
+                variant="ghost"
+                size="small"
+                onClick={hideScopes}
+              >
                 {i18n.t("ui.common.cancel")}
               </Button>
               <Button variant="secondary" size="small" onClick={() => props.respond("session")}>
@@ -218,7 +239,11 @@ function PermissionActions(props: { respond: (response: PermissionReply) => void
         </div>
       }
     >
-      <div data-component="permission-prompt" data-kind={mutation() ? "environment-mutation" : "remote-compute"}>
+      <div
+        data-component="permission-prompt"
+        data-kind={mutation() ? "environment-mutation" : "remote-compute"}
+        data-expanded={scopes()}
+      >
         <span data-slot="permission-origin">OpenScience approval</span>
         <div data-slot="permission-summary" data-kind={mutation() ? "environment-mutation" : "remote-compute"}>
           <strong data-slot="permission-compute-title">
@@ -267,23 +292,49 @@ function PermissionActions(props: { respond: (response: PermissionReply) => void
         </div>
         <div
           data-slot="permission-actions"
+          role="group"
           aria-label={mutation() ? "Environment change approval scope" : "Remote compute approval scope"}
         >
-          <Button variant="ghost" size="small" onClick={() => props.respond("reject")}>
-            {i18n.t("ui.permission.deny")}
-          </Button>
-          <Button variant="primary" size="small" onClick={() => props.respond("once")}>
-            {i18n.t("ui.permission.scopeOnce")}
-          </Button>
-          <Button variant="secondary" size="small" onClick={() => props.respond("session")}>
-            {i18n.t("ui.permission.allowSession")}
-          </Button>
-          <Button variant="secondary" size="small" onClick={() => props.respond("project")}>
-            {i18n.t("ui.permission.allowProject")}
-          </Button>
-          <Button variant="secondary" size="small" onClick={() => props.respond("always")}>
-            {i18n.t("ui.permission.scopeGlobal")}
-          </Button>
+          <Show
+            when={scopes()}
+            fallback={
+              <>
+                <Button variant="ghost" size="small" onClick={() => props.respond("reject")}>
+                  {i18n.t("ui.permission.deny")}
+                </Button>
+                <Button
+                  ref={(element: HTMLButtonElement) => (scopeTrigger = element)}
+                  variant="secondary"
+                  size="small"
+                  aria-expanded={scopes()}
+                  onClick={showScopes}
+                >
+                  {i18n.t("ui.permission.allow")}
+                </Button>
+                <Button variant="primary" size="small" onClick={() => props.respond("once")}>
+                  {i18n.t("ui.permission.scopeOnce")}
+                </Button>
+              </>
+            }
+          >
+            <Button
+              ref={(element: HTMLButtonElement) => (scopeBack = element)}
+              variant="ghost"
+              size="small"
+              onClick={hideScopes}
+            >
+              {i18n.t("ui.common.cancel")}
+            </Button>
+            <Button variant="secondary" size="small" onClick={() => props.respond("session")}>
+              {i18n.t("ui.permission.allowSession")}
+            </Button>
+            <Button variant="secondary" size="small" onClick={() => props.respond("project")}>
+              {i18n.t("ui.permission.allowProject")}
+            </Button>
+            <Button variant="secondary" size="small" onClick={() => props.respond("always")}>
+              {i18n.t("ui.permission.scopeGlobal")}
+            </Button>
+          </Show>
         </div>
       </div>
     </Show>
@@ -839,7 +890,13 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const render = createMemo(() => ToolRegistry.render(part.tool, metadata()) ?? GenericTool)
 
   return (
-    <div data-component="tool-part-wrapper" data-permission={showPermission()} data-question={showQuestion()}>
+    <div
+      data-component="tool-part-wrapper"
+      data-permission={showPermission()}
+      data-question={showQuestion()}
+      data-tool-family={traceFamily(part.tool)}
+      data-tool-status={part.state.status}
+    >
       <Switch>
         <Match when={part.state.status === "error" && part.state.error}>
           {(error) => {
@@ -886,6 +943,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             output={part.state.output}
             status={part.state.status}
             partID={part.id}
+            attachments={part.state.status === "completed" ? part.state.attachments : undefined}
             title={title()}
             hideDetails={props.hideDetails}
             forceOpen={forceOpen()}
@@ -1013,28 +1071,43 @@ function KernelTool(props: ToolProps & { language: "python" | "r"; label: "Pytho
         subtitle: subtitle(),
       }}
     >
-      <div data-component="kernel-tool">
+      <div data-component="kernel-tool" data-language={props.language}>
         <header>
           <strong>{props.label}</strong>
           <span>{subtitle()}</span>
         </header>
-        <Show when={images().length > 0}>
-          <div data-slot="kernel-tool-images">
-            <For each={images()}>
-              {(image) => <img src={image} alt={`${props.label} execution result`} loading="lazy" />}
-            </For>
-          </div>
-        </Show>
-        <Show when={props.output}>
-          <div data-slot="kernel-tool-result">
-            <pre>{stripAnsi(props.output ?? "")}</pre>
+        <Show when={props.output || images().length > 0}>
+          <div data-slot="kernel-tool-output-cell">
+            <span data-slot="kernel-tool-prompt">Out [{count() ?? " "}]:</span>
+            <div data-slot="kernel-tool-output-body">
+              <Show when={props.output}>
+                <div data-slot="kernel-tool-result">
+                  <pre>{stripAnsi(props.output ?? "")}</pre>
+                </div>
+              </Show>
+              <Show when={images().length > 0}>
+                <div data-slot="kernel-tool-images">
+                  <For each={images()}>
+                    {(image) => <img src={image} alt={`${props.label} execution result`} loading="lazy" />}
+                  </For>
+                </div>
+              </Show>
+            </div>
           </div>
         </Show>
         <details data-slot="kernel-tool-source">
-          <summary>Code</summary>
-          <pre>
-            <code>{code()}</code>
-          </pre>
+          <summary>
+            <span data-slot="kernel-tool-prompt">In [{count() ?? " "}]:</span>
+            <span>Code</span>
+          </summary>
+          <div data-slot="kernel-tool-input-cell">
+            <span data-slot="kernel-tool-prompt" aria-hidden="true">
+              In [{count() ?? " "}]:
+            </span>
+            <pre>
+              <code>{code()}</code>
+            </pre>
+          </div>
         </details>
       </div>
     </BasicTool>
@@ -1394,7 +1467,31 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "generate_image",
   render(props) {
+    const data = useData()
+    const dialog = useDialog()
     const route = () => (props.metadata.route === "wallet" ? "OpenScience wallet" : "Connected OpenRouter key")
+    const filepath = () =>
+      typeof props.metadata.filepath === "string"
+        ? props.metadata.filepath
+        : typeof props.input.output_path === "string"
+          ? props.input.output_path
+          : undefined
+    const attachment = createMemo(() => {
+      const filename = filepath() ? getFilename(filepath()!) : undefined
+      return props.attachments?.find(
+        (part) =>
+          part.type === "file" &&
+          part.mime.startsWith("image/") &&
+          (!filename || !part.filename || part.filename === filename),
+      )
+    })
+    const size = () => {
+      const value = typeof props.metadata.size === "number" ? props.metadata.size : undefined
+      if (value === undefined) return undefined
+      if (value < 1024) return `${value} B`
+      if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`
+      return `${(value / (1024 * 1024)).toFixed(1)} MB`
+    }
     return (
       <BasicTool
         {...props}
@@ -1406,6 +1503,40 @@ ToolRegistry.register({
           args: [props.metadata.model || props.input.model, route()].filter((value): value is string => !!value),
         }}
       >
+        <Show when={props.status === "completed"}>
+          <div data-component="generated-image-preview">
+            <Show
+              when={attachment()?.url?.startsWith("data:image/") ? attachment() : undefined}
+              fallback={
+                <div data-slot="generated-image-placeholder">
+                  <Icon name="photo" size="small" />
+                  <span>The image is saved to the workspace. Open the file to preview it.</span>
+                </div>
+              }
+            >
+              {(image) => (
+                <button
+                  type="button"
+                  data-slot="generated-image-preview-button"
+                  aria-label={`Preview ${image().filename ?? "generated image"}`}
+                  onClick={() => dialog.show(() => <ImagePreview src={image().url} alt={image().filename} />)}
+                >
+                  <img src={image().url} alt={image().filename ?? "Generated image"} loading="lazy" />
+                </button>
+              )}
+            </Show>
+            <div data-slot="generated-image-meta">
+              <span>{[props.metadata.model, size()].filter(Boolean).join(" · ")}</span>
+              <Show when={filepath()}>
+                {(path) => (
+                  <Button variant="secondary" size="small" icon="folder" onClick={() => data.openFile?.(path())}>
+                    Open image
+                  </Button>
+                )}
+              </Show>
+            </div>
+          </div>
+        </Show>
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output">

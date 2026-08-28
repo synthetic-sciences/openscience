@@ -16,11 +16,10 @@ const server = await createServer({
     resolve: { conditions: ["browser", "production"] },
   },
 })
-const [pane, artifacts, state, dialogs, web] = await Promise.all([
+const [pane, artifacts, state, web] = await Promise.all([
   server.ssrLoadModule("/src/atlas/RightPane.tsx") as Promise<typeof import("./RightPane")>,
   server.ssrLoadModule("/src/artifacts/context.ts") as Promise<typeof import("@/artifacts/context")>,
   server.ssrLoadModule("/src/atlas/store/ui.ts") as Promise<typeof import("@/atlas/store/ui")>,
-  server.ssrLoadModule("@synsci/ui/context/dialog") as Promise<typeof import("@synsci/ui/context/dialog")>,
   server.ssrLoadModule("solid-js/web") as Promise<typeof import("solid-js/web")>,
 ])
 const cleanups: Array<() => void> = []
@@ -93,7 +92,7 @@ test("parks a previously opened terminal when its parent tab closes", async () =
   expect(inspector?.parentElement?.dataset.open).toBe("false")
 })
 
-test("closes the mounted Details pane when its artifact ownership clears", async () => {
+test("migrates legacy Details requests to Files without coupling pane lifetime to artifact ownership", async () => {
   const current = artifacts.createArtifactContext({ directory: "/project", path: "results.csv" })
   const host = mountGate()
 
@@ -101,6 +100,7 @@ test("closes the mounted Details pane when its artifact ownership clears", async
   state.uiStore.openContext("artifact")
   await Promise.resolve()
   expect(artifacts.artifactContext.active()).toEqual(current)
+  expect(state.uiStore.context()).toBe("files")
   expect(state.uiStore.open()).toBe(true)
   expect(host.querySelector('[aria-label="Research inspector"]')).not.toBeNull()
 
@@ -108,32 +108,24 @@ test("closes the mounted Details pane when its artifact ownership clears", async
   await Promise.resolve()
 
   expect(artifacts.artifactContext.active()).toBeUndefined()
-  expect(state.uiStore.open()).toBe(false)
-  expect(host.querySelector('[aria-label="Research inspector"]')).toBeNull()
+  expect(state.uiStore.context()).toBe("files")
+  expect(state.uiStore.open()).toBe(true)
+  expect(host.querySelector('[aria-label="Research inspector"]')).not.toBeNull()
 })
 
-test("wires the reactive artifact gate into RightPane", async () => {
+test("keeps the retired artifact synchronization hook inert", async () => {
   const current = artifacts.createArtifactContext({ directory: "/project", path: "report.pdf" })
+  const host = mountGate()
 
   artifacts.artifactContext.activate(current)
   state.uiStore.openContext("artifact")
   artifacts.artifactContext.clear(current.id)
-  expect(state.uiStore.open()).toBe(true)
-
-  // RightPane now owns dirty-editor confirmation, so mounting the real pane
-  // must honor its DialogProvider contract even though this gate closes before
-  // any dialog is shown.
-  const host = mount(() =>
-    dialogs.DialogProvider({
-      get children() {
-        return pane.RightPane()
-      },
-    }),
-  )
+  state.uiStore.syncArtifact(false)
   await Promise.resolve()
 
-  expect(state.uiStore.open()).toBe(false)
-  expect(host.querySelector('[aria-label="Research inspector"]')).toBeNull()
+  expect(state.uiStore.context()).toBe("files")
+  expect(state.uiStore.open()).toBe(true)
+  expect(host.querySelector('[aria-label="Research inspector"]')).not.toBeNull()
 })
 
 test.each(["files", "terminal", "canvas", "kernels"] as const)(

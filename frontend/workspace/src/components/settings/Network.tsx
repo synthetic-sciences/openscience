@@ -190,178 +190,195 @@ export default function Network() {
             </div>
           </Show>
 
-          <Section title="Access policy" description="Web fetches and science connectors follow this policy.">
-            <div class="settings-card settings-preferences-card">
-              <div class="settings-row settings-preference-row settings-network-policy-row">
-                <div class="settings-row-copy">
-                  <strong>Restrict network access</strong>
-                  <span>
-                    {state().allowlistEnabled
-                      ? `Only ${effectiveCount()} approved domains may be reached.`
-                      : "Connections are not restricted by the domain list."}
-                  </span>
-                </div>
-                <Switch hideLabel checked={state().allowlistEnabled} disabled={loading()} onChange={toggleAllowlist}>
-                  Restrict network access
-                </Switch>
-              </div>
-            </div>
-          </Section>
-
-          <Section title="Service groups" description="Use maintained domain sets for common research services.">
-            <Show
-              when={!loading()}
-              fallback={
+          <Show
+            when={!loading() && !error()}
+            fallback={
+              <Show when={loading()}>
                 <div
                   class="settings-panel-loading__rows settings-network-loading-rows"
                   role="status"
-                  aria-label="Loading service groups"
+                  aria-label="Loading network settings"
                 >
-                  <span />
-                  <span />
-                  <span />
                   <span />
                   <span />
                   <span />
                 </div>
-              }
-            >
-              <div class="settings-card settings-preferences-card settings-network-groups">
-                <For
-                  each={catalog()}
-                  fallback={
-                    <span class="settings-empty-copy settings-network-empty-copy">No service groups available.</span>
-                  }
-                >
-                  {(group) => {
-                    const on = () => state().enabled.includes(group.id)
-                    const open = () => !!expanded()[group.id]
-                    const detailsId = () => `network-group-${group.id}`
-                    return (
-                      <div class="settings-list-item">
-                        <div class="settings-row settings-preference-row settings-network-group-row">
-                          <button
-                            type="button"
-                            class="settings-network-disclosure"
-                            onClick={() => toggleExpanded(group.id)}
-                            aria-label={`${open() ? "Collapse" : "Expand"} ${group.label}`}
-                            aria-expanded={open()}
-                            aria-controls={detailsId()}
-                          >
-                            <Icon
-                              name={open() ? "chevron-down" : "chevron-right"}
-                              size="small"
-                              class="settings-network-disclosure__icon"
-                            />
-                            <span class="settings-row-copy">
-                              <strong class="truncate">{group.label}</strong>
-                              <span class="settings-network-group-description">
-                                {group.description} · <span class="tabular-nums">{group.domains.length}</span> domains
-                              </span>
-                            </span>
-                          </button>
-                          <Switch hideLabel checked={on()} onChange={(v) => toggleGroup(group.id, v)}>
-                            {`Allow ${group.label}`}
-                          </Switch>
-                        </div>
-                        <Show when={open()}>
-                          <div id={detailsId()} class="settings-preference-disclosure">
-                            <ul class="settings-preference-domain-list" aria-label={`${group.label} domains`}>
-                              <For each={group.domains}>
-                                {(domain) => (
-                                  <li>
-                                    <code>{domain}</code>
-                                  </li>
-                                )}
-                              </For>
-                            </ul>
-                          </div>
-                        </Show>
-                      </div>
-                    )
-                  }}
-                </For>
-              </div>
-            </Show>
-          </Section>
-
-          <Section
-            title="Allowed domains"
-            description="Add domains that are specific to your work."
-            action={
-              <Show when={state().custom.length > 0}>
-                <button
-                  type="button"
-                  class="settings-inline-action text-text-danger"
-                  data-quiet="true"
-                  onClick={clearCustom}
-                  aria-label="Clear allowed domains"
-                >
-                  Clear
-                </button>
               </Show>
             }
           >
-            <Show
-              when={!loading()}
-              fallback={
-                <div
-                  class="settings-panel-loading__rows settings-network-loading-rows settings-network-loading-rows--domains"
-                  role="status"
-                  aria-label="Loading allowed domains"
-                >
-                  <span />
-                  <span />
-                </div>
-              }
-            >
-              <div class="settings-card settings-preferences-card settings-network-domains">
-                <For
-                  each={state().custom}
-                  fallback={
-                    <span class="settings-empty-copy settings-network-empty-copy">No custom domains added.</span>
-                  }
-                >
-                  {(domain) => (
-                    <div class="settings-row settings-preference-row settings-network-domain-row group">
-                      <code class="settings-network-domain-value max-w-full break-all whitespace-normal min-w-0 text-13-regular text-text-base">
-                        {domain}
-                      </code>
-                      <button
-                        type="button"
-                        class="settings-icon-action text-icon-weak-base hover:text-text-danger"
-                        onClick={() => removeCustom(domain)}
-                        aria-label={`Remove ${domain}`}
-                      >
-                        <Icon name="close-small" size="small" />
-                      </button>
-                    </div>
-                  )}
-                </For>
-                <div class="settings-row settings-preference-row settings-network-add-row">
-                  <input
-                    type="text"
-                    aria-label="Add allowed domain"
-                    placeholder="Add a domain, e.g. example.org"
-                    value={customDomain()}
-                    disabled={loading()}
-                    class="settings-field min-w-0 flex-1 basis-[220px] font-mono"
-                    onInput={(e) => setCustomDomain(e.currentTarget.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addCustom()}
-                  />
-                  <button
-                    type="button"
-                    class="settings-preference-action shrink-0"
-                    data-variant="primary"
-                    disabled={loading() || !customDomain().trim()}
-                    onClick={addCustom}
-                  >
-                    Add domain
-                  </button>
+            <Section title="Access policy" description="Web fetches and science connectors follow this policy.">
+              <div class="settings-card settings-preferences-card">
+                <div class="settings-row settings-preference-row settings-network-policy-row">
+                  <div class="settings-row-copy">
+                    <strong>Restrict network access</strong>
+                    <span>
+                      {state().allowlistEnabled
+                        ? `Only ${effectiveCount()} approved domains may be reached.`
+                        : "Connections are not restricted by the domain list."}
+                    </span>
+                  </div>
+                  <Switch hideLabel checked={state().allowlistEnabled} disabled={loading()} onChange={toggleAllowlist}>
+                    Restrict network access
+                  </Switch>
                 </div>
               </div>
-            </Show>
-          </Section>
+            </Section>
+
+            <Section title="Service groups" description="Use maintained domain sets for common research services.">
+              <Show
+                when={!loading()}
+                fallback={
+                  <div
+                    class="settings-panel-loading__rows settings-network-loading-rows"
+                    role="status"
+                    aria-label="Loading service groups"
+                  >
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                }
+              >
+                <div class="settings-card settings-preferences-card settings-network-groups">
+                  <For
+                    each={catalog()}
+                    fallback={
+                      <span class="settings-empty-copy settings-network-empty-copy">No service groups available.</span>
+                    }
+                  >
+                    {(group) => {
+                      const on = () => state().enabled.includes(group.id)
+                      const open = () => !!expanded()[group.id]
+                      const detailsId = () => `network-group-${group.id}`
+                      return (
+                        <div class="settings-list-item">
+                          <div class="settings-row settings-preference-row settings-network-group-row">
+                            <button
+                              type="button"
+                              class="settings-network-disclosure"
+                              onClick={() => toggleExpanded(group.id)}
+                              aria-label={`${open() ? "Collapse" : "Expand"} ${group.label}`}
+                              aria-expanded={open()}
+                              aria-controls={detailsId()}
+                            >
+                              <Icon
+                                name={open() ? "chevron-down" : "chevron-right"}
+                                size="small"
+                                class="settings-network-disclosure__icon"
+                              />
+                              <span class="settings-row-copy">
+                                <strong class="truncate">{group.label}</strong>
+                                <span class="settings-network-group-description">
+                                  {group.description} · <span class="tabular-nums">{group.domains.length}</span> domains
+                                </span>
+                              </span>
+                            </button>
+                            <Switch hideLabel checked={on()} onChange={(v) => toggleGroup(group.id, v)}>
+                              {`Allow ${group.label}`}
+                            </Switch>
+                          </div>
+                          <Show when={open()}>
+                            <div id={detailsId()} class="settings-preference-disclosure">
+                              <ul class="settings-preference-domain-list" aria-label={`${group.label} domains`}>
+                                <For each={group.domains}>
+                                  {(domain) => (
+                                    <li>
+                                      <code>{domain}</code>
+                                    </li>
+                                  )}
+                                </For>
+                              </ul>
+                            </div>
+                          </Show>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </div>
+              </Show>
+            </Section>
+
+            <Section
+              title="Allowed domains"
+              description="Add domains that are specific to your work."
+              action={
+                <Show when={state().custom.length > 0}>
+                  <button
+                    type="button"
+                    class="settings-inline-action text-text-danger"
+                    data-quiet="true"
+                    onClick={clearCustom}
+                    aria-label="Clear allowed domains"
+                  >
+                    Clear
+                  </button>
+                </Show>
+              }
+            >
+              <Show
+                when={!loading()}
+                fallback={
+                  <div
+                    class="settings-panel-loading__rows settings-network-loading-rows settings-network-loading-rows--domains"
+                    role="status"
+                    aria-label="Loading allowed domains"
+                  >
+                    <span />
+                    <span />
+                  </div>
+                }
+              >
+                <div class="settings-card settings-preferences-card settings-network-domains">
+                  <For
+                    each={state().custom}
+                    fallback={
+                      <span class="settings-empty-copy settings-network-empty-copy">No custom domains added.</span>
+                    }
+                  >
+                    {(domain) => (
+                      <div class="settings-row settings-preference-row settings-network-domain-row group">
+                        <code class="settings-network-domain-value max-w-full break-all whitespace-normal min-w-0 text-13-regular text-text-base">
+                          {domain}
+                        </code>
+                        <button
+                          type="button"
+                          class="settings-icon-action text-icon-weak-base hover:text-text-danger"
+                          onClick={() => removeCustom(domain)}
+                          aria-label={`Remove ${domain}`}
+                        >
+                          <Icon name="close-small" size="small" />
+                        </button>
+                      </div>
+                    )}
+                  </For>
+                  <div class="settings-row settings-preference-row settings-network-add-row">
+                    <input
+                      type="text"
+                      aria-label="Add allowed domain"
+                      placeholder="Add a domain, e.g. example.org"
+                      value={customDomain()}
+                      disabled={loading()}
+                      class="settings-field min-w-0 flex-1 basis-[220px] font-mono"
+                      onInput={(e) => setCustomDomain(e.currentTarget.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addCustom()}
+                    />
+                    <button
+                      type="button"
+                      class="settings-preference-action shrink-0"
+                      data-variant="primary"
+                      disabled={loading() || !customDomain().trim()}
+                      onClick={addCustom}
+                    >
+                      Add domain
+                    </button>
+                  </div>
+                </div>
+              </Show>
+            </Section>
+          </Show>
         </PanelBody>
       </div>
     </PanelScroll>

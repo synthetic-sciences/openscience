@@ -29,3 +29,21 @@ test("settings dialog navigates between sections and closes", async ({ page, got
   await dialog.getByRole("button", { name: "Close" }).click()
   await expect(dialog).toHaveCount(0)
 })
+
+test("narrow settings menu owns its first Escape press", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const dialog = await openSettings(page)
+  await page.setViewportSize({ width: 560, height: 800 })
+  const menu = dialog.locator(".settings-nav__mobile-trigger")
+  await menu.click()
+  await expect(menu).toHaveAttribute("aria-expanded", "true")
+
+  await menu.press("Escape")
+  await expect(dialog).toBeVisible()
+  await expect(menu).toBeFocused()
+  await expect(menu).toHaveAttribute("aria-expanded", "false")
+
+  await menu.press("Escape")
+  await expect(dialog).toHaveCount(0)
+})

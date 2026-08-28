@@ -50,7 +50,13 @@ describe("live interaction radius contract", () => {
   })
 
   test("uses solid semantic structure and limits tint mixing to restrained state and common-region surfaces", () => {
-    expect(files.composer.match(/color-mix/g)).toHaveLength(1)
+    // The composer keeps its base surface solid. Tint mixing is confined to
+    // the suggestion elevation and the compact delegation segmented control.
+    expect(files.composer.match(/color-mix/g)).toHaveLength(6)
+    expect(files.composer).toContain("border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent)")
+    expect(files.composer).toContain(
+      "background: color-mix(in srgb, var(--surface-raised-base-hover) 62%, transparent)",
+    )
     expect(files.chat.match(/color-mix/g)).toHaveLength(4)
     expect(files.chat).toContain("border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent)")
     expect(files.settings.match(/color-mix/g)).toHaveLength(1)

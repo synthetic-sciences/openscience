@@ -321,10 +321,6 @@ export const AppearanceSections: Component = () => {
               current={soundOptions.find((o) => o.id === settings.sounds.agent())}
               value={(o) => o.id}
               label={(o) => language.t(o.label)}
-              onHighlight={(option) => {
-                if (!option) return
-                playDemoSound(option.src, settings.sounds.volume())
-              }}
               onSelect={(option) => {
                 if (!option) return
                 settings.sounds.setAgent(option.id)
@@ -347,10 +343,6 @@ export const AppearanceSections: Component = () => {
               current={soundOptions.find((o) => o.id === settings.sounds.permissions())}
               value={(o) => o.id}
               label={(o) => language.t(o.label)}
-              onHighlight={(option) => {
-                if (!option) return
-                playDemoSound(option.src, settings.sounds.volume())
-              }}
               onSelect={(option) => {
                 if (!option) return
                 settings.sounds.setPermissions(option.id)
@@ -373,10 +365,6 @@ export const AppearanceSections: Component = () => {
               current={soundOptions.find((o) => o.id === settings.sounds.errors())}
               value={(o) => o.id}
               label={(o) => language.t(o.label)}
-              onHighlight={(option) => {
-                if (!option) return
-                playDemoSound(option.src, settings.sounds.volume())
-              }}
               onSelect={(option) => {
                 if (!option) return
                 settings.sounds.setErrors(option.id)

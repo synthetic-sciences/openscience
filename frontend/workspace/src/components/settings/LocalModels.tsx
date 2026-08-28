@@ -421,6 +421,7 @@ const LocalModels: Component = () => {
             <div class="flex gap-2">
               <input
                 class="flex-1 rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
+                aria-label="Model to pull with Ollama"
                 placeholder="llama3.1  ·  qwen2.5-coder  ·  phi3"
                 value={pullName()}
                 onInput={(e) => setPullName(e.currentTarget.value)}
@@ -626,18 +627,27 @@ const LocalModels: Component = () => {
               </p>
             </div>
             <div class="flex flex-col gap-2">
-              <input
-                class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
-                placeholder="http://localhost:11434/v1"
-                value={url()}
-                onInput={(e) => setUrl(e.currentTarget.value)}
-              />
-              <input
-                class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
-                placeholder="API key (optional — most local servers need none)"
-                value={key()}
-                onInput={(e) => setKey(e.currentTarget.value)}
-              />
+              <label class="flex flex-col gap-1">
+                <span class="text-11-medium text-text-weak">Endpoint URL</span>
+                <input
+                  class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
+                  inputMode="url"
+                  placeholder="http://localhost:11434/v1"
+                  value={url()}
+                  onInput={(e) => setUrl(e.currentTarget.value)}
+                />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-11-medium text-text-weak">API key (optional)</span>
+                <input
+                  class="w-full rounded-sm border border-border-weak-base bg-surface-base px-3 py-2 text-13-regular text-text-strong placeholder:text-text-weak/60"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="Most local servers need none"
+                  value={key()}
+                  onInput={(e) => setKey(e.currentTarget.value)}
+                />
+              </label>
               <div class="flex gap-2">
                 <Button size="small" variant="secondary" disabled={busy() || !url().trim()} onClick={listCustom}>
                   List models

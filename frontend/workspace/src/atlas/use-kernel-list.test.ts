@@ -134,7 +134,7 @@ describe("kernel list reconciliation", () => {
     // this pins that reconcile's patch reaches them and the head re-renders,
     // rather than the card holding the first reading it was given.
     const metric = (element: Element | null, name: "memory" | "cpu") =>
-      element?.querySelector(`[data-metric="${name}"] > span`)?.textContent
+      element?.querySelector(`[data-metric="${name}"]`)?.textContent
     const [source, setSource] = core.createSignal<KernelStatus[] | undefined>([
       kernel({ id: "kernel-a", resources: { cpu_percent: 0, memory_bytes: 16_000_000 } }),
     ])

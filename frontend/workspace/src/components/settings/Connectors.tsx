@@ -46,12 +46,21 @@ export default function Connectors() {
 
   const [status, setStatus] = createSignal<Record<string, McpStatus>>({})
   const [details, setDetails] = createSignal<Record<string, McpInspection>>({})
+  const [inspectionProblems, setInspectionProblems] = createSignal<Record<string, string>>({})
   const [search, setSearch] = createSignal("")
-  const [busy, setBusy] = createSignal(false)
+  const [busyKeys, setBusyKeys] = createSignal(new Set<string>())
   const [problem, setProblem] = createSignal("")
   const [expanded, setExpanded] = createSignal<string>()
   const [editing, setEditing] = createSignal<string | undefined>()
   const [form, setForm] = createSignal<ConnectorFormState | undefined>()
+  const busy = (key?: string) => (key ? busyKeys().has(key) : busyKeys().size > 0)
+  const setBusy = (key: string, value: boolean) =>
+    setBusyKeys((current) => {
+      const next = new Set(current)
+      if (value) next.add(key)
+      else next.delete(key)
+      return next
+    })
 
   const entries = createMemo(() =>
     Object.entries(sync.data.config.mcp ?? {})
@@ -64,18 +73,31 @@ export default function Connectors() {
     try {
       const res = await sdk.client.mcp.status()
       setStatus(res.data ?? {})
-      const inspected = await Promise.all(
-        entries().map(async ([name]) => {
-          const result = await sdk.client.mcp.inspect({ name }).catch(() => undefined)
-          return result?.data ? ([name, result.data] as const) : undefined
-        }),
-      )
-      setDetails(Object.fromEntries(inspected.filter((entry) => entry !== undefined)))
       setProblem("")
     } catch (error) {
       setProblem(message(error))
       throw error
     }
+  }
+  async function inspect(name: string) {
+    const key = `inspect:${name}`
+    if (busy(key)) return
+    setBusy(key, true)
+    setInspectionProblems((current) => ({ ...current, [name]: "" }))
+    try {
+      const result = await sdk.client.mcp.inspect({ name })
+      if (!result.data) throw new Error("The connector returned no capability details.")
+      setDetails((current) => ({ ...current, [name]: result.data! }))
+    } catch (error) {
+      setInspectionProblems((current) => ({ ...current, [name]: message(error) }))
+    } finally {
+      setBusy(key, false)
+    }
+  }
+  function toggleDetails(name: string) {
+    const opening = expanded() !== name
+    setExpanded(opening ? name : undefined)
+    if (opening && !details()[name]) void inspect(name)
   }
   onMount(() => void refresh().catch(() => undefined))
 
@@ -95,10 +117,11 @@ export default function Connectors() {
     return "Needs client registration"
   }
   async function toggle(name: string, on: boolean) {
-    if (busy()) return
+    const key = `row:${name}`
+    if (busy(key)) return
     const config = entries().find(([key]) => key === name)?.[1]
     if (!config) return
-    setBusy(true)
+    setBusy(key, true)
     try {
       const next = { ...config, enabled: on }
       await sdk.client.mcp.config.set({ name, config: next, scope: "global" })
@@ -107,12 +130,13 @@ export default function Connectors() {
     } catch (err) {
       showToast({ variant: "error", title: `Could not turn connector ${on ? "on" : "off"}`, description: message(err) })
     } finally {
-      setBusy(false)
+      setBusy(key, false)
     }
   }
 
   async function remove(name: string) {
-    if (busy()) return
+    const key = `row:${name}`
+    if (busy(key)) return
     const confirmed = await confirmDialog(dialog, {
       title: `Remove "${name}"?`,
       message: "This disconnects the connector and deletes it from your global OpenScience configuration.",
@@ -120,7 +144,7 @@ export default function Connectors() {
       danger: true,
     })
     if (!confirmed) return
-    setBusy(true)
+    setBusy(key, true)
     try {
       await sdk.client.mcp.config.remove({ name, scope: "global" })
       sync.set("config", "mcp", (current = {}) => {
@@ -133,17 +157,19 @@ export default function Connectors() {
     } catch (err) {
       showToast({ variant: "error", title: "Remove failed", description: message(err) })
     } finally {
-      setBusy(false)
+      setBusy(key, false)
     }
   }
 
   async function authenticate(name: string) {
-    if (busy()) return
-    setBusy(true)
+    const key = `row:${name}`
+    if (busy(key)) return
+    setBusy(key, true)
     try {
       const result = await sdk.client.mcp.auth.authenticate({ name })
       if (!result.data) throw new Error("The connector did not return an authentication result.")
       await refresh()
+      await inspect(name)
       if (result.data.status !== "connected") {
         throw new Error(
           result.data.status === "failed"
@@ -155,12 +181,13 @@ export default function Connectors() {
     } catch (err) {
       showToast({ variant: "error", title: "Authentication failed", description: message(err) })
     } finally {
-      setBusy(false)
+      setBusy(key, false)
     }
   }
 
   async function disconnectAuth(name: string) {
-    if (busy()) return
+    const key = `row:${name}`
+    if (busy(key)) return
     const confirmed = await confirmDialog(dialog, {
       title: `Disconnect "${name}"?`,
       message: "This removes the connector's OAuth credentials from this machine. Its configuration stays in place.",
@@ -168,15 +195,16 @@ export default function Connectors() {
       danger: true,
     })
     if (!confirmed) return
-    setBusy(true)
+    setBusy(key, true)
     try {
       await sdk.client.mcp.auth.remove({ name })
       await refresh()
+      await inspect(name)
       showToast({ variant: "success", title: `"${name}" disconnected` })
     } catch (err) {
       showToast({ variant: "error", title: "Disconnect failed", description: message(err) })
     } finally {
-      setBusy(false)
+      setBusy(key, false)
     }
   }
 
@@ -194,7 +222,8 @@ export default function Connectors() {
   }
 
   async function save() {
-    if (busy()) return
+    const key = "form"
+    if (busy(key)) return
     const state = form()
     if (!state) return
     const name = state.name.trim()
@@ -202,7 +231,7 @@ export default function Connectors() {
       showToast({ variant: "error", title: "Connector name is required" })
       return
     }
-    setBusy(true)
+    setBusy(key, true)
     try {
       const config = buildConnectorConfig(state)
       const previous = editing()
@@ -240,7 +269,7 @@ export default function Connectors() {
     } catch (err) {
       showToast({ variant: "error", title: "Save failed", description: message(err) })
     } finally {
-      setBusy(false)
+      setBusy(key, false)
     }
   }
 
@@ -288,8 +317,13 @@ export default function Connectors() {
               <button
                 type="button"
                 class="text-12-medium"
-                disabled={busy()}
-                onClick={() => void refresh().catch(() => undefined)}
+                disabled={busy("refresh")}
+                onClick={() => {
+                  setBusy("refresh", true)
+                  void refresh()
+                    .catch(() => undefined)
+                    .finally(() => setBusy("refresh", false))
+                }}
               >
                 Retry
               </button>
@@ -300,7 +334,7 @@ export default function Connectors() {
               <ConnectorForm
                 state={state()}
                 editing={!!editing()}
-                busy={busy()}
+                busy={busy("form")}
                 onChange={setForm}
                 onSave={save}
                 onCancel={closeForm}
@@ -385,22 +419,24 @@ export default function Connectors() {
                                 <button
                                   type="button"
                                   class="connectors-action"
-                                  disabled={busy()}
+                                  disabled={busy(`row:${name}`)}
                                   onClick={() => void authenticate(name)}
                                 >
-                                  {detail()?.auth === "authenticated" ? "Reconnect" : "Connect"}
+                                  {detail()?.auth === "authenticated" || s()?.status === "connected"
+                                    ? "Reconnect"
+                                    : "Connect"}
                                 </button>
                               </Show>
                               <IconButton
                                 icon="edit"
                                 variant="ghost"
-                                disabled={busy()}
+                                disabled={busy(`row:${name}`)}
                                 aria-label={`Edit ${name}`}
                                 onClick={() => editConnector(name, config)}
                               />
                               <Switch
                                 checked={config.enabled !== false}
-                                disabled={busy()}
+                                disabled={busy(`row:${name}`)}
                                 onChange={(v) => void toggle(name, v)}
                                 hideLabel
                               >
@@ -411,19 +447,40 @@ export default function Connectors() {
                                 variant="ghost"
                                 aria-expanded={expanded() === name}
                                 aria-label={expanded() === name ? `Hide ${name} details` : `Show ${name} details`}
-                                onClick={() => setExpanded((value) => (value === name ? undefined : name))}
+                                onClick={() => toggleDetails(name)}
                               />
                             </div>
                           </div>
                           <Show when={expanded() === name}>
                             <div class="connectors-details">
-                              <ConnectorInspection detail={detail()} />
+                              <Show
+                                when={!busy(`inspect:${name}`)}
+                                fallback={
+                                  <div class="connectors-inspection-state" role="status">
+                                    Inspecting available tools and resources…
+                                  </div>
+                                }
+                              >
+                                <Show
+                                  when={!inspectionProblems()[name]}
+                                  fallback={
+                                    <div class="connectors-inspection-state" role="alert">
+                                      <span>Could not inspect this connector. {inspectionProblems()[name]}</span>
+                                      <button type="button" onClick={() => void inspect(name)}>
+                                        Retry
+                                      </button>
+                                    </div>
+                                  }
+                                >
+                                  <ConnectorInspection detail={detail()} />
+                                </Show>
+                              </Show>
                               <div class="connectors-details__actions">
                                 <Show when={detail()?.auth === "authenticated" || detail()?.auth === "expired"}>
                                   <button
                                     type="button"
                                     class="connectors-detail-action"
-                                    disabled={busy()}
+                                    disabled={busy(`row:${name}`)}
                                     onClick={() => void disconnectAuth(name)}
                                   >
                                     Disconnect OAuth
@@ -432,7 +489,7 @@ export default function Connectors() {
                                 <button
                                   type="button"
                                   class="connectors-detail-action"
-                                  disabled={busy()}
+                                  disabled={busy(`row:${name}`)}
                                   onClick={() => editConnector(name, config)}
                                 >
                                   Edit configuration
@@ -440,7 +497,7 @@ export default function Connectors() {
                                 <button
                                   type="button"
                                   class="connectors-detail-action connectors-detail-action--danger"
-                                  disabled={busy()}
+                                  disabled={busy(`row:${name}`)}
                                   onClick={() => void remove(name)}
                                 >
                                   Remove connector
@@ -456,8 +513,13 @@ export default function Connectors() {
                 <button
                   type="button"
                   class="connectors-refresh"
-                  disabled={busy()}
-                  onClick={() => void refresh().catch(() => undefined)}
+                  disabled={busy("refresh")}
+                  onClick={() => {
+                    setBusy("refresh", true)
+                    void refresh()
+                      .catch(() => undefined)
+                      .finally(() => setBusy("refresh", false))
+                  }}
                 >
                   <Icon name="refresh" size="small" /> Refresh status
                 </button>

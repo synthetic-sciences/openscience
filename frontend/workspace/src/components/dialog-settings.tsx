@@ -1,14 +1,16 @@
-import { Component, For, batch, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { Component, For, Show, batch, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Dialog } from "@synsci/ui/dialog"
 import { Icon } from "@synsci/ui/icon"
 import { IconButton } from "@synsci/ui/icon-button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
 import {
-  SETTINGS_PANELS,
+  SETTINGS_PRIMARY_PANELS,
   SETTINGS_SECTIONS,
   DEFAULT_PANEL,
   findPanel,
+  panelChildren,
+  panelRoot,
   preloadPanel,
   type SettingsPanelId,
 } from "./settings/registry"
@@ -238,6 +240,9 @@ const SETTINGS_STYLES = `
 .settings-nav__scroll-button {
   display: none;
 }
+.settings-nav__mobile-trigger {
+  display: none;
+}
 .settings-nav__sections {
   min-height: 0;
   display: flex;
@@ -256,6 +261,27 @@ const SETTINGS_STYLES = `
   display: flex;
   flex-direction: column;
   gap: var(--settings-space-1);
+}
+.settings-nav__group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav__children {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  margin: 1px 0 3px 28px;
+  padding-left: 8px;
+  border-left: 1px solid var(--settings-border);
+}
+.settings-nav__item[data-secondary="true"] {
+  min-height: 32px;
+  display: flex;
+  padding-inline: 8px;
+  font-size: 12px;
 }
 .settings-nav__label {
   padding: 0 var(--settings-space-2) var(--settings-space-1);
@@ -1275,88 +1301,101 @@ const SETTINGS_STYLES = `
     flex-direction: column;
   }
   .settings-nav {
+    position: relative;
+    z-index: 30;
     width: 100%;
     height: 48px;
     flex: 0 0 48px;
-    display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) 32px;
-    align-items: stretch;
+    display: block;
     padding: 0;
     border-right: 0;
     border-bottom: 1px solid var(--border-base);
-    overflow: hidden;
+    overflow: visible;
   }
   .settings-nav__title {
     display: none;
   }
-  .settings-nav__scroll-button {
-    width: 32px;
+  .settings-nav__mobile-trigger {
+    width: 100%;
     height: 48px;
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 9px;
+    padding: 0 16px;
+    border: 0;
     border-radius: 0;
-    color: var(--text-weak);
-  }
-  .settings-nav__scroll-button:hover {
-    background: var(--settings-surface-hover);
+    background: var(--settings-rail);
     color: var(--text-strong);
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    text-align: left;
   }
-  .settings-nav__scroll-button:focus-visible {
+  .settings-nav__mobile-trigger:hover {
+    background: var(--settings-surface-hover);
+  }
+  .settings-nav__mobile-trigger:focus-visible {
     outline: 2px solid var(--color-focus);
     outline-offset: -3px;
   }
-  .settings-nav__scroll-button:disabled {
-    color: var(--text-weaker);
-    cursor: default;
-    opacity: 0.42;
+  .settings-nav__mobile-trigger > [data-component="icon"]:last-child {
+    margin-left: auto;
   }
-  .settings-nav__scroll-button:disabled:hover {
-    background: transparent;
+  .settings-nav__mobile-trigger small {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-weak);
+    font-size: 11px;
+    font-weight: var(--font-weight-regular);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .settings-nav__sections {
+    position: absolute;
+    top: 48px;
+    right: 0;
+    left: 0;
+    z-index: 31;
     min-width: 0;
-    align-items: center;
-    flex-direction: row;
-    gap: 2px;
-    padding: 0 4px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    scroll-snap-type: x proximity;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-strong-base) transparent;
+    max-height: min(68dvh, 520px);
+    display: none;
+    flex-direction: column;
+    gap: 16px;
+    padding: 14px 12px 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-bottom: 1px solid var(--settings-border);
+    background: var(--settings-rail);
+    box-shadow: 0 14px 28px color-mix(in srgb, var(--background-strongest) 20%, transparent);
   }
-  .settings-nav__sections::-webkit-scrollbar {
-    display: block;
-    height: 3px;
-  }
-  .settings-nav__sections::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .settings-nav__sections::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: var(--border-strong-base);
+  .settings-nav[data-mobile-open="true"] .settings-nav__sections {
+    display: flex;
   }
   .settings-nav__section {
-    flex: 0 0 auto;
-    flex-direction: row;
-    gap: 2px;
+    flex-direction: column;
+    gap: 4px;
   }
-  .settings-nav__label,
   .settings-nav__footer {
     display: none;
   }
+  .settings-nav__label {
+    display: block;
+    padding-inline: 8px;
+  }
   .settings-nav__item {
-    height: 36px;
-    flex: 0 0 auto;
+    width: 100%;
+    min-height: 40px;
     gap: 6px;
-    padding: 0 12px;
+    padding: 6px 10px;
     border: 0;
     border-radius: var(--settings-radius-control);
+    font-size: 13px;
+  }
+  .settings-nav__children {
+    margin-left: 28px;
+  }
+  .settings-nav__item[data-secondary="true"] {
+    min-height: 36px;
     font-size: 12px;
-    scroll-snap-align: start;
-    white-space: nowrap;
   }
   .settings-nav__item:hover {
     background: var(--settings-surface-hover);
@@ -1432,9 +1471,10 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
   const [mounted, setMounted] = createSignal([initial])
   const [pending, setPending] = createSignal<SettingsPanelId>()
   const [expanded, setExpanded] = createSignal(false)
-  const [navCanScrollBack, setNavCanScrollBack] = createSignal(false)
-  const [navCanScrollForward, setNavCanScrollForward] = createSignal(false)
+  const [navOpen, setNavOpen] = createSignal(false)
+  let nav: HTMLElement | undefined
   let navSections: HTMLDivElement | undefined
+  let navTrigger: HTMLButtonElement | undefined
   let navigationRequest = 0
 
   const current = createMemo(() => findPanel(history()[cursor()]))
@@ -1442,6 +1482,15 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
   const canForward = createMemo(() => cursor() < history().length - 1)
 
   onMount(() => {
+    const closeMobileNavigation = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !navOpen()) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      setNavOpen(false)
+      queueMicrotask(() => navTrigger?.focus())
+    }
+    nav?.addEventListener("keydown", closeMobileNavigation, true)
+
     // Keep the opening interaction light. Preloading every settings chunk at
     // once competes with the active panel on slower machines. The most likely
     // next destination is warmed during idle time; every other destination is
@@ -1456,21 +1505,8 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
     } else {
       timerHandle = globalThis.setTimeout(preloadSkills, 600)
     }
-    const updateNavScroll = () => {
-      if (!navSections) return
-      const max = Math.max(0, navSections.scrollWidth - navSections.clientWidth)
-      setNavCanScrollBack(navSections.scrollLeft > 1)
-      setNavCanScrollForward(navSections.scrollLeft < max - 1)
-    }
-    const observer = new ResizeObserver(updateNavScroll)
-    if (navSections) {
-      observer.observe(navSections)
-      navSections.addEventListener("scroll", updateNavScroll, { passive: true })
-      updateNavScroll()
-    }
     onCleanup(() => {
-      observer.disconnect()
-      navSections?.removeEventListener("scroll", updateNavScroll)
+      nav?.removeEventListener("keydown", closeMobileNavigation, true)
       if (idleHandle !== undefined) window.cancelIdleCallback(idleHandle)
       if (timerHandle !== undefined) globalThis.clearTimeout(timerHandle)
     })
@@ -1481,12 +1517,13 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
     queueMicrotask(() =>
       navSections
         ?.querySelector<HTMLElement>('.settings-nav__item[data-active="true"]')
-        ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" }),
+        ?.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" }),
     )
   })
 
   const navigate = (id: SettingsPanelId) => {
     if (history()[cursor()] === id) return
+    const restoreNavFocus = navOpen()
     const request = ++navigationRequest
     const next = history().slice(0, cursor() + 1)
     next.push(id)
@@ -1500,7 +1537,9 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
       setHistory(next)
       setCursor(next.length - 1)
       setPending(id)
+      setNavOpen(false)
     })
+    if (restoreNavFocus) queueMicrotask(() => navTrigger?.focus())
 
     void preloadPanel(id)
       .catch(() => undefined)
@@ -1517,12 +1556,6 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
   }
   const back = () => canBack() && moveHistory(cursor() - 1)
   const forward = () => canForward() && moveHistory(cursor() + 1)
-  const scrollNav = (direction: -1 | 1) => {
-    if (!navSections) return
-    const distance = Math.min(navSections.clientWidth * 0.72, 360)
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    navSections.scrollBy({ left: direction * distance, behavior: reduced ? "auto" : "smooth" })
-  }
 
   return (
     <>
@@ -1536,53 +1569,80 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
       >
         <div class="settings-layout">
           {/* ── Left rail ── */}
-          <nav class="settings-nav" aria-label="Settings sections">
+          <nav
+            ref={nav}
+            class="settings-nav"
+            aria-label="Settings sections"
+            data-mobile-open={navOpen() ? "true" : undefined}
+            data-dialog-escape-scope={navOpen() ? "true" : undefined}
+          >
             <div class="settings-nav__title">Settings</div>
             <button
               type="button"
-              class="settings-nav__scroll-button"
-              aria-label="Earlier settings sections"
-              disabled={!navCanScrollBack()}
-              onClick={() => scrollNav(-1)}
+              ref={navTrigger}
+              class="settings-nav__mobile-trigger"
+              aria-expanded={navOpen()}
+              aria-controls="settings-section-menu"
+              onClick={() => setNavOpen((value) => !value)}
             >
-              <Icon name="chevron-left" size="small" />
+              <Icon name={panelRoot(current().id).icon} size="small" />
+              <span>{panelRoot(current().id).title}</span>
+              <Show when={current().parent}>
+                <small>· {current().title}</small>
+              </Show>
+              <Icon name="chevron-down" size="small" classList={{ "rotate-180": navOpen() }} />
             </button>
-            <div class="settings-nav__sections" ref={navSections}>
+            <div id="settings-section-menu" class="settings-nav__sections" ref={navSections}>
               <For each={SETTINGS_SECTIONS}>
                 {(section) => (
                   <div class="settings-nav__section">
                     <span class="settings-nav__label">{section.label}</span>
-                    <For each={SETTINGS_PANELS.filter((p) => p.section === section.id)}>
+                    <For each={SETTINGS_PRIMARY_PANELS.filter((p) => p.section === section.id)}>
                       {(panel) => (
-                        <button
-                          type="button"
-                          class="settings-nav__item"
-                          data-active={current().id === panel.id ? "true" : "false"}
-                          data-pending={pending() === panel.id ? "true" : undefined}
-                          onPointerEnter={() => void preloadPanel(panel.id).catch(() => undefined)}
-                          onFocus={() => void preloadPanel(panel.id).catch(() => undefined)}
-                          onClick={() => void navigate(panel.id)}
-                          aria-busy={pending() === panel.id ? "true" : undefined}
-                          aria-current={current().id === panel.id ? "page" : undefined}
-                        >
-                          <Icon name={panel.icon} size="normal" class="flex-shrink-0" />
-                          <span class="truncate">{panel.title}</span>
-                        </button>
+                        <div class="settings-nav__group">
+                          <button
+                            type="button"
+                            class="settings-nav__item"
+                            data-active={current().id === panel.id ? "true" : "false"}
+                            data-pending={pending() === panel.id ? "true" : undefined}
+                            onPointerEnter={() => void preloadPanel(panel.id).catch(() => undefined)}
+                            onFocus={() => void preloadPanel(panel.id).catch(() => undefined)}
+                            onClick={() => void navigate(panel.id)}
+                            aria-busy={pending() === panel.id ? "true" : undefined}
+                            aria-current={current().id === panel.id ? "page" : undefined}
+                          >
+                            <Icon name={panel.icon} size="normal" class="flex-shrink-0" />
+                            <span class="truncate">{panel.title}</span>
+                          </button>
+                          <Show when={panelRoot(current().id).id === panel.id && panelChildren(panel.id).length > 0}>
+                            <div class="settings-nav__children">
+                              <For each={panelChildren(panel.id)}>
+                                {(child) => (
+                                  <button
+                                    type="button"
+                                    class="settings-nav__item"
+                                    data-secondary="true"
+                                    data-active={current().id === child.id ? "true" : "false"}
+                                    data-pending={pending() === child.id ? "true" : undefined}
+                                    onPointerEnter={() => void preloadPanel(child.id).catch(() => undefined)}
+                                    onFocus={() => void preloadPanel(child.id).catch(() => undefined)}
+                                    onClick={() => void navigate(child.id)}
+                                    aria-busy={pending() === child.id ? "true" : undefined}
+                                    aria-current={current().id === child.id ? "page" : undefined}
+                                  >
+                                    <span class="truncate">{child.title}</span>
+                                  </button>
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+                        </div>
                       )}
                     </For>
                   </div>
                 )}
               </For>
             </div>
-            <button
-              type="button"
-              class="settings-nav__scroll-button"
-              aria-label="Later settings sections"
-              disabled={!navCanScrollForward()}
-              onClick={() => scrollNav(1)}
-            >
-              <Icon name="chevron-right" size="small" />
-            </button>
             <div class="settings-nav__footer">
               <span class="text-12-medium">OpenScience</span>
               <span class="text-11-regular">v{platform.version}</span>

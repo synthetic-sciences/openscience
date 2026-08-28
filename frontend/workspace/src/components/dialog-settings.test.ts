@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { SETTINGS_PANELS } from "./settings/registry"
+import { SETTINGS_PANELS, SETTINGS_PRIMARY_PANELS } from "./settings/registry"
 
 const source = () => readFileSync(fileURLToPath(new URL("./dialog-settings.tsx", import.meta.url)), "utf8")
 const appSource = () => readFileSync(fileURLToPath(new URL("../app.tsx", import.meta.url)), "utf8")
@@ -40,21 +40,23 @@ test("settings use a compact responsive navigation frame", () => {
   expect(dialog).toContain('class="settings-nav"')
   expect(dialog).toContain('class="settings-nav__sections')
   expect(dialog).toContain('class="settings-nav__item')
-  expect(dialog).toContain('aria-label="Earlier settings sections"')
-  expect(dialog).toContain('aria-label="Later settings sections"')
-  expect(dialog).toContain("navSections.scrollBy")
-  expect(dialog).toContain("disabled={!navCanScrollBack()}")
-  expect(dialog).toContain("disabled={!navCanScrollForward()}")
+  expect(dialog).toContain('class="settings-nav__mobile-trigger"')
+  expect(dialog).toContain('aria-controls="settings-section-menu"')
+  expect(dialog).toContain('data-mobile-open={navOpen() ? "true" : undefined}')
+  expect(dialog).toContain('data-dialog-escape-scope={navOpen() ? "true" : undefined}')
+  expect(dialog).toContain('nav?.addEventListener("keydown", closeMobileNavigation, true)')
+  expect(dialog).toContain("event.preventDefault()")
+  expect(dialog).toContain("event.stopImmediatePropagation()")
+  expect(dialog).toContain("queueMicrotask(() => navTrigger?.focus())")
+  expect(dialogSource()).toContain("target.closest('[data-dialog-escape-scope=\"true\"]')")
+  expect(dialog).toContain("SETTINGS_PRIMARY_PANELS")
+  expect(SETTINGS_PRIMARY_PANELS).toHaveLength(7)
   expect(dialog).toContain("scrollIntoView")
   expect(dialog).toContain('class="settings-main__viewport"')
   expect(dialog).toContain("@media (max-width: 980px)")
   expect(dialog).toMatch(/\.settings-nav__sections\s*\{[^}]*min-height: 0;[^}]*flex: 1;[^}]*overflow-y: auto/s)
-  expect(dialog).toMatch(
-    /@media \(max-width: 980px\)[\s\S]*\.settings-nav__sections::-webkit-scrollbar\s*\{[^}]*display: block;[^}]*height: 3px/s,
-  )
-  expect(dialog).toMatch(
-    /@media \(max-width: 980px\)[\s\S]*\.settings-nav\s*\{[^}]*grid-template-columns: 32px minmax\(0, 1fr\) 32px/s,
-  )
+  expect(dialog).toMatch(/@media \(max-width: 980px\)[\s\S]*\.settings-nav__sections\s*\{[^}]*position: absolute/s)
+  expect(dialog).not.toContain("navSections.scrollBy")
   expect(dialog).toMatch(/\.settings-main\s*\{[^}]*min-width: 0;[^}]*min-height: 0;[^}]*overflow: hidden/s)
   expect(dialog).toMatch(/\.settings-main__viewport\s*\{[^}]*min-width: 0;[^}]*min-height: 0;[^}]*overflow: hidden/s)
   expect(dialog).not.toContain("w-[224px]")
@@ -67,6 +69,7 @@ test("settings enforce one sentence-case typography system", () => {
   expect(dialog).toContain("font-family: var(--font-family-sans)")
   expect(dialog).toContain(".settings-section-label")
   expect(dialog).toMatch(/\.settings-nav__item\s*\{[^}]*min-height: 32px/s)
+  expect(dialog).toMatch(/\.settings-nav__item\[data-secondary="true"\]\s*\{[^}]*min-height: 32px/s)
   expect(dialog).toMatch(/\.settings-nav__item\s*\{[^}]*font-size: 13px/s)
   expect(dialog).toMatch(/\.settings-nav__item\s*\{[^}]*font-weight: var\(--font-weight-regular\)/s)
   expect(dialog).toMatch(
@@ -262,7 +265,7 @@ test("settings dialog makes every registered capability navigable", () => {
   expect(models?.icon).toBe("models")
   expect(compute?.icon).toBe("cpu")
   expect(permissions?.icon).toBe("shield")
-  expect(dialog).toContain("SETTINGS_PANELS.filter((p) => p.section === section.id)")
+  expect(dialog).toContain("SETTINGS_PRIMARY_PANELS.filter((p) => p.section === section.id)")
   expect(dialog).toContain("onClick={() => void navigate(panel.id)}")
   expect(dialog).toContain('aria-current={current().id === panel.id ? "page" : undefined}')
   expect(dialog).toContain("<SettingsPanelStack")

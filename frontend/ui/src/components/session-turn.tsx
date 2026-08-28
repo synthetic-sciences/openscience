@@ -19,6 +19,7 @@ import { Binary } from "@synsci/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part, QuestionPrompt } from "./message-part"
+import { BasicTool } from "./basic-tool"
 import {
   artifactTypeLabel,
   artifactActions,
@@ -153,14 +154,36 @@ function AssistantTrace(props: {
     <For each={traceIDs()}>
       {(partID) => (
         <Show when={traceByID().get(partID)}>
-          {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
+          {(entry) => (
+            <Show when={entry().group} fallback={<Part part={entry().part} message={entry().message} hideCopy />}>
+              {(group) => (
+                <div data-component="trace-preflight-group">
+                  <BasicTool
+                    icon="console"
+                    trigger={{
+                      title: `Checked environment · ${group().length} steps`,
+                      subtitle: group()
+                        .map((item) =>
+                          item.part.type === "tool" && "title" in item.part.state ? item.part.state.title : undefined,
+                        )
+                        .filter((title): title is string => !!title)
+                        .slice(0, 2)
+                        .join(" · "),
+                    }}
+                  >
+                    <div data-slot="trace-preflight-items">
+                      <For each={group()}>{(item) => <Part part={item.part} message={item.message} hideCopy />}</For>
+                    </div>
+                  </BasicTool>
+                </div>
+              )}
+            </Show>
+          )}
         </Show>
       )}
     </For>
   )
 }
-
-type ResearchTraceEntry = { part: PartType; message: AssistantMessage }
 
 function SessionErrorNotice(props: { error: unknown }) {
   const display = () => sessionErrorDisplay(props.error)

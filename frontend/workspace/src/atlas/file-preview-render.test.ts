@@ -35,7 +35,7 @@ describe("file preview markdown images", () => {
     const preview = await read("./FilePreview.tsx")
     const css = await read("./FilePreview.css")
 
-    expect(preview).toContain('sourceLabel={description().source && props.writable !== false ? "Edit" : undefined}')
+    expect(preview).toContain('sourceLabel={description().source && writable() !== false ? "Edit" : undefined}')
     expect(preview).toContain('import { CodeEditor } from "@/atlas/CodeEditor"')
     expect(preview).toContain("label={`${name()} source`}")
     expect(preview).toContain('wrap={kind() === "markdown"}')

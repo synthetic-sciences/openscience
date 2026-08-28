@@ -80,6 +80,30 @@ describe("research trace presentation", () => {
     expect(trace.map((item) => item.part.id)).toEqual(["read", "grep", "list"])
   })
 
+  test("groups only adjacent successful shell preflights and retains their original calls", () => {
+    const first = entry("shell-1", "bash", "Check Python runtime")
+    const second = entry("shell-2", "bash", "Inspect workspace status")
+    if (first.part.type === "tool") first.part.state.input = { command: "python --version" }
+    if (second.part.type === "tool") second.part.state.input = { command: "git status --short" }
+    const trace = visibleResearchTrace([first, second, entry("patch", "apply_patch", "Update report")])
+
+    expect(trace.map((item) => item.part.id)).toEqual(["shell-1", "patch"])
+    expect(trace[0]?.group?.map((item) => item.part.id)).toEqual(["shell-1", "shell-2"])
+  })
+
+  test("never groups failed or substantive shell work", () => {
+    const check = entry("shell-1", "bash", "Check and train model")
+    if (check.part.type === "tool") check.part.state.input = { command: "pwd && python train.py" }
+    const trace = visibleResearchTrace([
+      check,
+      entry("shell-2", "bash", "Check dependency", "error"),
+      entry("shell-3", "bash", "Train full model"),
+    ])
+
+    expect(trace.map((item) => item.part.id)).toEqual(["shell-1", "shell-2", "shell-3"])
+    expect(trace.some((item) => item.group)).toBe(false)
+  })
+
   test("collapses adjacent completed skill loads into one truthful disclosure", () => {
     const trace = visibleResearchTrace([
       {

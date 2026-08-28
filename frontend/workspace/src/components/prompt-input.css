@@ -462,6 +462,7 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
 
 form.workspace-composer {
   --composer-radius-pill: 999px;
+  --composer-radius-segment: var(--radius-sm);
   --composer-editor-font-family: var(--font-family-sans);
   --composer-editor-font-features: var(--font-family-sans--font-feature-settings, normal);
   --composer-editor-font-variation: var(--font-family-sans--font-variation-settings, normal);
@@ -764,7 +765,7 @@ form.workspace-composer .workspace-composer__research-slider button {
   min-height: 32px;
   padding: 3px 7px;
   border: 0;
-  border-radius: calc(var(--radius-md) - 2px);
+  border-radius: var(--composer-radius-segment);
   background: transparent;
   color: var(--text-weak);
   font: inherit;

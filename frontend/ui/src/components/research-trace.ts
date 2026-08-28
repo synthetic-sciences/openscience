@@ -5,6 +5,8 @@ export type ResearchTraceEntry = {
   message: AssistantMessage
   part: Part
   hidden?: boolean
+  /** Adjacent, low-value successful preflights kept behind one disclosure. */
+  group?: ResearchTraceEntry[]
 }
 
 export type TaskActivity = {
@@ -91,10 +93,25 @@ function skillMatches(entry: CompletedSkillEntry) {
     : []
 }
 
+function completedShellPreflight(entry: ResearchTraceEntry) {
+  if (entry.part.type !== "tool" || entry.part.tool !== "bash" || entry.part.state.status !== "completed") return false
+  const input = (entry.part.state.input ?? {}) as Record<string, unknown>
+  const command = typeof input.command === "string" ? input.command.trim() : ""
+  return [
+    /^pwd$/,
+    /^(?:which|command\s+-v)\s+[A-Za-z0-9._+/-]+$/,
+    /^git\s+status(?:\s+(?:--short|--porcelain(?:=v[12])?))?$/,
+    /^git\s+rev-parse\s+(?:--show-toplevel|--is-inside-work-tree|--show-prefix|HEAD)$/,
+    /^[A-Za-z0-9._+/-]+\s+--version$/,
+  ].some((pattern) => pattern.test(command))
+}
+
 /**
  * Keep the primary activity transcript literal and chronological. Streaming
  * state changes must not replace already-visible rows with aggregate summaries;
- * compact grouping is reserved for secondary child-agent summaries below.
+ * The sole inline compaction is a run of low-value, successful shell
+ * preflights. The original calls remain in `group` so expansion never hides
+ * commands or output; errors and substantive work always remain literal.
  */
 export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
   // Streaming reconciliation can briefly surface the same durable part twice
@@ -152,6 +169,19 @@ export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTra
         },
       })
       continue
+    }
+    if (completedShellPreflight(first)) {
+      const group: ResearchTraceEntry[] = [first]
+      while (index + 1 < visible.length) {
+        const next = visible[index + 1]!
+        if (!completedShellPreflight(next)) break
+        group.push(next)
+        index++
+      }
+      if (group.length > 1) {
+        result.push({ ...first, group })
+        continue
+      }
     }
     if (!completedSkillLoad(first)) {
       result.push(first)
