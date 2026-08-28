@@ -586,6 +586,9 @@
                               "seat_assigned": {
                                 "type": "boolean"
                               },
+                              "funding_available": {
+                                "type": "boolean"
+                              },
                               "effective_permissions": {
                                 "type": "array",
                                 "items": {
@@ -601,6 +604,7 @@
                               "role",
                               "membership_status",
                               "seat_assigned",
+                              "funding_available",
                               "effective_permissions"
                             ]
                           }
@@ -684,6 +688,9 @@
                           "seat_assigned": {
                             "type": "boolean"
                           },
+                          "funding_available": {
+                            "type": "boolean"
+                          },
                           "effective_permissions": {
                             "type": "array",
                             "items": {
@@ -699,6 +706,7 @@
                           "role",
                           "membership_status",
                           "seat_assigned",
+                          "funding_available",
                           "effective_permissions"
                         ]
                       }
@@ -771,6 +779,9 @@
                           "seat_assigned": {
                             "type": "boolean"
                           },
+                          "funding_available": {
+                            "type": "boolean"
+                          },
                           "effective_permissions": {
                             "type": "array",
                             "items": {
@@ -786,6 +797,7 @@
                           "role",
                           "membership_status",
                           "seat_assigned",
+                          "funding_available",
                           "effective_permissions"
                         ]
                       }

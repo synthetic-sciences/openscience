@@ -2,11 +2,12 @@ import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import { existsSync, readFileSync } from "fs"
-import { randomUUID, createHash } from "crypto"
+import { createHash, randomUUID } from "crypto"
 import { Global } from "../global"
 import { DataRootBarrier } from "../global/data-root-barrier"
 import { Log } from "../util/log"
 import { Lock } from "../util/lock"
+import { FileLease } from "../util/file-lease"
 import { Env } from "../env"
 import { Auth } from "../auth"
 import {
@@ -219,6 +220,7 @@ export interface FundingOrganization {
   role: string
   membership_status: string
   seat_assigned: boolean
+  funding_available: boolean
   effective_permissions: string[]
 }
 
@@ -600,6 +602,7 @@ export namespace OpenScience {
           role: typeof row.role === "string" ? row.role : "member",
           membership_status: typeof row.membership_status === "string" ? row.membership_status : "active",
           seat_assigned: row.seat_assigned === true,
+          funding_available: row.funding_available === true,
           effective_permissions: Array.isArray(row.effective_permissions)
             ? row.effective_permissions.filter((permission): permission is string => typeof permission === "string")
             : [],
@@ -609,7 +612,14 @@ export namespace OpenScience {
   }
 
   function organizationAvailable(row: FundingOrganization | undefined): boolean {
-    return !!row && row.status === "active" && row.membership_status === "active"
+    return (
+      !!row &&
+      row.status === "active" &&
+      row.membership_status === "active" &&
+      row.seat_assigned &&
+      row.funding_available &&
+      row.effective_permissions.includes("use_shared_wallet")
+    )
   }
 
   async function authStatus(snapshot: FundingSnapshot): Promise<{
@@ -2114,6 +2124,11 @@ export namespace OpenScience {
    *  api_key (never the raw key, which must not sit in the queue file). */
   function accountTag(session: Pick<OpenScienceSession, "api_key" | "user_id">): string {
     if (session.user_id) return session.user_id
+    // The input is a high-entropy, server-issued API credential. This short
+    // fingerprint partitions local retry rows; it is not authentication or a
+    // password verifier. Keep the established digest so existing key-only
+    // queues and durable cutover markers remain upgrade-compatible.
+    // codeql[js/insufficient-password-hash]
     return "k:" + createHash("sha256").update(session.api_key).digest("hex").slice(0, 16)
   }
 
@@ -2145,10 +2160,21 @@ export namespace OpenScience {
     }
   }
 
+  async function updateUsageCapabilities(update: (value: UsageCapabilities) => void): Promise<void> {
+    await using lease = await FileLease.acquire(`${usageCapabilityPath}.lock`)
+    await lease.during(async () => {
+      using _ = await Lock.write(usageCapabilityPath)
+      const current = await readUsageCapabilities()
+      update(current)
+      await atomicWrite(usageCapabilityPath, JSON.stringify(current, null, 2), { mode: 0o600 })
+    })
+  }
+
   async function rememberUsageCutover(session: OpenScienceSession | FundingSnapshot): Promise<void> {
-    const current = await readUsageCapabilities()
-    current.accounts[contextTag(session)] = { nonfinancial: true, observed_at: new Date().toISOString() }
-    await atomicWrite(usageCapabilityPath, JSON.stringify(current, null, 2), { mode: 0o600 }).catch((error) =>
+    await updateUsageCapabilities((current) => {
+      current.accounts[contextTag(session)] = { nonfinancial: true, observed_at: new Date().toISOString() }
+      if (!session.organization_id) delete current.accounts[accountTag(session)]
+    }).catch((error) =>
       log.warn("could not persist usage cutover capability", {
         error: error instanceof Error ? error.message : String(error),
       }),
@@ -2164,15 +2190,27 @@ export namespace OpenScience {
       return true
     }
     const value = await readUsageCapabilities()
-    return value.accounts[contextTag(session)]?.nonfinancial === true
+    if (value.accounts[contextTag(session)]?.nonfinancial === true) return true
+    if (session.organization_id || value.accounts[accountTag(session)]?.nonfinancial !== true) return false
+    // Before organization funding existed, the durable marker used only the
+    // account tag. It can belong only to Personal. Preserve that cutover and
+    // migrate it under the serialized multi-context map update.
+    await rememberUsageCutover(session)
+    return true
   }
 
   /** Whether a queued row tagged `rowAccount` may be flushed under `currentAccount`.
    *  A row with no tag is legacy/accountless → best-effort send under the current
    *  account; a row tagged for a DIFFERENT account is never sent (kept until that
    *  account is active). Pure + exported for tests. */
-  export function shouldFlushForAccount(rowAccount: string | undefined, currentAccount: string): boolean {
-    return !rowAccount || rowAccount === currentAccount
+  export function shouldFlushForAccount(
+    rowAccount: string | undefined,
+    currentAccount: string,
+    legacyPersonalAccount?: string,
+  ): boolean {
+    if (rowAccount === currentAccount) return true
+    if (legacyPersonalAccount === undefined) return false
+    return !rowAccount || rowAccount === legacyPersonalAccount
   }
 
   async function persistToQueue(params: UsageParams, account?: string) {
@@ -2305,6 +2343,7 @@ export namespace OpenScience {
       const session = await getFundingSnapshot()
       if (!session) return
       const currentAccount = contextTag(session)
+      const legacyPersonalAccount = session.organization_id ? undefined : accountTag(session)
       const cutover = await usageCutoverReady(session)
 
       const retry: string[] = []
@@ -2313,7 +2352,7 @@ export namespace OpenScience {
           const { __account, ...params } = JSON.parse(line) as UsageParams & { __account?: string }
           // Never bill the active account for usage another account generated —
           // keep it queued until that account is the one flushing.
-          if (!shouldFlushForAccount(__account, currentAccount)) {
+          if (!shouldFlushForAccount(__account, currentAccount, legacyPersonalAccount)) {
             retry.push(line)
             continue
           }

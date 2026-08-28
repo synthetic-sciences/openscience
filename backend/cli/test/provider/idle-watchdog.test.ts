@@ -40,6 +40,35 @@ function watched(
 }
 
 describe("provider activity watchdog", () => {
+  test("never emits a funding credential through request timing", async () => {
+    const secret = "thk_timing.super-secret"
+    const timings: Provider.RequestTiming[] = []
+    const response = Provider.withRequestContext(
+      {
+        ...context,
+        funding: Object.freeze({
+          api_key: secret,
+          user_id: "user-timing",
+          account: "user-timing",
+          organization_id: "org-timing",
+        }),
+      },
+      () =>
+        Provider.fetchWithIdleWatchdog(async () => new Response("ok"), "https://provider.test", undefined, {
+          providerID: "test-provider",
+          modelID: "test-model",
+          idleTimeout: false,
+          onTiming: (timing) => timings.push(timing),
+        }),
+    )
+    expect(await (await response).text()).toBe("ok")
+    const serialized = JSON.stringify(timings)
+    expect(timings).toHaveLength(1)
+    expect(serialized).not.toContain(secret)
+    expect(serialized).not.toContain("api_key")
+    expect(serialized).not.toContain("funding")
+  })
+
   test("leaves provider inactivity unbounded by default and clamps explicit timer values", () => {
     expect(Provider.resolveIdleTimeout(undefined)).toBe(false)
     expect(Provider.resolveIdleTimeout(false)).toBe(false)

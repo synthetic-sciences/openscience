@@ -17,7 +17,8 @@ const alpha = {
   role: "owner",
   membership_status: "active",
   seat_assigned: true,
-  effective_permissions: ["billing.manage", "research.use"],
+  funding_available: true,
+  effective_permissions: ["manage_billing", "use_shared_wallet"],
 }
 
 const beta = {
@@ -28,7 +29,18 @@ const beta = {
   role: "member",
   membership_status: "active",
   seat_assigned: true,
-  effective_permissions: ["research.use"],
+  funding_available: true,
+  effective_permissions: ["use_shared_wallet"],
+}
+
+const unseated = {
+  ...beta,
+  organization_id: "org_unseated",
+  name: "Unseated Lab",
+  slug: "unseated-lab",
+  seat_assigned: false,
+  funding_available: false,
+  effective_permissions: [],
 }
 
 afterEach(async () => {
@@ -143,6 +155,20 @@ describe("organization funding context", () => {
     ])
   })
 
+  test("refuses an organization without an active funded seat", async () => {
+    await Bun.write(session, JSON.stringify({ api_key: "thk_context.secret", user_id: "user-context" }))
+    globalThis.fetch = (async () =>
+      Response.json({ organizations: [unseated], funding_context: { type: "personal" } })) as unknown as typeof fetch
+
+    const selected = await AccountRoutes().request("/funding-context", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: unseated.organization_id }),
+    })
+    expect(selected.status).toBe(400)
+    expect((await Bun.file(session).json()).organization_id).toBeUndefined()
+  })
+
   test("adds attribution only to funded control-plane calls", async () => {
     await Bun.write(
       session,
@@ -245,5 +271,30 @@ describe("organization funding context", () => {
     expect(await OpenScience.getBalance(second!)).toBe(20)
     expect((await OpenScience.getResearchEntitlements(second!))?.plan).toBe("org_beta")
     expect(reads).toEqual({ balance: 2, entitlements: 2 })
+  })
+
+  test("preserves concurrent Personal and organization usage cutover markers", async () => {
+    const personal = Object.freeze({
+      api_key: "thk_context.secret",
+      user_id: "user-context",
+      account: "user-context",
+    })
+    const organization = Object.freeze({ ...personal, organization_id: alpha.organization_id })
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      if (new Headers(init?.headers).get("X-Organization-ID")) await Bun.sleep(10)
+      return Response.json({ accepted: true, financial: false, billing_authority: "gateway_proxy" })
+    }) as typeof fetch
+
+    await Promise.all([
+      OpenScience.reportUsage({ service: "llm", event_type: "chat", tokens_used: 1 }, personal),
+      OpenScience.reportUsage({ service: "llm", event_type: "chat", tokens_used: 1 }, organization),
+    ])
+
+    expect(await Bun.file(capabilities).json()).toMatchObject({
+      accounts: {
+        ["user-context\u0000personal"]: { nonfinancial: true },
+        [`user-context\u0000organization:${alpha.organization_id}`]: { nonfinancial: true },
+      },
+    })
   })
 })

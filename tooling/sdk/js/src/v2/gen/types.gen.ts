@@ -2785,6 +2785,7 @@ export type AccountGetResponses = {
         role: string
         membership_status: string
         seat_assigned: boolean
+        funding_available: boolean
         effective_permissions: Array<string>
       }>
     }
@@ -2816,6 +2817,7 @@ export type AccountFundingContextGetResponses = {
       role: string
       membership_status: string
       seat_assigned: boolean
+      funding_available: boolean
       effective_permissions: Array<string>
     }>
   }
@@ -2860,6 +2862,7 @@ export type AccountFundingContextSetResponses = {
       role: string
       membership_status: string
       seat_assigned: boolean
+      funding_available: boolean
       effective_permissions: Array<string>
     }>
   }

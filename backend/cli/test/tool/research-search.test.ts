@@ -20,6 +20,13 @@ const restores: Array<{ mockRestore(): void }> = []
 const sessionPath = path.join(Global.Path.data, "openscience-session.json")
 
 function managedAce() {
+  const snapshot = Object.freeze({
+    api_key: "thk_search.secret",
+    user_id: "user-search",
+    account: "user-search",
+    organization_id: "org_search",
+  })
+  const funding = spyOn(OpenScience, "getFundingSnapshot").mockResolvedValue(snapshot)
   const billing = spyOn(OpenScience, "getBillingMode").mockResolvedValue({
     mode: "managed",
     balance_cents: 2_000,
@@ -28,7 +35,8 @@ function managedAce() {
     managed_unlocked: true,
     balance_usd: 20,
   })
-  restores.push(billing)
+  restores.push(funding, billing)
+  return snapshot
 }
 
 afterEach(async () => {
@@ -38,7 +46,7 @@ afterEach(async () => {
 
 describe("research_search", () => {
   test("does not start a second provider when managed settlement is unknown", async () => {
-    managedAce()
+    const snapshot = managedAce()
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue(null)
     restores.push(dispatch)
     const fetcher = spyOn(globalThis, "fetch").mockImplementation(
@@ -57,6 +65,7 @@ describe("research_search", () => {
       operation_id: "call_search",
     })
     expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(dispatch.mock.calls[0]?.[3]).toBe(snapshot)
     expect(fetcher).not.toHaveBeenCalled()
   })
 

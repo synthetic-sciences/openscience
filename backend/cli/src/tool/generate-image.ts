@@ -472,6 +472,7 @@ export const GenerateImageTool = Tool.define("generate_image", {
     })
     await Bus.publish(File.Event.Edited, { file: output })
     await Bus.publish(FileWatcher.Event.Updated, { file: output, event: approved ? "change" : "add" })
+    if (managed) OpenScience.invalidateBalance()
 
     const attachments = generatedImageAttachments({
       bytes: image.bytes,

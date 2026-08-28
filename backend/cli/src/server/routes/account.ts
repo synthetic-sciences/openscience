@@ -34,6 +34,7 @@ const FundingOrganization = z.object({
   role: z.string(),
   membership_status: z.string(),
   seat_assigned: z.boolean(),
+  funding_available: z.boolean(),
   effective_permissions: z.array(z.string()),
 })
 

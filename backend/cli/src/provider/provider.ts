@@ -57,7 +57,7 @@ export namespace Provider {
     funding?: FundingSnapshot
   }
 
-  export type RequestTiming = RequestContext & {
+  export type RequestTiming = Pick<RequestContext, "sessionID" | "messageID" | "attempt"> & {
     requestID: string
     providerID: string
     modelID: string
@@ -239,7 +239,9 @@ export namespace Provider {
     }
     const signal = signals.length === 1 ? signals[0]! : AbortSignal.any(signals)
     const timing: Omit<RequestTiming, "completedAt" | "outcome"> = {
-      ...context,
+      sessionID: context.sessionID,
+      messageID: context.messageID,
+      attempt: context.attempt,
       requestID: crypto.randomUUID(),
       providerID: options.providerID,
       modelID: options.modelID,

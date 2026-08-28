@@ -250,8 +250,9 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
           },
         })
 
+        const snapshot = await OpenScience.getFundingSnapshot()
         const [billing, credential] = await Promise.all([
-          OpenScience.getBillingMode().catch(() => null),
+          snapshot ? OpenScience.getBillingMode(snapshot).catch(() => null) : Promise.resolve(null),
           resolveCredentialFields("firecrawl").catch(() => undefined),
         ])
         const key = credential?.api_key
@@ -267,7 +268,12 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
         // search. It can choose Firecrawl without exposing that provider key to
         // this process. Replays use one durable operation key.
         const operationID = ctx.callID || randomUUID()
-        const response = await OpenScience.dispatchResearchSearch(input as ResearchSearchInput, operationID, ctx.abort)
+        const response = await OpenScience.dispatchResearchSearch(
+          input as ResearchSearchInput,
+          operationID,
+          ctx.abort,
+          snapshot ?? undefined,
+        )
         if (!response) {
           return {
             output: completed(
