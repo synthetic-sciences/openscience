@@ -9,6 +9,7 @@ const signed = process.env.OPENSCIENCE_DESKTOP_SIGNED === "true"
 export default {
   appId: "ai.syntheticsciences.openscience",
   productName: "OpenScience",
+  executableName: "openscience",
   artifactName: `OpenScience-${name}-\${arch}.\${ext}`,
   extraMetadata: {
     version: process.env.OPENSCIENCE_VERSION || "2.0.47",

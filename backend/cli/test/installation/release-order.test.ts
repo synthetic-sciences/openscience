@@ -158,6 +158,7 @@ test("desktop packaging explicitly separates signed and unsigned installers", as
   const config = await Bun.file(path.join(import.meta.dir, "../../../../frontend/desktop/electron-builder.mjs")).text()
 
   expect(config).toContain('process.env.OPENSCIENCE_DESKTOP_SIGNED === "true"')
+  expect(config).toContain('executableName: "openscience"')
   expect(config).toContain('identity: signed ? undefined : "-"')
   expect(config).toContain("forceCodeSigning: signed")
   expect(config).toContain("hardenedRuntime: true")
