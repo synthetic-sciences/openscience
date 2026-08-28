@@ -17,11 +17,13 @@ describe("OpenScience session file", () => {
       user_id: "u1",
       device_name: "dev",
       organization_id: "org_test",
+      organization_locked: true,
     })
     const s = await OpenScience.getSession()
     expect(s?.api_key).toBe("thk_test.secret")
     expect(s?.user_id).toBe("u1")
     expect(s?.organization_id).toBe("org_test")
+    expect(s?.organization_locked).toBe(true)
 
     await OpenScience.clearSession()
     expect(await OpenScience.getSession()).toBeNull()

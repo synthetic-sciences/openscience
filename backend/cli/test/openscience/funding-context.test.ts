@@ -120,6 +120,39 @@ describe("organization funding context", () => {
     expect(headers).toEqual([null, null, beta.organization_id, null])
   })
 
+  test("requires a fresh login before changing an organization-scoped key", async () => {
+    await Bun.write(
+      session,
+      JSON.stringify({
+        api_key: "thk_org-scoped.secret",
+        user_id: "user-context",
+        organization_id: alpha.organization_id,
+        organization_locked: true,
+      }),
+    )
+    globalThis.fetch = (async () => {
+      throw new Error("a locked context change must fail before a network request")
+    }) as unknown as typeof fetch
+
+    const personal = await AccountRoutes().request("/funding-context", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: null }),
+    })
+    const other = await AccountRoutes().request("/funding-context", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: beta.organization_id }),
+    })
+
+    expect(personal.status).toBe(400)
+    expect(other.status).toBe(400)
+    expect(await personal.json()).toEqual({
+      error: "This sign-in is tied to one organization. Sign in again to choose another account.",
+    })
+    expect((await Bun.file(session).json()).organization_id).toBe(alpha.organization_id)
+  })
+
   test("keeps a revoked organization selected and lets Atlas reject it instead of falling back to Personal", async () => {
     await Bun.write(
       session,

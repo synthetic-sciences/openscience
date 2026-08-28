@@ -161,6 +161,9 @@ export interface OpenScienceSession {
    *  An organization selection is always forwarded explicitly; it is never
    *  erased merely because a later Atlas status read is unavailable. */
   organization_id?: string
+  /** True when Atlas issued this API key for one immutable organization.
+   *  Changing that scope requires a fresh browser approval and a new key. */
+  organization_locked?: boolean
   /** Last-seen ``/api/cli/sync/version`` value. Background refresh fires
    *  when the server returns a higher value. */
   cached_v?: number
@@ -210,6 +213,12 @@ interface SyncResponse {
   }
 }
 
+function loginOrganizationID(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined
+  if (typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value)) return value
+  throw new Error("Login returned an invalid organization id.")
+}
+
 export type AccountProfile = SyncResponse["user"]
 
 export interface FundingOrganization {
@@ -245,6 +254,17 @@ interface AuthStatusResponse {
   funding_context?: {
     type?: "personal" | "organization"
     organization_id?: string
+  }
+}
+
+interface BrowserLoginResponse {
+  api_key?: unknown
+  key?: unknown
+  organization_id?: unknown
+  user_id?: unknown
+  user?: {
+    id?: unknown
+    user_id?: unknown
   }
 }
 
@@ -508,18 +528,23 @@ export namespace OpenScience {
         }
         return null
       }
+      const organizationID =
+        data.organization_id === undefined
+          ? undefined
+          : typeof data.organization_id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(data.organization_id)
+            ? data.organization_id
+            : (() => {
+                throw new Error("invalid organization_id in the local OpenScience session")
+              })()
+      if (data.organization_locked === true && !organizationID) {
+        throw new Error("organization-locked OpenScience session is missing its organization_id")
+      }
       return {
         api_key: data.api_key,
         user_id: data.user_id || "",
         device_name: data.device_name,
-        organization_id:
-          data.organization_id === undefined
-            ? undefined
-            : typeof data.organization_id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(data.organization_id)
-              ? data.organization_id
-              : (() => {
-                  throw new Error("invalid organization_id in the local OpenScience session")
-                })(),
+        organization_id: organizationID,
+        organization_locked: data.organization_locked === true ? true : undefined,
         // Sync bookkeeping. Dropping these made refreshIfStale's TTL and
         // version dedupe dead code: every message fired a version probe
         // plus a full background sync, and updateSession (getSession +
@@ -664,15 +689,27 @@ export namespace OpenScience {
     }
   }
 
-  /** Change only the local non-secret funding selection. Organization choices
-   * require a fresh personal-context auth status read; Personal is always an
-   * explicit, offline-safe choice. */
+  /** Change only the local non-secret funding selection. Flexible legacy keys
+   * validate organization choices against Atlas. A key issued for one
+   * organization cannot be relabeled locally; choosing another account
+   * requires a fresh login and separately scoped key. */
   export async function setFundingContext(organizationID: string | null): Promise<FundingContext> {
-    const snapshot = await getFundingSnapshot()
-    if (!snapshot) throw new FundingContextError("Sign in before choosing a funding account.")
+    const connected = await getSession()
+    if (!connected) throw new FundingContextError("Sign in before choosing a funding account.")
     if (organizationID !== null && !/^[A-Za-z0-9_-]{1,128}$/.test(organizationID)) {
       throw new FundingContextError("Invalid organization id.")
     }
+    if (connected.organization_locked && organizationID !== connected.organization_id) {
+      throw new FundingContextError(
+        "This sign-in is tied to one organization. Sign in again to choose another account.",
+      )
+    }
+    const snapshot = Object.freeze({
+      api_key: connected.api_key,
+      user_id: connected.user_id,
+      account: accountTag(connected),
+      ...(connected.organization_id ? { organization_id: connected.organization_id } : {}),
+    })
     const status = organizationID
       ? await authStatus(Object.freeze({ ...snapshot, organization_id: undefined }))
       : undefined
@@ -686,6 +723,11 @@ export namespace OpenScience {
       const current = await getSession()
       if (!current || current.api_key !== snapshot.api_key) {
         throw new FundingContextError("The connected account changed while the funding selection was being saved.")
+      }
+      if (current.organization_locked && organizationID !== current.organization_id) {
+        throw new FundingContextError(
+          "This sign-in is tied to one organization. Sign in again to choose another account.",
+        )
       }
       const next = { ...current, organization_id: organizationID ?? undefined }
       await atomicWrite(filepath, JSON.stringify(next, null, 2), { mode: 0o600 })
@@ -1197,14 +1239,20 @@ export namespace OpenScience {
         }),
       })
       if (!redeemRes.ok) throw new Error(await loginError(redeemRes, "redeem"))
-      const redeemed = await redeemRes.json()
+      const redeemed = (await redeemRes.json()) as BrowserLoginResponse
       const key = redeemed.api_key || redeemed.key
-      if (!key) throw new Error("Login did not return an API key.")
+      if (typeof key !== "string" || !key.startsWith("thk_")) {
+        throw new Error("Login did not return a valid OpenScience API key.")
+      }
+      const organizationID = loginOrganizationID(redeemed.organization_id)
+      const identity = redeemed.user?.user_id || redeemed.user?.id || redeemed.user_id
 
       const session: OpenScienceSession = {
         api_key: key,
-        user_id: redeemed.user?.id || redeemed.user_id || "",
+        user_id: typeof identity === "string" ? identity : "",
         device_name: name,
+        ...(organizationID ? { organization_id: organizationID } : {}),
+        ...(organizationID ? { organization_locked: true } : {}),
       }
       await saveSession(session)
       return session
@@ -1238,10 +1286,31 @@ export namespace OpenScience {
     })
       .then(async (response) => (response.ok ? ((await response.json()) as SyncResponse) : undefined))
       .catch(() => undefined)
+    // Modern organization-scoped keys report their immutable scope here.
+    // Keep this best-effort so older servers without /api/v1/auth/status and
+    // legacy personal keys continue to connect exactly as before.
+    const status = await atlasFetch(
+      `${API_BASE}/api/v1/auth/status`,
+      {
+        headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+      },
+      1_500,
+    )
+      .then(async (response) => (response.ok ? ((await response.json()) as AuthStatusResponse) : undefined))
+      .catch(() => undefined)
+    const organizationID = (() => {
+      const context = status?.funding_context
+      if (context?.type !== "organization") return undefined
+      const value = context.organization_id
+      if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) return undefined
+      return value
+    })()
     const session: OpenScienceSession = {
       api_key: key,
       user_id: profile?.user?.user_id || "",
       device_name: deviceName(),
+      ...(organizationID ? { organization_id: organizationID } : {}),
+      ...(organizationID ? { organization_locked: true } : {}),
     }
     await saveSession(session)
     return session
