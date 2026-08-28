@@ -19,6 +19,8 @@ type Wallet = {
   aceEnabled: boolean
 }
 
+export const canSelectManaged = (wallet: Wallet | undefined) => Boolean(wallet?.signedIn && wallet.managedSupported)
+
 const MODES: { value: Mode; title: string; body: string }[] = [
   {
     value: "byok",
@@ -83,11 +85,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   }
   const update = (value: Mode) => {
     if (busy()) return
-    if (
-      value === "managed" &&
-      wallet() &&
-      (!wallet()!.signedIn || !wallet()!.managedSupported || !wallet()!.aceEnabled)
-    ) {
+    if (value === "managed" && wallet() && !canSelectManaged(wallet())) {
       platform.openLink(URLS.dashboardBilling)
       return
     }
@@ -159,19 +157,18 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     unsubscribe()
   })
 
-  const needsAce = () =>
-    wallet() !== undefined && (!wallet()!.signedIn || !wallet()!.managedSupported || !wallet()!.aceEnabled)
+  const needsAce = () => wallet() !== undefined && !canSelectManaged(wallet())
   const aceLabel = () => {
     if (!wallet()) return "Checking account"
     if (!wallet()!.signedIn) return "Account required"
     if (!wallet()!.managedSupported) return "Managed unavailable"
     if (wallet()!.aceEnabled) return "Ace on"
-    return "Ace off"
+    return "Wallet funded"
   }
   const aceAction = () => {
     if (!wallet()?.signedIn) return "Sign in"
-    if (!wallet()?.managedSupported) return "Learn more"
-    if (!wallet()?.aceEnabled) return "Turn on Ace"
+    if (!wallet()?.managedSupported) return "Add funds"
+    if (!wallet()?.aceEnabled) return "Manage Wallet"
     return "Manage Ace"
   }
 
@@ -232,7 +229,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
 
       <Show when={wallet() && !wallet()!.signedIn}>
         <p class="settings-inline-note text-12-regular text-text-weak">
-          Managed access requires a Synthetic Sciences account with Ace enabled.
+          Managed access requires a Synthetic Sciences account with Wallet funds or Ace auto reload.
         </p>
       </Show>
     </div>
