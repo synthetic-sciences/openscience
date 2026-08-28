@@ -3,11 +3,13 @@ import { openSettings } from "./utils"
 
 const panels = [
   "Models",
+  "Local models",
   "Skills",
-  "Connectors",
+  "MCP & connectors",
+  "Research tools",
   "Compute",
+  "Security & access",
   "Network",
-  "Permissions",
   "Sandbox",
   "Credentials",
   "Storage",
