@@ -759,7 +759,15 @@ describe("managed data root", () => {
       switching = DataRootBarrier.exclusive(1_000)
       await waitForFile(path.join(config, "data-root-switch.intent"))
       startNested.resolve()
-      expect(await Promise.race([nestedDone.promise.then(() => true), Bun.sleep(250).then(() => false)])).toBe(true)
+      expect(
+        await Promise.race([
+          nestedDone.promise.then(() => "nested" as const),
+          switching.then(
+            () => "exclusive" as const,
+            () => "exclusive" as const,
+          ),
+        ]),
+      ).toBe("nested")
       await command
       await outer[Symbol.asyncDispose]()
       const exclusive = await switching
