@@ -125,8 +125,8 @@ export default function General() {
       if (issue) {
         throw new Error(typeof issue === "string" ? issue : "The funding account could not be changed")
       }
-      await loadAccount()
       window.dispatchEvent(new Event("openscience:account-changed"))
+      await loadAccount()
     } catch (cause) {
       const detail = cause instanceof Error ? cause.message : String(cause)
       setError(detail)

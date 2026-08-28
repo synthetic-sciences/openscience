@@ -33,9 +33,16 @@ describe("General preference writes", () => {
 describe("General Ace funding", () => {
   test("offers Personal and team Wallet contexts without changing provider credentials", async () => {
     const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
+    const start = source.indexOf("const setFunding")
+    const funding = source.slice(start, source.indexOf("return (", start))
+    const changed = 'window.dispatchEvent(new Event("openscience:account-changed"))'
+    const event = funding.indexOf(changed)
     expect(source).toContain('title="Ace funding"')
     expect(source).toContain('id: "personal", label: "Personal"')
     expect(source).toContain("sdk.client.account.fundingContext.set")
+    expect(source.match(new RegExp(changed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))).toHaveLength(2)
+    expect(event).toBeGreaterThan(-1)
+    expect(funding.indexOf("await loadAccount()")).toBeGreaterThan(event)
     expect(source).toContain("Your keys and subscriptions stay personal.")
   })
 })
