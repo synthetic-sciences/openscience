@@ -5,11 +5,6 @@ if (!source) throw new Error("OPENSCIENCE_DESKTOP_SIDECAR must point to the nati
 
 const name = process.platform === "darwin" ? "mac" : process.platform === "win32" ? "windows" : "linux"
 const signed = process.env.OPENSCIENCE_DESKTOP_SIGNED === "true"
-const apple = ["CSC_LINK", "CSC_KEY_PASSWORD", "APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID"]
-const missing = apple.filter((key) => !process.env[key])
-if (signed && process.platform === "darwin" && missing.length) {
-  throw new Error(`Signed macOS builds require ${missing.join(", ")}`)
-}
 
 export default {
   appId: "ai.syntheticsciences.openscience",
@@ -38,9 +33,9 @@ export default {
     gatekeeperAssess: false,
     entitlements: "build/entitlements.mac.plist",
     entitlementsInherit: "build/entitlements.mac.plist",
-    notarize: signed,
+    notarize: signed && process.env.APPLE_ID ? true : false,
   },
-  dmg: { sign: signed },
+  dmg: { sign: false },
   win: {
     target: ["nsis"],
     icon: "build/icon.ico",

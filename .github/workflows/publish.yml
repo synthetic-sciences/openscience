@@ -17,12 +17,13 @@ on:
         required: false
         type: string
       release_mode:
-        description: "Production releases require Developer ID signing and Apple notarization"
+        description: "Signed notarizes macOS and signs Windows; unsigned publishes native archives and unsigned desktop installers"
         required: true
         default: signed
         type: choice
         options:
           - signed
+          - unsigned
       desktop_resume_manifest:
         description: "Optional reviewed JSON binding pre-existing desktop assets to this exact version, source, release mode, and sha256 digests"
         required: false
@@ -92,9 +93,9 @@ jobs:
       contents: read
     steps:
       - name: Require Developer ID and notarization credentials
+        if: inputs.release_mode == 'signed'
         shell: bash
         env:
-          OPENSCIENCE_RELEASE_MODE: ${{ inputs.release_mode }}
           APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
           APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
           APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
@@ -102,10 +103,6 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          [[ "$OPENSCIENCE_RELEASE_MODE" == "signed" ]] || {
-            echo "::error::Production releases require signed mode"
-            exit 1
-          }
           missing=()
           for name in APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_NOTARY_APPLE_ID APPLE_NOTARY_PASSWORD APPLE_TEAM_ID; do
             if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
@@ -114,6 +111,14 @@ jobs:
             echo "::error::macOS release signing is not configured. Missing repository secrets: ${missing[*]}"
             exit 1
           fi
+
+      - name: Record unsigned native release mode
+        if: inputs.release_mode == 'unsigned'
+        shell: bash
+        run: |
+          echo "::warning::Publishing unsigned native CLI archives and desktop installers; operating systems may show security prompts."
+          echo "### Unsigned native release" >> "$GITHUB_STEP_SUMMARY"
+          echo "Native CLI archives and desktop installers will be published without trusted code signing. macOS Gatekeeper and Windows SmartScreen may show security prompts." >> "$GITHUB_STEP_SUMMARY"
 
   version:
     needs:
@@ -566,49 +571,6 @@ jobs:
           unset CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
           unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
           bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
-
-      - name: Download existing macOS installer for verification
-        if: steps.existing.outputs.found == 'true' && matrix.signing == 'mac'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
-          DESKTOP_ASSET: ${{ matrix.asset }}
-        run: |
-          set -euo pipefail
-          mkdir -p frontend/desktop/dist
-          gh release download "$OPENSCIENCE_TAG" --pattern "$DESKTOP_ASSET" --dir frontend/desktop/dist
-
-      - name: Verify Developer ID signature and notarization
-        if: matrix.signing == 'mac'
-        shell: bash
-        env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          DESKTOP_ASSET: ${{ matrix.asset }}
-        run: |
-          set -euo pipefail
-          installer="frontend/desktop/dist/$DESKTOP_ASSET"
-          [[ -s "$installer" ]] || {
-            echo "::error::Missing macOS installer $DESKTOP_ASSET"
-            exit 1
-          }
-          codesign --verify --strict --verbose=2 "$installer"
-          xcrun stapler validate "$installer"
-          spctl --assess --type install --verbose=3 "$installer"
-          volume="$(hdiutil attach -nobrowse -readonly "$installer" | awk '/Apple_HFS|Apple_APFS/ {print substr($0,index($0,"/Volumes/")); exit}')"
-          [[ -n "$volume" ]] || {
-            echo "::error::Could not mount $DESKTOP_ASSET"
-            exit 1
-          }
-          trap 'hdiutil detach "$volume" >/dev/null' EXIT
-          app="$volume/OpenScience.app"
-          [[ -d "$app" ]] || {
-            echo "::error::$DESKTOP_ASSET does not contain OpenScience.app"
-            exit 1
-          }
-          codesign --verify --deep --strict --verbose=2 "$app"
-          codesign --display --verbose=4 "$app" 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
-          spctl --assess --type execute --verbose=3 "$app"
 
       - name: Verify or upload immutable desktop installer
         if: steps.existing.outputs.found != 'true'

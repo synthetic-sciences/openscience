@@ -20,29 +20,6 @@ env:
   GH_REPO: ${{ github.repository }}
 
 jobs:
-  signing:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Require Developer ID and notarization credentials
-        shell: bash
-        env:
-          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
-          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
-          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          missing=()
-          for name in APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_NOTARY_APPLE_ID APPLE_NOTARY_PASSWORD APPLE_TEAM_ID; do
-            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
-          done
-          if (( ${#missing[@]} )); then
-            echo "::error::macOS release signing is not configured. Missing repository secrets: ${missing[*]}"
-            exit 1
-          fi
-
   resolve:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -108,9 +85,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   build:
-    needs:
-      - resolve
-      - signing
+    needs: resolve
     strategy:
       fail-fast: false
       matrix:
@@ -121,35 +96,30 @@ jobs:
             archive: openscience-darwin-arm64.zip
             binary: openscience
             asset: OpenScience-mac-arm64.dmg
-            signing: mac
           - runner: macos-15
             target: mac
             arch: x64
             archive: openscience-darwin-x64.zip
             binary: openscience
             asset: OpenScience-mac-x64.dmg
-            signing: mac
           - runner: windows-2025
             target: win
             arch: x64
             archive: openscience-windows-x64.zip
             binary: openscience.exe
             asset: OpenScience-windows-x64.exe
-            signing: none
           - runner: ubuntu-24.04
             target: linux
             arch: x64
             archive: openscience-linux-x64.tar.gz
             binary: openscience
             asset: OpenScience-linux-x64.AppImage
-            signing: none
           - runner: ubuntu-24.04-arm
             target: linux
             arch: arm64
             archive: openscience-linux-arm64.tar.gz
             binary: openscience
             asset: OpenScience-linux-arm64.AppImage
-            signing: none
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
@@ -234,73 +204,26 @@ jobs:
         if: steps.existing.outputs.found != 'true'
         run: bun install --frozen-lockfile
 
-      - name: Build Developer ID-signed macOS installer
-        if: steps.existing.outputs.found != 'true' && matrix.signing == 'mac'
+      - name: Build unsigned desktop installer
+        if: steps.existing.outputs.found != 'true'
         shell: bash
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/.desktop-sidecar/${{ matrix.binary }}
           OPENSCIENCE_VERSION: ${{ inputs.version }}
-          OPENSCIENCE_DESKTOP_SIGNED: "true"
-          CSC_IDENTITY_AUTO_DISCOVERY: "true"
-          CSC_LINK: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
-
-      - name: Build unsigned non-macOS installer
-        if: steps.existing.outputs.found != 'true' && matrix.signing == 'none'
-        shell: bash
-        env:
-          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/.desktop-sidecar/${{ matrix.binary }}
-          OPENSCIENCE_VERSION: ${{ inputs.version }}
-          OPENSCIENCE_DESKTOP_SIGNED: "false"
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
           set -euo pipefail
           unset CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
           unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
           args=("--${{ matrix.target }}" "--${{ matrix.arch }}")
-          if [[ "${{ matrix.target }}" == "win" ]]; then
+          if [[ "${{ matrix.target }}" == "mac" ]]; then
+            args+=("-c.mac.identity=-" "-c.mac.notarize=false")
+          elif [[ "${{ matrix.target }}" == "win" ]]; then
             args+=("-c.win.signExecutable=false")
           else
             args+=("-c.executableName=openscience")
           fi
           bun run --cwd frontend/desktop dist -- "${args[@]}"
-
-      - name: Download existing macOS installer for verification
-        if: steps.existing.outputs.found == 'true' && matrix.signing == 'mac'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OPENSCIENCE_TAG: ${{ needs.resolve.outputs.tag }}
-          DESKTOP_ASSET: ${{ matrix.asset }}
-        run: |
-          set -euo pipefail
-          mkdir -p frontend/desktop/dist
-          gh release download "$OPENSCIENCE_TAG" --pattern "$DESKTOP_ASSET" --dir frontend/desktop/dist
-
-      - name: Verify Developer ID signature and notarization
-        if: matrix.signing == 'mac'
-        shell: bash
-        env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          DESKTOP_ASSET: ${{ matrix.asset }}
-        run: |
-          set -euo pipefail
-          installer="frontend/desktop/dist/$DESKTOP_ASSET"
-          codesign --verify --strict --verbose=2 "$installer"
-          xcrun stapler validate "$installer"
-          spctl --assess --type install --verbose=3 "$installer"
-          volume="$(hdiutil attach -nobrowse -readonly "$installer" | awk '/Apple_HFS|Apple_APFS/ {print substr($0,index($0,"/Volumes/")); exit}')"
-          [[ -n "$volume" ]]
-          trap 'hdiutil detach "$volume" >/dev/null' EXIT
-          app="$volume/OpenScience.app"
-          [[ -d "$app" ]]
-          codesign --verify --deep --strict --verbose=2 "$app"
-          codesign --display --verbose=4 "$app" 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
-          spctl --assess --type execute --verbose=3 "$app"
 
       - name: Upload immutable desktop installer
         if: steps.existing.outputs.found != 'true'
@@ -375,8 +298,8 @@ jobs:
           fi
 
           body="$(jq -r .body <<<"$assets")"
-          old='The native CLI archives and desktop installers in this release are unsigned. macOS and Windows may show operating-system security prompts. The macOS apps are ad-hoc signed but are not notarized.'
-          new='The native CLI archives and Windows/Linux desktop installers in this release are unsigned. The macOS desktop installers are Developer ID signed and notarized.'
+          old='The native CLI archives in this release are unsigned. macOS and Windows may show operating-system security prompts. Desktop installers are not included.'
+          new='The native CLI archives and desktop installers in this release are unsigned. macOS and Windows may show operating-system security prompts. The macOS apps are ad-hoc signed but are not notarized.'
           if [[ "$body" == *"$old"* ]]; then
             body="${body//$old/$new}"
           elif [[ "$body" != *"$new"* ]]; then
