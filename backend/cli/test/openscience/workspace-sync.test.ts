@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Global } from "../../src/global"
@@ -24,13 +24,16 @@ async function seed(value: Record<string, unknown>) {
   )
 }
 
-afterEach(async () => {
+async function reset() {
   globalThis.fetch = original
   for (const key of keys) delete process.env[key]
   await Promise.all([session, synced, settings].map((target) => fs.rm(target, { force: true }).catch(() => undefined)))
   OpenScience.invalidateBalance()
   OpenScience.invalidateResearchEntitlements()
-})
+}
+
+beforeEach(reset)
+afterEach(reset)
 
 describe("workspace-scoped account sync", () => {
   test("a workspace-locked organization sync carries the organization and keeps shell credentials private", async () => {
