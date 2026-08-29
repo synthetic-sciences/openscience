@@ -15,9 +15,10 @@ describe("research access modes", () => {
 
   test("reports the confirmed mode instead of the stale previous label", () => {
     expect(DEFAULT_RESEARCH_ACCESS_MODE).toBe("approve")
-    expect(researchAccessLabel("ask")).toBe("Ask for approval")
-    expect(researchAccessLabel("approve")).toBe("Approve for me")
+    expect(researchAccessLabel("ask")).toBe("Ask always")
+    expect(researchAccessLabel("approve")).toBe("Ask risky")
     expect(researchAccessLabel("full")).toBe("Full access")
+    expect(researchAccessLabel("unexpected")).toBe("Restricted access")
   })
 
   test("a fresh project defaults to Approve", () => {
@@ -28,18 +29,18 @@ describe("research access modes", () => {
   test("maps each label to the requested sandbox and approval contract", () => {
     expect(researchAccessContract("ask")).toEqual({
       sandbox: "workspace-write",
-      approval: "on-request",
-      review: "user",
+      approval: "every action",
+      boundary: "standing grants ignored",
     })
     expect(researchAccessContract("approve")).toEqual({
       sandbox: "workspace-write",
-      approval: "on-request",
-      review: "auto_review",
+      approval: "risky actions",
+      boundary: "contained work proceeds",
     })
     expect(researchAccessContract("full")).toEqual({
       sandbox: "danger-full-access",
-      approval: "never",
-      review: "none",
+      approval: "managed boundaries",
+      boundary: "routine prompts off",
     })
   })
 })

@@ -85,12 +85,11 @@ export default function ResearchTools() {
     const project = route()
     const current = access()
     if (!project || !current || accessSaving() || researchAccessMode(current) === mode) return
-    if (mode !== "full" && !current.sandboxStatus.available) return
     if (mode === "full") {
       const confirmed = await confirmDialog(dialog, {
         title: "Enable Full access?",
         message:
-          "Full access disables the execution sandbox. OpenScience may run commands with unrestricted file and network access without asking for action approval.",
+          "Full access disables the execution sandbox and routine action prompts. Managed policy, credential, and paid-compute boundaries still apply.",
         confirmLabel: "Enable Full access",
         danger: true,
       })
@@ -104,10 +103,20 @@ export default function ResearchTools() {
         body: JSON.stringify({ mode, ...(mode === "ask" ? {} : { root: current.root }) }),
       })
       if (!response.ok) throw new Error(await response.text())
-      setAccess(await response.json())
+      const confirmed = (await response.json()) as NonNullable<ReturnType<typeof access>>
+      setAccess(confirmed)
+      const effective = researchAccessMode(confirmed)
+      if (effective !== mode) {
+        showToast({
+          variant: "error",
+          title: "Access is limited by managed settings",
+          description: `The effective mode remains ${RESEARCH_ACCESS_OPTIONS.find((item) => item.value === effective)?.label ?? "Restricted access"}.`,
+        })
+        return
+      }
       showToast({
         variant: "success",
-        title: `${RESEARCH_ACCESS_OPTIONS.find((item) => item.value === mode)?.label} enabled`,
+        title: `${RESEARCH_ACCESS_OPTIONS.find((item) => item.value === effective)?.label} enabled`,
       })
     } catch (cause) {
       showToast({
@@ -193,7 +202,7 @@ export default function ResearchTools() {
                         role="radio"
                         data-tone={option.value === "full" ? "warning" : undefined}
                         aria-checked={access() ? researchAccessMode(access()!) === option.value : false}
-                        disabled={!access() || accessSaving() || unavailable()}
+                        disabled={!access() || accessSaving()}
                         onClick={() => void updateAccess(option.value)}
                       >
                         <span class="settings-research-access__mark" aria-hidden="true" />
@@ -201,11 +210,11 @@ export default function ResearchTools() {
                           <strong>{option.label}</strong>
                           <small>
                             {unavailable()
-                              ? `Unavailable: ${access()?.sandboxStatus.reason ?? "sandbox backend not installed"}`
+                              ? `Fail-closed until setup: ${access()?.sandboxStatus.reason ?? "sandbox backend not installed"}`
                               : option.description}
                           </small>
                           <code>
-                            {contract().sandbox} · {contract().approval} · {contract().review}
+                            {contract().sandbox} · {contract().approval} · {contract().boundary}
                           </code>
                         </span>
                       </button>

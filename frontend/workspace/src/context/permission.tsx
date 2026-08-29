@@ -73,6 +73,18 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         autoAcceptEdits: {} as Record<string, boolean>,
       }),
     )
+    const migration = { complete: false }
+
+    // The old hidden auto-accept toggle could answer edit prompts after a user
+    // switched to Ask always. It no longer has a product control, so clear the
+    // persisted authority instead of letting stale client state weaken the
+    // execution-time mode.
+    createEffect(() => {
+      if (!ready() || migration.complete) return
+      migration.complete = true
+      if (Object.keys(store.autoAcceptEdits).length === 0) return
+      setStore("autoAcceptEdits", {})
+    })
 
     const MAX_RESPONDED = 1000
     const RESPONDED_TTL_MS = 60 * 60 * 1000
@@ -132,11 +144,6 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       if (event?.type !== "permission.asked") return
 
       const perm = event.properties
-      if (isAutoAccepting(perm.sessionID, e.name) && shouldAutoAccept(perm)) {
-        respondOnce(perm, e.name)
-        return
-      }
-
       if (settings.sounds.enabled()) {
         playSound(soundSrc(settings.sounds.permissions()), settings.sounds.volume())
       }
@@ -194,8 +201,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     return {
       ready,
       respond,
-      autoResponds(permission: PermissionRequest, directory?: string) {
-        return isAutoAccepting(permission.sessionID, directory) && shouldAutoAccept(permission)
+      autoResponds(_permission: PermissionRequest, _directory?: string) {
+        return false
       },
       isAutoAccepting,
       toggleAutoAccept(sessionID: string, directory: string) {

@@ -9,18 +9,18 @@ export const DEFAULT_RESEARCH_ACCESS_MODE: ResearchAccessMode = "approve"
 export const RESEARCH_ACCESS_OPTIONS = [
   {
     value: "ask",
-    label: "Ask for approval",
-    description: "Ask before project code or host access",
+    label: "Ask always",
+    description: "Ask before actions that change files, use the network, run compute, or spend credits",
   },
   {
     value: "approve",
-    label: "Approve for me",
-    description: "Trust this project inside the sandbox",
+    label: "Ask risky",
+    description: "Run contained, reversible work and ask before external, costly, or hard-to-reverse actions",
   },
   {
     value: "full",
     label: "Full access",
-    description: "Warning: disables the sandbox for files, commands, and internet",
+    description: "Run without routine prompts; paid and managed safety boundaries still apply",
   },
 ] as const satisfies ReadonlyArray<{
   value: ResearchAccessMode
@@ -32,12 +32,18 @@ export function researchAccessMode(state: ResearchAccessState): ResearchAccessMo
   return state.mode
 }
 
-export function researchAccessLabel(mode: ResearchAccessMode): string {
-  return RESEARCH_ACCESS_OPTIONS.find((option) => option.value === mode)?.label ?? "Full access"
+export function researchAccessLabel(mode: string): string {
+  return RESEARCH_ACCESS_OPTIONS.find((option) => option.value === mode)?.label ?? "Restricted access"
 }
 
 export function researchAccessContract(mode: ResearchAccessMode) {
-  if (mode === "ask") return { sandbox: "workspace-write", approval: "on-request", review: "user" } as const
-  if (mode === "approve") return { sandbox: "workspace-write", approval: "on-request", review: "auto_review" } as const
-  return { sandbox: "danger-full-access", approval: "never", review: "none" } as const
+  if (mode === "ask")
+    return { sandbox: "workspace-write", approval: "every action", boundary: "standing grants ignored" } as const
+  if (mode === "approve")
+    return { sandbox: "workspace-write", approval: "risky actions", boundary: "contained work proceeds" } as const
+  return {
+    sandbox: "danger-full-access",
+    approval: "managed boundaries",
+    boundary: "routine prompts off",
+  } as const
 }

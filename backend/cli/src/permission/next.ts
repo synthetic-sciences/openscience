@@ -14,6 +14,7 @@ import { KernelRuntime } from "@/science/kernel/registry"
 import { Network } from "@/settings/network"
 import { SessionTraceStore } from "@/session/trace-store"
 import { ProjectTrust } from "@/project/trust"
+import { ProjectAccess } from "@/project/access"
 
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
@@ -30,6 +31,72 @@ export namespace PermissionNext {
     ref: "PermissionAction",
   })
   export type Action = z.infer<typeof Action>
+
+  export const Risk = z.enum(["passive", "contained", "risky", "unknown"])
+  export type Risk = z.infer<typeof Risk>
+
+  const PASSIVE = new Set(["glob", "grep", "list", "question", "read", "skill", "todoread"])
+  const CONTAINED = new Set([
+    "artifact",
+    "bash",
+    "batch",
+    "edit",
+    "lsp",
+    "plan_enter",
+    "plan_exit",
+    "planwrite",
+    "provenance_record",
+    "research_contract",
+    "task",
+    "todowrite",
+  ])
+  const RISKY = new Set([
+    "atlas",
+    "atlas_write",
+    "codesearch",
+    "compute_job",
+    "doom_loop",
+    "environment_mutation",
+    "external_directory",
+    "generate_image",
+    "mcp",
+    "modal",
+    "network",
+    "remote_compute",
+    "webfetch",
+    "websearch",
+  ])
+
+  export function risk(permission: string): Risk {
+    if (PASSIVE.has(permission)) return "passive"
+    if (CONTAINED.has(permission)) return "contained"
+    if (RISKY.has(permission)) return "risky"
+    return "unknown"
+  }
+
+  /**
+   * Apply the project action mode after configured policy and durable grants.
+   * A deny always wins. Ask always ignores every prior allow for actions that
+   * can change state. Ask risky accepts an explicit user grant for a risky
+   * boundary, but a config/session allow cannot silently weaken the mode.
+   * Unknown permission kinds remain fail-closed even under Full access.
+   */
+  export function modeAction(input: {
+    mode: ProjectAccess.Mode
+    permission: string
+    configured: Action
+    granted: Action
+  }): Action {
+    if (input.configured === "deny") return "deny"
+    const level = risk(input.permission)
+    if (level === "unknown") return "ask"
+    if (input.mode === "ask" && level !== "passive") return "ask"
+    if (input.mode === "approve" && level === "risky") {
+      return input.granted === "allow" ? "allow" : "ask"
+    }
+    if (input.configured === "ask" && input.granted === "allow") return "allow"
+    return input.configured
+  }
 
   export const Rule = z
     .object({
@@ -134,6 +201,7 @@ export namespace PermissionNext {
         string,
         {
           info: Request
+          mode?: ProjectAccess.Mode
           resolve: () => void
           reject: (e: any) => void
           trace: Promise<void>
@@ -238,10 +306,11 @@ export namespace PermissionNext {
   export const ask = fn(
     Request.partial({ id: true }).extend({
       ruleset: Ruleset,
+      mode: ProjectAccess.Mode.optional(),
     }),
     async (input) => {
       const s = await state()
-      const { ruleset, ...request } = input
+      const { ruleset, mode, ...request } = input
       const filesystemRequest =
         request.permission === "external_directory" ? FilesystemMetadata.safeParse(request.metadata) : undefined
       if (
@@ -267,20 +336,35 @@ export namespace PermissionNext {
           ? ruleset.filter((rule) => !(rule.action === "allow" && Wildcard.match(request.permission, rule.permission)))
           : ruleset
       const granted = approvals(s, request.sessionID)
+      const policy = REMOTE_PLAN.has(request.permission)
+        ? configured.filter((rule) => rule.action !== "allow")
+        : spendFilter(request.permission, configured)
       const rules = REMOTE_PLAN.has(request.permission)
         ? merge(
             configured.filter((rule) => rule.action !== "allow"),
             spendFilter(request.permission, granted),
           )
         : spendFilter(request.permission, merge(configured, granted))
+      const approved = spendFilter(request.permission, granted)
       const evaluated = (request.patterns ?? []).map((pattern) => {
-        const rule = evaluate(request.permission, pattern, rules)
+        const base = evaluate(request.permission, pattern, rules)
+        const rule = {
+          ...base,
+          action: mode
+            ? modeAction({
+                mode,
+                permission: request.permission,
+                configured: evaluate(request.permission, pattern, policy).action,
+                granted: evaluate(request.permission, pattern, approved).action,
+              })
+            : base.action,
+        }
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
         return rule
       })
       const denied = evaluated.find((rule) => rule.action === "deny")
       if (denied) throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
-      if (request.permission === "external_directory" && (await filesystem(request))) return
+      if (mode !== "ask" && request.permission === "external_directory" && (await filesystem(request))) return
       if (evaluated.some((rule) => rule.action === "ask")) {
         const id = input.id ?? Identifier.ascending("permission")
         const info: Request = {
@@ -291,6 +375,7 @@ export namespace PermissionNext {
         return new Promise<void>((resolve, reject) => {
           s.pending[id] = {
             info,
+            mode,
             resolve,
             reject,
             trace,
@@ -305,6 +390,7 @@ export namespace PermissionNext {
   /** Resolve any other pending request the newly granted approvals now cover. */
   async function settle(s: State, reply: Reply) {
     for (const [id, pending] of Object.entries(s.pending)) {
+      if (pending.mode === "ask") continue
       const ok =
         (await filesystem(pending.info)) ||
         (pending.info.patterns.length > 0 &&

@@ -1079,3 +1079,94 @@ test("ask - allows all patterns when all match allow rules", async () => {
     },
   })
 })
+test("project action modes are execution-time authority floors", () => {
+  expect(PermissionNext.modeAction({ mode: "ask", permission: "edit", configured: "allow", granted: "allow" })).toBe(
+    "ask",
+  )
+  expect(PermissionNext.modeAction({ mode: "ask", permission: "network", configured: "allow", granted: "allow" })).toBe(
+    "ask",
+  )
+  expect(PermissionNext.modeAction({ mode: "ask", permission: "read", configured: "allow", granted: "allow" })).toBe(
+    "allow",
+  )
+
+  expect(PermissionNext.modeAction({ mode: "approve", permission: "edit", configured: "allow", granted: "ask" })).toBe(
+    "allow",
+  )
+  expect(
+    PermissionNext.modeAction({ mode: "approve", permission: "network", configured: "allow", granted: "ask" }),
+  ).toBe("ask")
+  expect(
+    PermissionNext.modeAction({ mode: "approve", permission: "network", configured: "allow", granted: "allow" }),
+  ).toBe("allow")
+
+  expect(PermissionNext.modeAction({ mode: "full", permission: "network", configured: "allow", granted: "ask" })).toBe(
+    "allow",
+  )
+  expect(
+    PermissionNext.modeAction({ mode: "full", permission: "future_provider", configured: "allow", granted: "allow" }),
+  ).toBe("ask")
+  expect(PermissionNext.modeAction({ mode: "full", permission: "network", configured: "deny", granted: "allow" })).toBe(
+    "deny",
+  )
+})
+
+test("Ask always ignores prior grants while Ask risky requires a user grant", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const first = PermissionNext.ask({
+        id: "permission_mode_first",
+        sessionID: "session_mode_floor",
+        permission: "network",
+        patterns: ["api.example.test"],
+        metadata: {},
+        always: ["api.example.test"],
+        ruleset: [{ permission: "network", pattern: "*", action: "ask" }],
+        mode: "approve",
+      })
+      await PermissionNext.reply({ requestID: "permission_mode_first", reply: "session" })
+      await expect(first).resolves.toBeUndefined()
+
+      const strict = PermissionNext.ask({
+        id: "permission_mode_strict",
+        sessionID: "session_mode_floor",
+        permission: "network",
+        patterns: ["api.example.test"],
+        metadata: {},
+        always: ["api.example.test"],
+        ruleset: [{ permission: "network", pattern: "*", action: "allow" }],
+        mode: "ask",
+      })
+      expect((await PermissionNext.list()).some((request) => request.id === "permission_mode_strict")).toBe(true)
+      await PermissionNext.reply({ requestID: "permission_mode_strict", reply: "reject" })
+      await expect(strict).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+
+      const configured = PermissionNext.ask({
+        id: "permission_mode_configured",
+        sessionID: "session_mode_configured",
+        permission: "network",
+        patterns: ["other.example.test"],
+        metadata: {},
+        always: ["other.example.test"],
+        ruleset: [{ permission: "network", pattern: "*", action: "allow" }],
+        mode: "approve",
+      })
+      await PermissionNext.reply({ requestID: "permission_mode_configured", reply: "reject" })
+      await expect(configured).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+
+      await expect(
+        PermissionNext.ask({
+          sessionID: "session_mode_full",
+          permission: "network",
+          patterns: ["full.example.test"],
+          metadata: {},
+          always: ["full.example.test"],
+          ruleset: [{ permission: "network", pattern: "*", action: "allow" }],
+          mode: "full",
+        }),
+      ).resolves.toBeUndefined()
+    },
+  })
+})

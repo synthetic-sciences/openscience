@@ -281,7 +281,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const confirmed = await confirmDialog(dialog, {
         title: "Enable Full access?",
         message:
-          "Full access disables the execution sandbox. OpenScience may run commands with unrestricted file and network access without asking for action approval.",
+          "Full access disables the execution sandbox and routine action prompts. Managed policy, credential, and paid-compute boundaries still apply.",
         confirmLabel: "Enable Full access",
         danger: true,
       })
@@ -2773,11 +2773,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                   data-tone={option.value === "full" ? "warning" : undefined}
                                   aria-checked={selectedResearchAccess() === option.value}
                                   tabindex={selectedResearchAccess() === option.value ? 0 : -1}
-                                  disabled={
-                                    researchAccess.loading ||
-                                    researchAccessSaving() ||
-                                    (option.value !== "full" && researchAccess()?.sandboxStatus.available === false)
-                                  }
+                                  disabled={researchAccess.loading || researchAccessSaving()}
                                   onClick={(event) => {
                                     void applyResearchAccess(option.value, event.currentTarget)
                                     event.currentTarget.closest("details")?.removeAttribute("open")
@@ -2787,7 +2783,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                     <strong>{option.label}</strong>
                                     <small>
                                       {option.value !== "full" && researchAccess()?.sandboxStatus.available === false
-                                        ? `Unavailable: ${researchAccess()?.sandboxStatus.reason ?? "sandbox backend not installed"}`
+                                        ? `Fail-closed until setup: ${researchAccess()?.sandboxStatus.reason ?? "sandbox backend not installed"}`
                                         : option.description}
                                     </small>
                                   </span>
