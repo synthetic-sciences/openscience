@@ -18,7 +18,7 @@ import { Instance } from "../project/instance"
 import { Installation } from "../installation"
 import { withTimeout } from "@/util/timeout"
 import { McpOAuthProvider } from "./oauth-provider"
-import { McpOAuthCallback } from "./oauth-callback"
+import { McpOAuthCallback, OAUTH_AUTHORIZATION_FAILED_MESSAGE, OAuthAuthorizationFailedError } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
@@ -1515,7 +1515,7 @@ export namespace MCP {
     if (persisted?.callback?.type === "code") return finishAuth(mcpName, persisted.callback.value)
     if (persisted?.callback?.type === "error") {
       await McpAuth.clearOAuthFlow(mcpName, persisted.state)
-      throw new Error(persisted.callback.value)
+      return { status: "failed", error: OAUTH_AUTHORIZATION_FAILED_MESSAGE }
     }
     if (persisted?.callback?.type === "cancelled") {
       await McpAuth.clearOAuthFlow(mcpName, persisted.state)
@@ -1597,11 +1597,15 @@ export namespace MCP {
     }
 
     // Wait for callback using the already-registered promise
-    const code = await callbackPromise.catch(async (error) => {
+    const code = await callbackPromise.catch(async (error): Promise<string | Status> => {
       await closePendingOAuthTransport(mcpName, oauthState).catch(() => undefined)
       await McpAuth.clearOAuthFlow(mcpName, oauthState).catch(() => undefined)
+      if (error instanceof OAuthAuthorizationFailedError) {
+        return { status: "failed", error: OAUTH_AUTHORIZATION_FAILED_MESSAGE }
+      }
       throw error
     })
+    if (typeof code !== "string") return code
 
     // Validate and clear the state
     const storedState = await McpAuth.getOAuthState(mcpName)

@@ -9,6 +9,16 @@ import fs from "node:fs/promises"
 
 const log = Log.create({ service: "mcp.oauth-callback" })
 
+export const OAUTH_AUTHORIZATION_FAILED_MESSAGE =
+  "OAuth authorization did not complete. Review access with the provider, then try Connect again."
+
+export class OAuthAuthorizationFailedError extends Error {
+  constructor() {
+    super(OAUTH_AUTHORIZATION_FAILED_MESSAGE)
+    this.name = "OAuthAuthorizationFailedError"
+  }
+}
+
 const HTML_SUCCESS = `<!DOCTYPE html>
 <html>
 <head>
@@ -102,12 +112,11 @@ export namespace McpOAuthCallback {
 
           const code = url.searchParams.get("code")
           const state = url.searchParams.get("state")
-          const error = url.searchParams.get("error")
-          const errorDescription = url.searchParams.get("error_description")
+          const hasError = url.searchParams.has("error")
 
           // Query values come from the OAuth provider. Record only presence:
           // error/error_description may contain provider-controlled secrets.
-          log.info("received oauth callback", { hasCode: !!code, hasState: !!state, hasError: !!error })
+          log.info("received oauth callback", { hasCode: !!code, hasState: !!state, hasError })
 
           // Enforce state parameter presence
           if (!state) {
@@ -127,11 +136,11 @@ export namespace McpOAuthCallback {
             })
           }
 
-          const callback: McpAuth.OAuthCallback = error
-            ? { type: "error", value: errorDescription || error }
+          const callback: McpAuth.OAuthCallback = hasError
+            ? { type: "error", value: OAUTH_AUTHORIZATION_FAILED_MESSAGE }
             : code
               ? { type: "code", value: code }
-              : { type: "error", value: "No authorization code provided" }
+              : { type: "error", value: OAUTH_AUTHORIZATION_FAILED_MESSAGE }
           try {
             await McpAuth.recordOAuthCallback(state, callback)
           } catch (cause) {
@@ -178,7 +187,7 @@ export namespace McpOAuthCallback {
     if (!pending) return
     finish(state, pending)
     if (callback.type === "code") pending.resolve(callback.value)
-    else if (callback.type === "error") pending.reject(new Error(callback.value))
+    else if (callback.type === "error") pending.reject(new OAuthAuthorizationFailedError())
     else pending.reject(new Error("Authorization cancelled"))
   }
 

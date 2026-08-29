@@ -126,6 +126,7 @@ const { ProjectTrust } = await import("../../src/project/trust")
 const { tmpdir } = await import("../fixture/fixture")
 const { Config } = await import("../../src/config/config")
 const { McpAuth } = await import("../../src/mcp/auth")
+const { Log } = await import("../../src/util/log")
 
 async function trust() {
   const status = await ProjectTrust.status(Instance.project)
@@ -359,6 +360,62 @@ test("a resumed exact flow restarts its callback listener without creating a rep
       expect(callback.status).toBe(200)
       await waiting
       expect(finishAuthCalls).toBe(1)
+    },
+  })
+})
+
+test("a provider callback error followed by wait settles as a fixed failure without leaking provider text", async () => {
+  const name = "provider-callback-failure"
+  const errorMarker = `provider-error-${crypto.randomUUID()}`
+  const descriptionMarker = `provider-description-${crypto.randomUUID()}`
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        `${dir}/openscience.json`,
+        JSON.stringify({
+          $schema: "https://syntheticsciences.ai/config.json",
+          mcp: { [name]: { type: "remote", url: "https://example.com/mcp" } },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const started = await MCP.startAuth(name)
+      expect(started.state).toBe("pending")
+      if (started.state !== "pending") throw new Error("Expected pending OAuth authorization")
+      const pending = await McpAuth.pendingOAuthFlow(name)
+      expect(pending).toBeDefined()
+
+      await Log.flush()
+      const before = await Bun.file(Log.file()).text()
+      const callback = await fetch(
+        `http://127.0.0.1:19876/mcp/oauth/callback?state=${encodeURIComponent(pending!.state)}` +
+          `&error=${encodeURIComponent(errorMarker)}` +
+          `&error_description=${encodeURIComponent(descriptionMarker)}`,
+      )
+
+      expect(callback.status).toBe(400)
+      const callbackPage = await callback.text()
+      expect(callbackPage).not.toContain(errorMarker)
+      expect(callbackPage).not.toContain(descriptionMarker)
+      expect((await McpAuth.pendingOAuthFlow(name))?.callback).toEqual({
+        type: "error",
+        value: "OAuth authorization did not complete. Review access with the provider, then try Connect again.",
+      })
+      expect(await MCP.waitForAuth(name, started.flowId)).toEqual({
+        status: "failed",
+        error: "OAuth authorization did not complete. Review access with the provider, then try Connect again.",
+      })
+      expect(await McpAuth.pendingOAuthFlow(name)).toBeUndefined()
+
+      await Log.flush()
+      const appended = (await Bun.file(Log.file()).text()).slice(before.length)
+      expect(appended).not.toContain(errorMarker)
+      expect(appended).not.toContain(descriptionMarker)
     },
   })
 })

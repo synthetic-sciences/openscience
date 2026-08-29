@@ -5,7 +5,11 @@ import fs from "node:fs/promises"
 import { pathToFileURL } from "node:url"
 import { Global } from "../../src/global"
 import { McpAuth } from "../../src/mcp/auth"
-import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
+import {
+  McpOAuthCallback,
+  OAUTH_AUTHORIZATION_FAILED_MESSAGE,
+  OAuthAuthorizationFailedError,
+} from "../../src/mcp/oauth-callback"
 import { OAUTH_CALLBACK_PATH, OAUTH_CALLBACK_PORT } from "../../src/mcp/oauth-provider"
 import { Log } from "../../src/util/log"
 
@@ -48,6 +52,10 @@ test("provider-controlled callback errors are represented by booleans in logs", 
   const errorMarker = `provider-error-${crypto.randomUUID()}`
   const descriptionMarker = `provider-description-${crypto.randomUUID()}`
   await McpOAuthCallback.ensureRunning()
+  const waiting = McpOAuthCallback.waitForCallback(auth.name, auth.state).then(
+    () => undefined,
+    (error) => error as Error,
+  )
   await Log.flush()
   const before = await Bun.file(Log.file()).text()
 
@@ -58,6 +66,9 @@ test("provider-controlled callback errors are represented by booleans in logs", 
       `&error_description=${encodeURIComponent(descriptionMarker)}`,
   )
   expect(response.status).toBe(400)
+  const failure = await waiting
+  expect(failure).toBeInstanceOf(OAuthAuthorizationFailedError)
+  expect(failure?.message).toBe(OAUTH_AUTHORIZATION_FAILED_MESSAGE)
   await Log.flush()
   const appended = (await Bun.file(Log.file()).text()).slice(before.length)
 
