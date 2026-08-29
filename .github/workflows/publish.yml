@@ -363,7 +363,9 @@ jobs:
           desktop_assets="$(jq -cS '
             [.assets[] | select(
               .name == "OpenScience-mac-arm64.dmg" or
+              .name == "OpenScience-mac-arm64.zip" or
               .name == "OpenScience-mac-x64.dmg" or
+              .name == "OpenScience-mac-x64.zip" or
               .name == "OpenScience-windows-x64.exe" or
               .name == "OpenScience-linux-x64.AppImage" or
               .name == "OpenScience-linux-arm64.AppImage"
@@ -417,77 +419,96 @@ jobs:
             arch: arm64
             sidecar: backend/cli/dist/@synsci/openscience-darwin-arm64/bin/openscience
             asset: OpenScience-mac-arm64.dmg
+            assets: OpenScience-mac-arm64.dmg OpenScience-mac-arm64.zip
             signing: mac
           - runner: macos-14
             target: mac
             arch: x64
             sidecar: backend/cli/dist/@synsci/openscience-darwin-x64/bin/openscience
             asset: OpenScience-mac-x64.dmg
+            assets: OpenScience-mac-x64.dmg OpenScience-mac-x64.zip
             signing: mac
           - runner: windows-2025
             target: win
             arch: x64
             sidecar: backend/cli/dist/@synsci/openscience-windows-x64/bin/openscience.exe
             asset: OpenScience-windows-x64.exe
+            assets: OpenScience-windows-x64.exe
             signing: windows
           - runner: ubuntu-24.04
             target: linux
             arch: x64
             sidecar: backend/cli/dist/@synsci/openscience-linux-x64/bin/openscience
             asset: OpenScience-linux-x64.AppImage
+            assets: OpenScience-linux-x64.AppImage
             signing: none
           - runner: ubuntu-24.04-arm
             target: linux
             arch: arm64
             sidecar: backend/cli/dist/@synsci/openscience-linux-arm64/bin/openscience
             asset: OpenScience-linux-arm64.AppImage
+            assets: OpenScience-linux-arm64.AppImage
             signing: none
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
       contents: write
     steps:
-      - name: Check for an existing immutable desktop installer
+      - name: Check for existing immutable desktop artifacts
         id: existing
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
-          DESKTOP_ASSET: ${{ matrix.asset }}
+          DESKTOP_ASSETS: ${{ matrix.assets }}
           TRUSTED_DESKTOP_ASSETS: ${{ needs.desktop-resume.outputs.trusted_assets }}
         run: |
           set -euo pipefail
-          existing="$(gh release view "$OPENSCIENCE_TAG" --json assets --jq '.assets[] | select(.name == env.DESKTOP_ASSET)')"
-          expected_digest="$(jq -r --arg name "$DESKTOP_ASSET" '.[$name] // empty' <<<"$TRUSTED_DESKTOP_ASSETS")"
-          if [[ -z "$existing" ]]; then
-            if [[ -n "$expected_digest" ]]; then
-              echo "::error::$DESKTOP_ASSET vanished after the desktop resume plan was frozen"
+          release="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
+          found=0
+          total=0
+          for name in $DESKTOP_ASSETS; do
+            ((total += 1))
+            existing="$(jq -c --arg name "$name" '.assets[] | select(.name == $name)' <<<"$release")"
+            expected_digest="$(jq -r --arg name "$name" '.[$name] // empty' <<<"$TRUSTED_DESKTOP_ASSETS")"
+            if [[ -z "$existing" ]]; then
+              if [[ -n "$expected_digest" ]]; then
+                echo "::error::$name vanished after the desktop resume plan was frozen"
+                exit 1
+              fi
+              continue
+            fi
+            if [[ -z "$expected_digest" ]]; then
+              echo "::error::$name appeared after the desktop resume plan was frozen"
               exit 1
             fi
+            [[ "$(jq -r .state <<<"$existing")" == "uploaded" ]] || {
+              echo "::error::$name exists but is not fully uploaded"
+              exit 1
+            }
+            size="$(jq -r .size <<<"$existing")"
+            if [[ ! "$size" =~ ^[0-9]+$ ]] || (( size <= 0 )); then
+              echo "::error::$name exists but is empty"
+              exit 1
+            fi
+            digest="$(jq -r .digest <<<"$existing")"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::$name exists without a valid sha256 digest"
+              exit 1
+            fi
+            if [[ ! "$expected_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || [[ "$digest" != "$expected_digest" ]]; then
+              echo "::error::$name does not match its reviewed desktop resume manifest digest"
+              exit 1
+            fi
+            ((found += 1))
+          done
+          if (( found == 0 )); then
             echo "found=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [[ -z "$expected_digest" ]]; then
-            echo "::error::$DESKTOP_ASSET appeared after the desktop resume plan was frozen"
-            exit 1
-          fi
-          if [[ "$(jq -r .state <<<"$existing")" != "uploaded" ]]; then
-            echo "::error::$DESKTOP_ASSET exists but is not fully uploaded"
-            exit 1
-          fi
-          size="$(jq -r .size <<<"$existing")"
-          if [[ ! "$size" =~ ^[0-9]+$ ]] || (( size <= 0 )); then
-            echo "::error::$DESKTOP_ASSET exists but is empty"
-            exit 1
-          fi
-          digest="$(jq -r .digest <<<"$existing")"
-          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::$DESKTOP_ASSET exists without a valid sha256 digest"
-            exit 1
-          fi
-          if [[ ! "$expected_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || [[ "$digest" != "$expected_digest" ]]; then
-            echo "::error::$DESKTOP_ASSET does not match its reviewed desktop resume manifest digest"
+          if (( found != total )); then
+            echo "::error::Desktop artifacts must be resumed or rebuilt as one complete architecture set"
             exit 1
           fi
           echo "found=true" >> "$GITHUB_OUTPUT"
@@ -572,13 +593,14 @@ jobs:
           unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
           bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
 
-      - name: Verify or upload immutable desktop installer
+      - name: Verify or upload immutable desktop artifacts
         if: steps.existing.outputs.found != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
           DESKTOP_ASSET: ${{ matrix.asset }}
+          DESKTOP_ASSETS: ${{ matrix.assets }}
         run: |
           set -euo pipefail
           installer="frontend/desktop/dist/$DESKTOP_ASSET"
@@ -586,20 +608,24 @@ jobs:
             produced="frontend/desktop/dist/OpenScience-linux-x86_64.AppImage"
             [[ -s "$produced" ]] && mv "$produced" "$installer"
           fi
-          [[ -s "$installer" ]] || {
-            echo "::error::electron-builder did not produce $DESKTOP_ASSET"
-            exit 1
-          }
-          existing="$(gh release view "$OPENSCIENCE_TAG" --json assets --jq '.assets[] | select(.name == env.DESKTOP_ASSET) | .digest' || true)"
-          if [[ -z "$existing" ]]; then
-            gh release upload "$OPENSCIENCE_TAG" "$installer"
-            exit 0
-          fi
-          actual="sha256:$(node -e 'const fs=require("fs"),c=require("crypto");const h=c.createHash("sha256");h.update(fs.readFileSync(process.argv[1]));process.stdout.write(h.digest("hex"))' "$installer")"
-          [[ "$actual" == "$existing" ]] || {
-            echo "::error::$DESKTOP_ASSET already exists with different bytes; refusing to clobber"
-            exit 1
-          }
+          release="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
+          for name in $DESKTOP_ASSETS; do
+            artifact="frontend/desktop/dist/$name"
+            [[ -s "$artifact" ]] || {
+              echo "::error::electron-builder did not produce $name"
+              exit 1
+            }
+            existing="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$release")"
+            if [[ -z "$existing" ]]; then
+              gh release upload "$OPENSCIENCE_TAG" "$artifact"
+              continue
+            fi
+            actual="sha256:$(node -e 'const fs=require("fs"),c=require("crypto");const h=c.createHash("sha256");h.update(fs.readFileSync(process.argv[1]));process.stdout.write(h.digest("hex"))' "$artifact")"
+            [[ "$actual" == "$existing" ]] || {
+              echo "::error::$name already exists with different bytes; refusing to clobber"
+              exit 1
+            }
+          done
 
   verify-native-cli:
     needs:
@@ -787,7 +813,9 @@ jobs:
           assets="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
           expected=(
             OpenScience-mac-arm64.dmg
+            OpenScience-mac-arm64.zip
             OpenScience-mac-x64.dmg
+            OpenScience-mac-x64.zip
             OpenScience-windows-x64.exe
             OpenScience-linux-x64.AppImage
             OpenScience-linux-arm64.AppImage

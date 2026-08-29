@@ -44,14 +44,14 @@ describe("launch settings truth pass", () => {
     expect(ids).toContain("skills")
     expect(ids.indexOf("skills")).toBe(ids.indexOf("local-models") + 1)
     expect(panel.title).toBe("Skills")
-    expect(panel.section).toBe("workspace")
+    expect(panel.section).toBe("capabilities")
     expect(panel.icon).toBe("flask")
     expect(source("Skills.tsx")).toContain("<SkillsPage embedded />")
   })
 
-  test("groups Customize by workspace, runtime, and app", () => {
-    expect(SETTINGS_PANELS.find((item) => item.id === "models")?.section).toBe("workspace")
-    expect(SETTINGS_PANELS.find((item) => item.id === "connectors")?.section).toBe("workspace")
+  test("groups every Customize destination without nested navigation", () => {
+    expect(SETTINGS_PANELS.find((item) => item.id === "models")?.section).toBe("inference")
+    expect(SETTINGS_PANELS.find((item) => item.id === "connectors")?.section).toBe("capabilities")
     expect(SETTINGS_PANELS.find((item) => item.id === "compute")?.section).toBe("runtime")
     expect(SETTINGS_PANELS.find((item) => item.id === "general")?.section).toBe("app")
   })

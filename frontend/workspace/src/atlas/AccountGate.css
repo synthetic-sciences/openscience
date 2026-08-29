@@ -78,52 +78,6 @@
   align-items: center;
 }
 
-.account-gate__steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-}
-
-.account-gate__steps > div {
-  min-height: 54px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px;
-  color: var(--color-text-faint);
-}
-
-.account-gate__steps > div + div {
-  border-left: 1px solid var(--color-border);
-}
-
-.account-gate__steps > div[data-current="true"] {
-  background: var(--color-background-element);
-  color: var(--color-text);
-}
-
-.account-gate__steps span {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border: 1px solid currentColor;
-  border-radius: 6px;
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-}
-
-.account-gate__steps strong {
-  overflow: hidden;
-  font-size: 10px;
-  font-weight: var(--font-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .account-gate__actions {
   min-height: 36px;
   display: flex;
@@ -218,18 +172,5 @@
     padding: 20px;
     border: 0;
     border-radius: 0;
-  }
-
-  .account-gate__steps {
-    grid-template-columns: 1fr;
-  }
-
-  .account-gate__steps > div {
-    min-height: 40px;
-  }
-
-  .account-gate__steps > div + div {
-    border-top: 1px solid var(--color-border);
-    border-left: 0;
   }
 }

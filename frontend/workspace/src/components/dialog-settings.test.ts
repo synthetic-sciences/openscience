@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { SETTINGS_PANELS, SETTINGS_PRIMARY_PANELS } from "./settings/registry"
+import { SETTINGS_PANELS } from "./settings/registry"
 
 const source = () => readFileSync(fileURLToPath(new URL("./dialog-settings.tsx", import.meta.url)), "utf8")
 const appSource = () => readFileSync(fileURLToPath(new URL("../app.tsx", import.meta.url)), "utf8")
@@ -49,8 +49,10 @@ test("settings use a compact responsive navigation frame", () => {
   expect(dialog).toContain("event.stopImmediatePropagation()")
   expect(dialog).toContain("queueMicrotask(() => navTrigger?.focus())")
   expect(dialogSource()).toContain("target.closest('[data-dialog-escape-scope=\"true\"]')")
-  expect(dialog).toContain("SETTINGS_PRIMARY_PANELS")
-  expect(SETTINGS_PRIMARY_PANELS).toHaveLength(7)
+  expect(dialog).toContain("SETTINGS_PANELS.filter((p) => p.section === section.id)")
+  expect(SETTINGS_PANELS).toHaveLength(12)
+  expect(dialog).not.toContain("panelChildren")
+  expect(dialog).not.toContain("data-secondary")
   expect(dialog).toContain("scrollIntoView")
   expect(dialog).toContain('class="settings-main__viewport"')
   expect(dialog).toContain("@media (max-width: 980px)")
@@ -69,7 +71,6 @@ test("settings enforce one sentence-case typography system", () => {
   expect(dialog).toContain("font-family: var(--font-family-sans)")
   expect(dialog).toContain(".settings-section-label")
   expect(dialog).toMatch(/\.settings-nav__item\s*\{[^}]*min-height: 32px/s)
-  expect(dialog).toMatch(/\.settings-nav__item\[data-secondary="true"\]\s*\{[^}]*min-height: 32px/s)
   expect(dialog).toMatch(/\.settings-nav__item\s*\{[^}]*font-size: 13px/s)
   expect(dialog).toMatch(/\.settings-nav__item\s*\{[^}]*font-weight: var\(--font-weight-regular\)/s)
   expect(dialog).toMatch(
@@ -265,7 +266,7 @@ test("settings dialog makes every registered capability navigable", () => {
   expect(models?.icon).toBe("models")
   expect(compute?.icon).toBe("cpu")
   expect(permissions?.icon).toBe("shield")
-  expect(dialog).toContain("SETTINGS_PRIMARY_PANELS.filter((p) => p.section === section.id)")
+  expect(dialog).toContain("SETTINGS_PANELS.filter((p) => p.section === section.id)")
   expect(dialog).toContain("onClick={() => void navigate(panel.id)}")
   expect(dialog).toContain('aria-current={current().id === panel.id ? "page" : undefined}')
   expect(dialog).toContain("<SettingsPanelStack")

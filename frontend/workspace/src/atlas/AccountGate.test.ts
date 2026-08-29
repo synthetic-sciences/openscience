@@ -7,7 +7,7 @@ describe("workspace account gate", () => {
     const onboarding = await Bun.file(new URL("./DesktopOnboarding.tsx", import.meta.url)).text()
     expect(app.indexOf("<AccountGate>")).toBeLessThan(app.indexOf("<GlobalSDKProvider>"))
     expect(gate).toContain("Connect OpenScience")
-    expect(gate).toContain("app.syntheticsciences.ai")
+    expect(gate).toContain("Model access stays optional")
     expect(gate).toContain("Synthetic Sciences API key")
     expect(gate).toContain("Improve OpenScience is on by default")
     expect(gate).toContain("redacted research activity")
@@ -19,8 +19,10 @@ describe("workspace account gate", () => {
     expect(gate).not.toContain("BYOK")
     expect(gate).not.toContain("ChatGPT")
     expect(gate).toContain("<DesktopOnboarding>{props.children}</DesktopOnboarding>")
+    expect(gate).not.toContain("Setup overview")
     expect(onboarding).toContain("Your account is connected")
-    expect(onboarding).toContain("Set up models later")
+    expect(onboarding).toContain("Open workspace")
+    expect(onboarding).toContain("Model setup is not required")
   })
 
   test("returns to the full-page gate immediately after Settings disconnects", async () => {

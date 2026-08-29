@@ -17,5 +17,9 @@ bun run build            # production build → dist/
 `curl -fsSL https://openscience.sh/install | bash` works. Screenshots in
 `src/assets/` are captured from the real workspace UI.
 
+`public/install-desktop` is the certificate-free macOS bootstrap. It verifies
+the release checksum and app identity, installs the app in Applications,
+removes the downloaded quarantine attribute, and launches the verified copy.
+
 Merges to `main` deploy automatically through the linked Vercel project. For
 a manual production deployment, run `vercel deploy --prod`.

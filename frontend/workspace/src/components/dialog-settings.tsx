@@ -1,16 +1,14 @@
-import { Component, For, Show, batch, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { Component, For, batch, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Dialog } from "@synsci/ui/dialog"
 import { Icon } from "@synsci/ui/icon"
 import { IconButton } from "@synsci/ui/icon-button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
 import {
-  SETTINGS_PRIMARY_PANELS,
+  SETTINGS_PANELS,
   SETTINGS_SECTIONS,
   DEFAULT_PANEL,
   findPanel,
-  panelChildren,
-  panelRoot,
   preloadPanel,
   type SettingsPanelId,
 } from "./settings/registry"
@@ -261,27 +259,6 @@ const SETTINGS_STYLES = `
   display: flex;
   flex-direction: column;
   gap: var(--settings-space-1);
-}
-.settings-nav__group {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-.settings-nav__children {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-  margin: 1px 0 3px 28px;
-  padding-left: 8px;
-  border-left: 1px solid var(--settings-border);
-}
-.settings-nav__item[data-secondary="true"] {
-  min-height: 32px;
-  display: flex;
-  padding-inline: 8px;
-  font-size: 12px;
 }
 .settings-nav__label {
   padding: 0 var(--settings-space-2) var(--settings-space-1);
@@ -1390,13 +1367,6 @@ const SETTINGS_STYLES = `
     border-radius: var(--settings-radius-control);
     font-size: 13px;
   }
-  .settings-nav__children {
-    margin-left: 28px;
-  }
-  .settings-nav__item[data-secondary="true"] {
-    min-height: 36px;
-    font-size: 12px;
-  }
   .settings-nav__item:hover {
     background: var(--settings-surface-hover);
   }
@@ -1585,11 +1555,8 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
               aria-controls="settings-section-menu"
               onClick={() => setNavOpen((value) => !value)}
             >
-              <Icon name={panelRoot(current().id).icon} size="small" />
-              <span>{panelRoot(current().id).title}</span>
-              <Show when={current().parent}>
-                <small>· {current().title}</small>
-              </Show>
+              <Icon name={current().icon} size="small" />
+              <span>{current().title}</span>
               <Icon name="chevron-down" size="small" classList={{ "rotate-180": navOpen() }} />
             </button>
             <div id="settings-section-menu" class="settings-nav__sections" ref={navSections}>
@@ -1597,46 +1564,22 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
                 {(section) => (
                   <div class="settings-nav__section">
                     <span class="settings-nav__label">{section.label}</span>
-                    <For each={SETTINGS_PRIMARY_PANELS.filter((p) => p.section === section.id)}>
+                    <For each={SETTINGS_PANELS.filter((p) => p.section === section.id)}>
                       {(panel) => (
-                        <div class="settings-nav__group">
-                          <button
-                            type="button"
-                            class="settings-nav__item"
-                            data-active={current().id === panel.id ? "true" : "false"}
-                            data-pending={pending() === panel.id ? "true" : undefined}
-                            onPointerEnter={() => void preloadPanel(panel.id).catch(() => undefined)}
-                            onFocus={() => void preloadPanel(panel.id).catch(() => undefined)}
-                            onClick={() => void navigate(panel.id)}
-                            aria-busy={pending() === panel.id ? "true" : undefined}
-                            aria-current={current().id === panel.id ? "page" : undefined}
-                          >
-                            <Icon name={panel.icon} size="normal" class="flex-shrink-0" />
-                            <span class="truncate">{panel.title}</span>
-                          </button>
-                          <Show when={panelRoot(current().id).id === panel.id && panelChildren(panel.id).length > 0}>
-                            <div class="settings-nav__children">
-                              <For each={panelChildren(panel.id)}>
-                                {(child) => (
-                                  <button
-                                    type="button"
-                                    class="settings-nav__item"
-                                    data-secondary="true"
-                                    data-active={current().id === child.id ? "true" : "false"}
-                                    data-pending={pending() === child.id ? "true" : undefined}
-                                    onPointerEnter={() => void preloadPanel(child.id).catch(() => undefined)}
-                                    onFocus={() => void preloadPanel(child.id).catch(() => undefined)}
-                                    onClick={() => void navigate(child.id)}
-                                    aria-busy={pending() === child.id ? "true" : undefined}
-                                    aria-current={current().id === child.id ? "page" : undefined}
-                                  >
-                                    <span class="truncate">{child.title}</span>
-                                  </button>
-                                )}
-                              </For>
-                            </div>
-                          </Show>
-                        </div>
+                        <button
+                          type="button"
+                          class="settings-nav__item"
+                          data-active={current().id === panel.id ? "true" : "false"}
+                          data-pending={pending() === panel.id ? "true" : undefined}
+                          onPointerEnter={() => void preloadPanel(panel.id).catch(() => undefined)}
+                          onFocus={() => void preloadPanel(panel.id).catch(() => undefined)}
+                          onClick={() => void navigate(panel.id)}
+                          aria-busy={pending() === panel.id ? "true" : undefined}
+                          aria-current={current().id === panel.id ? "page" : undefined}
+                        >
+                          <Icon name={panel.icon} size="normal" class="flex-shrink-0" />
+                          <span class="truncate">{panel.title}</span>
+                        </button>
                       )}
                     </For>
                   </div>

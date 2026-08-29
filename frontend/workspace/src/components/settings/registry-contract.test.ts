@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { SETTINGS_PANELS, SETTINGS_PANEL_IDS, SETTINGS_PRIMARY_PANELS, SETTINGS_SECTIONS, panelRoot } from "./registry"
+import { SETTINGS_PANELS, SETTINGS_PANEL_IDS, SETTINGS_SECTIONS } from "./registry"
 
 const root = new URL("./", import.meta.url)
 const modules: Record<(typeof SETTINGS_PANEL_IDS)[number], string> = {
@@ -30,20 +30,23 @@ describe("settings registry source contract", () => {
     }
   })
 
-  test("keeps seven primary destinations and valid progressive-disclosure children", () => {
-    expect(SETTINGS_PRIMARY_PANELS.map((panel) => panel.title)).toEqual([
+  test("keeps every destination visible in the grouped rail", () => {
+    expect(SETTINGS_PANELS.map((panel) => panel.title)).toEqual([
       "Models",
+      "Local models",
       "Skills",
-      "Connectors",
+      "MCP & connectors",
+      "Research tools",
       "Compute",
       "Security & access",
+      "Network",
+      "Sandbox",
+      "Credentials",
       "Storage",
       "General",
     ])
-    for (const panel of SETTINGS_PANELS) {
-      expect(panelRoot(panel.id).parent).toBeUndefined()
-      if (panel.parent) expect(SETTINGS_PANEL_IDS).toContain(panel.parent)
-    }
+    expect(SETTINGS_SECTIONS.map((section) => section.label)).toEqual(["Inference", "Capabilities", "Runtime", "App"])
+    expect(SETTINGS_PANELS.every((panel) => "parent" in panel === false)).toBe(true)
   })
 
   test("keeps every panel inside the shared settings frame", async () => {

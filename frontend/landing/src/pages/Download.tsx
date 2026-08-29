@@ -6,6 +6,7 @@ const DOCS = "https://openscience.sh/docs"
 const RELEASE = `${GITHUB}/releases/latest/download`
 const NPM = "npm i -g @synsci/openscience"
 const CURL = "curl -fsSL https://openscience.sh/install | bash"
+const MAC = "curl -fsSL https://openscience.sh/install-desktop | bash"
 
 const DOWNLOADS = {
   "mac-arm64": {
@@ -287,6 +288,16 @@ export default function Download() {
                 Unsigned release. macOS and Windows may show security prompts; macOS builds are ad-hoc signed and not
                 notarized.
               </div>
+              {download.platform === "mac" && (
+                <div className="mt-7 border border-border/60 bg-background/60 p-4 text-left sm:p-5">
+                  <div className="text-[13px] text-foreground">Install without opening Security Settings</div>
+                  <p className="mb-4 mt-2 text-[12.5px] leading-5 text-foreground/55">
+                    Paste this once in Terminal. It verifies the published checksum and app identity, installs
+                    OpenScience in Applications, removes its download quarantine, and launches it.
+                  </p>
+                  <Copy command={MAC} />
+                </div>
+              )}
             </div>
           </div>
 

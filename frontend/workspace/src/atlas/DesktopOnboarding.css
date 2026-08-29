@@ -8,8 +8,8 @@
 }
 
 .desktop-onboarding__shell {
-  width: min(720px, 100%);
-  min-height: min(600px, calc(100vh - 48px));
+  width: min(680px, 100%);
+  min-height: min(500px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -25,6 +25,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
 }
 
 .desktop-onboarding__brand {
@@ -48,42 +49,19 @@
   letter-spacing: 0.04em;
 }
 
-.desktop-onboarding__progress {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.desktop-onboarding__account-state {
   color: var(--text-weak);
-}
-
-.desktop-onboarding__progress > span {
-  width: 18px;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--border-weak-base);
-}
-
-.desktop-onboarding__progress > span[data-active="true"] {
-  background: var(--text-strong);
-}
-
-.desktop-onboarding__progress small {
-  margin-left: 4px;
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
 }
 
 .desktop-onboarding__content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-}
-
-.desktop-onboarding__content--ready {
-  max-width: 620px;
+  gap: 22px;
 }
 
 .desktop-onboarding__intro {
-  max-width: 600px;
+  max-width: 580px;
 }
 
 .desktop-onboarding__intro p {
@@ -104,119 +82,135 @@
 }
 
 .desktop-onboarding__intro > span,
-.desktop-onboarding__choices button > span:last-child,
-.desktop-onboarding__route-list button span,
+.desktop-onboarding__model-copy small,
 .desktop-onboarding__note,
-.desktop-onboarding__ready-card > div > div > span,
-.desktop-onboarding__summary small,
-.desktop-onboarding__account-copy small {
+.desktop-onboarding__footer > span {
   color: var(--text-weak);
   font-size: 12px;
   line-height: 1.5;
   text-wrap: pretty;
 }
 
-.desktop-onboarding__choices {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.desktop-onboarding__choices button,
-.desktop-onboarding__route-list button {
-  min-height: 88px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 14px;
+.desktop-onboarding__models {
+  overflow: hidden;
   border: 1px solid var(--border-weak-base);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--surface-raised-base);
-  color: inherit;
-  text-align: left;
-  transition:
-    border-color 150ms ease,
-    background-color 150ms ease;
 }
 
-.desktop-onboarding__choices button:hover,
-.desktop-onboarding__route-list button:hover {
-  border-color: var(--border-strong-base);
-  background: var(--surface-base-hover);
-}
-
-.desktop-onboarding__choices button:active,
-.desktop-onboarding__route-list button:active {
-  transform: scale(0.99);
-}
-
-.desktop-onboarding__choices button:focus-visible,
-.desktop-onboarding__route-list button:focus-visible,
-.desktop-onboarding__credentials select:focus-visible {
-  outline: 2px solid var(--text-strong);
-  outline-offset: 2px;
-}
-
-.desktop-onboarding__choices button[data-selected="true"],
-.desktop-onboarding__route-list button[data-selected="true"] {
-  border-color: var(--text-strong);
-  box-shadow: inset 0 0 0 1px var(--text-strong);
-}
-
-.desktop-onboarding__choice-topline {
+.desktop-onboarding__models > summary {
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 16px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 150ms ease;
 }
 
-.desktop-onboarding__choices strong,
-.desktop-onboarding__route-list strong,
-.desktop-onboarding__ready-card strong,
-.desktop-onboarding__summary strong,
-.desktop-onboarding__account-copy strong {
+.desktop-onboarding__models > summary::-webkit-details-marker {
+  display: none;
+}
+
+.desktop-onboarding__models > summary:hover {
+  background: var(--surface-base-hover);
+}
+
+.desktop-onboarding__models > summary:focus-visible,
+.desktop-onboarding__credentials select:focus-visible {
+  outline: 2px solid var(--text-strong);
+  outline-offset: -3px;
+}
+
+.desktop-onboarding__models > summary > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.desktop-onboarding__models > summary strong,
+.desktop-onboarding__model-copy strong {
   font-size: 13px;
   font-weight: var(--font-weight-emphasis);
 }
 
-.desktop-onboarding__choices em {
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--surface-base-hover);
+.desktop-onboarding__models > summary small {
   color: var(--text-weak);
-  font-size: 9px;
-  font-style: normal;
-  font-weight: var(--font-weight-emphasis);
-  letter-spacing: 0.02em;
-}
-
-.desktop-onboarding__detail {
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--border-weak-base) 76%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-raised-base) 66%, transparent);
-}
-
-.desktop-onboarding__route-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.desktop-onboarding__route-list button {
-  min-height: 68px;
-  padding: 10px;
-}
-
-.desktop-onboarding__route-list button span {
   font-size: 11px;
 }
 
+.desktop-onboarding__models > summary > span:last-child {
+  color: var(--text-weak);
+  font-size: 18px;
+  transition: transform 180ms ease;
+}
+
+.desktop-onboarding__models[open] > summary > span:last-child {
+  transform: rotate(45deg);
+}
+
+.desktop-onboarding__model-options {
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px 12px;
+}
+
+.desktop-onboarding__model-option {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 2px;
+  border-top: 1px solid var(--border-weak-base);
+}
+
+.desktop-onboarding__model-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.desktop-onboarding__model-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-onboarding__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-weak);
+  font-size: 10px;
+  font-weight: var(--font-weight-emphasis);
+  letter-spacing: 0.04em;
+}
+
+.desktop-onboarding__status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--text-weak);
+}
+
+.desktop-onboarding__status[data-ready="true"] i {
+  background: var(--icon-success-base, #52a66d);
+}
+
+.desktop-onboarding__model-option--key {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
 .desktop-onboarding__credentials {
+  width: 100%;
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
-  gap: 10px;
-  margin-top: 12px;
+  grid-template-columns: 132px minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
 }
 
 .desktop-onboarding__credentials label,
@@ -233,110 +227,14 @@
   padding: 0 10px;
   border: 1px solid var(--border-weak-base);
   border-radius: 8px;
-  background: var(--surface-raised-base);
+  background: var(--surface-base);
   color: var(--text-strong);
 }
 
 .desktop-onboarding__note {
-  margin: 12px 0 0;
-}
-
-.desktop-onboarding__account {
-  min-height: 72px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.desktop-onboarding__account-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.desktop-onboarding__account-copy strong,
-.desktop-onboarding__account-copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-onboarding__status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-weak);
-  font-size: 10px;
-  font-weight: var(--font-weight-emphasis);
-  letter-spacing: 0.06em;
-}
-
-.desktop-onboarding__status i {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--text-weak);
-}
-
-.desktop-onboarding__status[data-ready="true"] i {
-  background: var(--icon-success-base, #52a66d);
-}
-
-.desktop-onboarding__ready-card {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid var(--border-weak-base);
-  border-radius: 12px;
-  background: var(--surface-raised-base);
-}
-
-.desktop-onboarding__ready-card > div {
-  min-height: 96px;
-  display: flex;
-  gap: 12px;
-  padding: 16px;
-}
-
-.desktop-onboarding__ready-card > div + div {
-  border-left: 1px solid var(--border-weak-base);
-}
-
-.desktop-onboarding__ready-card > div > div {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.desktop-onboarding__ready-index {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border-weak-base);
-  border-radius: 7px;
-  color: var(--text-weak);
-  font-size: 10px;
-  font-weight: var(--font-weight-emphasis);
-  font-variant-numeric: tabular-nums;
-}
-
-.desktop-onboarding__summary {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  gap: 3px 12px;
-  padding: 12px 0;
+  margin: 0;
+  padding: 12px 2px 2px;
   border-top: 1px solid var(--border-weak-base);
-  border-bottom: 1px solid var(--border-weak-base);
-}
-
-.desktop-onboarding__summary > span {
-  grid-row: span 2;
-  color: var(--text-weak);
-  font-size: 11px;
 }
 
 .desktop-onboarding__error {
@@ -350,20 +248,20 @@
 }
 
 .desktop-onboarding__footer {
-  min-height: 48px;
+  min-height: 52px;
   margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid var(--border-weak-base);
 }
 
 .desktop-onboarding__footer button,
-.desktop-onboarding__account button {
+.desktop-onboarding__model-option button {
   min-height: 32px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .desktop-onboarding__choices button,
-  .desktop-onboarding__route-list button {
+  .desktop-onboarding__models > summary,
+  .desktop-onboarding__models > summary > span:last-child {
     transition: none;
   }
 }
@@ -382,28 +280,22 @@
     box-shadow: none;
   }
 
-  .desktop-onboarding__choices,
-  .desktop-onboarding__route-list,
-  .desktop-onboarding__credentials,
-  .desktop-onboarding__ready-card {
+  .desktop-onboarding__credentials {
     grid-template-columns: 1fr;
   }
 
-  .desktop-onboarding__choices button {
-    min-height: 76px;
-  }
-
-  .desktop-onboarding__route-list button {
-    min-height: 56px;
-  }
-
-  .desktop-onboarding__ready-card > div + div {
-    border-top: 1px solid var(--border-weak-base);
-    border-left: 0;
-  }
-
-  .desktop-onboarding__account {
+  .desktop-onboarding__model-option {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .desktop-onboarding__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .desktop-onboarding__footer button {
+    width: 100%;
+    min-height: 44px;
   }
 }
