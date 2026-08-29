@@ -955,6 +955,17 @@ jobs:
           mkdir -p "$mountpoint"
           cleanup() { hdiutil detach "$mountpoint" -quiet 2>/dev/null || true; }
           trap cleanup EXIT
+          if [[ "$OPENSCIENCE_TRUSTED" == "true" ]]; then
+            codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
+            dmg_details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
+            grep -Fq 'Authority=Developer ID Application:' <<<"$dmg_details"
+            grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$dmg_details" || {
+              echo "::error::$OPENSCIENCE_DMG is not signed by the configured OpenScience team"
+              exit 1
+            }
+            xcrun stapler validate "$OPENSCIENCE_DMG"
+            spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
+          fi
           hdiutil attach "$OPENSCIENCE_DMG" -readonly -nobrowse -mountpoint "$mountpoint" -quiet
           current="$mountpoint/OpenScience.app"
           [[ -d "$current" && ! -L "$current" ]] || {
