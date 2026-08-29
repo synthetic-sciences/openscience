@@ -38,6 +38,7 @@ async function gateway(reply: Reply) {
     starts: [] as Array<Record<string, string>>,
     redeems: [] as Array<Record<string, string>>,
     funded: [] as Array<{ key: string | null; organization: string | null }>,
+    syncs: [] as Array<{ key: string | null; organization: string | null }>,
   }
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -109,6 +110,10 @@ async function gateway(reply: Reply) {
       }
       if (url.pathname === "/api/cli/balance") return Response.json({ balance_cents: 2000, balance_usd: 20 })
       if (url.pathname === "/api/cli/sync") {
+        state.syncs.push({
+          key: request.headers.get("Authorization"),
+          organization: request.headers.get("X-Organization-ID"),
+        })
         return Response.json({
           user: {
             user_id:
@@ -294,6 +299,11 @@ describe("browser login funding context", () => {
         type: "personal",
         locked: true,
       })
+      expect(atlas.state.syncs).toEqual([
+        { key: "Bearer thk_pasted-org.secret", organization: alpha.organization_id },
+        { key: "Bearer thk_legacy-personal.secret", organization: null },
+        { key: "Bearer thk_pasted-personal.secret", organization: null },
+      ])
     } finally {
       await atlas.close()
     }
@@ -331,6 +341,8 @@ describe("browser login funding context", () => {
         organization_id: alpha.organization_id,
         locked: false,
       })
+      expect(atlas.state.syncs.length).toBeGreaterThanOrEqual(3)
+      expect(atlas.state.syncs.every((call) => call.organization === null)).toBe(true)
     } finally {
       await atlas.close()
     }

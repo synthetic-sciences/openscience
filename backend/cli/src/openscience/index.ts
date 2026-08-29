@@ -240,6 +240,9 @@ export interface FundingSnapshot {
   readonly user_id: string
   readonly account: string
   readonly organization_id?: string
+  /** Organization credentials are available only to a browser-approved,
+   * immutable workspace key. A legacy local funding selection is not enough. */
+  readonly workspace_locked?: boolean
 }
 
 export interface FundingContext {
@@ -509,6 +512,23 @@ export namespace OpenScience {
     return accountAtlasFetch(session, input, init, timeoutMs, false)
   }
 
+  /** Credential-sync request for the immutable workspace selected during
+   * browser login. A flexible legacy key may still select an organization for
+   * Wallet attribution, but it must never receive that organization's shared
+   * credentials. */
+  async function workspaceAtlasFetch(
+    session: Pick<OpenScienceSession, "api_key" | "organization_id" | "workspace_locked">,
+    input: string,
+    init: RequestInit = {},
+    timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
+  ): Promise<Response> {
+    const scope =
+      session.workspace_locked === true && session.organization_id
+        ? session
+        : { api_key: session.api_key, organization_id: undefined }
+    return accountAtlasFetch(scope, input, init, timeoutMs, true)
+  }
+
   /** Explicitly funded request. This is intentionally separate from the
    * general authenticated transport so organization attribution cannot leak
    * onto BYOK credential, device, skill, graph, project, or telemetry calls. */
@@ -586,6 +606,7 @@ export namespace OpenScience {
       user_id: session.user_id,
       account: accountTag(session),
       ...(session.organization_id ? { organization_id: session.organization_id } : {}),
+      ...(session.workspace_locked ? { workspace_locked: true } : {}),
     })
   }
 
@@ -698,23 +719,32 @@ export namespace OpenScience {
    * The compare-under-lock prevents a slow status response for account A from
    * relabeling account B after a concurrent sign-in. */
   async function reconcileWorkspaceScope(apiKey: string, organizationID?: string): Promise<boolean> {
-    const changed = { value: false }
-    await CredentialLifecycle.serialized(async () => {
-      using _ = await Lock.write(filepath)
-      const current = await getSession()
-      if (!current || current.api_key !== apiKey) return
-      if (current.workspace_locked && current.organization_id === organizationID) return
-      const next = {
-        ...current,
-        organization_id: organizationID,
-        workspace_locked: true,
-      }
-      delete next.organization_locked
-      if (!organizationID) delete next.organization_id
-      await atomicWrite(filepath, JSON.stringify(next, null, 2), { mode: 0o600 })
-      changed.value = true
-    })
-    if (!changed.value) return false
+    const result = await CredentialLifecycle.mutateIf(
+      "managed-session.workspace",
+      async () => {
+        const current = await getSession()
+        return !!current && current.api_key === apiKey && (!current.workspace_locked || current.organization_id !== organizationID)
+      },
+      async () => {
+        using _ = await Lock.write(filepath)
+        const current = await getSession()
+        if (!current || current.api_key !== apiKey) return false
+        if (current.workspace_locked && current.organization_id === organizationID) return false
+        await clearSyncedCredentialArtifacts()
+        const next = {
+          ...current,
+          organization_id: organizationID,
+          workspace_locked: true,
+          cached_v: undefined,
+          last_check_ts: undefined,
+        }
+        delete next.organization_locked
+        if (!organizationID) delete next.organization_id
+        await atomicWrite(filepath, JSON.stringify(next, null, 2), { mode: 0o600 })
+        return true
+      },
+    )
+    if (!result.applied || !result.value) return false
     cachedProfile = undefined
     invalidateResearchEntitlements()
     invalidateBalance()
@@ -830,7 +860,7 @@ export namespace OpenScience {
       throw new FundingContextError("That organization is not available to the connected account.")
     }
 
-    await CredentialLifecycle.serialized(async () => {
+    await CredentialLifecycle.mutate("managed-session.funding-context", async () => {
       using _ = await Lock.write(filepath)
       const current = await getSession()
       if (!current || current.api_key !== snapshot.api_key) {
@@ -839,7 +869,17 @@ export namespace OpenScience {
       if (current.workspace_locked && requested !== current.organization_id) {
         throw new FundingContextError("This sign-in is tied to one workspace. Sign in again to choose another account.")
       }
-      const next = { ...current, organization_id: requested }
+      // A historical flexible key could have persisted an organization response
+      // before workspace-scoped login existed. Remove that snapshot before
+      // publishing the new selection so an offline sync cannot reuse it.
+      await clearSyncedCredentialArtifacts()
+      const next = {
+        ...current,
+        organization_id: requested,
+        cached_v: undefined,
+        last_check_ts: undefined,
+      }
+      if (!requested) delete next.organization_id
       await atomicWrite(filepath, JSON.stringify(next, null, 2), { mode: 0o600 })
     })
     cachedProfile = undefined
@@ -847,6 +887,9 @@ export namespace OpenScience {
     invalidateBalance()
     const { Provider } = await import("../provider/provider")
     Provider.invalidate()
+    // Rehydrate the Personal snapshot immediately. Organization credentials
+    // still require a separately issued workspace-locked login key.
+    await syncServices()
     return organizationID
       ? {
           type: "organization",
@@ -867,7 +910,7 @@ export namespace OpenScience {
   export async function getProfile(snapshot?: FundingSnapshot): Promise<AccountProfile | null> {
     const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
-    return authenticatedAtlasFetch(session, `${API_BASE}/api/cli/sync`, {
+    return workspaceAtlasFetch(session, `${API_BASE}/api/cli/sync`, {
       headers: { Authorization: `Bearer ${session.api_key}` },
     })
       .then(async (response) => {
@@ -932,6 +975,9 @@ export namespace OpenScience {
       const previous = await getSession()
       const replacingCredential = previous?.api_key !== session.api_key
       const changingSubject = previous?.user_id !== session.user_id
+      const changingWorkspace =
+        previous?.organization_id !== session.organization_id ||
+        previous?.workspace_locked !== session.workspace_locked
       if (previous && (replacingCredential || changingSubject)) {
         // Give account A's still-present credential the first chance to finish
         // its opt-out. If it is offline or revoked, the telemetry state already
@@ -939,13 +985,15 @@ export namespace OpenScience {
         // cannot orphan the purge or replay it against account B.
         await retryPendingTelemetryConsent().catch(() => false)
       }
-      if (replacingCredential) {
+      if (replacingCredential || changingWorkspace) {
         // A pasted key can replace an account without an explicit logout. Tear
-        // down account A's complete credential snapshot before publishing B's
-        // session, so a failed B sync can never fall back to A's keys/files/env.
+        // down the old account/workspace credential snapshot before publishing
+        // the new session, so a failed sync can never fall back to old secrets.
         await clearSyncedCredentialArtifacts()
-        await dropUsageQueue()
-        await resetTelemetryAccountSession()
+        if (replacingCredential) {
+          await dropUsageQueue()
+          await resetTelemetryAccountSession()
+        }
       } else if (previous && changingSubject && !(await preserveTelemetryConsentForSession(session))) {
         // A legacy key-only session and its canonical user-id session are the
         // same account. Copy the privacy setting before changing the durable
@@ -968,15 +1016,29 @@ export namespace OpenScience {
    *  under a lock so two concurrent patches (e.g. an interactive last_check_ts
    *  update racing a background cached_v update) can't lose each other's field
    *  in the read-modify-write. */
-  async function updateSession(patch: Partial<OpenScienceSession>): Promise<void> {
+  async function updateSession(
+    patch: Partial<OpenScienceSession>,
+    expected?: Pick<OpenScienceSession, "api_key" | "organization_id" | "workspace_locked">,
+  ): Promise<boolean> {
+    const updated = { value: false }
     await CredentialLifecycle.serialized(async () => {
       using _ = await Lock.write(filepath)
       const session = await getSession()
       if (!session) return
+      if (
+        expected &&
+        (session.api_key !== expected.api_key ||
+          session.organization_id !== expected.organization_id ||
+          session.workspace_locked !== expected.workspace_locked)
+      ) {
+        return
+      }
       // Sync bookkeeping is not credential material; publishing a credential
       // revision for every TTL timestamp would unnecessarily stop live children.
       await atomicWrite(filepath, JSON.stringify({ ...session, ...patch }, null, 2), { mode: 0o600 })
+      updated.value = true
     })
+    return updated.value
   }
 
   /** TTL gate for the cheap version probe. */
@@ -1000,7 +1062,7 @@ export namespace OpenScience {
 
     let v: number | null = null
     try {
-      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/sync/version`, {
+      const res = await workspaceAtlasFetch(session, `${API_BASE}/api/cli/sync/version`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
       if (!res.ok) return // fail open — keep current env
@@ -1017,7 +1079,7 @@ export namespace OpenScience {
     }
 
     // Always stamp the probe time so we don't hammer the server.
-    await updateSession({ last_check_ts: now })
+    if (!(await updateSession({ last_check_ts: now }, session))) return
     if (v === null) return
     if (v === session.cached_v) return
 
@@ -1025,14 +1087,24 @@ export namespace OpenScience {
     // continues with the existing env; new env applies to the NEXT message.
     void (async () => {
       try {
+        const current = await getSession()
+        if (
+          !current ||
+          current.api_key !== session.api_key ||
+          current.organization_id !== session.organization_id ||
+          current.workspace_locked !== session.workspace_locked
+        ) {
+          return
+        }
         // The current turn has already constructed its provider SDK from the
         // previous snapshot. Publishing the cross-process revision is still
         // required, but reconciling it locally would run the instance revoker,
         // dispose SessionPrompt state, and abort the turn that scheduled this
         // refresh. Apply the new snapshot for the next turn without revoking
         // this process's in-flight work.
-        await syncServices({ reconcileLocal: false })
-        await updateSession({ cached_v: v as number })
+        const synced = await syncServices({ reconcileLocal: false })
+        if (!synced) return
+        if (!(await updateSession({ cached_v: v as number }, session))) return
         // Force provider SDK to rebuild from the new env on the next call.
         const provider = await import("../provider/provider")
         provider.Provider.invalidate?.()
@@ -1390,14 +1462,6 @@ export namespace OpenScience {
     if (!res.ok) {
       throw new Error(`Could not validate key: HTTP ${res.status}`)
     }
-    // Balance is the compatibility validation endpoint. A best-effort sync
-    // read additionally gives modern Gateway deployments' canonical user id,
-    // avoiding legacy empty-id sessions while preserving older deployments.
-    const profile = await atlasFetch(`${API_BASE}/api/cli/sync`, {
-      headers: { Authorization: `Bearer ${key}` },
-    })
-      .then(async (response) => (response.ok ? ((await response.json()) as SyncResponse) : undefined))
-      .catch(() => undefined)
     // Modern organization-scoped keys report their immutable scope here.
     // Keep this best-effort so older servers without /api/v1/auth/status and
     // legacy personal keys continue to connect exactly as before.
@@ -1420,6 +1484,19 @@ export namespace OpenScience {
     })()
     const workspaceLocked = status?.api_key?.workspace_locked === true || !!pinned
     const organizationID = pinned ?? (workspaceLocked ? undefined : selected)
+    // Read profile + credential state only after the immutable scope is known.
+    // This prevents a pasted Personal/flexible key from ever receiving team
+    // material, while an organization-pinned key sends its exact workspace.
+    const scope = {
+      api_key: key,
+      ...(organizationID ? { organization_id: organizationID } : {}),
+      ...(workspaceLocked ? { workspace_locked: true } : {}),
+    }
+    const profile = await workspaceAtlasFetch(scope, `${API_BASE}/api/cli/sync`, {
+      headers: { Authorization: `Bearer ${key}` },
+    })
+      .then(async (response) => (response.ok ? ((await response.json()) as SyncResponse) : undefined))
+      .catch(() => undefined)
     const session: OpenScienceSession = {
       api_key: key,
       user_id: profile?.user?.user_id || "",
@@ -1471,17 +1548,37 @@ export namespace OpenScience {
     if (!session) return null
 
     try {
-      const res = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/sync`, {
+      const res = await workspaceAtlasFetch(session, `${API_BASE}/api/cli/sync`, {
         headers: { Authorization: `Bearer ${session.api_key}` },
       })
 
       if (!res.ok) {
         if (res.status === 401) return null
         if (res.status === 403) {
+          if (session.workspace_locked === true && session.organization_id) {
+            const cleared = await CredentialLifecycle.mutateIf(
+              "managed-services.workspace-denied",
+              async () => {
+                const current = await getSession()
+                return (
+                  current?.api_key === session.api_key &&
+                  current.organization_id === session.organization_id &&
+                  current.workspace_locked === session.workspace_locked
+                )
+              },
+              clearSyncedCredentialArtifacts,
+            )
+            if (cleared.applied) {
+              const provider = await import("../provider/provider")
+              provider.Provider.invalidate()
+            }
+          }
           // 403s also come from WAFs and rate limiters, not just key
-          // revocation. Destroying the session on one silently signed the
-          // user out; keep it and let the next sync retry. A genuinely
-          // revoked key comes back as 401.
+          // revocation. Keep the valid session and let the next sync retry.
+          // An organization-scoped denial still fails closed for cached team
+          // credentials; Personal and flexible legacy snapshots stay available
+          // offline exactly as before. A revoked key comes back as 401 and the
+          // authenticated transport clears its matching session plus artifacts.
           log.warn("sync got 403, keeping session")
           return null
         }
@@ -1507,6 +1604,14 @@ export namespace OpenScience {
       // dashboard stayed live in the CLI forever.
       const fresh = new Map<string, string>()
       for (const [, svc] of Object.entries(data.services)) {
+        // Defence in depth: even a misconfigured control plane cannot deliver a
+        // team secret to Personal or to a flexible legacy funding selection.
+        if (
+          svc.metadata?.source === "organization_byok" &&
+          !(session.workspace_locked === true && session.organization_id)
+        ) {
+          continue
+        }
         if (svc.connected && svc.env) {
           for (const [key, value] of Object.entries(svc.env)) {
             if (value) fresh.set(key, value)
@@ -1518,7 +1623,12 @@ export namespace OpenScience {
         "managed-services.sync",
         async () => {
           const current = await getSession()
-          if (!current || current.api_key !== session.api_key) {
+          if (
+            !current ||
+            current.api_key !== session.api_key ||
+            current.organization_id !== session.organization_id ||
+            current.workspace_locked !== session.workspace_locked
+          ) {
             throw new Error("Managed session changed while services were syncing; discarded the stale response")
           }
           // Retired releases materialized an Atlas-delivered GCP service account.
