@@ -2,7 +2,7 @@
 name: givemeanode-agent-compute
 description: Operate GiveMeANode GPU nodes, batch jobs, storage, and rollout sandboxes through its connected MCP server with bounded spend, durable recovery, and explicit approval for paid or destructive actions.
 category: cloud-compute
-version: 1.0.0
+version: 1.0.1
 author: Synthetic Sciences
 license: MIT
 tags: [Infrastructure, GPU Cloud, MCP, H100, Batch Jobs, Rollout Sandboxes]
@@ -12,11 +12,15 @@ tags: [Infrastructure, GPU Cloud, MCP, H100, Batch Jobs, Rollout Sandboxes]
 
 Use the configured `givemeanode` MCP connector. Do not install or invoke `gman`, call the HTTP API directly, or ask for a service token when the MCP tools are available. The connector owns OAuth; OpenScience's MCP permission boundary owns each tool invocation.
 
+GiveMeANode is not currently a native `compute_job` target. Use its discovered MCP tools directly, and do not claim that a remote node or batch job is tracked, recoverable, or releasable through OpenScience's JobBroker.
+
 ## Start with live state
 
 - Read the available MCP tools and the `gman://docs/llms.txt` resource before relying on remembered arguments. The service contract is versioned and `/preview` may evolve.
-- Read `list_limits`, `get_billing`, relevant nodes/jobs, and live rates before proposing paid work. Never hard-code prices, availability, queue time, images, or limits.
+- Read `list_limits`, `get_billing`, relevant nodes/jobs, and the current published rate before proposing paid work. Never hard-code prices, availability, queue time, images, or limits. If role-scoped billing inspection is refused, surface that gap instead of assuming funds or headroom.
 - In a shared workspace, pass a stable mission and inspect `yours`, `created_by`, and `same_mission` before stopping or deleting anything.
+
+The exact locked rate and job cost ceiling arrive in the create/submit response, not from a separate quote operation. Before that mutation, show the current published estimate, the requested maximum duration, and the applicable workspace or organization cap. If the user has not authorized work with a price that is only locked on submission, do not submit it. Preserve the returned rate and cost ceiling in the handoff.
 
 ## Choose the right primitive
 
@@ -28,13 +32,14 @@ Use the configured `givemeanode` MCP connector. Do not install or invoke `gman`,
 ## Safe lifecycle
 
 1. Inspect live limits, billing, existing resources, and the current tool schema.
-2. Present one recommended shape with the provider-returned node rate, session minimum, expected upper-bound duration, and a stop condition. Treat cost as an estimate.
+2. Present one recommended shape with the current published rate, session minimum when applicable, an explicit maximum duration, and a stop condition. Mark the pre-submit cost as an estimate.
 3. Let the MCP permission prompt authorize the exact paid mutation. Never interpret prose approval as permission to bypass it.
-4. Use a stable node name or idempotency key. If a create/submit response is lost, read the existing node/job before retrying; never create a duplicate to resolve uncertainty.
-5. For queued work, keep the same resource and poll at the provider-recommended cadence. Read `expires_at`, queue position, `blocked_on`, capacity notes, and `Retry-After`; do not tight-loop.
-6. Put secrets in the tool's `env` object, never in command text, filenames, logs, or chat. Use short-lived, minimally scoped values and treat values sent to a node as exposed to that workload.
-7. Verify the requested scientific output, not merely a running resource or zero exit code.
-8. Stop an interactive node as soon as the work is safely preserved. Cancel a job that is no longer useful. Report the final remote state and provider-returned spend evidence.
+4. Open or attach a stable mission before the first create or submit, and pass it on related work so spend and evidence share one receipt.
+5. Use a stable, request-specific node name or idempotency key. A batch job must also have a bounded `max_duration_minutes`, an explicit image or context, and a declared output path or destination. If a create/submit response is lost, read the existing node/job before retrying; never create a duplicate to resolve uncertainty.
+6. For queued work, keep the same resource and poll at the provider-recommended cadence. Read `expires_at`, queue position, `blocked_on`, capacity notes, and `Retry-After`; do not tight-loop.
+7. Refer to an existing provider-stored secret by name, such as `{secret: "wandb-prod"}`, instead of sending a literal secret through MCP arguments. Never place secret values in commands, filenames, logs, or chat.
+8. Verify the requested scientific output, not merely a running resource or zero exit code.
+9. Stop an interactive node as soon as the work is safely preserved. Cancel a batch job that is no longer useful. Report the final remote state, returned rate or cost ceiling, and available spend evidence.
 
 Deletion is separate from stopping: `delete_node` destroys the persistent disk and must remain an explicit destructive action after outputs are verified. Do not delete storage, snapshots, connections, or teammate resources as routine cleanup.
 
