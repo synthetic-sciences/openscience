@@ -42,7 +42,6 @@ test("allows the OpenRouter managed route and non-compute integrations", () => {
     "WANDB_API_KEY",
     "HF_TOKEN",
     "PINECONE_API_KEY",
-    "GITHUB_TOKEN",
     "OPENALEX_API_KEY",
     "SEMANTIC_SCHOLAR_API_KEY",
     "NVIDIA_API_KEY",
@@ -52,6 +51,13 @@ test("allows the OpenRouter managed route and non-compute integrations", () => {
   }
   expect(isSyncedEnvAllowed("OPENROUTER_BASE_URL", managedOpenRouterBaseURL())).toBe(true)
   expect(SYNCED_SERVICE_ENV_KEYS).not.toContain("MODAL_TOKEN_SECRET")
+})
+
+test("ignores account-synced GitHub tokens now that code sync is retired", () => {
+  for (const key of ["GITHUB_TOKEN", "GH_TOKEN"]) {
+    expect(isSyncedEnvAllowed(key, "ghp_account_synced_value")).toBe(false)
+    expect(SYNCED_SERVICE_ENV_KEYS).not.toContain(key as never)
+  }
 })
 
 test("fails closed for arbitrary environment fields and Modal control-plane tokens", () => {

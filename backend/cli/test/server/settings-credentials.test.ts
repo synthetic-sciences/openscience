@@ -76,9 +76,11 @@ test("credential catalog is categorized and injects integration and compute envi
       "const services = (await catalog.json()).services",
       'const integration = services.filter((service) => service.category === "integration").map((service) => service.id)',
       'const compute = services.filter((service) => service.category === "compute").map((service) => service.id)',
-      'for (const id of ["github", "openalex", "huggingface", "tinker", "wandb", "pinecone", "langsmith"]) {',
+      'for (const id of ["openalex", "huggingface", "tinker", "wandb", "pinecone", "langsmith"]) {',
       '  if (!integration.includes(id)) throw new Error("missing integration " + id)',
       "}",
+      '// Code sync is retired: the GitHub PAT slot must be gone from the catalog.',
+      'if (services.some((service) => service.id === "github")) throw new Error("retired github credential slot is still listed")',
       'for (const id of ["aws", "gcp", "azure", "nvidia"]) {',
       '  if (!compute.includes(id)) throw new Error("missing compute credential " + id)',
       "}",
@@ -134,6 +136,58 @@ test("credential catalog is categorized and injects integration and compute envi
   }
 })
 
+test("a legacy stored github token stays inert after code-sync retirement", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-legacy-github-credential-"))
+  const runner = path.join(root, "legacy.ts")
+  const routes = new URL("../../src/server/routes/settings/credentials.ts", import.meta.url).href
+  const secretFile = new URL("../../src/util/secret-file.ts", import.meta.url).href
+  const secretBox = new URL("../../src/util/secret-box.ts", import.meta.url).href
+  await Bun.write(
+    runner,
+    [
+      `import fs from "node:fs/promises"`,
+      `import path from "node:path"`,
+      `import { CredentialsRoutes, applyCredentialEnv } from ${JSON.stringify(routes)}`,
+      `import { SecretFile } from ${JSON.stringify(secretFile)}`,
+      `import { SecretBox } from ${JSON.stringify(secretBox)}`,
+      `for (const key of ["GITHUB_TOKEN", "GH_TOKEN"]) delete process.env[key]`,
+      `const data = process.env.OPENSCIENCE_DATA_DIR`,
+      `const machineKey = await SecretFile.key(path.join(data, "credentials.key"))`,
+      `const cipher = SecretBox.seal(machineKey, "ghp_legacy_code_sync_token")`,
+      `const entry = { label: "GitHub", fields: { token: cipher }, updated_at: new Date().toISOString(), source: "local" }`,
+      `await fs.writeFile(path.join(data, "credentials.json"), JSON.stringify({ github: entry }))`,
+      `await applyCredentialEnv()`,
+      `if (process.env.GITHUB_TOKEN || process.env.GH_TOKEN) throw new Error("legacy github token was injected into the environment")`,
+      `const listed = await CredentialsRoutes().request("/")`,
+      `const services = (await listed.json()).services`,
+      `if (services.some((service) => service.id === "github")) throw new Error("legacy github entry surfaced in the credential list")`,
+    ].join("\n"),
+  )
+
+  try {
+    const childEnv = { ...process.env }
+    delete childEnv.GITHUB_TOKEN
+    delete childEnv.GH_TOKEN
+    const proc = Bun.spawn([process.execPath, runner], {
+      env: {
+        ...childEnv,
+        OPENSCIENCE_DATA_DIR: root,
+        OPENSCIENCE_CONFIG_DIR: path.join(root, "config"),
+        OPENSCIENCE_TEST_HOME: path.join(root, "home"),
+        XDG_STATE_HOME: path.join(root, "state"),
+        XDG_CACHE_HOME: path.join(root, "cache"),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [exit, error] = await Promise.all([proc.exited, new Response(proc.stderr).text()])
+    if (exit !== 0) throw new Error(error)
+    expect(exit).toBe(0)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("trusted Firecrawl and NVIDIA credentials resolve in-process without entering agent shells", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-trusted-credentials-"))
   const runner = path.join(root, "trusted.ts")
@@ -155,7 +209,7 @@ test("trusted Firecrawl and NVIDIA credentials resolve in-process without enteri
       `if ((await resolveCredentialFields("firecrawl"))?.api_key !== "fc-trusted") throw new Error("Firecrawl resolver failed")`,
       `if ((await resolveCredentialFields("nvidia"))?.api_key !== "nvapi-trusted") throw new Error("NVIDIA resolver failed")`,
       `if ((await resolveCredentialFields("nvidia_ngc"))?.api_key !== "ngc-trusted") throw new Error("NGC resolver failed")`,
-      `if (await resolveCredentialFields("github")) throw new Error("untrusted service resolved through trusted API")`,
+      `if (await resolveCredentialFields("huggingface")) throw new Error("untrusted service resolved through trusted API")`,
       `if (await fs.stat(CredentialLifecycle.revisionPath()).then(() => true, () => false)) throw new Error("trusted credential published a process revocation")`,
     ].join("\n"),
   )

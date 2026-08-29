@@ -6,7 +6,7 @@
  * with the user's stored `thk_` key (`OpenScience.getSession()`). This is the
  * same backend + token the CLI already uses for sync/skills/billing, and
  * the same contract the `atlas` CLI binary speaks (`nodes:list`,
- * `nodes:commit-new`, `auth/github/*`).
+ * `nodes:commit-new`).
  *
  * Reads and mutations both preserve failure semantics. A signed-out or
  * unreachable Atlas account must not look like a legitimately empty graph.
@@ -596,36 +596,6 @@ export const AtlasBridgeRoutes = lazy(() =>
         return c.json(await res.json())
       } catch (error) {
         const failure = readError(error)
-        return c.json({ detail: failure.detail }, failure.status as any)
-      }
-    })
-    .get("/github/status", async (c) => {
-      try {
-        const res = await atlas("GET", "/api/v1/auth/github/status")
-        if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
-        return c.json(await res.json())
-      } catch (error) {
-        const failure = readError(error)
-        return c.json({ detail: failure.detail }, failure.status as any)
-      }
-    })
-    .post("/github/refresh", async (c) => {
-      try {
-        const res = await atlas("POST", "/api/v1/auth/github/refresh-repos", {})
-        if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
-        return c.json(await res.json())
-      } catch (error) {
-        const failure = mutationError(error)
-        return c.json({ detail: failure.detail }, failure.status as any)
-      }
-    })
-    .post("/github/disconnect", async (c) => {
-      try {
-        const res = await atlas("DELETE", "/api/v1/auth/github/disconnect")
-        if (!res.ok) throw new BackendHttpError(res.status, await res.text().catch(() => ""))
-        return c.json(await res.json())
-      } catch (error) {
-        const failure = mutationError(error)
         return c.json({ detail: failure.detail }, failure.status as any)
       }
     })

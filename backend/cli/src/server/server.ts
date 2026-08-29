@@ -11,7 +11,6 @@ import { isAllowedHost, isAllowedOrigin, isCorsPreflight, isCrossOrigin, isDeplo
 import { timingSafeEqual } from "../util/timing-safe"
 import { FolderResolveRoutes } from "./routes/folder-resolve"
 import { AtlasBridgeRoutes } from "./routes/atlas-bridge"
-import { RepoRoutes } from "./routes/repo"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { NamedError } from "@synsci/util/error"
@@ -351,8 +350,6 @@ export namespace Server {
         // Atlas graph bridge — proxies /api/atlas/* to the Atlas REST API
         // using the user's stored thk_ key (see routes/atlas-bridge.ts).
         .route("/api/atlas", AtlasBridgeRoutes())
-        // Repository tab (status/commit/push/remote) — shells out to git.
-        .route("/api/repo", RepoRoutes())
         .use(async (c, next) => {
           const selected = await projectSelection(c)
           if (selected.selector) await Project.assertDirectory(selected.selector)

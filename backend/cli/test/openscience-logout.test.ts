@@ -67,7 +67,7 @@ test("logout in one server removes synced env and revokes inherited children in 
   const openscience = new URL("../src/openscience/index.ts", import.meta.url).href
   const lifecycle = new URL("../src/credentials/lifecycle.ts", import.meta.url).href
   await fs.mkdir(managedDir, { recursive: true })
-  await Bun.write(path.join(managedDir, "synced-env.json"), JSON.stringify({ GITHUB_TOKEN: "cross-synced-secret" }))
+  await Bun.write(path.join(managedDir, "synced-env.json"), JSON.stringify({ WANDB_API_KEY: "cross-synced-secret" }))
   await Bun.write(
     path.join(root, "openscience-session.json"),
     JSON.stringify({ api_key: "thk_test.secret", user_id: "u" }),
@@ -85,8 +85,8 @@ test("logout in one server removes synced env and revokes inherited children in 
       `import { CredentialLifecycle } from ${JSON.stringify(lifecycle)}`,
       `await CredentialLifecycle.ensureFresh()`,
       `const initial = await OpenScience.subprocessEnv(process.env)`,
-      `if (initial.GITHUB_TOKEN !== "cross-synced-secret") throw new Error("worker did not load synced secret")`,
-      `const child = spawn(process.execPath, ["-e", "console.log(process.env.GITHUB_TOKEN || 'absent'); setInterval(() => {}, 1000)"], { env: initial, stdio: ["ignore", "pipe", "pipe"] })`,
+      `if (initial.WANDB_API_KEY !== "cross-synced-secret") throw new Error("worker did not load synced secret")`,
+      `const child = spawn(process.execPath, ["-e", "console.log(process.env.WANDB_API_KEY || 'absent'); setInterval(() => {}, 1000)"], { env: initial, stdio: ["ignore", "pipe", "pipe"] })`,
       `const inherited = await new Promise((resolve, reject) => { child.stdout.once("data", (data) => resolve(String(data).trim())); child.once("error", reject) })`,
       `if (inherited !== "cross-synced-secret") throw new Error("child did not inherit synced secret")`,
       `let revoked = false`,
@@ -96,15 +96,15 @@ test("logout in one server removes synced env and revokes inherited children in 
       `for (let i = 0; i < 400 && !revoked; i++) await Bun.sleep(10)`,
       `await CredentialLifecycle.ensureFresh()`,
       `if (!revoked || (child.exitCode === null && child.signalCode === null)) throw new Error("synced child was not revoked")`,
-      `if (process.env.GITHUB_TOKEN !== undefined) throw new Error("logout left synced secret in process.env")`,
+      `if (process.env.WANDB_API_KEY !== undefined) throw new Error("logout left synced secret in process.env")`,
       `const next = await OpenScience.subprocessEnv(process.env)`,
-      `if (next.GITHUB_TOKEN !== undefined) throw new Error("new child env retained logged-out secret")`,
+      `if (next.WANDB_API_KEY !== undefined) throw new Error("new child env retained logged-out secret")`,
       `CredentialLifecycle.stopWatching()`,
     ].join("\n"),
   )
   const env = {
     ...process.env,
-    GITHUB_TOKEN: "cross-synced-secret",
+    WANDB_API_KEY: "cross-synced-secret",
     OPENSCIENCE_DATA_DIR: root,
     OPENSCIENCE_CONFIG_DIR: managedDir,
     OPENSCIENCE_TEST_HOME: path.join(root, "home"),

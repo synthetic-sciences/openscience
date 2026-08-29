@@ -10,7 +10,7 @@ const scope = path.join(Global.Path.data, "openscience-workspace-scope.json")
 const config = path.join(process.env.XDG_CONFIG_HOME!, "openscience")
 const synced = path.join(config, "synced-env.json")
 const settings = path.join(config, "openscience-synced.json")
-const keys = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENALEX_API_KEY", "GITHUB_TOKEN"]
+const keys = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENALEX_API_KEY", "WANDB_API_KEY"]
 
 async function seed(value: Record<string, unknown>) {
   await fs.mkdir(Global.Path.data, { recursive: true })
@@ -151,9 +151,9 @@ describe("workspace-scoped account sync", () => {
   test("replacing an organization workspace with Personal removes its synced secrets before the new session is published", async () => {
     await seed({ api_key: "osk_workspace.secret", organization_id: "org_alpha", workspace_locked: true })
     await fs.mkdir(config, { recursive: true })
-    await Bun.write(synced, JSON.stringify({ GITHUB_TOKEN: "old-team-secret" }))
+    await Bun.write(synced, JSON.stringify({ WANDB_API_KEY: "old-team-secret" }))
     await Bun.write(settings, JSON.stringify({ model: "old-team/model" }))
-    process.env.GITHUB_TOKEN = "old-team-secret"
+    process.env.WANDB_API_KEY = "old-team-secret"
     globalThis.fetch = (async () => new Response("offline", { status: 503 })) as unknown as typeof fetch
 
     await OpenScience.saveSession({
@@ -164,16 +164,16 @@ describe("workspace-scoped account sync", () => {
 
     expect(await Bun.file(synced).exists()).toBe(false)
     expect(await Bun.file(settings).exists()).toBe(false)
-    expect(process.env.GITHUB_TOKEN).toBeUndefined()
+    expect(process.env.WANDB_API_KEY).toBeUndefined()
     expect((await OpenScience.getSession())?.organization_id).toBeUndefined()
   })
 
   test("an organization sync denial clears team credentials without signing out the workspace", async () => {
     await seed({ api_key: "osk_workspace.secret", organization_id: "org_alpha", workspace_locked: true })
     await fs.mkdir(config, { recursive: true })
-    await Bun.write(synced, JSON.stringify({ GITHUB_TOKEN: "denied-team-secret" }))
+    await Bun.write(synced, JSON.stringify({ WANDB_API_KEY: "denied-team-secret" }))
     await Bun.write(settings, JSON.stringify({ model: "team/model" }))
-    process.env.GITHUB_TOKEN = "denied-team-secret"
+    process.env.WANDB_API_KEY = "denied-team-secret"
     globalThis.fetch = (async () => new Response("membership unavailable", { status: 403 })) as unknown as typeof fetch
 
     expect(await OpenScience.syncServices()).toBeNull()
@@ -185,15 +185,15 @@ describe("workspace-scoped account sync", () => {
     })
     expect(await Bun.file(synced).exists()).toBe(false)
     expect(await Bun.file(settings).exists()).toBe(false)
-    expect(process.env.GITHUB_TOKEN).toBeUndefined()
+    expect(process.env.WANDB_API_KEY).toBeUndefined()
   })
 
   test("a Personal or flexible sync denial keeps its existing offline snapshot", async () => {
     await seed({ organization_id: "org_legacy_selection" })
     await fs.mkdir(config, { recursive: true })
-    await Bun.write(synced, JSON.stringify({ GITHUB_TOKEN: "personal-synced-secret" }))
+    await Bun.write(synced, JSON.stringify({ WANDB_API_KEY: "personal-synced-secret" }))
     await Bun.write(settings, JSON.stringify({ model: "personal/model" }))
-    process.env.GITHUB_TOKEN = "personal-synced-secret"
+    process.env.WANDB_API_KEY = "personal-synced-secret"
     globalThis.fetch = (async () => new Response("temporarily unavailable", { status: 403 })) as unknown as typeof fetch
 
     expect(await OpenScience.syncServices()).toBeNull()
@@ -204,7 +204,7 @@ describe("workspace-scoped account sync", () => {
     })
     expect(await Bun.file(synced).exists()).toBe(true)
     expect(await Bun.file(settings).exists()).toBe(true)
-    expect(process.env.GITHUB_TOKEN).toBe("personal-synced-secret")
+    expect(process.env.WANDB_API_KEY).toBe("personal-synced-secret")
   })
 
   test("a delayed organization denial cannot clear a newly selected workspace", async () => {
@@ -228,24 +228,24 @@ describe("workspace-scoped account sync", () => {
       workspace_locked: true,
     })
     await fs.mkdir(config, { recursive: true })
-    await Bun.write(synced, JSON.stringify({ GITHUB_TOKEN: "new-personal-secret" }))
+    await Bun.write(synced, JSON.stringify({ WANDB_API_KEY: "new-personal-secret" }))
     await Bun.write(settings, JSON.stringify({ model: "personal/model" }))
-    process.env.GITHUB_TOKEN = "new-personal-secret"
+    process.env.WANDB_API_KEY = "new-personal-secret"
     release.resolve()
 
     expect(await pending).toBeNull()
     expect((await OpenScience.getSession())?.organization_id).toBeUndefined()
     expect(await Bun.file(synced).exists()).toBe(true)
     expect(await Bun.file(settings).exists()).toBe(true)
-    expect(process.env.GITHUB_TOKEN).toBe("new-personal-secret")
+    expect(process.env.WANDB_API_KEY).toBe("new-personal-secret")
   })
 
   test("a revoked organization key clears its session and cached team credentials", async () => {
     await seed({ api_key: "osk_workspace.secret", organization_id: "org_alpha", workspace_locked: true })
     await fs.mkdir(config, { recursive: true })
-    await Bun.write(synced, JSON.stringify({ GITHUB_TOKEN: "revoked-team-secret" }))
+    await Bun.write(synced, JSON.stringify({ WANDB_API_KEY: "revoked-team-secret" }))
     await Bun.write(settings, JSON.stringify({ model: "team/model" }))
-    process.env.GITHUB_TOKEN = "revoked-team-secret"
+    process.env.WANDB_API_KEY = "revoked-team-secret"
     globalThis.fetch = (async () => new Response("revoked", { status: 401 })) as unknown as typeof fetch
 
     expect(await OpenScience.syncServices()).toBeNull()
@@ -253,6 +253,6 @@ describe("workspace-scoped account sync", () => {
     expect(await OpenScience.getSession()).toBeNull()
     expect(await Bun.file(synced).exists()).toBe(false)
     expect(await Bun.file(settings).exists()).toBe(false)
-    expect(process.env.GITHUB_TOKEN).toBeUndefined()
+    expect(process.env.WANDB_API_KEY).toBeUndefined()
   })
 })

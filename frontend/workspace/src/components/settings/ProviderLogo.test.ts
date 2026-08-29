@@ -8,7 +8,6 @@ const CREDENTIALS = [
   "azure",
   "nvidia",
   "modal",
-  "github",
   "literature",
   "openalex",
   "huggingface",

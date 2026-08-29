@@ -266,7 +266,7 @@ async function describe(root: string, names: string[]) {
  * machine-local credentials.key. When the target already had a key of its own,
  * the legacy key is not carried across, and copying the ciphertexts verbatim
  * hands the user entries the UI reports as "set" while decryptFields silently
- * drops every one — a configured GitHub token that injects no GITHUB_TOKEN.
+ * drops every one — a configured Hugging Face token that injects no HF_TOKEN.
  * Both keys are on disk here, so translate rather than discard.
  *
  * Returns undefined when there is nothing to translate or the legacy key is

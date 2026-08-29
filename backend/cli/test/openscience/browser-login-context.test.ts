@@ -176,7 +176,7 @@ async function login() {
 
 afterEach(async () => {
   globalThis.fetch = original
-  delete process.env.GITHUB_TOKEN
+  delete process.env.WANDB_API_KEY
   await Promise.all(
     [session, scope, queue, synced, settings].map((target) => fs.rm(target, { force: true }).catch(() => {})),
   )
@@ -211,10 +211,10 @@ describe("browser login funding context", () => {
       await OpenScience.getCredits()
 
       await fs.mkdir(config, { recursive: true })
-      await Bun.write(synced, JSON.stringify({ GITHUB_TOKEN: "old-organization-secret" }))
+      await Bun.write(synced, JSON.stringify({ WANDB_API_KEY: "old-organization-secret" }))
       await Bun.write(settings, JSON.stringify({ model: "old-organization/model" }))
       await Bun.write(queue, '{"organization_id":"org_alpha","prompt":"old"}\n')
-      process.env.GITHUB_TOKEN = "old-organization-secret"
+      process.env.WANDB_API_KEY = "old-organization-secret"
 
       atlas.state.reply = {
         key: "thk_legacy-personal.secret",
@@ -237,7 +237,7 @@ describe("browser login funding context", () => {
       expect(await Bun.file(synced).exists()).toBe(false)
       expect(await Bun.file(settings).exists()).toBe(false)
       expect(await Bun.file(queue).exists()).toBe(false)
-      expect(process.env.GITHUB_TOKEN).toBeUndefined()
+      expect(process.env.WANDB_API_KEY).toBeUndefined()
     } finally {
       await atlas.close()
     }

@@ -27,7 +27,7 @@ function enabledConsent() {
 
 afterEach(async () => {
   globalThis.fetch = original
-  if (process.env.GITHUB_TOKEN === "account-a-synced-secret") delete process.env.GITHUB_TOKEN
+  if (process.env.WANDB_API_KEY === "account-a-synced-secret") delete process.env.WANDB_API_KEY
   await Promise.all(
     [file, syncedSnapshot, syncedConfig, traceQueue, traceConsent].map((target) =>
       fs.rm(target, { force: true }).catch(() => {}),
@@ -221,10 +221,10 @@ test("replacing an account clears A credentials and traces before a failed B syn
   await OpenScience.clearSession()
   await fs.mkdir(syncedDir, { recursive: true })
   await Bun.write(file, JSON.stringify({ api_key: "thk_account_a.secret", user_id: "account-a" }))
-  await Bun.write(syncedSnapshot, JSON.stringify({ GITHUB_TOKEN: "account-a-synced-secret" }))
+  await Bun.write(syncedSnapshot, JSON.stringify({ WANDB_API_KEY: "account-a-synced-secret" }))
   await Bun.write(syncedConfig, JSON.stringify({ model: "account-a/model" }))
   await Bun.write(traceQueue, '{"account":"a","prompt":"must-be-purged"}\n')
-  process.env.GITHUB_TOKEN = "account-a-synced-secret"
+  process.env.WANDB_API_KEY = "account-a-synced-secret"
   globalThis.fetch = (async () => new Response("offline", { status: 503 })) as unknown as typeof fetch
 
   await OpenScience.saveSession({ api_key: "thk_account_b.secret", user_id: "account-b" })
@@ -234,7 +234,7 @@ test("replacing an account clears A credentials and traces before a failed B syn
   expect(await Bun.file(syncedSnapshot).exists()).toBe(false)
   expect(await Bun.file(syncedConfig).exists()).toBe(false)
   expect(await Bun.file(traceQueue).exists()).toBe(false)
-  expect(process.env.GITHUB_TOKEN).toBeUndefined()
+  expect(process.env.WANDB_API_KEY).toBeUndefined()
 })
 
 test("authenticated control-plane activity retries an offline opt-out without reopening Settings", async () => {

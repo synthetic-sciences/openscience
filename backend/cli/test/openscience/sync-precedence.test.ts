@@ -25,6 +25,7 @@ afterEach(async () => {
   delete process.env["META_MODEL_BASE_URL"]
   delete process.env["GITHUB_TOKEN"]
   delete process.env["GH_TOKEN"]
+  delete process.env["WANDB_API_KEY"]
   for (const key of RETIRED_SYNCED_COMPUTE_ENV_KEYS) delete process.env[key]
   await fs.rm(path.join(Global.Path.data, "openscience-session.json"), { force: true })
 })
@@ -122,6 +123,7 @@ test("a synced direct-provider BYOK key transfers when the slot is empty", async
 test("account sync drops retired compute credentials but keeps integrations", async () => {
   await seedSession()
   for (const key of RETIRED_SYNCED_COMPUTE_ENV_KEYS) delete process.env[key]
+  for (const key of ["GITHUB_TOKEN", "GH_TOKEN", "WANDB_API_KEY"]) delete process.env[key]
   const retired = Object.fromEntries(
     [...RETIRED_SYNCED_COMPUTE_ENV_KEYS].map((key) => [key, `${key.toLowerCase()}-account-value`]),
   )
@@ -137,6 +139,9 @@ test("account sync drops retired compute credentials but keeps integrations", as
       GITHUB_TOKEN: "github-user-token",
       GH_TOKEN: "github-user-token",
     },
+    wandb: {
+      WANDB_API_KEY: "wandb-user-key",
+    },
   })
   await OpenScience.syncServices()
   const env = OpenScience.filterEnvForSubprocess(process.env)
@@ -148,8 +153,13 @@ test("account sync drops retired compute credentials but keeps integrations", as
   expect(process.env.OPENSCIENCE_ARBITRARY_SYNC_VALUE).toBeUndefined()
   expect(process.env.MODAL_TOKEN_ID).toBeUndefined()
   expect(process.env.MODAL_TOKEN_SECRET).toBeUndefined()
-  expect(env.GITHUB_TOKEN).toBe("github-user-token")
-  expect(env.GH_TOKEN).toBe("github-user-token")
+  // Code sync is retired: a github credential still present in the account
+  // payload is ignored, never applied or persisted.
+  expect(process.env.GITHUB_TOKEN).toBeUndefined()
+  expect(process.env.GH_TOKEN).toBeUndefined()
+  expect(env.GITHUB_TOKEN).toBeUndefined()
+  expect(env.GH_TOKEN).toBeUndefined()
+  expect(env.WANDB_API_KEY).toBe("wandb-user-key")
 
   const snapshot = JSON.parse(
     await Bun.file(path.join(process.env.XDG_CONFIG_HOME!, "openscience", "synced-env.json")).text(),
@@ -159,7 +169,9 @@ test("account sync drops retired compute credentials but keeps integrations", as
   expect(snapshot.OPENSCIENCE_ARBITRARY_SYNC_VALUE).toBeUndefined()
   expect(snapshot.MODAL_TOKEN_ID).toBeUndefined()
   expect(snapshot.MODAL_TOKEN_SECRET).toBeUndefined()
-  expect(snapshot.GITHUB_TOKEN).toBe("github-user-token")
+  expect(snapshot.GITHUB_TOKEN).toBeUndefined()
+  expect(snapshot.GH_TOKEN).toBeUndefined()
+  expect(snapshot.WANDB_API_KEY).toBe("wandb-user-key")
 })
 
 test("sync rejects GCP JSON and removes the legacy materialized credential", async () => {
@@ -201,6 +213,7 @@ test("preload removes retired compute credentials from a legacy snapshot", async
       MODAL_TOKEN_ID: "account-modal-id",
       MODAL_TOKEN_SECRET: "account-modal-secret",
       GITHUB_TOKEN: "account-github-key",
+      WANDB_API_KEY: "account-wandb-key",
     }),
   )
   await Bun.write(legacyGcp, JSON.stringify({ private_key: "legacy-gcp-key" }))
@@ -209,6 +222,7 @@ test("preload removes retired compute credentials from a legacy snapshot", async
   delete childEnv.TINKER_API_KEY
   delete childEnv.RUNPOD_API_KEY
   delete childEnv.GITHUB_TOKEN
+  delete childEnv.WANDB_API_KEY
   delete childEnv.OPENSCIENCE_ARBITRARY_SYNC_VALUE
   delete childEnv.MODAL_TOKEN_ID
   delete childEnv.MODAL_TOKEN_SECRET
@@ -216,7 +230,7 @@ test("preload removes retired compute credentials from a legacy snapshot", async
   try {
     const script = [
       `await import(${JSON.stringify(preload)})`,
-      `console.log(JSON.stringify({ aws: process.env.AWS_ACCESS_KEY_ID, tinker: process.env.TINKER_API_KEY, runpod: process.env.RUNPOD_API_KEY, path: process.env.PATH, arbitrary: process.env.OPENSCIENCE_ARBITRARY_SYNC_VALUE, modalID: process.env.MODAL_TOKEN_ID, modalSecret: process.env.MODAL_TOKEN_SECRET, github: process.env.GITHUB_TOKEN }))`,
+      `console.log(JSON.stringify({ aws: process.env.AWS_ACCESS_KEY_ID, tinker: process.env.TINKER_API_KEY, runpod: process.env.RUNPOD_API_KEY, path: process.env.PATH, arbitrary: process.env.OPENSCIENCE_ARBITRARY_SYNC_VALUE, modalID: process.env.MODAL_TOKEN_ID, modalSecret: process.env.MODAL_TOKEN_SECRET, github: process.env.GITHUB_TOKEN, wandb: process.env.WANDB_API_KEY }))`,
     ].join(";")
     const child = Bun.spawn([process.execPath, "-e", script], { env: childEnv, stdout: "pipe", stderr: "pipe" })
     const [exit, stdout, stderr] = await Promise.all([
@@ -226,12 +240,14 @@ test("preload removes retired compute credentials from a legacy snapshot", async
     ])
     if (exit !== 0) throw new Error(stderr)
     const loaded = JSON.parse(stdout.trim()) as Record<string, string>
-    expect(loaded.github).toBe("account-github-key")
+    expect(loaded.wandb).toBe("account-wandb-key")
+    // The retired code-sync github token is scrubbed from legacy snapshots.
+    expect(loaded.github).toBeUndefined()
     expect(loaded.path).not.toBe("/account-controlled/bin")
     expect(loaded.arbitrary).toBeUndefined()
     expect(loaded.modalID).toBeUndefined()
     expect(loaded.modalSecret).toBeUndefined()
-    expect(JSON.parse(await Bun.file(snapshot).text())).toEqual({ GITHUB_TOKEN: "account-github-key" })
+    expect(JSON.parse(await Bun.file(snapshot).text())).toEqual({ WANDB_API_KEY: "account-wandb-key" })
     expect(await Bun.file(legacyGcp).exists()).toBe(false)
   } finally {
     await fs.rm(root, { recursive: true, force: true })

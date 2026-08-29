@@ -520,8 +520,8 @@ describe("OpenScience data directory", () => {
     await fs.writeFile(
       path.join(legacy, "credentials.json"),
       JSON.stringify({
-        github: {
-          fields: { GITHUB_TOKEN: SecretBox.seal(before, "ghp_real"), STALE: "not-even-base64-gcm" },
+        huggingface: {
+          fields: { HF_TOKEN: SecretBox.seal(before, "hf_real"), STALE: "not-even-base64-gcm" },
           updated_at: "1",
         },
       }),
@@ -534,10 +534,10 @@ describe("OpenScience data directory", () => {
     // Readable with the key this machine actually uses — the point of the
     // exercise. Carried verbatim it would decrypt to nothing while the UI
     // still called it "set".
-    expect(SecretBox.open(after, store.github.fields.GITHUB_TOKEN)).toBe("ghp_real")
+    expect(SecretBox.open(after, store.huggingface.fields.HF_TOKEN)).toBe("hf_real")
     // A field that will not open is unrecoverable; carrying it forward would
     // recreate the silent dud.
-    expect(store.github.fields.STALE).toBeUndefined()
+    expect(store.huggingface.fields.STALE).toBeUndefined()
     expect(await fs.readFile(path.join(target, "credentials.key"))).toEqual(after)
   })
 
@@ -554,19 +554,19 @@ describe("OpenScience data directory", () => {
     await fs.writeFile(
       path.join(legacy, "credentials.json"),
       JSON.stringify({
-        github: { fields: { GITHUB_TOKEN: SecretBox.seal(before, "old") }, updated_at: "1" },
+        huggingface: { fields: { HF_TOKEN: SecretBox.seal(before, "old") }, updated_at: "1" },
         modal: { fields: { MODAL_TOKEN: SecretBox.seal(before, "recovered") }, updated_at: "1" },
       }),
     )
     await fs.writeFile(
       path.join(target, "credentials.json"),
-      JSON.stringify({ github: { fields: { GITHUB_TOKEN: SecretBox.seal(after, "current") }, updated_at: "2" } }),
+      JSON.stringify({ huggingface: { fields: { HF_TOKEN: SecretBox.seal(after, "current") }, updated_at: "2" } }),
     )
 
     await resolveDataDirectory({ home, legacy })
 
     const store = JSON.parse(await fs.readFile(path.join(target, "credentials.json"), "utf8"))
-    expect(SecretBox.open(after, store.github.fields.GITHUB_TOKEN)).toBe("current")
+    expect(SecretBox.open(after, store.huggingface.fields.HF_TOKEN)).toBe("current")
     expect(SecretBox.open(after, store.modal.fields.MODAL_TOKEN)).toBe("recovered")
   })
 

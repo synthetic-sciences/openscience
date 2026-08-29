@@ -5,7 +5,6 @@ const publicSources = [
   "src/cli/cmd/auth.ts",
   "src/cli/cmd/billing.ts",
   "src/cli/cmd/connect.ts",
-  "src/cli/cmd/github.ts",
   "src/cli/cmd/project.ts",
   "src/cli/cmd/run.ts",
   "src/provider/provider.ts",

@@ -1,7 +1,7 @@
 /**
  * Encrypted-at-rest credential store for external services (settings ▸
  * Credentials). Distinct from provider BYOK keys (auth.json) — this holds
- * secrets for AWS, GitHub, Modal, etc. that skills and tools consume.
+ * secrets for AWS, Hugging Face, Modal, etc. that skills and tools consume.
  *
  * Storage layout (both under Global.Path.data, mode 0600):
  *   credentials.json  — { [serviceId]: { label?, fields: { name: cipher }, updated_at } }
@@ -18,7 +18,7 @@
  * reads AWS_ACCESS_KEY_ID), the in-process literature connectors (Semantic
  * Scholar `x-api-key`, OpenAlex mailto/key), and — via OpenScience.subprocessEnv,
  * which forwards non-managed env vars — approved skill/bash subprocesses (aws,
- * gh, gcloud, …). Governed Modal tokens remain in settings ▸ Compute and never
+ * gcloud, …). Governed Modal tokens remain in settings ▸ Compute and never
  * enter agent-controlled shells.
  * It runs at CLI/server boot (index.ts middleware) and again
  * after each save/delete so changes apply live without a restart. Decrypted
@@ -77,13 +77,6 @@ const CATALOG: ServiceSpec[] = [
       { name: "secret_access_key", label: "Secret access key", type: "password" },
       { name: "region", label: "Default region", type: "text", optional: true, placeholder: "us-east-1" },
     ],
-  },
-  {
-    id: "github",
-    label: "GitHub",
-    description: "Personal access token for repositories and the GitHub API.",
-    category: "integration",
-    fields: [{ name: "token", label: "Access token", type: "password", placeholder: "ghp_… / github_pat_…" }],
   },
   {
     id: "gcp",
@@ -279,10 +272,6 @@ function mapServiceEnv(id: string, f: Record<string, string>): Record<string, st
       put("AWS_SECRET_ACCESS_KEY", f.secret_access_key)
       put("AWS_DEFAULT_REGION", f.region)
       put("AWS_REGION", f.region)
-      return out
-    case "github":
-      put("GITHUB_TOKEN", f.token)
-      put("GH_TOKEN", f.token)
       return out
     case "gcp":
       put("GOOGLE_CLOUD_PROJECT", f.project_id)
@@ -596,9 +585,13 @@ async function view(store: Store) {
       }
     }),
   )
+  // Only user-defined `custom:` entries surface here. A store may still hold
+  // an entry for a retired service (for example a legacy GitHub token from the
+  // removed code-sync integration); those stay inert — never listed, never
+  // mapped into the environment.
   const custom = await Promise.all(
     Object.entries(store)
-      .filter(([id]) => !seen.has(id))
+      .filter(([id]) => !seen.has(id) && id.startsWith("custom:"))
       .map(async ([id, entry]) => {
         const names = Object.keys(await validDecryptedFields(id, entry))
         return {

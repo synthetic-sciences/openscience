@@ -36,13 +36,14 @@ export const BYOK_LLM_ENV_KEYS = [
 ]
 
 /** Atlas-synced non-model credentials that approved agent subprocesses may
- * consume. Retired cloud-provider credentials are intentionally absent. Modal
- * stays outside this generic subprocess list because its user-owned token
- * resolves only in the trusted compute adapter. */
+ * consume. Retired cloud-provider credentials are intentionally absent, and so
+ * are GitHub tokens (`GITHUB_TOKEN`/`GH_TOKEN`): the code-sync integration is
+ * retired, so a github credential still present in an account sync payload is
+ * silently dropped rather than applied. Modal stays outside this generic
+ * subprocess list because its user-owned token resolves only in the trusted
+ * compute adapter. */
 export const SYNCED_SERVICE_ENV_KEYS = [
   "NVIDIA_API_KEY",
-  "GITHUB_TOKEN",
-  "GH_TOKEN",
   "OPENALEX_MAILTO",
   "OPENALEX_API_KEY",
   "SEMANTIC_SCHOLAR_API_KEY",

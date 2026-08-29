@@ -65,7 +65,6 @@ test("every durable Windows runtime launch uses the registration gate", async ()
     "src/file/publication.ts",
     "src/file/science.ts",
     "src/format/index.ts",
-    "src/server/routes/repo.ts",
   ]
   for (const file of commandRuntime) {
     const source = await Bun.file(path.join(import.meta.dir, "../..", file)).text()
