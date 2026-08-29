@@ -133,21 +133,37 @@ export namespace SessionRevert {
 
     if (!revert) throw new TransactionError("The selected message no longer exists in this session.")
 
-    const availability = await Snapshot.availability()
-    if (!availability.available) throw new UnavailableError(availability.reason)
-    const rollbackSnapshot = await Snapshot.capture()
-    if (!rollbackSnapshot) throw new UnavailableError("Undo could not capture the current project state.")
-    const redoSnapshot = session.revert?.snapshot ?? rollbackSnapshot
-    const filesystem = await Snapshot.revert(patches)
-    if (!complete(filesystem)) {
-      const rollback = await Snapshot.restore(rollbackSnapshot)
-      throw new TransactionError(failureMessage("Undo", filesystem, rollback))
-    }
-
     const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
     const turns = rangeMessages.filter((msg) => msg.info.role === "user").length
+    let rollbackSnapshot: string | undefined
+    let redoSnapshot = session.revert?.snapshot
+    let filesystem: Snapshot.RevertResult = {
+      status: "noop",
+      restored: [],
+      removed: [],
+      skipped: [],
+      errors: [],
+    }
+
+    // A conversation-only undo has no filesystem side effects to protect and
+    // must remain available in blank/non-Git projects. File-bearing turns keep
+    // the full snapshot transaction below; this branch only skips Git when no
+    // patch part exists in the reverted range.
+    if (patches.length > 0) {
+      const availability = await Snapshot.availability()
+      if (!availability.available) throw new UnavailableError(availability.reason)
+      rollbackSnapshot = await Snapshot.capture()
+      if (!rollbackSnapshot) throw new UnavailableError("Undo could not capture the current project state.")
+      redoSnapshot ??= rollbackSnapshot
+      filesystem = await Snapshot.revert(patches)
+      if (!complete(filesystem)) {
+        const rollback = await Snapshot.restore(rollbackSnapshot)
+        throw new TransactionError(failureMessage("Undo", filesystem, rollback))
+      }
+      revert.snapshot = redoSnapshot
+    }
+
     const files = [...new Set([...filesystem.restored, ...filesystem.removed])].toSorted()
-    revert.snapshot = redoSnapshot
     revert.turns = turns
     revert.files = files
 
@@ -155,7 +171,7 @@ export namespace SessionRevert {
       () => undefined,
     )
     try {
-      revert.diff = await Snapshot.diff(redoSnapshot)
+      if (redoSnapshot) revert.diff = await Snapshot.diff(redoSnapshot)
       const diffs = await SessionSummary.computeDiff({ messages: rangeMessages })
       await Storage.write(["session_diff", input.sessionID], diffs)
       Bus.publish(Session.Event.Diff, {
@@ -172,7 +188,9 @@ export namespace SessionRevert {
       })
       return { status: "reverted", session: updated, turns, files, filesystem }
     } catch (error) {
-      const rollback = await Snapshot.restore(rollbackSnapshot)
+      const rollback = rollbackSnapshot
+        ? await Snapshot.restore(rollbackSnapshot)
+        : ({ status: "noop", restored: [], removed: [], skipped: [], errors: [] } satisfies Snapshot.RevertResult)
       const recovered = await (
         previousDiff
           ? Storage.write(["session_diff", input.sessionID], previousDiff)
@@ -206,13 +224,22 @@ export namespace SessionRevert {
     SessionPrompt.assertNotBusy(input.sessionID)
     const session = await Session.get(input.sessionID)
     if (!session.revert) return session
-    if (!session.revert.snapshot) {
-      throw new UnavailableError("This undo has no recovery snapshot, so the original files cannot be restored safely.")
-    }
     if (!session.revert.files) {
       throw new UnavailableError("This undo predates scoped file recovery, so Restore cannot replay it safely.")
     }
     const files = session.revert.files
+    if (files.length === 0) {
+      try {
+        return await Session.update(input.sessionID, (draft) => {
+          draft.revert = undefined
+        })
+      } catch (error) {
+        throw new TransactionError(error instanceof Error ? error.message : String(error))
+      }
+    }
+    if (!session.revert.snapshot) {
+      throw new UnavailableError("This undo has no recovery snapshot, so the original files cannot be restored safely.")
+    }
     const rollbackSnapshot = await Snapshot.capture()
     if (!rollbackSnapshot) throw new UnavailableError("Restore could not capture the current project state.")
     const filesystem = await Snapshot.restore(session.revert.snapshot, files)

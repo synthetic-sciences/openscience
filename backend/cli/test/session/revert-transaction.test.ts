@@ -54,8 +54,76 @@ async function turn(input: { sessionID: string; root: string; hash: string; file
   return user
 }
 
+async function conversationTurn(input: { sessionID: string; root: string }) {
+  const user = await Session.updateMessage({
+    id: Identifier.ascending("message"),
+    role: "user",
+    sessionID: input.sessionID,
+    effort: "normal",
+    agent: "default",
+    model: { providerID: "openai", modelID: "gpt-4" },
+    time: { created: Date.now() },
+  })
+  await Session.updatePart({
+    id: Identifier.ascending("part"),
+    messageID: user.id,
+    sessionID: input.sessionID,
+    type: "text",
+    text: "Explain this result",
+  })
+
+  const assistant = await Session.updateMessage({
+    id: Identifier.ascending("message"),
+    role: "assistant",
+    sessionID: input.sessionID,
+    mode: "default",
+    agent: "default",
+    path: { cwd: input.root, root: input.root },
+    cost: 0,
+    tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: "gpt-4",
+    providerID: "openai",
+    parentID: user.id,
+    time: { created: Date.now(), completed: Date.now() },
+    finish: "end_turn",
+  } satisfies MessageV2.Assistant)
+  await Session.updatePart({
+    id: Identifier.ascending("part"),
+    messageID: assistant.id,
+    sessionID: input.sessionID,
+    type: "text",
+    text: "The result is sound.",
+  })
+  return user
+}
+
 describe("transactional session undo", () => {
   afterAll(() => Instance.disposeAll())
+
+  test("undoes and restores a conversation-only turn without requiring Git", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const user = await conversationTurn({ sessionID: session.id, root: tmp.path })
+
+        const undone = await SessionRevert.revert({ sessionID: session.id, messageID: user.id })
+        expect(SessionRevert.RevertResult.parse(undone)).toEqual(undone)
+        expect(undone).toMatchObject({
+          status: "reverted",
+          turns: 1,
+          files: [],
+          filesystem: { status: "noop", restored: [], removed: [], skipped: [], errors: [] },
+        })
+        expect(undone.session.revert).toMatchObject({ messageID: user.id, turns: 1, files: [] })
+        expect(undone.session.revert?.snapshot).toBeUndefined()
+
+        const restored = await SessionRevert.unrevert({ sessionID: session.id })
+        expect(restored.revert).toBeUndefined()
+      },
+    })
+  })
 
   test("returns a structured result, is idempotent, and restores the exact redo snapshot", async () => {
     await using tmp = await tmpdir({ git: true })
