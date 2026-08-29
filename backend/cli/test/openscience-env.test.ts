@@ -1,7 +1,19 @@
 import { expect, test } from "bun:test"
+import { createHash } from "node:crypto"
 import path from "node:path"
 import { OpenScience } from "../src/openscience"
 import { ToolOutputPath } from "../src/tool/tool-output-path"
+
+test("structured credentials are redacted before registered secret substrings", () => {
+  const suffix = createHash("sha256").update("openscience-redaction-suffix").digest("hex")
+  const prefix = createHash("sha256").update("openscience-redaction-prefix").digest("hex").slice(0, 10)
+  const epoch = createHash("sha256").update("openscience-redaction-epoch").digest("hex").slice(0, 32)
+  const nonce = createHash("sha256").update("openscience-redaction-nonce").digest("hex").slice(0, 32)
+  const proof = `odp_v2.${prefix}.${epoch}.${nonce}.${suffix}`
+  OpenScience.registerSecretValues([suffix])
+
+  expect(OpenScience.redactSecrets(`before x${proof}x after`)).toBe("before x[REDACTED]x after")
+})
 
 test("subprocess env filtering never passes managed Atlas provider keys", () => {
   const filtered = OpenScience.filterEnvForSubprocess({

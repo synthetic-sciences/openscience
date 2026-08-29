@@ -495,7 +495,15 @@ describe("outbound OpenScience trace contract", () => {
 
     const secret = "sk-test-super-secret-value-1234567890"
     const privateKey = "-----BEGIN PRIVATE KEY-----\nsuper-secret-material\n-----END PRIVATE KEY-----"
-    const deletionProof = `odp_v2.${"a".repeat(10)}.${"b".repeat(32)}.${"c".repeat(32)}.${"d".repeat(64)}`
+    const deletionProofSuffix = createHash("sha256").update("telemetry-deletion-proof-suffix").digest("hex")
+    const deletionProofPrefix = createHash("sha256").update("telemetry-key-prefix").digest("hex").slice(0, 10)
+    const deletionProofEpoch = createHash("sha256").update("telemetry-epoch").digest("hex").slice(0, 32)
+    const deletionProofNonce = createHash("sha256").update("telemetry-nonce").digest("hex").slice(0, 32)
+    const deletionProof = `odp_v2.${deletionProofPrefix}.${deletionProofEpoch}.${deletionProofNonce}.${deletionProofSuffix}`
+    // Reproduce the production ordering hazard: an independently registered
+    // secret may be an exact substring of a structured credential. The whole
+    // structured token must be removed before exact-value redaction runs.
+    OpenScience.registerSecretValues([deletionProofSuffix])
     expect(
       await OutboundTelemetry.userMessage({
         sessionID: "ses_offline",

@@ -52,6 +52,7 @@ const syncedSecretValues = new Map<string, string>()
 // (a hot path in bash output streaming) can mask them without an async read.
 const byokSecretValues = new Set<string>()
 const TOKEN_SECRET_PATTERNS = [
+  /odp_v2\.[a-f0-9]{10,138}\.[a-f0-9]{32}\.[a-f0-9]{32}\.[a-f0-9]{64}/gi,
   /\b(?:thk[_-]|osk_|sk-|sk_|gsk_|hf_|nvapi-|ghp_|gho_|ghu_|ghs_|github_pat_|xox[baprs]-)[A-Za-z0-9._-]{8,}\b/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
 ]
@@ -2020,6 +2021,16 @@ export namespace OpenScience {
    *  ahead of a subprocess run to seed the BYOK cache. */
   export function redactSecrets(text: string): string {
     let result = text
+    // Preserve complete structured-token matches before replacing exact
+    // registered values. A registered value can be a substring of a token
+    // (for example, an ODP proof digest); replacing that substring first would
+    // destroy the token shape and leave the rest of the credential visible.
+    for (const pattern of TOKEN_SECRET_PATTERNS) result = result.replace(pattern, "[REDACTED]")
+    result = result.replace(PRIVATE_KEY_SECRET, "[REDACTED]")
+    result = result.replace(JWT_SECRET, "[REDACTED]")
+    result = result.replace(BEARER_SECRET, "$1[REDACTED]")
+    result = result.replace(QUOTED_SECRET, "$1$2[REDACTED]$2")
+    result = result.replace(BARE_SECRET, "$1[REDACTED]")
     for (const value of syncedSecretValues.values()) {
       if (value.length < 4) continue
       result = result.replaceAll(value, "[REDACTED]")
@@ -2028,12 +2039,6 @@ export namespace OpenScience {
       if (value.length < 4) continue
       result = result.replaceAll(value, "[REDACTED]")
     }
-    for (const pattern of TOKEN_SECRET_PATTERNS) result = result.replace(pattern, "[REDACTED]")
-    result = result.replace(PRIVATE_KEY_SECRET, "[REDACTED]")
-    result = result.replace(JWT_SECRET, "[REDACTED]")
-    result = result.replace(BEARER_SECRET, "$1[REDACTED]")
-    result = result.replace(QUOTED_SECRET, "$1$2[REDACTED]$2")
-    result = result.replace(BARE_SECRET, "$1[REDACTED]")
     return result
   }
 

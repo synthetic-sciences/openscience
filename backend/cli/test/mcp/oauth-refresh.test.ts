@@ -1,4 +1,5 @@
 import { test, expect, beforeEach } from "bun:test"
+import { createHash } from "node:crypto"
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "../../src/global"
@@ -6,7 +7,7 @@ import { McpAuth } from "../../src/mcp/auth"
 import { McpOAuthProvider } from "../../src/mcp/oauth-provider"
 import { Log } from "../../src/util/log"
 
-const authorityFingerprint = "d".repeat(64)
+const authorityFingerprint = createHash("sha256").update("mcp-oauth-refresh-authority").digest("hex")
 
 beforeEach(async () => {
   await fs.mkdir(Global.Path.data, { recursive: true })
@@ -247,6 +248,7 @@ test("refresh keeps the current refresh token and scope when the server omits re
 
 test("OAuth refresh never follows a redirect carrying the refresh token", async () => {
   const name = "refresh-no-redirect"
+  const expiredAccess = `expired-access-${createHash("sha256").update(name).digest("hex")}`
   let sinkRequests = 0
   const sink = Bun.serve({
     port: 0,
@@ -268,7 +270,7 @@ test("OAuth refresh never follows a redirect carrying the refresh token", async 
   await McpAuth.set(
     name,
     {
-      tokens: { accessToken: "stale", refreshToken: "never-forward", expiresAt: Date.now() / 1000 - 60 },
+      tokens: { accessToken: expiredAccess, refreshToken: "never-forward", expiresAt: Date.now() / 1000 - 60 },
       credentialAuthorityFingerprint: authorityFingerprint,
     },
     url,
