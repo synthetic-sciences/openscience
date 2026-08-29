@@ -340,6 +340,7 @@ import type {
   SettingsResearchToolsGetResponses,
   SettingsResearchToolsTelemetryDeleteResponses,
   SettingsResearchToolsTelemetryUpdateResponses,
+  SettingsScientificToolsResponses,
   SettingsSkillsInstallErrors,
   SettingsSkillsInstallResponses,
   SettingsStorageRelocateErrors,
@@ -348,6 +349,7 @@ import type {
   SettingsStorageResetLocationResponses,
   SettingsStorageUsageResponses,
   SettingsUpdatesCheckResponses,
+  SettingsUpdatesInstallErrors,
   SettingsUpdatesInstallResponses,
   SettingsUsageGetResponses,
   SettingsWalletGetResponses,
@@ -1375,6 +1377,20 @@ export class Jobs extends HeyApiClient {
       approval?: string
       sessionID: string
       default_uploads?: boolean
+      capability?: {
+        id: string
+        version: string
+        manifest_sha256: string
+        profile: "task" | "smoke"
+        runtime_digest: string
+      }
+      capability_execution?: {
+        network: "none"
+        lock_digest: string
+        pip_requirements: string
+        runtime_binary?: string
+        runtime_root?: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1402,6 +1418,8 @@ export class Jobs extends HeyApiClient {
             { in: "body", key: "approval" },
             { in: "body", key: "sessionID" },
             { in: "body", key: "default_uploads" },
+            { in: "body", key: "capability" },
+            { in: "body", key: "capability_execution" },
           ],
         },
       ],
@@ -1462,6 +1480,20 @@ export class Jobs extends HeyApiClient {
       approval?: string
       sessionID: string
       default_uploads?: boolean
+      capability?: {
+        id: string
+        version: string
+        manifest_sha256: string
+        profile: "task" | "smoke"
+        runtime_digest: string
+      }
+      capability_execution?: {
+        network: "none"
+        lock_digest: string
+        pip_requirements: string
+        runtime_binary?: string
+        runtime_root?: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1489,6 +1521,8 @@ export class Jobs extends HeyApiClient {
             { in: "body", key: "approval" },
             { in: "body", key: "sessionID" },
             { in: "body", key: "default_uploads" },
+            { in: "body", key: "capability" },
+            { in: "body", key: "capability_execution" },
           ],
         },
       ],
@@ -1866,10 +1900,11 @@ export class Updates extends HeyApiClient {
    * Install the latest OpenScience release
    */
   public install<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).post<SettingsUpdatesInstallResponses, unknown, ThrowOnError>({
-      url: "/settings/updates",
-      ...options,
-    })
+    return (options?.client ?? this.client).post<
+      SettingsUpdatesInstallResponses,
+      SettingsUpdatesInstallErrors,
+      ThrowOnError
+    >({ url: "/settings/updates", ...options })
   }
 }
 
@@ -2046,6 +2081,18 @@ export class Usage extends HeyApiClient {
 }
 
 export class Settings extends HeyApiClient {
+  /**
+   * Get scientific capability and connector catalogs
+   *
+   * Returns truthful manifest maturity, backend availability, release evidence, and reviewed connector setup records.
+   */
+  public scientificTools<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsScientificToolsResponses, unknown, ThrowOnError>({
+      url: "/settings/scientific-tools",
+      ...options,
+    })
+  }
+
   private _credentials?: Credentials
   get credentials(): Credentials {
     return (this._credentials ??= new Credentials({ client: this.client }))
