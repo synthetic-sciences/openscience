@@ -188,6 +188,8 @@ test("production release keeps signed publishing as the default and falls back t
   expect(preflight).toContain("Set both WINDOWS_CSC_LINK and WINDOWS_CSC_KEY_PASSWORD, or remove both")
   expect(preflight).toContain("Publishing unsigned native CLI archives and desktop installers")
   expect(sign).toContain("Developer ID sign and notarize macOS binaries")
+  expect(sign).toContain("if ! security set-key-partition-list")
+  expect(sign).toContain("continuing with the explicit codesign ACL from security import")
   expect(sign).toContain("if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'")
   expect(sign).toContain("--identifier ai.syntheticsciences.openscience")
   expect(sign).toContain("codesign --verify --strict")

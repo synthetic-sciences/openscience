@@ -414,7 +414,9 @@ jobs:
           security set-keychain-settings -lut 21600 "$keychain"
           security unlock-keychain -p "$keychain_password" "$keychain"
           security import "$certificate" -k "$keychain" -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
+          if ! security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"; then
+            echo "::warning::The runner could not update the imported key's partition list; continuing with the explicit codesign ACL from security import. Signature and Team ID verification remain mandatory."
+          fi
 
           identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
           if [[ -z "$identity" ]]; then
