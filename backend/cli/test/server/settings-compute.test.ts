@@ -1184,16 +1184,31 @@ test("provider read broker kills its credential-bearing tree on timeout and call
     }
     return false
   }
+  const started = async () => {
+    for (let attempt = 0; attempt < 500; attempt++) {
+      const pid = await fs
+        .readFile(marker, "utf8")
+        .then(Number)
+        .catch(() => 0)
+      if (Number.isSafeInteger(pid) && pid > 0) return pid
+      await Bun.sleep(10)
+    }
+    throw new Error("Timed out waiting for the provider payload to start")
+  }
   try {
     await connect("runpod", "runpod-bounded-read-key")
     await ComputeSettings.setProviderEnabled("runpod", true)
     await ProviderCli.approveExecutable("runpod", { executableDirectories: [bin] })
 
+    let timedOutPID = 0
     const timedOut = await ProviderCli.execute("runpod", "list_resources", undefined, {
       executableDirectories: [bin],
-      timeoutMs: 1_000,
+      timeoutMs: 100,
+      testAfterLaunchRegistration: async () => {
+        timedOutPID = await started()
+      },
     })
-    const timedOutPID = Number(await fs.readFile(marker, "utf8"))
+    expect(timedOutPID).toBeGreaterThan(0)
     expect(timedOut).toMatchObject({ ok: false, error: expect.stringContaining("timed out") })
     expect(await gone(timedOutPID)).toBe(true)
 
@@ -1203,8 +1218,7 @@ test("provider read broker kills its credential-bearing tree on timeout and call
       executableDirectories: [bin],
       signal: controller.signal,
     })
-    for (let attempt = 0; attempt < 100 && !(await Bun.file(marker).exists()); attempt++) await Bun.sleep(10)
-    const cancelledPID = Number(await fs.readFile(marker, "utf8"))
+    const cancelledPID = await started()
     controller.abort()
     const cancelled = await pending
     expect(cancelled).toMatchObject({ ok: false, error: expect.stringContaining("cancelled") })

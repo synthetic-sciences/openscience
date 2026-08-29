@@ -371,6 +371,9 @@ export namespace ProviderCli {
     testAfterExecutableVerification?: (executablePath: string) => void | Promise<void>
     /** Exercise the production immutable-authority check for a fake test CLI. */
     testRequireImmutableAuthority?: boolean
+    /** Synchronize a lifecycle test after durable wrapper registration but
+     * before its operation timeout is armed. */
+    testAfterLaunchRegistration?: () => void | Promise<void>
   }
 
   interface InvokeResult {
@@ -478,6 +481,10 @@ export namespace ProviderCli {
       })
       if (!result.launched) throw new Error(`${spec.cli} launch did not establish executable authority`)
       if (!launched || !credentialRevision) throw new Error(`${spec.cli} launch did not establish credential authority`)
+      if (options.testAfterLaunchRegistration) {
+        if (!process.env.OPENSCIENCE_TEST_HOME) throw new Error("Provider CLI test hooks are disabled outside tests")
+        await options.testAfterLaunchRegistration()
+      }
       let timer: ReturnType<typeof setTimeout> | undefined
       let abort: (() => void) | undefined
       const timeout = new Promise<never>((_, reject) => {
