@@ -39,14 +39,7 @@ const SKILL_ICON_RULES: Array<{ terms: string[]; icon: IconProps["name"] }> = [
   { terms: ["presentation", "slide", "poster"], icon: "layout-grid" },
 ]
 
-const FALLBACK_ICONS: IconProps["name"][] = [
-  "book-open",
-  "task",
-  "code-lines",
-  "flask",
-  "models",
-  "folder-tree",
-]
+const FALLBACK_ICONS: IconProps["name"][] = ["book-open", "task", "code-lines", "flask", "models", "folder-tree"]
 
 /** One stable icon decision shared by every skill surface. */
 export function skillIconFor(skill: SkillIconIdentity): IconProps["name"] {

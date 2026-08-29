@@ -47,12 +47,7 @@ export function requiresAccountForRequest(input: {
       ["/settings/updates/stage", "/settings/updates/apply", "/settings/updates/dispose"].includes(input.path)) ||
     (method === "DELETE" && input.path === "/settings/updates/stage")
   if (method === "OPTIONS" || method === "HEAD") return false
-  if (
-    input.path === "/global/health" ||
-    input.path === "/doc" ||
-    updateRecovery ||
-    input.path.startsWith("/account")
-  )
+  if (input.path === "/global/health" || input.path === "/doc" || updateRecovery || input.path.startsWith("/account"))
     return false
   const root = input.path.split("/").filter(Boolean)[0]
   if (root && API_ROOTS.has(root)) return true
