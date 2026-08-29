@@ -147,18 +147,18 @@ quote, exact approval, idempotency, and recovery.
 
 ## Landing and release gates
 
-| Gate                                               | Status   | Acceptance                                                                                                                                     |
-| -------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Latest Aayam sync                                  | verified | fetched `origin/main` is an ancestor of local HEAD                                                                                             |
-| OpenScience focused tests/typechecks/builds        | verified | slice evidence above; final aggregate run is the next gate on the now-clean exact head                                                         |
-| Push PR #440 and rerun Test/CodeQL on the new head | active   | old red checks are against `d0b2574e`, not the local fixes                                                                                     |
-| Atlas PR #300 CI                                   | verified | all five checks green; backend used real pgvector Postgres, 1,504 passed                                                                       |
-| Merge Atlas PR #300                                | blocked  | requires review/landing authority                                                                                                              |
-| Merge OpenScience PR #440                          | blocked  | requires new-head CI, final review, and explicit merge confirmation                                                                            |
-| Signed/notarized exact ZIP+DMG updater canary      | blocked  | runs only in release CI with Developer ID/notary artifacts and a prior signed baseline                                                         |
-| Packaged clean-root onboarding/storage/browser QA  | active   | disposable source browser QA is green for onboarding, updates, Undo/redo, slash/skills, Compute, and GiveMeANode; packaged walkthrough remains |
-| Paid Modal/GiveMeANode/Atlas/Stripe canaries       | blocked  | require explicit cost/production approval after non-paid gates                                                                                 |
-| Deploy and stable release                          | blocked  | neither PR is landed; next unused version/tag/assets must be rechecked immediately before release                                              |
+| Gate                                               | Status   | Acceptance                                                                                                                                                                                                                                       |
+| -------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Latest Aayam sync                                  | verified | fetched `origin/main` is an ancestor of local HEAD                                                                                                                                                                                               |
+| OpenScience local tests/typechecks/builds          | active   | exact-head aggregate reached 3,245 pass / 23 skip; four peak-disk reserve failures pass 68/68 focused and real SSH passes 2/2 focused; typecheck, format, backend build, and workspace build are green; fresh CI must supply the clean aggregate |
+| Push PR #440 and rerun Test/CodeQL on the new head | active   | old red checks are against `d0b2574e`, not the local fixes                                                                                                                                                                                       |
+| Atlas PR #300 CI                                   | verified | all five checks green; backend used real pgvector Postgres, 1,504 passed                                                                                                                                                                         |
+| Merge Atlas PR #300                                | blocked  | requires review/landing authority                                                                                                                                                                                                                |
+| Merge OpenScience PR #440                          | blocked  | requires new-head CI, final review, and explicit merge confirmation                                                                                                                                                                              |
+| Signed/notarized exact ZIP+DMG updater canary      | blocked  | runs only in release CI with Developer ID/notary artifacts and a prior signed baseline                                                                                                                                                           |
+| Packaged clean-root onboarding/storage/browser QA  | active   | disposable source browser QA is green for onboarding, updates, Undo/redo, slash/skills, Compute, and GiveMeANode; packaged walkthrough remains                                                                                                   |
+| Paid Modal/GiveMeANode/Atlas/Stripe canaries       | blocked  | require explicit cost/production approval after non-paid gates                                                                                                                                                                                   |
+| Deploy and stable release                          | blocked  | neither PR is landed; next unused version/tag/assets must be rechecked immediately before release                                                                                                                                                |
 
 ## Execution order from here
 
@@ -166,17 +166,15 @@ quote, exact approval, idempotency, and recovery.
    provider mutation blocked until OpenScience has managed/native adapters and
    each paid provider exposes a stable, pre-authorizable cost contract with a
    durable operation seam.
-2. Run the final focused/aggregate provider-free suites, typechecks, formatting,
-   builds, and diff checks.
-3. Push PR #440 normally and require fresh Test, CodeQL, workflow lint, platform
+2. Push PR #440 normally and require fresh Test, CodeQL, workflow lint, platform
    ownership, migration, build, and preview checks on the exact head.
-4. Complete a fresh pre-landing review and packaged clean-root UI walkthrough.
-5. Obtain explicit confirmation before merging OpenScience or Atlas.
-6. Run the exact signed/notarized desktop artifact canary from the immutable
+3. Complete a fresh pre-landing review and packaged clean-root UI walkthrough.
+4. Obtain explicit confirmation before merging OpenScience or Atlas.
+5. Run the exact signed/notarized desktop artifact canary from the immutable
    release candidate.
-7. With explicit cost and production approval, run one bounded Modal,
+6. With explicit cost and production approval, run one bounded Modal,
    GiveMeANode, Atlas managed-call, and Stripe/Ace canary with cleanup evidence.
-8. Release the next unused stable version, verify every immutable asset,
+7. Release the next unused stable version, verify every immutable asset,
    notarization/signature/provenance, website, and in-app update behavior.
 
 No merge, deployment, paid provider call, Stripe mutation, or stable release is
