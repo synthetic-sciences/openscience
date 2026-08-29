@@ -97,6 +97,8 @@ export interface Skill {
   category?: string
   tags?: string[]
   entry?: boolean
+  permission_action?: "allow" | "ask" | "deny"
+  recommended?: boolean
 }
 
 type State = {

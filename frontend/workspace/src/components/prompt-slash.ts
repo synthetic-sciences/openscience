@@ -7,9 +7,15 @@ export interface SlashCommand {
   source: "builtin" | "project" | "mcp" | "skill"
   category: "session" | "research" | "evidence" | "output" | "project" | "skill"
   keybind?: string
-  type: "action" | "command" | "mode" | "skill"
+  type: "action" | "browse" | "command" | "mode" | "skill"
   /** Local command-palette action. It executes in the client instead of being sent as a chat command. */
   actionID?: string
+  /** Why a skill is in the compact empty-query shortlist. */
+  skillState?: "loaded" | "pinned" | "recent" | "recommended"
+  /** Search-only text lets local actions survive the already-filtered list hook. */
+  searchText?: string
+  /** Ephemeral query rank assigned by slashMatches before grouped rendering. */
+  resultRank?: number
 }
 
 export type SlashGroup = "Commands" | "Skills"
@@ -71,6 +77,8 @@ export function slashEdit(text: string, cursor: number, value: string): SlashEdi
 // an app command.
 export const SLASH_NATIVE = ["compact", "context", "plan", "goal", "status"] as const
 export const SLASH_ACTION_SKILLS = ["init", "stop", "handoff", "checkpoint"] as const
+export const SLASH_QUERY_LIMIT = 10
+export const SLASH_SHORTLIST_LIMIT = 5
 
 export function slashActionSkill(name: string) {
   return (SLASH_ACTION_SKILLS as readonly string[]).includes(name)
@@ -85,11 +93,17 @@ export function slashMode(command: Pick<SlashCommand, "trigger">): SlashMode | u
 }
 
 export function slashRank(command: SlashCommand) {
+  if (command.resultRank !== undefined) return command.resultRank
   const core = SLASH_NATIVE.findIndex((name) => name === command.trigger)
   if (core >= 0) return core
   if (command.source === "builtin") return 100
   if (command.source === "project") return 200
   if (command.source === "mcp") return 300
+  if (command.skillState === "loaded") return 350
+  if (command.skillState === "pinned") return 360
+  if (command.skillState === "recent") return 370
+  if (command.skillState === "recommended") return 380
+  if (command.type === "browse") return 500
   return 400
 }
 
@@ -98,6 +112,7 @@ export function sortSlash(a: SlashCommand, b: SlashCommand) {
 }
 
 export function slashIcon(command: SlashCommand) {
+  if (command.type === "browse") return "layout-grid" as const
   if (command.trigger === "goal") return "task" as const
   if (command.trigger === "init") return "file" as const
   if (command.trigger === "compact") return "collapse" as const
@@ -127,4 +142,56 @@ export function slashSource(command: SlashCommand) {
   if (command.source === "project") return "Project"
   if (command.source === "mcp") return "MCP"
   return ""
+}
+
+export function slashState(command: SlashCommand) {
+  if (command.skillState === "loaded") return "Loaded this turn"
+  if (command.skillState === "pinned") return "Pinned"
+  if (command.skillState === "recent") return "Recent"
+  if (command.skillState === "recommended") return "Recommended"
+  return slashSource(command)
+}
+
+export function slashOptionId(command: Pick<SlashCommand, "id">) {
+  return `composer-slash-option-${command.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`
+}
+
+function matchScore(command: SlashCommand, query: string) {
+  const needle = query.trim().replace(/^\/+/, "").toLowerCase()
+  if (!needle) return 0
+  const trigger = command.trigger.toLowerCase()
+  if (trigger === needle) return 1_000
+  if (trigger.startsWith(needle)) return 800 - trigger.length
+  if (trigger.includes(needle)) return 600 - trigger.indexOf(needle)
+  const text = [command.trigger, command.title, command.description, command.usage]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+  const terms = needle.split(/\s+/).filter(Boolean)
+  if (!terms.every((term) => text.includes(term))) return 0
+  return 300 + terms.reduce((score, term) => score + (trigger.includes(term) ? 8 : 2), 0)
+}
+
+/** Rank an already permission-filtered candidate set. The result is bounded
+ * before Solid mounts rows, so opening `/` remains constant-cost even with a
+ * library of hundreds of skills. */
+export function slashMatches(commands: readonly SlashCommand[], query: string, limit = SLASH_QUERY_LIMIT) {
+  const needle = query.trim()
+  if (!needle) return commands.toSorted(sortSlash)
+  return commands
+    .map((command) => ({ command, score: matchScore(command, needle) }))
+    .filter((entry) => entry.score > 0)
+    .toSorted((a, b) => b.score - a.score || sortSlash(a.command, b.command))
+    .slice(0, limit)
+    .map((entry, index) => ({ ...entry.command, resultRank: index }))
+}
+
+export function compactSlashItems(commands: readonly SlashCommand[], skillNames: ReadonlySet<string>) {
+  return commands
+    .filter(
+      (command) =>
+        SLASH_NATIVE.some((name) => name === command.trigger) ||
+        (command.source === "skill" && skillNames.has(command.trigger)),
+    )
+    .toSorted(sortSlash)
 }

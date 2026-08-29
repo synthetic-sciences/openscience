@@ -55,7 +55,14 @@ import { uiStore } from "@/atlas/store/ui"
 import { confirmDialog } from "@/atlas/dialogs"
 import { projectHref, projectPathname } from "@/utils/project-route"
 import { ModelSettingsPopover } from "./model-settings-popover"
-import { enabledSkills, skillAction, visibleSkills } from "@/atlas/skill-permissions"
+import {
+  loadedSkillNamesThisTurn,
+  recordRecentSkill,
+  skillAction,
+  skillCatalogSnapshot,
+  skillPreferences,
+  SKILL_PREFERENCES_EVENT,
+} from "@/atlas/skill-permissions"
 import { DialogSettings } from "./dialog-settings"
 import "./prompt-input.css"
 import {
@@ -83,11 +90,16 @@ import {
   slashGroup,
   slashIcon,
   slashMode,
+  slashMatches,
+  slashOptionId,
   slashActionSkill,
   slashEdit,
-  slashSource,
+  slashState,
   slashTokenAt,
+  compactSlashItems,
   SLASH_NATIVE,
+  SLASH_QUERY_LIMIT,
+  SLASH_SHORTLIST_LIMIT,
   sortSlash,
   type SlashCommand,
   type SlashMode,
@@ -838,6 +850,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleConversationSelect,
   })
 
+  const skillStorage = typeof localStorage === "undefined" ? undefined : localStorage
+  const [skillPreferenceRevision, setSkillPreferenceRevision] = createSignal(0)
+  onMount(() => {
+    const refresh = () => setSkillPreferenceRevision((value) => value + 1)
+    globalThis.addEventListener(SKILL_PREFERENCES_EVENT, refresh)
+    globalThis.addEventListener("storage", refresh)
+    onCleanup(() => {
+      globalThis.removeEventListener(SKILL_PREFERENCES_EVENT, refresh)
+      globalThis.removeEventListener("storage", refresh)
+    })
+  })
+  const currentSkillPreferences = createMemo(() => {
+    skillPreferenceRevision()
+    return skillPreferences(skillStorage)
+  })
+  const loadedSkills = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID || sessionID === "new") return []
+    return loadedSkillNamesThisTurn(sync.data.message[sessionID] ?? [], sync.data.part)
+  })
+  const skillSnapshot = createMemo(() => {
+    const preferences = currentSkillPreferences()
+    return skillCatalogSnapshot(sync.data.skill ?? [], {
+      permission: sync.data.config.permission,
+      pinned: preferences.pinned,
+      recent: preferences.recent,
+      loadedThisTurn: loadedSkills(),
+      shortlistLimit: SLASH_SHORTLIST_LIMIT,
+    })
+  })
+
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const usage: Record<string, string> = {
       compact: "/compact [focus]",
@@ -847,7 +890,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       status: "/status",
     }
     const catalog = new Map(sync.data.command.map((item) => [item.name, item]))
-    const enabled = enabledSkills(sync.data.skill ?? [], [], sync.data.config.permission)
     const local = command.options
       .filter((item) => item.slash && !item.disabled)
       .map((item) => ({
@@ -888,8 +930,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     // built-in skill tool — lazy invocation, no new pipeline. A real command
     // owns its trigger when names collide, so it is never repeated as a skill.
     // Hide skills tagged `entry: false` (internal helpers).
-    const skills = enabled
-      .filter((skill) => !reserved.has(skill.name))
+    const loaded = new Set(skillSnapshot().loadedThisTurn.map((skill) => skill.name))
+    const pinned = new Set(skillSnapshot().pinned.map((skill) => skill.name))
+    const recent = new Set(skillSnapshot().recent.map((skill) => skill.name))
+    const recommended = new Set(skillSnapshot().recommended.map((skill) => skill.name))
+    const shortlist = new Set(skillSnapshot().shortlist.map((skill) => skill.name))
+    const skills = skillSnapshot()
+      .allowed.filter((skill) => !reserved.has(skill.name))
       .map((s) => ({
         id: `skill.${s.name}`,
         trigger: s.name,
@@ -899,6 +946,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         source: "skill" as const,
         category: "skill" as const,
         type: slashActionSkill(s.name) ? ("action" as const) : ("skill" as const),
+        skillState: (loaded.has(s.name)
+          ? "loaded"
+          : pinned.has(s.name)
+            ? "pinned"
+            : recent.has(s.name)
+              ? "recent"
+              : recommended.has(s.name) && shortlist.has(s.name)
+                ? "recommended"
+                : undefined) as SlashCommand["skillState"],
       }))
 
     return [...builtin, ...local, ...skills].toSorted(sortSlash)
@@ -906,10 +962,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const slashItems = (query: string) => {
     const items = slashCommands()
-    if (!query.trim()) return items
+    const browse = (searchText: string): SlashCommand => ({
+      id: "skill.browse-all",
+      trigger: searchText || "browse-skills",
+      title: "Browse all skills",
+      description: "Open the complete skill library",
+      searchText,
+      source: "skill",
+      category: "skill",
+      type: "browse",
+    })
+    if (!query.trim()) {
+      const compactSkillNames = new Set(skillSnapshot().shortlist.map((skill) => skill.name))
+      const compact = compactSlashItems(items, compactSkillNames)
+      return [...compact, browse("")]
+    }
 
     const shown = new Set(items.map((item) => item.trigger))
-    const governed = new Set(visibleSkills(sync.data.skill ?? [], []).map((skill) => skill.name))
+    const governed = new Set(skillSnapshot().library.map((skill) => skill.name))
     const commands: SlashCommand[] = sync.data.command
       .filter(
         (item) =>
@@ -932,22 +1002,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const all = store.slashInline
       ? items.filter((item) => item.type === "skill" || item.type === "mode")
       : [...items, ...commands]
-    const needle = query.trim().replace(/^\/+/, "").toLowerCase()
-    const trigger = (item: SlashCommand) => item.trigger.toLowerCase()
-    const exact = all.filter((item) => trigger(item) === needle)
-    if (exact.length) return exact
-
-    const prefix = all.filter((item) => trigger(item).startsWith(needle))
-    if (prefix.length) return prefix
-
-    const contained = all.filter((item) => trigger(item).includes(needle))
-    if (contained.length) return contained
-
-    const terms = needle.split(/\s+/)
-    return all.filter((item) => {
-      const text = [item.trigger, item.title, item.description, item.usage].filter(Boolean).join(" ").toLowerCase()
-      return terms.every((term) => text.includes(term))
-    })
+    return [...slashMatches(all, query, SLASH_QUERY_LIMIT), browse(query.trim())]
   }
 
   const setIntent = (intent: SlashMode | null) => {
@@ -996,6 +1051,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!cmd) return
     setStore("popover", null)
 
+    if (cmd.type === "browse") {
+      dialog.show(() => <DialogSettings initial="skills" />)
+      return
+    }
+    if (cmd.source === "skill") recordRecentSkill(cmd.trigger, skillStorage)
+
     const intent = slashMode(cmd)
     if (intent) {
       if (!replaceSlash("")) return
@@ -1030,7 +1091,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<SlashCommand>({
     items: slashItems,
     key: (x) => x?.id,
-    filterKeys: ["trigger", "title", "description", "usage"],
+    filterKeys: ["trigger", "title", "description", "usage", "searchText"],
     groupBy: slashGroup,
     sortBy: sortSlash,
     sortGroupsBy: (a, b) => (a.category === "Commands" ? -1 : b.category === "Commands" ? 1 : 0),
@@ -1572,6 +1633,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (event.key === "Enter" && isImeComposing(event)) {
       return
     }
+
+    // Arrow, Tab, and Enter belong to the OS input-method candidate window
+    // while composing. Never let the slash list consume them.
+    if (store.popover && isImeComposing(event)) return
 
     const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
 
@@ -2352,6 +2417,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }}
           class="workspace-composer__suggestions absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left
                  min-h-10 overflow-auto no-scrollbar flex flex-col"
+          id={store.popover === "slash" ? "composer-slash-listbox" : undefined}
+          role={store.popover === "slash" ? "listbox" : undefined}
+          aria-label={store.popover === "slash" ? "Commands and skills" : undefined}
           onMouseDown={(e) => e.preventDefault()}
         >
           <Switch>
@@ -2443,12 +2511,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <For each={slashGrouped()}>
                   {(group) => (
                     <section class="workspace-composer__slash-group" aria-label={group.category}>
-                      <Show when={group.category === "Skills"}>
-                        <header class="workspace-composer__slash-heading">Skills</header>
-                      </Show>
+                      <header class="workspace-composer__slash-heading">{group.category}</header>
                       <For each={group.items}>
                         {(cmd) => (
                           <button
+                            type="button"
+                            id={slashOptionId(cmd)}
+                            role="option"
+                            aria-selected={slashActive() === cmd.id}
                             data-slash-id={cmd.id}
                             classList={{
                               "workspace-composer__suggestion workspace-composer__slash-row w-full": true,
@@ -2460,13 +2530,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             <span class="workspace-composer__slash-icon">
                               <Icon name={slashIcon(cmd)} size="small" />
                             </span>
-                            <span class="workspace-composer__slash-name">/{cmd.trigger}</span>
+                            <span class="workspace-composer__slash-name">
+                              {cmd.type === "browse" ? cmd.title : `/${cmd.trigger}`}
+                            </span>
                             <span class="workspace-composer__slash-detail truncate">
                               {cmd.description || cmd.title}
                             </span>
-                            <Show when={command.keybind(cmd.id) || slashSource(cmd)}>
+                            <Show when={command.keybind(cmd.id) || slashState(cmd)}>
                               <span class="workspace-composer__slash-meta">
-                                {command.keybind(cmd.id) || slashSource(cmd)}
+                                {command.keybind(cmd.id) || slashState(cmd)}
                               </span>
                             </Show>
                           </button>
@@ -2637,10 +2709,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               editorRef = el
               props.ref?.(el)
             }}
-            role="textbox"
+            role="combobox"
             aria-multiline="true"
             aria-label={placeholder()}
             aria-busy={submitting()}
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            aria-expanded={store.popover === "slash"}
+            aria-controls={store.popover === "slash" ? "composer-slash-listbox" : undefined}
+            aria-activedescendant={
+              store.popover === "slash" && slashActive() ? slashOptionId({ id: slashActive()! }) : undefined
+            }
             dir="auto"
             contenteditable={submitting() ? "false" : "true"}
             onInput={handleInput}

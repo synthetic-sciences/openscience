@@ -22,6 +22,8 @@ import { Project } from "../project/project"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill/skill"
+import { PermissionNext } from "../permission/next"
+import { Config } from "../config/config"
 import { Auth } from "../auth"
 import { Command } from "../command"
 import { Global } from "../global"
@@ -597,15 +599,16 @@ export namespace Server {
                 description: "List of skills",
                 content: {
                   "application/json": {
-                    schema: resolver(Skill.Info.array()),
+                    schema: resolver(Skill.CatalogEntry.array()),
                   },
                 },
               },
             },
           }),
           async (c) => {
-            const skills = await Skill.all()
-            return c.json(skills)
+            const config = await Config.get()
+            const skills = await Skill.catalog(PermissionNext.fromConfig(config.permission ?? {}))
+            return c.json(skills.library)
           },
         )
         .put(

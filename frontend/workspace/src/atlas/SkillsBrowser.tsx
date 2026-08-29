@@ -10,7 +10,7 @@ import { useDialog } from "@synsci/ui/context/dialog"
 import { useSync } from "@/context/sync"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconSearch } from "@/atlas/shared/Icon"
-import { enabledSkills } from "./skill-permissions"
+import { skillCatalogSnapshot } from "./skill-permissions"
 
 interface SkillRow {
   name: string
@@ -56,7 +56,9 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
   })
 
   const groups = createMemo(() => {
-    const all = enabledSkills((sync.data.skill ?? []) as SkillRow[], [], sync.data.config.permission)
+    const all = skillCatalogSnapshot((sync.data.skill ?? []) as SkillRow[], {
+      permission: sync.data.config.permission,
+    }).allowed
     const q = query().trim().toLowerCase()
     const filtered = q
       ? all.filter(
@@ -83,7 +85,6 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
   return (
     <div
       ref={panelRef}
-      class="atlas-fade-in"
       style={{
         position: "absolute",
         bottom: "100%",

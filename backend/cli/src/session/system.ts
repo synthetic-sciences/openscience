@@ -31,7 +31,7 @@ export namespace SystemPrompt {
   }
 
   export async function availableSkills(permission: PermissionNext.Ruleset, message?: string) {
-    const catalog = await Skill.all()
+    const catalog = (await Skill.catalog(permission)).allowed
     const key = (message?.length ?? 0) <= 8_192 ? JSON.stringify([permission, message ?? ""]) : undefined
     const cache = (() => {
       const current = skillPrompts.get(catalog)
@@ -50,7 +50,7 @@ export namespace SystemPrompt {
       if (cache.size > 32) cache.delete(cache.keys().next().value!)
       return value
     }
-    const skills = catalog.filter((skill) => PermissionNext.evaluate("skill", skill.name, permission).action !== "deny")
+    const skills = catalog
     if (skills.length === 0) {
       return publish(
         [

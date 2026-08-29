@@ -22,6 +22,7 @@ import { Install } from "./install/install"
 import { isRetiredProductSkillName, isRetiredProductSkillPath, RETIRED_PRODUCT_SKILL_NAMES } from "./retired"
 import { purgeRetiredAtlasAgentInstall } from "./retired-install"
 import { SkillCatalog } from "./catalog"
+import { PermissionNext } from "@/permission/next"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -66,6 +67,19 @@ export namespace Skill {
     entry: z.boolean().optional(),
   })
   export type Info = z.infer<typeof Info>
+  export const CatalogEntry = Info.extend({
+    permission_action: PermissionNext.Action,
+    recommended: z.boolean(),
+  })
+  export type CatalogEntry = z.infer<typeof CatalogEntry>
+  export type CatalogSnapshot = {
+    /** Every user-facing skill in the library, annotated with its effective
+     * permission state. Denied rows remain here so Settings can restore them. */
+    library: CatalogEntry[]
+    /** The only skills system routing, model search, and slash invocation may
+     * advertise. Runtime permission checks remain authoritative at execution. */
+    allowed: CatalogEntry[]
+  }
   const Frontmatter = Info.pick({
     name: true,
     description: true,
@@ -110,6 +124,14 @@ export namespace Skill {
   const USER_SKILL_DIR = path.join(Global.Path.data, "user-skills")
   const UserSkillName = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)
   const priority = { default: 0, installed: 1, user: 2, project: 3 } as const
+  const recommended = new Set([
+    "conducting-scientific-research",
+    "literature-review",
+    "scientific-writing",
+    "exploratory-data-analysis",
+    "citation-management",
+    "scientific-schematics",
+  ])
 
   async function read(match: string, origin: Info["origin"]): Promise<Info | undefined> {
     const md = await ConfigMarkdown.parse(match).catch((err) => {
@@ -434,6 +456,7 @@ export namespace Skill {
 
   export const state = Instance.state(compute)
   const lists = new WeakMap<Record<string, Info>, Info[]>()
+  const catalogs = new WeakMap<Info[], Map<string, CatalogSnapshot>>()
 
   export async function invalidate() {
     State.clear(Instance.directory, compute)
@@ -539,5 +562,30 @@ export namespace Skill {
     )
     lists.set(current, value)
     return value
+  }
+
+  /** Build the single permission-annotated catalog consumed by every skill
+   * discovery surface. Skill contents stay lazy; this snapshot contains only
+   * the already-indexed frontmatter metadata. */
+  export async function catalog(permission: PermissionNext.Ruleset): Promise<CatalogSnapshot> {
+    const current = await all()
+    const key = JSON.stringify(permission)
+    const cached = catalogs.get(current)?.get(key)
+    if (cached) return cached
+
+    const library = current.map((skill) => ({
+      ...skill,
+      permission_action: PermissionNext.evaluate("skill", skill.name, permission).action,
+      recommended: recommended.has(skill.name),
+    }))
+    const snapshot = {
+      library,
+      allowed: library.filter((skill) => skill.permission_action !== "deny"),
+    }
+    const entries = catalogs.get(current) ?? new Map<string, CatalogSnapshot>()
+    entries.set(key, snapshot)
+    if (entries.size > 32) entries.delete(entries.keys().next().value!)
+    catalogs.set(current, entries)
+    return snapshot
   }
 }

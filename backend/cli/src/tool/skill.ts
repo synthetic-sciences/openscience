@@ -79,7 +79,8 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
   // execute(). Avoid evaluating every catalog entry here: this initializer is
   // rebuilt for every model step, and a 311-entry permission scan created
   // thousands of redundant log records during long research runs.
-  const accessibleSkills = await Skill.all()
+  const accessibleSkills = (await Skill.catalog(ctx?.agent?.permission ?? [])).allowed
+  const accessibleByName = new Map(accessibleSkills.map((skill) => [skill.name, skill]))
 
   // Group skills by category for the description
   const categories: Record<string, Skill.Info[]> = {}
@@ -179,7 +180,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       }
 
       const resolvedName = SkillCatalog.resolve(name)
-      const skill = await Skill.get(resolvedName)
+      const skill = accessibleByName.get(resolvedName)
 
       if (!skill) {
         const ranked = searchSkills(name, accessibleSkills, 5)

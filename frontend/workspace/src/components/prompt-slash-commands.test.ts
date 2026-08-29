@@ -4,74 +4,92 @@ import { fileURLToPath } from "node:url"
 import {
   SLASH_NATIVE,
   SLASH_ACTION_SKILLS,
+  SLASH_QUERY_LIMIT,
+  compactSlashItems,
   slashActionSkill,
   slashGroup,
   slashIcon,
   slashEdit,
   slashMode,
+  slashMatches,
+  slashOptionId,
   slashSource,
+  slashState,
   slashTokenAt,
   sortSlash,
   type SlashCommand,
 } from "./prompt-slash"
 
-test("slash menu keeps a small toggleable action surface above other skills", () => {
+test("slash menu exposes accessible listbox semantics without an entrance animation", () => {
   const component = readFileSync(fileURLToPath(new URL("./prompt-input.tsx", import.meta.url)), "utf8")
-  const hierarchy = readFileSync(fileURLToPath(new URL("./prompt-slash.ts", import.meta.url)), "utf8")
   const styles = readFileSync(fileURLToPath(new URL("./prompt-input.css", import.meta.url)), "utf8")
 
-  expect(hierarchy).toContain('export const SLASH_NATIVE = ["compact", "context", "plan", "goal", "status"]')
-  expect(component).toContain("sync.data.command")
-  expect(component).toContain("sync.data.skill")
-  expect(component).toContain("const catalog = new Map(sync.data.command")
-  expect(component).toContain("const builtin = SLASH_NATIVE.filter(")
-  expect(component).toContain("const localTriggers = new Set(local.map((item) => item.trigger))")
-  expect(component).toContain("!localTriggers.has(name)")
-  expect(component).toContain('skillAction(sync.data.config.permission, name) !== "deny"')
-  expect(component).not.toContain("available.has(name)")
-  expect(component).toContain("const slashItems = (query: string) =>")
-  expect(component).toContain("if (!query.trim()) return items")
-  expect(component).toContain('item.source === "builtin" &&')
-  expect(component).toContain("!SLASH_NATIVE.some((name) => name === item.name)")
-  expect(component).toContain('skillAction(sync.data.config.permission, item.name) !== "deny"')
-  expect(component).toContain("const exact = all.filter((item) => trigger(item) === needle)")
-  expect(component).toContain("if (exact.length) return exact")
-  expect(component).toContain("if (prefix.length) return prefix")
-  expect(component).toContain("if (contained.length) return contained")
-  expect(component).toContain('item.type === "skill" || item.type === "mode"')
-  expect(component).toContain("items: slashItems")
-  expect(component).toContain("const enabled = enabledSkills(sync.data.skill ?? [], [], sync.data.config.permission)")
-  expect(component).toContain("const local = command.options")
-  expect(component).toContain('command.trigger(cmd.actionID, "slash")')
-  expect(component).toContain("const skills = enabled")
-  expect(component).toContain(".filter((skill) => !reserved.has(skill.name))")
-  expect(component).toContain('source: "builtin" as const')
-  expect(component).toContain('type: slashActionSkill(s.name) ? ("action" as const) : ("skill" as const)')
-  expect(component).toContain("groupBy: slashGroup")
-  expect(component).toContain("grouped: slashGrouped")
-  expect(component).toContain("aria-label={group.category}")
-  expect(component).toContain('if (cmd.type === "skill")')
-  expect(component).toContain('if (!replaceSlash("")) return')
-  expect(component).toContain('void handleSubmit(new Event("submit"), cmd.trigger)')
-  expect(component).toContain("const intent = slashMode(cmd)")
-  expect(component).toContain("data-composer-intent={intent()}")
-  expect(component).toContain('if (store.intent === "plan")')
-  expect(component).toContain('if (store.intent === "goal")')
-  expect(component).toContain("requestAnimationFrame(scrollSlashActive)")
-  expect(component).toContain("editorRef.focus({ preventScroll: true })")
-  expect(component).toContain("[() => sync.data.command, () => sync.data.skill, () => sync.data.config.permission]")
-  expect(component).toContain('const native = command?.source === "builtin" && command.menu')
-  expect(component.indexOf("if (native && active")).toBeLessThan(component.indexOf("const currentModel"))
-  expect(component).toContain("workspace-composer__slash-icon")
-  expect(component).toContain("workspace-composer__slash-meta")
-  expect(component).toContain('when={group.category === "Skills"}')
-  expect(component).not.toContain("workspace-composer__slash-badge")
+  expect(component).toContain('role={store.popover === "slash" ? "listbox" : undefined}')
+  expect(component).toContain('role="option"')
+  expect(component).toContain('role="combobox"')
+  expect(component).toContain('aria-autocomplete="list"')
+  expect(component).toContain("aria-activedescendant")
+  expect(component).toContain("slashOptionId(cmd)")
+  expect(component).toContain("compactSlashItems(items, compactSkillNames)")
+  expect(component).toContain("slashMatches(all, query, SLASH_QUERY_LIMIT)")
+  expect(component).toContain('<DialogSettings initial="skills" />')
   expect(styles).toMatch(/\.workspace-composer__slash-row\s*\{[^}]*display: grid/s)
   expect(styles).toMatch(/\.workspace-composer__slash-group\s*\{[^}]*display: grid/s)
   expect(styles).toMatch(/\.workspace-composer__slash-heading\s*\{[^}]*font-size: 12px/s)
   expect(styles).toMatch(/\.workspace-composer__suggestions\s*\{[^}]*border-radius: var\(--radius-xl\)/s)
   expect(styles).toMatch(/\.workspace-composer__suggestions\s*\{[^}]*max-height: min\(360px, 48vh\)/s)
+  expect(styles).not.toMatch(/\.workspace-composer__suggestions\s*\{[^}]*animation:/s)
   expect(styles).toContain(".workspace-composer__intent")
+})
+
+test("empty slash stays bounded to native commands plus the selected skill shortlist", () => {
+  const command = (trigger: string, source: SlashCommand["source"] = "builtin"): SlashCommand => ({
+    id: `${source}.${trigger}`,
+    trigger,
+    title: trigger,
+    source,
+    category: source === "skill" ? "skill" : "session",
+    type: source === "skill" ? "skill" : "command",
+  })
+  const commands = [
+    ...SLASH_NATIVE.map((name) => command(name)),
+    command("undo"),
+    command("recommended", "skill"),
+    command("hidden-library-skill", "skill"),
+  ]
+
+  expect(compactSlashItems(commands, new Set(["recommended"])).map((item) => item.trigger)).toEqual([
+    ...SLASH_NATIVE,
+    "recommended",
+  ])
+})
+
+test("query ranking returns at most ten best matches with stable accessible IDs", () => {
+  const commands: SlashCommand[] = Array.from({ length: 20 }, (_, index) => ({
+    id: `skill.analysis-${index}`,
+    trigger: `analysis-${index}`,
+    title: `Analysis ${index}`,
+    description: index === 17 ? "single cell exact workflow" : "general workflow",
+    source: "skill",
+    category: "skill",
+    type: "skill",
+  }))
+  commands.push({
+    id: "skill.single-cell",
+    trigger: "single-cell",
+    title: "Single cell",
+    source: "skill",
+    category: "skill",
+    type: "skill",
+    skillState: "loaded",
+  })
+
+  const result = slashMatches(commands, "single cell", SLASH_QUERY_LIMIT)
+  expect(result).toHaveLength(2)
+  expect(result.map((item) => item.trigger)).toEqual(["single-cell", "analysis-17"])
+  expect(slashOptionId(result[0])).toBe("composer-slash-option-skill-single-cell")
+  expect(slashState(result[0])).toBe("Loaded this turn")
+  expect(slashMatches(commands, "analysis", SLASH_QUERY_LIMIT)).toHaveLength(10)
 })
 
 test("slash hierarchy keeps frequent native actions ahead of a stable skills catalog", () => {
