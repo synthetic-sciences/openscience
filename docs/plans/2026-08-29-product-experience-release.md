@@ -1,186 +1,172 @@
 # Product experience and runtime release plan
 
-Status values are `todo`, `active`, `verified`, and `blocked`.
+Status values are `verified`, `active`, and `blocked`.
 
-This plan is the release authority for the product-quality work requested on
-2026-08-29. It starts from Aayam's exact `origin/main` commit
-`284137c76bd4f3a555d9a2b29f1ef478dba33e36`. Before every merge and release,
-the branch must fetch and incorporate any newer Aayam commits without dropping
-their wallet, signing, notarization, or draft-release behavior.
+This is the release authority for the product-quality work requested on
+2026-08-29. “Verified” means the implementation and its local/provider-free
+contract tests pass. It does not mean an external provider, signed artifact, or
+production deployment was exercised unless the evidence says so explicitly.
 
-The work is intentionally split into independently reviewable slices. A visible
-control is complete only when it has a backend transition, durable/recoverable
-state, truthful failure copy, and behavior tests. Marketing labels must
-distinguish governed integrations, credential/CLI bridges, and stored
-credentials.
+The current branch is an exact descendant of Aayam's fetched
+`origin/main` at `5ad5d6e183bd1deba79d78b35fe21cc882c0cada`. Recheck that
+ancestry immediately before landing. PR #440 still points at the older
+`d0b2574e` head until the local commits listed below are pushed.
 
 ## Product principles
 
 - Reach a useful composer in under 60 seconds on a clean install.
-- Show a visible response within 400 ms. Never use a blank loading surface.
-- Prefer progressive disclosure: one recommended action first, advanced setup
-  later in Customize.
-- Use no ornamental entrance motion. Use determinate, linear motion only for
-  real progress and honor reduced-motion preferences.
-- Use at least 32 px interaction targets and 44 px for primary touch actions.
+- Show a visible response within 400 ms; never use a blank loading surface.
+- Put one recommended action first and progressively disclose advanced setup.
 - Ask for authority at the real side-effect boundary. Independence never
   bypasses permissions.
-- Preserve the user's working app, sessions, drafts, files, and purchased Wallet
-  through failure, update, relocation, and restart.
-- Do not call a capability verified merely because a credential is present.
+- Preserve sessions, drafts, files, credentials, and purchased Wallet state
+  through update, relocation, rollback, and restart.
+- Never call a provider or tool verified merely because a credential exists.
+- Keep secret-bearing provider operations behind reviewed brokers. Do not solve
+  usability by exporting control-plane credentials to generic Bash or MCP.
+- Distinguish local contract evidence, signed-artifact evidence, provider
+  canaries, and production evidence.
 
-## Release baseline and invariants
+## Current outcome matrix
 
-| ID      | Requirement                                                                                  | Status  | Evidence                                               |
-| ------- | -------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------ |
-| SYNC-01 | Branch contains the latest Aayam main before each landing                                    | active  | ancestry and exact-head check                          |
-| SYNC-02 | Preserve `managedUnlocked` onboarding and Wallet routing                                     | todo    | mounted onboarding and billing tests                   |
-| REL-01  | Modal token-free SDK prewarm lands from PR #431                                              | active  | 93 focused tests and terminal PR CI                    |
-| REL-02  | Production publisher can create the release commit and tag when workflows changed            | blocked | latest run 33255944525 permission failure              |
-| REL-03  | Signed/notarized macOS artifacts remain required                                             | active  | latest run signed/notarized successfully               |
-| REL-04  | Do not reuse partially staged `2.0.54`; release the integrated tree as the next free version | todo    | npm/tag/release preflight                              |
-| REL-05  | Atlas Nia retirement and Firecrawl hardening deploy from exact green SHA                     | todo    | Atlas preflight, one bounded search, zero new Nia rows |
+### Harness, permissions, skills, and undo
 
-## Execution order
+| ID       | Outcome                                                                                                     | Status   | Evidence / remaining gate                                         |
+| -------- | ----------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| HAR-01   | Active Task assignments remain byte-exact; executable compaction markers are rejected                       | verified | `68dfddbc`; long-assignment regressions                           |
+| HAR-02   | A provider `content-filter` with no textual handoff is retryable even after tools ran                       | verified | `68dfddbc`, `906bca04`; focused content-filter suite              |
+| HAR-03   | Managed-search pending/unavailable settles as a typed partial failure                                       | verified | `68dfddbc`; operation/reconciliation tests                        |
+| HAR-04   | Tool-only, partial, or filtered child work never reports a misleading Completed state                       | verified | `68dfddbc`, `906bca04`; Task settlement tests                     |
+| PERM-01  | Ask always, Ask risky, and Full access are execution-time authority floors                                  | verified | `2a8a92b4`, `15f974b8`, `a1d4d553`; permission/Bash matrices      |
+| PERM-02  | Standing, session, and config grants cannot weaken the selected floor                                       | verified | pending-settlement and standing-approval regressions              |
+| PERM-03  | Destructive or ambiguous shell syntax is risky; new kinds fail closed                                       | verified | `ab5e4a13`; 75 permission tests plus adversarial parser cases     |
+| PERM-04  | UI exposes requested/effective access without coercing Full access                                          | verified | mounted managed-policy and sandbox tests                          |
+| DEC-01   | Interactive asks on planning/consequential decisions with a recommendation first                            | verified | `3f68be07`; real two-step fake-provider trace                     |
+| DEC-02   | Balanced resolves routine planning and asks on consequential ambiguity                                      | verified | `3f68be07`; real QuestionTool trace                               |
+| DEC-03   | Independent selects the recommendation, records the assumption, and pauses only for missing authority/input | verified | `3f68be07`; persisted tool outcome; permission boundary unchanged |
+| SKILL-01 | One permission-filtered lazy catalog backs prompt, settings, and slash discovery                            | verified | `b5769137`, `15f974b8`; bundled catalog and boundary tests        |
+| SKILL-02 | Empty `/` shows native actions plus a bounded skill shortlist                                               | verified | prompt/slash mounted and ranking tests                            |
+| SKILL-03 | Browse all opens the real library, preserves the query/caret, and supports keyboard selection               | verified | 43 focused mounted/unit tests and production build                |
+| UNDO-01  | Undo/restore is scoped to the transaction files and does not overwrite unrelated later edits                | verified | scoped restore regression in `15f974b8`                           |
+| UNDO-02  | Undo exposes a structured preview and prevents duplicate settlement                                         | verified | transaction and mounted UI tests                                  |
 
-### 1. Harness settlement and recoverability
+### First run and brand
 
-| ID     | Outcome                                                                                    | Status | Required evidence                       |
-| ------ | ------------------------------------------------------------------------------------------ | ------ | --------------------------------------- |
-| HAR-01 | Active Task assignments remain byte-exact and executable prompts reject compaction markers | active | long six-artifact assignment regression |
-| HAR-02 | `content-filter` with no textual handoff is retryable even after tools ran                 | todo   | processor snapshot and restart tests    |
-| HAR-03 | Managed-search pending/unavailable is a typed partial outcome with a durable operation ID  | todo   | 503/pending/reconciliation tests        |
-| HAR-04 | Task never reports Completed for tool-only/partial/provider-filtered child work            | todo   | full long-task settlement regression    |
+| ID       | Outcome                                                                                  | Status   | Evidence / remaining gate                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| ONB-01   | A branded nonblank first-run surface appears promptly                                    | verified | `fd0373eb`, `15f974b8`; mounted slow-preference tests                                                     |
+| ONB-02   | Account to folder/project to composer is smooth and crash-idempotent                     | active   | durable operation binding and concurrent-window tests pass; exact packaged clean-root walkthrough remains |
+| ONB-03   | Recommended folder path is primary; blank project and provider setup are progressive     | verified | mounted keyboard/remount tests                                                                            |
+| ONB-04   | BYOK credential plus billing-mode change rolls back as one server transaction on failure | verified | `aac06db4`; 86 backend/provider and 9 mounted onboarding tests                                            |
+| BRAND-01 | One canonical OpenScience mark serves every shell/onboarding/docs surface                | active   | main product surfaces use the brand, but an exhaustive single-source asset contract is not yet proven     |
+| BRAND-02 | Every built-in compute, credential, and MCP catalog row has a local audited mark         | verified | `15f974b8`, `bc9b21af`; exhaustive provider/catalog tests; no render-time tracking requests               |
 
-Implementation notes:
+### Desktop update and storage
 
-- Generic historical message rendering may stay compact, but the Task input used
-  to create a child must never be reconstructed from a 200-character display
-  projection.
-- Provider retry cannot blindly replay side effects. Reconcile pending search by
-  session plus canonical request signature and reuse its operation ID.
-- Persist a structured child result containing finish reason, textual handoff,
-  partial tool count, changed-file count, and retryability.
+| ID       | Outcome                                                                                                | Status   | Evidence / remaining gate                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| UPD-01   | One persisted controller backs update state, retry, cancel, and recovery UI                            | verified | controller/backend/Electron state-machine tests                                                                                  |
+| UPD-02   | Architecture ZIP stages with progress/cancel and never surprise-restarts                               | verified | network, cancellation, restart-blocked, and signed-out tests                                                                     |
+| UPD-03   | Apply drains admitted work and preserves the old runtime until disposal is proven                      | verified | quiescence/disposal/helper regressions                                                                                           |
+| UPD-04   | Final replacement binds digest, version, inode, signer, Team ID, and notarization trust                | verified | downgrade, wrong-signer, tamper, journal-trust, and race tests                                                                   |
+| UPD-05   | Health-bound activation rolls back only with exact process-tree evidence and otherwise fails closed    | verified | helper/reconciler/killpoint tests; ambiguous live-runtime crashes intentionally preserve the journal                             |
+| UPD-06   | Signed macOS installs get in-app update; unsupported/unsigned/Windows/Linux show manual installer copy | verified | platform/account-gate UI and capability tests                                                                                    |
+| UPD-07   | Exact immutable signed ZIP and DMG complete the real updater lifecycle before publication              | blocked  | `0c46c64c` adds the fail-closed per-arch CI canary; Developer ID/notary artifacts can only be exercised after push in release CI |
+| STORE-01 | Retry bypasses stale scan failures                                                                     | verified | `e6503e0c`; immediate retry tests                                                                                                |
+| STORE-02 | Relocation preflights capacity and journals copy/ready/publish/switch recovery                         | verified | ENOSPC and crash-phase tests in `15f974b8`                                                                                       |
+| STORE-03 | Storage UI reports truthful phases, interruption, and safe resume                                      | verified | backend 11 pass/1 platform skip; frontend 16 pass                                                                                |
+| STORE-04 | User cancellation during a synchronous relocation                                                      | active   | crash-safe resume exists; no racy fake cancel was shipped                                                                        |
 
-### 2. Permission and independence contracts
+### Compute, SSH, MCP, and GiveMeANode
 
-| ID      | Outcome                                                                                                           | Status | Required evidence                        |
-| ------- | ----------------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------- |
-| PERM-01 | `Ask always`, `Ask risky`, and `Full access` are execution-time authority floors                                  | todo   | exhaustive tool x mode matrix            |
-| PERM-02 | Standing/session/config grants cannot weaken the selected floor                                                   | todo   | override, child, and migration tests     |
-| PERM-03 | New permission kinds default to ask/deny, never allow                                                             | todo   | registry exhaustiveness test             |
-| PERM-04 | UI shows requested and effective mode without coercing users to Full                                              | todo   | mounted managed-policy and sandbox tests |
-| DEC-01  | Interactive pauses at consequential decisions and recommends one option                                           | todo   | fake-model behavioral trace              |
-| DEC-02  | Balanced decides reversible matters and asks only on consequential ambiguity                                      | todo   | fake-model behavioral trace              |
-| DEC-03  | Independent takes the recommended reversible path, records assumptions, and asks only for missing authority/input | todo   | fake-model behavioral trace              |
+| ID      | Outcome                                                                                                       | Status   | Evidence / remaining gate                                                                                                                                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| COMP-01 | UI truthfully distinguishes governed Modal/SSH, provider bridges, and stored cloud credentials                | verified | compute truth matrix and mounted tests                                                                                                                                    |
+| COMP-02 | TensorPool, Lambda, Prime Intellect, Vast.ai, and RunPod have official read-only doctors                      | verified | exact argv/stdin fake-CLI fixtures, credential isolation, success-only `last_used`                                                                                        |
+| COMP-03 | Provider credentials enter only a pinned reviewed child and are revoked across processes                      | verified | CredentialLifecycle/process-ledger tests; `1c2d58cf` rejects PATH substitution                                                                                            |
+| COMP-04 | Saved provider credentials enable governed agent list/status work without generic shell exposure              | verified | `c24389f9`; `provider_compute` owns exact read-only argv/endpoints, risky permission, trusted executables, credential lease, ledger, redaction, timeout, and cancellation |
+| COMP-05 | Paid or mutating provider operations have typed schemas, live quote/cost approval, idempotency, and recovery  | blocked  | no generic production broker exists for all five providers; must not be simulated by Bash                                                                                 |
+| SSH-01  | Literal identity files, bounded Include, ProxyJump, pinned host keys, and trusted OpenSSH executables work    | verified | local adapter/job fixtures; `1c2d58cf` pins `ssh`, `ssh-keyscan`, and `ssh-keygen`                                                                                        |
+| SSH-02  | Import never executes user SSH directives while resolving aliases and effective connection fields             | verified | raw `ssh -G -F ~/.ssh/config` evaluates `Match exec`; a bounded data-only parser and broker-owned config are safer and covered by no-exec tests                           |
+| MCP-01  | MCP headers/env/client secrets/OAuth authority are encrypted, authority-bound, redacted, and revocable        | verified | migration, transplant, URL/tenant binding, malformed-store, and two-process tests                                                                                         |
+| MCP-02  | OAuth start/wait/cancel/callback/restart/refresh settlement is exact-flow and cross-process durable           | verified | `15f974b8`, `53f7c344`, `63c1ccee`, `abdb1eaf`, `ab5e4a13`; MCP suite green                                                                                               |
+| GMAN-01 | Recommended GiveMeANode preset saves disabled, completes OAuth, inspects, and rolls back setup failures       | verified | one-click connector tests and resumable SDK contract                                                                                                                      |
+| GMAN-02 | Agents receive current MCP-first operating guidance for nodes, jobs, limits, billing, recovery, and safe stop | verified | `bc9b21af`; bundled skill validation, connector UI tests, typechecks, production build                                                                                    |
+| GMAN-03 | GiveMeANode is a typed native JobBroker target with durable operation receipts                                | blocked  | preview/untyped responses, no pre-submit quote or server-enforced max cost, and no authorized internal MCP seam make this unsafe to invent                                |
 
-The decision request contract is
-`{ recommendation, options, impact, blocking }`. Each turn snapshots its mode;
-changing a global preference cannot mutate a turn already in flight.
+Saved dashboard credentials are deliberately not inherited by Bash, Task,
+notebooks, kernels, plugins, or local MCP. Agents use the reviewed
+`provider_compute` boundary for the supported read-only account, availability,
+list, and status operations. Paid and mutating provider operations remain
+unavailable until provider-specific schemas can bind a live quote, exact
+approval, idempotency, and recovery.
 
-### 3. Skills, slash menu, and undo
+### Ace billing
 
-| ID       | Outcome                                                                              | Status | Required evidence                         |
-| -------- | ------------------------------------------------------------------------------------ | ------ | ----------------------------------------- |
-| SKILL-01 | One permission-filtered catalog backs system prompt, Skill tool, settings, and slash | todo   | denied-skill boundary tests               |
-| SKILL-02 | Empty `/` shows native commands plus recent/pinned/recommended skills only           | todo   | row cap and <400 ms open test             |
-| SKILL-03 | Queries show the best 8-12 results and Browse all opens the library                  | todo   | ranking, keyboard, IME, and mobile tests  |
-| SKILL-04 | UI distinguishes Library, Allowed, Recommended/Recent, and Loaded this turn          | todo   | mounted state tests                       |
-| UNDO-01  | Undo/redo restores the exact target tree, including deletions and renames            | todo   | file-mode/symlink/untracked/failure tests |
-| UNDO-02  | Undo reports a structured preview and cannot double-submit                           | todo   | mounted transaction tests                 |
+| ID      | Outcome                                                                                        | Status   | Evidence / remaining gate                                                                                                         |
+| ------- | ---------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| BILL-01 | UI/docs match $0 activation, purchased-balance threshold, fixed $20 reload, and separate fee   | verified | OpenScience copy contracts plus Atlas PR #300                                                                                     |
+| BILL-02 | Authoritative 402 includes reload state/guidance and only pre-dispatch work retries once       | verified | Atlas PR #300 plus OpenScience `a116bfae`; one idempotent managed replay only                                                     |
+| BILL-03 | Monthly limits include pending and committed spend                                             | verified | Atlas real-Postgres concurrent hold tests                                                                                         |
+| BILL-04 | Legacy whole-cent settlement is unreachable                                                    | verified | Atlas microusd-only API and negative signature/caller invariants                                                                  |
+| BILL-05 | Curated chat, image, and search reservations are exhaustively bounded                          | verified | Atlas catalog parity/reservation suite                                                                                            |
+| BILL-06 | Exact Atlas billing commit is merged, deployed, and passes Stripe/provider production canaries | blocked  | PR #300 is green and mergeable (1,504 real-Postgres backend tests) but is not merged/deployed; no paid or Stripe mutation was run |
 
-OpenScience already lazily loads Skill contents. Preserve that foundation and
-remove the UI behavior that renders all installed skills in the empty slash
-menu.
+### Tools and live-provider truth
 
-### 4. First-run activation and brand system
+| ID      | Outcome                                                                              | Status   | Evidence / remaining gate                                                                                                        |
+| ------- | ------------------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| TOOL-01 | All 312 bundled skills parse and validate; slash/settings use the same lazy catalog  | verified | bundled skill contract and workspace build                                                                                       |
+| TOOL-02 | Local/provider-free tool contracts, permission boundaries, and redaction suites pass | verified | focused suites across MCP, compute, storage, updater, permissions, onboarding, and Fable                                         |
+| TOOL-03 | Every external tool/provider works against a live production account                 | blocked  | credentials and paid calls are intentionally not inferred; only bounded canaries after non-paid gates and explicit cost approval |
 
-| ID       | Outcome                                                                                          | Status | Required evidence                        |
-| -------- | ------------------------------------------------------------------------------------------------ | ------ | ---------------------------------------- |
-| ONB-01   | Branded, nonblank status appears within 400 ms                                                   | todo   | slow-preference mounted test             |
-| ONB-02   | Account -> recommended Open a folder -> composer in under 60 seconds                             | todo   | packaged clean-root walkthrough          |
-| ONB-03   | Blank project remains a secondary path and provider setup is progressive                         | todo   | keyboard and restart tests               |
-| ONB-04   | BYOK credential and billing-mode change are transactional                                        | todo   | failure rollback and double-submit tests |
-| BRAND-01 | One canonical OpenScience mark serves onboarding, shell, splash, notification, docs, and landing | todo   | generated asset/visual coverage          |
-| BRAND-02 | Every compute/credential/MCP catalog entry has an audited local logo                             | todo   | catalog exhaustiveness test              |
+## Completed local commits awaiting push
 
-### 5. Desktop update and storage
+- `ab5e4a13` — harden MCP identifiers and shell target parsing.
+- `0c46c64c` — require the signed/notarized desktop lifecycle.
+- `aac06db4` — transactional onboarding credential rollback.
+- `906bca04` — filtered Task settlement failure copy.
+- `a116bfae` — bounded pending-Ace retry.
+- `1c2d58cf` — pin secret-bearing host executables.
+- `3f68be07` — behavioral independence traces.
+- `a1d4d553` — permission and credential CI contracts.
+- `bc9b21af` — GiveMeANode agent guidance and local connector marks.
+- `6a6676bc` — bind GiveMeANode MCP compute to the actual preview contract.
+- `c24389f9` — broker saved provider credentials for governed reads.
+- `20fb8836` — prove SSH import remains data-only and never evaluates user commands.
 
-| ID       | Outcome                                                                                                    | Status | Required evidence                     |
-| -------- | ---------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------- |
-| UPD-01   | One persisted UpdateController backs banner and Settings                                                   | todo   | state-machine and crash/restart tests |
-| UPD-02   | Background ZIP stage exposes bytes/progress/cancel and never surprise-restarts                             | todo   | network/full-disk/cancel tests        |
-| UPD-03   | Apply waits for active work, preserves drafts, and uses explicit Restart to update                         | todo   | active-run packaged test              |
-| UPD-04   | Update validates version, bundle, GitHub digest, signing team/designated requirement, and Gatekeeper       | todo   | wrong-signer/downgrade/tamper tests   |
-| UPD-05   | Old bundle remains until new-version health handshake; failure rolls back and relaunches                   | todo   | helper crash/launch failure test      |
-| UPD-06   | macOS in-app update is truthful; Windows/Linux show honest manual fallback until a complete updater exists | todo   | platform behavior tests               |
-| STORE-01 | Retry bypasses storage scan error TTL                                                                      | todo   | immediate retry behavior test         |
-| STORE-02 | Relocation preflights free space and reports drain/copy/verify/switch phases                               | todo   | ENOSPC/crash/active-writer tests      |
-| STORE-03 | UI truthfully separates data, config, cache, state, and safety copies                                      | todo   | mounted copy/reveal/cleanup tests     |
+## Landing and release gates
 
-The DMG remains the first-install artifact. The macOS updater consumes the
-architecture-specific ZIP. Production update artifacts must be signed and
-notarized; removing quarantine is not accepted as a trust check.
+| Gate                                               | Status   | Acceptance                                                                                        |
+| -------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------- |
+| Latest Aayam sync                                  | verified | fetched `origin/main` is an ancestor of local HEAD                                                |
+| OpenScience focused tests/typechecks/builds        | verified | slice evidence above; final aggregate run still required after active work                        |
+| Push PR #440 and rerun Test/CodeQL on the new head | active   | old red checks are against `d0b2574e`, not the local fixes                                        |
+| Atlas PR #300 CI                                   | verified | all five checks green; backend used real pgvector Postgres, 1,504 passed                          |
+| Merge Atlas PR #300                                | blocked  | requires review/landing authority                                                                 |
+| Merge OpenScience PR #440                          | blocked  | requires new-head CI, final review, and explicit merge confirmation                               |
+| Signed/notarized exact ZIP+DMG updater canary      | blocked  | runs only in release CI with Developer ID/notary artifacts and a prior signed baseline            |
+| Packaged clean-root onboarding/storage/browser QA  | active   | local mounted/provider-free coverage is green; packaged walkthrough remains                       |
+| Paid Modal/GiveMeANode/Atlas/Stripe canaries       | blocked  | require explicit cost/production approval after non-paid gates                                    |
+| Deploy and stable release                          | blocked  | neither PR is landed; next unused version/tag/assets must be rechecked immediately before release |
 
-### 6. Compute, SSH, GiveMeANode, MCP, and credentials
+## Execution order from here
 
-| ID      | Outcome                                                                                                     | Status | Required evidence                  |
-| ------- | ----------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------- |
-| COMP-01 | UI labels Modal/SSH as governed, GPU providers as CLI bridges, cloud/NVIDIA as credential-only              | todo   | catalog truth matrix               |
-| COMP-02 | Provider doctors report configured, valid, expired, scope-limited, unreachable, or CLI missing              | todo   | official-contract fixtures         |
-| COMP-03 | Credentials are injected only into the reviewed provider operation                                          | todo   | redaction and process-ledger tests |
-| SSH-01  | Identity/agent selection, `ssh -G`, ProxyJump, and explicit host-key trust are smooth                       | todo   | local OpenSSH fixture matrix       |
-| MCP-01  | OAuth tokens/client secrets migrate from plaintext to SecretBox/keychain                                    | todo   | migration and no-plaintext tests   |
-| MCP-02  | OAuth callback ownership, cancel, headers, and restart recovery are durable                                 | todo   | two-process local OAuth tests      |
-| GMAN-01 | Recommended one-click GiveMeANode connector saves, authenticates, inspects, and rolls back atomically       | todo   | local OAuth/connect tests          |
-| GMAN-02 | Governed GiveMeANode JobBroker target is idempotent, rate-aware, bounded, recoverable, and defaults to stop | todo   | fake-provider lifecycle suite      |
+1. Keep GMAN-03 and generic paid provider mutation blocked until each provider
+   exposes a stable, pre-authorizable cost contract and OpenScience has an
+   authorized, durable operation seam.
+2. Run the final focused/aggregate provider-free suites, typechecks, formatting,
+   builds, and diff checks.
+3. Push PR #440 normally and require fresh Test, CodeQL, workflow lint, platform
+   ownership, migration, build, and preview checks on the exact head.
+4. Complete a fresh pre-landing review and packaged clean-root UI walkthrough.
+5. Obtain explicit confirmation before merging OpenScience or Atlas.
+6. Run the exact signed/notarized desktop artifact canary from the immutable
+   release candidate.
+7. With explicit cost and production approval, run one bounded Modal,
+   GiveMeANode, Atlas managed-call, and Stripe/Ace canary with cleanup evidence.
+8. Release the next unused stable version, verify every immutable asset,
+   notarization/signature/provenance, website, and in-app update behavior.
 
-Provider truth:
-
-- Governed today: local, SSH, Modal.
-- Credential/CLI bridge: TensorPool, Lambda, Prime Intellect, Vast.ai, RunPod.
-- Stored credential only: AWS, GCP, Azure, NVIDIA NIM/NGC.
-- GiveMeANode stage 1 is a one-click OAuth MCP connector. Stage 2 is a typed
-  JobBroker target; raw node provisioning is not delegated directly to the
-  model.
-
-Every provider contract is pinned to its official documentation. Doctors are
-read-only and must not create a billable resource.
-
-### 7. Ace billing and recovery
-
-| ID      | Outcome                                                                                       | Status | Required evidence                    |
-| ------- | --------------------------------------------------------------------------------------------- | ------ | ------------------------------------ |
-| BILL-01 | Docs and UI match $0 Ace activation, purchased-only threshold, fixed $20 reload, separate fee | todo   | server-constant copy contract        |
-| BILL-02 | 402 includes reload state/retry guidance and only pre-dispatch work auto-retries once         | todo   | webhook/idempotency tests            |
-| BILL-03 | Monthly limit includes pending/committed spend and is visible during consent                  | todo   | concurrent hold tests                |
-| BILL-04 | Whole-cent legacy settlement path is unreachable/fail-closed                                  | todo   | production-caller and negative tests |
-| BILL-05 | Catalog-wide maximum-cost reservations prevent unlimited under-reserve spend                  | todo   | model/image/search invariant tests   |
-
-Wallet always means purchased balance. Promotional credits remain a separate,
-expiring plan benefit. An insufficient hold must stop before provider dispatch.
-
-### 8. Deep verification, landing, deployment, and release
-
-1. Run focused behavior tests during each slice; run typecheck, formatting, and
-   diff checks before every PR.
-2. Review each slice against exact latest main and resolve Aayam overlap before
-   landing.
-3. Run complete backend/workspace/desktop suites, production builds, migration
-   matrices, accessibility checks, and responsive browser QA.
-4. Run packaged clean-root onboarding, signed macOS update/rollback, storage
-   relocation, SSH, local compute, Modal, and provider-free connector doctors.
-5. Run `test publish` from the exact green main and require all immutable npm,
-   OS smoke, packaged E2E, and scientific capability gates.
-6. Run the bounded paid Modal canary from the exact candidate. Stop on the first
-   failure and confirm resource cleanup.
-7. Repair the workflow-capable release identity. Release the next unused stable
-   version; verify 20 exact assets, package provenance/signatures, DMG and ZIP
-   identities, notarization, stable tags, website, and in-app update.
-8. Deploy Atlas exact green main, verify Firecrawl policy, make one bounded
-   Wallet-funded search, and prove no new Nia use. Only after the Nia-free
-   backend is live, inventory and delete authorized private upstream Nia
-   sources, then remove/revoke its credential.
-
-Paid/provider actions remain fail-closed: doctors and fake-provider tests first;
-one bounded canary only after every non-paid gate is green.
+No merge, deployment, paid provider call, Stripe mutation, or stable release is
+complete at this snapshot.
