@@ -405,32 +405,24 @@ jobs:
           key: cli-build-${{ needs.version.outputs.version }}
           fail-on-cache-miss: true
 
+      - name: Import Developer ID identity
+        if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'
+        uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
+        with:
+          p12-file-base64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          p12-password: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+
       - name: Developer ID sign and notarize macOS binaries
         if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'
         shell: bash
         env:
-          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
-          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
           APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
           APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          certificate="$RUNNER_TEMP/openscience-developer-id.p12"
-          keychain="$RUNNER_TEMP/openscience-signing.keychain-db"
-          keychain_password="$(openssl rand -hex 24)"
-          trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true; rm -f "$certificate"' EXIT
-
-          printf '%s' "$APPLE_DEVELOPER_ID_P12_BASE64" | openssl base64 -d -A -out "$certificate"
-          security create-keychain -p "$keychain_password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$certificate" -k "$keychain" -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
-          if ! security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"; then
-            echo "::warning::The runner could not update the imported key's partition list; continuing with the explicit codesign ACL from security import. Signature and Team ID verification remain mandatory."
-          fi
-
-          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
+          identities="$(security find-identity -v -p codesigning)"
+          identity="$(sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' <<<"$identities" | head -n 1)"
           if [[ -z "$identity" ]]; then
             echo "::error::The imported certificate does not contain a Developer ID Application identity."
             exit 1
@@ -445,7 +437,7 @@ jobs:
           for binary in "${binaries[@]}"; do
             codesign --force --options runtime --timestamp \
               --identifier ai.syntheticsciences.openscience \
-              --keychain "$keychain" --sign "$identity" "$binary"
+              --sign "$identity" "$binary"
             codesign --verify --strict --verbose=2 "$binary"
             details="$(codesign -dv --verbose=4 "$binary" 2>&1)"
             grep -Fxq 'Identifier=ai.syntheticsciences.openscience' <<<"$details"
