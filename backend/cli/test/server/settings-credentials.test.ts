@@ -79,7 +79,7 @@ test("credential catalog is categorized and injects integration and compute envi
       'for (const id of ["openalex", "huggingface", "tinker", "wandb", "pinecone", "langsmith"]) {',
       '  if (!integration.includes(id)) throw new Error("missing integration " + id)',
       "}",
-      '// Code sync is retired: the GitHub PAT slot must be gone from the catalog.',
+      "// Code sync is retired: the GitHub PAT slot must be gone from the catalog.",
       'if (services.some((service) => service.id === "github")) throw new Error("retired github credential slot is still listed")',
       'for (const id of ["aws", "gcp", "azure", "nvidia"]) {',
       '  if (!compute.includes(id)) throw new Error("missing compute credential " + id)',
