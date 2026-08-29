@@ -23831,6 +23831,78 @@
         ]
       }
     },
+    "/auth/{providerID}/onboarding": {
+      "put": {
+        "operationId": "auth.onboarding",
+        "summary": "Configure an onboarding provider credential",
+        "description": "Atomically save one local provider key and select BYOK model access.",
+        "responses": {
+          "200": {
+            "description": "Provider credential and BYOK mode configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "configured"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Configuration failed and compensation was attempted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "providerID",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiAuth"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.auth.onboarding({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/auth/{providerID}": {
       "put": {
         "operationId": "auth.set",
@@ -58144,6 +58216,22 @@
           "data"
         ]
       },
+      "ApiAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "api"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "key"
+        ]
+      },
       "OAuth": {
         "type": "object",
         "properties": {
@@ -58172,22 +58260,6 @@
           "refresh",
           "access",
           "expires"
-        ]
-      },
-      "ApiAuth": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "api"
-          },
-          "key": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "key"
         ]
       },
       "WellKnownAuth": {

@@ -17,6 +17,7 @@ import type {
   AccountLogoutResponses,
   AccountSessionResponses,
   AgentPartInput,
+  ApiAuth,
   AppAgentsResponses,
   AppLogErrors,
   AppLogResponses,
@@ -24,6 +25,8 @@ import type {
   AppSkillsResponses,
   AppSkillWriteResponses,
   Auth as Auth3,
+  AuthOnboardingErrors,
+  AuthOnboardingResponses,
   AuthRemoveErrors,
   AuthRemoveResponses,
   AuthSetErrors,
@@ -2304,6 +2307,41 @@ export class Settings extends HeyApiClient {
 }
 
 export class Auth extends HeyApiClient {
+  /**
+   * Configure an onboarding provider credential
+   *
+   * Atomically save one local provider key and select BYOK model access.
+   */
+  public onboarding<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      apiAuth?: ApiAuth
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { key: "apiAuth", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<AuthOnboardingResponses, AuthOnboardingErrors, ThrowOnError>({
+      url: "/auth/{providerID}/onboarding",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
   /**
    * Remove auth credentials
    *

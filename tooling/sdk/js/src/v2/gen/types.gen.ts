@@ -2091,6 +2091,11 @@ export type NotFoundError = {
   }
 }
 
+export type ApiAuth = {
+  type: "api"
+  key: string
+}
+
 export type OAuth = {
   type: "oauth"
   refresh: string
@@ -2098,11 +2103,6 @@ export type OAuth = {
   expires: number
   accountId?: string
   enterpriseUrl?: string
-}
-
-export type ApiAuth = {
-  type: "api"
-  key: string
 }
 
 export type WellKnownAuth = {
@@ -9464,6 +9464,37 @@ export type SettingsScientificToolsResponses = {
 }
 
 export type SettingsScientificToolsResponse = SettingsScientificToolsResponses[keyof SettingsScientificToolsResponses]
+
+export type AuthOnboardingData = {
+  body?: ApiAuth
+  path: {
+    providerID: string
+  }
+  query?: never
+  url: "/auth/{providerID}/onboarding"
+}
+
+export type AuthOnboardingErrors = {
+  /**
+   * Configuration failed and compensation was attempted
+   */
+  500: {
+    error: string
+  }
+}
+
+export type AuthOnboardingError = AuthOnboardingErrors[keyof AuthOnboardingErrors]
+
+export type AuthOnboardingResponses = {
+  /**
+   * Provider credential and BYOK mode configured
+   */
+  200: {
+    configured: true
+  }
+}
+
+export type AuthOnboardingResponse = AuthOnboardingResponses[keyof AuthOnboardingResponses]
 
 export type AuthRemoveData = {
   body?: never
