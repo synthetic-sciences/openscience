@@ -619,13 +619,40 @@
                         "locked",
                         "organizations"
                       ]
+                    },
+                    "credential": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "personal",
+                                "organization"
+                              ]
+                            },
+                            "legacy": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "legacy"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
                     "session",
                     "balance_usd",
                     "billing_mode",
-                    "funding_context"
+                    "funding_context",
+                    "credential"
                   ]
                 }
               }

@@ -22,6 +22,8 @@ export const URLS = {
   dashboardCli: "https://app.syntheticsciences.ai/cli",
   /** Plans and shared wallet. */
   dashboardBilling: "https://app.syntheticsciences.ai/billing",
+  /** Workspace chooser with the creation form open. */
+  dashboardWorkspaces: "https://app.syntheticsciences.ai/workspaces?create=1",
   /** GitHub integration settings. */
   githubIntegration: "https://app.syntheticsciences.ai/settings/integrations",
   /** Notification favicon. */

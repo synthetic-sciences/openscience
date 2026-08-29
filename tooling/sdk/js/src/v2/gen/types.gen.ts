@@ -2791,6 +2791,10 @@ export type AccountGetResponses = {
         effective_permissions: Array<string>
       }>
     }
+    credential: {
+      type: "personal" | "organization"
+      legacy: boolean
+    } | null
   }
 }
 

@@ -38,7 +38,10 @@ describe("General workspace switching", () => {
     expect(source).toContain("sdk.client.account.loginBrowser()")
     expect(source).not.toContain("sdk.client.account.fundingContext.set")
     expect(source).not.toContain("<FilterMenu")
-    expect(source).toContain("approve Personal or one of your teams")
+    expect(source).toContain("approve Personal or one of your shared workspaces")
+    expect(source).toContain("Create workspace")
+    expect(source).toContain("URLS.dashboardWorkspaces")
+    expect(source).toContain("This legacy thk_ key remains connected to Personal")
   })
 
   test("keeps the current workspace active while browser approval is pending or fails", async () => {

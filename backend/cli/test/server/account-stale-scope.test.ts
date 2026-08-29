@@ -45,6 +45,7 @@ describe("account.summary stale workspace scope", () => {
       session: true,
       balance_usd: null,
       billing_mode: null,
+      credential: { type: "personal", legacy: true },
       funding_context: {
         type: "personal",
         available: false,

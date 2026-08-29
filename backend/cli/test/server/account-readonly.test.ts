@@ -46,8 +46,51 @@ test("account GET reads the profile without publishing a credential revision", a
   expect(data.user).toEqual({ user_id: "user-1", email: "researcher@example.com", subscription_plan: "pro" })
   expect(data.balance_usd).toBe(12.5)
   expect(data.billing_mode.mode).toBe("byok")
+  expect(data.credential).toEqual({ type: "personal", legacy: true })
   expect(process.env["OPENAI_API_KEY"]).not.toBe("must-not-be-applied")
   expect(await Bun.file(revision).exists()).toBe(false)
+})
+
+test("account GET reports immutable personal and organization credentials", async () => {
+  await Bun.write(
+    session,
+    JSON.stringify({ api_key: "thk_personal.secret", user_id: "user-1", workspace_locked: true }),
+  )
+  OpenScience.invalidateBalance()
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input)
+    if (url.endsWith("/api/v1/auth/status")) {
+      return Response.json({
+        api_key: { organization_id: null, workspace_locked: true },
+        organizations: [],
+        funding_context: { type: "personal", locked: true },
+      })
+    }
+    if (url.endsWith("/api/cli/sync")) return Response.json({ user: { user_id: "user-1" }, services: {} })
+    if (url.endsWith("/api/cli/balance")) return Response.json({ balance_usd: 0 })
+    if (url.endsWith("/api/v1/wallet")) return Response.json({ balance_cents: 0 })
+    if (url.endsWith("/api/cli/access")) return Response.json({ managed_supported: true })
+    if (url.endsWith("/api/cli/billing-mode")) {
+      return Response.json({ mode: "byok", balance_cents: 0, balance_usd: 0, managed_supported: true })
+    }
+    return new Response("not found", { status: 404 })
+  }) as typeof fetch
+
+  const personal = await AccountRoutes().request("/")
+  expect((await personal.json()).credential).toEqual({ type: "personal", legacy: false })
+
+  await Bun.write(
+    session,
+    JSON.stringify({
+      api_key: "osk_workspace.secret",
+      user_id: "user-1",
+      organization_id: "org_alpha",
+      workspace_locked: true,
+    }),
+  )
+  OpenScience.invalidateBalance()
+  const workspace = await AccountRoutes().request("/")
+  expect((await workspace.json()).credential).toEqual({ type: "organization", legacy: false })
 })
 
 test("account routes keep unavailable distinct from a real negative balance", async () => {

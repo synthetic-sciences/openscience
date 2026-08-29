@@ -8,6 +8,7 @@ import { GlobalBus } from "@/bus/global"
 import { lazy } from "@/util/lazy"
 import { GlobalDisposedEvent } from "./global"
 import { openUrl } from "@/util/open-url"
+import { isOrganizationWorkspaceKey } from "@/credentials/managed-key"
 
 const Device = z.object({
   key_id: z.string(),
@@ -45,6 +46,20 @@ const FundingContext = z.object({
   locked: z.boolean(),
   organizations: z.array(FundingOrganization),
 })
+
+const Credential = z.object({
+  type: z.enum(["personal", "organization"]),
+  legacy: z.boolean(),
+})
+
+function credential(session: { api_key: string; workspace_locked?: boolean } | null) {
+  if (!session) return null
+  const organization = isOrganizationWorkspaceKey(session.api_key)
+  return {
+    type: organization ? ("organization" as const) : ("personal" as const),
+    legacy: !organization && session.workspace_locked !== true,
+  }
+}
 
 function emitDisposed() {
   GlobalBus.emit("event", {
@@ -96,6 +111,7 @@ export const AccountRoutes = lazy(() =>
                     balance_usd: z.number().nullable(),
                     billing_mode: BillingMode.nullable(),
                     funding_context: FundingContext,
+                    credential: Credential.nullable(),
                   }),
                 ),
               },
@@ -116,6 +132,7 @@ export const AccountRoutes = lazy(() =>
             session: true,
             balance_usd: null,
             billing_mode: null,
+            credential: credential(await OpenScience.getSession()),
             funding_context: {
               type: "personal" as const,
               available: false,
@@ -129,6 +146,7 @@ export const AccountRoutes = lazy(() =>
             session: false,
             balance_usd: null,
             billing_mode: null,
+            credential: null,
             funding_context: {
               type: "personal" as const,
               available: true,
@@ -148,6 +166,7 @@ export const AccountRoutes = lazy(() =>
           balance_usd: credits?.balanceUsd ?? null,
           billing_mode: billing,
           funding_context: state.context,
+          credential: credential(state.snapshot),
         })
       },
     )

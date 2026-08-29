@@ -119,8 +119,8 @@ export function AccountGate(props: ParentProps) {
                 <p class="account-gate__eyebrow">Your research workspace</p>
                 <h1 id="account-gate-title">Connect OpenScience</h1>
                 <p>
-                  Sign in with your Synthetic Sciences account to connect this device. Model access stays optional and
-                  can be configured after sign in.
+                  Sign in with your Synthetic Sciences account, then choose Personal or one of your shared workspaces.
+                  Model access stays optional and can be configured after sign in.
                 </p>
                 <div class="account-gate__actions">
                   <Button variant="primary" size="small" disabled={busy()} onClick={() => void connectBrowser()}>
@@ -134,7 +134,10 @@ export function AccountGate(props: ParentProps) {
                 </Show>
                 <details class="account-gate__advanced">
                   <summary>Connect with a device key</summary>
-                  <p>For headless or managed setups. Create a key from app.syntheticsciences.ai.</p>
+                  <p>
+                    For headless or managed setups. Legacy thk_ keys connect Personal; osk_ keys connect one shared
+                    workspace. Create a key from app.syntheticsciences.ai.
+                  </p>
                   <label class="account-gate__field">
                     <span>Synthetic Sciences API key</span>
                     <TextField
