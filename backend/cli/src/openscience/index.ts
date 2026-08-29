@@ -723,7 +723,11 @@ export namespace OpenScience {
       "managed-session.workspace",
       async () => {
         const current = await getSession()
-        return !!current && current.api_key === apiKey && (!current.workspace_locked || current.organization_id !== organizationID)
+        return (
+          !!current &&
+          current.api_key === apiKey &&
+          (!current.workspace_locked || current.organization_id !== organizationID)
+        )
       },
       async () => {
         using _ = await Lock.write(filepath)
@@ -976,8 +980,7 @@ export namespace OpenScience {
       const replacingCredential = previous?.api_key !== session.api_key
       const changingSubject = previous?.user_id !== session.user_id
       const changingWorkspace =
-        previous?.organization_id !== session.organization_id ||
-        previous?.workspace_locked !== session.workspace_locked
+        previous?.organization_id !== session.organization_id || previous?.workspace_locked !== session.workspace_locked
       if (previous && (replacingCredential || changingSubject)) {
         // Give account A's still-present credential the first chance to finish
         // its opt-out. If it is offline or revoked, the telemetry state already
