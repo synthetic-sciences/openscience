@@ -687,6 +687,94 @@ test("revert ignores malformed patch files through a symlinked parent", async ()
   }
 })
 
+test("revert fails closed when a verified deletion parent is swapped for an external symlink", async () => {
+  if (process.platform === "win32") return
+  await using tmp = await bootstrap()
+  const outside = `${tmp.path}-snapshot-race-outside`
+  const displaced = `${tmp.path}-snapshot-race-parent`
+  await fs.mkdir(outside)
+  await Bun.write(path.join(outside, "sentinel.txt"), "outside sentinel")
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const before = await Snapshot.track()
+        expect(before).toBeTruthy()
+        const parent = path.join(tmp.path, "nested")
+        await fs.mkdir(parent)
+        await Bun.write(path.join(parent, "sentinel.txt"), "worktree file")
+        const patch = await Snapshot.patch(before!)
+        const swapped = { value: false }
+
+        using barrier = Snapshot.testing({
+          afterMutationParentVerify: async (operation, target) => {
+            if (operation !== "remove" || target !== path.join(parent, "sentinel.txt")) return
+            swapped.value = true
+            await fs.rename(parent, displaced)
+            await fs.symlink(outside, parent)
+          },
+        })
+        const result = await Snapshot.revert([patch])
+
+        expect(swapped.value).toBe(true)
+        expect(result.status).toBe("partial")
+        expect(result.errors[0]?.message).toContain("identity changed")
+        expect(await Bun.file(path.join(outside, "sentinel.txt")).text()).toBe("outside sentinel")
+      },
+    })
+  } finally {
+    await fs.rm(path.join(tmp.path, "nested"), { force: true })
+    await fs.rename(displaced, path.join(tmp.path, "nested")).catch(() => undefined)
+    await fs.rm(outside, { recursive: true, force: true })
+  }
+})
+
+test("revert fails closed when a verified restore parent is swapped for an external symlink", async () => {
+  if (process.platform === "win32") return
+  await using tmp = await bootstrap()
+  const outside = `${tmp.path}-snapshot-restore-race-outside`
+  const displaced = `${tmp.path}-snapshot-restore-race-parent`
+  const parent = path.join(tmp.path, "nested")
+  const file = path.join(parent, "sentinel.txt")
+  await fs.mkdir(outside)
+  await Bun.write(path.join(outside, "sentinel.txt"), "outside sentinel")
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await fs.mkdir(parent)
+        await Bun.write(file, "snapshot content")
+        const before = await Snapshot.track()
+        expect(before).toBeTruthy()
+        await Bun.write(file, "changed content")
+        const patch = await Snapshot.patch(before!)
+        const swapped = { value: false }
+
+        using barrier = Snapshot.testing({
+          afterMutationParentVerify: async (operation, target) => {
+            if (operation !== "restore" || target !== file) return
+            swapped.value = true
+            await fs.rename(parent, displaced)
+            await fs.symlink(outside, parent)
+          },
+        })
+        const result = await Snapshot.revert([patch])
+
+        expect(swapped.value).toBe(true)
+        expect(result.status).toBe("partial")
+        expect(result.errors[0]?.message).toContain("identity changed")
+        expect(await Bun.file(path.join(outside, "sentinel.txt")).text()).toBe("outside sentinel")
+      },
+    })
+  } finally {
+    await fs.rm(parent, { force: true })
+    await fs.rename(displaced, parent).catch(() => undefined)
+    await fs.rm(outside, { recursive: true, force: true })
+  }
+})
+
 test("diff reports worktree-only/shared edits and ignores primary-only", async () => {
   await using tmp = await bootstrap()
   const worktreePath = `${tmp.path}-worktree`

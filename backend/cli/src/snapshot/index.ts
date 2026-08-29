@@ -8,11 +8,30 @@ import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Scheduler } from "../scheduler"
 import { Filesystem } from "../util/filesystem"
+import { SnapshotSafeIO } from "./safe-io"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
   const hour = 60 * 60 * 1000
   const prune = "7.days"
+
+  type TestHooks = {
+    afterMutationParentVerify?: (operation: "remove" | "restore", target: string) => void | Promise<void>
+  }
+
+  const hooks = { value: undefined as TestHooks | undefined }
+
+  /** Deterministic parent-swap barrier for the real snapshot mutation path. */
+  export function testing(input: TestHooks) {
+    if (!process.env.OPENSCIENCE_TEST_HOME) throw new Error("Snapshot test hooks are disabled outside tests")
+    const prior = hooks.value
+    hooks.value = input
+    return {
+      [Symbol.dispose]() {
+        if (hooks.value === input) hooks.value = prior
+      },
+    }
+  }
 
   export function init() {
     Scheduler.register({
@@ -217,58 +236,6 @@ export namespace Snapshot {
     return result.text().trim()
   }
 
-  async function safeDelete(target: string, root: string) {
-    if (target === root || !Filesystem.contains(root, target))
-      throw new Error("Refused to remove a path outside the worktree.")
-    const relative = path.relative(root, target)
-    const pieces = relative.split(path.sep)
-    let current = root
-    for (const piece of pieces.slice(0, -1)) {
-      current = path.join(current, piece)
-      const stat = await fs.lstat(current).catch(() => undefined)
-      if (!stat) return false
-      if (stat.isSymbolicLink()) throw new Error("Refused to follow a symlinked parent outside the snapshot plan.")
-      if (!stat.isDirectory()) throw new Error("A parent path is not a directory.")
-    }
-    const stat = await fs.lstat(target).catch(() => undefined)
-    if (!stat) return false
-    await fs.rm(target, { recursive: true, force: true })
-    return true
-  }
-
-  async function prepareParent(target: string, root: string) {
-    if (target === root || !Filesystem.contains(root, target))
-      throw new Error("Refused to write a path outside the worktree.")
-    const relative = path.relative(root, path.dirname(target))
-    if (!relative) return
-    let current = root
-    for (const piece of relative.split(path.sep)) {
-      current = path.join(current, piece)
-      const stat = await fs.lstat(current).catch(() => undefined)
-      if (!stat) {
-        await fs.mkdir(current)
-        continue
-      }
-      if (stat.isDirectory() && !stat.isSymbolicLink()) continue
-      // The target tree requires a directory here. Remove only the in-worktree
-      // path entry itself; never follow a symlink into its destination.
-      await fs.rm(current, { recursive: true, force: true })
-      await fs.mkdir(current)
-    }
-  }
-
-  async function removeEmptyParents(target: string, boundary: string) {
-    let current = path.dirname(target)
-    while (current !== boundary && Filesystem.contains(boundary, current)) {
-      const removed = await fs
-        .rmdir(current)
-        .then(() => true)
-        .catch(() => false)
-      if (!removed) return
-      current = path.dirname(current)
-    }
-  }
-
   async function applyTree(hash: string, files: string[]): Promise<RevertResult> {
     if (files.length === 0) return { status: "noop", restored: [], removed: [], skipped: [], errors: [] }
     const git = gitdir()
@@ -328,11 +295,11 @@ export namespace Snapshot {
       .filter(([, entry]) => !entry)
       .toSorted(([a], [b]) => b.split("/").length - a.split("/").length)
     for (const [relative] of deletions) {
-      const target = worktreePath(relative)
       try {
-        const changed = await safeDelete(target, root)
+        const changed = await SnapshotSafeIO.remove(root, relative, {
+          afterParentVerify: hooks.value?.afterMutationParentVerify,
+        })
         if (changed) removed.push(relative)
-        await removeEmptyParents(target, root)
       } catch (error) {
         errors.push({ file: relative, message: error instanceof Error ? error.message : String(error) })
       }
@@ -344,15 +311,21 @@ export namespace Snapshot {
       .filter((item): item is [string, PlannedEntry] => Boolean(item[1]))
       .toSorted(([a], [b]) => a.split("/").length - b.split("/").length)
     for (const [relative, entry] of writes) {
-      const target = worktreePath(relative)
       try {
-        await prepareParent(target, root)
-        await fs.rm(target, { recursive: true, force: true })
         if (entry.mode === "120000") {
-          await fs.symlink(new TextDecoder().decode(entry.content), target)
+          await SnapshotSafeIO.restore(
+            root,
+            relative,
+            { kind: "symlink", target: new TextDecoder().decode(entry.content) },
+            { afterParentVerify: hooks.value?.afterMutationParentVerify },
+          )
         } else {
-          await fs.writeFile(target, entry.content)
-          await fs.chmod(target, entry.mode === "100755" ? 0o755 : 0o644)
+          await SnapshotSafeIO.restore(
+            root,
+            relative,
+            { kind: "file", content: entry.content, mode: entry.mode === "100755" ? 0o755 : 0o644 },
+            { afterParentVerify: hooks.value?.afterMutationParentVerify },
+          )
         }
         restored.push(relative)
       } catch (error) {
