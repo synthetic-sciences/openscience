@@ -7,6 +7,15 @@ import { JsonStore } from "../../src/util/jsonstore"
 
 const filepath = path.join(Global.Path.data, "mcp-auth.json")
 
+// Decoded authority fingerprints enter the process-wide secret redaction set.
+// Use fixture-specific digests instead of common repeated-hex placeholders so
+// this suite cannot redact unrelated integrity hashes in later test files.
+const authorityFingerprint = (label: string) =>
+  new Bun.CryptoHasher("sha256").update(`mcp-auth-test:${label}`).digest("hex")
+const oauthAuthority = authorityFingerprint("oauth-authority")
+const completedAuthority = authorityFingerprint("completed-authority")
+const credentialAuthority = authorityFingerprint("credential-authority")
+
 async function clean() {
   await fs.mkdir(Global.Path.data, { recursive: true })
   const entries = await fs.readdir(Global.Path.data)
@@ -64,12 +73,12 @@ test("seals OAuth tokens, client secrets, PKCE state, and callback codes at rest
       oauthStartedAt: Date.now(),
       oauthAuthorizationUrl: "https://id.example/authorize?state=state-real",
       oauthServerUrl: "https://mcp.example/",
-      oauthAuthorityFingerprint: "a".repeat(64),
+      oauthAuthorityFingerprint: oauthAuthority,
       oauthCallback: { type: "code", value: "authorization-code-real" },
       oauthCompletedState: "completed-state-real",
       oauthCompletedAt: Date.now(),
-      oauthCompletedAuthorityFingerprint: "b".repeat(64),
-      credentialAuthorityFingerprint: "c".repeat(64),
+      oauthCompletedAuthorityFingerprint: completedAuthority,
+      credentialAuthorityFingerprint: credentialAuthority,
     },
     "https://mcp.example",
   )
@@ -84,9 +93,9 @@ test("seals OAuth tokens, client secrets, PKCE state, and callback codes at rest
     "state-real",
     "https://id.example/authorize?state=state-real",
     "authorization-code-real",
-    "a".repeat(64),
+    oauthAuthority,
     "completed-state-real",
-    "b".repeat(64),
+    completedAuthority,
   ]) {
     expect(disk).not.toContain(secret)
   }
@@ -97,10 +106,10 @@ test("seals OAuth tokens, client secrets, PKCE state, and callback codes at rest
     oauthState: "state-real",
     oauthAuthorizationUrl: "https://id.example/authorize?state=state-real",
     oauthCallback: { type: "code", value: "authorization-code-real" },
-    oauthAuthorityFingerprint: "a".repeat(64),
+    oauthAuthorityFingerprint: oauthAuthority,
     oauthCompletedState: "completed-state-real",
-    oauthCompletedAuthorityFingerprint: "b".repeat(64),
-    credentialAuthorityFingerprint: "c".repeat(64),
+    oauthCompletedAuthorityFingerprint: completedAuthority,
+    credentialAuthorityFingerprint: credentialAuthority,
   })
 })
 
@@ -108,7 +117,7 @@ test("OAuth token settlement is exact, durable, and cancellation-aware", async (
   const name = "settlement"
   const state = "state-settlement"
   const url = "https://mcp.example/"
-  const fingerprint = "c".repeat(64)
+  const fingerprint = credentialAuthority
   await McpAuth.updateOAuthState(name, state, {
     serverUrl: url,
     authorityFingerprint: fingerprint,
