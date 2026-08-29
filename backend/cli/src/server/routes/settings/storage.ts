@@ -115,7 +115,7 @@ async function scanUsage(dataDir: string): Promise<ScanResult> {
   }
 }
 
-function refreshUsage(dataDir: string) {
+function refreshUsage(dataDir: string, refresh = false) {
   if (usageScan.dataDir !== dataDir) {
     usageScan.dataDir = dataDir
     usageScan.value = undefined
@@ -125,7 +125,12 @@ function refreshUsage(dataDir: string) {
   }
   const fresh = usageScan.value && Date.now() - Date.parse(usageScan.value.updated_at) < 30_000
   const recentError = usageScan.errorAt !== undefined && Date.now() - usageScan.errorAt < 30_000
-  if (fresh || recentError || usageScan.promise) return
+  if (usageScan.promise) return
+  if (!refresh && (fresh || recentError)) return
+  if (refresh) {
+    usageScan.error = undefined
+    usageScan.errorAt = undefined
+  }
   usageScan.promise = scanUsage(dataDir)
     .then((value) => {
       if (usageScan.dataDir !== dataDir) return
@@ -163,13 +168,15 @@ export const StorageRoutes = lazy(() =>
       "/",
       describeRoute({
         summary: "Get storage usage",
-        description: "Real on-disk sizes for the active OpenScience data directory and its top-level entries.",
+        description:
+          "Real on-disk sizes for the active OpenScience data directory and its top-level entries. Pass refresh=1 to bypass the result and error retry TTL.",
         operationId: "settings.storage.usage",
         responses: { 200: { description: "Usage", content: { "application/json": { schema: resolver(Usage) } } } },
       }),
+      validator("query", z.object({ refresh: z.literal("1").optional() })),
       async (c) => {
         const dataDir = await fs.realpath(Global.Path.data)
-        refreshUsage(dataDir)
+        refreshUsage(dataDir, c.req.valid("query").refresh === "1")
         const pointer = await Bun.file(pointerPath)
           .text()
           .then((text) => text.trim() || null)

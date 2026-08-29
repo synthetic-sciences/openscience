@@ -35,6 +35,26 @@ function fmt(bytes: number): string {
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`
 }
 
+export function storageUsagePath(refresh = false) {
+  return refresh ? "/settings/storage?refresh=1" : "/settings/storage"
+}
+
+export async function storageLocationChoice(open: () => Promise<string | string[] | null>) {
+  return Promise.resolve()
+    .then(open)
+    .then(
+      (picked) => {
+        const path = Array.isArray(picked) ? picked[0] : picked
+        if (!path) return { kind: "cancelled" as const }
+        return { kind: "selected" as const, path }
+      },
+      (error) => ({
+        kind: "error" as const,
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    )
+}
+
 export const Storage: Component = () => {
   const sdk = useGlobalSDK()
   const platform = usePlatform()
@@ -53,13 +73,14 @@ export const Storage: Component = () => {
   let poll: ReturnType<typeof setTimeout> | undefined
   const schedulePoll = (next: Usage) => {
     if (poll) clearTimeout(poll)
-    poll = next.scanning ? setTimeout(() => void load(true), 1_500) : undefined
+    poll = next.scanning ? setTimeout(() => void load({ background: true }), 1_500) : undefined
   }
-  const load = async (background = false) => {
+  const load = async (options: { background?: boolean; refresh?: boolean } = {}) => {
+    const background = options.background ?? false
     if (!background) setLoading(true)
     if (!background) setError(undefined)
     try {
-      const next = await settingsApi<Usage>(base(), fetchFn(), "/settings/storage")
+      const next = await settingsApi<Usage>(base(), fetchFn(), storageUsagePath(options.refresh))
       setUsage(next)
       schedulePoll(next)
     } catch (err) {
@@ -73,6 +94,7 @@ export const Storage: Component = () => {
       if (!background) setLoading(false)
     }
   }
+  const retry = () => load({ background: Boolean(usage()), refresh: true })
   onMount(() => void load())
   onCleanup(() => {
     if (poll) clearTimeout(poll)
@@ -84,11 +106,14 @@ export const Storage: Component = () => {
     setError(undefined)
     setStatus(undefined)
     if (!platform.openDirectoryPickerDialog) return
-    const picked = await platform
-      .openDirectoryPickerDialog({ title: "Choose a new OpenScience data location", serverUrl: sdk.url })
-      .catch(() => null)
-    const selected = Array.isArray(picked) ? picked[0] : picked
-    if (selected) setTarget(selected)
+    const choice = await storageLocationChoice(() =>
+      platform.openDirectoryPickerDialog!({ title: "Choose a new OpenScience data location", serverUrl: sdk.url }),
+    )
+    if (choice.kind === "error") {
+      setError(`The system folder picker could not open. ${choice.message}`)
+      return
+    }
+    if (choice.kind === "selected") setTarget(choice.path)
   }
 
   const relocate = async () => {
@@ -109,7 +134,7 @@ export const Storage: Component = () => {
       setStatus(
         `Moved ${fmt(result.bytes)} across ${result.files} files. Every running OpenScience server now uses ${result.target}.${result.warning ? ` ${result.warning}` : ""}`,
       )
-      await load()
+      await load({ refresh: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -134,7 +159,7 @@ export const Storage: Component = () => {
           ? `Returned to ${result.target}. The previous default directory is preserved at ${result.backup}.`
           : `Returned to ${result.target}.`) + (result.warning ? ` ${result.warning}` : ""),
       )
-      await load()
+      await load({ refresh: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -159,7 +184,7 @@ export const Storage: Component = () => {
           <Show when={error()}>
             <div class="settings-alert whitespace-pre-wrap" data-tone="critical" role="alert">
               <span>{error()}</span>
-              <button type="button" class="settings-inline-action" disabled={loading()} onClick={() => void load()}>
+              <button type="button" class="settings-inline-action" disabled={loading()} onClick={() => void retry()}>
                 Retry
               </button>
             </div>
@@ -177,7 +202,7 @@ export const Storage: Component = () => {
               <div class="settings-alert" data-tone="warning" role="status">
                 <Icon name="alert-circle" size="small" class="shrink-0 text-icon-weak-base" />
                 <span>Disk usage could not be refreshed. Cached values remain visible. {message()}</span>
-                <button type="button" class="settings-inline-action" onClick={() => void load()}>
+                <button type="button" class="settings-inline-action" onClick={() => void retry()}>
                   Retry
                 </button>
               </div>

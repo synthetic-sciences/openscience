@@ -107,6 +107,37 @@ describe("Storage Settings integration", () => {
     await script(workspace, source)
   })
 
+  test("refresh=1 bypasses a fresh usage result without starting duplicate background scans", async () => {
+    const workspace = await root()
+    const source = [
+      `import { StorageRoutes } from ${JSON.stringify(routes)}`,
+      `import { Global } from ${JSON.stringify(globalModule)}`,
+      'import fs from "node:fs/promises"',
+      'import path from "node:path"',
+      'const first = path.join(Global.Path.data, "first")',
+      "await fs.mkdir(first, { recursive: true })",
+      'await fs.writeFile(path.join(first, "payload.bin"), Buffer.alloc(4096, 1))',
+      'const settle = async (url = "/") => {',
+      "  let body = await (await StorageRoutes().request(url)).json()",
+      "  const deadline = Date.now() + 10_000",
+      '  while (body.scanning && Date.now() < deadline) { await Bun.sleep(10); body = await (await StorageRoutes().request("/")).json() }',
+      '  if (body.scanning) throw new Error("usage scan did not settle")',
+      "  return body",
+      "}",
+      "const initial = await settle()",
+      'if (!initial.entries.some((item) => item.name === "first")) throw new Error("initial entry missing")',
+      'const second = path.join(Global.Path.data, "second")',
+      "await fs.mkdir(second)",
+      'await fs.writeFile(path.join(second, "payload.bin"), Buffer.alloc(4096, 2))',
+      'const cached = await (await StorageRoutes().request("/")).json()',
+      'if (cached.scanning) throw new Error("fresh cache unexpectedly started another scan")',
+      'if (cached.entries.some((item) => item.name === "second")) throw new Error("fresh cache unexpectedly changed")',
+      'const refreshed = await settle("/?refresh=1")',
+      'if (!refreshed.entries.some((item) => item.name === "second")) throw new Error("explicit refresh did not bypass the fresh result TTL")',
+    ].join("\n")
+    await script(workspace, source)
+  })
+
   test("reports scan failures instead of presenting unreadable storage as empty", async () => {
     if (process.platform === "win32") return
     const workspace = await root()
@@ -126,6 +157,13 @@ describe("Storage Settings integration", () => {
       '  if (body.scanning) throw new Error("usage scan did not settle")',
       '  if (!body.scan_error) throw new Error("unreadable storage was silently reported as a successful scan")',
       "} finally { await fs.chmod(blocked, 0o700) }",
+      'const cached = await (await StorageRoutes().request("/")).json()',
+      'if (cached.scanning || !cached.scan_error) throw new Error("the ordinary request did not honor the error retry TTL")',
+      'let retried = await (await StorageRoutes().request("/?refresh=1")).json()',
+      'if (!retried.scanning || retried.scan_error) throw new Error("explicit retry did not start a truthful fresh scan")',
+      "const deadline = Date.now() + 10_000",
+      'while (retried.scanning && Date.now() < deadline) { await Bun.sleep(20); retried = await (await StorageRoutes().request("/")).json() }',
+      'if (retried.scanning || retried.scan_error) throw new Error("explicit retry did not recover after the directory became readable")',
     ].join("\n")
     await script(workspace, source)
   })
