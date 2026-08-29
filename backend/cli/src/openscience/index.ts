@@ -16,7 +16,7 @@ import {
   SYNCED_SERVICE_ENV_KEYS,
   managedOpenRouterBaseURL,
 } from "./synced-env-policy"
-import { isAtlasManagedKey } from "../credentials/managed-key"
+import { isAtlasManagedKey, isOrganizationWorkspaceKey } from "../credentials/managed-key"
 import { BILLING_URL, DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ToolOutputPath } from "../tool/tool-output-path"
@@ -51,7 +51,7 @@ const syncedSecretValues = new Map<string, string>()
 // (a hot path in bash output streaming) can mask them without an async read.
 const byokSecretValues = new Set<string>()
 const TOKEN_SECRET_PATTERNS = [
-  /\b(?:thk[_-]|sk-|sk_|gsk_|hf_|nvapi-|ghp_|gho_|ghu_|ghs_|github_pat_|xox[baprs]-)[A-Za-z0-9._-]{8,}\b/g,
+  /\b(?:thk[_-]|osk_|sk-|sk_|gsk_|hf_|nvapi-|ghp_|gho_|ghu_|ghs_|github_pat_|xox[baprs]-)[A-Za-z0-9._-]{8,}\b/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
 ]
 const QUOTED_SECRET =
@@ -66,6 +66,10 @@ const SECRET_FIELD =
 
 function isManagedAtlasKey(value: string): boolean {
   return isAtlasManagedKey(value)
+}
+
+function isAccountKey(value: unknown): value is string {
+  return typeof value === "string" && (value.startsWith("thk_") || value.startsWith("osk_"))
 }
 
 function isManagedOpenRouterProxy(value: string | undefined): boolean {
@@ -145,13 +149,13 @@ const CONTROL_PLANE_ENV_KEYS = new Set(["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"])
 /**
  * Persistent CLI auth session.
  *
- * Holds the long-lived ``thk_*`` API key issued by the Atlas device-code
+ * Holds the long-lived Atlas API key issued by browser or key login
  * flow. Atlas API keys carry a 1-year TTL and are revoked by deletion
  * rather than expiry, so we don't track refresh tokens or expiry locally
  * — a 401 on any request signals "key revoked or expired, re-auth".
  */
 export interface OpenScienceSession {
-  /** Atlas-issued ``thk_<uuid>.<secret>`` Bearer token. */
+  /** Atlas-issued Personal (`thk_`) or organization-workspace (`osk_`) Bearer token. */
   api_key: string
   /** Atlas user_id (UUID). Stored for diagnostics; not used for auth. */
   user_id: string
@@ -413,6 +417,69 @@ export namespace OpenScience {
   }
 
   const filepath = path.join(Global.Path.data, "openscience-session.json")
+  const scopepath = path.join(Global.Path.data, "openscience-workspace-scope.json")
+  const FUNDING_PROTOCOL = "1"
+  const FUNDING_PROTOCOL_HEADER = "OpenScience-Funding-Protocol"
+  const FUNDING_CONTEXT_HEADER = "OpenScience-Funding-Context"
+
+  interface WorkspaceScope {
+    protocol: 1
+    key_fingerprint: string
+    organization_id?: string
+    workspace_locked: true
+  }
+
+  function keyFingerprint(key: string): string {
+    return new Bun.CryptoHasher("sha256").update(key).digest("hex")
+  }
+
+  function validOrganizationID(value: unknown): value is string {
+    return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value)
+  }
+
+  async function readWorkspaceScope(key: string): Promise<WorkspaceScope | null | undefined> {
+    if (!existsSync(scopepath)) return
+    return Bun.file(scopepath)
+      .json()
+      .then((value: unknown) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return null
+        const scope = value as Partial<WorkspaceScope>
+        if (scope.protocol !== 1 || scope.workspace_locked !== true) return null
+        if (scope.key_fingerprint !== keyFingerprint(key)) return undefined
+        if (scope.organization_id !== undefined && !validOrganizationID(scope.organization_id)) return null
+        return {
+          protocol: 1 as const,
+          key_fingerprint: scope.key_fingerprint,
+          ...(scope.organization_id ? { organization_id: scope.organization_id } : {}),
+          workspace_locked: true as const,
+        }
+      })
+      .catch(() => null)
+  }
+
+  async function writeWorkspaceScope(session: OpenScienceSession): Promise<void> {
+    const locked = session.workspace_locked === true || session.organization_locked === true
+    if (!locked) {
+      if (isOrganizationWorkspaceKey(session.api_key)) {
+        throw new FundingContextError("Organization credentials require an immutable organization workspace.")
+      }
+      await fs.unlink(scopepath).catch(() => undefined)
+      return
+    }
+    if (session.organization_id && !isOrganizationWorkspaceKey(session.api_key)) {
+      throw new FundingContextError("Sign in again to renew this organization workspace credential.")
+    }
+    if (!session.organization_id && isOrganizationWorkspaceKey(session.api_key)) {
+      throw new FundingContextError("An organization credential cannot be saved as a Personal workspace.")
+    }
+    const scope: WorkspaceScope = {
+      protocol: 1,
+      key_fingerprint: keyFingerprint(session.api_key),
+      ...(session.organization_id ? { organization_id: session.organization_id } : {}),
+      workspace_locked: true,
+    }
+    await atomicWrite(scopepath, JSON.stringify(scope, null, 2), { mode: 0o600 })
+  }
 
   /** Friendly device label sent to the backend. Surfaced in the
    *  user's Devices list so they can identify which machine each row
@@ -492,7 +559,11 @@ export namespace OpenScience {
     // Only fundedAtlasFetch may restore this header after the unconditional
     // removal, which keeps keys/devices/skills/graph/telemetry account-scoped.
     headers.delete("X-Organization-ID")
-    if (funding && session.organization_id) headers.set("X-Organization-ID", session.organization_id)
+    headers.delete(FUNDING_PROTOCOL_HEADER)
+    if (funding) {
+      headers.set(FUNDING_PROTOCOL_HEADER, FUNDING_PROTOCOL)
+      if (session.organization_id) headers.set("X-Organization-ID", session.organization_id)
+    }
     const response = await atlasFetch(input, { ...init, headers }, timeoutMs)
     if (response.status === 401) await clearRejectedSession(session.api_key)
     else await retryPendingTelemetryConsent().catch(() => false)
@@ -513,9 +584,8 @@ export namespace OpenScience {
   }
 
   /** Credential-sync request for the immutable workspace selected during
-   * browser login. A flexible legacy key may still select an organization for
-   * Wallet attribution, but it must never receive that organization's shared
-   * credentials. */
+   * browser login. Personal and legacy keys remain unscoped and can never
+   * receive an organization's shared credentials. */
   async function workspaceAtlasFetch(
     session: Pick<OpenScienceSession, "api_key" | "organization_id" | "workspace_locked">,
     input: string,
@@ -526,7 +596,7 @@ export namespace OpenScience {
       session.workspace_locked === true && session.organization_id
         ? session
         : { api_key: session.api_key, organization_id: undefined }
-    return accountAtlasFetch(scope, input, init, timeoutMs, true)
+    return fundedAtlasFetch(scope, input, init, timeoutMs)
   }
 
   /** Explicitly funded request. This is intentionally separate from the
@@ -538,7 +608,11 @@ export namespace OpenScience {
     init: RequestInit = {},
     timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
   ): Promise<Response> {
-    return accountAtlasFetch(session, input, init, timeoutMs, true)
+    if (session.organization_id && !isOrganizationWorkspaceKey(session.api_key)) {
+      throw new FundingContextError("Sign in again to renew this organization workspace credential.")
+    }
+    const response = await accountAtlasFetch(session, input, init, timeoutMs, true)
+    return validateFundingResponse(response, session)
   }
 
   export async function getSession(): Promise<OpenScienceSession | null> {
@@ -559,18 +633,28 @@ export namespace OpenScience {
         }
         return null
       }
-      const organizationID =
+      const persistedOrganizationID =
         data.organization_id === undefined
           ? undefined
-          : typeof data.organization_id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(data.organization_id)
+          : validOrganizationID(data.organization_id)
             ? data.organization_id
             : (() => {
                 throw new Error("invalid organization_id in the local OpenScience session")
               })()
-      if (data.organization_locked === true && !organizationID) {
+      if (data.organization_locked === true && !persistedOrganizationID) {
         throw new Error("organization-locked OpenScience session is missing its organization_id")
       }
-      const locked = data.workspace_locked === true || data.organization_locked === true
+      const scope = await readWorkspaceScope(data.api_key)
+      if (scope === null) throw new FundingContextError("The saved workspace scope is invalid. Sign in again.")
+      // A matching Personal sidecar intentionally has no organization id. It
+      // must override an organization value rewritten by an older client;
+      // nullish coalescing would incorrectly resurrect that stale selection.
+      const organizationID = scope ? scope.organization_id : persistedOrganizationID
+      const locked =
+        scope?.workspace_locked === true || data.workspace_locked === true || data.organization_locked === true
+      if (organizationID && locked && !isOrganizationWorkspaceKey(data.api_key)) {
+        throw new FundingContextError("Sign in again to renew this organization workspace credential.")
+      }
       return {
         api_key: data.api_key,
         user_id: data.user_id || "",
@@ -624,11 +708,19 @@ export namespace OpenScience {
       if (selected.api_key !== apiKey) {
         throw new FundingContextError("The connected account changed during this managed operation. Retry it.")
       }
+      if (selected.organization_id && !isOrganizationWorkspaceKey(apiKey)) {
+        throw new FundingContextError("Sign in again to renew this organization workspace credential.")
+      }
       return selected
     }
     if (existsSync(filepath)) {
       throw new FundingContextError(
         "OpenScience could not safely read the selected funding account. Repair the local session or sign in again.",
+      )
+    }
+    if (isOrganizationWorkspaceKey(apiKey)) {
+      throw new FundingContextError(
+        "An organization environment credential requires a saved workspace scope. Sign in again before using managed services.",
       )
     }
     return Object.freeze({
@@ -640,7 +732,45 @@ export namespace OpenScience {
 
   /** Non-secret header projection for an already-snapshotted operation. */
   export function fundingHeaders(snapshot: FundingSnapshot): Record<string, string> {
-    return snapshot.organization_id ? { "X-Organization-ID": snapshot.organization_id } : {}
+    return {
+      [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL,
+      ...(snapshot.organization_id ? { "X-Organization-ID": snapshot.organization_id } : {}),
+    }
+  }
+
+  /** Verify the modern gateway resolved the exact organization selected at
+   * operation start. An older gateway has no proof headers, so organization
+   * work fails before its response body or stream can be consumed. */
+  export async function validateFundingResponse(
+    response: Response,
+    snapshot: Pick<FundingSnapshot, "api_key" | "organization_id">,
+  ): Promise<Response> {
+    if (!snapshot.organization_id) {
+      if (!response.ok) return response
+      const protocol = response.headers.get(FUNDING_PROTOCOL_HEADER)
+      const context = response.headers.get(FUNDING_CONTEXT_HEADER)
+      if ((!context || context === "personal") && protocol !== FUNDING_PROTOCOL) return response
+      if (protocol === FUNDING_PROTOCOL && context === "personal") return response
+      await response.body?.cancel().catch(() => undefined)
+      throw new FundingContextError(
+        "The gateway resolved a different workspace for this credential. Sign in again before using managed services.",
+      )
+    }
+    if (!isOrganizationWorkspaceKey(snapshot.api_key)) {
+      await response.body?.cancel().catch(() => undefined)
+      throw new FundingContextError("Sign in again to renew this organization workspace credential.")
+    }
+    // An explicit rejection cannot spend or leak successful response data. Let
+    // the caller preserve its existing 401/402/403 handling instead of
+    // replacing a useful policy result with a missing-proof error.
+    if (!response.ok) return response
+    const protocol = response.headers.get(FUNDING_PROTOCOL_HEADER)
+    const context = response.headers.get(FUNDING_CONTEXT_HEADER)
+    if (protocol === FUNDING_PROTOCOL && context === `organization:${snapshot.organization_id}`) return response
+    await response.body?.cancel().catch(() => undefined)
+    throw new FundingContextError(
+      "OpenScience could not verify the selected organization with the gateway. No response data was accepted.",
+    )
   }
 
   function organizations(value: unknown): FundingOrganization[] {
@@ -686,24 +816,47 @@ export namespace OpenScience {
     workspace_locked: boolean
     funding_context?: AuthStatusResponse["funding_context"]
   } | null> {
-    const request = (operation: FundingSnapshot) =>
-      fundedAtlasFetch(operation, `${API_BASE}/api/v1/auth/status`, {
-        headers: { Accept: "application/json" },
-      }).catch(() => undefined)
-    const first = await request(snapshot)
+    const request = async (operation: FundingSnapshot) => {
+      const response = await accountAtlasFetch(
+        operation,
+        `${API_BASE}/api/v1/auth/status`,
+        { headers: { Accept: "application/json" } },
+        ATLAS_FETCH_TIMEOUT_MS,
+        true,
+      ).catch(() => undefined)
+      if (!response || !operation.organization_id) return response
+      return validateFundingResponse(response, operation).catch(() => undefined)
+    }
+    // Legacy thk_* keys can only represent Personal funding. If an older
+    // client persisted a local organization choice, ask Atlas for the key's
+    // immutable Personal scope directly. Sending the stale organization first
+    // would be rejected locally before Atlas could repair it.
+    const initial =
+      snapshot.organization_id && !isOrganizationWorkspaceKey(snapshot.api_key)
+        ? Object.freeze({ ...snapshot, organization_id: undefined })
+        : snapshot
+    const first = await request(initial)
     // An older client could have attached a local organization selection to a
     // newly locked Personal key. Retry this read without that header so Atlas
     // can report the immutable scope and repair the local session.
     const response =
-      first?.status === 403 && snapshot.organization_id
+      first?.status === 403 && snapshot.organization_id && isOrganizationWorkspaceKey(snapshot.api_key)
         ? await request(Object.freeze({ ...snapshot, organization_id: undefined }))
         : first
     if (!response?.ok) return null
+    const protocol = response.headers.get(FUNDING_PROTOCOL_HEADER)
+    const proof = response.headers.get(FUNDING_CONTEXT_HEADER)
     return response
       .json()
       .then((value) => {
         const body = value as AuthStatusResponse
         const pinned = loginOrganizationID(body.api_key?.organization_id)
+        const expected =
+          body.funding_context?.type === "organization" && body.funding_context.organization_id
+            ? `organization:${body.funding_context.organization_id}`
+            : "personal"
+        if (protocol === FUNDING_PROTOCOL && proof !== expected) return null
+        if (proof && proof !== expected) return null
         return {
           organizations: organizations(body.organizations ?? body.available_organizations),
           pinned_organization_id: pinned,
@@ -744,6 +897,7 @@ export namespace OpenScience {
         }
         delete next.organization_locked
         if (!organizationID) delete next.organization_id
+        await writeWorkspaceScope(next)
         await atomicWrite(filepath, JSON.stringify(next, null, 2), { mode: 0o600 })
         return true
       },
@@ -767,6 +921,9 @@ export namespace OpenScience {
     const status = await authStatus(snapshot)
     const pinned = status?.pinned_organization_id
     if (status?.workspace_locked) {
+      if (pinned && !isOrganizationWorkspaceKey(snapshot.api_key)) {
+        throw new FundingContextError("Sign in again to renew this organization workspace credential.")
+      }
       await reconcileWorkspaceScope(snapshot.api_key, pinned)
       if (!pinned) {
         const echoed = status.funding_context
@@ -780,7 +937,7 @@ export namespace OpenScience {
       }
       const row = status.organizations.find((item) => item.organization_id === pinned)
       const echoed = status.funding_context
-      const matches = !echoed || (echoed.type === "organization" && echoed.organization_id === pinned)
+      const matches = echoed?.type === "organization" && echoed.organization_id === pinned
       return {
         type: "organization",
         organization_id: pinned,
@@ -796,7 +953,7 @@ export namespace OpenScience {
     }
     const row = status?.organizations.find((item) => item.organization_id === snapshot.organization_id)
     const echoed = status?.funding_context
-    const matches = !echoed || (echoed.type === "organization" && echoed.organization_id === snapshot.organization_id)
+    const matches = echoed?.type === "organization" && echoed.organization_id === snapshot.organization_id
     return {
       type: "organization",
       organization_id: snapshot.organization_id,
@@ -835,10 +992,10 @@ export namespace OpenScience {
     return read(snapshot, 2)
   }
 
-  /** Change only the local non-secret funding selection. Flexible legacy keys
-   * validate organization choices against Atlas. A key issued for one
-   * organization cannot be relabeled locally; choosing another account
-   * requires a fresh login and separately scoped key. */
+  /** Change only the local non-secret funding selection. Organization funding
+   * always requires a separately issued workspace key. A key issued for one
+   * workspace cannot be relabeled locally; choosing another account requires
+   * a fresh browser login. */
   export async function setFundingContext(organizationID: string | null): Promise<FundingContext> {
     const connected = await getSession()
     if (!connected) throw new FundingContextError("Sign in before choosing a funding account.")
@@ -848,6 +1005,9 @@ export namespace OpenScience {
     const requested = organizationID ?? undefined
     if (connected.workspace_locked && requested !== connected.organization_id) {
       throw new FundingContextError("This sign-in is tied to one workspace. Sign in again to choose another account.")
+    }
+    if (requested && !isOrganizationWorkspaceKey(connected.api_key)) {
+      throw new FundingContextError("Sign in again to create a rollback-safe organization workspace.")
     }
     if (connected.workspace_locked) return getFundingContext()
     const snapshot = Object.freeze({
@@ -969,6 +1129,7 @@ export namespace OpenScience {
   async function writeSession(session: OpenScienceSession) {
     // Atomic temp+rename so a crash or a concurrent reader never sees a torn
     // session file (which getSession would mis-read as a logout).
+    await writeWorkspaceScope(session)
     await atomicWrite(filepath, JSON.stringify(session, null, 2), { mode: 0o600 })
   }
 
@@ -1264,6 +1425,10 @@ export namespace OpenScience {
       try {
         await fs.unlink(filepath)
       } catch {}
+      // Keep the non-secret scope guard if deleting the credential failed. If
+      // the session is gone, a leftover sidecar is harmless and the next login
+      // replaces it after matching the new key fingerprint.
+      if (!existsSync(filepath)) await fs.unlink(scopepath).catch(() => undefined)
       return true
     }
     const cleared =
@@ -1427,10 +1592,13 @@ export namespace OpenScience {
       if (!redeemRes.ok) throw new Error(await loginError(redeemRes, "redeem"))
       const redeemed = (await redeemRes.json()) as BrowserLoginResponse
       const key = redeemed.api_key || redeemed.key
-      if (typeof key !== "string" || !key.startsWith("thk_")) {
+      if (!isAccountKey(key)) {
         throw new Error("Login did not return a valid OpenScience API key.")
       }
       const organizationID = loginOrganizationID(redeemed.organization_id)
+      if (organizationID && !isOrganizationWorkspaceKey(key)) {
+        throw new Error("Organization login returned a legacy credential. Sign in again after the gateway updates.")
+      }
       const workspaceLocked = redeemed.workspace_locked === true || !!organizationID
       const identity = redeemed.user?.user_id || redeemed.user?.id || redeemed.user_id
 
@@ -1453,8 +1621,8 @@ export namespace OpenScience {
    *  Used when no local browser + loopback callback is available. */
   export async function loginWithKey(rawKey: string): Promise<OpenScienceSession> {
     const key = rawKey.trim()
-    if (!key.startsWith("thk_")) {
-      throw new Error("Expected an API key starting with `thk_`.")
+    if (!isAccountKey(key)) {
+      throw new Error("Expected an OpenScience API key starting with `thk_` or `osk_`.")
     }
     const res = await atlasFetch(`${API_BASE}/api/cli/balance`, {
       headers: { Authorization: `Bearer ${key}` },
@@ -1486,7 +1654,14 @@ export namespace OpenScience {
       return value
     })()
     const workspaceLocked = status?.api_key?.workspace_locked === true || !!pinned
-    const organizationID = pinned ?? (workspaceLocked ? undefined : selected)
+    const reportedOrganizationID = pinned ?? (workspaceLocked ? undefined : selected)
+    if (pinned && !isOrganizationWorkspaceKey(key)) {
+      throw new Error("This organization credential predates the rollback-safe login flow. Sign in again in a browser.")
+    }
+    // Old flexible Personal keys could carry a dashboard-selected organization
+    // in status. Keep the Personal login, but never turn that legacy selection
+    // into organization funding; a browser-approved `osk_` workspace is required.
+    const organizationID = isOrganizationWorkspaceKey(key) ? reportedOrganizationID : undefined
     // Read profile + credential state only after the immutable scope is known.
     // This prevents a pasted Personal/flexible key from ever receiving team
     // material, while an organization-pinned key sends its exact workspace.
@@ -1956,6 +2131,7 @@ export namespace OpenScience {
     const home = os.homedir()
     return [
       filepath,
+      scopepath,
       path.join(Global.Path.data, "auth.json"),
       path.join(Global.Path.data, "credentials.json"),
       path.join(Global.Path.data, "credentials.key"),

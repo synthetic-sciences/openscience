@@ -6,6 +6,7 @@ import { API_BASE, OpenScience } from "../../src/openscience"
 
 const original = globalThis.fetch
 const session = path.join(Global.Path.data, "openscience-session.json")
+const scope = path.join(Global.Path.data, "openscience-workspace-scope.json")
 const queue = path.join(Global.Path.data, "telemetry-queue-v2.jsonl")
 const config = path.join(process.env.XDG_CONFIG_HOME!, "openscience")
 const synced = path.join(config, "synced-env.json")
@@ -45,6 +46,16 @@ async function gateway(reply: Reply) {
     port: 0,
     async fetch(request) {
       const url = new URL(request.url)
+      const organization = request.headers.get("X-Organization-ID")
+      const json = (value: unknown) =>
+        Response.json(value, {
+          headers: organization
+            ? {
+                "OpenScience-Funding-Protocol": "1",
+                "OpenScience-Funding-Context": `organization:${organization}`,
+              }
+            : undefined,
+        })
       if (url.pathname === "/api/v1/auth/cli/browser/start") {
         const body = (await request.json()) as Record<string, string>
         state.starts.push(body)
@@ -52,7 +63,7 @@ async function gateway(reply: Reply) {
         target.searchParams.set("state", body.state)
         target.searchParams.set("redirect_uri", body.redirect_uri)
         target.searchParams.set("exchange_token", `exchange-${state.starts.length}`)
-        return Response.json({ approval_url: target.toString() })
+        return json({ approval_url: target.toString() })
       }
       if (url.pathname === "/approve") {
         const target = new URL(url.searchParams.get("redirect_uri")!)
@@ -62,33 +73,33 @@ async function gateway(reply: Reply) {
       }
       if (url.pathname === "/api/v1/auth/cli/browser/redeem") {
         state.redeems.push((await request.json()) as Record<string, string>)
-        return Response.json(state.reply)
+        return json(state.reply)
       }
       if (url.pathname === "/api/v1/auth/status") {
         const key = request.headers.get("Authorization")
-        if (key === "Bearer thk_browser-org.secret" || key === "Bearer thk_pasted-org.secret") {
-          return Response.json({
+        if (key === "Bearer osk_browser-org.secret" || key === "Bearer osk_pasted-org.secret") {
+          return json({
             api_key: { organization_id: alpha.organization_id, workspace_locked: true },
             organizations: [alpha],
             funding_context: { type: "organization", organization_id: alpha.organization_id, locked: true },
           })
         }
         if (key === "Bearer thk_browser-personal.secret") {
-          return Response.json({
+          return json({
             api_key: { organization_id: null, workspace_locked: true },
             organizations: [],
             funding_context: { type: "personal", locked: true },
           })
         }
         if (key === "Bearer thk_pasted-personal.secret") {
-          return Response.json({
+          return json({
             api_key: { organization_id: null, workspace_locked: true },
             organizations: [],
             funding_context: { type: "personal", locked: true },
           })
         }
         if (key === "Bearer thk_legacy-selected.secret") {
-          return Response.json({
+          return json({
             api_key: { organization_id: null, workspace_locked: false },
             organizations: [alpha],
             funding_context: {
@@ -99,25 +110,25 @@ async function gateway(reply: Reply) {
           })
         }
         if (key === "Bearer thk_legacy-personal.secret") return new Response("not found", { status: 404 })
-        return Response.json({ organizations: [alpha], funding_context: { type: "personal" } })
+        return json({ organizations: [alpha], funding_context: { type: "personal" } })
       }
       if (url.pathname === "/api/v1/wallet") {
         state.funded.push({
           key: request.headers.get("Authorization"),
           organization: request.headers.get("X-Organization-ID"),
         })
-        return Response.json({ balance_cents: 2000, purchased_cents: 2000, lifetime_spent_cents: 0 })
+        return json({ balance_cents: 2000, purchased_cents: 2000, lifetime_spent_cents: 0 })
       }
-      if (url.pathname === "/api/cli/balance") return Response.json({ balance_cents: 2000, balance_usd: 20 })
+      if (url.pathname === "/api/cli/balance") return json({ balance_cents: 2000, balance_usd: 20 })
       if (url.pathname === "/api/cli/sync") {
         state.syncs.push({
           key: request.headers.get("Authorization"),
           organization: request.headers.get("X-Organization-ID"),
         })
-        return Response.json({
+        return json({
           user: {
             user_id:
-              request.headers.get("Authorization") === "Bearer thk_pasted-org.secret"
+              request.headers.get("Authorization") === "Bearer osk_pasted-org.secret"
                 ? "user-pasted-org"
                 : "user-legacy",
           },
@@ -125,7 +136,7 @@ async function gateway(reply: Reply) {
         })
       }
       if (url.pathname === "/api/v1/telemetry/consent") {
-        return Response.json({
+        return json({
           consent_version: 2,
           analytics_enabled: true,
           research_content_enabled: true,
@@ -165,7 +176,9 @@ async function login() {
 afterEach(async () => {
   globalThis.fetch = original
   delete process.env.GITHUB_TOKEN
-  await Promise.all([session, queue, synced, settings].map((target) => fs.rm(target, { force: true }).catch(() => {})))
+  await Promise.all(
+    [session, scope, queue, synced, settings].map((target) => fs.rm(target, { force: true }).catch(() => {})),
+  )
   OpenScience.invalidateBalance()
   OpenScience.invalidateResearchEntitlements()
 })
@@ -173,7 +186,7 @@ afterEach(async () => {
 describe("browser login funding context", () => {
   test("persists the approved organization and replaces it with a clean legacy Personal login", async () => {
     const atlas = await gateway({
-      api_key: "thk_browser-org.secret",
+      api_key: "osk_browser-org.secret",
       organization_id: alpha.organization_id,
       workspace_locked: true,
       user: { user_id: "user-browser-org" },
@@ -181,7 +194,7 @@ describe("browser login funding context", () => {
     try {
       const organization = await login()
       expect(organization).toMatchObject({
-        api_key: "thk_browser-org.secret",
+        api_key: "osk_browser-org.secret",
         user_id: "user-browser-org",
         organization_id: alpha.organization_id,
         workspace_locked: true,
@@ -217,7 +230,7 @@ describe("browser login funding context", () => {
       expect(atlas.state.starts.every((start) => !("organization_id" in start))).toBe(true)
       expect(atlas.state.redeems).toHaveLength(2)
       expect(atlas.state.funded).toEqual([
-        { key: "Bearer thk_browser-org.secret", organization: alpha.organization_id },
+        { key: "Bearer osk_browser-org.secret", organization: alpha.organization_id },
         { key: "Bearer thk_legacy-personal.secret", organization: null },
       ])
       expect(await Bun.file(synced).exists()).toBe(false)
@@ -275,9 +288,9 @@ describe("browser login funding context", () => {
   test("discovers a pasted organization key while old Personal-key servers remain compatible", async () => {
     const atlas = await gateway({})
     try {
-      const organization = await OpenScience.loginWithKey("thk_pasted-org.secret")
+      const organization = await OpenScience.loginWithKey("osk_pasted-org.secret")
       expect(organization).toMatchObject({
-        api_key: "thk_pasted-org.secret",
+        api_key: "osk_pasted-org.secret",
         user_id: "user-pasted-org",
         organization_id: alpha.organization_id,
         workspace_locked: true,
@@ -300,7 +313,7 @@ describe("browser login funding context", () => {
         locked: true,
       })
       expect(atlas.state.syncs).toEqual([
-        { key: "Bearer thk_pasted-org.secret", organization: alpha.organization_id },
+        { key: "Bearer osk_pasted-org.secret", organization: alpha.organization_id },
         { key: "Bearer thk_legacy-personal.secret", organization: null },
         { key: "Bearer thk_pasted-personal.secret", organization: null },
       ])
@@ -309,39 +322,30 @@ describe("browser login funding context", () => {
     }
   })
 
-  test("keeps a pasted legacy key flexible when modern status selects an organization", async () => {
+  test("keeps a pasted legacy key Personal when modern status suggests an organization", async () => {
     const atlas = await gateway({})
     try {
       const selected = await OpenScience.loginWithKey("thk_legacy-selected.secret")
       expect(selected).toMatchObject({
         api_key: "thk_legacy-selected.secret",
         user_id: "user-legacy",
-        organization_id: alpha.organization_id,
       })
+      expect(selected.organization_id).toBeUndefined()
       expect(selected.workspace_locked).toBeUndefined()
       expect(await OpenScience.getFundingContext()).toMatchObject({
-        type: "organization",
-        organization_id: alpha.organization_id,
+        type: "personal",
         available: true,
         locked: false,
       })
 
-      expect(await OpenScience.setFundingContext(null)).toMatchObject({
-        type: "personal",
-        locked: false,
-      })
       expect(await OpenScience.getSession()).toMatchObject({
         api_key: "thk_legacy-selected.secret",
       })
       expect((await OpenScience.getSession())?.organization_id).toBeUndefined()
       expect((await OpenScience.getSession())?.workspace_locked).toBeUndefined()
 
-      expect(await OpenScience.setFundingContext(alpha.organization_id)).toMatchObject({
-        type: "organization",
-        organization_id: alpha.organization_id,
-        locked: false,
-      })
-      expect(atlas.state.syncs.length).toBeGreaterThanOrEqual(3)
+      await expect(OpenScience.setFundingContext(alpha.organization_id)).rejects.toThrow("rollback-safe")
+      expect(atlas.state.syncs.length).toBeGreaterThanOrEqual(1)
       expect(atlas.state.syncs.every((call) => call.organization === null)).toBe(true)
     } finally {
       await atlas.close()

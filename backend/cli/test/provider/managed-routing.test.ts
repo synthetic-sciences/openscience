@@ -121,7 +121,7 @@ describe("Provider.isManagedProxyBaseURL (pure)", () => {
 
 describe("Provider.requestFundingHeaders (pure)", () => {
   const funding = {
-    api_key: "thk_openrouter",
+    api_key: "osk_openrouter",
     user_id: "user-1",
     account: "user-1",
     organization_id: "org_alpha",
@@ -130,7 +130,7 @@ describe("Provider.requestFundingHeaders (pure)", () => {
   test("attaches the snapshotted organization to the exact managed proxy", () => {
     const headers = Provider.requestFundingHeaders({
       baseURL: `${PROXY}/openrouter/v1`,
-      apiKey: "thk_openrouter",
+      apiKey: "osk_openrouter",
       headers: { "X-Organization-ID": "org_untrusted", Accept: "application/json" },
       funding,
     })
@@ -159,7 +159,7 @@ describe("Provider.requestFundingHeaders (pure)", () => {
     expect(() =>
       Provider.requestFundingHeaders({
         baseURL: `${PROXY}/openrouter/v1`,
-        apiKey: "thk_openrouter",
+        apiKey: "osk_openrouter",
       }),
     ).toThrow("no funding-account snapshot")
     expect(() =>
@@ -172,11 +172,29 @@ describe("Provider.requestFundingHeaders (pure)", () => {
   })
 })
 
+describe("Provider.managedIdempotencyKey (pure)", () => {
+  const input = {
+    endpoint: `${PROXY}/openrouter/v1/chat/completions`,
+    body: '{"model":"openai/gpt-5.6-luna","stream":true}',
+    sessionID: "session-1",
+    messageID: "message-1",
+    operation: "model",
+  }
+
+  test("is stable for an exact transport retry and changes across operations", () => {
+    const first = Provider.managedIdempotencyKey(input)
+    expect(first).toMatch(/^os_[a-f0-9]{64}$/)
+    expect(Provider.managedIdempotencyKey(input)).toBe(first)
+    expect(Provider.managedIdempotencyKey({ ...input, operation: "generate-image" })).not.toBe(first)
+    expect(Provider.managedIdempotencyKey({ ...input, body: '{"stream":false}' })).not.toBe(first)
+  })
+})
+
 test("managed inference sends the operation snapshot through the real provider fetch hook", async () => {
   await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
   const file = path.join(Global.Path.data, "openscience-session.json")
   const original = globalThis.fetch
-  const seen: Array<string | null> = []
+  const seen: Array<{ organization: string | null; protocol: string | null; idempotency: string | null }> = []
   const chunks = [
     {
       id: "chatcmpl_context",
@@ -198,17 +216,33 @@ test("managed inference sends the operation snapshot through the real provider f
   try {
     await Bun.write(
       file,
-      JSON.stringify({ api_key: "thk_openrouter", user_id: "user-1", organization_id: "org_alpha" }),
+      JSON.stringify({
+        api_key: "osk_openrouter",
+        user_id: "user-1",
+        organization_id: "org_alpha",
+        workspace_locked: true,
+      }),
     )
     globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
-      seen.push(new Headers(init?.headers).get("X-Organization-ID"))
-      return new Response(body, { headers: { "content-type": "text/event-stream" } })
+      const headers = new Headers(init?.headers)
+      seen.push({
+        organization: headers.get("X-Organization-ID"),
+        protocol: headers.get("OpenScience-Funding-Protocol"),
+        idempotency: headers.get("Idempotency-Key"),
+      })
+      return new Response(body, {
+        headers: {
+          "content-type": "text/event-stream",
+          "OpenScience-Funding-Protocol": "1",
+          "OpenScience-Funding-Context": "organization:org_alpha",
+        },
+      })
     }) as typeof fetch
     await Instance.provide({
       directory: tmp.path,
       init: async () => {
         clearManagedLLMEnv()
-        Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+        Env.set("OPENROUTER_API_KEY", "osk_openrouter")
         Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
         Provider.invalidate()
       },
@@ -223,12 +257,96 @@ test("managed inference sends the operation snapshot through the real provider f
           // Consuming the real adapter stream drives its custom fetch hook.
         }
         expect(await result.text).toBe("ok")
+
+        for (const prompt of ["generate a title", "generate a title", "generate a different title"]) {
+          const internal = streamText({
+            model: language,
+            prompt,
+            headers: {
+              "x-openscience-session": "session-title",
+              "x-openscience-request": "message-title",
+            },
+          })
+          for await (const _part of internal.fullStream) {
+            // Internal calls do not have an AsyncLocal request context. Their
+            // managed session headers must still make transport retries safe.
+          }
+          expect(await internal.text).toBe("ok")
+        }
       },
     })
-    expect(seen).toEqual(["org_alpha"])
+    expect(seen).toHaveLength(4)
+    expect(seen[0]).toMatchObject({ organization: "org_alpha", protocol: "1" })
+    expect(seen[0]?.idempotency).toMatch(/^os_[a-f0-9]{64}$/)
+    expect(seen[1]).toMatchObject({ organization: "org_alpha", protocol: "1" })
+    expect(seen[1]?.idempotency).toMatch(/^os_[a-f0-9]{64}$/)
+    expect(seen[1]?.idempotency).not.toBe(seen[0]?.idempotency)
+    expect(seen[2]?.idempotency).toBe(seen[1]?.idempotency)
+    expect(seen[3]?.idempotency).not.toBe(seen[1]?.idempotency)
   } finally {
     globalThis.fetch = original
     await fs.rm(file, { force: true })
+    await fs.rm(path.join(Global.Path.data, "openscience-workspace-scope.json"), { force: true })
+    delete process.env["OPENROUTER_API_KEY"]
+    delete process.env["OPENROUTER_BASE_URL"]
+    Provider.invalidate()
+  }
+})
+
+test("managed organization inference rejects an old gateway before consuming its response", async () => {
+  await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
+  const file = path.join(Global.Path.data, "openscience-session.json")
+  const original = globalThis.fetch
+  const body =
+    `data: ${JSON.stringify({
+      id: "chatcmpl_unverified",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: "anthropic/claude-sonnet-4.6",
+      choices: [{ index: 0, delta: { role: "assistant", content: "must not be consumed" }, finish_reason: null }],
+    })}\n\n` + "data: [DONE]\n\n"
+  try {
+    await Bun.write(
+      file,
+      JSON.stringify({
+        api_key: "osk_openrouter",
+        user_id: "user-1",
+        organization_id: "org_alpha",
+        workspace_locked: true,
+      }),
+    )
+    globalThis.fetch = (async () =>
+      new Response(body, { headers: { "content-type": "text/event-stream" } })) as unknown as typeof fetch
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("OPENROUTER_API_KEY", "osk_openrouter")
+        Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const model = await Provider.getModel("openrouter", "anthropic/claude-sonnet-4.6")
+        const language = await Provider.getLanguage(model)
+        const funding = await OpenScience.getFundingSnapshot()
+        expect(funding).not.toBeNull()
+        const context = { sessionID: "session-old", messageID: "message-old", attempt: 1, funding: funding! }
+        const result = Provider.withRequestContext(context, () => streamText({ model: language, prompt: "hello" }))
+        const parts = []
+        for await (const part of result.fullStream) parts.push(part)
+        expect(
+          parts.some(
+            (part) =>
+              part.type === "error" && String(part.error).includes("could not verify the selected organization"),
+          ),
+        ).toBe(true)
+        expect(parts.some((part) => part.type === "text-delta")).toBe(false)
+      },
+    })
+  } finally {
+    globalThis.fetch = original
+    await fs.rm(file, { force: true })
+    await fs.rm(path.join(Global.Path.data, "openscience-workspace-scope.json"), { force: true })
     delete process.env["OPENROUTER_API_KEY"]
     delete process.env["OPENROUTER_BASE_URL"]
     Provider.invalidate()

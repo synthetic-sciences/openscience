@@ -417,12 +417,23 @@ export const GenerateImageTool = Tool.define("generate_image", {
       ...(funding ? OpenScience.fundingHeaders(funding) : {}),
     }
     const request = async (endpoint: string, payload: Record<string, unknown>) => {
+      const text = JSON.stringify(payload)
+      const idempotency = managed
+        ? Provider.managedIdempotencyKey({
+            endpoint: `${base}/${endpoint}`,
+            body: text,
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            operation: "generate-image",
+          })
+        : undefined
       const response = await fetch(`${base}/${endpoint}`, {
         method: "POST",
         signal: AbortSignal.any([ctx.abort, AbortSignal.timeout(120_000)]),
-        headers,
-        body: JSON.stringify(payload),
+        headers: { ...headers, ...(idempotency ? { "Idempotency-Key": idempotency } : {}) },
+        body: text,
       })
+      if (funding) await OpenScience.validateFundingResponse(response, funding)
       const raw = (
         await readBoundedImageResponse(response, response.ok ? MAX_IMAGE_RESPONSE_BYTES : MAX_IMAGE_ERROR_BYTES)
       ).toString("utf8")

@@ -6,6 +6,7 @@ import { OpenScience } from "../../src/openscience"
 import { AccountRoutes } from "../../src/server/routes/account"
 
 const session = path.join(Global.Path.data, "openscience-session.json")
+const scope = path.join(Global.Path.data, "openscience-workspace-scope.json")
 const capabilities = path.join(Global.Path.data, "usage-capabilities.json")
 const original = globalThis.fetch
 
@@ -45,7 +46,11 @@ const unseated = {
 
 afterEach(async () => {
   globalThis.fetch = original
-  await Promise.all([fs.rm(session, { force: true }), fs.rm(capabilities, { force: true })])
+  await Promise.all([
+    fs.rm(session, { force: true }),
+    fs.rm(scope, { force: true }),
+    fs.rm(capabilities, { force: true }),
+  ])
   OpenScience.invalidateBalance()
   OpenScience.invalidateResearchEntitlements()
 })
@@ -62,7 +67,13 @@ describe("organization funding context", () => {
     )
   })
 
-  test("reads available organizations and persists only an explicitly validated selection", async () => {
+  test("rejects a standalone organization environment key before managed dispatch", async () => {
+    await expect(OpenScience.managedRequestSnapshot("osk_environment.secret")).rejects.toThrow(
+      "requires a saved workspace scope",
+    )
+  })
+
+  test("shows available organizations but requires a separately scoped login to select one", async () => {
     await Bun.write(session, JSON.stringify({ api_key: "thk_context.secret", user_id: "user-context" }))
     const headers: Array<string | null> = []
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -89,20 +100,11 @@ describe("organization funding context", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ organization_id: beta.organization_id }),
     })
-    expect(selected.status).toBe(200)
-    expect(await selected.json()).toMatchObject({
-      type: "organization",
-      organization_id: beta.organization_id,
-      available: true,
+    expect(selected.status).toBe(400)
+    expect(await selected.json()).toEqual({
+      error: "Sign in again to create a rollback-safe organization workspace.",
     })
-    expect((await Bun.file(session).json()).organization_id).toBe(beta.organization_id)
-
-    const confirmed = await AccountRoutes().request("/funding-context")
-    expect(await confirmed.json()).toMatchObject({
-      type: "organization",
-      organization_id: beta.organization_id,
-      available: true,
-    })
+    expect((await Bun.file(session).json()).organization_id).toBeUndefined()
 
     const rejected = await AccountRoutes().request("/funding-context", {
       method: "PUT",
@@ -110,26 +112,16 @@ describe("organization funding context", () => {
       body: JSON.stringify({ organization_id: "org_missing" }),
     })
     expect(rejected.status).toBe(400)
-    expect((await Bun.file(session).json()).organization_id).toBe(beta.organization_id)
-
-    const personal = await AccountRoutes().request("/funding-context", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ organization_id: null }),
-    })
-    expect(await personal.json()).toEqual({ type: "personal", available: true, locked: false, organizations: [] })
     expect((await Bun.file(session).json()).organization_id).toBeUndefined()
 
-    // Reads use the selected context. Validation of a new choice deliberately
-    // uses Personal so an invalid old organization cannot lock Settings out.
-    expect(headers).toEqual([null, null, beta.organization_id, null])
+    expect(headers).toEqual([null])
   })
 
   test("requires a fresh login before changing an organization-scoped key", async () => {
     await Bun.write(
       session,
       JSON.stringify({
-        api_key: "thk_org-scoped.secret",
+        api_key: "osk_org-scoped.secret",
         user_id: "user-context",
         organization_id: alpha.organization_id,
         workspace_locked: true,
@@ -159,7 +151,7 @@ describe("organization funding context", () => {
   })
 
   test("repairs an organization key saved by an older client before displaying its workspace", async () => {
-    await Bun.write(session, JSON.stringify({ api_key: "thk_old-client.secret", user_id: "user-context" }))
+    await Bun.write(session, JSON.stringify({ api_key: "osk_old-client.secret", user_id: "user-context" }))
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       expect(String(input).endsWith("/api/v1/auth/status")).toBe(true)
       expect(new Headers(init?.headers).get("X-Organization-ID")).toBeNull()
@@ -178,7 +170,7 @@ describe("organization funding context", () => {
       organizations: [alpha],
     })
     expect(await Bun.file(session).json()).toMatchObject({
-      api_key: "thk_old-client.secret",
+      api_key: "osk_old-client.secret",
       user_id: "user-context",
       organization_id: alpha.organization_id,
       workspace_locked: true,
@@ -209,6 +201,30 @@ describe("organization funding context", () => {
     })
   })
 
+  test("requires a fresh login for a legacy key that Atlas has pinned to an organization", async () => {
+    await Bun.write(session, JSON.stringify({ api_key: "thk_old-organization.secret", user_id: "user-context" }))
+    globalThis.fetch = (async () =>
+      Response.json(
+        {
+          api_key: { organization_id: alpha.organization_id, workspace_locked: true },
+          organizations: [alpha],
+          funding_context: { type: "organization", organization_id: alpha.organization_id, locked: true },
+        },
+        {
+          headers: {
+            "OpenScience-Funding-Protocol": "1",
+            "OpenScience-Funding-Context": `organization:${alpha.organization_id}`,
+          },
+        },
+      )) as unknown as typeof fetch
+
+    await expect(OpenScience.getFundingContext()).rejects.toThrow("renew this organization workspace credential")
+    expect(await OpenScience.getSession()).toEqual({
+      api_key: "thk_old-organization.secret",
+      user_id: "user-context",
+    })
+  })
+
   test("repairs a wrongly selected old-client organization back to locked Personal", async () => {
     await Bun.write(
       session,
@@ -236,7 +252,7 @@ describe("organization funding context", () => {
       locked: true,
       organizations: [],
     })
-    expect(headers).toEqual([alpha.organization_id, null])
+    expect(headers).toEqual([null])
     expect(await Bun.file(session).json()).toEqual({
       api_key: "thk_old-personal-selected.secret",
       user_id: "user-context",
@@ -295,9 +311,7 @@ describe("organization funding context", () => {
       user_id: "user-context",
       workspace_locked: true,
     })
-    expect(calls.filter((call) => call.organization === alpha.organization_id)).toEqual([
-      { path: "/api/v1/auth/status", organization: alpha.organization_id },
-    ])
+    expect(calls.some((call) => call.organization === alpha.organization_id)).toBe(false)
     expect(
       calls
         .filter((call) =>
@@ -331,7 +345,7 @@ describe("organization funding context", () => {
   })
 
   test("repairs a removed member's old-client session without falling back to Personal", async () => {
-    await Bun.write(session, JSON.stringify({ api_key: "thk_removed-member.secret", user_id: "user-context" }))
+    await Bun.write(session, JSON.stringify({ api_key: "osk_removed-member.secret", user_id: "user-context" }))
     globalThis.fetch = (async () =>
       Response.json({
         api_key: { organization_id: alpha.organization_id },
@@ -353,7 +367,7 @@ describe("organization funding context", () => {
   })
 
   test("does not let a delayed scope repair overwrite a concurrent account change", async () => {
-    await Bun.write(session, JSON.stringify({ api_key: "thk_old-client.secret", user_id: "old-user" }))
+    await Bun.write(session, JSON.stringify({ api_key: "osk_old-client.secret", user_id: "old-user" }))
     const gate = Promise.withResolvers<void>()
     const started = Promise.withResolvers<void>()
     globalThis.fetch = (async () => {
@@ -400,7 +414,7 @@ describe("organization funding context", () => {
     expect(await Bun.file(session).json()).toEqual({ api_key: "thk_new-personal.secret", user_id: "new-user" })
   })
 
-  test("keeps legacy unpinned keys flexible when Atlas reports Personal scope", async () => {
+  test("keeps legacy Personal keys personal until a separately scoped browser login", async () => {
     await Bun.write(session, JSON.stringify({ api_key: "thk_flexible.secret", user_id: "user-context" }))
     globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
       const organization = new Headers(init?.headers).get("X-Organization-ID")
@@ -412,14 +426,8 @@ describe("organization funding context", () => {
     }) as typeof fetch
 
     expect(await OpenScience.getFundingContext()).toMatchObject({ type: "personal", locked: false })
-    expect(await OpenScience.setFundingContext(alpha.organization_id)).toMatchObject({
-      type: "organization",
-      organization_id: alpha.organization_id,
-      locked: false,
-    })
-    expect(await Bun.file(session).json()).toMatchObject({
-      organization_id: alpha.organization_id,
-    })
+    await expect(OpenScience.setFundingContext(alpha.organization_id)).rejects.toThrow("rollback-safe")
+    expect((await Bun.file(session).json()).organization_id).toBeUndefined()
     expect((await Bun.file(session).json()).workspace_locked).toBeUndefined()
   })
 
@@ -427,9 +435,10 @@ describe("organization funding context", () => {
     await Bun.write(
       session,
       JSON.stringify({
-        api_key: "thk_context.secret",
+        api_key: "osk_context.secret",
         user_id: "user-context",
         organization_id: alpha.organization_id,
+        workspace_locked: true,
       }),
     )
     const calls: Array<{ path: string; organization: string | null }> = []
@@ -438,7 +447,15 @@ describe("organization funding context", () => {
       const organization = new Headers(init?.headers).get("X-Organization-ID")
       calls.push({ path: url.pathname, organization })
       if (url.pathname.endsWith("/api/v1/auth/status")) {
-        return Response.json({ organizations: [], funding_context: { type: "personal" } })
+        return Response.json(
+          { organizations: [], funding_context: { type: "personal" } },
+          {
+            headers: {
+              "OpenScience-Funding-Protocol": "1",
+              "OpenScience-Funding-Context": `organization:${alpha.organization_id}`,
+            },
+          },
+        )
       }
       if (url.pathname.endsWith("/api/v1/wallet")) return new Response("forbidden", { status: 403 })
       return new Response("not found", { status: 404 })
@@ -448,7 +465,7 @@ describe("organization funding context", () => {
       type: "organization",
       organization_id: alpha.organization_id,
       available: false,
-      locked: false,
+      locked: true,
       organizations: [],
     })
     expect(await OpenScience.getCredits()).toBeNull()
@@ -473,13 +490,14 @@ describe("organization funding context", () => {
     expect((await Bun.file(session).json()).organization_id).toBeUndefined()
   })
 
-  test("adds attribution only to funded control-plane calls", async () => {
+  test("adds attribution only to funded and workspace-credential calls", async () => {
     await Bun.write(
       session,
       JSON.stringify({
-        api_key: "thk_context.secret",
+        api_key: "osk_context.secret",
         user_id: "user-context",
         organization_id: alpha.organization_id,
+        workspace_locked: true,
       }),
     )
     const calls: Array<{ path: string; organization: string | null }> = []
@@ -489,20 +507,27 @@ describe("organization funding context", () => {
         path: url.pathname,
         organization: new Headers(init?.headers).get("X-Organization-ID"),
       })
+      const response = (value: unknown) =>
+        Response.json(value, {
+          headers: {
+            "OpenScience-Funding-Protocol": "1",
+            "OpenScience-Funding-Context": `organization:${alpha.organization_id}`,
+          },
+        })
       if (url.pathname.endsWith("/api/v1/wallet")) {
-        return Response.json({
+        return response({
           balance_cents: 2_000,
           purchased_cents: 1_500,
           promotional_cents: 500,
           lifetime_spent_cents: 100,
         })
       }
-      if (url.pathname.endsWith("/api/credits/transactions")) return Response.json({ transactions: [] })
+      if (url.pathname.endsWith("/api/credits/transactions")) return response({ transactions: [] })
       if (url.pathname.endsWith("/api/v1/entitlements")) {
-        return Response.json({ plan: "team", managed_search: { available: true } })
+        return response({ plan: "team", managed_search: { available: true } })
       }
-      if (url.pathname.endsWith("/api/v1/research/search")) return Response.json({ results: [] })
-      if (url.pathname.endsWith("/api/cli/usage")) return Response.json({ recorded: true })
+      if (url.pathname.endsWith("/api/v1/research/search")) return response({ results: [] })
+      if (url.pathname.endsWith("/api/cli/usage")) return response({ recorded: true })
       if (url.pathname.endsWith("/api/cli/sync")) {
         return Response.json({ user: { user_id: "user-context" }, services: {} })
       }
@@ -533,6 +558,7 @@ describe("organization funding context", () => {
       "/api/v1/entitlements",
       "/api/v1/research/search",
       "/api/cli/usage",
+      "/api/cli/sync",
     ])
     for (const call of calls) {
       expect(call.organization, call.path).toBe(funded.has(call.path) ? alpha.organization_id : null)
@@ -544,19 +570,33 @@ describe("organization funding context", () => {
   test("keys balance and entitlement caches by account plus funding context", async () => {
     await Bun.write(
       session,
-      JSON.stringify({ api_key: "thk_context.secret", user_id: "user-context", organization_id: "org_alpha" }),
+      JSON.stringify({
+        api_key: "osk_context-alpha.secret",
+        user_id: "user-context",
+        organization_id: "org_alpha",
+        workspace_locked: true,
+      }),
     )
     const reads = { balance: 0, entitlements: 0 }
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input))
       const organization = new Headers(init?.headers).get("X-Organization-ID")
+      const response = (value: unknown) =>
+        Response.json(value, {
+          headers: organization
+            ? {
+                "OpenScience-Funding-Protocol": "1",
+                "OpenScience-Funding-Context": `organization:${organization}`,
+              }
+            : undefined,
+        })
       if (url.pathname.endsWith("/api/cli/balance")) {
         reads.balance++
-        return Response.json({ balance_usd: organization === "org_alpha" ? 10 : 20 })
+        return response({ balance_usd: organization === "org_alpha" ? 10 : 20 })
       }
       if (url.pathname.endsWith("/api/v1/entitlements")) {
         reads.entitlements++
-        return Response.json({ plan: organization })
+        return response({ plan: organization })
       }
       return new Response("not found", { status: 404 })
     }) as typeof fetch
@@ -569,12 +609,66 @@ describe("organization funding context", () => {
 
     await Bun.write(
       session,
-      JSON.stringify({ api_key: "thk_context.secret", user_id: "user-context", organization_id: "org_beta" }),
+      JSON.stringify({
+        api_key: "osk_context-beta.secret",
+        user_id: "user-context",
+        organization_id: "org_beta",
+        workspace_locked: true,
+      }),
     )
     const second = await OpenScience.getFundingSnapshot()
     expect(await OpenScience.getBalance(second!)).toBe(20)
     expect((await OpenScience.getResearchEntitlements(second!))?.plan).toBe("org_beta")
     expect(reads).toEqual({ balance: 2, entitlements: 2 })
+  })
+
+  test("rejects an organization balance when an old gateway omits or mismatches its proof", async () => {
+    const snapshot = Object.freeze({
+      api_key: "osk_context.secret",
+      user_id: "user-context",
+      account: "user-context",
+      organization_id: alpha.organization_id,
+      workspace_locked: true,
+    })
+    const replies: Array<Record<string, string> | undefined> = [
+      undefined,
+      {
+        "OpenScience-Funding-Protocol": "1",
+        "OpenScience-Funding-Context": "personal",
+      },
+      {
+        "OpenScience-Funding-Protocol": "1",
+        "OpenScience-Funding-Context": `organization:${alpha.organization_id}`,
+      },
+    ]
+    globalThis.fetch = (async () =>
+      Response.json({ balance_usd: 20 }, { headers: replies.shift() })) as unknown as typeof fetch
+
+    expect(await OpenScience.getBalance(snapshot)).toBeNull()
+    OpenScience.invalidateBalance()
+    expect(await OpenScience.getBalance(snapshot)).toBeNull()
+    OpenScience.invalidateBalance()
+    expect(await OpenScience.getBalance(snapshot)).toBe(20)
+  })
+
+  test("rejects a Personal balance when a modern gateway resolves an organization", async () => {
+    const snapshot = Object.freeze({
+      api_key: "thk_context.secret",
+      user_id: "user-context",
+      account: "user-context",
+    })
+    globalThis.fetch = (async () =>
+      Response.json(
+        { balance_usd: 20 },
+        {
+          headers: {
+            "OpenScience-Funding-Protocol": "1",
+            "OpenScience-Funding-Context": `organization:${alpha.organization_id}`,
+          },
+        },
+      )) as unknown as typeof fetch
+
+    expect(await OpenScience.getBalance(snapshot)).toBeNull()
   })
 
   test("preserves concurrent Personal and organization usage cutover markers", async () => {
@@ -583,10 +677,26 @@ describe("organization funding context", () => {
       user_id: "user-context",
       account: "user-context",
     })
-    const organization = Object.freeze({ ...personal, organization_id: alpha.organization_id })
+    const organization = Object.freeze({
+      ...personal,
+      api_key: "osk_context.secret",
+      organization_id: alpha.organization_id,
+      workspace_locked: true,
+    })
     globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
-      if (new Headers(init?.headers).get("X-Organization-ID")) await Bun.sleep(10)
-      return Response.json({ accepted: true, financial: false, billing_authority: "gateway_proxy" })
+      const id = new Headers(init?.headers).get("X-Organization-ID")
+      if (id) await Bun.sleep(10)
+      return Response.json(
+        { accepted: true, financial: false, billing_authority: "gateway_proxy" },
+        {
+          headers: id
+            ? {
+                "OpenScience-Funding-Protocol": "1",
+                "OpenScience-Funding-Context": `organization:${id}`,
+              }
+            : undefined,
+        },
+      )
     }) as typeof fetch
 
     await Promise.all([

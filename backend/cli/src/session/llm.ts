@@ -337,7 +337,7 @@ export namespace LLM {
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
-        ...(routed.providerID === "openrouter" && input.route === "managed"
+        ...(routed.providerID === "openrouter" && traceRoute === "managed"
           ? {
               "x-openscience-project": Instance.project.id,
               "x-openscience-session": input.sessionID,

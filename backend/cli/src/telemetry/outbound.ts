@@ -272,16 +272,16 @@ async function readConsent(): Promise<{ value: ConsentFile; absent: boolean; cor
 
 /** Return only the non-secret identifier embedded in a Gateway API key. */
 export function telemetryKeyID(value: string): string | undefined {
-  const match = /^(thk_[0-9a-f]{32})\.[A-Za-z0-9_-]{16,}$/i.exec(value)
+  const match = /^((?:thk|osk)_[0-9a-f]{32})\.[A-Za-z0-9_-]{16,}$/i.exec(value)
   return match?.[1].toLowerCase()
 }
 
 /** Match the exact non-secret prefix persisted with both current and legacy
  * Gateway keys. The secret portion is never used as a locator. */
 export function telemetryKeyPrefix(value: string): string | undefined {
-  const current = /^thk_([0-9a-f]{32})\.[A-Za-z0-9_-]+$/i.exec(value)
-  if (current) return `thk_${current[1].slice(0, 8).toLowerCase()}`
-  return /^(thk_[A-Za-z0-9_-]{1,64})\.[A-Za-z0-9_-]+$/.exec(value)?.[1]
+  const current = /^(thk|osk)_([0-9a-f]{32})\.[A-Za-z0-9_-]+$/i.exec(value)
+  if (current) return `${current[1].toLowerCase()}_${current[2].slice(0, 8).toLowerCase()}`
+  return /^((?:thk|osk)_[A-Za-z0-9_-]{1,64})\.[A-Za-z0-9_-]+$/.exec(value)?.[1]
 }
 
 /** Create a deletion-only capability without retaining the raw credential or

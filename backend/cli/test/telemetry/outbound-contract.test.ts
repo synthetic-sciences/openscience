@@ -328,6 +328,8 @@ describe("outbound OpenScience trace contract", () => {
     expect(coarsePlatform("freebsd")).toBe("unknown")
     const keyID = `thk_${"a".repeat(32)}`
     expect(telemetryKeyID(`${keyID}.${"secret".repeat(4)}`)).toBe(keyID)
+    const organizationKeyID = `osk_${"b".repeat(32)}`
+    expect(telemetryKeyID(`${organizationKeyID}.${"secret".repeat(4)}`)).toBe(organizationKeyID)
     expect(telemetryKeyID("thk_legacy-secret-without-an-id")).toBeUndefined()
     const rawKey = `${keyID}.${"secret".repeat(4)}`
     const epoch = "b".repeat(32)
@@ -335,6 +337,8 @@ describe("outbound OpenScience trace contract", () => {
     const proof = telemetryDeletionProof(rawKey, epoch, nonce)
     expect(telemetryKeyPrefix(rawKey)).toBe(`thk_${"a".repeat(8)}`)
     expect(telemetryKeyPrefix("thk_legacy.secret")).toBe("thk_legacy")
+    expect(telemetryKeyPrefix(`osk_${"b".repeat(32)}.${"secret".repeat(4)}`)).toBe(`osk_${"b".repeat(8)}`)
+    expect(telemetryKeyPrefix("osk_legacy.secret")).toBe("osk_legacy")
     expect(proof).toMatch(/^odp_v2\.[a-f0-9]{10,138}\.[a-f0-9]{32}\.[a-f0-9]{32}\.[a-f0-9]{64}$/)
     expect(proof).toBe(telemetryDeletionProof(rawKey, epoch, nonce))
     expect(proof).not.toBe(telemetryDeletionProof(rawKey, epoch, "d".repeat(32)))

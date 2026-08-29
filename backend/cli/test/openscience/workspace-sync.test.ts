@@ -6,6 +6,7 @@ import { OpenScience } from "../../src/openscience"
 
 const original = globalThis.fetch
 const session = path.join(Global.Path.data, "openscience-session.json")
+const scope = path.join(Global.Path.data, "openscience-workspace-scope.json")
 const config = path.join(process.env.XDG_CONFIG_HOME!, "openscience")
 const synced = path.join(config, "synced-env.json")
 const settings = path.join(config, "openscience-synced.json")
@@ -27,7 +28,9 @@ async function seed(value: Record<string, unknown>) {
 async function reset() {
   globalThis.fetch = original
   for (const key of keys) delete process.env[key]
-  await Promise.all([session, synced, settings].map((target) => fs.rm(target, { force: true }).catch(() => undefined)))
+  await Promise.all(
+    [session, scope, synced, settings].map((target) => fs.rm(target, { force: true }).catch(() => undefined)),
+  )
   OpenScience.invalidateBalance()
   OpenScience.invalidateResearchEntitlements()
 }
@@ -37,29 +40,37 @@ afterEach(reset)
 
 describe("workspace-scoped account sync", () => {
   test("a workspace-locked organization sync carries the organization and keeps shell credentials private", async () => {
-    await seed({ organization_id: "org_alpha", workspace_locked: true })
+    await seed({ api_key: "osk_workspace.secret", organization_id: "org_alpha", workspace_locked: true })
     process.env.OPENAI_API_KEY = "sk-local-openai"
     const headers: Array<string | null> = []
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       if (new URL(String(input)).pathname.endsWith("/api/cli/sync")) {
         headers.push(new Headers(init?.headers).get("X-Organization-ID"))
       }
-      return Response.json({
-        user: { user_id: "user-workspace" },
-        services: {
-          anthropic: {
-            connected: true,
-            env: { ANTHROPIC_API_KEY: "sk-team-anthropic" },
-            metadata: { source: "organization_byok" },
+      return Response.json(
+        {
+          user: { user_id: "user-workspace" },
+          services: {
+            anthropic: {
+              connected: true,
+              env: { ANTHROPIC_API_KEY: "sk-team-anthropic" },
+              metadata: { source: "organization_byok" },
+            },
+            openai: {
+              connected: true,
+              env: { OPENAI_API_KEY: "sk-team-openai" },
+              metadata: { source: "organization_byok" },
+            },
           },
-          openai: {
-            connected: true,
-            env: { OPENAI_API_KEY: "sk-team-openai" },
-            metadata: { source: "organization_byok" },
+          config: {},
+        },
+        {
+          headers: {
+            "OpenScience-Funding-Protocol": "1",
+            "OpenScience-Funding-Context": "organization:org_alpha",
           },
         },
-        config: {},
-      })
+      )
     }) as typeof fetch
 
     await OpenScience.syncServices()
@@ -102,12 +113,28 @@ describe("workspace-scoped account sync", () => {
   })
 
   test("the version probe uses the same workspace scope while unrelated account calls stay unscoped", async () => {
-    await seed({ organization_id: "org_alpha", workspace_locked: true, cached_v: 7, last_check_ts: 0 })
+    await seed({
+      api_key: "osk_workspace.secret",
+      organization_id: "org_alpha",
+      workspace_locked: true,
+      cached_v: 7,
+      last_check_ts: 0,
+    })
     const calls: Array<{ path: string; organization: string | null }> = []
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const path = new URL(String(input)).pathname
       calls.push({ path, organization: new Headers(init?.headers).get("X-Organization-ID") })
-      if (path.endsWith("/api/cli/sync/version")) return Response.json({ v: 7 })
+      if (path.endsWith("/api/cli/sync/version")) {
+        return Response.json(
+          { v: 7 },
+          {
+            headers: {
+              "OpenScience-Funding-Protocol": "1",
+              "OpenScience-Funding-Context": "organization:org_alpha",
+            },
+          },
+        )
+      }
       if (path.endsWith("/api/cli/devices")) return Response.json([])
       return new Response("not found", { status: 404 })
     }) as typeof fetch
@@ -121,8 +148,8 @@ describe("workspace-scoped account sync", () => {
     ])
   })
 
-  test("replacing a workspace under the same key removes its synced secrets before the new session is published", async () => {
-    await seed({ organization_id: "org_alpha", workspace_locked: true })
+  test("replacing an organization workspace with Personal removes its synced secrets before the new session is published", async () => {
+    await seed({ api_key: "osk_workspace.secret", organization_id: "org_alpha", workspace_locked: true })
     await fs.mkdir(config, { recursive: true })
     await Bun.write(synced, JSON.stringify({ GITHUB_TOKEN: "old-team-secret" }))
     await Bun.write(settings, JSON.stringify({ model: "old-team/model" }))
@@ -130,7 +157,7 @@ describe("workspace-scoped account sync", () => {
     globalThis.fetch = (async () => new Response("offline", { status: 503 })) as unknown as typeof fetch
 
     await OpenScience.saveSession({
-      api_key: "thk_workspace.secret",
+      api_key: "thk_new-workspace.secret",
       user_id: "user-workspace",
       workspace_locked: true,
     })
@@ -142,7 +169,7 @@ describe("workspace-scoped account sync", () => {
   })
 
   test("an organization sync denial clears team credentials without signing out the workspace", async () => {
-    await seed({ organization_id: "org_alpha", workspace_locked: true })
+    await seed({ api_key: "osk_workspace.secret", organization_id: "org_alpha", workspace_locked: true })
     await fs.mkdir(config, { recursive: true })
     await Bun.write(synced, JSON.stringify({ GITHUB_TOKEN: "denied-team-secret" }))
     await Bun.write(settings, JSON.stringify({ model: "team/model" }))
@@ -152,7 +179,7 @@ describe("workspace-scoped account sync", () => {
     expect(await OpenScience.syncServices()).toBeNull()
 
     expect(await OpenScience.getSession()).toMatchObject({
-      api_key: "thk_workspace.secret",
+      api_key: "osk_workspace.secret",
       organization_id: "org_alpha",
       workspace_locked: true,
     })
@@ -181,7 +208,7 @@ describe("workspace-scoped account sync", () => {
   })
 
   test("a delayed organization denial cannot clear a newly selected workspace", async () => {
-    await seed({ organization_id: "org_alpha", workspace_locked: true })
+    await seed({ api_key: "osk_workspace.secret", organization_id: "org_alpha", workspace_locked: true })
     const started = Promise.withResolvers<void>()
     const release = Promise.withResolvers<void>()
     globalThis.fetch = (async (input: string | URL | Request) => {
@@ -196,7 +223,7 @@ describe("workspace-scoped account sync", () => {
     const pending = OpenScience.syncServices()
     await started.promise
     await OpenScience.saveSession({
-      api_key: "thk_workspace.secret",
+      api_key: "thk_new-workspace.secret",
       user_id: "user-workspace",
       workspace_locked: true,
     })
@@ -214,7 +241,7 @@ describe("workspace-scoped account sync", () => {
   })
 
   test("a revoked organization key clears its session and cached team credentials", async () => {
-    await seed({ organization_id: "org_alpha", workspace_locked: true })
+    await seed({ api_key: "osk_workspace.secret", organization_id: "org_alpha", workspace_locked: true })
     await fs.mkdir(config, { recursive: true })
     await Bun.write(synced, JSON.stringify({ GITHUB_TOKEN: "revoked-team-secret" }))
     await Bun.write(settings, JSON.stringify({ model: "team/model" }))

@@ -8,10 +8,12 @@ import { BillingSettingsRoutes } from "../../src/server/routes/settings/billing"
 import { WalletSettingsRoutes } from "../../src/server/routes/settings/wallet"
 
 const session = path.join(Global.Path.data, "openscience-session.json")
+const scope = path.join(Global.Path.data, "openscience-workspace-scope.json")
 const original = globalThis.fetch
 
 beforeEach(async () => {
   await OpenScience.waitForBillingModeMirror()
+  await fs.rm(scope, { force: true })
   await fs.mkdir(Global.Path.data, { recursive: true })
   await fs.writeFile(session, JSON.stringify({ api_key: "thk_wallet-test", user_id: "user-wallet" }))
   OpenScience.invalidateBalance()
@@ -24,6 +26,7 @@ afterEach(async () => {
   OpenScience.invalidateBalance()
   await Config.updateGlobal({ billing: { llm: null } })
   await fs.rm(session, { force: true })
+  await fs.rm(scope, { force: true })
 })
 
 test("uses current Atlas access plus purchased Wallet truth without calling the retired mode write", async () => {
@@ -99,9 +102,7 @@ test("settings summaries repair stale locked Personal scope before funded reads"
     organization_id: "org_stale",
   }
   const verify = () => {
-    expect(calls.filter((call) => call.organization === stale.organization_id)).toEqual([
-      { path: "/api/v1/auth/status", organization: stale.organization_id },
-    ])
+    expect(calls.some((call) => call.organization === stale.organization_id)).toBe(false)
     expect(
       calls
         .filter((call) =>
@@ -121,7 +122,7 @@ test("settings summaries repair stale locked Personal scope before funded reads"
   OpenScience.invalidateBalance()
   const wallet = await (await WalletSettingsRoutes().request("/")).json()
   expect(wallet).toMatchObject({ signedIn: true, balanceUsd: 20, managedSupported: true })
-  expect(await Bun.file(session).json()).toEqual({
+  expect(await OpenScience.getSession()).toEqual({
     api_key: stale.api_key,
     user_id: stale.user_id,
     workspace_locked: true,
@@ -133,7 +134,7 @@ test("settings summaries repair stale locked Personal scope before funded reads"
   OpenScience.invalidateBalance()
   const billing = await (await BillingSettingsRoutes().request("/")).json()
   expect(billing.wallet).toEqual({ signedIn: true, balanceUsd: 20 })
-  expect(await Bun.file(session).json()).toEqual({
+  expect(await OpenScience.getSession()).toEqual({
     api_key: stale.api_key,
     user_id: stale.user_id,
     workspace_locked: true,

@@ -468,13 +468,38 @@ export namespace Provider {
   }): Headers {
     const headers = new Headers(input.headers)
     headers.delete("X-Organization-ID")
+    headers.delete("OpenScience-Funding-Protocol")
     if (!isAtlasProxyBaseURL(input.baseURL) || !Auth.isAtlasApiKey(input.apiKey)) return headers
     if (!input.funding) throw new Error("Managed inference has no funding-account snapshot. Retry the operation.")
     if (input.funding.api_key !== input.apiKey) {
       throw new Error("The connected account changed during managed inference. Retry the operation.")
     }
-    if (input.funding.organization_id) headers.set("X-Organization-ID", input.funding.organization_id)
+    for (const [key, value] of Object.entries(OpenScience.fundingHeaders(input.funding))) headers.set(key, value)
     return headers
+  }
+
+  /** Stable only for the exact managed provider operation and serialized body.
+   * Atlas scopes it again to the authenticated user and selected Wallet. */
+  export function managedIdempotencyKey(input: {
+    endpoint: string
+    body: string
+    sessionID: string
+    messageID: string
+    operation: string
+  }) {
+    const hash = new Bun.CryptoHasher("sha256")
+    for (const value of [
+      "openscience-managed-v1",
+      input.sessionID,
+      input.messageID,
+      input.operation,
+      input.endpoint,
+      input.body,
+    ]) {
+      hash.update(value)
+      hash.update("\0")
+    }
+    return `os_${hash.digest("hex")}`
   }
 
   const PUBLIC_PROVIDER_BASE_URLS: Record<string, string> = {
@@ -2331,13 +2356,30 @@ export namespace Provider {
           headers: opts.headers as HeadersInit | undefined,
           funding,
         })
+        const context = requestContext.getStore()
+        const sessionID = context?.sessionID ?? opts.headers.get("x-openscience-session")
+        const messageID = context?.messageID ?? opts.headers.get("x-openscience-request")
+        if (managed && sessionID && messageID && typeof opts.body === "string") {
+          const endpoint = input instanceof Request ? input.url : input instanceof URL ? input.href : String(input)
+          opts.headers.set(
+            "Idempotency-Key",
+            managedIdempotencyKey({
+              endpoint,
+              body: opts.body,
+              sessionID,
+              messageID,
+              operation: "model",
+            }),
+          )
+        }
 
-        return fetchWithIdleWatchdog(fetchFn, input, opts, {
+        const response = await fetchWithIdleWatchdog(fetchFn, input, opts, {
           providerID: model.providerID,
           modelID: model.id,
           idleTimeout,
           totalTimeout: options["timeout"],
         })
+        return funding ? OpenScience.validateFundingResponse(response, funding) : response
       }
 
       // Special case: google-vertex-anthropic uses a subpath import
