@@ -128,6 +128,11 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["text-on-brand-weaker"] = neutralAlpha[7]
   tokens["text-on-brand-strong"] = neutralAlpha[11]
 
+  // Primary buttons invert the neutral scale: light ink in dark mode and dark
+  // ink in light mode. This must be part of the runtime theme payload rather
+  // than relying on the OS-media fallback in theme.css. The app defaults to an
+  // explicit dark scheme, which can differ from the host OS preference.
+  tokens["button-primary-base"] = neutral[11]
   tokens["button-secondary-base"] = isDark ? neutral[2] : neutral[0]
   tokens["button-secondary-hover"] = isDark ? neutral[3] : neutral[1]
   tokens["button-ghost-hover"] = neutralAlpha[1]
