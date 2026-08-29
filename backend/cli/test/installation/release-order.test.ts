@@ -173,9 +173,8 @@ test("production release caches exact builds and packed npm artifacts by version
   )
 })
 
-test("production release keeps signed publishing as the default and falls back to unsigned Windows", async () => {
+test("production stable releases require signed macOS while allowing a disclosed unsigned Windows fallback", async () => {
   const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const input = workflow.slice(workflow.indexOf("      release_mode:"), workflow.indexOf("# One release at a time"))
   const preflight = workflow.slice(workflow.indexOf("\n  macos-signing-preflight:"), workflow.indexOf("\n  version:"))
   const sign = workflow.slice(workflow.indexOf("\n  sign-macos-cli:"), workflow.indexOf("\n  verify-native-cli:"))
   const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
@@ -183,16 +182,16 @@ test("production release keeps signed publishing as the default and falls back t
   const prepare = workflow.slice(workflow.indexOf("\n  prepare-npm:"), workflow.indexOf("\n  publish:"))
   const publish = workflow.slice(workflow.indexOf("\n  publish:"), workflow.indexOf("\n  deployment:"))
 
-  expect(input).toContain("default: signed")
-  expect(input).toContain("- signed")
-  expect(input).toContain("- unsigned")
-  expect(input).toContain("desktop_resume_manifest:")
+  expect(workflow).toContain("desktop_resume_manifest:")
+  expect(workflow).not.toContain("inputs.release_mode")
+  expect(workflow).not.toContain("      release_mode:")
   expect(workflow.indexOf("macos-signing-preflight:")).toBeLessThan(workflow.indexOf("\n  version:"))
-  expect(preflight).toContain("if: inputs.release_mode == 'signed'")
+  expect(preflight).toContain("Require Developer ID and notarization credentials")
+  expect(preflight).not.toContain("if: inputs.release_mode")
   expect(preflight).toContain("Validate optional Windows signing credentials")
   expect(preflight).toContain("the Windows installer will be published unsigned")
   expect(preflight).toContain("Set both WINDOWS_CSC_LINK and WINDOWS_CSC_KEY_PASSWORD, or remove both")
-  expect(preflight).toContain("Publishing unsigned native CLI archives and desktop installers")
+  expect(preflight).not.toContain("Publishing unsigned native CLI archives and desktop installers")
   expect(sign).toContain("Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466")
   expect(sign).toContain("p12-file-base64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}")
   expect(sign).toContain("p12-password: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}")
@@ -200,13 +199,13 @@ test("production release keeps signed publishing as the default and falls back t
   expect(sign).not.toContain("security set-key-partition-list")
   expect(sign).not.toContain('--keychain "$keychain"')
   expect(sign).toContain("security find-identity -v -p codesigning")
-  expect(sign).toContain("if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'")
+  expect(sign).toContain("if: steps.signed-cli-cache.outputs.cache-hit != 'true'")
   expect(sign).toContain("--identifier ai.syntheticsciences.openscience")
   expect(sign).toContain("codesign --verify --strict")
   expect(sign).toContain("xcrun notarytool submit")
   expect(sign).toContain("TeamIdentifier=$APPLE_TEAM_ID")
-  expect(sign).toContain("if: inputs.release_mode == 'unsigned'")
-  expect(sign).toContain("The native CLI archives and desktop installers in this release are unsigned.")
+  expect(sign).not.toContain("inputs.release_mode")
+  expect(sign).not.toContain("The native CLI archives and desktop installers in this release are unsigned.")
   expect(sign).toContain("Mark unsigned Windows installer in the release notes")
   expect(sign).toContain("The Windows installer is unsigned because Windows signing credentials are not configured")
   expect(sign).not.toContain("Desktop installers are not included.")
@@ -214,12 +213,7 @@ test("production release keeps signed publishing as the default and falls back t
   expect(sign.indexOf("Cache immutable signed CLI build")).toBeLessThan(
     sign.indexOf("Verify or upload immutable draft assets"),
   )
-  expect(sign.indexOf("Verify or upload immutable draft assets")).toBeLessThan(
-    sign.indexOf("Mark unsigned CLI archives in the release notes"),
-  )
-  expect(sign).toContain("format('cli-build-signed-{0}', needs.version.outputs.version)")
-  expect(sign).toContain("format('cli-build-{0}', needs.version.outputs.version)")
-  expect(desktop).not.toContain("build-desktop:\n    if: inputs.release_mode == 'signed'")
+  expect(sign).toContain("cache_key: cli-build-signed-${{ needs.version.outputs.version }}")
   expect(desktop).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
   expect(desktop).toContain("enableCrossOsArchive: ${{ runner.os == 'Windows' }}")
   expect(desktop).toContain("Detect optional Windows signing credentials")
@@ -227,7 +221,8 @@ test("production release keeps signed publishing as the default and falls back t
   expect(desktop).toContain("steps.windows-signing.outputs.enabled == 'true'")
   expect(desktop).toContain("steps.windows-signing.outputs.enabled != 'true'")
   expect(desktop).toContain("Build signed desktop installer")
-  expect(desktop).toContain("Build unsigned desktop installer")
+  expect(desktop).toContain("Build unsigned Windows installer")
+  expect(desktop).toContain("matrix.signing == 'windows' && steps.windows-signing.outputs.enabled != 'true'")
   expect(desktop).toContain('OPENSCIENCE_DESKTOP_SIGNED: "true"')
   expect(desktop).toContain('OPENSCIENCE_DESKTOP_SIGNED: "false"')
   expect(desktop).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"')
@@ -249,7 +244,7 @@ test("production release keeps signed publishing as the default and falls back t
   expect(publish).not.toContain("GITHUB_TOKEN: ${{ github.token }}")
   expect(publish).toContain("!cancelled() &&")
   expect(publish).toContain("needs.build-desktop.result == 'success'")
-  expect(publish).not.toContain("inputs.release_mode == 'unsigned' || needs.build-desktop.result == 'success'")
+  expect(publish).toContain("needs.verify-desktop-updater.result == 'success'")
 })
 
 test("production desktop resume freezes an exact reviewed asset set before any rebuild", async () => {
@@ -295,7 +290,7 @@ test("production desktop resume freezes an exact reviewed asset set before any r
     "name: Require macOS release signing credentials",
     "name: Make sidecar executable",
     "name: Build signed desktop installer",
-    "name: Build unsigned desktop installer",
+    "name: Build unsigned Windows installer",
     "name: Verify or upload immutable desktop artifacts",
   ]) {
     expect(findStep(marker)).toContain("steps.existing.outputs.found != 'true'")
@@ -336,7 +331,7 @@ test("production publish finalizes a complete immutable desktop checksum manifes
   expect(finalize).not.toContain("--clobber")
 })
 
-test("desktop packaging explicitly separates signed and unsigned installers", async () => {
+test("desktop packaging keeps local ad-hoc builds separate from signed stable macOS publication", async () => {
   const config = await Bun.file(path.join(import.meta.dir, "../../../../frontend/desktop/electron-builder.mjs")).text()
 
   expect(config).toContain('process.env.OPENSCIENCE_DESKTOP_SIGNED === "true"')
@@ -354,12 +349,21 @@ test("desktop packaging explicitly separates signed and unsigned installers", as
   const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
   const image = desktop.slice(
     desktop.indexOf("Notarize and staple signed macOS disk image"),
-    desktop.indexOf("Build unsigned desktop installer"),
+    desktop.indexOf("Build unsigned Windows installer"),
   )
   const updater = workflow.slice(
     workflow.indexOf("\n  verify-desktop-updater:"),
     workflow.indexOf("\n  verify-native-cli:"),
   )
+  const lifecycle = await Bun.file(
+    path.join(import.meta.dir, "../../../../frontend/desktop/script/update-lifecycle-canary.mjs"),
+  ).text()
+  const artifactCanary = await Bun.file(
+    path.join(import.meta.dir, "../../../../frontend/desktop/script/update-artifact-canary.mjs"),
+  ).text()
+  const updateHelper = await Bun.file(
+    path.join(import.meta.dir, "../../../../frontend/desktop/src/update-helper.mjs"),
+  ).text()
   expect(image).toContain("matrix.signing == 'mac'")
   expect(image).toContain('codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"')
   expect(image).toContain('xcrun notarytool submit "$OPENSCIENCE_DMG"')
@@ -373,6 +377,21 @@ test("desktop packaging explicitly separates signed and unsigned installers", as
   expect(updater).toContain('grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$dmg_details"')
   expect(updater).toContain('xcrun stapler validate "$OPENSCIENCE_DMG"')
   expect(updater).toContain('spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"')
+  expect(updater).toContain("runner: macos-15")
+  expect(updater).toContain("runner: macos-15-intel")
+  expect(updater).toContain("Require native updater architecture")
+  expect(updater).toContain("Resolve an immutable previous signed stable install")
+  expect(updater).toContain("No older immutable signed/notarized stable")
+  expect(updater).toContain("update-lifecycle-canary.mjs")
+  expect(updater).toContain("Exercise packaged handoff, activation, health, cleanup, and rollback")
+  expect(artifactCanary).toContain("codeDirectoryHash")
+  expect(artifactCanary).toContain("do not contain the same signed OpenScience app")
+  expect(lifecycle).toContain('OPENSCIENCE_UPDATE_TEST_HEALTH_FAILURE: "after-healthy"')
+  expect(lifecycle).toContain('OPENSCIENCE_UPDATE_TEST_SKIP_FALLBACK: "1"')
+  expect(lifecycle).toContain("service_health")
+  expect(lifecycle).toContain("assertTransactionClean")
+  expect(updateHelper).toContain("startupHealth = await waitForHealth(payload)")
+  expect(updateHelper.match(/health: startupHealth/g)?.length).toBe(2)
 })
 
 test("production mac updater archives preserve the exact OpenScience.app bundle name", async () => {
@@ -385,7 +404,7 @@ test("production mac updater archives preserve the exact OpenScience.app bundle 
   expect(desktop).not.toContain('[[ "$roots" == "openscience.app" ]]')
 })
 
-test("desktop backfill wraps the immutable public runtime without release or npm mutation", async () => {
+test("desktop backfill wraps the immutable public runtime without weakening stable macOS trust", async () => {
   const workflow = await Bun.file(
     path.join(import.meta.dir, "../../../../.github/workflows/desktop-backfill.yml"),
   ).text()
@@ -394,7 +413,17 @@ test("desktop backfill wraps the immutable public runtime without release or npm
   expect(workflow).toContain("GH_REPO: ${{ github.repository }}")
   expect(workflow).toContain("openscience-release-source:")
   expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"')
-  expect(workflow).toContain('args+=("-c.mac.identity=-" "-c.mac.notarize=false")')
+  expect(workflow).not.toContain('args+=("-c.mac.identity=-" "-c.mac.notarize=false")')
+  expect(workflow).toContain("runner: macos-15-intel")
+  expect(workflow).toContain("Verify an existing macOS backfill is signed and notarized")
+  expect(workflow).toContain("Require macOS signing and notarization credentials")
+  expect(workflow).toContain("Build signed macOS installer")
+  expect(workflow).toContain('OPENSCIENCE_DESKTOP_SIGNED: "true"')
+  expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "true"')
+  expect(workflow).toContain("Notarize and staple signed macOS backfill")
+  expect(workflow).toContain('xcrun notarytool submit "$OPENSCIENCE_DMG"')
+  expect(workflow).toContain('xcrun stapler validate "$OPENSCIENCE_DMG"')
+  expect(workflow).toContain("Build unsigned Windows or Linux installer")
   expect(workflow).toContain('args+=("-c.win.signExecutable=false")')
   expect(workflow).toContain('args+=("-c.executableName=openscience")')
   expect(workflow).toContain('bun run --cwd frontend/desktop dist -- "${args[@]}"')
@@ -413,6 +442,7 @@ test("desktop backfill wraps the immutable public runtime without release or npm
   expect(workflow).toContain("OpenScience-windows-x64.exe")
   expect(workflow).toContain("OpenScience-linux-x64.AppImage")
   expect(workflow).toContain("OpenScience-linux-arm64.AppImage")
+  expect(workflow).toContain("The macOS desktop installers are Developer ID signed and notarized")
 })
 
 test("production npm writes stage the complete set before latest promotion and release publication", async () => {

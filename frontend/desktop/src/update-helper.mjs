@@ -215,6 +215,7 @@ function guiEnvironment() {
     "NODE_OPTIONS",
     "NODE_PATH",
     "OPENSCIENCE_UPDATE_SKIP_LAUNCH",
+    "OPENSCIENCE_UPDATE_TEST_SKIP_FALLBACK",
     "OPENSCIENCE_UPDATE_TEST_HEALTH_FAILURE",
     "OPENSCIENCE_UPDATE_TEST_SWAP_EXECUTABLE",
   ]) {
@@ -225,6 +226,10 @@ function guiEnvironment() {
 
 function skipLaunch() {
   return process.env.NODE_ENV === "test" && process.env.OPENSCIENCE_UPDATE_SKIP_LAUNCH === "1"
+}
+
+function skipFallback() {
+  return process.env.NODE_ENV === "test" && process.env.OPENSCIENCE_UPDATE_TEST_SKIP_FALLBACK === "1"
 }
 
 function identity(stats) {
@@ -579,8 +584,28 @@ async function waitForHealth(payload) {
             throw uncertainProcess(`OpenScience ${payload.version} exited before startup health committed`)
           }
         }
+        if (
+          process.env.NODE_ENV === "test" &&
+          process.env.OPENSCIENCE_UPDATE_TEST_HEALTH_FAILURE === "after-healthy"
+        ) {
+          await stopUnhealthy(payload, health.process_identity)
+          for (let attempt = 0; attempt < 300; attempt++) {
+            const service = await observedProcess(health.service_identity)
+            if (!sameProcess(service, health.service_identity)) {
+              throw new Error("Injected desktop update health failure after packaged health")
+            }
+            await sleep(100)
+          }
+          throw uncertainProcess(
+            `OpenScience ${payload.version} did not dispose its exact local runtime after the injected canary shutdown`,
+          )
+        }
         launched?.child.unref()
-        return
+        return {
+          process_identity: health.process_identity,
+          service_identity: health.service_identity,
+          service_health: health.service_health,
+        }
       }
       if (health.healthy === false) {
         pendingFailure = new Error(
@@ -658,6 +683,7 @@ async function install(payload) {
   let newIdentity
   let stagedIdentity
   let rootIdentity
+  let startupHealth
   try {
     await authorized(payload)
     await receipt(payload.ready, {
@@ -714,7 +740,7 @@ async function install(payload) {
     await transaction(payload, "activated", { old: oldIdentity, new: newIdentity })
     const installed = await verify(payload, payload.target)
     if (!sameIdentity(installed, newIdentity)) throw new Error("The installed update changed during activation")
-    await waitForHealth(payload)
+    startupHealth = await waitForHealth(payload)
   } catch (error) {
     const recovery = []
     let uncertain = error?.code === "OPENSCIENCE_UPDATE_PROCESS_UNCERTAIN"
@@ -765,7 +791,7 @@ async function install(payload) {
       await transaction(payload, "aborted", { old: oldIdentity, new: stagedIdentity })
     }
     const fallback = restored && targetTrusted ? payload.target : payload.fallback
-    if (!uncertain && parentExited && !skipLaunch()) {
+    if (!uncertain && parentExited && !skipLaunch() && !skipFallback()) {
       await openBundle(payload, fallback).catch((cause) => recovery.push(cause))
     }
     const detail = error instanceof Error ? error.message : String(error)
@@ -805,6 +831,7 @@ async function install(payload) {
     status: "succeeded",
     version: payload.version,
     completed_at: new Date().toISOString(),
+    health: startupHealth,
   })
   const cleanup = []
   if (oldIdentity) await exactRemove(swapper, payload.incoming, oldIdentity).catch((cause) => cleanup.push(cause))
@@ -820,6 +847,7 @@ async function install(payload) {
     status: "succeeded",
     version: payload.version,
     completed_at: new Date().toISOString(),
+    health: startupHealth,
     cleanup_error: cleanup.length
       ? cleanup.map((cause) => (cause instanceof Error ? cause.message : String(cause))).join("; ")
       : undefined,

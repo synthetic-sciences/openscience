@@ -96,7 +96,7 @@ jobs:
             archive: openscience-darwin-arm64.zip
             binary: openscience
             asset: OpenScience-mac-arm64.dmg
-          - runner: macos-15
+          - runner: macos-15-intel
             target: mac
             arch: x64
             archive: openscience-darwin-x64.zip
@@ -143,6 +143,28 @@ jobs:
           (( $(jq -r .size <<<"$existing") > 0 ))
           [[ "$(jq -r .digest <<<"$existing")" == sha256:* ]]
           echo "found=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify an existing macOS backfill is signed and notarized
+        if: steps.existing.outputs.found == 'true' && matrix.target == 'mac'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.resolve.outputs.tag }}
+          OPENSCIENCE_DMG: ${{ matrix.asset }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "$APPLE_TEAM_ID" ]] || { echo "::error::Missing APPLE_TEAM_ID for stable macOS verification"; exit 1; }
+          gh release download "$OPENSCIENCE_TAG" --pattern "$OPENSCIENCE_DMG"
+          expected="$(gh release view "$OPENSCIENCE_TAG" --json assets --jq '.assets[] | select(.name == env.OPENSCIENCE_DMG) | .digest')"
+          actual="sha256:$(shasum -a 256 "$OPENSCIENCE_DMG" | awk '{print $1}')"
+          [[ "$expected" =~ ^sha256:[0-9a-f]{64}$ && "$actual" == "$expected" ]]
+          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
+          details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
+          grep -Fq 'Authority=Developer ID Application:' <<<"$details"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details"
+          xcrun stapler validate "$OPENSCIENCE_DMG"
+          spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.existing.outputs.found != 'true'
@@ -204,8 +226,62 @@ jobs:
         if: steps.existing.outputs.found != 'true'
         run: bun install --frozen-lockfile
 
-      - name: Build unsigned desktop installer
-        if: steps.existing.outputs.found != 'true'
+      - name: Require macOS signing and notarization credentials
+        if: steps.existing.outputs.found != 'true' && matrix.target == 'mac'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            [[ -n "${!name:-}" ]] || { echo "::error::Missing $name for stable macOS backfill"; exit 1; }
+          done
+
+      - name: Build signed macOS installer
+        if: steps.existing.outputs.found != 'true' && matrix.target == 'mac'
+        shell: bash
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/.desktop-sidecar/${{ matrix.binary }}
+          OPENSCIENCE_VERSION: ${{ inputs.version }}
+          OPENSCIENCE_DESKTOP_SIGNED: "true"
+          CSC_IDENTITY_AUTO_DISCOVERY: "true"
+          CSC_LINK: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bun run --cwd frontend/desktop dist -- --mac --${{ matrix.arch }}
+
+      - name: Notarize and staple signed macOS backfill
+        if: steps.existing.outputs.found != 'true' && matrix.target == 'mac'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          OPENSCIENCE_DMG: frontend/desktop/dist/${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          [[ -s "$OPENSCIENCE_DMG" ]]
+          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
+          details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
+          grep -Fq 'Authority=Developer ID Application:' <<<"$details"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details"
+          xcrun notarytool submit "$OPENSCIENCE_DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+          xcrun stapler staple "$OPENSCIENCE_DMG"
+          xcrun stapler validate "$OPENSCIENCE_DMG"
+          spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
+
+      - name: Build unsigned Windows or Linux installer
+        if: steps.existing.outputs.found != 'true' && matrix.target != 'mac'
         shell: bash
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/.desktop-sidecar/${{ matrix.binary }}
@@ -216,9 +292,7 @@ jobs:
           unset CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
           unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
           args=("--${{ matrix.target }}" "--${{ matrix.arch }}")
-          if [[ "${{ matrix.target }}" == "mac" ]]; then
-            args+=("-c.mac.identity=-" "-c.mac.notarize=false")
-          elif [[ "${{ matrix.target }}" == "win" ]]; then
+          if [[ "${{ matrix.target }}" == "win" ]]; then
             args+=("-c.win.signExecutable=false")
           else
             args+=("-c.executableName=openscience")
@@ -299,7 +373,7 @@ jobs:
 
           body="$(jq -r .body <<<"$assets")"
           old='The native CLI archives in this release are unsigned. macOS and Windows may show operating-system security prompts. Desktop installers are not included.'
-          new='The native CLI archives and desktop installers in this release are unsigned. macOS and Windows may show operating-system security prompts. The macOS apps are ad-hoc signed but are not notarized.'
+          new='The macOS desktop installers are Developer ID signed and notarized. Native CLI archives plus Windows and Linux desktop installers remain unsigned; Windows may show an operating-system security prompt.'
           if [[ "$body" == *"$old"* ]]; then
             body="${body//$old/$new}"
           elif [[ "$body" != *"$new"* ]]; then

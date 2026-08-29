@@ -34,12 +34,11 @@ branch.
      --acknowledge-remote-cost --timeout 900
    ```
 
-3. After every candidate job succeeds, trigger the `publish` workflow with a
-   bump level and an explicit release
-   mode:
+3. After every candidate job succeeds, trigger the signed production `publish`
+   workflow with a bump level:
 
    ```bash
-   gh workflow run publish.yml --ref main -f bump=patch -f release_mode=signed
+   gh workflow run publish.yml --ref main -f bump=patch
    ```
 
    Production preflight independently queries the GitHub Actions API for that
@@ -50,24 +49,28 @@ branch.
    Exact-version resumes remain bound to the immutable source marker in the
    existing draft release; the workflow rejects any mismatch before building.
 
-   Use `release_mode=unsigned` only for a deliberately unsigned release. In
-   that mode the macOS apps are ad-hoc signed but not notarized, the Windows
-   installer is unsigned, and the workflow adds the required warning to the
-   release notes. The first unsigned macOS install requires Apple's explicit
-   **Open Anyway** flow. Later desktop updates verify the architecture-specific
-   release ZIP's GitHub SHA-256 digest and app bundle identity, version, and
-   signature before replacing the installed bundle and restarting.
+   Stable publication has no unsigned macOS mode. Developer ID signing and
+   notarization credentials are mandatory before the draft can be built. The
+   Windows installer may still be published unsigned when both optional
+   Windows signing secrets are absent; release notes disclose that separately.
+   Ad-hoc-signed macOS development packages must never be attached to a stable
+   update release.
 
    The next version is derived from the current npm `latest`, so there is no
    manual version editing in `package.json` and no risk of a tag collision.
 
 4. The workflow then, in order: computes the version and opens a draft GitHub
-   release → builds the platform binaries and desktop installers → uploads and
-   verifies their checksum manifests → verifies the Linux x64 and ARM64 npm
+   release → builds the platform binaries and signed/notarized macOS desktop
+   installers → verifies the immutable ZIP and DMG on native Apple Silicon and
+   Intel runners → upgrades a previous immutable signed stable app through the
+   real helper/sidecar handoff, proves packaged main and runtime health and
+   cleanup, and injects a safe health failure to prove rollback → uploads and
+   verifies the checksum manifests → verifies the Linux x64 and ARM64 npm
    wrappers on native runners → publishes the CLI, SDK, plugin, and launcher
    packages to npm with provenance → attempts the Homebrew tap update → makes
-   the release public only after required npm publishes and desktop assets
-   succeed → records an npm deployment.
+   the release public only after every updater lifecycle and publication gate
+   succeeds → records an npm deployment. If no older digest-bound signed stable
+   updater ZIP exists for an architecture, the release fails closed.
 
    The publish job commits the generated package-version changes. It pushes that
    commit to `main` when the workflow identity may bypass branch protection;
@@ -101,11 +104,12 @@ release is not a draft, the tag targets the release commit, and the assets inclu
 11 platform archives, `checksums.txt`, `desktop-checksums.txt`, two macOS DMGs,
 two architecture-specific macOS updater ZIPs, one Windows EXE, and two Linux
 AppImages: 20 release assets in total. Inspect the publish run for Homebrew,
-launcher, signing, or notarization warnings. Homebrew updates remain non-fatal
+launcher or Windows-signing warnings. macOS signing, notarization, immutable
+asset verification, and both native updater lifecycles are fatal gates. Homebrew updates remain non-fatal
 and may need owner follow-up. Publishing the `synsci` launcher is required in
 both test and production releases; a launcher failure leaves the GitHub release
-as a draft. For unsigned mode, verify that the release warning is present and
-do not describe the installers as signed or notarized.
+as a draft. Never bypass the updater lifecycle job or replace a stable macOS
+asset with an ad-hoc-signed build.
 
 See [verification.md](verification.md) for the local gates to run before you
 push to `main`.

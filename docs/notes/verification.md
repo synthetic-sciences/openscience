@@ -67,9 +67,11 @@ Notes:
 - Modal concurrency is an admission limit. A start beyond capacity should fail
   visibly; autonomous waiting-queue behavior is deferred and must not appear in
   product or release copy.
-- An unsigned release must retain its GitHub warning and all seven desktop
-  payload checks: two macOS DMGs, two architecture-specific macOS updater ZIPs,
-  one Windows EXE, and two Linux AppImages. macOS artifacts are ad-hoc signed
-  but not notarized; the Windows installer is unsigned.
+- Stable releases require signed, notarized macOS DMGs and updater ZIPs; there
+  is no unsigned stable macOS channel. Both architectures must retain immutable
+  GitHub digests and pass their native previous-stable upgrade, packaged
+  main/sidecar health, cleanup, and injected safe-rollback canaries before the
+  draft is made public. The Windows installer may be unsigned only when both
+  optional Windows signing secrets are absent, with an explicit release note.
 - Organization funding and team billing are not part of this release tree. PR
   #413 remains unmerged and must not be included in shipped-feature claims.

@@ -16,16 +16,8 @@ on:
         description: "Exact stable version to publish or resume (overrides bump, for example 2.0.32)"
         required: false
         type: string
-      release_mode:
-        description: "Signed notarizes macOS and signs Windows when credentials exist; unsigned publishes native archives and unsigned desktop installers"
-        required: true
-        default: signed
-        type: choice
-        options:
-          - signed
-          - unsigned
       desktop_resume_manifest:
-        description: "Optional reviewed JSON binding pre-existing desktop assets to this exact version, source, release mode, and sha256 digests"
+        description: "Optional reviewed JSON binding pre-existing desktop assets to this exact version, source, signed stable channel, and sha256 digests"
         required: false
         type: string
 
@@ -247,7 +239,6 @@ jobs:
       contents: read
     steps:
       - name: Require Developer ID and notarization credentials
-        if: inputs.release_mode == 'signed'
         shell: bash
         env:
           APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
@@ -267,7 +258,6 @@ jobs:
           fi
 
       - name: Validate optional Windows signing credentials
-        if: inputs.release_mode == 'signed'
         shell: bash
         env:
           WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
@@ -284,14 +274,6 @@ jobs:
             echo "::error::Windows signing is partially configured. Set both WINDOWS_CSC_LINK and WINDOWS_CSC_KEY_PASSWORD, or remove both to publish Windows unsigned."
             exit 1
           fi
-
-      - name: Record unsigned native release mode
-        if: inputs.release_mode == 'unsigned'
-        shell: bash
-        run: |
-          echo "::warning::Publishing unsigned native CLI archives and desktop installers; operating systems may show security prompts."
-          echo "### Unsigned native release" >> "$GITHUB_STEP_SUMMARY"
-          echo "Native CLI archives and desktop installers will be published without trusted code signing. macOS Gatekeeper and Windows SmartScreen may show security prompts." >> "$GITHUB_STEP_SUMMARY"
 
   version:
     needs:
@@ -397,7 +379,6 @@ jobs:
 
       - name: Restore signed CLI build
         id: signed-cli-cache
-        if: inputs.release_mode == 'signed'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -405,8 +386,8 @@ jobs:
             frontend/workspace/dist/version.json
           key: cli-build-signed-${{ needs.version.outputs.version }}
 
-      - name: Restore unsigned CLI build
-        if: inputs.release_mode == 'unsigned' || steps.signed-cli-cache.outputs.cache-hit != 'true'
+      - name: Restore CLI input build for signing
+        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -416,14 +397,14 @@ jobs:
           fail-on-cache-miss: true
 
       - name: Import Developer ID identity
-        if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'
+        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
         uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
         with:
           p12-file-base64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
           p12-password: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
 
       - name: Developer ID sign and notarize macOS binaries
-        if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'
+        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
         shell: bash
         env:
           APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
@@ -480,7 +461,7 @@ jobs:
           done < <(find backend/cli/dist -maxdepth 1 -type f \( -name 'openscience-*.zip' -o -name 'openscience-*.tar.gz' \) | sort)
 
       - name: Cache immutable signed CLI build
-        if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'
+        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -488,8 +469,7 @@ jobs:
             frontend/workspace/dist/version.json
           key: cli-build-signed-${{ needs.version.outputs.version }}
 
-      # Signed mode uploads notarization-accepted bytes; unsigned mode uploads
-      # the same immutable native archives proven by the v2.0.49 release path.
+      # Stable production releases upload only notarization-accepted macOS bytes.
       - name: Verify or upload immutable draft assets
         run: ./tooling/repo/release-assets.ts backend/cli/dist
         env:
@@ -497,25 +477,7 @@ jobs:
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
           GH_TOKEN: ${{ github.token }}
 
-      - name: Mark unsigned CLI archives in the release notes
-        if: inputs.release_mode == 'unsigned'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
-        run: |
-          set -euo pipefail
-          notice='> [!WARNING]
-          > The native CLI archives and desktop installers in this release are unsigned. macOS Gatekeeper and Windows SmartScreen may show security prompts. The macOS apps are ad-hoc signed but are not notarized.'
-          body="$(gh release view "$OPENSCIENCE_TAG" --json body --jq .body)"
-          if ! grep -Fq 'The native CLI archives and desktop installers in this release are unsigned.' <<<"$body"; then
-            notes="$RUNNER_TEMP/openscience-unsigned-release-notes.txt"
-            printf '%s\n\n%s\n' "$body" "$notice" > "$notes"
-            gh release edit "$OPENSCIENCE_TAG" --notes-file "$notes"
-          fi
-
       - name: Mark unsigned Windows installer in the release notes
-        if: inputs.release_mode == 'signed'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -534,7 +496,7 @@ jobs:
           fi
 
     outputs:
-      cache_key: ${{ inputs.release_mode == 'signed' && format('cli-build-signed-{0}', needs.version.outputs.version) || format('cli-build-{0}', needs.version.outputs.version) }}
+      cache_key: cli-build-signed-${{ needs.version.outputs.version }}
 
   desktop-resume:
     needs: version
@@ -555,7 +517,7 @@ jobs:
           OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_SOURCE: ${{ needs.version.outputs.source }}
-          OPENSCIENCE_RELEASE_MODE: ${{ inputs.release_mode }}
+          OPENSCIENCE_RELEASE_MODE: signed
           DESKTOP_RESUME_MANIFEST: ${{ inputs.desktop_resume_manifest }}
         run: |
           set -euo pipefail
@@ -741,7 +703,7 @@ jobs:
 
       - name: Detect optional Windows signing credentials
         id: windows-signing
-        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing == 'windows'
+        if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows'
         shell: bash
         env:
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
@@ -754,7 +716,7 @@ jobs:
           echo "enabled=false" >> "$GITHUB_OUTPUT"
 
       - name: Require macOS release signing credentials
-        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing == 'mac'
+        if: steps.existing.outputs.found != 'true' && matrix.signing == 'mac'
         shell: bash
         run: |
           test -n "$CSC_LINK" || { echo "::error::Missing desktop code-signing certificate"; exit 1; }
@@ -777,7 +739,7 @@ jobs:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
 
       - name: Build signed desktop installer
-        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && (matrix.signing != 'windows' || steps.windows-signing.outputs.enabled == 'true')
+        if: steps.existing.outputs.found != 'true' && (matrix.signing != 'windows' || steps.windows-signing.outputs.enabled == 'true')
         shell: bash
         run: bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
         env:
@@ -792,7 +754,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Notarize and staple signed macOS disk image
-        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing == 'mac'
+        if: steps.existing.outputs.found != 'true' && matrix.signing == 'mac'
         shell: bash
         env:
           APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
@@ -818,8 +780,8 @@ jobs:
           xcrun stapler validate "$OPENSCIENCE_DMG"
           spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
 
-      - name: Build unsigned desktop installer
-        if: steps.existing.outputs.found != 'true' && (inputs.release_mode == 'unsigned' || (inputs.release_mode == 'signed' && matrix.signing == 'windows' && steps.windows-signing.outputs.enabled != 'true'))
+      - name: Build unsigned Windows installer
+        if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows' && steps.windows-signing.outputs.enabled != 'true'
         shell: bash
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
@@ -900,14 +862,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: arm64
+          - runner: macos-15
+            arch: arm64
+            machine: arm64
             dmg: OpenScience-mac-arm64.dmg
             zip: OpenScience-mac-arm64.zip
-          - arch: x64
+          - runner: macos-15-intel
+            arch: x64
+            machine: x86_64
             dmg: OpenScience-mac-x64.dmg
             zip: OpenScience-mac-x64.zip
-    runs-on: macos-14
-    timeout-minutes: 15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions:
       # Draft release assets are hidden from read-only workflow tokens. This
       # job only downloads and verifies the already immutable payloads.
@@ -919,6 +885,19 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-bun
+
+      - name: Require native updater architecture
+        shell: bash
+        env:
+          OPENSCIENCE_MACHINE: ${{ matrix.machine }}
+          OPENSCIENCE_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          actual="$(uname -m)"
+          if [[ "$actual" != "$OPENSCIENCE_MACHINE" ]]; then
+            echo "::error::The $OPENSCIENCE_ARCH updater lifecycle must run natively on $OPENSCIENCE_MACHINE; runner reported $actual."
+            exit 1
+          fi
 
       - name: Download the exact stable-channel macOS artifacts
         shell: bash
@@ -940,14 +919,13 @@ jobs:
             }
           done
 
-      - name: Exercise the updater against the exact ZIP and DMG app
+      - name: Verify the exact signed ZIP and DMG structure
         shell: bash
         env:
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_ARCH: ${{ matrix.arch }}
           OPENSCIENCE_DMG: ${{ matrix.dmg }}
           OPENSCIENCE_ZIP: ${{ matrix.zip }}
-          OPENSCIENCE_TRUSTED: ${{ inputs.release_mode == 'signed' }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
@@ -955,36 +933,128 @@ jobs:
           mkdir -p "$mountpoint"
           cleanup() { hdiutil detach "$mountpoint" -quiet 2>/dev/null || true; }
           trap cleanup EXIT
-          if [[ "$OPENSCIENCE_TRUSTED" == "true" ]]; then
-            codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
-            dmg_details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
-            grep -Fq 'Authority=Developer ID Application:' <<<"$dmg_details"
-            grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$dmg_details" || {
-              echo "::error::$OPENSCIENCE_DMG is not signed by the configured OpenScience team"
-              exit 1
-            }
-            xcrun stapler validate "$OPENSCIENCE_DMG"
-            spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
-          fi
+          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
+          dmg_details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
+          grep -Fq 'Authority=Developer ID Application:' <<<"$dmg_details"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$dmg_details" || {
+            echo "::error::$OPENSCIENCE_DMG is not signed by the configured OpenScience team"
+            exit 1
+          }
+          xcrun stapler validate "$OPENSCIENCE_DMG"
+          spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
           hdiutil attach "$OPENSCIENCE_DMG" -readonly -nobrowse -mountpoint "$mountpoint" -quiet
           current="$mountpoint/OpenScience.app"
           [[ -d "$current" && ! -L "$current" ]] || {
             echo "::error::$OPENSCIENCE_DMG has no real top-level OpenScience.app"
             exit 1
           }
-          if [[ "$OPENSCIENCE_TRUSTED" == "true" ]]; then
-            details="$(codesign -dv --verbose=4 "$current" 2>&1)"
-            grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details" || {
-              echo "::error::$OPENSCIENCE_DMG is not signed by the configured OpenScience team"
-              exit 1
-            }
-          fi
+          details="$(codesign -dv --verbose=4 "$current" 2>&1)"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details" || {
+            echo "::error::$OPENSCIENCE_DMG is not signed by the configured OpenScience team"
+            exit 1
+          }
           bun frontend/desktop/script/update-artifact-canary.mjs \
             --zip "$OPENSCIENCE_ZIP" \
             --current "$current" \
             --version "$OPENSCIENCE_VERSION" \
             --arch "$OPENSCIENCE_ARCH" \
-            --trusted "$OPENSCIENCE_TRUSTED"
+            --trusted true
+
+      - name: Resolve an immutable previous signed stable install
+        id: previous
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OPENSCIENCE_ARCH: ${{ matrix.arch }}
+          OPENSCIENCE_MACHINE: ${{ matrix.machine }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ZIP: ${{ matrix.zip }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          pages="$RUNNER_TEMP/openscience-stable-releases.json"
+          candidates="$RUNNER_TEMP/openscience-stable-candidates.jsonl"
+          gh api --paginate --slurp \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$GH_REPO/releases?per_page=100" > "$pages"
+          jq -c '
+            [.[] | .[] | select(
+              .draft == false and
+              .prerelease == false and
+              (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+            )]
+            | sort_by(.published_at // .created_at)
+            | reverse
+            | .[]
+          ' "$pages" > "$candidates"
+
+          found=false
+          while IFS= read -r release; do
+            tag="$(jq -r .tag_name <<<"$release")"
+            old_version="${tag#v}"
+            if ! OLD_VERSION="$old_version" CURRENT_VERSION="$OPENSCIENCE_VERSION" \
+              bun -e 'import { newer } from "./frontend/desktop/src/updater.mjs"; if (!newer(process.env.OLD_VERSION, process.env.CURRENT_VERSION)) process.exit(1)'; then
+              continue
+            fi
+            expected="$(jq -r --arg name "$OPENSCIENCE_ZIP" '.assets[] | select(.name == $name) | .digest' <<<"$release")"
+            [[ "$expected" =~ ^sha256:[0-9a-f]{64}$ ]] || continue
+            candidate="$RUNNER_TEMP/previous-$old_version"
+            mkdir -p "$candidate"
+            if ! gh release download "$tag" --pattern "$OPENSCIENCE_ZIP" --dir "$candidate"; then
+              continue
+            fi
+            archive="$candidate/$OPENSCIENCE_ZIP"
+            [[ -s "$archive" ]] || continue
+            actual="sha256:$(shasum -a 256 "$archive" | awk '{print $1}')"
+            [[ "$actual" == "$expected" ]] || continue
+            unpack="$candidate/unpacked"
+            mkdir -p "$unpack"
+            if ! ditto -x -k "$archive" "$unpack"; then continue; fi
+            app="$unpack/OpenScience.app"
+            [[ -d "$app" && ! -L "$app" ]] || continue
+            [[ "$(find "$unpack" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' ')" == "1" ]] || continue
+            if ! codesign --verify --deep --strict --verbose=2 "$app"; then continue; fi
+            if ! spctl --assess --type execute --verbose=4 "$app"; then continue; fi
+            details="$(codesign -dv --verbose=4 "$app" 2>&1)"
+            grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details" || continue
+            identifier="$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")"
+            installed="$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")"
+            executable="$(plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")"
+            [[ "$identifier" == "ai.syntheticsciences.openscience" && "$installed" == "$old_version" ]] || continue
+            architectures="$(lipo -archs "$app/Contents/MacOS/$executable")"
+            [[ " $architectures " == *" $OPENSCIENCE_MACHINE "* ]] || continue
+            {
+              echo "zip=$archive"
+              echo "version=$old_version"
+              echo "tag=$tag"
+            } >> "$GITHUB_OUTPUT"
+            found=true
+            break
+          done < "$candidates"
+          if [[ "$found" != "true" ]]; then
+            echo "::error::No older immutable signed/notarized stable $OPENSCIENCE_ARCH updater ZIP exists. Stable publication fails closed until a signed baseline is available."
+            exit 1
+          fi
+
+      - name: Exercise packaged handoff, activation, health, cleanup, and rollback
+        shell: bash
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_PREVIOUS_VERSION: ${{ steps.previous.outputs.version }}
+          OPENSCIENCE_PREVIOUS_ZIP: ${{ steps.previous.outputs.zip }}
+          OPENSCIENCE_ARCH: ${{ matrix.arch }}
+          OPENSCIENCE_ZIP: ${{ matrix.zip }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          bun frontend/desktop/script/update-lifecycle-canary.mjs \
+            --zip "$OPENSCIENCE_ZIP" \
+            --previous-zip "$OPENSCIENCE_PREVIOUS_ZIP" \
+            --version "$OPENSCIENCE_VERSION" \
+            --previous-version "$OPENSCIENCE_PREVIOUS_VERSION" \
+            --arch "$OPENSCIENCE_ARCH" \
+            --team "$APPLE_TEAM_ID"
 
   verify-native-cli:
     needs:
