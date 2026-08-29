@@ -1,6 +1,13 @@
-# Full OpenScience redesign
+# OpenScience implementation plans
 
-This directory is the only active implementation plan for pull request #240.
+The current release plan is
+[2026-08-29-product-experience-release.md](2026-08-29-product-experience-release.md).
+It owns the harness, permissions, skills, onboarding, updater, storage,
+compute/connectors, billing, and release work requested on 2026-08-29.
+
+## Historical full redesign plan
+
+The material below is the historical implementation plan for pull request #240.
 `/Users/aayambansal/Downloads/fixes.docx` is the product authority. When this
 plan and that document disagree, the document wins.
 
