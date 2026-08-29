@@ -43,6 +43,10 @@ async function waitEntry(previous: Set<string>) {
   throw new Error("Timed out waiting for the Modal Volume bridge ledger entry")
 }
 
+function passingBootstrap(python: string) {
+  return { argv: [python, "-I", "-c", "pass"], timeout: 1_000 }
+}
+
 async function fixture() {
   const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-volume-"))
   roots.push(root)
@@ -161,6 +165,7 @@ describe("ModalVolume", () => {
     const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-poison-"))
     roots.push(root)
     await Bun.write(path.join(root, "modal.py"), "raise RuntimeError('ambient modal module loaded')\n")
+    await using _testing = ModalVolume.testing({ bootstrap: passingBootstrap(python) })
 
     const selected = await ModalVolume.command({
       tokenId: "ak-test",
@@ -173,6 +178,7 @@ describe("ModalVolume", () => {
     expect(selected).toEqual([
       "/test/uv",
       "run",
+      "--offline",
       "--no-project",
       "--python",
       "3.12",
@@ -184,6 +190,270 @@ describe("ModalVolume", () => {
     ])
   })
 
+  test("prewarms the pinned uv runtime without Modal credentials before returning an offline bridge", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-cold-prewarm-"))
+    roots.push(root)
+    const marker = path.join(root, "prewarmed")
+    const tokenID = "ak-never-bootstrap-id"
+    const tokenSecret = "as-never-bootstrap-secret"
+    await using _testing = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
+      bootstrap: {
+        argv: [
+          python,
+          "-I",
+          "-c",
+          [
+            "import os, pathlib, sys",
+            "assert 'MODAL_TOKEN_ID' not in os.environ",
+            "assert 'MODAL_TOKEN_SECRET' not in os.environ",
+            "pathlib.Path(sys.argv[1]).write_text('cold-cache-ready')",
+          ].join("; "),
+          marker,
+        ],
+        timeout: 1_000,
+      },
+    })
+
+    const selected = await ModalVolume.command({
+      tokenId: tokenID,
+      tokenSecret,
+      python,
+      uv: "/test/uv",
+      env: { ...process.env, MODAL_TOKEN_ID: tokenID, MODAL_TOKEN_SECRET: tokenSecret },
+    })
+
+    expect(await Bun.file(marker).text()).toBe("cold-cache-ready")
+    expect(selected.slice(0, 3)).toEqual(["/test/uv", "run", "--offline"])
+    expect(selected).toContain(`modal==${ModalVolume.VERSION}`)
+  }, 30_000)
+
+  test("coalesces identical in-flight prewarms without retaining positive trust after completion", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-coalesced-prewarm-"))
+    roots.push(root)
+    const marker = path.join(root, "starts")
+    const release = path.join(root, "release")
+    await using _testing = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
+      bootstrap: {
+        argv: [
+          python,
+          "-I",
+          "-c",
+          [
+            "import pathlib, sys, time",
+            "marker = pathlib.Path(sys.argv[1])",
+            "with marker.open('a') as handle:",
+            "    handle.write('start\\n')",
+            "release = pathlib.Path(sys.argv[2])",
+            "while not release.exists():",
+            "    time.sleep(0.01)",
+          ].join("\n"),
+          marker,
+          release,
+        ],
+        timeout: 5_000,
+      },
+    })
+    const context = { tokenId: "ak-test", tokenSecret: "as-test", python, uv: "/test/uv" }
+
+    const first = ModalVolume.command(context)
+    const second = ModalVolume.command(context)
+    await waitText(marker)
+    await Bun.sleep(100)
+    expect((await Bun.file(marker).text()).trim().split("\n")).toHaveLength(1)
+    await Bun.write(release, "ready")
+    const selected = await Promise.all([first, second])
+
+    expect(selected.every((argv) => argv[2] === "--offline")).toBe(true)
+    await ModalVolume.command(context)
+    expect((await Bun.file(marker).text()).trim().split("\n")).toHaveLength(2)
+  }, 30_000)
+
+  test("fails closed when the token-free uv bootstrap times out", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const previous = new Set((await ledger()).map((entry) => entry.id))
+    await using _testing = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
+      bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 100 },
+    })
+    const running = ModalVolume.command({
+      tokenId: "ak-test",
+      tokenSecret: "as-test",
+      python,
+      uv: "/test/uv",
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+    const active = await waitEntry(previous)
+    const error = await running
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain("Modal Volume SDK bootstrap timed out after 100ms")
+    expect(await CredentialProcessLedger.owns(active.pid, active.identity)).toBe(false)
+    expect((await ledger()).some((entry) => entry.id === active.id)).toBe(false)
+  }, 30_000)
+
+  test("fails closed on a nonzero or signalled token-free uv bootstrap", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    await using _nonzero = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
+      bootstrap: {
+        argv: [python, "-I", "-c", "import sys; sys.stderr.write('bootstrap-only'); raise SystemExit(7)"],
+        timeout: 1_000,
+      },
+    })
+    const nonzero = await ModalVolume.command({
+      tokenId: "ak-never-log-id",
+      tokenSecret: "as-never-log-secret",
+      python,
+      uv: "/test/uv",
+    }).catch((error) => error as Error)
+
+    expect(nonzero).toBeInstanceOf(Error)
+    if (!(nonzero instanceof Error)) throw new Error("The nonzero bootstrap unexpectedly returned an argv")
+    expect(nonzero.message).toContain("Modal Volume SDK bootstrap failed (exit 7): bootstrap-only")
+    expect(nonzero.message).not.toContain("ak-never-log-id")
+    expect(nonzero.message).not.toContain("as-never-log-secret")
+
+    _nonzero[Symbol.dispose]()
+    await using _signalled = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
+      bootstrap: {
+        argv: [python, "-I", "-c", "import os, signal; os.kill(os.getpid(), signal.SIGTERM)"],
+        timeout: 1_000,
+      },
+    })
+    const signalled = await ModalVolume.command({
+      tokenId: "ak-test",
+      tokenSecret: "as-test",
+      python,
+      uv: "/test/uv",
+    }).catch((error) => error as Error)
+
+    expect(signalled).toBeInstanceOf(Error)
+    if (!(signalled instanceof Error)) throw new Error("The signalled bootstrap unexpectedly returned an argv")
+    expect(signalled.message).toMatch(/Modal Volume SDK bootstrap (?:was killed|failed)/)
+  }, 30_000)
+
+  test("aborts and reaps a sole in-flight token-free uv bootstrap before returning credentials", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const previous = new Set((await ledger()).map((entry) => entry.id))
+    const controller = new AbortController()
+    const reason = new DOMException("canary cancelled", "AbortError")
+    await using _testing = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
+      bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 5_000 },
+    })
+    const running = ModalVolume.command(
+      { tokenId: "ak-test", tokenSecret: "as-test", python, uv: "/test/uv" },
+      controller.signal,
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+    const active = await waitEntry(previous)
+
+    controller.abort(reason)
+    const error = await running
+
+    expect(error).toBe(reason)
+    expect(await CredentialProcessLedger.owns(active.pid, active.identity)).toBe(false)
+    expect((await ledger()).some((entry) => entry.id === active.id)).toBe(false)
+  }, 30_000)
+
+  test("observes a caller abort delivered immediately before the prewarm listener is registered", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const controller = new AbortController()
+    const reason = new DOMException("abort in listener gap", "AbortError")
+    await using _testing = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
+      bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 5_000 },
+      beforeBootstrapListener: () => controller.abort(reason),
+    })
+
+    const error = await ModalVolume.command(
+      { tokenId: "ak-test", tokenSecret: "as-test", python, uv: "/test/uv" },
+      controller.signal,
+    ).catch((value) => value)
+
+    expect(error).toBe(reason)
+    expect((await ledger()).some((entry) => entry.kind === "modal-volume")).toBe(false)
+  }, 30_000)
+
+  test("propagates token-free uv bootstrap cleanup failures instead of returning an offline bridge", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const previous = new Set((await ledger()).map((entry) => entry.id))
+    await using _testing = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
+      bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 100 },
+    })
+    const running = ModalVolume.command({
+      tokenId: "ak-test",
+      tokenSecret: "as-test",
+      python,
+      uv: "/test/uv",
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+    const active = await waitEntry(previous)
+    const failure = new Error("synthetic bootstrap cleanup failure")
+    const revoke = spyOn(CredentialProcessLedger, "revoke").mockRejectedValue(failure)
+
+    try {
+      const error = await running
+      expect(error).toBeInstanceOf(AggregateError)
+      expect((error as AggregateError).errors).toContain(failure)
+    } finally {
+      revoke.mockRestore()
+      await CredentialProcessLedger.revoke({ id: active.id, kind: "modal-volume" }).catch(() => undefined)
+    }
+  }, 30_000)
+
+  test("does not mask a settled bootstrap cleanup failure with a simultaneous caller abort", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const previous = new Set((await ledger()).map((entry) => entry.id))
+    const controller = new AbortController()
+    const reason = new DOMException("abort after cleanup failure", "AbortError")
+    await using _testing = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
+      bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 100 },
+      afterBootstrapSettled: () => controller.abort(reason),
+    })
+    const running = ModalVolume.command(
+      { tokenId: "ak-test", tokenSecret: "as-test", python, uv: "/test/uv" },
+      controller.signal,
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+    const active = await waitEntry(previous)
+    const failure = new Error("synthetic settled cleanup failure")
+    const revoke = spyOn(CredentialProcessLedger, "revoke").mockRejectedValue(failure)
+
+    try {
+      const error = await running
+      expect(controller.signal.aborted).toBe(true)
+      expect(error).toBeInstanceOf(AggregateError)
+      expect((error as AggregateError).errors).toContain(failure)
+    } finally {
+      revoke.mockRestore()
+      await CredentialProcessLedger.revoke({ id: active.id, kind: "modal-volume" }).catch(() => undefined)
+    }
+  }, 30_000)
+
   test("reaps a timed-out ambient SDK probe before selecting the pinned uv runtime", async () => {
     const python = Bun.which("python3") ?? Bun.which("python")
     if (!python) throw new Error("Python is required for the Modal Volume driver test")
@@ -191,6 +461,7 @@ describe("ModalVolume", () => {
     let active: LedgerEntry | undefined
     await using _testing = ModalVolume.testing({
       probe: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 1_000 },
+      bootstrap: passingBootstrap(python),
       beforeUv: async () => {
         expect(active).toBeDefined()
         expect(await CredentialProcessLedger.owns(active!.pid, active!.identity)).toBe(false)
@@ -212,6 +483,7 @@ describe("ModalVolume", () => {
     expect(selected).toEqual([
       "/test/uv",
       "run",
+      "--offline",
       "--no-project",
       "--python",
       "3.12",

@@ -27,7 +27,10 @@ export namespace ModalVolume {
 
   type TestHooks = {
     probe?: { argv: string[]; timeout: number }
+    bootstrap?: { argv: string[]; timeout: number }
     beforeUv?: () => void | Promise<void>
+    beforeBootstrapListener?: () => void
+    afterBootstrapSettled?: () => void
   }
 
   const hooks = { value: undefined as TestHooks | undefined }
@@ -114,6 +117,7 @@ export namespace ModalVolume {
 
   const LIST_TIMEOUT = 60_000
   const PROBE_TIMEOUT = 15_000
+  const BOOTSTRAP_TIMEOUT = 180_000
   const MAX_STDOUT = 8 * 1024 * 1024
   const MAX_STDERR = 1024 * 1024
   const text = new TextDecoder()
@@ -173,6 +177,19 @@ export namespace ModalVolume {
 
   const cache: { path?: Promise<string> } = {}
 
+  type Prewarm = {
+    controller: AbortController
+    promise: Promise<void>
+    waiters: number
+    settled: boolean
+    failure?: unknown
+  }
+
+  // Share only an identical in-flight token-free bootstrap. Successful
+  // checks are deliberately not retained: every later credential-bearing
+  // operation must re-attest its exact uv path, pin, and isolated runtime.
+  const prewarms = new Map<string, Prewarm>()
+
   export async function driverPath() {
     if (cache.path) return cache.path
     const pending = Promise.resolve().then(async () => {
@@ -196,6 +213,97 @@ export namespace ModalVolume {
       throw error
     })
     return cache.path
+  }
+
+  async function bootstrap(argv: string[], env: Record<string, string>, timeout: number, signal: AbortSignal) {
+    const result = await execute(argv, env, timeout, "SDK bootstrap", undefined, signal)
+    if (result.signal) throw new Error(`Modal Volume SDK bootstrap was killed by ${result.signal}`)
+    if (result.code === null) throw new Error("Modal Volume SDK bootstrap ended without an exit code")
+    if (result.code !== 0) {
+      const detail = result.stderr.byteLength ? result.stderr : result.stdout
+      const message = text.decode(detail).trim()
+      throw new Error(`Modal Volume SDK bootstrap failed (exit ${result.code})${message ? `: ${message}` : ""}`)
+    }
+  }
+
+  async function prewarm(argv: string[], env: Record<string, string>, timeout: number, signal?: AbortSignal) {
+    if (signal?.aborted) throw abortReason(signal)
+    const key = JSON.stringify([
+      argv,
+      Object.entries(env).toSorted(([left], [right]) => left.localeCompare(right)),
+      timeout,
+    ])
+    let entry = prewarms.get(key)
+    if (!entry) {
+      const controller = new AbortController()
+      entry = {
+        controller,
+        promise: Promise.resolve(),
+        waiters: 0,
+        settled: false,
+      }
+      const current = entry
+      current.promise = bootstrap(argv, env, timeout, controller.signal)
+        .catch((error) => {
+          current.failure = error
+          throw error
+        })
+        .finally(() => {
+          current.settled = true
+          hooks.value?.afterBootstrapSettled?.()
+          if (prewarms.get(key) === current) prewarms.delete(key)
+        })
+      prewarms.set(key, current)
+    }
+
+    entry.waiters++
+    let released = false
+    const release = async (reason?: unknown) => {
+      if (released) return
+      released = true
+      entry!.waiters--
+      if (reason === undefined || entry!.waiters > 0 || entry!.settled) return
+      entry!.controller.abort(reason)
+      try {
+        await entry!.promise
+      } catch (error) {
+        // The caller's own abort is expected. Ownership or process cleanup
+        // failures are not: they must replace it and fail closed.
+        if (error !== reason) throw error
+      }
+    }
+
+    if (!signal) {
+      try {
+        await entry.promise
+      } finally {
+        await release()
+      }
+      return
+    }
+
+    const interrupted = Promise.withResolvers<never>()
+    const abort = () => interrupted.reject(abortReason(signal))
+    hooks.value?.beforeBootstrapListener?.()
+    signal.addEventListener("abort", abort, { once: true })
+    if (signal.aborted) abort()
+    try {
+      await Promise.race([entry.promise, interrupted.promise])
+    } catch (error) {
+      if (!signal.aborted) {
+        await release()
+        throw error
+      }
+      const reason = abortReason(signal)
+      await release(reason)
+      if (entry.failure instanceof AggregateError) throw entry.failure
+      if (error instanceof AggregateError) throw error
+      throw reason
+    } finally {
+      signal.removeEventListener("abort", abort)
+    }
+    await release()
+    if (signal.aborted) throw abortReason(signal)
   }
 
   export async function command(context: Context, signal?: AbortSignal) {
@@ -229,7 +337,38 @@ export namespace ModalVolume {
     const uv = context.uv ?? Bun.which("uv")
     if (uv) {
       await hooks.value?.beforeUv?.()
-      return [uv, "run", "--no-project", "--python", "3.12", "--with", `modal==${VERSION}`, "python", "-I", file]
+      const env = environment({ ...process.env, ...context.env })
+      const setup = hooks.value?.bootstrap ?? {
+        argv: [
+          uv,
+          "run",
+          "--no-project",
+          "--python",
+          "3.12",
+          "--with",
+          `modal==${VERSION}`,
+          "python",
+          "-I",
+          "-c",
+          `import modal; assert modal.__version__ == '${VERSION}'; assert hasattr(modal.Volume, 'read_file')`,
+        ],
+        timeout: BOOTSTRAP_TIMEOUT,
+      }
+      await prewarm(setup.argv, env, setup.timeout, signal)
+      if (signal?.aborted) throw abortReason(signal)
+      return [
+        uv,
+        "run",
+        "--offline",
+        "--no-project",
+        "--python",
+        "3.12",
+        "--with",
+        `modal==${VERSION}`,
+        "python",
+        "-I",
+        file,
+      ]
     }
     throw new Error("Modal Volume access requires uv or a Python installation that can import the Modal SDK")
   }
