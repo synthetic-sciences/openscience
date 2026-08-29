@@ -191,9 +191,9 @@ describe("OpenScience default theme", () => {
   test("keeps primary buttons readable when the app scheme differs from the OS", () => {
     for (const mode of ["light", "dark"] as const) {
       expect(resolved[mode]["button-primary-base"]).toMatch(/^#[0-9a-f]{6}$/i)
-      expect(contrast(resolved[mode]["icon-invert-base"], resolved[mode]["button-primary-base"])).toBeGreaterThanOrEqual(
-        4.5,
-      )
+      expect(
+        contrast(resolved[mode]["icon-invert-base"], resolved[mode]["button-primary-base"]),
+      ).toBeGreaterThanOrEqual(4.5)
     }
   })
 
