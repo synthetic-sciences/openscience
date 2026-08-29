@@ -26,6 +26,36 @@ async function bootstrap() {
   })
 }
 
+async function darwinMount(target: string) {
+  const image = `${target}-${Math.random().toString(36).slice(2)}.dmg`
+  await fs.mkdir(target)
+  const created = await $`hdiutil create -quiet -size 5m -fs HFS+ -volname OpenScienceSnapshotTest ${image}`
+    .quiet()
+    .nothrow()
+  if (created.exitCode !== 0) {
+    await fs.rm(target, { recursive: true, force: true })
+    throw new Error(`Could not create snapshot mount fixture: ${created.stderr.toString().trim()}`)
+  }
+  const attached = await $`hdiutil attach -quiet -nobrowse -noautoopen -mountpoint ${target} ${image}`.quiet().nothrow()
+  if (attached.exitCode !== 0) {
+    await fs.rm(image, { force: true })
+    await fs.rm(target, { recursive: true, force: true })
+    throw new Error(`Could not attach snapshot mount fixture: ${attached.stderr.toString().trim()}`)
+  }
+  return {
+    async [Symbol.asyncDispose]() {
+      const detached = await $`hdiutil detach -quiet ${target}`.quiet().nothrow()
+      if (detached.exitCode !== 0) {
+        const forced = await $`hdiutil detach -quiet -force ${target}`.quiet().nothrow()
+        if (forced.exitCode !== 0) {
+          throw new Error(`Could not detach snapshot mount fixture: ${forced.stderr.toString().trim()}`)
+        }
+      }
+      await fs.rm(image, { force: true })
+    },
+  }
+}
+
 test("repairs a pre-existing partial snapshot directory", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
@@ -802,6 +832,104 @@ test("revert writes every byte when the host accepts only short writes", async (
       expect(result.status).toBe("applied")
       expect(writes.value).toBeGreaterThan(300)
       expect(restored.equals(original)).toBe(true)
+    },
+  })
+})
+
+test("revert refuses to remove through a mounted parent", async () => {
+  if (process.platform !== "darwin") return
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+      const parent = path.join(tmp.path, "mounted")
+      await using volume = await darwinMount(parent)
+      const sentinel = path.join(parent, "sentinel.txt")
+      await Bun.write(sentinel, "mounted sentinel")
+
+      const result = await Snapshot.revert([{ hash: before!, files: [sentinel] }])
+
+      expect(result.status).toBe("partial")
+      expect(result.errors[0]?.message).toContain("mounted snapshot parent")
+      expect(await Bun.file(sentinel).text()).toBe("mounted sentinel")
+    },
+  })
+})
+
+test("revert refuses to restore through a mounted parent", async () => {
+  if (process.platform !== "darwin") return
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const parent = path.join(tmp.path, "mounted")
+      const sentinel = path.join(parent, "sentinel.txt")
+      await fs.mkdir(parent)
+      await Bun.write(sentinel, "snapshot content")
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+      await fs.rm(parent, { recursive: true })
+      await using volume = await darwinMount(parent)
+      await Bun.write(sentinel, "mounted sentinel")
+
+      const result = await Snapshot.revert([{ hash: before!, files: [sentinel] }])
+
+      expect(result.status).toBe("partial")
+      expect(result.errors[0]?.message).toContain("mounted snapshot parent")
+      expect(await Bun.file(sentinel).text()).toBe("mounted sentinel")
+    },
+  })
+})
+
+test("revert structurally fails closed on a same-device parent mount transition", async () => {
+  if (process.platform === "win32") return
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+      const parent = path.join(tmp.path, "mounted")
+      const sentinel = path.join(parent, "sentinel.txt")
+      await fs.mkdir(parent)
+      await Bun.write(sentinel, "worktree sentinel")
+
+      using boundary = Snapshot.testing({
+        mountIdentity: (target, actual) => (target === parent ? `${actual}:mounted` : actual),
+      })
+      const result = await Snapshot.revert([{ hash: before!, files: [sentinel] }])
+
+      expect(result.status).toBe("partial")
+      expect(result.errors[0]?.message).toContain("mounted snapshot parent")
+      expect(await Bun.file(sentinel).text()).toBe("worktree sentinel")
+    },
+  })
+})
+
+test("restore structurally fails closed on a same-device parent mount transition", async () => {
+  if (process.platform === "win32") return
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const parent = path.join(tmp.path, "mounted")
+      const sentinel = path.join(parent, "sentinel.txt")
+      await fs.mkdir(parent)
+      await Bun.write(sentinel, "snapshot content")
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+      await Bun.write(sentinel, "worktree sentinel")
+
+      using boundary = Snapshot.testing({
+        mountIdentity: (target, actual) => (target === parent ? `${actual}:mounted` : actual),
+      })
+      const result = await Snapshot.revert([{ hash: before!, files: [sentinel] }])
+
+      expect(result.status).toBe("partial")
+      expect(result.errors[0]?.message).toContain("mounted snapshot parent")
+      expect(await Bun.file(sentinel).text()).toBe("worktree sentinel")
     },
   })
 })

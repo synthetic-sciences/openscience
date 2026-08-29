@@ -22,12 +22,14 @@ export namespace SnapshotSafeIO {
   export type Hooks = {
     afterParentVerify?: (operation: Operation, target: string) => void | Promise<void>
     writeChunkLimit?: (offset: number, remaining: number) => number
+    mountIdentity?: (target: string, actual: string) => string | Promise<string>
   }
 
   type Directory = {
     fd: number
     expected: string
     before: Stats
+    mount: string
     close(): Promise<void>
   }
 
@@ -38,6 +40,7 @@ export namespace SnapshotSafeIO {
     renameExclusive(fromDir: number, from: Buffer, toDir: number, to: Buffer): number
     unlinkat(dir: number, name: Buffer, flags: number): number
     symlinkat(target: Buffer, dir: number, name: Buffer): number
+    fstatfs(fd: number, buffer: Buffer): number
     dup(fd: number): number
     fdopendir(fd: number): number | bigint | null
     readdir(directory: number | bigint): number | bigint | null
@@ -91,6 +94,10 @@ export namespace SnapshotSafeIO {
             args: [FFIType.ptr, FFIType.i32, FFIType.ptr],
             returns: FFIType.i32,
           },
+          fstatfs: {
+            args: [FFIType.i32, FFIType.ptr],
+            returns: FFIType.i32,
+          },
           dup: {
             args: [FFIType.i32],
             returns: FFIType.i32,
@@ -142,6 +149,7 @@ export namespace SnapshotSafeIO {
         renameExclusive(fromDir, from, toDir, to, process.platform === "darwin" ? 0x4 : 0x1),
       unlinkat: symbols.unlinkat as Native["unlinkat"],
       symlinkat: symbols.symlinkat as Native["symlinkat"],
+      fstatfs: symbols.fstatfs as Native["fstatfs"],
       dup: symbols.dup as Native["dup"],
       fdopendir: symbols.fdopendir as Native["fdopendir"],
       readdir: symbols.readdir as Native["readdir"],
@@ -286,7 +294,37 @@ export namespace SnapshotSafeIO {
     }
   }
 
-  async function openRoot(root: string): Promise<Directory> {
+  function string(bytes: Uint8Array) {
+    const end = bytes.indexOf(0)
+    return Buffer.from(bytes.subarray(0, end < 0 ? bytes.byteLength : end)).toString("utf8")
+  }
+
+  async function mount(fd: number, target: string, hooks?: Hooks) {
+    const actual = await (async () => {
+      if (process.platform === "linux") {
+        const info = await fs.readFile(`/proc/self/fdinfo/${fd}`, "utf8").catch((error) => {
+          throw new Error(`Could not read the kernel mount identity for ${target}`, { cause: error })
+        })
+        const id = info.match(/^mnt_id:\s*(\d+)$/m)?.[1]
+        if (!id) throw new Error(`Kernel mount identity is unavailable for ${target}`)
+        return `linux:${id}`
+      }
+      if (process.platform === "darwin") {
+        // 64-bit Darwin struct statfs: fsid at 48, mounted-on name at 88.
+        // The mount path distinguishes nullfs/bind-style mounts even when the
+        // mounted filesystem has the same st_dev or fsid as its parent.
+        const buffer = Buffer.alloc(2168)
+        invoke("fstatfs", target, () => native().fstatfs(fd, buffer))
+        const point = string(buffer.subarray(88, 1112))
+        if (!point) throw new Error(`Kernel mount identity is unavailable for ${target}`)
+        return `darwin:${buffer.subarray(48, 56).toString("hex")}:${point}`
+      }
+      throw new Error(`Safe snapshot mount-boundary checks are unavailable on ${process.platform}`)
+    })()
+    return hooks?.mountIdentity ? hooks.mountIdentity(target, actual) : actual
+  }
+
+  async function openRoot(root: string, hooks?: Hooks): Promise<Directory> {
     const expected = path.resolve(root)
     const canonical = await fs.realpath(expected)
     if (canonical !== expected) throw new Error(`Snapshot worktree became ambiguous: ${root}`)
@@ -300,6 +338,7 @@ export namespace SnapshotSafeIO {
         fd: handle.fd,
         expected,
         before: await handle.stat(),
+        mount: await mount(handle.fd, expected, hooks),
         close: () => handle.close(),
       }
       await verify(result)
@@ -310,7 +349,7 @@ export namespace SnapshotSafeIO {
     }
   }
 
-  async function openChild(parent: Directory, child: string): Promise<Directory> {
+  async function openChild(parent: Directory, child: string, hooks?: Hooks): Promise<Directory> {
     const expected = path.join(parent.expected, segment(child))
     const fd = invoke("openat", expected, () =>
       native().openat(parent.fd, name(child), FS.O_RDONLY | FS.O_DIRECTORY | FS.O_NOFOLLOW | O_CLOEXEC, 0),
@@ -320,8 +359,10 @@ export namespace SnapshotSafeIO {
         fd,
         expected,
         before: await stat(fd),
+        mount: await mount(fd, expected, hooks),
         close: () => close(fd),
       }
+      if (result.mount !== parent.mount) throw new Error(`Refused to cross a mounted snapshot parent: ${expected}`)
       await verify(result)
       return result
     } catch (error) {
@@ -368,7 +409,7 @@ export namespace SnapshotSafeIO {
     return attempt(() => native().renameExclusive(parent.fd, name(from), parent.fd, name(to)))
   }
 
-  async function purge(parent: Directory, child: string, device: number): Promise<void> {
+  async function purge(parent: Directory, child: string, device: number, hooks?: Hooks): Promise<void> {
     const opened = attempt(() =>
       native().openat(parent.fd, name(child), FS.O_RDONLY | FS.O_DIRECTORY | FS.O_NOFOLLOW | O_CLOEXEC, 0),
     )
@@ -382,14 +423,26 @@ export namespace SnapshotSafeIO {
       if (opened.errno === ENOENT) return
       throw failure("openat", path.join(parent.expected, child), opened.errno)
     }
-    const before = await stat(opened.value).catch(async (error) => {
-      await close(opened.value).catch(() => undefined)
-      throw error
-    })
+    const inspected = await (async () => {
+      try {
+        return {
+          before: await stat(opened.value),
+          mount: await mount(opened.value, path.join(parent.expected, child), hooks),
+        }
+      } catch (error) {
+        await close(opened.value).catch(() => undefined)
+        throw error
+      }
+    })()
+    if (inspected.mount !== parent.mount) {
+      await close(opened.value)
+      throw new Error(`Refused to cross a mounted snapshot subtree: ${path.join(parent.expected, child)}`)
+    }
     const directory: Directory = {
       fd: opened.value,
       expected: path.join(parent.expected, child),
-      before,
+      before: inspected.before,
+      mount: inspected.mount,
       close: () => close(opened.value),
     }
     try {
@@ -397,7 +450,7 @@ export namespace SnapshotSafeIO {
         throw new Error(`Snapshot purge target is not a directory: ${directory.expected}`)
       if (directory.before.dev !== device)
         throw new Error(`Refusing to remove a mounted snapshot subtree: ${directory.expected}`)
-      for (const entry of await entries(directory.fd)) await removeNamed(directory, entry, device)
+      for (const entry of await entries(directory.fd)) await removeNamed(directory, entry, device, hooks)
       await sync(directory.fd, true)
     } finally {
       await directory.close()
@@ -408,7 +461,7 @@ export namespace SnapshotSafeIO {
     }
   }
 
-  async function removeNamed(parent: Directory, child: string, device: number) {
+  async function removeNamed(parent: Directory, child: string, device: number, hooks?: Hooks) {
     const backup = tomb("snapshot-remove")
     const moved = renameExclusive(parent, child, backup)
     if (!moved.ok) {
@@ -416,32 +469,32 @@ export namespace SnapshotSafeIO {
       throw failure("exclusive rename", path.join(parent.expected, child), moved.errno)
     }
     await sync(parent.fd, true)
-    await purge(parent, backup, device)
+    await purge(parent, backup, device, hooks)
     await sync(parent.fd, true)
     return true
   }
 
-  async function ensureChild(parent: Directory, child: string, device: number) {
-    const opened = await openChild(parent, child).catch((error: NodeJS.ErrnoException) => {
+  async function ensureChild(parent: Directory, child: string, device: number, hooks?: Hooks) {
+    const opened = await openChild(parent, child, hooks).catch((error: NodeJS.ErrnoException) => {
       if (error.errno === ENOENT || error.errno === ENOTDIR || error.errno === ELOOP) return error.errno
       throw error
     })
     if (typeof opened !== "number") return opened
-    if (opened === ENOTDIR || opened === ELOOP) await removeNamed(parent, child, device)
+    if (opened === ENOTDIR || opened === ELOOP) await removeNamed(parent, child, device, hooks)
     const created = attempt(() => native().mkdirat(parent.fd, name(child), 0o755))
     if (!created.ok && created.errno !== EEXIST) {
       throw failure("mkdirat", path.join(parent.expected, child), created.errno)
     }
     if (created.ok) await sync(parent.fd, true)
-    return openChild(parent, child)
+    return openChild(parent, child, hooks)
   }
 
-  async function parent(root: Directory, pieces: string[]) {
+  async function parent(root: Directory, pieces: string[], hooks?: Hooks) {
     const current = { value: root }
     try {
       for (const piece of pieces) {
         await verify(current.value)
-        const next = await ensureChild(current.value, piece, root.before.dev)
+        const next = await ensureChild(current.value, piece, root.before.dev, hooks)
         const prior = current.value
         current.value = next
         await prior.close()
@@ -453,12 +506,12 @@ export namespace SnapshotSafeIO {
     }
   }
 
-  async function existingParent(root: Directory, pieces: string[]) {
+  async function existingParent(root: Directory, pieces: string[], hooks?: Hooks) {
     const current = { value: root }
     try {
       for (const piece of pieces) {
         await verify(current.value)
-        const next = await openChild(current.value, piece).catch((error: NodeJS.ErrnoException) => {
+        const next = await openChild(current.value, piece, hooks).catch((error: NodeJS.ErrnoException) => {
           if (error.errno === ENOENT) return
           if (error.errno === ENOTDIR || error.errno === ELOOP) {
             throw new Error(
@@ -518,14 +571,14 @@ export namespace SnapshotSafeIO {
 
   async function posixRemove(rootPath: string, relative: string, hooks?: Hooks) {
     const parsed = target(rootPath, relative)
-    const base = await openRoot(parsed.root)
-    const destination = await existingParent(base, parsed.pieces.slice(0, -1))
+    const base = await openRoot(parsed.root, hooks)
+    const destination = await existingParent(base, parsed.pieces.slice(0, -1), hooks)
     if (!destination) return false
     try {
       await verify(destination)
       await hooks?.afterParentVerify?.("remove", parsed.path)
       await verify(destination)
-      const removed = await removeNamed(destination, parsed.pieces.at(-1)!, base.before.dev)
+      const removed = await removeNamed(destination, parsed.pieces.at(-1)!, base.before.dev, hooks)
       await verify(destination)
       return removed
     } finally {
@@ -535,8 +588,8 @@ export namespace SnapshotSafeIO {
 
   async function posixRestore(rootPath: string, relative: string, entry: Entry, hooks?: Hooks) {
     const parsed = target(rootPath, relative)
-    const base = await openRoot(parsed.root)
-    const destination = await parent(base, parsed.pieces.slice(0, -1))
+    const base = await openRoot(parsed.root, hooks)
+    const destination = await parent(base, parsed.pieces.slice(0, -1), hooks)
     const filename = parsed.pieces.at(-1)!
     const state = { staged: undefined as string | undefined, backup: undefined as string | undefined }
     try {
@@ -571,7 +624,7 @@ export namespace SnapshotSafeIO {
       state.staged = undefined
       await sync(destination.fd, true)
       if (state.backup) {
-        await purge(destination, state.backup, base.before.dev)
+        await purge(destination, state.backup, base.before.dev, hooks)
         state.backup = undefined
         await sync(destination.fd, true)
       }

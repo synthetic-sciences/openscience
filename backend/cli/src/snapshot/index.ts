@@ -18,6 +18,7 @@ export namespace Snapshot {
   type TestHooks = {
     afterMutationParentVerify?: (operation: "remove" | "restore", target: string) => void | Promise<void>
     writeChunkLimit?: (offset: number, remaining: number) => number
+    mountIdentity?: (target: string, actual: string) => string | Promise<string>
   }
 
   const hooks = { value: undefined as TestHooks | undefined }
@@ -299,6 +300,7 @@ export namespace Snapshot {
       try {
         const changed = await SnapshotSafeIO.remove(root, relative, {
           afterParentVerify: hooks.value?.afterMutationParentVerify,
+          mountIdentity: hooks.value?.mountIdentity,
         })
         if (changed) removed.push(relative)
       } catch (error) {
@@ -321,6 +323,7 @@ export namespace Snapshot {
             {
               afterParentVerify: hooks.value?.afterMutationParentVerify,
               writeChunkLimit: hooks.value?.writeChunkLimit,
+              mountIdentity: hooks.value?.mountIdentity,
             },
           )
         } else {
@@ -331,6 +334,7 @@ export namespace Snapshot {
             {
               afterParentVerify: hooks.value?.afterMutationParentVerify,
               writeChunkLimit: hooks.value?.writeChunkLimit,
+              mountIdentity: hooks.value?.mountIdentity,
             },
           )
         }
