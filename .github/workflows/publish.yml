@@ -87,21 +87,31 @@ jobs:
           expected="${GITHUB_SHA,,}"
           if [[ -n "$EXACT_VERSION" ]]; then
             release_error="$RUNNER_TEMP/npm-test-gate-release-error.txt"
-            if release_json="$(gh api "/repos/$GH_REPO/releases/tags/v$EXACT_VERSION" 2>"$release_error")"; then
+            if ! release_pages="$(gh api --paginate --slurp \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/$GH_REPO/releases?per_page=100" 2>"$release_error")"; then
+              cat "$release_error" >&2
+              echo "::error::Could not inspect v$EXACT_VERSION before validating its npm test rehearsal."
+              exit 1
+            fi
+            release_json="$(jq -c --arg tag "v$EXACT_VERSION" '
+              [.[] | .[] | select(.tag_name == $tag)]
+              | if length == 0 then empty
+                elif length == 1 then .[0]
+                else error("multiple releases use the requested tag")
+                end
+            ' <<<"$release_pages")"
+            if [[ -n "$release_json" ]]; then
               marker="$(jq -r 'try ((.body // "") | capture("<!-- openscience-release-source:(?<source>[0-9a-f]{40}) -->"; "i").source) catch ""' <<<"$release_json")"
               if [[ ! "$marker" =~ ^[0-9a-fA-F]{40}$ ]]; then
                 echo "::error::Existing release v$EXACT_VERSION is missing its immutable artifact-source marker."
                 exit 1
               fi
               expected="${marker,,}"
-            elif grep -qi 'HTTP 404' "$release_error"; then
+            else
               # A first exact-version dispatch has no release yet and is bound
               # to this workflow checkout. version.ts will create the draft.
               expected="${GITHUB_SHA,,}"
-            else
-              cat "$release_error" >&2
-              echo "::error::Could not inspect v$EXACT_VERSION before validating its npm test rehearsal."
-              exit 1
             fi
           fi
           if [[ ! "$expected" =~ ^[0-9a-f]{40}$ ]]; then
