@@ -110,6 +110,7 @@ async function gateway(reply: Reply) {
           })
         }
         if (key === "Bearer thk_legacy-personal.secret") return new Response("not found", { status: 404 })
+        if (key === "Bearer osk_unverified.secret") return new Response("status offline", { status: 500 })
         return json({ organizations: [alpha], funding_context: { type: "personal" } })
       }
       if (url.pathname === "/api/v1/wallet") {
@@ -347,6 +348,21 @@ describe("browser login funding context", () => {
       await expect(OpenScience.setFundingContext(alpha.organization_id)).rejects.toThrow("rollback-safe")
       expect(atlas.state.syncs.length).toBeGreaterThanOrEqual(1)
       expect(atlas.state.syncs.every((call) => call.organization === null)).toBe(true)
+    } finally {
+      await atlas.close()
+    }
+  })
+
+  test("refuses to save an organization key whose workspace cannot be verified", async () => {
+    const atlas = await gateway({})
+    try {
+      // The key itself validates, but its immutable scope never loads. Saving
+      // it anyway used to dead-end later in writeWorkspaceScope; the login
+      // must fail up front with a retryable message and keep no session.
+      await expect(OpenScience.loginWithKey("osk_unverified.secret")).rejects.toThrow(
+        "Couldn't verify this organization key's workspace",
+      )
+      expect(await OpenScience.getSession()).toBeFalsy()
     } finally {
       await atlas.close()
     }
