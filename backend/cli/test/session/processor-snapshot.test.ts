@@ -106,7 +106,7 @@ describe("session processor snapshot routing", () => {
       name: "APIError",
       data: {
         message:
-          "The provider blocked this response with its content filter and returned no textual handoff. Retry the request or choose another model.",
+          "The provider blocked this response with its content filter and returned no content or textual handoff. Retry the request or choose another model.",
         isRetryable: true,
         metadata: { action: "retry", provider_finish_reason: "content-filter" },
       },
