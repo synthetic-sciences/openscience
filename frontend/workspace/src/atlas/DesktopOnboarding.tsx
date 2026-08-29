@@ -62,16 +62,6 @@ export function onboardingDraftFingerprint(draft: ProjectCreateInput) {
   })
 }
 
-export async function configureProviderKey(input: {
-  saveKey: () => Promise<unknown>
-  selectByok: () => Promise<unknown>
-}) {
-  // Persist the credential first. If selecting BYOK fails, a useful local key
-  // remains, while the app never enters BYOK with no credential to use.
-  await input.saveKey()
-  await input.selectByok()
-}
-
 export function createOnboardingProjectFlow(input: {
   create: (project: ProjectCreateInput & { operation_id: string }) => Promise<ProjectRecord>
   markComplete: () => Promise<unknown>
@@ -302,17 +292,11 @@ export function DesktopOnboardingController(
     const value = key().trim()
     if (!value) return
     await run("api", async () => {
-      await configureProviderKey({
-        saveKey: () =>
-          settingsApi(server.url, fetcher(), `/auth/${encodeURIComponent(provider())}`, {
-            method: "PUT",
-            body: JSON.stringify({ type: "api", key: value }),
-          }),
-        selectByok: () =>
-          settingsApi(server.url, fetcher(), "/account/billing-mode", {
-            method: "POST",
-            body: JSON.stringify({ mode: "byok" }),
-          }),
+      // The local server owns the snapshot and compensation so a previous key
+      // never has to cross back through the browser to be restored.
+      await settingsApi(server.url, fetcher(), `/auth/${encodeURIComponent(provider())}/onboarding`, {
+        method: "PUT",
+        body: JSON.stringify({ type: "api", key: value }),
       })
       setKey("")
       setConfigured("api")

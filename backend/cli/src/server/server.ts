@@ -72,6 +72,7 @@ import { CredentialProcessLedger } from "../credentials/process-ledger"
 import { DataRootBarrier } from "../global/data-root-barrier"
 import { OpenScience } from "../openscience"
 import { accountRequiredResponse, requiresAccountForRequest } from "./account-gate"
+import { OnboardingAuthRoutes } from "./routes/onboarding-auth"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -304,6 +305,25 @@ export namespace Server {
         .route("/settings/updates", UpdatesSettingsRoutes())
         .route("/settings/research-tools", ResearchToolsSettingsRoutes())
         .route("/settings/scientific-tools", ScientificToolsSettingsRoutes())
+        .route(
+          "/auth",
+          OnboardingAuthRoutes({
+            readCredential: (providerID) => Auth.get(providerID),
+            saveCredential: (providerID, auth) => Auth.set(providerID, auth),
+            removeCredential: (providerID) => Auth.remove(providerID),
+            readBillingMode: async () => (await Config.getGlobal()).billing?.llm ?? null,
+            selectByok: async () => {
+              await OpenScience.setBillingMode("byok")
+            },
+            restoreBillingMode: async (mode) => {
+              await Config.updateGlobal({ billing: { llm: mode } }, { preserveInstances: true })
+            },
+            // Defer this call because Provider imports Server for local fetches;
+            // the route module itself intentionally has no Provider dependency.
+            invalidate: () => Provider.invalidate(),
+            serialize: (action) => CredentialLifecycle.serialized(action),
+          }),
+        )
         .put(
           "/auth/:providerID",
           describeRoute({

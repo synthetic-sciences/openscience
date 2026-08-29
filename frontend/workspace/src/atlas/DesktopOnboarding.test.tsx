@@ -224,17 +224,134 @@ describe("desktop onboarding", () => {
     gate.resolve(json({ desktop_onboarding_version: 0 }))
   })
 
-  test("saves a provider credential before selecting BYOK", async () => {
-    const order: string[] = []
-    await subject.configureProviderKey({
-      saveKey: async () => {
-        order.push("key")
-      },
-      selectByok: async () => {
-        order.push("byok")
-      },
-    })
-    expect(order).toEqual(["key", "byok"])
+  test("keeps the entered key visible when transactional provider setup rolls back", async () => {
+    let stored: string | undefined
+    const requests: string[] = []
+    const platform = {
+      platform: "desktop" as const,
+      openLink() {},
+      async restart() {},
+      back() {},
+      forward() {},
+      async notify() {},
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const pathname = new URL(String(input)).pathname
+        const request = `${init?.method ?? "GET"} ${pathname}`
+        requests.push(request)
+        if (request === "GET /settings/preferences") return json({ desktop_onboarding_version: 0 })
+        if (request === "GET /account") return json({ session: true })
+        if (request === "GET /settings/wallet") {
+          return json({ signedIn: true, managedSupported: false, managedUnlocked: false })
+        }
+        if (request === "PUT /auth/anthropic/onboarding") {
+          const previous = stored
+          stored = (JSON.parse(String(init?.body)) as { key: string }).key
+          // Model the server transaction's failure-after-save compensation.
+          stored = previous
+          return json({ error: "billing mode unavailable" }, 503)
+        }
+        return json({ error: "not_found" }, 404)
+      }) as typeof fetch,
+    }
+    const host = mount(() =>
+      subject.DesktopOnboardingController({
+        desktop: true,
+        platform,
+        server: { url: "http://127.0.0.1:4096", projects: { open() {}, touch() {} } },
+        children: "Workspace",
+      }),
+    )
+    await settle(() => host.textContent?.includes("Save key") === true)
+
+    const input = host.querySelector<HTMLInputElement>('input[type="password"]')!
+    input.value = "sk-ant-retry"
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }))
+    await settle(() =>
+      Array.from(host.querySelectorAll<HTMLButtonElement>("button")).some(
+        (button) => button.textContent?.includes("Save key") && !button.disabled,
+      ),
+    )
+    Array.from(host.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("Save key"))
+      ?.click()
+    await settle(() => host.textContent?.includes("billing mode unavailable") === true)
+
+    expect(input.value).toBe("sk-ant-retry")
+    expect(stored).toBeUndefined()
+    expect(requests).toContain("PUT /auth/anthropic/onboarding")
+    expect(requests).not.toContain("PUT /auth/anthropic")
+    expect(requests).not.toContain("POST /account/billing-mode")
+  })
+
+  test("preserves a pre-existing key, then retries cleanly after a full remount", async () => {
+    let stored = "sk-existing"
+    let mode: "managed" | "byok" = "managed"
+    let attempts = 0
+    const state = () => ({ stored, mode, attempts })
+    const platform = {
+      platform: "desktop" as const,
+      openLink() {},
+      async restart() {},
+      back() {},
+      forward() {},
+      async notify() {},
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const pathname = new URL(String(input)).pathname
+        const request = `${init?.method ?? "GET"} ${pathname}`
+        if (request === "GET /settings/preferences") return json({ desktop_onboarding_version: 0 })
+        if (request === "GET /account") return json({ session: true })
+        if (request === "GET /settings/wallet") {
+          return json({ signedIn: true, managedSupported: false, managedUnlocked: false })
+        }
+        if (request === "PUT /auth/anthropic/onboarding") {
+          attempts++
+          const previous = stored
+          const previousMode = mode
+          stored = (JSON.parse(String(init?.body)) as { key: string }).key
+          if (attempts === 1) {
+            stored = previous
+            mode = previousMode
+            return json({ error: "billing mode unavailable" }, 503)
+          }
+          mode = "byok"
+          return json({ configured: true })
+        }
+        return json({ error: "not_found" }, 404)
+      }) as typeof fetch,
+    }
+    const view = () =>
+      subject.DesktopOnboardingController({
+        desktop: true,
+        platform,
+        server: { url: "http://127.0.0.1:4096", projects: { open() {}, touch() {} } },
+        children: "Workspace",
+      })
+    const enterAndSave = async (host: HTMLElement) => {
+      await settle(() => host.textContent?.includes("Save key") === true)
+      const input = host.querySelector<HTMLInputElement>('input[type="password"]')!
+      input.value = "sk-replayed"
+      input.dispatchEvent(new InputEvent("input", { bubbles: true }))
+      await settle(() =>
+        Array.from(host.querySelectorAll<HTMLButtonElement>("button")).some(
+          (button) => button.textContent?.includes("Save key") && !button.disabled,
+        ),
+      )
+      Array.from(host.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent?.includes("Save key"))
+        ?.click()
+    }
+
+    const first = mount(view)
+    await enterAndSave(first)
+    await settle(() => first.textContent?.includes("billing mode unavailable") === true)
+    expect(state()).toMatchObject({ stored: "sk-existing", mode: "managed" })
+
+    unmount(first)
+    const second = mount(view)
+    await enterAndSave(second)
+    await settle(() => second.textContent?.includes("Saved") === true)
+
+    expect(state()).toEqual({ stored: "sk-replayed", mode: "byok", attempts: 2 })
   })
 
   test("retries completion without creating a duplicate project", async () => {
