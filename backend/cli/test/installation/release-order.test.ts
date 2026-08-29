@@ -167,7 +167,7 @@ test("production release caches exact builds and packed npm artifacts by version
   )
 })
 
-test("production release keeps signed publishing as the default and ships installers in unsigned mode", async () => {
+test("production release keeps signed publishing as the default and falls back to unsigned Windows", async () => {
   const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
   const input = workflow.slice(workflow.indexOf("      release_mode:"), workflow.indexOf("# One release at a time"))
   const preflight = workflow.slice(workflow.indexOf("\n  macos-signing-preflight:"), workflow.indexOf("\n  version:"))
@@ -183,6 +183,9 @@ test("production release keeps signed publishing as the default and ships instal
   expect(input).toContain("desktop_resume_manifest:")
   expect(workflow.indexOf("macos-signing-preflight:")).toBeLessThan(workflow.indexOf("\n  version:"))
   expect(preflight).toContain("if: inputs.release_mode == 'signed'")
+  expect(preflight).toContain("Validate optional Windows signing credentials")
+  expect(preflight).toContain("the Windows installer will be published unsigned")
+  expect(preflight).toContain("Set both WINDOWS_CSC_LINK and WINDOWS_CSC_KEY_PASSWORD, or remove both")
   expect(preflight).toContain("Publishing unsigned native CLI archives and desktop installers")
   expect(sign).toContain("Developer ID sign and notarize macOS binaries")
   expect(sign).toContain("if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'")
@@ -192,6 +195,8 @@ test("production release keeps signed publishing as the default and ships instal
   expect(sign).toContain("TeamIdentifier=$APPLE_TEAM_ID")
   expect(sign).toContain("if: inputs.release_mode == 'unsigned'")
   expect(sign).toContain("The native CLI archives and desktop installers in this release are unsigned.")
+  expect(sign).toContain("Mark unsigned Windows installer in the release notes")
+  expect(sign).toContain("The Windows installer is unsigned because Windows signing credentials are not configured")
   expect(sign).not.toContain("Desktop installers are not included.")
   expect(sign.indexOf("xcrun notarytool submit")).toBeLessThan(sign.indexOf("Cache immutable signed CLI build"))
   expect(sign.indexOf("Cache immutable signed CLI build")).toBeLessThan(
@@ -205,9 +210,10 @@ test("production release keeps signed publishing as the default and ships instal
   expect(desktop).not.toContain("build-desktop:\n    if: inputs.release_mode == 'signed'")
   expect(desktop).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
   expect(desktop).toContain("enableCrossOsArchive: ${{ runner.os == 'Windows' }}")
-  expect(desktop).toContain(
-    "if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing != 'none'",
-  )
+  expect(desktop).toContain("Detect optional Windows signing credentials")
+  expect(desktop).toContain("Require macOS release signing credentials")
+  expect(desktop).toContain("steps.windows-signing.outputs.enabled == 'true'")
+  expect(desktop).toContain("steps.windows-signing.outputs.enabled != 'true'")
   expect(desktop).toContain("Build signed desktop installer")
   expect(desktop).toContain("Build unsigned desktop installer")
   expect(desktop).toContain('OPENSCIENCE_DESKTOP_SIGNED: "true"')
@@ -270,7 +276,8 @@ test("production desktop resume freezes an exact reviewed asset set before any r
     "uses: actions/setup-node@",
     "uses: actions/cache/restore@",
     "run: bun install --frozen-lockfile",
-    "name: Require release signing credentials",
+    "name: Detect optional Windows signing credentials",
+    "name: Require macOS release signing credentials",
     "name: Make sidecar executable",
     "name: Build signed desktop installer",
     "name: Build unsigned desktop installer",

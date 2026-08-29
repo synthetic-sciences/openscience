@@ -17,7 +17,7 @@ on:
         required: false
         type: string
       release_mode:
-        description: "Signed notarizes macOS and signs Windows; unsigned publishes native archives and unsigned desktop installers"
+        description: "Signed notarizes macOS and signs Windows when credentials exist; unsigned publishes native archives and unsigned desktop installers"
         required: true
         default: signed
         type: choice
@@ -241,6 +241,25 @@ jobs:
           done
           if (( ${#missing[@]} )); then
             echo "::error::macOS release signing is not configured. Missing repository secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Validate optional Windows signing credentials
+        if: inputs.release_mode == 'signed'
+        shell: bash
+        env:
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$WINDOWS_CSC_LINK" && -z "$WINDOWS_CSC_KEY_PASSWORD" ]]; then
+            echo "::warning::Windows signing is not configured; the Windows installer will be published unsigned."
+            echo "### Windows installer will be unsigned" >> "$GITHUB_STEP_SUMMARY"
+            echo "The signed release will still sign and notarize macOS. Windows SmartScreen may warn about the unsigned Windows installer." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [[ -z "$WINDOWS_CSC_LINK" || -z "$WINDOWS_CSC_KEY_PASSWORD" ]]; then
+            echo "::error::Windows signing is partially configured. Set both WINDOWS_CSC_LINK and WINDOWS_CSC_KEY_PASSWORD, or remove both to publish Windows unsigned."
             exit 1
           fi
 
@@ -479,6 +498,25 @@ jobs:
             gh release edit "$OPENSCIENCE_TAG" --notes-file "$notes"
           fi
 
+      - name: Mark unsigned Windows installer in the release notes
+        if: inputs.release_mode == 'signed'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$WINDOWS_CSC_LINK" && -n "$WINDOWS_CSC_KEY_PASSWORD" ]]; then exit 0; fi
+          body="$(gh release view "$OPENSCIENCE_TAG" --json body --jq .body)"
+          notice='> The macOS downloads in this release are signed and notarized. The Windows installer is unsigned because Windows signing credentials are not configured, so Windows SmartScreen may show a warning.'
+          if ! grep -Fq 'The Windows installer is unsigned because Windows signing credentials are not configured' <<<"$body"; then
+            notes="$RUNNER_TEMP/openscience-unsigned-windows-release-notes.txt"
+            printf '%s\n\n%s\n' "$body" "$notice" > "$notes"
+            gh release edit "$OPENSCIENCE_TAG" --notes-file "$notes"
+          fi
+
     outputs:
       cache_key: ${{ inputs.release_mode == 'signed' && format('cli-build-signed-{0}', needs.version.outputs.version) || format('cli-build-{0}', needs.version.outputs.version) }}
 
@@ -685,20 +723,32 @@ jobs:
       - if: steps.existing.outputs.found != 'true'
         run: bun install --frozen-lockfile
 
-      - name: Require release signing credentials
-        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing != 'none'
+      - name: Detect optional Windows signing credentials
+        id: windows-signing
+        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing == 'windows'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$CSC_LINK" && -n "$CSC_KEY_PASSWORD" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+
+      - name: Require macOS release signing credentials
+        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing == 'mac'
         shell: bash
         run: |
           test -n "$CSC_LINK" || { echo "::error::Missing desktop code-signing certificate"; exit 1; }
           test -n "$CSC_KEY_PASSWORD" || { echo "::error::Missing desktop certificate password"; exit 1; }
-          if [[ "${{ matrix.signing }}" == "mac" ]]; then
-            test -n "$APPLE_ID" || { echo "::error::Missing APPLE_ID for notarization"; exit 1; }
-            test -n "$APPLE_APP_SPECIFIC_PASSWORD" || { echo "::error::Missing Apple app password"; exit 1; }
-            test -n "$APPLE_TEAM_ID" || { echo "::error::Missing APPLE_TEAM_ID"; exit 1; }
-          fi
+          test -n "$APPLE_ID" || { echo "::error::Missing APPLE_ID for notarization"; exit 1; }
+          test -n "$APPLE_APP_SPECIFIC_PASSWORD" || { echo "::error::Missing Apple app password"; exit 1; }
+          test -n "$APPLE_TEAM_ID" || { echo "::error::Missing APPLE_TEAM_ID"; exit 1; }
         env:
-          CSC_LINK: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_BASE64 || secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -711,7 +761,7 @@ jobs:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
 
       - name: Build signed desktop installer
-        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed'
+        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && (matrix.signing != 'windows' || steps.windows-signing.outputs.enabled == 'true')
         shell: bash
         run: bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
         env:
@@ -726,7 +776,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Build unsigned desktop installer
-        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'unsigned'
+        if: steps.existing.outputs.found != 'true' && (inputs.release_mode == 'unsigned' || (inputs.release_mode == 'signed' && matrix.signing == 'windows' && steps.windows-signing.outputs.enabled != 'true'))
         shell: bash
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
