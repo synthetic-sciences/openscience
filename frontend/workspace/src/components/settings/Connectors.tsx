@@ -40,6 +40,7 @@ import {
   type OAuthMode,
 } from "./connector-form"
 import type { ConnectorCatalogRecord, ScientificToolsResponse } from "./scientific-tools-state"
+import { ProviderLogo } from "./ProviderLogo"
 
 type McpConfig = NonNullable<Config["mcp"]>[string]
 type PendingAuthorization = { authorizationUrl: string; flowId: string }
@@ -587,6 +588,7 @@ export default function Connectors() {
                       }
                       return (
                         <article class="connectors-catalog__row" role="listitem" data-state={entry.status}>
+                          <ProviderLogo id={entry.id === "s3" ? "aws" : entry.id} label={entry.name} />
                           <div class="connectors-catalog__copy">
                             <div class="connectors-catalog__title">
                               <strong>{entry.name}</strong>
@@ -673,7 +675,9 @@ export default function Connectors() {
                         >
                           <div class="connectors-row">
                             <div class="connectors-identity" data-kind={identity.icon}>
-                              <Icon name={identity.icon} size="small" />
+                              <Show when={identity.providerLogo} fallback={<Icon name={identity.icon} size="small" />}>
+                                {(provider) => <ProviderLogo id={provider()} label={identity.label} size="small" />}
+                              </Show>
                             </div>
                             <div class="connectors-copy">
                               <div class="connectors-copy__title">

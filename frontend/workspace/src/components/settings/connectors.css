@@ -88,7 +88,7 @@
 .connectors-catalog__row {
   min-height: 76px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
   padding: 12px 4px;
@@ -264,6 +264,10 @@
   border-radius: var(--connectors-radius);
   background: var(--surface-raised-base);
   color: var(--icon-strong-base);
+}
+
+.connectors-identity .settings-provider-logo {
+  background: transparent;
 }
 
 .connectors-copy {
@@ -676,10 +680,11 @@
   }
 
   .connectors-catalog__row {
-    grid-template-columns: 1fr;
+    grid-template-columns: 32px minmax(0, 1fr);
   }
 
   .connectors-catalog__actions {
+    grid-column: 2;
     justify-content: flex-start;
   }
 

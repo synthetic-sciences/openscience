@@ -21,6 +21,10 @@ const CREDENTIALS = [
   "wandb",
   "pinecone",
   "langsmith",
+  "givemeanode",
+  "benchling",
+  "box",
+  "dropbox",
 ] as const
 
 describe("provider logos", () => {
@@ -48,6 +52,12 @@ describe("provider logos", () => {
     expect(providerLogoSource("prime").kind).toBe("image")
     expect(providerLogoSource("vast-ai")).toEqual({ kind: "vector", id: "vast" })
     expect(providerLogoSource("runpod").kind).toBe("image")
+  })
+
+  test("uses local canonical marks for every MCP catalog brand", () => {
+    for (const id of ["givemeanode", "github", "benchling", "box", "dropbox", "aws"]) {
+      expect(providerLogoSource(id).kind).not.toBe("fallback")
+    }
   })
 
   test("uses a monogram only for user-defined services", () => {

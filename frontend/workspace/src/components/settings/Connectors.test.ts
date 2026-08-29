@@ -175,7 +175,25 @@ describe("Connector Settings form behavior", () => {
         type: "remote",
         url: "https://api.github.com/mcp",
       }),
-    ).toEqual({ icon: "github", label: "GitHub" })
+    ).toEqual({ icon: "github", label: "GitHub", providerLogo: "github" })
+    expect(
+      connectorIdentity("givemeanode", {
+        type: "remote",
+        url: "https://mcp.givemeanode.com",
+      }),
+    ).toEqual({ icon: "cloud", label: "GiveMeANode", providerLogo: "givemeanode" })
+    expect(
+      connectorIdentity("box", {
+        type: "remote",
+        url: "https://mcp.box.com",
+      }),
+    ).toEqual({ icon: "cloud", label: "Box", providerLogo: "box" })
+    expect(
+      connectorIdentity("lab records", {
+        type: "remote",
+        url: "https://tenant.mcp.benchling.com/mcp",
+      }),
+    ).toEqual({ icon: "cloud", label: "Benchling", providerLogo: "benchling" })
     expect(
       connectorIdentity("research files", {
         type: "local",
