@@ -30,17 +30,65 @@ test("formats the purchased-credit balance to exact cents", () => {
 test("allows Managed whenever the server authorizes Wallet or reload access", () => {
   expect(canSelectManaged(undefined)).toBe(false)
   expect(
-    canSelectManaged({ signedIn: false, managedSupported: true, aceEnabled: true, balanceUsd: 20, billingMode: null }),
+    canSelectManaged({
+      signedIn: false,
+      managedSupported: true,
+      managedUnlocked: true,
+      aceEnabled: true,
+      balanceUsd: 20,
+      billingMode: null,
+    }),
   ).toBe(false)
   expect(
-    canSelectManaged({ signedIn: true, managedSupported: false, aceEnabled: true, balanceUsd: 20, billingMode: null }),
+    canSelectManaged({
+      signedIn: true,
+      managedSupported: false,
+      managedUnlocked: true,
+      aceEnabled: true,
+      balanceUsd: 20,
+      billingMode: null,
+    }),
   ).toBe(false)
   expect(
-    canSelectManaged({ signedIn: true, managedSupported: true, aceEnabled: false, balanceUsd: 20, billingMode: null }),
+    canSelectManaged({
+      signedIn: true,
+      managedSupported: true,
+      managedUnlocked: true,
+      aceEnabled: false,
+      balanceUsd: 20,
+      billingMode: null,
+    }),
   ).toBe(true)
   expect(
-    canSelectManaged({ signedIn: true, managedSupported: true, aceEnabled: true, balanceUsd: 0, billingMode: null }),
+    canSelectManaged({
+      signedIn: true,
+      managedSupported: true,
+      managedUnlocked: true,
+      aceEnabled: true,
+      balanceUsd: 0,
+      billingMode: null,
+    }),
   ).toBe(true)
+  expect(
+    canSelectManaged({
+      signedIn: true,
+      managedSupported: true,
+      managedUnlocked: false,
+      aceEnabled: false,
+      balanceUsd: 0,
+      billingMode: "byok",
+    }),
+  ).toBe(false)
+})
+
+test("does not redirect the Managed choice and gives an explicit zero-balance action", () => {
+  const update = source.slice(source.indexOf("const update ="), source.indexOf("// The mode can change"))
+
+  expect(update).not.toContain("openLink")
+  expect(source).toContain('return "No Wallet balance"')
+  expect(source).toContain('return "Turn on Ace"')
+  expect(source).toContain('option.value === "managed" && !canSelectManaged(wallet())')
+  expect(source).toContain("Add Wallet funds or turn on Ace to use Managed models")
 })
 
 // The provider catalog is intentionally not part of this helper. It is a

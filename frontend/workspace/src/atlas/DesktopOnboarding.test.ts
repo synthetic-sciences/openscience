@@ -46,11 +46,60 @@ describe("desktop onboarding", () => {
 
   test("uses the server's Wallet-or-reload managed-access decision", () => {
     expect(canUseManaged(undefined)).toBe(false)
-    expect(canUseManaged({ signedIn: true, managedSupported: false, aceEnabled: true, balanceUsd: 20 })).toBe(false)
-    expect(canUseManaged({ signedIn: true, managedSupported: true, aceEnabled: false, balanceUsd: 20 })).toBe(true)
-    expect(canUseManaged({ signedIn: true, managedSupported: true, aceEnabled: false, balanceUsd: null })).toBe(true)
-    expect(canUseManaged({ signedIn: false, managedSupported: true, aceEnabled: true, balanceUsd: 20 })).toBe(false)
-    expect(canUseManaged({ signedIn: true, managedSupported: true, aceEnabled: true, balanceUsd: 20 })).toBe(true)
+    expect(
+      canUseManaged({
+        signedIn: true,
+        managedSupported: false,
+        managedUnlocked: true,
+        aceEnabled: true,
+        balanceUsd: 20,
+      }),
+    ).toBe(false)
+    expect(
+      canUseManaged({
+        signedIn: true,
+        managedSupported: true,
+        managedUnlocked: true,
+        aceEnabled: false,
+        balanceUsd: 20,
+      }),
+    ).toBe(true)
+    expect(
+      canUseManaged({
+        signedIn: true,
+        managedSupported: true,
+        managedUnlocked: true,
+        aceEnabled: false,
+        balanceUsd: null,
+      }),
+    ).toBe(true)
+    expect(
+      canUseManaged({
+        signedIn: false,
+        managedSupported: true,
+        managedUnlocked: true,
+        aceEnabled: true,
+        balanceUsd: 20,
+      }),
+    ).toBe(false)
+    expect(
+      canUseManaged({
+        signedIn: true,
+        managedSupported: true,
+        managedUnlocked: true,
+        aceEnabled: true,
+        balanceUsd: 0,
+      }),
+    ).toBe(true)
+    expect(
+      canUseManaged({
+        signedIn: true,
+        managedSupported: true,
+        managedUnlocked: false,
+        aceEnabled: false,
+        balanceUsd: 0,
+      }),
+    ).toBe(false)
   })
 
   test("keeps interactions compact, responsive, and motion restrained", async () => {

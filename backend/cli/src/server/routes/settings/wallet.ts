@@ -14,6 +14,7 @@ export const WalletState = z.object({
   balanceUsd: z.number().nullable().describe("Wallet balance in USD; null when signed out or unavailable"),
   billingMode: z.enum(["managed", "byok"]).nullable(),
   managedSupported: z.boolean(),
+  managedUnlocked: z.boolean(),
   aceEnabled: z.boolean(),
   lifetimeSpentUsd: z.number().nullable(),
   transactions: z.array(
@@ -33,6 +34,7 @@ const SIGNED_OUT: WalletState = {
   balanceUsd: null,
   billingMode: null,
   managedSupported: false,
+  managedUnlocked: false,
   aceEnabled: false,
   lifetimeSpentUsd: null,
   transactions: [],
@@ -46,16 +48,18 @@ async function readWallet(): Promise<WalletState> {
     OpenScience.getBillingMode().catch(() => null),
     OpenScience.getTransactions(20).catch(() => null),
   ])
+  const balance = credits?.balanceUsd ?? null
   return {
     signedIn: true,
     // Financial display comes only from the authoritative Wallet response.
     // Compatibility mode metadata may synthesize zero when that read failed;
     // never turn an unavailable balance into "$0.00".
-    balanceUsd: credits?.balanceUsd ?? null,
+    balanceUsd: balance,
     billingMode: mode?.mode ?? null,
-    // The control is account-aware: infrastructure support alone must not
-    // make Managed selectable before Ace is enabled or funded.
-    managedSupported: mode?.managed_unlocked ?? false,
+    managedSupported: mode?.managed_supported ?? false,
+    // Keep funded accounts usable during a rolling Atlas deploy where the
+    // older access response still tied managed_unlocked to Ace consent.
+    managedUnlocked: Boolean(mode?.managed_unlocked || mode?.ace_enabled || (balance !== null && balance > 0)),
     aceEnabled: mode?.ace_enabled ?? false,
     lifetimeSpentUsd:
       credits?.lifetimeSpentCents === null || credits?.lifetimeSpentCents === undefined

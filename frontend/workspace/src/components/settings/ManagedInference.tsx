@@ -16,10 +16,12 @@ type Wallet = {
   balanceUsd: number | null
   billingMode: "managed" | "byok" | null
   managedSupported: boolean
+  managedUnlocked: boolean
   aceEnabled: boolean
 }
 
-export const canSelectManaged = (wallet: Wallet | undefined) => Boolean(wallet?.signedIn && wallet.managedSupported)
+export const canSelectManaged = (wallet: Wallet | undefined) =>
+  Boolean(wallet?.signedIn && wallet.managedSupported && wallet.managedUnlocked)
 
 const MODES: { value: Mode; title: string; body: string }[] = [
   {
@@ -30,7 +32,7 @@ const MODES: { value: Mode; title: string; body: string }[] = [
   {
     value: "managed",
     title: "Managed",
-    body: "Use your Ace balance for supported models without configuring a provider key.",
+    body: "Use your Wallet balance for supported models without configuring a provider key.",
   },
 ]
 
@@ -85,10 +87,6 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   }
   const update = (value: Mode) => {
     if (busy()) return
-    if (value === "managed" && wallet() && !canSelectManaged(wallet())) {
-      platform.openLink(URLS.dashboardBilling)
-      return
-    }
     const previous = mode()
     // Immediate visual acknowledgement: the network write may include account
     // synchronization, but the pressed state should never wait on that work.
@@ -157,19 +155,20 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     unsubscribe()
   })
 
-  const needsAce = () => wallet() !== undefined && !canSelectManaged(wallet())
+  const managedUnavailable = () => wallet() !== undefined && !canSelectManaged(wallet())
   const aceLabel = () => {
     if (!wallet()) return "Checking account"
     if (!wallet()!.signedIn) return "Account required"
     if (!wallet()!.managedSupported) return "Managed unavailable"
+    if (!wallet()!.managedUnlocked) return "No Wallet balance"
     if (wallet()!.aceEnabled) return "Ace on"
     return "Wallet funded"
   }
   const aceAction = () => {
     if (!wallet()?.signedIn) return "Sign in"
-    if (!wallet()?.managedSupported) return "Add funds"
-    if (!wallet()?.aceEnabled) return "Manage Wallet"
-    return "Manage Ace"
+    if (!wallet()?.managedSupported) return "Manage Wallet"
+    if (!wallet()?.managedUnlocked) return "Turn on Ace"
+    return wallet()?.aceEnabled ? "Manage Ace" : "Manage Wallet"
   }
 
   return (
@@ -187,9 +186,13 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
                 type="button"
                 aria-pressed={mode() === option.value}
                 aria-busy={busy()}
-                disabled={busy() || (option.value === "managed" && wallet() === undefined)}
+                disabled={busy() || (option.value === "managed" && !canSelectManaged(wallet()))}
                 class="models-routing__option"
-                title={option.value === "managed" && needsAce() ? "Enable Ace to use Managed models" : undefined}
+                title={
+                  option.value === "managed" && managedUnavailable()
+                    ? "Add Wallet funds or turn on Ace to use Managed models"
+                    : undefined
+                }
                 onClick={() => update(option.value)}
               >
                 <span class="models-routing__option-label">
@@ -206,7 +209,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
               <span class="models-routing__sync"> Updating model availability…</span>
             </Show>
           </p>
-          <Show when={mode() === "managed"}>
+          <Show when={mode() === "managed" || managedUnavailable()}>
             <div class="models-routing__account">
               <span class="models-routing__account-state">{aceLabel()}</span>
               <span aria-live="polite" class="models-account-summary__balance">

@@ -32,7 +32,14 @@ test("uses current Atlas access plus purchased Wallet truth without calling the 
     const path = new URL(String(input)).pathname
     const method = init?.method ?? "GET"
     calls.push({ path, method })
-    if (path === "/api/cli/access") return Response.json({ managed_supported: true, cli_balance_cents: 2500 })
+    if (path === "/api/cli/access") {
+      return Response.json({
+        managed_supported: true,
+        managed_unlocked: false,
+        ace_enabled: false,
+        cli_balance_cents: 2500,
+      })
+    }
     if (path === "/api/cli/billing-mode") return new Response("retired", { status: 404 })
     if (path === "/api/v1/wallet") {
       return Response.json({ balance_cents: 2500, purchased_cents: 2000, promotional_cents: 500 })
@@ -44,7 +51,14 @@ test("uses current Atlas access plus purchased Wallet truth without calling the 
   }) as typeof fetch
 
   const wallet = await (await WalletSettingsRoutes().request("/")).json()
-  expect(wallet).toMatchObject({ signedIn: true, balanceUsd: 20, lifetimeSpentUsd: 7.5, managedSupported: true })
+  expect(wallet).toMatchObject({
+    signedIn: true,
+    balanceUsd: 20,
+    lifetimeSpentUsd: 7.5,
+    managedSupported: true,
+    managedUnlocked: true,
+    aceEnabled: false,
+  })
   expect(await OpenScience.getBalance()).toBe(25)
 
   const update = await BillingSettingsRoutes().request("/", {
