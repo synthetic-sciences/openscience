@@ -101,6 +101,7 @@ test("connecting a provider stores its key without exposing it to the process en
     connected: true,
     enabled: false,
     integration: "cli_credential",
+    hint: expect.stringContaining("administrator-managed TensorPool CLI"),
     credential: {
       label: "API key",
       environment: "TENSORPOOL_KEY",

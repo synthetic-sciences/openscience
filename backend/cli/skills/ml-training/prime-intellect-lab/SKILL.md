@@ -18,6 +18,7 @@ Use this skill for Prime Intellect identity, compute, environment, and training 
 - A key saved in **Customize > Compute > Prime Intellect** is encrypted control-plane data. It is not exported into Bash, Task, notebooks, kernels, plugins, or MCP servers.
 - Use `provider_compute` with `account`, `list_resources`, `resource_status`, or `list_availability` for live identity, pod, status, and availability reads. OpenScience owns the exact reviewed `prime` argv and isolated home/config directory.
 - **Test connection** runs exactly `prime whoami` through the same broker.
+- The saved key is admitted only when **Test connection** approves a root/admin-managed, non-writable `prime` executable. A normal user-owned pip, pipx, or Homebrew install remains credential-only and cannot be used by `provider_compute` until a managed/native adapter exists.
 - OpenScience updates `last_used` only after the command succeeds.
 - Never display or persist the key. The saved credential cannot create or terminate pods, disks, deployments, training, or environments; do not claim a generic agent shell is authenticated by dashboard storage.
 

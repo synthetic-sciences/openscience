@@ -446,7 +446,7 @@ const Compute: Component = () => {
       variant: "success",
       title: `${item.name} credential saved`,
       description: saved?.enabled
-        ? "Enabled for a provider-specific native broker. Generic agent processes cannot access it."
+        ? "Enabled. Test connection must approve an administrator-managed executable before agents can use the read-only broker."
         : "Saved encrypted and off. Generic agent processes cannot access it.",
     })
   }
@@ -875,7 +875,7 @@ const Compute: Component = () => {
 
           <Section
             title="GPU provider credentials"
-            subtitle="Store encrypted credentials for reviewed read-only agent operations. Credentials never enter agent shells; paid and mutating provider actions remain unavailable through this broker."
+            subtitle="Store encrypted credentials for reviewed read-only agent operations. Test connection admits only administrator-managed executables; ordinary Homebrew and pip installs remain credential-only. Credentials never enter agent shells, and paid or mutating actions remain unavailable."
           >
             <Panel>
               <For each={cliProviders()}>

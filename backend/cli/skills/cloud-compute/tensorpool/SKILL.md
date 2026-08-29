@@ -18,12 +18,13 @@ Use this skill for TensorPool cluster, job, and storage workflows. Treat provide
 - A key saved in **Customize > Compute > TensorPool** is encrypted control-plane data. It is not exported into Bash, Task, notebooks, kernels, plugins, or MCP servers.
 - Use `provider_compute` with `account`, `list_resources`, `resource_status`, `list_jobs`, or `job_status` for live reads. OpenScience selects the exact reviewed `tp` argv, admits the key only to that isolated child, and marks `last_used` only after success.
 - **Test connection** uses the same boundary for exactly `tp --no-input me`.
+- The saved key is admitted only when **Test connection** approves a root/admin-managed, non-writable `tp` executable. A normal user-owned pip, pipx, or Homebrew install is credential-only and cannot be used by `provider_compute`; use an administrator-managed install or wait for a managed/native adapter.
 - Never print, echo, persist, or ask the user to paste a saved key into chat.
 - A generic agent shell can use `tp` only when the user has independently authenticated that shell. The saved credential cannot create, submit, edit, attach, destroy, or otherwise mutate resources; do not ask the user to weaken this boundary.
 
 ## Current CLI contract
 
-Install and inspect the installed CLI rather than guessing its version:
+For an independently authenticated user shell, install and inspect the CLI rather than guessing its version. This does not make a user-owned install eligible for the saved-key broker:
 
 ```bash
 python -m pip install tensorpool

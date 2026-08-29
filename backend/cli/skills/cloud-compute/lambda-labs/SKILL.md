@@ -17,7 +17,8 @@ Use this skill for Lambda Cloud instance discovery and lifecycle planning. Do no
 
 - A key saved in **Customize > Compute > Lambda** is encrypted control-plane data. It is not exported into Bash, Task, notebooks, kernels, plugins, or MCP servers.
 - Use `provider_compute` with `list_resources`, `resource_status`, or `list_availability` for live instance and capacity reads. `account` is the same reviewed instance-list request used by **Test connection**.
-- The bearer header is supplied to pinned `curl` over stdin, so the key is not placed in argv or a temporary file.
+- **Test connection** must approve an administrator-managed, non-writable `curl` executable; the macOS system `/usr/bin/curl` satisfies that boundary. User-owned replacements are rejected.
+- The bearer header is supplied to the approved `curl` over stdin, so the key is not placed in argv or a temporary file.
 - OpenScience updates `last_used` only after the API returns success.
 - Never print, log, persist, or put the key in a URL. The saved credential cannot launch, restart, terminate, or change resources; a generic shell is unauthenticated unless the user configured it separately.
 

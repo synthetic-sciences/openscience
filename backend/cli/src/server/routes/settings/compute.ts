@@ -169,7 +169,7 @@ export namespace ComputeSettings {
       name: "TensorPool",
       integration: "cli_credential",
       placeholder: "tp-…",
-      hint: "Available to agents through reviewed read-only TensorPool broker operations; generic shells never receive it.",
+      hint: "Available to agents only after Test connection approves an administrator-managed TensorPool CLI; user-owned CLI installs and generic shells never receive it.",
       credential: {
         label: "API key",
         environment: "TENSORPOOL_KEY",
@@ -182,7 +182,7 @@ export namespace ComputeSettings {
       name: "Lambda",
       integration: "cli_credential",
       placeholder: "secret_…",
-      hint: "Available to agents through reviewed read-only Lambda API operations; generic shells never receive it.",
+      hint: "Available to agents through reviewed read-only Lambda API operations after Test connection approves the system curl executable; generic shells never receive it.",
       credential: {
         label: "Cloud API key",
         environment: "LAMBDA_API_KEY",
@@ -195,7 +195,7 @@ export namespace ComputeSettings {
       name: "Prime Intellect",
       integration: "cli_credential",
       placeholder: "pi-…",
-      hint: "Available to agents through reviewed read-only Prime broker operations; generic shells never receive it.",
+      hint: "Available to agents only after Test connection approves an administrator-managed Prime CLI; user-owned CLI installs and generic shells never receive it.",
       credential: {
         label: "API key",
         environment: "PRIME_API_KEY",
@@ -208,7 +208,7 @@ export namespace ComputeSettings {
       name: "Vast.ai",
       integration: "cli_credential",
       placeholder: "vast api key",
-      hint: "Available to agents through reviewed read-only Vast.ai broker operations; generic shells never receive it.",
+      hint: "Available to agents only after Test connection approves an administrator-managed Vast.ai CLI; user-owned CLI installs and generic shells never receive it.",
       credential: {
         label: "API key",
         environment: "VAST_API_KEY",
@@ -221,7 +221,7 @@ export namespace ComputeSettings {
       name: "RunPod",
       integration: "cli_credential",
       placeholder: "rpa_…",
-      hint: "Available to agents through reviewed read-only RunPod broker operations; generic shells never receive it.",
+      hint: "Available to agents only after Test connection approves an administrator-managed RunPod CLI; user-owned CLI installs and generic shells never receive it.",
       credential: {
         label: "API key",
         environment: "RUNPOD_API_KEY",
