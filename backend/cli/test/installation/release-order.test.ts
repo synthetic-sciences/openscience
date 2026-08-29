@@ -92,6 +92,8 @@ test("production publish requires a complete exact-source npm rehearsal before r
   expect(gate).not.toContain("continue-on-error")
 
   expect(npmPreflight).toContain("- npm-test-gate")
+  expect(npmPreflight).toContain("Require release tag token")
+  expect(npmPreflight).toContain("RELEASE_GITHUB_TOKEN must have repo and workflow scopes")
   expect(signingPreflight).toContain("- npm-test-gate")
   expect(version).toContain("- npm-test-gate")
   expect(version).toContain("ARTIFACT_SOURCE: ${{ steps.version.outputs.artifact_source }}")
@@ -242,6 +244,9 @@ test("production release keeps signed publishing as the default and falls back t
   expect(desktop).toContain("OpenScience-mac-x64.dmg OpenScience-mac-x64.zip")
   expect(prepare).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
   expect(publish).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
+  expect(publish).toContain("token: ${{ secrets.RELEASE_GITHUB_TOKEN }}")
+  expect(publish).toContain("GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}")
+  expect(publish).not.toContain("GITHUB_TOKEN: ${{ github.token }}")
   expect(publish).toContain("!cancelled() &&")
   expect(publish).toContain("needs.build-desktop.result == 'success'")
   expect(publish).not.toContain("inputs.release_mode == 'unsigned' || needs.build-desktop.result == 'success'")

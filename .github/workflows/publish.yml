@@ -220,6 +220,16 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Require release tag token
+        shell: bash
+        env:
+          RELEASE_GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+        run: |
+          if [[ -z "$RELEASE_GITHUB_TOKEN" ]]; then
+            echo "::error::RELEASE_GITHUB_TOKEN must have repo and workflow scopes so the guarded release commit can update the version tag."
+            exit 1
+          fi
+
       # Authenticate and prove ownership of every package before creating a
       # draft release or making the first immutable npm registry write.
       - name: Preflight npm publisher identity and ownership
@@ -1002,6 +1012,9 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.version.outputs.source }}
+          # github.token cannot push a tag whose release commit updates a
+          # workflow file; use the dedicated repo + workflow scoped token.
+          token: ${{ secrets.RELEASE_GITHUB_TOKEN }}
 
       - uses: ./.github/actions/setup-bun
 
@@ -1169,7 +1182,7 @@ jobs:
           OPENSCIENCE_RELEASE_SOURCE: ${{ needs.version.outputs.source }}
           OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
           OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
           # Fine-grained PAT with push access to synthetic-sciences/homebrew-tap;
           # github.token is repo-scoped and can't update the tap.
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
