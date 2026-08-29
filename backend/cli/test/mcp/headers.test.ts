@@ -47,7 +47,7 @@ const { MCP } = await import("../../src/mcp/index")
 const { Instance } = await import("../../src/project/instance")
 const { tmpdir } = await import("../fixture/fixture")
 
-test("headers are passed to transports when oauth is enabled (default)", async () => {
+test("headers are passed while passive startup leaves default OAuth registration inert", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -91,8 +91,9 @@ test("headers are passed to transports when oauth is enabled (default)", async (
           Authorization: "Bearer test-token",
           "X-Custom-Header": "custom-value",
         })
-        // OAuth should be enabled by default, so authProvider should exist
-        expect(call.options.authProvider).toBeDefined()
+        // OAuth is available by default, but passive startup must not create
+        // dynamic client authority before the user explicitly chooses Connect.
+        expect(call.options.authProvider).toBeUndefined()
       }
     },
   })
