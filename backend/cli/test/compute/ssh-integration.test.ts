@@ -1,19 +1,64 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { ComputeJobs } from "../../src/compute/jobs"
 
-async function run(argv: string[], env: Record<string, string | undefined> = process.env) {
+type FixtureProcess = ReturnType<typeof Bun.spawn>
+
+const active = new Set<FixtureProcess>()
+const stopping = new WeakMap<FixtureProcess, Promise<void>>()
+let cleanupFixture: (() => Promise<void>) | undefined
+
+async function stop(proc: FixtureProcess) {
+  const existing = stopping.get(proc)
+  if (existing) return existing
+  const result = (async () => {
+    if (proc.exitCode !== null) return
+    proc.kill("SIGTERM")
+    const graceful = await Promise.race([proc.exited.then(() => true), Bun.sleep(1_000).then(() => false)])
+    if (graceful) return
+    proc.kill("SIGKILL")
+    await proc.exited
+  })()
+  stopping.set(proc, result)
+  return result
+}
+
+afterEach(async () => {
+  await Promise.all([...active].map(stop))
+  const cleanup = cleanupFixture
+  cleanupFixture = undefined
+  await cleanup?.()
+})
+
+async function run(argv: string[], env: Record<string, string | undefined> = process.env, timeout = 120_000) {
   const proc = Bun.spawn(argv, { env, stdout: "pipe", stderr: "pipe" })
-  const [code, stdout, stderr] = await Promise.all([
-    proc.exited,
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ])
-  if (code !== 0) throw new Error(`${argv[0]} exited ${code}: ${stderr}`)
-  return stdout
+  active.add(proc)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let timeoutError: Error | undefined
+  try {
+    const expired = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        timeoutError = new Error(`${argv.slice(0, 3).join(" ")} timed out after ${timeout}ms`)
+        void stop(proc).then(() => reject(timeoutError), reject)
+      }, timeout)
+    })
+    const [code, stdout, stderr] = await Promise.race([
+      Promise.all([proc.exited, new Response(proc.stdout).text(), new Response(proc.stderr).text()]),
+      expired,
+    ])
+    if (timeoutError) {
+      await stop(proc)
+      throw timeoutError
+    }
+    if (code !== 0) throw new Error(`${argv[0]} exited ${code}: ${stderr}`)
+    return stdout
+  } finally {
+    clearTimeout(timer)
+    active.delete(proc)
+  }
 }
 
 async function waitForRemoteID(root: string, id: string, timeout: number) {
@@ -104,6 +149,19 @@ test("the real-sshd fixture stays portable without relaxing its isolation", () =
   expect(directives).toContain("X11Forwarding no")
 })
 
+test("the SSH fixture runner reaps a timed-out child before returning", async () => {
+  const failure = await run(
+    [process.execPath, "-e", 'process.on("SIGTERM", () => {}); await Bun.sleep(30_000)'],
+    process.env,
+    50,
+  ).then(
+    () => "unexpected-success",
+    (error) => String(error),
+  )
+  expect(failure).toContain("timed out after 50ms")
+  expect(active.size).toBe(0)
+})
+
 test("dispatches through a real OpenSSH daemon and reattaches from a fresh server process", async () => {
   const sshd = "/usr/sbin/sshd"
   if (!(await Bun.file(sshd).exists())) return
@@ -122,7 +180,20 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
   const fixture = new URL("../fixture/ssh-compute-process.ts", import.meta.url).pathname
   const listen = await port()
   let daemon: ReturnType<typeof Bun.spawn> | undefined
-  let agentPid: number | undefined
+  let agent: ReturnType<typeof Bun.spawn> | undefined
+  const previousSocket = process.env.SSH_AUTH_SOCK
+  let cleanup: Promise<void> | undefined
+  const dispose = () => {
+    cleanup ??= (async () => {
+      if (previousSocket === undefined) delete process.env.SSH_AUTH_SOCK
+      else process.env.SSH_AUTH_SOCK = previousSocket
+      await Promise.all([daemon ? stop(daemon) : undefined, agent ? stop(agent) : undefined])
+      await fs.rm(root, { recursive: true, force: true })
+      if (await fs.lstat(root).catch(() => undefined)) throw new Error(`SSH fixture cleanup left ${root}`)
+    })()
+    return cleanup
+  }
+  cleanupFixture = dispose
   try {
     await Promise.all([fs.mkdir(workspace), fs.mkdir(remote), fs.mkdir(path.join(root, "home"), { recursive: true })])
     await fs.writeFile(path.join(workspace, "input.txt"), "payload\n")
@@ -131,11 +202,21 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
     await fs.copyFile(`${clientKey}.pub`, authorized)
     await fs.chmod(authorized, 0o600)
     await fs.writeFile(config, fixtureConfig({ listen, root, hostKey, authorized }))
-    const agent = await run(["ssh-agent", "-s"])
-    const socket = agent.match(/SSH_AUTH_SOCK=([^;]+)/)?.[1]
-    agentPid = Number(agent.match(/SSH_AGENT_PID=([0-9]+)/)?.[1])
-    if (!socket || !Number.isInteger(agentPid)) throw new Error("ssh-agent did not publish its environment")
+    const socket = path.join(root, "agent.sock")
     const env = environment(root, socket)
+    const launchedAgent = Bun.spawn(["ssh-agent", "-D", "-a", socket], {
+      env,
+      stdout: "ignore",
+      stderr: "pipe",
+    })
+    agent = launchedAgent
+    const agentError = new Response(launchedAgent.stderr).text()
+    const agentDeadline = Date.now() + 3_000
+    while (!(await fs.lstat(socket).catch(() => undefined)) && Date.now() < agentDeadline) {
+      if (agent.exitCode !== null) throw new Error(`ssh-agent exited ${agent.exitCode}: ${await agentError}`)
+      await Bun.sleep(20)
+    }
+    if (!(await fs.lstat(socket).catch(() => undefined))) throw new Error("ssh-agent did not create its socket")
     await run(["ssh-add", clientKey], env)
     const listed = await run(["ssh-add", "-l"], env)
     if (!listed.includes("ED25519")) throw new Error(`SSH fixture agent did not retain the test key: ${listed}`)
@@ -451,9 +532,7 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
       expect(recoveredKillpoint.log.match(/remote:payload/g)).toHaveLength(1)
     }
   } finally {
-    daemon?.kill("SIGTERM")
-    if (daemon) await daemon.exited.catch(() => undefined)
-    if (agentPid) process.kill(agentPid, "SIGTERM")
-    await fs.rm(root, { recursive: true, force: true })
+    await dispose()
+    if (cleanupFixture === dispose) cleanupFixture = undefined
   }
 }, 360_000)
