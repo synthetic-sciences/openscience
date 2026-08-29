@@ -17,6 +17,10 @@ const RECOVERY_COMMANDS = new Set([
   "generate",
 ])
 
+export function isScientificCapabilityCanary(command: string | undefined, argv: string[]): boolean {
+  return command === "debug" && argv[1] === "capability-canary"
+}
+
 /** Commands that are safe and necessary before an account session exists. */
 export function requiresOpenScienceAccount(command: string | undefined, argv: string[]): boolean {
   if (argv.some((value) => value === "--help" || value === "-h" || value === "--version" || value === "-v")) {
@@ -25,6 +29,10 @@ export function requiresOpenScienceAccount(command: string | undefined, argv: st
   // The default command hosts the workspace, whose full-page account gate is
   // itself the primary first-run recovery path.
   if (!command) return false
+  // Release canaries exercise only exact local/Modal capability runtimes. They
+  // must work in an isolated candidate home without an Atlas account and do
+  // not expose the general debug surface accountlessly.
+  if (isScientificCapabilityCanary(command, argv)) return false
   return !RECOVERY_COMMANDS.has(command)
 }
 

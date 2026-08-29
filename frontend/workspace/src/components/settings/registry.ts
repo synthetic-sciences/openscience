@@ -32,6 +32,7 @@ export const SETTINGS_PANEL_IDS = [
   "models",
   "local-models",
   "skills",
+  "scientific-tools",
   "connectors",
   "research-tools",
   "compute",
@@ -81,6 +82,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "flask",
     section: "capabilities",
     component: lazy(() => import("./Skills")),
+  },
+  {
+    id: "scientific-tools",
+    title: "Scientific tools",
+    icon: "flask",
+    section: "capabilities",
+    component: lazy(() => import("./ScientificTools")),
   },
   {
     id: "connectors",

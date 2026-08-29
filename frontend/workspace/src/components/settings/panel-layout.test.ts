@@ -6,6 +6,7 @@ const read = (path: string) => Bun.file(new URL(path, root)).text()
 const panels = [
   "Models.tsx",
   "Connectors.tsx",
+  "ScientificTools.tsx",
   "Compute.tsx",
   "Network.tsx",
   "Permissions.tsx",

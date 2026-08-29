@@ -48,7 +48,7 @@ import {
 } from "./process/darwin-responsibility-launcher"
 import { Global } from "./global"
 import { disposeDataRootOperation, runDataRootMiddleware } from "./cli/cmd/cmd"
-import { ACCOUNT_REQUIRED_MESSAGE, requiresOpenScienceAccount } from "./cli/account-gate"
+import { ACCOUNT_REQUIRED_MESSAGE, isScientificCapabilityCanary, requiresOpenScienceAccount } from "./cli/account-gate"
 import { OutboundTelemetry } from "./telemetry/outbound"
 import { purgeRetiredAtlasAgentInstall } from "./skill/retired-install"
 import { SELF_RESTART_ARG, SelfRestart } from "./process/self-restart"
@@ -129,6 +129,7 @@ const cli = yargs(hideBin(process.argv))
   })
   .middleware(async (opts) => {
     const initialize = async () => {
+      const capabilityCanary = isScientificCapabilityCanary(command, process.argv.slice(2))
       await Log.init({
         print: process.argv.includes("--print-logs"),
         dev: Installation.isLocal(),
@@ -155,7 +156,7 @@ const cli = yargs(hideBin(process.argv))
       // A consent change may have been saved while offline. Retry it on every
       // startup before the account gate can exit. Opt-out is prospective and
       // never turns into an implicit deletion request.
-      await OutboundTelemetry.initializeAccount().catch(() => undefined)
+      if (!capabilityCanary) await OutboundTelemetry.initializeAccount().catch(() => undefined)
 
       if (requiresOpenScienceAccount(command, process.argv.slice(2)) && !(await OpenScience.isAuthenticated())) {
         throw new Error(ACCOUNT_REQUIRED_MESSAGE)
@@ -166,27 +167,35 @@ const cli = yargs(hideBin(process.argv))
       // env applies to the NEXT command — the current one uses whatever is
       // already cached on disk. Replaces a blocking 5s Promise.race that
       // ran on every invocation regardless of staleness.
-      await OpenScience.refreshIfStale().catch(() => {})
+      if (!capabilityCanary) await OpenScience.refreshIfStale().catch(() => {})
 
       // Inject decrypted service credentials (settings ▸ Credentials) into the
       // process env so skills/tools/connectors actually use them. Dynamic import
       // keeps the credential route module out of every command's static graph.
-      await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
+      if (!capabilityCanary) {
+        await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
+      }
 
       // Legacy skill-based compute providers still consume their enabled keys
       // from subprocess environments. Modal remains adapter-only.
-      await import("./server/routes/settings/compute").then((m) => m.ComputeSettings.applyComputeEnv()).catch(() => {})
+      if (!capabilityCanary) {
+        await import("./server/routes/settings/compute")
+          .then((m) => m.ComputeSettings.applyComputeEnv())
+          .catch(() => {})
+      }
 
       // First authenticated startup quietly provisions the app-owned Python
       // and R starters. The command does not wait for package resolution; the
       // first kernel request joins the same lease-backed setup if it is still
       // running. OpenScience never modifies the user's Python, R, or Conda.
-      await import("./science/kernel/environment-manager")
-        .then((m) => m.ManagedEnvironments.startInBackground())
-        .catch(() => {})
+      if (!capabilityCanary) {
+        await import("./science/kernel/environment-manager")
+          .then((m) => m.ManagedEnvironments.startInBackground())
+          .catch(() => {})
+      }
 
       // Retry any failed usage reports from previous sessions
-      OpenScience.flushPendingUsage().catch(() => {})
+      if (!capabilityCanary) OpenScience.flushPendingUsage().catch(() => {})
     }
 
     const command = typeof opts._[0] === "string" ? opts._[0] : undefined

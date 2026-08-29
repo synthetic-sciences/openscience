@@ -10,12 +10,45 @@ branch.
    CI workflow: Typecheck, Format, the Linux test suite, web/docs and landing
    builds, migration and runtime ownership checks on their platform matrices,
    launcher/release-script smoke tests, and workflow linting.
-2. Trigger the `publish` workflow with a bump level and an explicit release
+2. Trigger `test publish` from that exact `main` commit with packaged E2E and
+   OS smokes enabled. Promotion is blocked until the exact npm candidate also
+   installs and completes all five packaged scientific capability smoke
+   lifecycles on Linux x64, Linux ARM64, and macOS ARM64. Each canary must
+   report a ready exact-pack doctor state, semantic artifact validation, and
+   evidence bound to the candidate's source SHA embedded in the compiled
+   binary. A workflow environment variable is only a cross-check and must not
+   be accepted as the source of release provenance.
+
+   ```bash
+   gh workflow run npm-test.yml --ref main \
+     -f run_packaged_e2e=true -f run_os_smoke=true
+   ```
+
+   Before production, install that exact candidate in an isolated release
+   operator root and run its bounded Modal smokes with the configured Modal
+   account. This is the explicit paid-compute acknowledgement; archive the JSON
+   report with the release evidence and do not substitute a source-tree run.
+
+   ```bash
+   openscience debug capability-canary --all --target modal \
+     --acknowledge-remote-cost --timeout 900
+   ```
+
+3. After every candidate job succeeds, trigger the `publish` workflow with a
+   bump level and an explicit release
    mode:
 
    ```bash
    gh workflow run publish.yml --ref main -f bump=patch -f release_mode=signed
    ```
+
+   Production preflight independently queries the GitHub Actions API for that
+   exact artifact-source SHA. It accepts only a completed `test publish` run
+   whose packaged E2E, four native OS smokes, musl smoke, three scientific
+   capability canaries, and `promote-test` job all succeeded. A run with either
+   optional gate disabled, or with any required job skipped, cannot publish.
+   Exact-version resumes remain bound to the immutable source marker in the
+   existing draft release; the workflow rejects any mismatch before building.
 
    Use `release_mode=unsigned` only for a deliberately unsigned release. In
    that mode the macOS apps are ad-hoc signed but not notarized, the Windows
@@ -28,7 +61,7 @@ branch.
    The next version is derived from the current npm `latest`, so there is no
    manual version editing in `package.json` and no risk of a tag collision.
 
-3. The workflow then, in order: computes the version and opens a draft GitHub
+4. The workflow then, in order: computes the version and opens a draft GitHub
    release → builds the platform binaries and desktop installers → uploads and
    verifies their checksum manifests → verifies the Linux x64 and ARM64 npm
    wrappers on native runners → publishes the CLI, SDK, plugin, and launcher
@@ -62,10 +95,12 @@ npm view synsci version
 gh release view vX.Y.Z --json isDraft,tagName,targetCommitish,assets
 ```
 
-Confirm that all four npm packages report the new version, the GitHub release
-is not a draft, the tag targets the release commit, and the assets include the
-platform archives, `checksums.txt`, `desktop-checksums.txt`, two macOS DMGs, one
-Windows EXE, and two Linux AppImages. Inspect the publish run for Homebrew,
+Confirm that the CLI, SDK, plugin, and launcher packages plus all 11 native npm
+packages report the new version and expected dist-tags. Confirm that the GitHub
+release is not a draft, the tag targets the release commit, and the assets include the
+11 platform archives, `checksums.txt`, `desktop-checksums.txt`, two macOS DMGs,
+two architecture-specific macOS updater ZIPs, one Windows EXE, and two Linux
+AppImages: 20 release assets in total. Inspect the publish run for Homebrew,
 launcher, signing, or notarization warnings. Homebrew updates remain non-fatal
 and may need owner follow-up. Publishing the `synsci` launcher is required in
 both test and production releases; a launcher failure leaves the GitHub release
@@ -80,8 +115,8 @@ push to `main`.
 The `test publish` workflow uses registry credentials and therefore runs only
 from the protected `main` branch. Validate a candidate branch with the local
 pack/build and browser gates first; after it lands on `main`, dispatch the test
-workflow and require its packaged E2E and operating-system smoke jobs to pass
-before starting the production publish.
+workflow and require packaged E2E, operating-system smoke, and all three native
+scientific-capability canary jobs to pass before starting production publish.
 
 Every npm test build must use separate binary, config, data, cache, and state
 roots. Use the exact prerelease version being validated; do not rely on a

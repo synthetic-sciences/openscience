@@ -184,6 +184,115 @@ describe("ModalVolume", () => {
     ])
   })
 
+  test("reaps a timed-out ambient SDK probe before selecting the pinned uv runtime", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const previous = new Set((await ledger()).map((entry) => entry.id))
+    let active: LedgerEntry | undefined
+    await using _testing = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 1_000 },
+      beforeUv: async () => {
+        expect(active).toBeDefined()
+        expect(await CredentialProcessLedger.owns(active!.pid, active!.identity)).toBe(false)
+        expect((await ledger()).some((entry) => entry.id === active!.id)).toBe(false)
+      },
+    })
+    const started = Date.now()
+    const running = ModalVolume.command({
+      tokenId: "ak-test",
+      tokenSecret: "as-test",
+      python,
+      uv: "/test/uv",
+    })
+    active = await waitEntry(previous)
+
+    const selected = await running
+
+    expect(Date.now() - started).toBeLessThan(4_000)
+    expect(selected).toEqual([
+      "/test/uv",
+      "run",
+      "--no-project",
+      "--python",
+      "3.12",
+      "--with",
+      `modal==${ModalVolume.VERSION}`,
+      "python",
+      "-I",
+      await ModalVolume.driverPath(),
+    ])
+  }, 30_000)
+
+  test("does not turn an in-flight caller abort into a uv fallback", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const previous = new Set((await ledger()).map((entry) => entry.id))
+    const controller = new AbortController()
+    const reason = new DOMException("release cancelled", "AbortError")
+    let selected = false
+    await using _testing = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 5_000 },
+      beforeUv: () => {
+        selected = true
+      },
+    })
+    const running = ModalVolume.command(
+      { tokenId: "ak-test", tokenSecret: "as-test", python, uv: "/test/uv" },
+      controller.signal,
+    ).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    const active = await waitEntry(previous)
+
+    controller.abort(reason)
+    const result = await running
+
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error("The aborted SDK probe unexpectedly selected a runtime")
+    expect(result.error).toBe(reason)
+    expect(selected).toBe(false)
+    expect(await CredentialProcessLedger.owns(active.pid, active.identity)).toBe(false)
+    expect((await ledger()).some((entry) => entry.id === active.id)).toBe(false)
+  }, 30_000)
+
+  test("does not select uv when timed-out probe ownership cleanup fails", async () => {
+    const python = Bun.which("python3") ?? Bun.which("python")
+    if (!python) throw new Error("Python is required for the Modal Volume driver test")
+    const previous = new Set((await ledger()).map((entry) => entry.id))
+    let selected = false
+    await using _testing = ModalVolume.testing({
+      probe: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 1_000 },
+      beforeUv: () => {
+        selected = true
+      },
+    })
+    const running = ModalVolume.command({
+      tokenId: "ak-test",
+      tokenSecret: "as-test",
+      python,
+      uv: "/test/uv",
+    }).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    const active = await waitEntry(previous)
+    const failure = new Error("synthetic ownership cleanup failure")
+    const revoke = spyOn(CredentialProcessLedger, "revoke").mockRejectedValue(failure)
+
+    try {
+      const result = await running
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error("The unsafe SDK probe unexpectedly selected a runtime")
+      expect(result.error).toBeInstanceOf(AggregateError)
+      expect((result.error as AggregateError).errors).toContain(failure)
+      expect(selected).toBe(false)
+    } finally {
+      revoke.mockRestore()
+      await CredentialProcessLedger.revoke({ id: active.id, kind: "modal-volume" }).catch(() => undefined)
+    }
+  }, 30_000)
+
   // This is four independent control-plane calls. Each call deliberately
   // completes durable helper ownership and descendant reaping before the next
   // one starts, so their combined deadline must not inherit Bun's 5s default.

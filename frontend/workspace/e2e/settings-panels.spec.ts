@@ -5,6 +5,7 @@ const panels = [
   "Models",
   "Local models",
   "Skills",
+  "Scientific tools",
   "MCP & connectors",
   "Research tools",
   "Compute",

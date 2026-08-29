@@ -25,6 +25,25 @@ export namespace ModalVolume {
     uv?: string
   }
 
+  type TestHooks = {
+    probe?: { argv: string[]; timeout: number }
+    beforeUv?: () => void | Promise<void>
+  }
+
+  const hooks = { value: undefined as TestHooks | undefined }
+
+  /** Deterministic SDK-selection barriers for process-ownership regressions. */
+  export function testing(input: TestHooks) {
+    if (!process.env.OPENSCIENCE_TEST_HOME) throw new Error("Modal Volume test hooks are disabled outside tests")
+    const prior = hooks.value
+    hooks.value = input
+    return {
+      [Symbol.dispose]() {
+        if (hooks.value === input) hooks.value = prior
+      },
+    }
+  }
+
   export type Entry = {
     path: string
     type: string
@@ -98,6 +117,14 @@ export namespace ModalVolume {
   const MAX_STDOUT = 8 * 1024 * 1024
   const MAX_STDERR = 1024 * 1024
   const text = new TextDecoder()
+
+  class TimeoutError extends Error {
+    constructor(action: string, timeout: number) {
+      super(`Modal Volume ${action} timed out after ${timeout}ms`)
+      this.name = "ModalVolumeTimeoutError"
+    }
+  }
+
   const clean = (value: string) => value.replaceAll("\\", "/").replace(/^\/+/, "")
   const safe = (value: string) => {
     const result = clean(value)
@@ -178,22 +205,30 @@ export namespace ModalVolume {
     const python = context.python ?? Bun.which("python3") ?? Bun.which("python")
     if (python) {
       const probe = await execute(
-        [
+        hooks.value?.probe?.argv ?? [
           python,
           "-I",
           "-c",
           `import modal; assert modal.__version__ == '${VERSION}'; assert hasattr(modal.Volume, 'read_file')`,
         ],
         environment({ ...process.env, ...context.env }),
-        PROBE_TIMEOUT,
+        hooks.value?.probe?.timeout ?? PROBE_TIMEOUT,
         "SDK probe",
         undefined,
         signal,
-      )
-      if (probe.code === 0) return [python, "-I", file]
+      ).catch((error) => {
+        if (signal?.aborted) throw abortReason(signal)
+        if (error instanceof TimeoutError) return undefined
+        throw error
+      })
+      if (probe?.signal) throw new Error(`Modal Volume SDK probe was killed by ${probe.signal}`)
+      if (probe?.code === 0) return [python, "-I", file]
+      if (probe?.code === null) throw new Error("Modal Volume SDK probe ended without an exit code")
     }
+    if (signal?.aborted) throw abortReason(signal)
     const uv = context.uv ?? Bun.which("uv")
     if (uv) {
+      await hooks.value?.beforeUv?.()
       return [uv, "run", "--no-project", "--python", "3.12", "--with", `modal==${VERSION}`, "python", "-I", file]
     }
     throw new Error("Modal Volume access requires uv or a Python installation that can import the Modal SDK")
@@ -377,10 +412,7 @@ export namespace ModalVolume {
         timeout === undefined
           ? undefined
           : new Promise<never>((_, reject) => {
-              timer = setTimeout(
-                () => reject(new Error(`Modal Volume ${action} timed out after ${timeout}ms`)),
-                timeout,
-              )
+              timer = setTimeout(() => reject(new TimeoutError(action, timeout)), timeout)
             })
       const result = Promise.all([launched.stdout, launched.stderr, launched.completion] as const)
       const interrupted = signal ? Promise.withResolvers<never>() : undefined

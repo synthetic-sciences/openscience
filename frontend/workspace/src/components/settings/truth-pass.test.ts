@@ -25,6 +25,7 @@ describe("launch settings truth pass", () => {
       "models",
       "local-models",
       "skills",
+      "scientific-tools",
       "connectors",
       "research-tools",
       "compute",
@@ -47,6 +48,18 @@ describe("launch settings truth pass", () => {
     expect(panel.section).toBe("capabilities")
     expect(panel.icon).toBe("flask")
     expect(source("Skills.tsx")).toContain("<SkillsPage embedded />")
+  })
+
+  test("keeps scientific tools as a flat truthful capability destination", () => {
+    const panel = findPanel("scientific-tools")
+    const scientific = source("ScientificTools.tsx")
+
+    expect(panel.title).toBe("Scientific tools")
+    expect(panel.section).toBe("capabilities")
+    expect(scientific).toContain('"/settings/scientific-tools"')
+    expect(scientific).toContain("Instructional presence and upstream availability never count")
+    expect(scientific).toContain("Release-verified")
+    expect(scientific).not.toContain("54 verified")
   })
 
   test("groups every Customize destination without nested navigation", () => {
@@ -156,6 +169,11 @@ describe("launch settings truth pass", () => {
     expect(connectors).toContain('label="Hosted server"')
     expect(connectors).toContain('label="Local process"')
     expect(connectors).toContain('label="Add connector"')
+    expect(connectors).toContain('label="Reviewed setup catalog"')
+    expect(connectors).toContain("Nothing is installed, enabled, or granted write")
+    expect(connectors).toContain("access until you review and save it")
+    expect(connectors).toContain("connectorFormFromCatalog(entry.setup)")
+    expect(connectors).not.toContain("write-back ready")
     expect(connectors).toContain('label: "Hosted server"')
     expect(connectors).toContain('label: "Local process"')
     expect(connectors).toContain('"Save connector"')

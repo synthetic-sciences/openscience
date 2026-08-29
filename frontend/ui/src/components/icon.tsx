@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 import { splitProps, type ComponentProps } from "solid-js"
 import { iconDefinitions, type IconName } from "./iconoir-registry"
 

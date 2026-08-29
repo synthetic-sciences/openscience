@@ -278,6 +278,7 @@ export const FormField: Component<{
   multiline?: boolean
   disabled?: boolean
   mono?: boolean
+  secret?: boolean
 }> = (props) => (
   <label class="flex min-w-0 flex-col gap-1.5">
     <span class="text-12-medium text-text-strong">{props.label}</span>
@@ -285,11 +286,13 @@ export const FormField: Component<{
       when={props.multiline}
       fallback={
         <input
-          type="text"
+          type={props.secret ? "password" : "text"}
+          autocomplete={props.secret ? "new-password" : undefined}
           value={props.value}
           disabled={props.disabled}
           placeholder={props.placeholder}
           class="settings-field"
+          classList={{ "font-mono": props.mono }}
           onInput={(e) => props.onInput(e.currentTarget.value)}
         />
       }

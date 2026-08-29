@@ -26,6 +26,8 @@ export interface ConnectorFormState {
   clientSecret: string
   scope: string
   timeout: string
+  initiallyDisabled: boolean
+  requireClientSecret: boolean
   previous?: ConfiguredMcp
 }
 
@@ -42,6 +44,51 @@ export function blankConnectorForm(type: McpType): ConnectorFormState {
     clientSecret: "",
     scope: "",
     timeout: "",
+    initiallyDisabled: false,
+    requireClientSecret: false,
+  }
+}
+
+export function connectorFormFromCatalog(setup: {
+  type: "remote"
+  name: string
+  url: string
+  oauth: "auto" | "client"
+  scope?: string
+  confidential_client?: boolean
+}): ConnectorFormState {
+  return {
+    ...blankConnectorForm("remote"),
+    name: setup.name,
+    url: setup.url,
+    oauth: setup.oauth,
+    scope: setup.scope ?? "",
+    initiallyDisabled: true,
+    requireClientSecret: setup.confidential_client === true,
+  }
+}
+
+export function connectorMatchesCatalogSetup(
+  config: ConfiguredMcp | undefined,
+  setup: {
+    type: "remote"
+    url: string
+    oauth: "auto" | "client"
+    scope?: string
+    confidential_client?: boolean
+  },
+) {
+  if (config?.type !== "remote") return false
+  try {
+    if (new URL(config.url).href !== new URL(setup.url).href) return false
+    if (setup.oauth === "auto") {
+      return config.oauth !== false && (!config.oauth || !("clientId" in config.oauth))
+    }
+    if (!config.oauth || !("clientId" in config.oauth) || !config.oauth.clientId) return false
+    if (setup.confidential_client && !config.oauth.clientSecret) return false
+    return setup.scope === undefined || config.oauth.scope === setup.scope
+  } catch {
+    return false
   }
 }
 
@@ -140,7 +187,7 @@ export function buildConnectorConfig(state: ConnectorFormState): ConfiguredMcp {
   if (timeout !== undefined && (!Number.isInteger(timeout) || timeout <= 0)) {
     throw new Error("Timeout must be a positive whole number of milliseconds")
   }
-  const enabled = state.previous?.enabled
+  const enabled = state.previous?.enabled ?? (state.initiallyDisabled ? false : undefined)
   if (state.type === "local") {
     const command = parseConnectorCommand(state.command)
     if (command.length === 0) throw new Error("Command is required")
@@ -159,6 +206,9 @@ export function buildConnectorConfig(state: ConnectorFormState): ConfiguredMcp {
   const headers = restoreRecord(parseRecord(state.headers, "Headers"), previous?.headers)
   const oauth = typeof previous?.oauth === "object" ? previous.oauth : undefined
   const secret = state.clientSecret.trim() === MASK ? oauth?.clientSecret : state.clientSecret.trim()
+  if (state.oauth === "client" && !state.clientId.trim()) throw new Error("OAuth client ID is required")
+  if (state.oauth === "client" && state.requireClientSecret && !secret)
+    throw new Error("OAuth client secret is required")
   return {
     type: "remote",
     url: state.url.trim(),

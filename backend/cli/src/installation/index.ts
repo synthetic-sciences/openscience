@@ -13,6 +13,7 @@ declare global {
   const OPENSCIENCE_CHANNEL: string
   const OPENSCIENCE_LIBC: string
   const OPENSCIENCE_PLATFORM_PACKAGE: string
+  const OPENSCIENCE_ARTIFACT_SOURCE: string
 }
 
 export namespace Installation {
@@ -220,6 +221,10 @@ export namespace Installation {
 
   export const VERSION = typeof OPENSCIENCE_VERSION === "string" ? OPENSCIENCE_VERSION : "local"
   export const CHANNEL = typeof OPENSCIENCE_CHANNEL === "string" ? OPENSCIENCE_CHANNEL : "local"
+  export const ARTIFACT_SOURCE =
+    typeof OPENSCIENCE_ARTIFACT_SOURCE === "string" && /^[a-f0-9]{40}$/.test(OPENSCIENCE_ARTIFACT_SOURCE)
+      ? OPENSCIENCE_ARTIFACT_SOURCE
+      : undefined
   export const USER_AGENT = `openscience/${CHANNEL}/${VERSION}/${Flag.OPENSCIENCE_CLIENT}`
   export const PLATFORM_PACKAGE =
     typeof OPENSCIENCE_PLATFORM_PACKAGE === "string"

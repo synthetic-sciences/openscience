@@ -93,7 +93,7 @@ function worker(mode: string, directory: string, seed: Seed, ready: string, atte
   })
 }
 
-function capacity(mode: "hold-cap" | "take-cap" | "hold-cap-intent" | "replace-cap", ready: string) {
+function capacity(mode: "hold-cap" | "take-cap" | "hold-cap-claim" | "hold-cap-intent" | "replace-cap", ready: string) {
   return spawn([process.execPath, fixture, mode, "", "", "", "", ready], {
     cwd: import.meta.dir,
     stdout: "pipe",
@@ -769,8 +769,7 @@ describe("durable Task attempts across Bun processes", () => {
     const slot = TaskCapacity.slotPath("child", 0)
     const root = path.dirname(slot)
     const deadReady = path.join(root, `aba-dead-${crypto.randomUUID()}.ready`)
-    const intentReady = path.join(root, `aba-intent-${crypto.randomUUID()}.ready`)
-    const firstReady = path.join(root, `aba-first-${crypto.randomUUID()}.ready`)
+    const claimReady = path.join(root, `aba-claim-${crypto.randomUUID()}.ready`)
     const secondReady = path.join(root, `aba-second-${crypto.randomUUID()}.ready`)
     const thirdReady = path.join(root, `aba-third-${crypto.randomUUID()}.ready`)
     await fs.mkdir(root, { recursive: true })
@@ -781,24 +780,13 @@ describe("durable Task attempts across Bun processes", () => {
       dead.kill("SIGKILL")
       await within(dead.exited)
 
-      const intent = capacity("hold-cap-intent", intentReady)
-      processes.add(intent)
-      await wait(intentReady)
-
-      const first = capacity("take-cap", firstReady)
-      processes.add(first)
-      const claims = LockCoordination.directory(slot, "claim")
-      await waitFor(
-        () =>
-          fs
-            .readdir(claims)
-            .then((items) => items.length > 0)
-            .catch(() => false),
-        "the first capacity reclaimer claim",
-      )
-      process.kill(first.pid, "SIGSTOP")
-      intent.kill("SIGKILL")
-      await within(intent.exited)
+      // Keep one reclaimer claim live without relying on SIGSTOP delivery.
+      // A successful kill() only queues the signal; the old choreography
+      // could kill the intent before the target actually stopped, allowing
+      // that process to dispose its claim and the next waiter to acquire.
+      const claim = capacity("hold-cap-claim", claimReady)
+      processes.add(claim)
+      await wait(claimReady)
 
       const second = capacity("take-cap", secondReady)
       processes.add(second)
@@ -812,17 +800,16 @@ describe("durable Task attempts across Bun processes", () => {
       const third = capacity("take-cap", thirdReady)
       processes.add(third)
       await Bun.sleep(150)
-      expect(await Promise.all([firstReady, secondReady, thirdReady].map((file) => Bun.file(file).exists()))).toEqual([
-        false,
+      expect(await Promise.all([secondReady, thirdReady].map((file) => Bun.file(file).exists()))).toEqual([
         false,
         false,
       ])
       expect(await Bun.file(slot).exists()).toBe(false)
 
-      process.kill(first.pid, "SIGCONT")
-      const results = await Promise.all([result(first), result(second), result(third)])
+      claim.kill("SIGKILL")
+      await within(claim.exited)
+      const results = await Promise.all([result(second), result(third)])
       expect(results).toEqual([
-        expect.objectContaining({ acquired: true }),
         expect.objectContaining({ acquired: true }),
         expect.objectContaining({ acquired: true }),
       ])
@@ -835,16 +822,9 @@ describe("durable Task attempts across Bun processes", () => {
       expect(await markers("claim")).toEqual([])
       expect(await markers("intent")).toEqual([])
     } finally {
-      for (const proc of processes) {
-        try {
-          process.kill(proc.pid, "SIGCONT")
-        } catch {}
-        proc.kill()
-      }
+      for (const proc of processes) proc.kill()
       await Promise.all([...processes].map((proc) => proc.exited.catch(() => undefined)))
-      await Promise.all(
-        [deadReady, intentReady, firstReady, secondReady, thirdReady].map((file) => fs.rm(file, { force: true })),
-      )
+      await Promise.all([deadReady, claimReady, secondReady, thirdReady].map((file) => fs.rm(file, { force: true })))
     }
   }, 20_000)
 

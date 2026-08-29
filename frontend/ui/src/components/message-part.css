@@ -1319,6 +1319,10 @@
     justify-content: flex-end;
     flex-wrap: wrap;
     margin-left: auto;
+
+    [data-component="button"] {
+      min-height: 32px;
+    }
   }
 
   &[data-expanded="true"] [data-slot="permission-actions"] {
@@ -1329,6 +1333,7 @@
   }
 
   [data-slot="permission-summary"][data-kind="remote-compute"],
+  [data-slot="permission-summary"][data-kind="hosted-scientific"],
   [data-slot="permission-summary"][data-kind="environment-mutation"] {
     display: grid;
     gap: 5px;
@@ -1379,6 +1384,7 @@
   }
 
   &[data-kind="remote-compute"],
+  &[data-kind="hosted-scientific"],
   &[data-kind="environment-mutation"] {
     align-items: stretch;
     flex-direction: column;

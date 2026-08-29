@@ -33,6 +33,12 @@ console.log("Generated models-snapshot.ts")
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+const artifactSource = process.env.OPENSCIENCE_ARTIFACT_SOURCE?.trim() ?? ""
+if (artifactSource && !/^[a-f0-9]{40}$/.test(artifactSource)) {
+  throw new Error(
+    `OPENSCIENCE_ARTIFACT_SOURCE must be an exact lowercase 40-character Git SHA, received '${artifactSource}'`,
+  )
+}
 
 const targets = singleFlag
   ? NativeTargets.filter((item) => {
@@ -116,6 +122,7 @@ for (const item of targets) {
       OPENSCIENCE_CHANNEL: `'${Script.channel}'`,
       OPENSCIENCE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
       OPENSCIENCE_PLATFORM_PACKAGE: `'${name}'`,
+      OPENSCIENCE_ARTIFACT_SOURCE: JSON.stringify(artifactSource),
     },
   })
 

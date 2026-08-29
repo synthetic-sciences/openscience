@@ -35,6 +35,9 @@ export namespace Sandbox {
     writable: string[]
     /** Absolute grant/runtime roots the process may read. */
     readable?: string[]
+    /** Readable roots that must remain unwritable even below a writable
+     * ancestor (for example an exact scientific runtime inside a project). */
+    readOnly?: string[]
     /** Exact ancestor directories that a resolver may enumerate while walking
      * toward an allowed subtree. Children are not made readable. */
     readableExact?: string[]
@@ -45,6 +48,7 @@ export namespace Sandbox {
      * symlink). The source is resolved before spawn; bubblewrap never follows
      * the caller-provided lexical spelling on the host. */
     readableAliases?: MountAlias[]
+    readOnlyAliases?: MountAlias[]
     writableAliases?: MountAlias[]
     unreadableAliases?: MountAlias[]
     /** Whether the sandboxed process may reach the network. */
@@ -507,6 +511,7 @@ export namespace Sandbox {
     workspace: string[]
     temporary: string
     readable?: string[]
+    readOnly?: string[]
     extraWritable?: string[]
     unreadable?: string[]
     entrypoints?: string[]
@@ -529,17 +534,22 @@ export namespace Sandbox {
       ...runtimeReadRoots(input.entrypoints ?? []),
       ...input.workspace,
       ...(input.readable ?? []),
+      ...(input.readOnly ?? []),
       ...(input.extraWritable ?? []),
       ...writable,
     ]
     const readable = dedupe(readableInputs).filter((value) => !tooBroadToConfine(value))
+    const readOnlyInputs = input.readOnly ?? []
+    const readOnly = dedupe(readOnlyInputs).filter((value) => !tooBroadToConfine(value))
     const unreadableInputs = input.unreadable ?? []
     return {
       writable,
       readable,
+      readOnly,
       readableExact: traversalRoots(readable),
       unreadable: dedupe(unreadableInputs).filter((value) => !tooBroadToConfine(value)),
       readableAliases: mountAliases(readableInputs),
+      readOnlyAliases: mountAliases(readOnlyInputs),
       writableAliases: mountAliases(writableInputs),
       unreadableAliases: mountAliases(unreadableInputs),
       network: (input.options.network ?? "allow") !== "deny",
@@ -608,6 +618,10 @@ export namespace Sandbox {
     }
     // Character devices tools legitimately write (null, tty, ptys, urandom, …).
     lines.push('(allow file-write* (subpath "/dev"))')
+    const readOnly = withPrivateAliases(dedupe(policy.readOnly ?? []))
+    if (readOnly.length) {
+      lines.push(`(deny file-write* ${readOnly.map((value) => `(subpath "${sbpl(value)}")`).join(" ")})`)
+    }
     // Seatbelt uses the last matching rule, so the sensitive write deny must
     // follow every broad writable-parent allow. These are host-managed
     // enclaves, not merely secrets to hide. Bubblewrap's later tmpfs/dev-null
@@ -692,6 +706,12 @@ export namespace Sandbox {
     // destination is upgraded rather than accidentally left read-only.
     for (const alias of safeMountAliases(policy.writableAliases)) {
       args.push("--bind-try", alias.source, alias.destination)
+    }
+    // Re-apply immutable runtime mounts after every writable ancestor. A
+    // writable project bind can otherwise hide an earlier nested ro-bind.
+    for (const value of dedupe(policy.readOnly ?? [])) args.push("--ro-bind-try", value, value)
+    for (const alias of safeMountAliases(policy.readOnlyAliases)) {
+      args.push("--ro-bind-try", alias.source, alias.destination)
     }
     const unreadable = new Map<string, string>()
     for (const value of dedupe(policy.unreadable ?? [])) unreadable.set(value, value)
@@ -792,6 +812,8 @@ export namespace Sandbox {
     workspace: string[]
     /** Additional explicit read-only grant roots for this process. */
     readable?: string[]
+    /** Roots that may be read but must override writable ancestors. */
+    readOnly?: string[]
     /** Exact host credential files to mask from the process. */
     unreadable?: string[]
     /** Canonical local runtime used by both persistent kernels and shell reruns. */
@@ -808,6 +830,7 @@ export namespace Sandbox {
         workspace: input.workspace,
         temporary,
         readable: input.readable,
+        readOnly: input.readOnly,
         unreadable: input.unreadable,
         entrypoints: [input.shell, input.runtime?.python].filter((value): value is string => !!value),
         options: input.options!,
@@ -834,6 +857,8 @@ export namespace Sandbox {
     workspace: string[]
     /** Explicit read-only grant roots for this process. */
     readable?: string[]
+    /** Roots that may be read but must override writable ancestors. */
+    readOnly?: string[]
     /** Extra paths (e.g. a generated kernel script under /tmp) to keep writable/visible. */
     extraWritable?: string[]
     /** Exact host credential files to mask from the process. */
@@ -850,6 +875,7 @@ export namespace Sandbox {
         workspace: input.workspace,
         temporary,
         readable: input.readable,
+        readOnly: input.readOnly,
         extraWritable: input.extraWritable,
         unreadable: input.unreadable,
         entrypoints: [input.file],

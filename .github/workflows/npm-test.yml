@@ -113,6 +113,7 @@ jobs:
         env:
           OPENSCIENCE_CHANNEL: test
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.source }}
           GH_TOKEN: ${{ github.token }}
       - name: Cache immutable CLI build
         if: steps.npm-artifacts-cache.outputs.cache-hit != 'true' && steps.cli-build-cache.outputs.cache-hit != 'true'
@@ -536,6 +537,109 @@ jobs:
           sed -n '1,200p' "$RUNNER_TEMP/openscience-musl-smoke.log" >&2 || true
           exit 1
 
+  scientific-capability-canary:
+    needs: publish-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-latest
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+          - name: macos-arm64
+            runner: macos-latest
+    name: scientific capability canary (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Install and prove the Linux capability sandbox
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
+      - name: Install the exact published OpenScience candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/openscience-capability-prefix"
+          mkdir -p "$prefix"
+          npm install --global --prefix "$prefix" "@synsci/openscience@${{ needs.publish-test.outputs.version }}"
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+          "$prefix/bin/openscience" --version | tee "$RUNNER_TEMP/openscience-capability-version.txt"
+          grep -Fx "${{ needs.publish-test.outputs.version }}" "$RUNNER_TEMP/openscience-capability-version.txt"
+      - name: Run every packaged scientific capability lifecycle
+        shell: bash
+        env:
+          HOME: ${{ runner.temp }}/openscience-capability/home
+          XDG_DATA_HOME: ${{ runner.temp }}/openscience-capability/share
+          XDG_CACHE_HOME: ${{ runner.temp }}/openscience-capability/cache
+          XDG_CONFIG_HOME: ${{ runner.temp }}/openscience-capability/config
+          XDG_STATE_HOME: ${{ runner.temp }}/openscience-capability/state
+          OPENSCIENCE_CONFIG_DIR: ${{ runner.temp }}/openscience-capability/config/openscience
+          OPENSCIENCE_DATA_DIR: ${{ runner.temp }}/openscience-capability/data
+          OPENSCIENCE_DISABLE_SHARE: "true"
+          OPENSCIENCE_DISABLE_LSP_DOWNLOAD: "true"
+          OPENSCIENCE_DISABLE_DEFAULT_PLUGINS: "true"
+          OPENSCIENCE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          OPENSCIENCE_RELEASE_SHA: ${{ needs.publish-test.outputs.source }}
+        run: |
+          set -euo pipefail
+          project="$RUNNER_TEMP/openscience-capability/project"
+          mkdir -p "$HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$OPENSCIENCE_DATA_DIR" "$project"
+          cd "$project"
+          openscience debug capability-canary --all --target local --timeout 900 \
+            | tee "$RUNNER_TEMP/scientific-capability-canary.json"
+          CANARY_RESULT="$RUNNER_TEMP/scientific-capability-canary.json" \
+          EXPECTED_SOURCE="${{ needs.publish-test.outputs.source }}" \
+          EXPECTED_VERSION="${{ needs.publish-test.outputs.version }}" \
+          node --input-type=module - <<'NODE'
+          import fs from "node:fs"
+          const report = JSON.parse(fs.readFileSync(process.env.CANARY_RESULT, "utf8"))
+          if (report.schema_version !== 1 || report.target !== "local") throw new Error("invalid canary report")
+          if (!Array.isArray(report.results) || report.results.length !== 5) {
+            throw new Error(`expected five packaged capability results, received ${report.results?.length}`)
+          }
+          const ids = new Set(report.results.map((item) => item.capability))
+          for (const expected of ["scipy", "matplotlib", "scikit-learn", "biopython", "rdkit"]) {
+            if (!ids.has(expected)) throw new Error(`missing ${expected} release canary`)
+          }
+          for (const item of report.results) {
+            if (item.status !== "succeeded") throw new Error(`${item.capability} ended ${item.status}`)
+            if (item.doctor?.availability?.local !== "ready") {
+              throw new Error(`${item.capability} doctor did not report the exact local pack ready`)
+            }
+            const evidence = item.verification?.evidence
+            if (evidence?.release_sha !== process.env.EXPECTED_SOURCE) {
+              throw new Error(`${item.capability} recorded the wrong release source`)
+            }
+            if (evidence?.app_version !== process.env.EXPECTED_VERSION) {
+              throw new Error(`${item.capability} recorded the wrong candidate version`)
+            }
+            if (!item.verification?.validation?.ok) throw new Error(`${item.capability} failed semantic validation`)
+          }
+          console.log(`verified ${report.results.length} exact packaged capability lifecycles`)
+          NODE
+      - name: Upload scientific capability evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-test-scientific-capability-${{ matrix.name }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/scientific-capability-canary.json
+            ${{ runner.temp }}/openscience-capability/data/scientific-capability-evidence.json
+
   promote-test:
     needs:
       - version
@@ -543,6 +647,7 @@ jobs:
       - packaged-e2e
       - os-smoke
       - musl-baseline-smoke
+      - scientific-capability-canary
     if: inputs.run_packaged_e2e && inputs.run_os_smoke
     runs-on: ubuntu-latest
     timeout-minutes: 30

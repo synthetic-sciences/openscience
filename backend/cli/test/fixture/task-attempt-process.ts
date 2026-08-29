@@ -83,6 +83,11 @@ if (mode === "loop-parent") {
       await new Promise(() => {})
     },
   })
+} else if (mode === "hold-cap-claim") {
+  await using claim = await LockCoordination.claim(TaskCapacity.slotPath("child", 0), 5_000)
+  await fs.writeFile(ready, String(process.pid))
+  await new Promise(() => {})
+  void claim
 } else if (mode === "hold-cap-intent") {
   await using intent = await LockCoordination.intent(TaskCapacity.slotPath("child", 0), 5_000)
   await fs.writeFile(ready, String(process.pid))

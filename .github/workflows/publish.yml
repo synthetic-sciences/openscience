@@ -62,8 +62,138 @@ jobs:
             exit 1
           fi
 
-  npm-preflight:
+  npm-test-gate:
     needs: release-source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      source: ${{ steps.candidate.outputs.source }}
+      run_id: ${{ steps.candidate.outputs.run_id }}
+      run_url: ${{ steps.candidate.outputs.run_url }}
+    steps:
+      - name: Require a complete exact-source npm test rehearsal
+        id: candidate
+        shell: bash
+        env:
+          EXACT_VERSION: ${{ inputs.version }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          expected="${GITHUB_SHA,,}"
+          if [[ -n "$EXACT_VERSION" ]]; then
+            release_error="$RUNNER_TEMP/npm-test-gate-release-error.txt"
+            if release_json="$(gh api "/repos/$GH_REPO/releases/tags/v$EXACT_VERSION" 2>"$release_error")"; then
+              marker="$(jq -r 'try ((.body // "") | capture("<!-- openscience-release-source:(?<source>[0-9a-f]{40}) -->"; "i").source) catch ""' <<<"$release_json")"
+              if [[ ! "$marker" =~ ^[0-9a-fA-F]{40}$ ]]; then
+                echo "::error::Existing release v$EXACT_VERSION is missing its immutable artifact-source marker."
+                exit 1
+              fi
+              expected="${marker,,}"
+            elif grep -qi 'HTTP 404' "$release_error"; then
+              # A first exact-version dispatch has no release yet and is bound
+              # to this workflow checkout. version.ts will create the draft.
+              expected="${GITHUB_SHA,,}"
+            else
+              cat "$release_error" >&2
+              echo "::error::Could not inspect v$EXACT_VERSION before validating its npm test rehearsal."
+              exit 1
+            fi
+          fi
+          if [[ ! "$expected" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The npm test gate did not resolve an immutable source SHA."
+            exit 1
+          fi
+
+          runs="$(gh api --paginate --slurp \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$GH_REPO/actions/workflows/npm-test.yml/runs?event=workflow_dispatch&status=completed&head_sha=$expected&per_page=100")"
+          mapfile -t run_ids < <(
+            jq -r --arg source "$expected" --arg repo "${GH_REPO,,}" '
+              [.[] | .workflow_runs[]]
+              | map(select(
+                  (.head_sha | ascii_downcase) == $source
+                  and (.head_repository.full_name | ascii_downcase) == $repo
+                  and .head_branch == "main"
+                  and .event == "workflow_dispatch"
+                  and .status == "completed"
+                  and .conclusion == "success"
+                ))
+              | sort_by(.run_number, .run_attempt)
+              | reverse
+              | .[].id
+            ' <<<"$runs"
+          )
+
+          if (( ${#run_ids[@]} == 0 )); then
+            echo "::error::No successful test publish workflow exists for exact source $expected. Dispatch npm-test.yml from that main commit with both optional gates enabled."
+            exit 1
+          fi
+
+          for run_id in "${run_ids[@]}"; do
+            job_pages="$(gh api --paginate --slurp \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/$GH_REPO/actions/runs/$run_id/jobs?filter=latest&per_page=100")"
+            jobs="$(jq -c '[.[] | .jobs[]]' <<<"$job_pages")"
+
+            if jq -e '
+              . as $jobs
+              | def exactly_one($name):
+                  [$jobs[] | select(.name == $name and .conclusion == "success")] | length == 1;
+                def complete_matrix($prefix; $labels):
+                  ([$jobs[] | select(.name | startswith($prefix))] | length == ($labels | length))
+                  and ($labels | all(.[];
+                    . as $label
+                    | [$jobs[] | select(
+                        (.name | startswith($prefix))
+                        and (.name | contains($label))
+                        and .conclusion == "success"
+                      )]
+                    | length == 1
+                  ));
+                ($jobs | length > 0)
+                and ($jobs | all(.[]; .status == "completed" and .conclusion == "success"))
+                and ([
+                  "test-source",
+                  "version",
+                  "build-cli",
+                  "prepare-npm",
+                  "publish-test",
+                  "packaged-e2e",
+                  "musl-baseline-smoke",
+                  "promote-test"
+                ] | all(.[]; exactly_one(.)))
+                and complete_matrix("os-smoke ("; ["linux-x64", "linux-arm64", "macos", "windows"])
+                and complete_matrix("scientific capability canary ("; ["linux-x64", "linux-arm64", "macos-arm64"])
+            ' <<<"$jobs" >/dev/null; then
+              run_url="$(jq -r --argjson id "$run_id" '[.[] | .workflow_runs[] | select(.id == $id)][0].html_url' <<<"$runs")"
+              {
+                echo "source=$expected"
+                echo "run_id=$run_id"
+                echo "run_url=$run_url"
+              } >> "$GITHUB_OUTPUT"
+              {
+                echo "### Verified npm test rehearsal"
+                echo "Exact source \`$expected\` passed every required candidate job in [run $run_id]($run_url)."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            echo "::warning::Successful workflow run $run_id was rejected because required jobs were missing, skipped, or not successful."
+            jq -r '.[] | "  \(.name): status=\(.status), conclusion=\(.conclusion // "none")"' <<<"$jobs"
+          done
+
+          echo "::error::No successful test publish run for exact source $expected completed packaged E2E, all OS smokes, all three scientific capability canaries, and test promotion. Disabled or skipped gates do not qualify."
+          exit 1
+
+  npm-preflight:
+    needs:
+      - release-source
+      - npm-test-gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -86,7 +216,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   macos-signing-preflight:
-    needs: release-source
+    needs:
+      - release-source
+      - npm-test-gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -123,6 +255,7 @@ jobs:
   version:
     needs:
       - release-source
+      - npm-test-gate
       - npm-preflight
       - macos-signing-preflight
     runs-on: ubuntu-latest
@@ -143,6 +276,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OPENSCIENCE_BUMP: ${{ inputs.bump }}
           OPENSCIENCE_VERSION: ${{ inputs.version }}
+
+      - name: Bind the production artifact to the verified candidate source
+        shell: bash
+        env:
+          ARTIFACT_SOURCE: ${{ steps.version.outputs.artifact_source }}
+          VERIFIED_SOURCE: ${{ needs.npm-test-gate.outputs.source }}
+        run: |
+          set -euo pipefail
+          if [[ "${ARTIFACT_SOURCE,,}" != "${VERIFIED_SOURCE,,}" ]]; then
+            echo "::error::Release artifact source $ARTIFACT_SOURCE was not the exact source validated by npm test ($VERIFIED_SOURCE). Resume an existing draft with an explicit version, then run the matching rehearsal."
+            exit 1
+          fi
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
@@ -179,6 +324,7 @@ jobs:
         env:
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
           GH_TOKEN: ${{ github.token }}
 
       - name: Cache immutable CLI build
@@ -608,6 +754,32 @@ jobs:
             produced="frontend/desktop/dist/OpenScience-linux-x86_64.AppImage"
             [[ -s "$produced" ]] && mv "$produced" "$installer"
           fi
+          if [[ "${{ matrix.target }}" == "mac" ]]; then
+            zip_name=""
+            for name in $DESKTOP_ASSETS; do
+              [[ "$name" == *.zip ]] && zip_name="$name"
+            done
+            [[ -n "$zip_name" ]] || {
+              echo "::error::The macOS release set has no updater ZIP"
+              exit 1
+            }
+            zip_path="frontend/desktop/dist/$zip_name"
+            [[ -s "$zip_path" ]] || {
+              echo "::error::electron-builder did not produce $zip_name"
+              exit 1
+            }
+            entries="$RUNNER_TEMP/$zip_name.entries"
+            unzip -Z1 "$zip_path" > "$entries"
+            roots="$(sed -E 's#^([^/]+).*$#\1#' "$entries" | sort -u)"
+            [[ "$roots" == "OpenScience.app" ]] || {
+              echo "::error::$zip_name must contain exactly one top-level OpenScience.app bundle; found: $roots"
+              exit 1
+            }
+            grep -q '^OpenScience\.app/Contents/' "$entries" || {
+              echo "::error::$zip_name does not contain an OpenScience.app bundle payload"
+              exit 1
+            }
+          fi
           release="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
           for name in $DESKTOP_ASSETS; do
             artifact="frontend/desktop/dist/$name"
@@ -847,22 +1019,90 @@ jobs:
           checksum_asset="$(jq -c '.assets[] | select(.name == "desktop-checksums.txt")' <<<"$assets" || true)"
           if [[ -z "$checksum_asset" ]]; then
             gh release upload "$OPENSCIENCE_TAG" desktop-checksums.txt
-            exit 0
+          else
+            [[ "$(jq -r .state <<<"$checksum_asset")" == "uploaded" ]]
+            (( $(jq -r .size <<<"$checksum_asset") > 0 ))
+            existing_digest="$(jq -r .digest <<<"$checksum_asset")"
+            actual_digest="sha256:$(sha256sum desktop-checksums.txt | awk '{print $1}')"
+            [[ "$existing_digest" == "$actual_digest" ]] || {
+              echo "::error::desktop-checksums.txt already exists with different bytes; refusing to clobber"
+              exit 1
+            }
+            gh release download "$OPENSCIENCE_TAG" --pattern desktop-checksums.txt --dir "$RUNNER_TEMP"
+            cmp --silent desktop-checksums.txt "$RUNNER_TEMP/desktop-checksums.txt" || {
+              echo "::error::desktop-checksums.txt digest matched but downloaded bytes differed"
+              exit 1
+            }
           fi
 
-          [[ "$(jq -r .state <<<"$checksum_asset")" == "uploaded" ]]
-          (( $(jq -r .size <<<"$checksum_asset") > 0 ))
-          existing_digest="$(jq -r .digest <<<"$checksum_asset")"
-          actual_digest="sha256:$(sha256sum desktop-checksums.txt | awk '{print $1}')"
-          [[ "$existing_digest" == "$actual_digest" ]] || {
-            echo "::error::desktop-checksums.txt already exists with different bytes; refusing to clobber"
+          # Freeze the complete public release shape before publication. A
+          # resume may reuse immutable assets, so expected-file presence alone
+          # is insufficient: reject unknown extras and independently bind both
+          # checksum manifests to GitHub's payload digests.
+          assets="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
+          cli_manifest="backend/cli/dist/checksums.txt"
+          [[ "$(wc -l < "$cli_manifest" | tr -d ' ')" == "11" ]] || {
+            echo "::error::checksums.txt must describe exactly 11 native CLI payloads"
             exit 1
           }
-          gh release download "$OPENSCIENCE_TAG" --pattern desktop-checksums.txt --dir "$RUNNER_TEMP"
-          cmp --silent desktop-checksums.txt "$RUNNER_TEMP/desktop-checksums.txt" || {
-            echo "::error::desktop-checksums.txt digest matched but downloaded bytes differed"
+          expected_names="$RUNNER_TEMP/openscience-release-expected-assets.txt"
+          actual_names="$RUNNER_TEMP/openscience-release-actual-assets.txt"
+          awk '{print $2}' "$cli_manifest" > "$expected_names"
+          printf '%s\n' \
+            checksums.txt \
+            OpenScience-mac-arm64.dmg \
+            OpenScience-mac-arm64.zip \
+            OpenScience-mac-x64.dmg \
+            OpenScience-mac-x64.zip \
+            OpenScience-windows-x64.exe \
+            OpenScience-linux-x64.AppImage \
+            OpenScience-linux-arm64.AppImage \
+            desktop-checksums.txt >> "$expected_names"
+          sort -u -o "$expected_names" "$expected_names"
+          jq -r '.assets[].name' <<<"$assets" | sort -u > "$actual_names"
+          [[ "$(wc -l < "$expected_names" | tr -d ' ')" == "20" ]] || {
+            echo "::error::The release contract must contain exactly 20 unique asset names"
             exit 1
           }
+          diff -u "$expected_names" "$actual_names" || {
+            echo "::error::$OPENSCIENCE_TAG assets do not exactly match the reviewed 20-file release contract"
+            exit 1
+          }
+          jq -e 'all(.assets[]; .state == "uploaded" and (.size | type == "number" and . > 0) and (.digest | test("^sha256:[0-9a-f]{64}$")))' \
+            <<<"$assets" >/dev/null || {
+              echo "::error::$OPENSCIENCE_TAG contains an incomplete, empty, or unverified asset"
+              exit 1
+            }
+          while read -r digest name; do
+            remote="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$assets")"
+            [[ "$remote" == "sha256:$digest" ]] || {
+              echo "::error::$name does not match checksums.txt"
+              exit 1
+            }
+          done < "$cli_manifest"
+          while read -r digest name; do
+            remote="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$assets")"
+            [[ "$remote" == "sha256:$digest" ]] || {
+              echo "::error::$name does not match desktop-checksums.txt"
+              exit 1
+            }
+          done < desktop-checksums.txt
+          for zip_name in OpenScience-mac-arm64.zip OpenScience-mac-x64.zip; do
+            zip_dir="$RUNNER_TEMP/${zip_name%.zip}"
+            mkdir -p "$zip_dir"
+            gh release download "$OPENSCIENCE_TAG" --pattern "$zip_name" --dir "$zip_dir"
+            entries="$zip_dir/entries.txt"
+            unzip -Z1 "$zip_dir/$zip_name" > "$entries"
+            roots="$(sed -E 's#^([^/]+).*$#\1#' "$entries" | sort -u)"
+            [[ "$roots" == "OpenScience.app" ]] || {
+              echo "::error::$zip_name must contain exactly one top-level OpenScience.app bundle; found: $roots"
+              exit 1
+            }
+            grep -q '^OpenScience\.app/Contents/' "$entries" || {
+              echo "::error::$zip_name does not contain an OpenScience.app bundle payload"
+              exit 1
+            }
+          done
 
       - name: Publish
         run: ./tooling/repo/publish.ts

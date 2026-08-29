@@ -24,6 +24,11 @@ export default {
   ],
   asar: true,
   mac: {
+    // Keep the CLI/process executable lowercase on every platform, but brand
+    // the macOS bundle exactly as the updater's immutable staging contract.
+    // electron-builder otherwise derives `openscience.app` from the global
+    // executableName even though productName is OpenScience.
+    executableName: "OpenScience",
     target: ["dmg", "zip"],
     icon: "build/icon.icns",
     category: "public.app-category.developer-tools",

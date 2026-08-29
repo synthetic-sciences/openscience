@@ -17,6 +17,15 @@ describe("ModalAdapter image", () => {
       `'project; echo unsafe' 'name'\"'\"'s-extra'`,
     )
   })
+
+  test("installs scientific packs only from a sha256 wheel lock", () => {
+    const requirements = "numpy==2.5.2 --hash=sha256:" + "a".repeat(64) + "\n"
+    const layer = ModalAdapter.layers(["numpy==2.5.2"], { digest: "b".repeat(64), requirements })[0]!
+    expect(layer).toContain("--only-binary=:all:")
+    expect(layer).toContain("--require-hashes")
+    expect(layer).not.toContain(requirements)
+    expect(layer).toContain(Buffer.from(requirements).toString("base64"))
+  })
 })
 
 describe("ModalAdapter client lifecycle", () => {

@@ -29,8 +29,9 @@ It is model-agnostic, open source, and built to do real work in machine learning
 - **One adaptive Research agent.** A single user-facing collaborator handles the task end to end, loads domain skills when useful, and delegates independent Explore or Execute work when it helps. Off, Auto, and High delegation guide how readily it parallelizes without imposing a per-turn worker quota; plan mode stays read-only.
 - **309 bundled skills.** Training (DeepSpeed, PEFT, TRL), evaluation, dataset work, molecular and clinical biology, cheminformatics, papers and LaTeX, figures, and user-configured scientific runtimes.
 - **Scientific databases as tools.** 42 built-in connectors, including UniProt, PDB, Ensembl, ChEMBL, PubChem, arXiv, OpenAlex, and Semantic Scholar, queryable directly by the agent.
+- **Governed scientific capabilities.** A truthful 54-entry inventory sits behind one lifecycle tool. Five experimental Python capabilities run through exact, hashed local or Modal environments; ten experimental BioNeMo capabilities use strict bring-your-own-key NVIDIA NIM adapters. No capability is labeled verified until a release-artifact canary passes.
 - **A real workspace.** A browser UI with a file tree, an editor, a terminal, session history, and inline rendering for molecules, structures, genomes, and plots.
-- **Extensible.** LSP integration, MCP servers, plugins, custom agents and commands, and a TypeScript SDK.
+- **Extensible.** LSP integration, MCP servers, plugins, custom agents and commands, and a TypeScript SDK. Five reviewed connector presets help configure common MCP endpoints, but they save disabled for inspection and do not claim ELN, LIMS, clinical, or regulatory write-back.
 
 ## Install
 
@@ -75,7 +76,7 @@ openscience login          # connect this device once
 openscience wallet         # check Ace and the purchased wallet balance
 ```
 
-Ace is one optional on/off authorization, not a scheduled monthly plan. Turning it on funds only the gap needed to bring the purchased wallet to **20 credits** for $20 total wallet value plus the processing fee shown before payment. One credit is $1 shared by credit-backed model calls and enhanced search. Usage is debited at the underlying OpenRouter provider price plus a 2% service margin. While Ace is on, a purchased balance below 2 is restored only to 20; it never stacks another 20 on top. Turning Ace off stops future charges and leaves the remaining balance available. There is no separate auto-reload control. BYOK, local-model, and eligible ChatGPT/Codex usage remain separate and never debit the wallet.
+Ace is one optional on/off authorization, not a scheduled monthly plan. Turning it on is a **$0 authorization** backed by the selected saved card; it does not buy credits or change the Wallet. One credit is $1 shared by credit-backed model calls and enhanced search. Usage is debited at the underlying OpenRouter provider price plus a 2% service margin. While Ace is on, a purchased Wallet balance below **5 credits** triggers one fixed reload of **20 credits** plus the disclosed processing fee. Turning Ace off stops future charges and preserves saved Stripe cards, Wallet value, and billing history. There is no separate auto-reload control. BYOK, local-model, and eligible ChatGPT/Codex usage remain separate and never debit the Wallet.
 
 ## How it works
 

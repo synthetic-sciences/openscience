@@ -128,6 +128,32 @@ export namespace ComputeJobs {
   export const SecretRef = ComputeSecrets.Ref
   export type SecretRef = ComputeSecrets.Ref
 
+  /** Trusted internal identity for a packaged scientific capability. This is
+   * never part of the model-facing compute_job schema. */
+  export const CapabilityBinding = z
+    .object({
+      id: z.string().regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/),
+      version: z.string().regex(/^\d+\.\d+\.\d+$/),
+      manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      profile: z.enum(["task", "smoke"]),
+      runtime_digest: z.string().regex(/^[a-f0-9]{64}$/),
+    })
+    .strict()
+  export type CapabilityBinding = z.infer<typeof CapabilityBinding>
+
+  /** Trusted execution material resolved only by scientific_capability. It is
+   * not exposed by the model-facing compute_job schema. */
+  export const CapabilityExecution = z
+    .object({
+      network: z.literal("none"),
+      lock_digest: z.string().regex(/^[a-f0-9]{64}$/),
+      pip_requirements: z.string().trim().min(1).max(100_000),
+      runtime_binary: z.string().trim().min(1).refine(path.isAbsolute).optional(),
+      runtime_root: z.string().trim().min(1).refine(path.isAbsolute).optional(),
+    })
+    .strict()
+  export type CapabilityExecution = z.infer<typeof CapabilityExecution>
+
   export const Artifact = z.object({
     path: z.string(),
     size: z.number().int().nonnegative(),
@@ -171,6 +197,8 @@ export namespace ComputeJobs {
     resources: Resources.optional(),
     artifact_patterns: z.string().array(),
     checkpoint: z.string().optional(),
+    capability_runtime_digest: z.string().length(64).optional(),
+    network: z.literal("deny").optional(),
     warning: z.string(),
   })
   export type LocalPlan = z.infer<typeof LocalPlan>
@@ -207,6 +235,27 @@ export namespace ComputeJobs {
   export const Request = Input.extend({
     sessionID: z.string().startsWith("ses_"),
     default_uploads: z.boolean().optional(),
+    capability: CapabilityBinding.optional(),
+    capability_execution: CapabilityExecution.optional(),
+  }).superRefine((value, ctx) => {
+    if (Boolean(value.capability) !== Boolean(value.capability_execution)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["capability_execution"],
+        message: "Scientific capability identity and execution policy must be supplied together",
+      })
+    }
+    if (
+      value.capability_execution &&
+      value.target.kind === "local" &&
+      (!value.capability_execution.runtime_binary || !value.capability_execution.runtime_root)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["capability_execution", "runtime_root"],
+        message: "Local scientific capabilities require a trusted runtime binary and root",
+      })
+    }
   })
   export type Request = z.infer<typeof Request>
 
@@ -217,6 +266,8 @@ export namespace ComputeJobs {
     id: z.string(),
     name: z.string(),
     purpose: z.string().optional(),
+    capability: CapabilityBinding.optional(),
+    capability_execution: CapabilityExecution.optional(),
     command: z.string(),
     cwd: z.string().optional(),
     target: Target,
@@ -269,6 +320,10 @@ export namespace ComputeJobs {
         environment: z.string().optional(),
         image: z.string(),
         packages: z.array(z.string()).default([]),
+        package_lock: z
+          .object({ digest: z.string().length(64), requirements: z.string().trim().min(1).max(100_000) })
+          .strict()
+          .optional(),
         secret_refs: SecretRef.array().default([]),
         gpu: z.string(),
         network: z.enum(["unrestricted", "none"]),
@@ -317,10 +372,32 @@ export namespace ComputeJobs {
     provider?: ModalProvider
   }
 
+  type TestHooks = {
+    beforeModalDeactivate?: (id: string) => void | Promise<void>
+  }
+
+  const hooks = { value: undefined as TestHooks | undefined }
+
+  /** Deterministic lifecycle barriers for Modal lease handoff regressions. */
+  export function testing(input: TestHooks) {
+    if (!process.env.OPENSCIENCE_TEST_HOME) throw new Error("Compute job test hooks are disabled outside tests")
+    const prior = hooks.value
+    hooks.value = input
+    return {
+      [Symbol.dispose]() {
+        if (hooks.value === input) hooks.value = prior
+      },
+    }
+  }
+
   async function modalContext(options: Options, message: string): Promise<ModalAdapter.Context> {
     const context = options.credentials ?? (await options.resolveCredentials?.())
     if (!context) throw new Error(message)
     return context
+  }
+
+  function modalExecutionContext(job: Pick<Job, "capability_execution">, context: ModalAdapter.Context) {
+    return job.capability_execution ? { ...context, network: "none" as const } : context
   }
 
   type Runtime = {
@@ -1471,12 +1548,39 @@ export namespace ComputeJobs {
     }
   }
 
+  async function reattestLocalCapability(job: Job, authority: ExecutionAuthority.Decision) {
+    if (job.target.kind !== "local" || !job.capability || !job.capability_execution) return
+    const configuredRuntime = job.capability_execution.runtime_root
+    if (!configuredRuntime) throw new Error("Scientific local capability runtime is unavailable")
+    const runtime = await fs.realpath(configuredRuntime).catch(() => undefined)
+    if (!runtime) throw new Error("Scientific local capability runtime is unavailable")
+    // The effective sandbox write surface is the union of project/session
+    // grants and the machine-wide allowWrite policy. On Seatbelt, allowing an
+    // ancestor of the exact runtime would let a process rename that ancestor
+    // around the later path-based read-only deny, so reject the topology before
+    // either attestation or spawn.
+    for (const writable of new Set([...authority.writable, ...authority.sandbox.allowWrite])) {
+      const root = await fs.realpath(writable).catch(() => undefined)
+      if (!root) continue
+      const relative = path.relative(root, runtime)
+      if (
+        relative === "" ||
+        (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+      ) {
+        throw new Error("Scientific local capability runtime must be outside every writable sandbox root")
+      }
+    }
+    const { CapabilityRegistry } = await import("@/science/capability/registry")
+    await CapabilityRegistry.reattest(job.capability, job.capability_execution)
+  }
+
   async function launch(
     job: Job,
     host: Host | undefined,
     scope: Scope,
     authority: ExecutionAuthority.Decision,
   ): Promise<Launch> {
+    if (!host) await reattestLocalCapability(job, authority)
     const spec = command(job, host)
     if (host) {
       const planned = Sandbox.wrapArgv({
@@ -1503,23 +1607,34 @@ export namespace ComputeJobs {
     await fs.mkdir(logsOf(scope.root), { recursive: true })
     await fs.writeFile(exitOf(scope.root, job.id), "", { mode: 0o600 })
     const wrapped = `(${job.command}\n); code=$?; printf %s "$code" > ${quote(exitOf(scope.root, job.id))}; exit "$code"`
+    const sandboxOptions = job.capability_execution
+      ? { ...authority.sandbox, enabled: true, network: "deny" as const }
+      : authority.sandbox
     const planned = Sandbox.wrapArgv({
       file: Shell.acceptable(),
       args: ["-lc", wrapped],
       workspace: authority.writable,
-      readable: authority.readable,
+      readable: [
+        ...authority.readable,
+        ...(job.capability_execution?.runtime_root ? [job.capability_execution.runtime_root] : []),
+      ],
+      readOnly: job.capability_execution?.runtime_root ? [job.capability_execution.runtime_root] : [],
       extraWritable: [exitOf(scope.root, job.id)],
       unreadable: OpenScience.kernelSensitivePaths(),
-      options: authority.sandbox,
+      options: sandboxOptions,
     })
+    if (job.capability_execution && !planned.sandboxed) {
+      Sandbox.cleanup(planned)
+      throw new Error("Scientific local capability execution requires an enforced host sandbox")
+    }
     return {
       argv: [planned.file, ...planned.args],
       temporary: planned.temporary,
       sandbox: {
-        requested: authority.sandbox.enabled,
+        requested: sandboxOptions.enabled,
         enforced: planned.sandboxed,
         backend: planned.backend,
-        network: authority.sandbox.network,
+        network: sandboxOptions.network,
         warning: planned.warning,
       },
     }
@@ -1627,7 +1742,7 @@ export namespace ComputeJobs {
     if (checkpoint) await outputPath(root, checkpoint, "Checkpoint path")
   }
 
-  async function modal(input: Request, cwd: string, context?: ModalAdapter.Config) {
+  async function modal(input: Request, cwd: string, context?: ModalAdapter.Config): Promise<ModalPlan.Prepared> {
     if (!context) throw new Error("Modal is not enabled or connected")
     if (!input.gpu) throw new Error("A Modal GPU type is required")
     if (input.modules?.length) throw new Error("Environment modules are only supported by SSH compute")
@@ -1644,6 +1759,12 @@ export namespace ComputeJobs {
       workspaceCwd: input.cwd,
       image: input.image ?? context.image,
       packages: input.packages ?? [],
+      packageLock: input.capability_execution
+        ? {
+            digest: input.capability_execution.lock_digest,
+            requirements: input.capability_execution.pip_requirements,
+          }
+        : undefined,
       secretRefs: input.secret_refs ?? [],
       gpu: input.gpu,
       resources: input.resources
@@ -1657,7 +1778,7 @@ export namespace ComputeJobs {
       uploads: input.uploads ?? [],
       deniedUploads: input.default_uploads ? "skip" : "error",
       outputs: patterns,
-      context,
+      context: input.capability_execution ? { ...context, network: "none" } : context,
     })
   }
 
@@ -1674,6 +1795,7 @@ export namespace ComputeJobs {
       command: job.command,
       image: job.modal.image,
       packages: job.modal.packages,
+      packageLock: job.modal.package_lock,
       gpu: job.modal.gpu,
       gpus: job.resources?.gpus,
       cpus: job.resources?.cpus,
@@ -1830,6 +1952,13 @@ export namespace ComputeJobs {
       createdAt: job.created_at,
       startedAt: job.started_at,
       completedAt: job.completed_at,
+      scientificCapability: job.capability
+        ? {
+            ...job.capability,
+            execution_network: job.capability_execution?.network,
+            lock_digest: job.capability_execution?.lock_digest,
+          }
+        : undefined,
     })
   }
 
@@ -2481,6 +2610,11 @@ export namespace ComputeJobs {
           if (process.platform === "linux" && !linuxIdentity) {
             throw new Error(`Could not establish the compute server identity for durable launch registration`)
           }
+          // All asynchronous launch preparation is complete at this point.
+          // Repeat the archive-derived capability attestation after approval
+          // and immediately before the synchronous wrapper + child spawn so a
+          // runtime changed while permission was pending can never execute.
+          if (!host) await reattestLocalCapability(queued, authority)
           const wrapped = WindowsJobLauncher.wrap({
             file: launch.argv[0]!,
             args: launch.argv.slice(1),
@@ -2717,6 +2851,7 @@ export namespace ComputeJobs {
     provider: ModalProvider,
     secrets?: Record<string, string>,
   ): Promise<void> {
+    const executionContext = modalExecutionContext(job, context)
     const log = path.join(logsOf(scope.root), `${job.id}.log`)
     await fs.mkdir(logsOf(scope.root), { recursive: true })
     await event(scope.root, job.id, "Dispatching governed job to Modal")
@@ -2726,7 +2861,7 @@ export namespace ComputeJobs {
       const draft = move(jobs[index]!, { type: "start" }, { started_at: new Date().toISOString() })
       jobs[index] = Job.parse({ ...draft, provenance: provenance(draft) })
     })
-    const result = await provider.run(context, modalSpec(job, files, scope, secrets), {
+    const result = await provider.run(executionContext, modalSpec(job, files, scope, secrets), {
       created: async (id) => {
         const started = await change(scope.root, (jobs) => {
           const index = jobs.findIndex((item) => item.id === job.id)
@@ -2744,7 +2879,7 @@ export namespace ComputeJobs {
         await (mode === "append" ? appendSnapshot(log, value) : snapshot(log, value))
       },
     })
-    await completeModal(job, scope, context, result, provider)
+    await completeModal(job, scope, executionContext, result, provider)
   }
 
   async function recoverModal(
@@ -2754,11 +2889,12 @@ export namespace ComputeJobs {
     provider: ModalProvider,
     attached?: () => void,
   ): Promise<void> {
+    const executionContext = modalExecutionContext(job, context)
     const log = path.join(logsOf(scope.root), `${job.id}.log`)
     await fs.mkdir(logsOf(scope.root), { recursive: true })
     await event(scope.root, job.id, "Recovering Modal job after OpenScience restart")
     const spec = modalSpec(job, [], scope)
-    const id = job.remote_id ?? (await provider.find(context, job.id, spec.project))
+    const id = job.remote_id ?? (await provider.find(executionContext, job.id, spec.project))
     if (id && !job.remote_id) {
       await change(scope.root, (jobs) => {
         const index = jobs.findIndex((item) => item.id === job.id)
@@ -2776,7 +2912,7 @@ export namespace ComputeJobs {
       })
     }
     attached?.()
-    const result = await provider.recover(context, spec, id, {
+    const result = await provider.recover(executionContext, spec, id, {
       log: async (value) => {
         await event(scope.root, job.id, value)
       },
@@ -2784,7 +2920,7 @@ export namespace ComputeJobs {
         await (mode === "append" ? appendSnapshot(log, value) : snapshot(log, value))
       },
     })
-    await completeModal(Job.parse({ ...job, remote_id: id }), scope, context, result, provider)
+    await completeModal(Job.parse({ ...job, remote_id: id }), scope, executionContext, result, provider)
   }
 
   async function collectCancelledModal(
@@ -2793,16 +2929,17 @@ export namespace ComputeJobs {
     context: ModalAdapter.Context,
     provider: ModalProvider,
   ): Promise<void> {
+    const executionContext = modalExecutionContext(job, context)
     const expected = [...(job.artifact_patterns ?? []), ...(job.checkpoint_path ? [job.checkpoint_path] : [])]
     if (!expected.length) return
     const log = path.join(logsOf(scope.root), `${job.id}.log`)
     const spec = modalSpec(job, [], scope)
     const result = await (provider.collect
-      ? provider.collect(context, spec, {
+      ? provider.collect(executionContext, spec, {
           log: async (value) => event(scope.root, job.id, value),
           output: async (value, mode) => (mode === "append" ? appendSnapshot(log, value) : snapshot(log, value)),
         })
-      : provider.recover(context, spec, undefined, {
+      : provider.recover(executionContext, spec, undefined, {
           log: async (value) => event(scope.root, job.id, value),
           output: async (value, mode) => (mode === "append" ? appendSnapshot(log, value) : snapshot(log, value)),
         }))
@@ -3018,8 +3155,13 @@ export namespace ComputeJobs {
   export async function release(id: string, options: Options = {}): Promise<Job> {
     const scope = await scoped(options)
     const key = keyOf(scope.root, id)
-    if (active.has(key)) throw new Error(`Compute job ${id} still has an active recovery`)
     const stored = await get(id, { root: scope.root, workspace: scope.workspace })
+    if (stored?.target.kind !== "modal" && active.has(key)) {
+      throw new Error(`Compute job ${id} still has an active recovery`)
+    }
+    if (stored?.target.kind === "modal" && !terminal.has(stored.status)) {
+      throw new Error(`Cancel compute job ${id} before releasing its resources`)
+    }
     if (stored?.target.kind === "ssh") {
       if (!terminal.has(stored.status)) throw new Error(`Cancel compute job ${id} before releasing its resources`)
       if (stored.status === "cancelled" && stored.lifecycle?.resource !== "closed") return cancelSsh(stored, scope)
@@ -3044,6 +3186,7 @@ export namespace ComputeJobs {
     return await operation.during(async () => {
       await using lease = await FileLease.acquire(modalLeaseOf(scope.root, id))
       return await lease.during(async () => {
+        if (active.has(key)) throw new Error(`Compute job ${id} still has an active recovery`)
         const job = await get(id, { root: scope.root, workspace: scope.workspace })
         if (!job) throw new Error(`Compute job ${id} was not found`)
         if (job.target.kind !== "modal" || !job.modal || !job.cwd) {
@@ -3110,7 +3253,11 @@ export namespace ComputeJobs {
         resources: parsed.resources,
         artifact_patterns: parsed.artifacts ?? [],
         checkpoint: parsed.checkpoint,
-        warning: "This detached job runs on this computer inside the active session sandbox.",
+        capability_runtime_digest: parsed.capability?.runtime_digest,
+        network: parsed.capability_execution ? ("deny" as const) : undefined,
+        warning: parsed.capability_execution
+          ? "This scientific capability runs inside an enforced, network-denied session sandbox with its locked runtime mounted read-only."
+          : "This detached job runs on this computer inside the active session sandbox.",
       }
       const digest = new Bun.CryptoHasher("sha256").update(JSON.stringify(value)).digest("hex")
       return LocalPlan.parse({ digest, ...value })
@@ -3207,6 +3354,8 @@ export namespace ComputeJobs {
       id,
       name: parsed.name,
       purpose: parsed.purpose ?? parsed.name,
+      capability: parsed.capability,
+      capability_execution: parsed.capability_execution,
       command: parsed.command,
       cwd,
       target: parsed.target,
@@ -3221,6 +3370,7 @@ export namespace ComputeJobs {
             environment: prepared.plan.environment,
             image: prepared.plan.image,
             packages: prepared.plan.packages,
+            package_lock: prepared.plan.package_lock,
             secret_refs: prepared.plan.secret_refs,
             gpu: prepared.plan.gpu,
             network: prepared.plan.network,
@@ -3310,7 +3460,13 @@ export namespace ComputeJobs {
               throw error
             } finally {
               setup.resolve()
-              if (activated) await deactivate(key)
+              if (activated) {
+                try {
+                  await hooks.value?.beforeModalDeactivate?.(job.id)
+                } finally {
+                  await deactivate(key)
+                }
+              }
             }
           })
           .finally(() => releaseLease(lease))

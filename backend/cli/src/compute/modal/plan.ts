@@ -50,6 +50,10 @@ export namespace ModalPlan {
     environment: z.string().optional(),
     image: z.string(),
     packages: z.array(z.string()),
+    package_lock: z
+      .object({ digest: z.string().length(64), requirements: z.string().trim().min(1).max(100_000) })
+      .strict()
+      .optional(),
     secret_refs: ComputeSecrets.Ref.array(),
     gpu: z.string(),
     resources: z
@@ -84,6 +88,7 @@ export namespace ModalPlan {
     workspaceCwd?: string
     image: string
     packages: string[]
+    packageLock?: { digest: string; requirements: string }
     secretRefs?: ComputeSecrets.Ref[]
     gpu: string
     resources?: { cpus?: number; gpus?: number; memory_gb?: number }
@@ -335,6 +340,7 @@ export namespace ModalPlan {
       environment: input.context.environment,
       image: input.image,
       packages: input.packages.toSorted(),
+      package_lock: input.packageLock,
       secret_refs: [...new Set(input.secretRefs ?? [])].toSorted(),
       gpu: input.gpu,
       resources: input.resources,

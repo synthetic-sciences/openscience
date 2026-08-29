@@ -61,6 +61,7 @@ import { WalletSettingsRoutes } from "./routes/settings/wallet"
 import { SettingsUsageRoutes } from "./routes/settings/usage"
 import { UpdatesSettingsRoutes } from "./routes/settings/updates"
 import { ResearchToolsSettingsRoutes } from "./routes/settings/research-tools"
+import { ScientificToolsSettingsRoutes } from "./routes/settings/scientific-tools"
 import { projectSelection } from "./project-selection"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ComputeJobs } from "../compute/jobs"
@@ -271,6 +272,7 @@ export namespace Server {
         .route("/settings/wallet", WalletSettingsRoutes())
         .route("/settings/updates", UpdatesSettingsRoutes())
         .route("/settings/research-tools", ResearchToolsSettingsRoutes())
+        .route("/settings/scientific-tools", ScientificToolsSettingsRoutes())
         .put(
           "/auth/:providerID",
           describeRoute({

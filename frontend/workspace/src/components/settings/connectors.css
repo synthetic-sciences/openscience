@@ -69,6 +69,115 @@
   flex-direction: column;
 }
 
+.connectors-catalog {
+  margin-bottom: 28px;
+}
+
+.connectors-catalog__lead {
+  max-width: 720px;
+  margin: 8px 0 12px;
+  color: var(--text-weak);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.connectors-catalog__list {
+  border-block: 1px solid var(--border-weak-base);
+}
+
+.connectors-catalog__row {
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border-weak-base);
+}
+
+.connectors-catalog__row:last-child {
+  border-bottom: 0;
+}
+
+.connectors-catalog__copy {
+  min-width: 0;
+}
+
+.connectors-catalog__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.connectors-catalog__title strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+}
+
+.connectors-catalog__title span {
+  color: var(--text-weak);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+}
+
+.connectors-catalog__row[data-state="unavailable"] .connectors-catalog__title span {
+  color: var(--text-danger);
+}
+
+.connectors-catalog__copy p,
+.connectors-catalog__copy small {
+  display: block;
+  margin: 2px 0 0;
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 16px;
+  text-wrap: pretty;
+}
+
+.connectors-catalog__copy small {
+  color: var(--text-weaker);
+}
+
+.connectors-catalog__contract {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.connectors-catalog__contract span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 4px;
+}
+
+.connectors-catalog__contract em {
+  font-style: normal;
+}
+
+.connectors-catalog__contract em:not(:last-child)::after {
+  content: ";";
+}
+
+.connectors-catalog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.connectors-catalog__actions button:focus-visible {
+  outline: 2px solid var(--border-strong-base);
+  outline-offset: 2px;
+}
+
 .connectors-item {
   min-width: 0;
   border-top: 1px solid var(--border-weak-base);
@@ -497,7 +606,13 @@
   }
 
   .connectors-status {
-    display: none;
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .connectors-row__actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
   }
 }
 
@@ -516,8 +631,17 @@
     grid-template-columns: 32px minmax(0, 1fr);
   }
 
+  .connectors-catalog__row {
+    grid-template-columns: 1fr;
+  }
+
+  .connectors-catalog__actions {
+    justify-content: flex-start;
+  }
+
   .connectors-row__actions {
     grid-column: 2;
+    grid-row: 3;
     justify-content: flex-start;
   }
 

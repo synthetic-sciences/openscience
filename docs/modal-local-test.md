@@ -33,6 +33,23 @@ If `uploads` is omitted, OpenScience stages safe ordinary files from the selecte
 
 Commands run inside the configured sandbox image. Use commands such as `python analysis.py`, list `analysis.py` under uploads, and provide third-party requirements in the tool's packages field. Do not use `modal run`, install the Modal Python SDK, or write a Modal-decorated application for this path; OpenScience's JavaScript adapter builds and governs the sandbox.
 
+## Scientific capability boundary
+
+The five packaged Python capabilities—SciPy, Matplotlib, scikit-learn,
+Biopython, and RDKit—use `scientific_capability`, not an arbitrary
+`compute_job` command. Their manifests bind an immutable Python image, exact
+hashed dependency locks, one CPU, 2 GiB RAM, a bounded timeout, no uploads for
+the built-in smoke, and no execution network. Those restrictions override a
+more permissive project Modal configuration during dispatch and restart
+recovery. The same tool owns status, logs, artifacts, validation, cancellation,
+delivery retry, and release.
+
+Use **Customize → Scientific tools** to distinguish declared support from the
+current machine/provider state. Stored Modal credentials are shown as
+configured, not ready, until bounded evidence exists. These capabilities remain
+experimental until the installed release artifact passes its local and Modal
+canaries; a source-tree smoke is useful preparation but not release evidence.
+
 ## Run the smoke job
 
 Open a session in a trusted project, then open **Compute → Jobs → New job** and enter:

@@ -10,9 +10,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Added
 
-- Added a pinned, inspectable protein-binder workflow skill that selects a
-  supported BioNeMo path from the credentials and compute capabilities actually
-  available, without pretending unavailable NVIDIA services are configured.
+- Added strict bring-your-own-key NVIDIA NIM adapters for Boltz-2, DiffDock,
+  Evo 2, GenMol, MolMIM, MSA Search, OpenFold2, OpenFold3, ProteinMPNN, and
+  RFdiffusion, with typed requests, bounded response capture, restart-safe NVCF
+  reconciliation, artifact hashing, durable dispatch ownership, an offline
+  credential doctor, and a one-time approval that discloses a bounded,
+  secret-scrubbed summary of data leaving the device. Provenance records the
+  reviewed NVIDIA API schema version; it does not claim an undisclosed
+  model-weight version. They remain experimental until bounded live provider
+  canaries are recorded from a release artifact.
 - Added a visible local-model settings surface and real Ollama context-window
   controls that create tuned `num_ctx` aliases through Ollama's native API.
 - Added a conversation-first Research harness with model-directed delegation,
@@ -22,10 +28,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   keeping explicit OpenRouter models on OpenRouter and normalizing strict tool
   schemas at the provider boundary. Deterministic contract tests cover the
   route; a live provider canary is still pending.
-- Added a versioned six-entry scientific capability registry as an experimental
-  foundation: five pinned-package `compute_job` plans and one blocked AlphaFold2
-  entry. The registry describes and compiles plans only; it neither dispatches
-  work nor claims parity with a hosted 54-tool catalog.
+- Added a versioned 54-entry scientific capability inventory behind one
+  model-facing lifecycle tool. Five experimental Python capabilities run with
+  exact hashed local or Modal environments and bounded scientific smokes; ten
+  experimental BioNeMo capabilities use strict BYOK hosted adapters; two
+  entries are explicitly blocked. No entry is labeled verified without a
+  matching release-artifact canary.
+- Added five reviewed MCP connector presets with explicit read/write surfaces,
+  setup requirements, and safety notes. Presets save disabled for inspection;
+  they do not claim first-party ELN, LIMS, clinical, or regulatory write-back.
 
 ### Changed
 
@@ -48,8 +59,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   and `synsci` launcher, including both graph-initialization slash-command
   skills, while preserving automatic native-binary installation.
 - Replaced the retired Ace subscription copy with pay-as-you-go managed credits:
-  one wallet for OpenRouter model usage and enhanced search, 20-credit reloads
-  below a 2-credit balance, and no scheduled monthly top-up.
+  a free card-backed authorization, one purchased Wallet for OpenRouter model
+  usage and enhanced search, fixed 20-credit reloads below a 5-credit purchased
+  balance, and no scheduled monthly top-up.
 - Retired managed-compute billing and budget behavior while preserving local,
   SSH, scheduler, and other user-owned compute workflows. Deprecated 2.x config
   and SDK fields remain as inert compatibility shims for this patch release.
@@ -74,6 +86,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Made runtime restart transfer a cancelled startup's durable lease without a
+  closing-handle race, so the replacement incarnation cannot fail or be reaped
+  by the superseded boot.
 - Made PDF.js use one dev- and production-safe worker URL, added responsive page
   thumbnails and better use of available preview space, and prevented the
   `Invalid workerSrc type` failure seen in local development.

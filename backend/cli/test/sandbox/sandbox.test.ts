@@ -147,6 +147,20 @@ describe("Sandbox.seatbeltProfile", () => {
     )
   })
 
+  test("keeps a nested exact runtime unwritable after a broad workspace allow", () => {
+    const runtime = "/work/project/.data/conda/envs/exact"
+    const profile = Sandbox.seatbeltProfile({
+      writable: ["/work/project"],
+      readable: [runtime],
+      readOnly: [runtime],
+      network: false,
+    })
+    const allow = profile.indexOf('(allow file-write* (subpath "/work/project"))')
+    const deny = profile.indexOf(`(deny file-write* (subpath "${runtime}"))`)
+    expect(allow).toBeGreaterThan(-1)
+    expect(deny).toBeGreaterThan(allow)
+  })
+
   test("allows resolver traversal only on exact ancestors", () => {
     const profile = Sandbox.seatbeltProfile({
       writable: ["/work/project"],
@@ -191,6 +205,25 @@ describe("Sandbox.bubblewrapArgs", () => {
     expect(i).toBeGreaterThan(-1)
     expect(args[i + 1]).toBe("/work/project")
     expect(args[i + 2]).toBe("/work/project")
+  })
+
+  test("re-mounts a nested exact runtime read-only after its writable workspace ancestor", () => {
+    const workspace = "/work/project"
+    const runtime = "/work/project/.data/conda/envs/exact"
+    const args = Sandbox.bubblewrapArgs({
+      writable: [workspace],
+      readable: [runtime],
+      readOnly: [runtime],
+      network: false,
+    })
+    const writable = args.findIndex(
+      (value, index) => value === "--bind-try" && args[index + 1] === workspace && args[index + 2] === workspace,
+    )
+    const immutable = args.findLastIndex(
+      (value, index) => value === "--ro-bind-try" && args[index + 1] === runtime && args[index + 2] === runtime,
+    )
+    expect(writable).toBeGreaterThan(-1)
+    expect(immutable).toBeGreaterThan(writable)
   })
 
   test("mounts canonical sources at normalized stable alias destinations", () => {

@@ -93,6 +93,7 @@ type Entry = {
   ownershipID: string | null
   lease?: FileLease.Lease
   claiming?: Promise<void>
+  reclaiming?: StartTicket
   idle?: ReturnType<typeof setTimeout>
   expiring?: Promise<void>
 }
@@ -320,8 +321,12 @@ const record = (identity: KernelIdentity) => {
 }
 
 async function releaseLease(value: Entry) {
-  await value.lease?.[Symbol.asyncDispose]()
+  const lease = value.lease
+  if (!lease) return
+  // Detach synchronously. A waiter may acquire the next lease while disposal
+  // drains this one; the old disposer must never erase that newer handle.
   value.lease = undefined
+  await lease[Symbol.asyncDispose]()
 }
 
 function withLease<T>(value: Entry, action: () => Promise<T>): Promise<T> {
@@ -436,6 +441,10 @@ async function reclaimEntry(value: Entry) {
   value.idle = undefined
   const pending = records().starts.get(value.key)
   if (pending) pending.ticket.cancelled = true
+  // The cancelled boot and this reclaimer temporarily share the same durable
+  // lease. The boot must leave that lease open for the reclaimer instead of
+  // racing its first scoped teardown by closing the handle underneath it.
+  value.reclaiming = pending?.ticket
   // A start with no kernel claim is queued behind the authority mutation that
   // invoked this revoker. Waiting for that promise while the mutation still
   // owns AuthoritySignal.exclusive would deadlock. Its cancelled ticket makes
@@ -500,13 +509,16 @@ async function reclaimEntry(value: Entry) {
 function releaseEntry(value: Entry) {
   if (value.expiring) return value.expiring
   const pending = reclaimEntry(value)
+  const reclaiming = value.reclaiming
   value.expiring = pending
   void pending.then(
     () => {
       if (value.expiring === pending) value.expiring = undefined
+      if (value.reclaiming === reclaiming) value.reclaiming = undefined
     },
     () => {
       if (value.expiring === pending) value.expiring = undefined
+      if (value.reclaiming === reclaiming) value.reclaiming = undefined
       scheduleIdle(value)
     },
   )
@@ -717,6 +729,10 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
     if (records().starts.get(value.key)?.ticket === ticket) records().starts.delete(value.key)
   }
   const stale = () => ticket.cancelled || records().entries.get(value.key) !== value
+  const releaseStartupLease = async () => {
+    if (ticket.cancelled && value.reclaiming === ticket) return
+    await releaseLease(value)
+  }
   const abort = async () => {
     drop()
     const failures: unknown[] = []
@@ -732,7 +748,7 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
     )
     if (terminated) await value.manager.release(value.key).catch((error) => failures.push(error))
     await persist(value).catch((error) => failures.push(error))
-    await releaseLease(value)
+    await releaseStartupLease()
     if (failures.length) throw new AggregateError(failures, "Cancelled kernel startup could not be safely reclaimed")
     throw new KernelStartupCancelled()
   }
@@ -741,13 +757,16 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
   // claim, child creation, durable process identity, and in-memory handoff as
   // one indivisible spawn boundary with trust/filesystem mutations.
   const start = AuthoritySignal.exclusive(async () => {
+    // A cancelled start may still be queued behind the revoker that replaced
+    // it. Refuse it before it can borrow and dispose the replacement's lease.
+    if (stale()) throw new KernelStartupCancelled()
     await claim(value, ticket)
     const current = await ExecutionAuthority.require({
       projectID: identity.projectID,
       sessionID: identity.sessionID,
       capability: "kernel",
     }).catch(async (error) => {
-      await releaseLease(value)
+      await releaseStartupLease()
       throw error
     })
     if (current.generation !== authority.generation || stale()) {
@@ -836,7 +855,7 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
         value.authority = current
         value.state = ticket.cancelled ? "stopped" : "crashed"
         await persist(value)
-        await releaseLease(value)
+        await releaseStartupLease()
         if (failures.length) {
           throw new AggregateError([error, ...failures], "Kernel startup ownership cleanup failed")
         }

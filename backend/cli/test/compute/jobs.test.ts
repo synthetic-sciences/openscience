@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -13,6 +13,7 @@ import { Sandbox } from "../../src/sandbox/sandbox"
 import { ExecutionAuthority } from "../../src/project/execution"
 import { ArtifactStore } from "../../src/artifact/store"
 import { CredentialProcessLedger } from "../../src/credentials/process-ledger"
+import { CapabilityRegistry } from "../../src/science/capability/registry"
 import { sandboxedExecution, tmpdir, trustProject } from "../fixture/fixture"
 
 type StartOptions = NonNullable<Parameters<typeof ComputeJobs.start>[1]>
@@ -38,7 +39,13 @@ function modalProvider(overrides: Partial<ComputeJobs.ModalProvider> = {}): Comp
   }
 }
 
-async function start(input: ComputeJobs.Input, options: StartOptions) {
+async function start(
+  input: ComputeJobs.Input & {
+    capability?: ComputeJobs.CapabilityBinding
+    capability_execution?: ComputeJobs.CapabilityExecution
+  },
+  options: StartOptions,
+) {
   if (!options.workspace) throw new Error("Compute test start requires an explicit workspace")
   const projectDirectory = options.workspace
   return Instance.provide({
@@ -637,6 +644,167 @@ describe("ComputeJobs persistence", () => {
 })
 
 describe("ComputeJobs local lifecycle", () => {
+  test("persists an internal capability binding in the job and provenance envelope", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const workspace = path.join(tmp.path, "project")
+    const runtime = path.join(tmp.path, "runtime")
+    await fs.mkdir(workspace, { recursive: true })
+    await fs.mkdir(runtime, { recursive: true })
+    const marker = path.join(runtime, "lock-marker")
+    await fs.writeFile(marker, "verified")
+    const capability = ComputeJobs.CapabilityBinding.parse({
+      id: "scipy",
+      version: "2.0.0",
+      manifest_sha256: "a".repeat(64),
+      profile: "smoke",
+      runtime_digest: "b".repeat(64),
+    })
+    const capabilityExecution = ComputeJobs.CapabilityExecution.parse({
+      network: "none",
+      lock_digest: "c".repeat(64),
+      pip_requirements: "scipy==1.18.1 --hash=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      runtime_binary: path.join(runtime, "bin", "python"),
+      runtime_root: runtime,
+    })
+    const reattest = spyOn(CapabilityRegistry, "reattest").mockImplementation(async (binding, execution) => ({
+      binding,
+      execution,
+    }))
+    try {
+      if (!Sandbox.available()) {
+        await expect(
+          start(
+            {
+              name: "capability provenance",
+              command: `test "$(cat '${path.join(runtime, "lock-marker")}')" = verified`,
+              target: { kind: "local" },
+              capability,
+              capability_execution: capabilityExecution,
+            },
+            { root, workspace },
+          ),
+        ).rejects.toThrow("requires an enforced host sandbox")
+        return
+      }
+      const job = await start(
+        {
+          name: "capability provenance",
+          command: [
+            `test "$(cat ${JSON.stringify(marker)})" = verified`,
+            `if (printf tampered > ${JSON.stringify(marker)}) 2>/dev/null; then exit 17; fi`,
+            `test "$(cat ${JSON.stringify(marker)})" = verified`,
+          ].join("; "),
+          target: { kind: "local" },
+          capability,
+          capability_execution: capabilityExecution,
+        },
+        { root, workspace },
+      )
+      const finished = await ComputeJobs.wait(job.id, { root, workspace, timeout: 5_000 })
+      const restarted = await ComputeJobs.get(job.id, { root, workspace })
+      const log = await ComputeJobs.log(job.id, { root, workspace })
+
+      expect({ status: finished.status, error: finished.error, log }).toEqual({
+        status: "succeeded",
+        error: undefined,
+        log: "",
+      })
+      expect(await Bun.file(marker).text()).toBe("verified")
+      expect(reattest).toHaveBeenCalledTimes(2)
+      expect(finished.sandbox).toMatchObject({ requested: true, enforced: true, network: "deny" })
+      expect(restarted?.capability).toEqual(capability)
+      expect(restarted?.capability_execution).toEqual(capabilityExecution)
+      expect(restarted?.provenance?.scientific_capability).toEqual({
+        ...capability,
+        execution_network: "none",
+        lock_digest: capabilityExecution.lock_digest,
+      })
+
+      const nestedRuntime = path.join(workspace, ".data", "conda", "envs", "exact")
+      const nestedMarker = path.join(nestedRuntime, "lock-marker")
+      const spawned = path.join(workspace, "unsafe-spawned")
+      await fs.mkdir(nestedRuntime, { recursive: true })
+      await fs.writeFile(nestedMarker, "verified")
+      const nestedExecution = ComputeJobs.CapabilityExecution.parse({
+        ...capabilityExecution,
+        runtime_binary: path.join(nestedRuntime, "bin", "python"),
+        runtime_root: nestedRuntime,
+      })
+      await expect(
+        start(
+          {
+            name: "nested capability runtime",
+            command: `touch ${JSON.stringify(spawned)}`,
+            target: { kind: "local" },
+            capability,
+            capability_execution: nestedExecution,
+          },
+          { root, workspace },
+        ),
+      ).rejects.toThrow("must be outside every writable sandbox root")
+      expect(await Bun.file(nestedMarker).text()).toBe("verified")
+      expect(await Bun.file(spawned).exists()).toBe(false)
+
+      const policyRoot = path.join(tmp.path, "machine-writable")
+      const policyRuntime = path.join(policyRoot, "conda", "envs", "exact")
+      const policyMarker = path.join(policyRuntime, "lock-marker")
+      const policySpawned = path.join(workspace, "policy-unsafe-spawned")
+      await fs.mkdir(policyRuntime, { recursive: true })
+      await fs.writeFile(policyMarker, "verified")
+      const policyExecution = ComputeJobs.CapabilityExecution.parse({
+        ...capabilityExecution,
+        runtime_binary: path.join(policyRuntime, "bin", "python"),
+        runtime_root: policyRuntime,
+      })
+      const originalRequire = ExecutionAuthority.require
+      const authority = spyOn(ExecutionAuthority, "require").mockImplementation(async (input) => {
+        const decision = await originalRequire(input)
+        return ExecutionAuthority.Decision.parse({
+          ...decision,
+          sandbox: { ...decision.sandbox, allowWrite: [policyRoot] },
+        })
+      })
+      try {
+        await expect(
+          start(
+            {
+              name: "policy-nested capability runtime",
+              command: `touch ${JSON.stringify(policySpawned)}`,
+              target: { kind: "local" },
+              capability,
+              capability_execution: policyExecution,
+            },
+            { root, workspace },
+          ),
+        ).rejects.toThrow("must be outside every writable sandbox root")
+      } finally {
+        authority.mockRestore()
+      }
+      expect(await Bun.file(policyMarker).text()).toBe("verified")
+      expect(await Bun.file(policySpawned).exists()).toBe(false)
+    } finally {
+      reattest.mockRestore()
+    }
+  })
+
+  test("rejects capability identity without its execution policy", () => {
+    const base = {
+      name: "invalid capability binding",
+      command: "true",
+      target: { kind: "local" as const },
+      sessionID: "ses_fixture",
+    }
+    const capability = {
+      id: "scipy",
+      version: "2.0.0",
+      manifest_sha256: "a".repeat(64),
+      profile: "smoke" as const,
+      runtime_digest: "b".repeat(64),
+    }
+    expect(() => ComputeJobs.Request.parse({ ...base, capability })).toThrow("supplied together")
+  })
+
   test("rejects a missing working directory before recording a job", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
@@ -822,7 +990,7 @@ describe("ComputeJobs local lifecycle", () => {
       sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
     })
     expect(await Bun.file(path.join(job.cwd!, "result.txt")).exists()).toBe(true)
-  })
+  }, 15_000)
 
   test("bounds repository-controlled metadata while retaining dirty-state truth", async () => {
     await using tmp = await tmpdir({ git: true })
@@ -1121,6 +1289,56 @@ describe("ComputeJobs local lifecycle", () => {
 })
 
 describe("ComputeJobs Modal governance", () => {
+  test("binds scientific wheel locks and no-network execution into the Modal approval", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const capability = ComputeJobs.CapabilityBinding.parse({
+      id: "scipy",
+      version: "2.0.0",
+      manifest_sha256: "a".repeat(64),
+      profile: "smoke",
+      runtime_digest: "b".repeat(64),
+    })
+    const capability_execution = ComputeJobs.CapabilityExecution.parse({
+      network: "none",
+      lock_digest: "c".repeat(64),
+      pip_requirements: `scipy==1.18.1 --hash=sha256:${"d".repeat(64)}`,
+    })
+    const plan = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        return ComputeJobs.plan(
+          {
+            sessionID: session.id,
+            name: "locked scientific Modal smoke",
+            command: "python -I smoke.py",
+            target: { kind: "modal" },
+            image: "python:3.12-slim@sha256:" + "e".repeat(64),
+            packages: ["scipy==1.18.1"],
+            gpu: "none",
+            uploads: [],
+            capability,
+            capability_execution,
+          },
+          { root, workspace: tmp.path, modal: { ...modal, network: "unrestricted" } },
+        )
+      },
+    })
+
+    expect(plan).toMatchObject({
+      provider: "modal",
+      network: "none",
+      package_lock: {
+        digest: capability_execution.lock_digest,
+        requirements: capability_execution.pip_requirements,
+      },
+      uploads: [],
+      upload_bytes: 0,
+    })
+  })
+
   test("returns the approved dispatch before the remote workload finishes", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
@@ -1168,7 +1386,7 @@ describe("ComputeJobs Modal governance", () => {
 
     gate.resolve()
     expect((await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })).status).toBe("succeeded")
-  })
+  }, 15_000)
 
   test("records a Modal sandbox timeout as a terminal timed-out job", async () => {
     await using tmp = await tmpdir()
@@ -1221,6 +1439,7 @@ describe("ComputeJobs Modal governance", () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
     const gate = Promise.withResolvers<void>()
+    const releases = { count: 0 }
     const provider = modalProvider({
       run: async (_context, spec, hooks) => {
         await hooks.created(`sandbox-${spec.id}`)
@@ -1228,6 +1447,9 @@ describe("ComputeJobs Modal governance", () => {
         return { code: 0, outputs: [] }
       },
       close: async () => gate.resolve(),
+      release: async () => {
+        releases.count++
+      },
     })
     const request = {
       name: "held modal job",
@@ -1283,6 +1505,12 @@ describe("ComputeJobs Modal governance", () => {
     expect((refused[0] as PromiseRejectedResult).reason.message).toContain("Modal concurrency limit reached")
     const first = (started[0] as PromiseFulfilledResult<ComputeJobs.Job>).value
     expect(first.modal?.volume).toStartWith("test-")
+    const startedRelease = Date.now()
+    await expect(ComputeJobs.release(first.id, { root, workspace: tmp.path, credentials, provider })).rejects.toThrow(
+      `Cancel compute job ${first.id} before releasing its resources`,
+    )
+    expect(Date.now() - startedRelease).toBeLessThan(1_000)
+    expect(releases.count).toBe(0)
 
     await ComputeJobs.cancel(first.id, { root, workspace: tmp.path, credentials, provider })
   })
@@ -1479,39 +1707,31 @@ describe("ComputeJobs Modal governance", () => {
     expect(released.error).toBeUndefined()
   })
 
-  test("retries delivery from the durable Modal resource without rerunning the command", async () => {
+  test("release waits for the exact Modal job lease before checking active recovery", async () => {
     await using tmp = await tmpdir()
     const root = path.join(tmp.path, "state")
-    const entered = Promise.withResolvers<void>()
-    const finish = Promise.withResolvers<void>()
-    const calls = { run: 0, recover: 0, release: 0 }
-    const provider = modalProvider({
-      run: async (_context, spec, hooks) => {
-        calls.run++
-        await hooks.created(`sandbox-${spec.id}`)
-        entered.resolve()
-        await finish.promise
-        return { code: 0, outputs: [{ path: "../escape", staging: tmp.path, size: 0 }] }
+    const blocked = Promise.withResolvers<void>()
+    const deactivating = Promise.withResolvers<void>()
+    const calls = { release: 0 }
+    await using _testing = ComputeJobs.testing({
+      beforeModalDeactivate: async () => {
+        deactivating.resolve()
+        await blocked.promise
       },
-      recover: async (_context, spec, id, hooks) => {
-        calls.recover++
-        expect(id).toBe(`sandbox-${spec.id}`)
-        expect(await ComputeJobs.log(spec.id, { root, workspace: tmp.path })).toBe("last visible output\n")
-        await hooks.output("recovered output\n")
-        const staging = path.join(tmp.path, "recovered", "result.txt")
-        await Bun.write(staging, "recovered")
-        return { code: 0, outputs: [{ path: "result.txt", staging, size: 9 }] }
+    })
+    const provider = modalProvider({
+      run: async () => {
+        throw new Error("synthetic Modal launch failure")
       },
       release: async () => {
         calls.release++
       },
     })
     const request = {
-      name: "recover output",
-      command: "printf recovered > result.txt",
+      name: "failed Modal handoff",
+      command: "true",
       target: { kind: "modal" as const },
       gpu: "none",
-      artifacts: ["result.txt"],
     }
     const prepared = await Instance.provide({
       directory: tmp.path,
@@ -1530,11 +1750,108 @@ describe("ComputeJobs Modal governance", () => {
           { root, workspace: tmp.path, modal, credentials, provider },
         ),
     })
+    await deactivating.promise
+    expect((await ComputeJobs.get(job.id, { root, workspace: tmp.path }))?.status).toBe("failed")
+    const releasing = ComputeJobs.release(job.id, { root, workspace: tmp.path, credentials, provider }).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+
+    try {
+      const pending = await Promise.race([releasing.then(() => false), Bun.sleep(25).then(() => true)])
+      expect(pending).toBe(true)
+      expect(calls.release).toBe(0)
+    } finally {
+      blocked.resolve()
+    }
+
+    const result = await releasing
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw result.error
+    expect(result.value.status).toBe("failed")
+    expect(result.value.lifecycle?.resource).toBe("closed")
+    expect(calls.release).toBe(1)
+  }, 15_000)
+
+  test("retries delivery from the durable Modal resource without rerunning the command", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const entered = Promise.withResolvers<void>()
+    const finish = Promise.withResolvers<void>()
+    const calls = { run: 0, recover: 0, release: 0 }
+    const executionNetworks: ModalAdapter.Context["network"][] = []
+    const unrestrictedCredentials = { ...credentials, network: "unrestricted" as const }
+    const capability = ComputeJobs.CapabilityBinding.parse({
+      id: "scipy",
+      version: "2.0.0",
+      manifest_sha256: "a".repeat(64),
+      profile: "smoke",
+      runtime_digest: "b".repeat(64),
+    })
+    const capability_execution = ComputeJobs.CapabilityExecution.parse({
+      network: "none",
+      lock_digest: "c".repeat(64),
+      pip_requirements: `scipy==1.18.1 --hash=sha256:${"d".repeat(64)}`,
+    })
+    const provider = modalProvider({
+      run: async (context, spec, hooks) => {
+        calls.run++
+        executionNetworks.push(context.network)
+        await hooks.created(`sandbox-${spec.id}`)
+        entered.resolve()
+        await finish.promise
+        return { code: 0, outputs: [{ path: "../escape", staging: tmp.path, size: 0 }] }
+      },
+      recover: async (context, spec, id, hooks) => {
+        calls.recover++
+        executionNetworks.push(context.network)
+        expect(id).toBe(`sandbox-${spec.id}`)
+        expect(await ComputeJobs.log(spec.id, { root, workspace: tmp.path })).toBe("last visible output\n")
+        await hooks.output("recovered output\n")
+        const staging = path.join(tmp.path, "recovered", "result.txt")
+        await Bun.write(staging, "recovered")
+        return { code: 0, outputs: [{ path: "result.txt", staging, size: 9 }] }
+      },
+      release: async () => {
+        calls.release++
+      },
+    })
+    const request = {
+      name: "recover output",
+      command: "printf recovered > result.txt",
+      target: { kind: "modal" as const },
+      gpu: "none",
+      artifacts: ["result.txt"],
+      capability,
+      capability_execution,
+    }
+    const prepared = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const plan = await ComputeJobs.plan({ ...request, sessionID: session.id }, { root, workspace: tmp.path, modal })
+        return { session, plan }
+      },
+    })
+    const job = await Instance.provide({
+      directory: tmp.path,
+      fn: () =>
+        ComputeJobs.start(
+          { ...request, sessionID: prepared.session.id, approval: prepared.plan.digest },
+          { root, workspace: tmp.path, modal, credentials: unrestrictedCredentials, provider },
+        ),
+    })
     await entered.promise
     expect(calls).toEqual({ run: 1, recover: 0, release: 0 })
 
     await Bun.write(path.join(root, "jobs", `${job.id}.log`), "last visible output\n")
-    const retry = ComputeJobs.retry(job.id, { root, workspace: tmp.path, credentials, provider })
+    const retry = ComputeJobs.retry(job.id, {
+      root,
+      workspace: tmp.path,
+      credentials: unrestrictedCredentials,
+      provider,
+    })
     const beforeFinish = await Promise.race([
       retry.then(
         () => "settled" as const,
@@ -1559,6 +1876,7 @@ describe("ComputeJobs Modal governance", () => {
     expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path })).toBe("recovered output\n")
     expect(await Bun.file(path.join(job.cwd!, "result.txt")).text()).toBe("recovered")
     expect(calls).toEqual({ run: 1, recover: 1, release: 1 })
+    expect(executionNetworks).toEqual(["none", "none"])
   })
 
   test("retains a completed Modal Volume when its first control-plane download fails", async () => {

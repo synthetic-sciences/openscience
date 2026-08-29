@@ -38,6 +38,22 @@ export namespace ProvenanceEnvelope {
   })
   export type Output = z.infer<typeof Output>
 
+  export const ScientificCapability = z
+    .object({
+      id: z.string().regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/),
+      version: z.string().regex(/^\d+\.\d+\.\d+$/),
+      manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      profile: z.enum(["task", "smoke"]),
+      runtime_digest: z.string().regex(/^[a-f0-9]{64}$/),
+      execution_network: z.literal("none").optional(),
+      lock_digest: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+    })
+    .strict()
+  export type ScientificCapability = z.infer<typeof ScientificCapability>
+
   export const Schema = z.object({
     format: z.literal("openscience.provenance.v1"),
     kind: z.enum(["kernel", "local_compute", "remote_compute", "artifact_version"]),
@@ -99,6 +115,7 @@ export namespace ProvenanceEnvelope {
       ),
       atlas_run_id: field(z.string()),
     }),
+    scientific_capability: ScientificCapability.optional(),
   })
   export type Schema = z.infer<typeof Schema>
 
@@ -203,6 +220,7 @@ export namespace ProvenanceEnvelope {
     createdAt?: string | number
     startedAt?: string | number
     completedAt?: string | number
+    scientificCapability?: ScientificCapability
   }): Schema {
     return Schema.parse({
       format: "openscience.provenance.v1",
@@ -274,6 +292,7 @@ export namespace ProvenanceEnvelope {
         atlas_compute_id: unavailable("not_applicable"),
         atlas_run_id: unavailable("not_published"),
       },
+      ...(input.scientificCapability ? { scientific_capability: input.scientificCapability } : {}),
     })
   }
 }

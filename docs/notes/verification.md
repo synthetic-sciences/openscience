@@ -25,12 +25,21 @@ The landing site has its own lockfile and is not a root-workspace package:
 
 Before a production release, also run the launcher and release-script smoke
 checks from `.github/workflows/ci.yml`. After the candidate lands, dispatch the
-main-only `test publish` workflow with packaged E2E and OS smoke enabled, and
-require it to pass before production publishing. The migration matrix, Windows Job Object
-tests, macOS responsibility tests, Linux bubblewrap/OpenSSH integration, and
-workflow lint run on their native CI platforms; the exact `main` commit being
-released must be green there. The nightly/manual Playwright E2E workflow is not
-a required push check, but run it for changes to packaged browser flows.
+main-only `test publish` workflow with packaged E2E and OS smoke enabled. The
+workflow also installs the exact candidate and runs all five packaged
+scientific capability lifecycles on Linux x64, Linux ARM64, and macOS ARM64;
+each evidence record must match the immutable source SHA compiled into that
+candidate. `test` dist-tag promotion depends on all three evidence jobs.
+Production publishing also verifies the exact-source run and every required
+job through the GitHub Actions API; disabled or skipped candidate gates fail
+closed. When Modal is an advertised backend, also install the exact candidate
+in an isolated release-operator root and run
+`openscience debug capability-canary --all --target modal
+--acknowledge-remote-cost`; retain the JSON report. The migration matrix, Windows Job
+Object tests, macOS responsibility tests, Linux bubblewrap/OpenSSH integration,
+and workflow lint run on their native CI platforms; the exact `main` commit
+being released must be green there. The nightly/manual Playwright E2E workflow
+is not a required push check, but run it for changes to packaged browser flows.
 
 Notes:
 
@@ -47,14 +56,20 @@ Notes:
 - Native DeepSeek direct-BYOK routing and strict tool-schema normalization have
   deterministic contract coverage. A live official-API canary has not yet been
   recorded, so release claims must not describe that route as live-verified.
-- The scientific capability registry is a six-entry experimental foundation:
-  five pinned-package plans plus a blocked AlphaFold2 entry. Verify registry and
-  planning tests, and do not claim hosted 54-tool parity or automatic dispatch.
+- The scientific capability registry contains 54 truthful inventory entries.
+  Five experimental Python capabilities have full governed local/Modal
+  lifecycles and exact runtime locks; ten experimental BioNeMo capabilities
+  have strict BYOK NVIDIA NIM adapters; two entries are blocked. Source-tree
+  local and Modal preparation canaries do not make a released package verified:
+  require matching release-artifact evidence before changing maturity or making
+  a live-verified claim. No live BioNeMo provider canary is implied by offline
+  tests.
 - Modal concurrency is an admission limit. A start beyond capacity should fail
   visibly; autonomous waiting-queue behavior is deferred and must not appear in
   product or release copy.
-- An unsigned release must retain its GitHub warning and the five desktop asset
-  checks. macOS artifacts are ad-hoc signed but not notarized; the Windows
-  installer is unsigned.
+- An unsigned release must retain its GitHub warning and all seven desktop
+  payload checks: two macOS DMGs, two architecture-specific macOS updater ZIPs,
+  one Windows EXE, and two Linux AppImages. macOS artifacts are ad-hoc signed
+  but not notarized; the Windows installer is unsigned.
 - Organization funding and team billing are not part of this release tree. PR
   #413 remains unmerged and must not be included in shipped-feature claims.

@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { blankConnectorForm, buildConnectorConfig, connectorFormFromConfig, connectorIdentity } from "./connector-form"
+import { readFileSync } from "node:fs"
+import {
+  blankConnectorForm,
+  buildConnectorConfig,
+  connectorFormFromCatalog,
+  connectorFormFromConfig,
+  connectorIdentity,
+  connectorMatchesCatalogSetup,
+} from "./connector-form"
 
 describe("Connector Settings form behavior", () => {
   test("turns a quoted local command and environment fields into the persisted MCP payload", () => {
@@ -45,6 +53,56 @@ describe("Connector Settings form behavior", () => {
     ).toThrow("Timeout must be a positive whole number")
   })
 
+  test("prefills reviewed catalog setup without saving or enabling it", () => {
+    const form = connectorFormFromCatalog({
+      type: "remote",
+      name: "box",
+      url: "https://mcp.box.com",
+      oauth: "client",
+      scope: "item_readwrite",
+    })
+
+    expect(form).toMatchObject({
+      type: "remote",
+      name: "box",
+      url: "https://mcp.box.com",
+      oauth: "client",
+      scope: "item_readwrite",
+      initiallyDisabled: true,
+      requireClientSecret: false,
+    })
+    expect(form.previous).toBeUndefined()
+    expect(buildConnectorConfig({ ...form, clientId: "box-client" })).toMatchObject({ enabled: false })
+    expect(
+      connectorMatchesCatalogSetup(buildConnectorConfig({ ...form, clientId: "box-client" }), {
+        type: "remote",
+        url: form.url,
+        oauth: "client",
+        scope: form.scope,
+      }),
+    ).toBe(true)
+    expect(
+      connectorMatchesCatalogSetup(
+        { type: "remote", url: "https://attacker.example/mcp" },
+        { type: "remote", url: "https://mcp.box.com", oauth: "client" },
+      ),
+    ).toBe(false)
+    expect(
+      connectorMatchesCatalogSetup(
+        { type: "remote", url: "https://mcp.box.com", oauth: false },
+        { type: "remote", url: "https://mcp.box.com", oauth: "client" },
+      ),
+    ).toBe(false)
+    expect(() =>
+      buildConnectorConfig({
+        ...form,
+        clientId: "box-client",
+        clientSecret: "",
+        requireClientSecret: true,
+      }),
+    ).toThrow("OAuth client secret is required")
+  })
+
   test("uses recognizable connector identities and transport-specific fallbacks", () => {
     expect(
       connectorIdentity("code", {
@@ -70,5 +128,11 @@ describe("Connector Settings form behavior", () => {
         command: ["uvx", "analysis-mcp"],
       }),
     ).toEqual({ icon: "console", label: "Local process" })
+  })
+
+  test("keeps connection truth visible in narrow layouts", () => {
+    const css = readFileSync(new URL("./connectors.css", import.meta.url), "utf8")
+    expect(css).not.toMatch(/\.connectors-status\s*\{\s*display:\s*none/u)
+    expect(css).toContain(".connectors-status {\n    grid-column: 2;\n    grid-row: 2;")
   })
 })

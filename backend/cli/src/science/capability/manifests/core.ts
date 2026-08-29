@@ -1,76 +1,122 @@
-import { CapabilityManifest } from "../schema"
+import { CORE_SCIENCE_RUNTIME } from "../pack"
+import { CapabilityManifest, type CapabilitySource } from "../schema"
+import { CORE_SMOKES, type CoreSmokeID } from "../smokes"
 
-const manifest = (value: unknown) => CapabilityManifest.parse(value)
-
-export const manifests = {
-  scipy: manifest({
-    schema_version: 1,
+function packaged(input: {
+  id: CoreSmokeID
+  name: string
+  category: "analysis" | "visualization" | "bioinformatics" | "cheminformatics"
+  summary: string
+  source: CapabilitySource
+}) {
+  return CapabilityManifest.parse({
+    schema_version: 2,
+    id: input.id,
+    version: "2.0.0",
+    name: input.name,
+    category: input.category,
+    summary: input.summary,
+    maturity: "experimental",
+    availability: { local: "setup_needed", hosted: "setup_needed" },
+    basis:
+      "OpenScience owns an immutable Python 3.12 runtime contract, exact dependency graph, bounded CPU smoke, artifact validation, and governed local/Modal lifecycle. It remains experimental until release-artifact canaries pass on each advertised backend.",
+    source: input.source,
+    runtime: CORE_SCIENCE_RUNTIME,
+    smoke: CORE_SMOKES[input.id],
+    setup: {
+      instructions:
+        "Run scientific_capability doctor first. Use setup for the exact reusable local pack, or configure Modal for hosted execution.",
+      requirements: ["At least 2 GiB RAM", "Package-index access during initial environment construction"],
+    },
+  })
+}
+export const coreManifests = {
+  scipy: packaged({
     id: "scipy",
-    version: "1.0.0",
     name: "SciPy",
     category: "analysis",
     summary: "Numerical optimization, integration, signal processing, and scientific statistics in Python.",
-    status: "experimental",
-    basis:
-      "Available through the existing compute_job Python-package layer; no release-wide scientific validation suite yet.",
-    execution: { kind: "compute_job", targets: ["modal"], packages: ["scipy==1.18.1"] },
+    source: {
+      kind: "pypi",
+      name: "scipy",
+      version: "1.18.1",
+      reference: "https://pypi.org/project/scipy/1.18.1/",
+      license: "BSD-3-Clause",
+    },
   }),
-  matplotlib: manifest({
-    schema_version: 1,
+  matplotlib: packaged({
     id: "matplotlib",
-    version: "1.0.0",
     name: "Matplotlib",
     category: "visualization",
     summary: "Static scientific plotting and publication-oriented figure generation in Python.",
-    status: "experimental",
-    basis:
-      "Available through the existing compute_job Python-package layer; visual output quality remains task-reviewed.",
-    execution: { kind: "compute_job", targets: ["modal"], packages: ["matplotlib==3.11.1"] },
+    source: {
+      kind: "pypi",
+      name: "matplotlib",
+      version: "3.11.1",
+      reference: "https://pypi.org/project/matplotlib/3.11.1/",
+      license: "PSF-based Matplotlib license",
+    },
   }),
-  "scikit-learn": manifest({
-    schema_version: 1,
+  "scikit-learn": packaged({
     id: "scikit-learn",
-    version: "1.0.0",
     name: "scikit-learn",
     category: "analysis",
     summary: "Classical machine-learning models, preprocessing, model selection, and metrics in Python.",
-    status: "experimental",
-    basis: "Installable through compute_job; not baked into the verified local starter environment.",
-    execution: { kind: "compute_job", targets: ["modal"], packages: ["scikit-learn==1.9.0"] },
+    source: {
+      kind: "pypi",
+      name: "scikit-learn",
+      version: "1.9.0",
+      reference: "https://pypi.org/project/scikit-learn/1.9.0/",
+      license: "BSD-3-Clause",
+    },
   }),
-  biopython: manifest({
-    schema_version: 1,
+  biopython: packaged({
     id: "biopython",
-    version: "1.0.0",
     name: "Biopython",
     category: "bioinformatics",
     summary: "Sequence, alignment, structure-file, and common bioinformatics data handling in Python.",
-    status: "experimental",
-    basis: "Installable through compute_job; workflow-specific databases and command-line tools are not implied.",
-    execution: { kind: "compute_job", targets: ["modal"], packages: ["biopython==1.88"] },
+    source: {
+      kind: "pypi",
+      name: "biopython",
+      version: "1.88",
+      reference: "https://pypi.org/project/biopython/1.88/",
+      license: "Biopython license",
+    },
   }),
-  rdkit: manifest({
-    schema_version: 1,
+  rdkit: packaged({
     id: "rdkit",
-    version: "1.0.0",
     name: "RDKit",
     category: "cheminformatics",
     summary: "Molecular parsing, descriptors, fingerprints, conformers, and cheminformatics workflows.",
-    status: "experimental",
-    basis:
-      "Installable through compute_job; platform wheels and workload-specific validation still require a smoke run.",
-    execution: { kind: "compute_job", targets: ["modal"], packages: ["rdkit==2026.3.5"] },
+    source: {
+      kind: "pypi",
+      name: "rdkit",
+      version: "2026.3.5",
+      reference: "https://pypi.org/project/rdkit/2026.3.5/",
+      license: "BSD-3-Clause",
+    },
   }),
-  alphafold2: manifest({
-    schema_version: 1,
+  alphafold2: CapabilityManifest.parse({
+    schema_version: 2,
     id: "alphafold2",
-    version: "1.0.0",
+    version: "2.0.0",
     name: "AlphaFold2",
     category: "structure",
-    summary: "Protein structure prediction using the AlphaFold2 workflow.",
-    status: "blocked",
-    basis: "No reviewed OpenScience image, model-weight acquisition path, or licensed database workflow is configured.",
+    summary:
+      "Protein structure prediction requiring reviewed weights, databases, storage, licensing, and a GPU runtime.",
+    maturity: "blocked",
+    availability: { local: "unavailable", hosted: "unavailable" },
+    basis:
+      "OpenScience does not ship a reviewed AlphaFold2 image, weight acquisition flow, pinned databases, or release smoke.",
+    source: {
+      kind: "github",
+      name: "google-deepmind/alphafold",
+      version: "v2.3.2",
+      reference: "https://github.com/google-deepmind/alphafold/tree/v2.3.2",
+      license: "Apache-2.0 code; separate model/database terms",
+    },
     blocker:
-      "Requires a reviewed runtime image plus explicit model-weight and sequence-database setup before it can be offered.",
+      "Blocked until weights, databases, storage, licenses, an immutable image, and a bounded GPU canary are reviewed together.",
   }),
 } as const
+export const manifests = coreManifests

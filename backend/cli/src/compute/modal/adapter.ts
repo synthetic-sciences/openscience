@@ -48,6 +48,7 @@ export namespace ModalAdapter {
     command: string
     image: string
     packages: string[]
+    packageLock?: { digest: string; requirements: string }
     gpu: string
     gpus?: number
     cpus?: number
@@ -236,7 +237,13 @@ export namespace ModalAdapter {
     ].join("; ")
   }
 
-  export function layers(packages: string[]) {
+  export function layers(packages: string[], packageLock?: { digest: string; requirements: string }) {
+    if (packageLock) {
+      const encoded = Buffer.from(packageLock.requirements).toString("base64")
+      return [
+        `RUN printf '%s' ${quote(encoded)} | base64 -d > /tmp/openscience-requirements.txt && python -m pip install --disable-pip-version-check --no-cache-dir --no-deps --only-binary=:all: --require-hashes -r /tmp/openscience-requirements.txt && rm -f /tmp/openscience-requirements.txt`,
+      ]
+    }
     if (!packages.length) return []
     return [`RUN python -m pip install --disable-pip-version-check --no-cache-dir ${packages.map(quote).join(" ")}`]
   }
@@ -460,11 +467,13 @@ export namespace ModalAdapter {
       const count = spec.gpus ?? 1
       const gpu = spec.gpu === "none" || count <= 1 ? spec.gpu : `${spec.gpu}:${count}`
       const base = modal.images.fromRegistry(spec.image)
-      const commands = layers(spec.packages)
+      const commands = layers(spec.packages, spec.packageLock)
       const image = commands.length ? base.dockerfileCommands(commands) : base
       await hooks.log(
         commands.length
-          ? `Building image ${spec.image} with ${spec.packages.length} Python package${spec.packages.length === 1 ? "" : "s"}`
+          ? spec.packageLock
+            ? `Building image ${spec.image} from locked wheels (${spec.packageLock.digest.slice(0, 12)})`
+            : `Building image ${spec.image} with ${spec.packages.length} Python package${spec.packages.length === 1 ? "" : "s"}`
           : `Resolving image ${spec.image}`,
       )
       const ready = await image.build(app).catch((error) => {

@@ -9,6 +9,7 @@ import { ScrapCommand } from "./scrap"
 import { SkillCommand } from "./skill"
 import { SnapshotCommand } from "./snapshot"
 import { AgentCommand } from "./agent"
+import { CapabilityCanaryCommand } from "./capability-canary"
 
 export const DebugCommand = cmd({
   command: "debug",
@@ -23,6 +24,7 @@ export const DebugCommand = cmd({
       .command(SkillCommand)
       .command(SnapshotCommand)
       .command(AgentCommand)
+      .command(CapabilityCanaryCommand)
       .command(PathsCommand)
       .command(
         cmd({

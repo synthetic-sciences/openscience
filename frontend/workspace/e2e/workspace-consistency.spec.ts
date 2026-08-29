@@ -18,6 +18,7 @@ test("keeps Files and Customize labels visually consistent", async ({ page, goto
     ["Models"],
     ["Local models"],
     ["Skills", "Add skill"],
+    ["Scientific tools"],
     ["MCP & connectors", "Add connector"],
     ["Research tools"],
     ["Compute", "Add host"],

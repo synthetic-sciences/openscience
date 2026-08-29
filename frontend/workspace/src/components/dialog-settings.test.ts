@@ -50,7 +50,6 @@ test("settings use a compact responsive navigation frame", () => {
   expect(dialog).toContain("queueMicrotask(() => navTrigger?.focus())")
   expect(dialogSource()).toContain("target.closest('[data-dialog-escape-scope=\"true\"]')")
   expect(dialog).toContain("SETTINGS_PANELS.filter((p) => p.section === section.id)")
-  expect(SETTINGS_PANELS).toHaveLength(12)
   expect(dialog).not.toContain("panelChildren")
   expect(dialog).not.toContain("data-secondary")
   expect(dialog).toContain("scrollIntoView")

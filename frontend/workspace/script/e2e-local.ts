@@ -157,6 +157,11 @@ const providerCredentialEnvKeys = [
   "FIREWORKS_API_KEY",
   "CEREBRAS_API_KEY",
   "SAMBANOVA_API_KEY",
+  "NVIDIA_API_KEY",
+  "NGC_API_KEY",
+  "MODAL_TOKEN_ID",
+  "MODAL_TOKEN_SECRET",
+  "FIRECRAWL_API_KEY",
 ] as const
 
 for (const key of providerCredentialEnvKeys) {
