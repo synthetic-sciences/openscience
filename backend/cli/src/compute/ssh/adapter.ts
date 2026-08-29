@@ -6,6 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import type { Readable } from "node:stream"
 import type { ModalAdapter } from "../modal/adapter"
+import { TrustedExecutable } from "../../process/trusted-executable"
 
 export namespace SshAdapter {
   export type Scheduler = "none" | "slurm" | "pbs"
@@ -61,6 +62,7 @@ export namespace SshAdapter {
   export type OperationOptions = {
     signal?: AbortSignal
     timeoutMs?: number
+    executables?: Partial<Record<"ssh" | "ssh-keygen" | "ssh-keyscan", string>>
   }
 
   const STDOUT_BYTES = 256 * 1024
@@ -68,6 +70,16 @@ export namespace SshAdapter {
   const MANIFEST_BYTES = 256 * 1024
   const COMMAND_TIMEOUT = 300_000
   const STOP_GRACE = 1_000
+
+  export async function executable(name: "ssh" | "ssh-keygen" | "ssh-keyscan") {
+    const resolved = await TrustedExecutable.resolve(name, { systemOnly: true })
+    if (!resolved) throw new Error(`The OS-owned OpenSSH executable ${name} is required for remote compute`)
+    return resolved
+  }
+
+  async function operationExecutable(name: "ssh" | "ssh-keygen" | "ssh-keyscan", options: OperationOptions) {
+    return options.executables?.[name] ?? executable(name)
+  }
 
   const BOUNDED_SUBPROCESS = String.raw`
 def bounded(argv, stdout_limit=4 * 1024 * 1024, stderr_limit=64 * 1024, timeout=15):
@@ -1410,12 +1422,12 @@ finally:
     return `${known}.ssh_config`
   }
 
-  export function argv(host: Host, known: string, script: string) {
+  export function argv(host: Host, known: string, script: string, ssh: string) {
     const port = host.port ? ["-p", String(host.port)] : []
     const identity = host.identity_file ? ["-o", "IdentitiesOnly=yes", "-i", host.identity_file] : []
     const jump = host.proxy_jump ? ["-J", host.proxy_jump] : []
     return [
-      "ssh",
+      ssh,
       "-T",
       "-F",
       configPath(known),
@@ -1563,9 +1575,10 @@ finally:
   }
 
   export async function scan(host: Host, options: OperationOptions = {}) {
-    const keyscan = Bun.which("ssh-keyscan")
-    const keygen = Bun.which("ssh-keygen")
-    if (!keyscan || !keygen) throw new Error("OpenSSH key utilities are required for remote compute")
+    const [keyscan, keygen] = await Promise.all([
+      operationExecutable("ssh-keyscan", options),
+      operationExecutable("ssh-keygen", options),
+    ])
     const proxy_jump_host_keys: string[] = []
     for (const hop of host.proxy_jump?.split(",") ?? []) {
       const endpoint = jumpEndpoint(hop)
@@ -1575,10 +1588,9 @@ finally:
     return { ...target, proxy_jump_host_keys: proxy_jump_host_keys.length ? proxy_jump_host_keys : undefined }
   }
 
-  export async function known(host: Host, root: string) {
+  export async function known(host: Host, root: string, options: OperationOptions = {}) {
     if (!host.host_key || !host.fingerprint) throw new Error(`Test ${host.label} once to pin its SSH host key`)
-    const keygen = Bun.which("ssh-keygen")
-    if (!keygen) throw new Error("OpenSSH key utilities are required for remote compute")
+    const keygen = await operationExecutable("ssh-keygen", options)
     const fingerprint = await identify(keygen, host.host_key)
     if (fingerprint !== host.fingerprint) {
       throw new Error(`Pinned SSH host key does not match its saved fingerprint for ${host.label}`)

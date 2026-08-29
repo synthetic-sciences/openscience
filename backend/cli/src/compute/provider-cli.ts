@@ -1,4 +1,3 @@
-import { constants as FS } from "node:fs"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -11,6 +10,7 @@ import { WindowsJobLauncher } from "../process/windows-job-launcher"
 import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "../process/darwin-responsibility-launcher"
 import { OpenScience } from "../openscience"
 import { Shell } from "../shell/shell"
+import { TrustedExecutable } from "../process/trusted-executable"
 
 /**
  * Reviewed, read-only provider CLI bridge.
@@ -116,40 +116,6 @@ export namespace ProviderCli {
     const canonical = target === "prime" ? "prime_intellect" : target
     if (!(canonical in SPECS)) throw new Error(`Compute provider ${target} has no reviewed native CLI broker`)
     return canonical as Provider
-  }
-
-  function inside(root: string, candidate: string) {
-    const relative = path.relative(root, candidate)
-    return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
-  }
-
-  async function executable(name: string, environment: Record<string, string>): Promise<string | undefined> {
-    const search = environment.PATH ?? process.env.PATH ?? ""
-    const codeRoot = await fs.realpath(path.resolve(import.meta.dir, "../../../..")).catch(() => undefined)
-    const extensions =
-      process.platform === "win32"
-        ? (environment.PATHEXT ?? process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean)
-        : [""]
-    for (const folder of search.split(path.delimiter).filter(Boolean)) {
-      // Relative PATH entries and repository-local shims are writable by the
-      // active project. They must never become credential-bearing binaries.
-      if (!path.isAbsolute(folder)) continue
-      for (const extension of extensions) {
-        const candidate = path.resolve(folder, process.platform === "win32" ? `${name}${extension}` : name)
-        const canonical = await fs.realpath(candidate).catch(() => undefined)
-        if (!canonical || (codeRoot && inside(codeRoot, canonical))) continue
-        const info = await fs.stat(canonical).catch(() => undefined)
-        if (!info?.isFile()) continue
-        if (process.platform !== "win32") {
-          const accessible = await fs
-            .access(canonical, FS.X_OK)
-            .then(() => true)
-            .catch(() => false)
-          if (!accessible) continue
-        }
-        return canonical
-      }
-    }
   }
 
   function output(stream: NodeJS.ReadableStream, limit: number, label: string): Promise<Buffer> {
@@ -271,7 +237,10 @@ export namespace ProviderCli {
     }
   }
 
-  export async function doctor(targetInput: string): Promise<ComputeSettings.ProviderDoctor> {
+  export async function doctor(
+    targetInput: string,
+    options: { executableDirectories?: string[] } = {},
+  ): Promise<ComputeSettings.ProviderDoctor> {
     const target = provider(targetInput)
     const spec = SPECS[target]
     const checked = new Date().toISOString()
@@ -308,9 +277,16 @@ export namespace ProviderCli {
           fs.mkdir(isolated.XDG_STATE_HOME, { recursive: true }),
           fs.mkdir(isolated.TMPDIR, { recursive: true }),
         ])
-        const binary = await executable(spec.cli, isolated)
+        const binary = await TrustedExecutable.resolve(spec.cli, { directories: options.executableDirectories })
         if (!binary) return { missing: true as const }
-        launched = await launch(target, spec, binary, isolated, root, stdin)
+        launched = await launch(
+          target,
+          spec,
+          binary,
+          { ...isolated, PATH: TrustedExecutable.searchPath() },
+          root,
+          stdin,
+        )
         return { missing: false as const }
       })
       if (result.missing) {

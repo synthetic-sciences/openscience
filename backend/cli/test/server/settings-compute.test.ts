@@ -14,6 +14,7 @@ import { Sandbox } from "../../src/sandbox/sandbox"
 import { Log } from "../../src/util/log"
 import { Global } from "../../src/global"
 import { ModalVolume } from "../../src/compute/modal/volume"
+import { ProviderCli } from "../../src/compute/provider-cli"
 import { executionSession, sandboxedExecution, tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
@@ -690,9 +691,8 @@ test(
     try {
       await connect("runpod", "rpa_doctor_test")
       await ComputeSettings.setProviderEnabled("runpod", true)
-      const checked = await ComputeSettingsRoutes().request("/provider/runpod/doctor", { method: "POST" })
-      expect(checked.status).toBe(200)
-      expect(await checked.json()).toMatchObject({
+      const checked = await ProviderCli.doctor("runpod", { executableDirectories: [bin] })
+      expect(checked).toMatchObject({
         ok: true,
         provider: "runpod",
         cli: "runpodctl",
@@ -703,8 +703,8 @@ test(
       expect(used).toBeString()
 
       await fs.writeFile(cli, "#!/bin/sh\necho rejected >&2\nexit 7\n", { mode: 0o700 })
-      const failed = await ComputeSettingsRoutes().request("/provider/runpod/doctor", { method: "POST" })
-      expect(await failed.json()).toMatchObject({ ok: false, error: expect.stringContaining("rejected") })
+      const failed = await ProviderCli.doctor("runpod", { executableDirectories: [bin] })
+      expect(failed).toMatchObject({ ok: false, error: expect.stringContaining("rejected") })
       expect((await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used).toBe(used)
 
       await connect("runpod", "rpa_replacement_key")
@@ -823,10 +823,8 @@ test(
         await connect(contract.provider, contract.key)
         await ComputeSettings.setProviderEnabled(contract.provider, true)
 
-        const response = await ComputeSettingsRoutes().request(`/provider/${contract.provider}/doctor`, {
-          method: "POST",
-        })
-        expect(await response.json()).toMatchObject({ ok: true, provider: contract.provider, cli: contract.cli })
+        const response = await ProviderCli.doctor(contract.provider, { executableDirectories: [bin] })
+        expect(response).toMatchObject({ ok: true, provider: contract.provider, cli: contract.cli })
         expect((await fs.readFile(args, "utf8")).trimEnd().split("\n")).toEqual(contract.args)
         if (contract.header) expect(await fs.readFile(header, "utf8")).toBe(contract.header)
         expect(
@@ -839,6 +837,37 @@ test(
       if (previousOpenAI === undefined) delete process.env.OPENAI_API_KEY
       else process.env.OPENAI_API_KEY = previousOpenAI
       for (const contract of contracts) await ComputeSettings.disconnectProvider(contract.provider)
+    }
+  },
+  nativeLifecycleTimeout,
+)
+
+test(
+  "native provider doctors never select a workspace CLI shim from ambient PATH",
+  async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    const marker = path.join(tmp.path, "credential-received")
+    const previousPath = process.env.PATH
+    await fs.mkdir(bin)
+    await fs.writeFile(
+      path.join(bin, "runpodctl"),
+      `#!/bin/sh\nprintf '%s' "$RUNPOD_API_KEY" > ${JSON.stringify(marker)}\n`,
+      {
+        mode: 0o700,
+      },
+    )
+    process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`
+    try {
+      await connect("runpod", "must-not-reach-workspace")
+      await ComputeSettings.setProviderEnabled("runpod", true)
+      await ComputeSettingsRoutes().request("/provider/runpod/doctor", { method: "POST" })
+      expect(await Bun.file(marker).exists()).toBe(false)
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH
+      else process.env.PATH = previousPath
+      await ComputeSettings.disconnectProvider("runpod")
     }
   },
   nativeLifecycleTimeout,

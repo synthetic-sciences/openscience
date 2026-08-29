@@ -903,7 +903,8 @@ export namespace ComputeJobs {
   ) {
     if (options.authorize !== false) await currentAuthority(authority)
     const known = await SshAdapter.known(host, scope.root)
-    const spec = SshAdapter.argv(host, known, script)
+    const ssh = await SshAdapter.executable("ssh")
+    const spec = SshAdapter.argv(host, known, script, ssh)
     const input = options.stdin ? await fs.open(options.stdin, "r") : undefined
     const output = options.stdout ? await fs.open(options.stdout, "w", 0o600) : undefined
     const detached = process.platform !== "win32"
@@ -2511,10 +2512,13 @@ export namespace ComputeJobs {
     })
   }
 
-  export async function probe(host: Host): Promise<Probe> {
+  export async function probe(
+    host: Host,
+    executables: SshAdapter.OperationOptions["executables"] = {},
+  ): Promise<Probe> {
     const parsed = Host.parse(host)
     const started = performance.now()
-    const scanned = await SshAdapter.scan(parsed).catch((error) => ({
+    const scanned = await SshAdapter.scan(parsed, { executables }).catch((error) => ({
       error: error instanceof Error ? error.message : String(error),
     }))
     if ("error" in scanned) {
@@ -2575,8 +2579,9 @@ export namespace ComputeJobs {
     ].join("; ")
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-probe-"))
     try {
-      const known = await SshAdapter.known({ ...parsed, ...scanned }, temporary)
-      const argv = SshAdapter.argv({ ...parsed, ...scanned }, known, script)
+      const known = await SshAdapter.known({ ...parsed, ...scanned }, temporary, { executables })
+      const ssh = executables.ssh ?? (await SshAdapter.executable("ssh"))
+      const argv = SshAdapter.argv({ ...parsed, ...scanned }, known, script, ssh)
       const agent = process.env.SSH_AUTH_SOCK
       const detached = process.platform !== "win32"
       const proc = spawn(argv[0]!, argv.slice(1), {

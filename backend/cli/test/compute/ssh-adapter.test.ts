@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import crypto from "node:crypto"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -123,6 +123,12 @@ test("terminates an SSH probe when its bounded operation times out or is aborted
     fs.writeFile(keygen, "#!/bin/sh\nexit 1\n", { mode: 0o700 }),
   ])
   process.env.PATH = `${bin}${path.delimiter}${previous ?? ""}`
+  const nativeExecutable = SshAdapter.executable
+  const executable = spyOn(SshAdapter, "executable").mockImplementation((name) => {
+    if (name === "ssh-keyscan") return Promise.resolve(keyscan)
+    if (name === "ssh-keygen") return Promise.resolve(keygen)
+    return nativeExecutable(name)
+  })
   const host = { id: "slow", label: "Slow", host: "example.com", scheduler: "none" as const }
   try {
     const started = Date.now()
@@ -133,6 +139,26 @@ test("terminates an SSH probe when its bounded operation times out or is aborted
     const pending = SshAdapter.scan(host, { signal: controller.signal, timeoutMs: 5_000 })
     setTimeout(() => controller.abort(new Error("probe cancelled")), 25)
     await expect(pending).rejects.toThrow("probe cancelled")
+  } finally {
+    executable.mockRestore()
+    if (previous === undefined) delete process.env.PATH
+    else process.env.PATH = previous
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("never selects workspace OpenSSH trust utilities from ambient PATH", async () => {
+  if (process.platform === "win32") return
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-ssh-path-shim-"))
+  const previous = process.env.PATH
+  try {
+    for (const name of ["ssh", "ssh-keygen", "ssh-keyscan"] as const) {
+      await fs.writeFile(path.join(root, name), "#!/bin/sh\nexit 0\n", { mode: 0o700 })
+    }
+    process.env.PATH = `${root}${path.delimiter}${previous ?? ""}`
+    for (const name of ["ssh", "ssh-keygen", "ssh-keyscan"] as const) {
+      expect(await SshAdapter.executable(name)).not.toBe(await fs.realpath(path.join(root, name)))
+    }
   } finally {
     if (previous === undefined) delete process.env.PATH
     else process.env.PATH = previous

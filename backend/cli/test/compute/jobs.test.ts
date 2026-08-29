@@ -180,7 +180,7 @@ describe("ComputeJobs command adapters", () => {
       scheduler: "none",
       concurrency: 4,
     })
-    const argv = SshAdapter.argv(imported, "/tmp/known-hosts", "true")
+    const argv = SshAdapter.argv(imported, "/tmp/known-hosts", "true", "/trusted/ssh")
 
     expect(argv).toContain("/tmp/known-hosts.ssh_config")
     expect(argv).toContain("researcher@login.cluster.example")
@@ -199,7 +199,7 @@ describe("ComputeJobs command adapters", () => {
       scheduler: "none",
       concurrency: 2,
     })
-    const argv = SshAdapter.argv(imported, "/tmp/known-hosts", "true")
+    const argv = SshAdapter.argv(imported, "/tmp/known-hosts", "true", "/trusted/ssh")
 
     expect(argv).toContain("IdentitiesOnly=yes")
     expect(argv).toContain(identity)
@@ -245,7 +245,7 @@ describe("ComputeJobs command adapters", () => {
     expect(config).toContain(`UserKnownHostsFile \"${known}\"`)
     expect(config).toContain("StrictHostKeyChecking yes")
     expect(config).not.toContain("ProxyCommand")
-    expect(SshAdapter.argv(pinned, known, "true")).toContain(`${known}.ssh_config`)
+    expect(SshAdapter.argv(pinned, known, "true", "/trusted/ssh")).toContain(`${known}.ssh_config`)
   })
 
   test("binds SSH resources, modules, and container into the approved digest", async () => {
@@ -348,6 +348,10 @@ printf '%s\\n' '{"exists":true}'
     await fs.chmod(path.join(bin, "ssh"), 0o700)
 
     const previousPath = process.env.PATH
+    const nativeExecutable = SshAdapter.executable
+    const executable = spyOn(SshAdapter, "executable").mockImplementation((name) =>
+      name === "ssh" ? Promise.resolve(path.join(bin, "ssh")) : nativeExecutable(name),
+    )
     process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`
     try {
       await Instance.provide({
@@ -397,9 +401,29 @@ printf '%s\\n' '{"exists":true}'
         },
       })
     } finally {
+      executable.mockRestore()
       process.env.PATH = previousPath
     }
   }, 15_000)
+
+  test("never selects a workspace SSH shim from ambient PATH", async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    const shim = path.join(bin, "ssh")
+    const previousPath = process.env.PATH
+    await fs.mkdir(bin)
+    await fs.writeFile(shim, "#!/bin/sh\nexit 0\n", { mode: 0o700 })
+    process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`
+    try {
+      const resolved = await SshAdapter.executable("ssh")
+      expect(resolved).not.toBe(await fs.realpath(shim))
+      expect(path.isAbsolute(resolved)).toBe(true)
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH
+      else process.env.PATH = previousPath
+    }
+  })
 
   test("bounds SSH control output and reaps every owned transport process", async () => {
     if (process.platform === "win32") return
@@ -427,6 +451,10 @@ time.sleep(60)'
       { mode: 0o700 },
     )
     const previousPath = process.env.PATH
+    const nativeExecutable = SshAdapter.executable
+    const executable = spyOn(SshAdapter, "executable").mockImplementation((name) =>
+      name === "ssh" ? Promise.resolve(path.join(bin, "ssh")) : nativeExecutable(name),
+    )
     process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`
     try {
       await Instance.provide({
@@ -480,6 +508,7 @@ time.sleep(60)'
         }
       }
     } finally {
+      executable.mockRestore()
       process.env.PATH = previousPath
     }
   }, 45_000)
@@ -515,32 +544,22 @@ time.sleep(60)'
         { mode: 0o700 },
       ),
     ])
-    const module = path.resolve(import.meta.dir, "../../src/compute/jobs.ts")
-    const script = `
-import { ComputeJobs } from ${JSON.stringify(module)}
-const result = await ComputeJobs.probe({
-  id: "bounded-probe",
-  label: "Bounded probe",
-  host: "probe.example.org",
-  scheduler: "none",
-  concurrency: 1,
-})
-console.log(JSON.stringify(result))
-`
+    const binaries = {
+      ssh: path.join(bin, "ssh"),
+      "ssh-keygen": path.join(bin, "ssh-keygen"),
+      "ssh-keyscan": path.join(bin, "ssh-keyscan"),
+    }
     try {
-      const child = Bun.spawn([process.execPath, "-e", script], {
-        cwd: path.resolve(import.meta.dir, "../.."),
-        env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` },
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-      const [code, stdout, stderr] = await Promise.all([
-        child.exited,
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ])
-      if (code !== 0) throw new Error(stderr)
-      const result = ComputeJobs.Probe.parse(JSON.parse(stdout.trim().split("\n").at(-1)!))
+      const result = await ComputeJobs.probe(
+        {
+          id: "bounded-probe",
+          label: "Bounded probe",
+          host: "probe.example.org",
+          scheduler: "none",
+          concurrency: 1,
+        },
+        binaries,
+      )
       expect(result.ok).toBe(false)
       expect(result.error).toBe("SSH operation stdout exceeded 65536 bytes")
       const pid = Number(await Bun.file(pidfile).text())
