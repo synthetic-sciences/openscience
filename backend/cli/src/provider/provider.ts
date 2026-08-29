@@ -502,6 +502,84 @@ export namespace Provider {
     return `os_${hash.digest("hex")}`
   }
 
+  const MANAGED_RELOAD_RETRY_MAX_SECONDS = 10
+  const MANAGED_RELOAD_RESPONSE_MAX_BYTES = 16_384
+  const ManagedReloadRetry = z.object({
+    error: z.literal("insufficient_balance"),
+    recovery: z.object({
+      kind: z.literal("ace_reload"),
+      retryable: z.literal(true),
+      retry_after_seconds: z.number().int().min(0).max(MANAGED_RELOAD_RETRY_MAX_SECONDS),
+      ace_reload: z.object({
+        state: z.literal("available"),
+        pending: z.literal(true),
+      }),
+    }),
+  })
+
+  /** Retry one managed request only when Atlas proves that no provider call
+   * ran and a durable personal Ace reload is already pending. The identical
+   * idempotency key keeps the replay bound to the original operation. */
+  export async function retryManagedPaymentRequired(input: {
+    response: Response
+    managed: boolean
+    headers: Headers
+    signal?: AbortSignal | null
+    retry: () => Promise<Response>
+  }): Promise<Response> {
+    if (!input.managed || input.response.status !== 402 || !input.headers.get("Idempotency-Key")) {
+      return input.response
+    }
+
+    const contentLength = input.response.headers.get("content-length")
+    const declared = contentLength === null ? undefined : Number(contentLength)
+    if (declared !== undefined && Number.isFinite(declared) && declared > MANAGED_RELOAD_RESPONSE_MAX_BYTES) {
+      return input.response
+    }
+    const text = await input.response
+      .clone()
+      .text()
+      .catch(() => "")
+    if (!text || text.length > MANAGED_RELOAD_RESPONSE_MAX_BYTES) return input.response
+    const body = iife(() => {
+      try {
+        return ManagedReloadRetry.safeParse(JSON.parse(text))
+      } catch {
+        return undefined
+      }
+    })
+    if (!body?.success) return input.response
+    const seconds = body.data.recovery.retry_after_seconds
+    const retryAfterHeader = input.response.headers.get("retry-after")
+    if (retryAfterHeader === null) return input.response
+    const retryAfter = Number(retryAfterHeader)
+    if (!Number.isFinite(retryAfter) || retryAfter !== seconds) {
+      return input.response
+    }
+
+    await input.response.body?.cancel().catch(() => undefined)
+    if (seconds > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const signal = input.signal
+        if (signal?.aborted) {
+          reject(signal.reason ?? new DOMException("Aborted", "AbortError"))
+          return
+        }
+        const aborted = () => {
+          clearTimeout(timer)
+          signal?.removeEventListener("abort", aborted)
+          reject(signal?.reason ?? new DOMException("Aborted", "AbortError"))
+        }
+        const timer = setTimeout(() => {
+          signal?.removeEventListener("abort", aborted)
+          resolve()
+        }, seconds * 1000)
+        signal?.addEventListener("abort", aborted, { once: true })
+      })
+    }
+    return input.retry()
+  }
+
   const PUBLIC_PROVIDER_BASE_URLS: Record<string, string> = {
     anthropic: "https://api.anthropic.com/v1",
     openai: "https://api.openai.com/v1",
@@ -2373,13 +2451,22 @@ export namespace Provider {
           )
         }
 
-        const response = await fetchWithIdleWatchdog(fetchFn, input, opts, {
-          providerID: model.providerID,
-          modelID: model.id,
-          idleTimeout,
-          totalTimeout: options["timeout"],
+        const request = () =>
+          fetchWithIdleWatchdog(fetchFn, input, opts, {
+            providerID: model.providerID,
+            modelID: model.id,
+            idleTimeout,
+            totalTimeout: options["timeout"],
+          })
+        const response = await request()
+        const settled = await retryManagedPaymentRequired({
+          response,
+          managed,
+          headers: opts.headers,
+          signal: opts.signal,
+          retry: request,
         })
-        return funding ? OpenScience.validateFundingResponse(response, funding) : response
+        return funding ? OpenScience.validateFundingResponse(settled, funding) : settled
       }
 
       // Special case: google-vertex-anthropic uses a subpath import

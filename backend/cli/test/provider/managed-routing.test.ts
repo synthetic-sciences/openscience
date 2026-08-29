@@ -190,6 +190,99 @@ describe("Provider.managedIdempotencyKey (pure)", () => {
   })
 })
 
+describe("Provider.retryManagedPaymentRequired", () => {
+  test("retries one exact managed operation only for a pending Ace reload", async () => {
+    const headers = new Headers({ "Idempotency-Key": "os_operation" })
+    const first = Response.json(
+      {
+        error: "insufficient_balance",
+        recovery: {
+          kind: "ace_reload",
+          retryable: true,
+          retry_after_seconds: 0,
+          ace_reload: { state: "available", pending: true },
+        },
+      },
+      { status: 402, headers: { "Retry-After": "0" } },
+    )
+    let retries = 0
+    const second = new Response("ok")
+
+    const result = await Provider.retryManagedPaymentRequired({
+      response: first,
+      managed: true,
+      headers,
+      retry: async () => {
+        retries++
+        return second
+      },
+    })
+
+    expect(result).toBe(second)
+    expect(retries).toBe(1)
+  })
+
+  test("does not retry an unproven, monthly-limit, or non-managed 402", async () => {
+    const cases = [
+      {
+        managed: false,
+        headers: new Headers({ "Idempotency-Key": "os_operation" }),
+        body: { error: "insufficient_balance", recovery: { retryable: true } },
+      },
+      {
+        managed: true,
+        headers: new Headers(),
+        body: { error: "insufficient_balance", recovery: { retryable: true } },
+      },
+      {
+        managed: true,
+        headers: new Headers({ "Idempotency-Key": "os_operation" }),
+        responseHeaders: {},
+        body: {
+          error: "insufficient_balance",
+          recovery: {
+            kind: "ace_reload",
+            retryable: true,
+            retry_after_seconds: 0,
+            ace_reload: { state: "available", pending: true },
+          },
+        },
+      },
+      {
+        managed: true,
+        headers: new Headers({ "Idempotency-Key": "os_operation" }),
+        body: {
+          error: "monthly_usage_limit",
+          recovery: {
+            kind: "monthly_usage_limit",
+            retryable: false,
+            retry_after_seconds: null,
+            ace_reload: { state: "available", pending: false },
+          },
+        },
+      },
+    ]
+    let retries = 0
+    for (const item of cases) {
+      const response = Response.json(item.body, {
+        status: 402,
+        headers: item.responseHeaders ?? { "Retry-After": "0" },
+      })
+      const result = await Provider.retryManagedPaymentRequired({
+        response,
+        managed: item.managed,
+        headers: item.headers,
+        retry: async () => {
+          retries++
+          return new Response("unexpected")
+        },
+      })
+      expect(result).toBe(response)
+    }
+    expect(retries).toBe(0)
+  })
+})
+
 test("managed inference sends the operation snapshot through the real provider fetch hook", async () => {
   await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
   const file = path.join(Global.Path.data, "openscience-session.json")
