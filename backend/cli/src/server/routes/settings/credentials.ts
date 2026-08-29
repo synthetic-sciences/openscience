@@ -699,8 +699,8 @@ export const CredentialsRoutes = lazy(() =>
         if (id === "gcp" && gcp && !validField(id, "service_account_json", gcp)) {
           return c.json({ error: "Google Cloud service account credentials must be a JSON object" }, 400)
         }
-        const store = await mutateCredentialStore(id, `settings-credential.set:${id}`, () =>
-          updateStore(async (current) => {
+        const store = await mutateCredentialStore(id, `settings-credential.set:${id}`, async () => {
+          let stored = await updateStore(async (current) => {
             const entry = current[id] ?? { fields: {}, updated_at: new Date().toISOString() }
             if (entry.removal) {
               throw new Error(`Credential ${id} removal is pending; retry removal before reconnecting`)
@@ -717,22 +717,26 @@ export const CredentialsRoutes = lazy(() =>
               updated_at: new Date().toISOString(),
               source: "local",
             }
-          }),
-        )
-        if (spec?.category === "compute" && spec.portable !== false) {
-          const entry = store[id]
-          const fields = entry ? await validDecryptedFields(id, entry) : {}
-          const authenticated = await OpenScience.isAuthenticated()
-          if (authenticated && !(await OpenScience.savePortableCredential(id, fields, spec.label))) {
-            throw new Error(`${spec.label} was saved on this device but could not be synced to your account`)
+          })
+          // Keep the remote save inside the same cross-process mutation lease
+          // as the local write. Otherwise DELETE can tombstone and delete the
+          // account copy while this older PUT is still in flight, then the PUT
+          // can land afterward and resurrect the secret remotely.
+          if (spec?.category === "compute" && spec.portable !== false) {
+            const entry = stored[id]
+            const fields = entry ? await validDecryptedFields(id, entry) : {}
+            const authenticated = await OpenScience.isAuthenticated()
+            if (authenticated && !(await OpenScience.savePortableCredential(id, fields, spec.label))) {
+              throw new Error(`${spec.label} was saved on this device but could not be synced to your account`)
+            }
+            if (authenticated && entry) {
+              stored = await updateStore((current) => {
+                if (current[id] && !current[id]!.removal) current[id]!.source = "account"
+              })
+            }
           }
-          if (authenticated && entry) {
-            entry.source = "account"
-            await updateStore((current) => {
-              if (current[id]) current[id]!.source = "account"
-            })
-          }
-        }
+          return stored
+        })
         return c.json({ services: await view(store) })
       },
     )

@@ -172,6 +172,72 @@ test("portable credential removal stays scrubbed when remote deletion succeeds b
   }
 })
 
+test("a concurrent portable PUT cannot recreate an account credential after DELETE", async () => {
+  const app = CredentialsRoutes()
+  const storePath = path.join(Global.Path.data, "credentials.json")
+  const saveEntered = Promise.withResolvers<void>()
+  const releaseSave = Promise.withResolvers<void>()
+  const deleteStarted = Promise.withResolvers<void>()
+  let authenticationChecks = 0
+  let remotePresent = false
+  const authenticated = spyOn(OpenScience, "isAuthenticated").mockImplementation(async () => {
+    authenticationChecks++
+    if (authenticationChecks >= 2) deleteStarted.resolve()
+    return true
+  })
+  const saveRemote = spyOn(OpenScience, "savePortableCredential").mockImplementation(async () => {
+    saveEntered.resolve()
+    await releaseSave.promise
+    remotePresent = true
+    return true
+  })
+  const deleteRemote = spyOn(OpenScience, "deletePortableCredential").mockImplementation(async () => {
+    remotePresent = false
+    return true
+  })
+  try {
+    const saving = app.request("/aws", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fields: {
+          access_key_id: "AKIACONCURRENT",
+          secret_access_key: "concurrent-put-secret",
+          region: "us-west-2",
+        },
+      }),
+    })
+    await saveEntered.promise
+    expect(JSON.parse(await fs.readFile(storePath, "utf8")).aws).toMatchObject({
+      source: "local",
+      fields: { access_key_id: expect.any(String), secret_access_key: expect.any(String) },
+    })
+
+    const deleting = app.request("/aws", { method: "DELETE" })
+    await deleteStarted.promise
+    // DELETE has reached the mutation boundary but cannot tombstone or perform
+    // its remote deletion until the older PUT's remote save is settled.
+    expect(deleteRemote).toHaveBeenCalledTimes(0)
+    releaseSave.resolve()
+
+    const [saved, removed] = await Promise.all([saving, deleting])
+    expect(saved.status).toBe(200)
+    expect(removed.status).toBe(200)
+    expect(saveRemote).toHaveBeenCalledTimes(1)
+    expect(deleteRemote).toHaveBeenCalledTimes(1)
+    expect(remotePresent).toBe(false)
+    expect(JSON.parse(await fs.readFile(storePath, "utf8")).aws).toBeUndefined()
+    expect(process.env.AWS_ACCESS_KEY_ID).toBeUndefined()
+    expect(process.env.AWS_SECRET_ACCESS_KEY).toBeUndefined()
+  } finally {
+    releaseSave.resolve()
+    await Promise.resolve(app.request("/aws", { method: "DELETE" })).catch(() => undefined)
+    deleteRemote.mockRestore()
+    saveRemote.mockRestore()
+    authenticated.mockRestore()
+  }
+})
+
 test("credential catalog is categorized and injects integration and compute environments", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-credential-catalog-"))
   const runner = path.join(root, "catalog.ts")

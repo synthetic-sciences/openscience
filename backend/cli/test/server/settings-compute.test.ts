@@ -792,14 +792,17 @@ test(
         command: "runpodctl user",
       })
       expect((await fs.readFile(marker, "utf8")).startsWith(os.tmpdir())).toBe(true)
-      const used = (await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used
-      expect(used).toBeString()
+      expect((await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used).toBeString()
       const persisted = JSON.parse(await fs.readFile(path.join(Global.Path.data, "settings-compute.json"), "utf8"))
       expect(persisted.providers.runpod.executable).toMatchObject({
         version: 1,
         name: "runpodctl",
         path: await fs.realpath(cli),
         sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      })
+      expect(persisted.providers.runpod.executable_approval).toMatchObject({
+        source: "settings",
+        approved_at: expect.any(String),
       })
 
       await fs.writeFile(cli, `#!/bin/sh\nprintf '%s' "$RUNPOD_API_KEY" > ${JSON.stringify(replacementMarker)}\n`, {
@@ -808,7 +811,7 @@ test(
       const failed = await ProviderCli.doctor("runpod", { executableDirectories: [bin] })
       expect(failed).toMatchObject({ ok: false, error: expect.stringContaining("changed after it was approved") })
       expect(await Bun.file(replacementMarker).exists()).toBe(false)
-      expect((await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used).toBe(used)
+      expect((await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used).toBeNull()
 
       await connect("runpod", "rpa_replacement_key")
       expect((await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used).toBeNull()
@@ -816,6 +819,79 @@ test(
       if (previousPath === undefined) delete process.env.PATH
       else process.env.PATH = previousPath
       await ComputeSettings.disconnectProvider("runpod")
+    }
+  },
+  nativeLifecycleTimeout,
+)
+
+test("provider broker never silently approves a CLI on first agent invocation", async () => {
+  if (process.platform === "win32") return
+  await using tmp = await tmpdir()
+  const bin = path.join(tmp.path, "bin")
+  const marker = path.join(tmp.path, "unapproved-cli-received-secret")
+  await fs.mkdir(bin)
+  await fs.writeFile(
+    path.join(bin, "runpodctl"),
+    `#!/bin/sh\nprintf '%s' "$RUNPOD_API_KEY" > ${JSON.stringify(marker)}\n`,
+    { mode: 0o700 },
+  )
+  try {
+    await connect("runpod", "unapproved-provider-sentinel")
+    await ComputeSettings.setProviderEnabled("runpod", true)
+    const result = await ProviderCli.execute("runpod", "list_resources", undefined, {
+      executableDirectories: [bin],
+    })
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining("not approved") })
+    expect(await Bun.file(marker).exists()).toBe(false)
+  } finally {
+    await ComputeSettings.disconnectProvider("runpod")
+  }
+})
+
+test(
+  "provider broker rejects rename swaps and same-inode rewrites after final verification without launching a secret",
+  async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    await fs.mkdir(bin)
+
+    const fixedLength = 512
+    const script = (body: string) => {
+      const prefix = `#!/bin/sh\n${body}\n#`
+      if (prefix.length > fixedLength) throw new Error("provider CLI test script exceeded fixed length")
+      return prefix.padEnd(fixedLength, "x")
+    }
+
+    for (const mutation of ["rename", "same-inode"] as const) {
+      const cli = path.join(bin, "runpodctl")
+      const marker = path.join(tmp.path, `${mutation}-received-secret`)
+      const replacement = script(`printf '%s' "$RUNPOD_API_KEY" > ${JSON.stringify(marker)}`)
+      await fs.writeFile(cli, script("exit 0"), { mode: 0o700 })
+      await connect("runpod", `post-verification-${mutation}-sentinel`)
+      await ComputeSettings.setProviderEnabled("runpod", true)
+      try {
+        await ProviderCli.approveExecutable("runpod", { executableDirectories: [bin] })
+        const result = await ProviderCli.execute("runpod", "list_resources", undefined, {
+          executableDirectories: [bin],
+          testRequireImmutableAuthority: true,
+          testAfterExecutableVerification: async (binary) => {
+            if (mutation === "same-inode") {
+              await fs.writeFile(binary, replacement, { mode: 0o700 })
+              return
+            }
+            const staged = `${binary}.replacement`
+            await fs.writeFile(staged, replacement, { mode: 0o700 })
+            await fs.rename(staged, binary)
+          },
+        })
+        expect(result).toMatchObject({ ok: false, error: expect.stringContaining("administrator-managed") })
+        expect(await Bun.file(marker).exists()).toBe(false)
+        expect((await fs.stat(cli)).mode & 0o777).toBe(0o700)
+        expect((await fs.readFile(cli)).byteLength).toBe(fixedLength)
+      } finally {
+        await ComputeSettings.disconnectProvider("runpod")
+      }
     }
   },
   nativeLifecycleTimeout,
@@ -1055,6 +1131,7 @@ test("saved provider credentials power only fixed read/list/status broker operat
       )
       await connect(contract.provider, contract.key)
       await ComputeSettings.setProviderEnabled(contract.provider, true)
+      await ProviderCli.approveExecutable(contract.provider, { executableDirectories: [bin] })
 
       const response = await ProviderCli.execute(contract.provider, contract.operation, contract.resourceID, {
         executableDirectories: [bin],
@@ -1109,6 +1186,7 @@ test("provider read broker kills its credential-bearing tree on timeout and call
   try {
     await connect("runpod", "runpod-bounded-read-key")
     await ComputeSettings.setProviderEnabled("runpod", true)
+    await ProviderCli.approveExecutable("runpod", { executableDirectories: [bin] })
 
     const timedOut = await ProviderCli.execute("runpod", "list_resources", undefined, {
       executableDirectories: [bin],

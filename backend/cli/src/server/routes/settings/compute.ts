@@ -343,6 +343,10 @@ export namespace ComputeSettings {
     inode: z.string().regex(/^\d+$/),
     mode: z.string().regex(/^\d+$/),
   })
+  const ExecutableApproval = z.object({
+    source: z.literal("settings"),
+    approved_at: z.string(),
+  })
   const ProviderRemoval = z.object({
     token: z.string().uuid(),
     remote: z.boolean(),
@@ -356,6 +360,7 @@ export namespace ComputeSettings {
     connected_at: z.string(),
     last_used: z.string().nullable().default(null),
     executable: ExecutableAttestation.optional(),
+    executable_approval: ExecutableApproval.optional(),
     removal: ProviderRemoval.optional(),
   })
   const ModalStored = z.preprocess((value) => {
@@ -594,9 +599,22 @@ export namespace ComputeSettings {
     )
   }
 
-  /** Persist the first exact provider CLI identity before a credential is
-   * admitted. A later binary at the same path never silently replaces it. */
-  export async function pinProviderExecutable(
+  /** A failed explicit Settings check must not leave the provider advertised as
+   * verified from an older successful binary or credential. */
+  export async function markProviderCheckFailed(target: string): Promise<void> {
+    target = canonicalProvider(target)
+    await CredentialLifecycle.serialized(() =>
+      update((current) => {
+        const entry = current.providers[target]
+        if (entry && !entry.removal) entry.last_used = null
+      }),
+    )
+  }
+
+  /** Persist an exact provider CLI identity only from the explicit Settings
+   * connection check. Existing auto-pins from older builds have no approval
+   * marker and remain inadmissible until the user runs that check. */
+  export async function approveProviderExecutable(
     target: string,
     attestation: TrustedExecutable.Attestation,
   ): Promise<TrustedExecutable.Attestation> {
@@ -606,12 +624,28 @@ export namespace ComputeSettings {
       update((current) => {
         const entry = current.providers[target]
         if (!entry?.enabled || entry.removal) throw new Error(`Compute provider ${target} is disabled`)
-        if (!entry.executable) entry.executable = ExecutableAttestation.parse(attestation)
+        if (!entry.executable || !entry.executable_approval) {
+          entry.executable = ExecutableAttestation.parse(attestation)
+          entry.executable_approval = { source: "settings", approved_at: new Date().toISOString() }
+        }
         pinned = entry.executable
       }),
     )
     if (!pinned) throw new Error(`Compute provider ${target} executable attestation was not persisted`)
     return pinned
+  }
+
+  /** Resolve only an explicitly approved executable. Provider tool invocations
+   * never create trust on first use. */
+  export async function approvedProviderExecutable(target: string): Promise<TrustedExecutable.Attestation> {
+    target = canonicalProvider(target)
+    const current = await read()
+    const entry = current.providers[target]
+    if (!entry?.enabled || entry.removal) throw new Error(`Compute provider ${target} is disabled`)
+    if (!entry.executable || !entry.executable_approval) {
+      throw new Error(`Compute provider ${target} CLI is not approved; run Check connection in Settings > Compute`)
+    }
+    return entry.executable
   }
 
   function sshConfigTokens(value: string) {
@@ -889,6 +923,7 @@ export namespace ComputeSettings {
           connected_at: existing?.connected_at ?? new Date().toISOString(),
           last_used: sameCredential ? (existing?.last_used ?? null) : null,
           executable: existing?.executable,
+          executable_approval: existing?.executable_approval,
         }
       })
     })
@@ -931,6 +966,7 @@ export namespace ComputeSettings {
           connected_at: entry.connected_at,
           last_used: null,
           executable: entry.executable,
+          executable_approval: entry.executable_approval,
           removal: {
             token: crypto.randomUUID(),
             remote: entry.source === "account",
@@ -997,6 +1033,7 @@ export namespace ComputeSettings {
           connected_at: payload.updated_at ?? existing?.connected_at ?? new Date().toISOString(),
           last_used: sameCredential ? (existing?.last_used ?? null) : null,
           executable: existing?.executable,
+          executable_approval: existing?.executable_approval,
         }
       }
     })

@@ -360,9 +360,17 @@ export namespace ProviderCli {
   }
 
   export interface InvokeOptions {
+    /** Isolated fake-CLI roots for tests. Production callers never override
+     * the fixed trusted search roots. */
     executableDirectories?: string[]
     timeoutMs?: number
     signal?: AbortSignal
+    /** Deterministic TOCTOU barrier used only by the executable-boundary
+     * regression. Rejected unless the server itself is running under the test
+     * home established by test/preload.ts. */
+    testAfterExecutableVerification?: (executablePath: string) => void | Promise<void>
+    /** Exercise the production immutable-authority check for a fake test CLI. */
+    testRequireImmutableAuthority?: boolean
   }
 
   interface InvokeResult {
@@ -375,26 +383,47 @@ export namespace ProviderCli {
     error?: string
   }
 
-  async function invoke(target: Provider, spec: Spec, options: InvokeOptions = {}): Promise<InvokeResult> {
+  function allowMutableTestRoot(options: Pick<InvokeOptions, "executableDirectories">) {
+    return Boolean(options.executableDirectories?.length && process.env.OPENSCIENCE_TEST_HOME)
+  }
+
+  async function approve(
+    target: Provider,
+    spec: Spec,
+    options: Pick<InvokeOptions, "executableDirectories" | "testRequireImmutableAuthority">,
+  ) {
+    const selected = await TrustedExecutable.attest(spec.cli, { directories: options.executableDirectories })
+    if (!selected) throw new Error(`${spec.cli} is not installed. Install it from ${spec.docs}, then retry.`)
+    await TrustedExecutable.assertImmutableAuthority(selected, {
+      allowMutableTestRoot: allowMutableTestRoot(options),
+    })
+    const pinned = await ComputeSettings.approveProviderExecutable(target, selected)
+    await TrustedExecutable.revalidate(pinned)
+    await TrustedExecutable.assertImmutableAuthority(pinned, {
+      allowMutableTestRoot: allowMutableTestRoot(options),
+    })
+    return pinned
+  }
+
+  async function invoke(
+    target: Provider,
+    spec: Spec,
+    options: InvokeOptions = {},
+    explicitSettingsApproval = false,
+  ): Promise<InvokeResult> {
     const checked = new Date().toISOString()
     const root = await fs.mkdtemp(path.join(os.tmpdir(), `openscience-${target}-provider-`))
     let launched: Awaited<ReturnType<typeof launch>> | undefined
     let credentialRevision: string | undefined
     try {
       if (options.signal?.aborted) throw new Error(`${spec.cli} operation was cancelled before launch`)
-      const selected = await TrustedExecutable.attest(spec.cli, { directories: options.executableDirectories })
-      if (!selected) {
-        return {
-          ok: false,
-          provider: target,
-          cli: spec.cli,
-          command: spec.display,
-          checked_at: checked,
-          error: `${spec.cli} is not installed. Install it from ${spec.docs}, then retry.`,
-        }
-      }
-      const pinned = await ComputeSettings.pinProviderExecutable(target, selected)
+      const pinned = explicitSettingsApproval
+        ? await approve(target, spec, options)
+        : await ComputeSettings.approvedProviderExecutable(target)
       await TrustedExecutable.revalidate(pinned)
+      await TrustedExecutable.assertImmutableAuthority(pinned, {
+        allowMutableTestRoot: allowMutableTestRoot(options),
+      })
       const result = await ComputeSettings.withProviderEnv(target, process.env, async (provided, revision) => {
         if (options.signal?.aborted) throw new Error(`${spec.cli} operation was cancelled before launch`)
         credentialRevision = revision
@@ -425,10 +454,18 @@ export namespace ProviderCli {
           fs.mkdir(isolated.XDG_STATE_HOME, { recursive: true }),
           fs.mkdir(isolated.TMPDIR, { recursive: true }),
         ])
-        // Re-open and hash the exact pinned path after credential admission and
-        // immediately before spawn. A mutable package-manager root is never
-        // itself treated as executable authority.
+        // Re-open and hash the exact pinned path after credential admission.
+        // The following immutable-authority proof closes both pathname-swap
+        // and same-inode rewrite windows before spawn: in production the file
+        // and every ancestor are outside same-user write authority.
         const binary = await TrustedExecutable.revalidate(pinned)
+        if (options.testAfterExecutableVerification) {
+          if (!process.env.OPENSCIENCE_TEST_HOME) throw new Error("Provider CLI test hooks are disabled outside tests")
+          await options.testAfterExecutableVerification(binary)
+        }
+        await TrustedExecutable.assertImmutableAuthority(pinned, {
+          allowMutableTestRoot: allowMutableTestRoot(options) && !options.testRequireImmutableAuthority,
+        })
         launched = await launch(
           target,
           spec,
@@ -510,6 +547,17 @@ export namespace ProviderCli {
     operation: Operation
   }
 
+  /** Record executable approval without admitting a credential. The Settings
+   * doctor is the production caller; the direct export keeps broker contract
+   * tests from having to run a provider-specific account command first. */
+  export async function approveExecutable(
+    targetInput: string,
+    options: { executableDirectories?: string[]; testRequireImmutableAuthority?: boolean } = {},
+  ): Promise<TrustedExecutable.Attestation> {
+    const target = provider(targetInput)
+    return approve(target, DOCTOR_SPECS[target], options)
+  }
+
   /** Execute one provider-owned read operation. The caller selects only a
    * reviewed operation and an opaque resource id; it can never supply argv,
    * an executable, an endpoint, an environment variable, or a request body. */
@@ -529,7 +577,10 @@ export namespace ProviderCli {
     options: { executableDirectories?: string[] } = {},
   ): Promise<ComputeSettings.ProviderDoctor> {
     const target = provider(targetInput)
-    const result = await invoke(target, DOCTOR_SPECS[target], options)
+    // This path is called only by the user's explicit Settings connection
+    // check. Agent provider operations never create trust on first use.
+    const result = await invoke(target, DOCTOR_SPECS[target], options, true)
+    if (!result.ok) await ComputeSettings.markProviderCheckFailed(target)
     const { output: _output, ...doctor } = result
     return doctor
   }

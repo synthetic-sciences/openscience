@@ -29,6 +29,16 @@ export namespace TrustedExecutable {
     }
   }
 
+  export class UntrustedAuthorityError extends Error {
+    constructor(name: string, options?: ErrorOptions) {
+      super(
+        `Trusted executable ${name} is not administrator-managed and immutable; credential-bearing provider CLIs must be installed in a root-owned, non-writable system location`,
+        options,
+      )
+      this.name = "TrustedExecutableUntrustedAuthorityError"
+    }
+  }
+
   function systemDirectories() {
     if (process.platform === "win32") {
       const windows = process.env.SYSTEMROOT ?? process.env.WINDIR ?? "C:\\Windows"
@@ -165,5 +175,73 @@ export namespace TrustedExecutable {
     const current = await fingerprint(attestation.name, attestation.path)
     if (!same(attestation, current)) throw new ReplacedError(attestation.name)
     return attestation.path
+  }
+
+  function within(candidate: string, root: string) {
+    const relative = path.relative(root, candidate)
+    return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+  }
+
+  /**
+   * Prove that a same-user agent cannot replace the pathname or modify the
+   * pinned inode after its final hash check. Hashing an open descriptor alone
+   * is insufficient: POSIX spawn re-opens by pathname, and the same inode can
+   * be rewritten through another hard link. The production authority is
+   * therefore deliberately narrow: the file and its complete canonical
+   * ancestor chain must be administrator-owned and non-writable.
+   *
+   * Mutable fake CLIs are admitted only in the isolated Bun test process. The
+   * running desktop server never sets OPENSCIENCE_TEST_HOME, so callers cannot
+   * turn this into a production bypass through InvokeOptions.
+   */
+  export async function assertImmutableAuthority(
+    attestation: Attestation,
+    options: { allowMutableTestRoot?: boolean } = {},
+  ): Promise<void> {
+    if (options.allowMutableTestRoot) {
+      if (!process.env.OPENSCIENCE_TEST_HOME) throw new UntrustedAuthorityError(attestation.name)
+      return
+    }
+
+    const canonical = await fs.realpath(attestation.path).catch((error) => {
+      throw new ReplacedError(attestation.name, { cause: error })
+    })
+    if (canonical !== attestation.path) throw new ReplacedError(attestation.name)
+
+    if (process.platform === "win32") {
+      const windows = await fs
+        .realpath(process.env.SYSTEMROOT ?? process.env.WINDIR ?? "C:\\Windows")
+        .catch(() => undefined)
+      if (!windows || !within(canonical.toLowerCase(), path.join(windows, "System32").toLowerCase())) {
+        throw new UntrustedAuthorityError(attestation.name)
+      }
+      const writable = await fs
+        .access(canonical, FS.W_OK)
+        .then(() => true)
+        .catch(() => false)
+      if (writable) throw new UntrustedAuthorityError(attestation.name)
+      return
+    }
+
+    // A root-run agent has the same authority as the owner of system binaries,
+    // so no root-owned pathname is immutable to that actor.
+    if (process.geteuid?.() === 0) throw new UntrustedAuthorityError(attestation.name)
+
+    let current = canonical
+    for (;;) {
+      const info = await fs.stat(current).catch((error) => {
+        throw new UntrustedAuthorityError(attestation.name, { cause: error })
+      })
+      const writable = await fs
+        .access(current, FS.W_OK)
+        .then(() => true)
+        .catch(() => false)
+      if (info.uid !== 0 || (info.mode & 0o022) !== 0 || writable) {
+        throw new UntrustedAuthorityError(attestation.name)
+      }
+      const parent = path.dirname(current)
+      if (parent === current) break
+      current = parent
+    }
   }
 }
