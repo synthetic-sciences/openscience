@@ -119,8 +119,33 @@ function PlatformMark({ platform }: { platform: Platform }) {
   )
 }
 
-function Copy({ command }: { command: string }) {
+function Copy({ command, primary = false }: { command: string; primary?: boolean }) {
   const [copied, setCopied] = useState(false)
+
+  if (primary) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          if (!navigator.clipboard) return
+          void navigator.clipboard.writeText(command).then(
+            () => {
+              setCopied(true)
+              window.setTimeout(() => setCopied(false), 3000)
+            },
+            () => setCopied(false),
+          )
+        }}
+        className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-7 text-[15px] sm:text-[16px]"
+        aria-label={`Copy installer command: ${command}`}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <path d="M5.5 4V2.5h7v9H11M3.5 5.5h7v8h-7v-8Z" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+        <span aria-live="polite">{copied ? "Copied. Open Terminal" : "Copy macOS installer"}</span>
+      </button>
+    )
+  }
 
   return (
     <button
@@ -272,31 +297,64 @@ export default function Download() {
             </p>
 
             <div className="rise mx-auto mt-9 max-w-[560px] [animation-delay:270ms]">
-              <a
-                href={`${RELEASE}/${download.file}`}
-                className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-7 text-[15px] sm:text-[16px]"
-                aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
-              >
-                <svg width="15" height="16" viewBox="0 0 15 16" fill="none" aria-hidden>
-                  <path d="M7.5 1v9m0 0L11 6.5M7.5 10 4 6.5M1 14.5h13" stroke="currentColor" strokeWidth="1.3" />
-                </svg>
-                Download for {download.label} ({download.detail})
-              </a>
-              <div className="mt-3 text-[12.5px] leading-5 text-foreground/55">
-                {download.kind} · latest release · free and open source
-                <br />
-                Unsigned release. macOS and Windows may show security prompts; macOS builds are ad-hoc signed and not
-                notarized.
-              </div>
-              {download.platform === "mac" && (
-                <div className="mt-7 border border-border/60 bg-background/60 p-4 text-left sm:p-5">
-                  <div className="text-[13px] text-foreground">Install without opening Security Settings</div>
-                  <p className="mb-4 mt-2 text-[12.5px] leading-5 text-foreground/55">
-                    Paste this once in Terminal. It verifies the published checksum and app identity, installs
-                    OpenScience in Applications, removes its download quarantine, and launches it.
-                  </p>
-                  <Copy command={MAC} />
-                </div>
+              {download.platform === "mac" ? (
+                <>
+                  <Copy command={MAC} primary />
+                  <div className="mt-3 text-[12.5px] leading-5 text-foreground/55">
+                    Verified installer · detects your Mac · no Security Settings
+                  </div>
+                  <div className="mt-7 border border-border/60 bg-background/60 p-4 text-left sm:p-5">
+                    <div className="text-[13px] text-foreground">Finish in Terminal</div>
+                    <ol className="mb-4 mt-3 grid gap-2 text-[12.5px] leading-5 text-foreground/55">
+                      <li>
+                        <span className="mr-2 text-[hsl(var(--accent-coral))]">1.</span>Open Terminal from Spotlight.
+                      </li>
+                      <li>
+                        <span className="mr-2 text-[hsl(var(--accent-coral))]">2.</span>Paste the copied command and
+                        press Return.
+                      </li>
+                      <li>
+                        <span className="mr-2 text-[hsl(var(--accent-coral))]">3.</span>OpenScience verifies, installs,
+                        and launches automatically.
+                      </li>
+                    </ol>
+                    <Copy command={MAC} />
+                  </div>
+                  <details className="group mt-5 border-t border-border/50 pt-4 text-left">
+                    <summary className="min-h-11 cursor-pointer list-none py-3 text-center text-[12.5px] text-foreground/55 hover:text-foreground/80">
+                      Manual disk image
+                    </summary>
+                    <div className="border border-border/50 bg-background/40 p-4 text-[12.5px] leading-5 text-foreground/55">
+                      <p>
+                        The disk image is ad-hoc signed and cannot be notarized without an Apple Developer ID. macOS
+                        will require approval in Privacy &amp; Security. Use the installer above to avoid that screen.
+                      </p>
+                      <a
+                        href={`${RELEASE}/${download.file}`}
+                        className="mt-3 inline-flex min-h-11 items-center text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground/60"
+                        aria-label={`Download the manual disk image for ${download.label}, ${download.detail}`}
+                      >
+                        Download for {download.detail}
+                      </a>
+                    </div>
+                  </details>
+                </>
+              ) : (
+                <>
+                  <a
+                    href={`${RELEASE}/${download.file}`}
+                    className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-7 text-[15px] sm:text-[16px]"
+                    aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
+                  >
+                    <svg width="15" height="16" viewBox="0 0 15 16" fill="none" aria-hidden>
+                      <path d="M7.5 1v9m0 0L11 6.5M7.5 10 4 6.5M1 14.5h13" stroke="currentColor" strokeWidth="1.3" />
+                    </svg>
+                    Download for {download.label} ({download.detail})
+                  </a>
+                  <div className="mt-3 text-[12.5px] leading-5 text-foreground/55">
+                    {download.kind} · latest release · free and open source
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -363,7 +421,13 @@ export default function Download() {
             <h2 className="sr-only">Quick start</h2>
             <div className="grid gap-px border-y border-border/45 bg-border/45 sm:grid-cols-3">
               {[
-                ["01", "Install", "Open the download and follow your operating system's install prompt."],
+                [
+                  "01",
+                  "Install",
+                  download.platform === "mac"
+                    ? "Copy the verified installer, paste it in Terminal, and OpenScience launches automatically."
+                    : "Open the download and follow your operating system's install prompt.",
+                ],
                 ["02", "Connect", "Sign in or choose your own model provider during onboarding."],
                 ["03", "Research", "Open a project and start your first research session."],
               ].map((step) => (
