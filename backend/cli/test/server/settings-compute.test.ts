@@ -165,9 +165,15 @@ test("SSH config discovery safely resolves bounded includes, identity files, and
   const config = path.join(tmp.path, "config")
   const identity = path.join(tmp.path, "lab-key")
   const included = path.join(tmp.path, "conf.d", "bastion.conf")
-  await fs.mkdir(path.dirname(included))
+  const matchedInclude = path.join(tmp.path, "match.d", "hidden.conf")
+  const matchMarker = path.join(tmp.path, "match-exec-ran")
+  const proxyMarker = path.join(tmp.path, "proxy-command-ran")
+  await Promise.all([fs.mkdir(path.dirname(included)), fs.mkdir(path.dirname(matchedInclude))])
   await fs.writeFile(identity, "test-private-key", { mode: 0o600 })
-  await Bun.write(included, ["Host bastion", "  HostName bastion.example.org", "  User jump", "  Port 2200"].join("\n"))
+  await Promise.all([
+    Bun.write(included, ["Host bastion", "  HostName bastion.example.org", "  User jump", "  Port 2200"].join("\n")),
+    Bun.write(matchedInclude, ["Host match-only", "  HostName hidden.example.org"].join("\n")),
+  ])
   await Bun.write(
     config,
     [
@@ -182,10 +188,10 @@ test("SSH config discovery safely resolves bounded includes, identity files, and
       "  User wildcard-user",
       "Host command-only",
       "  HostName hidden.internal",
-      "  ProxyCommand sh -c bad",
-      "Match host lab",
+      `  ProxyCommand sh -c \"touch ${proxyMarker}\"`,
+      `Match exec \"touch ${matchMarker}\"`,
       "  User should-not-override",
-      "  Include conf.d/*.conf",
+      "  Include match.d/*.conf",
       "Host tokenized",
       "  HostName %h.example.org",
       "  Port invalid",
@@ -212,6 +218,8 @@ test("SSH config discovery safely resolves bounded includes, identity files, and
     },
     { alias: "tokenized" },
   ])
+  expect(await Bun.file(matchMarker).exists()).toBe(false)
+  expect(await Bun.file(proxyMarker).exists()).toBe(false)
 })
 
 test("SSH config discovery fails closed when Include nesting exceeds its bound", async () => {

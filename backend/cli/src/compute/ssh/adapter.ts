@@ -1554,6 +1554,10 @@ finally:
     // command-line -o options. Put only non-executable authentication and
     // host-key policy in this broker-owned config so every jump is checked
     // against the same pinned file without evaluating the user's ssh_config.
+    // Do not replace the data-only importer with `ssh -G -F ~/.ssh/config`:
+    // OpenSSH evaluates `Match exec` while resolving effective configuration.
+    // The importer extracts the reviewed literal fields, and this generated
+    // file plus exact argv are the only configuration consumed at runtime.
     const config = [
       "Host *",
       "  BatchMode yes",
