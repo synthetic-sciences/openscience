@@ -76,6 +76,7 @@ describe("models and compute settings UI contract", () => {
     expect(models).toContain("`saved:${modelRouteValue(selected)}`")
     expect(models).toContain("· {provider()}")
     expect(models).toContain("delegation_worker_model: option.model ?? null")
+    expect(models).toContain("if (sameDelegationModel(previous.delegation_worker_model, option.model)) return")
     expect(models).toContain("publishCapabilityPreferences(saved)")
     expect(models).toContain("<Show when={catalogOpen()}>")
     expect(models).toContain("<SearchInput")

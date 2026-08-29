@@ -16,6 +16,14 @@ export type DelegationModel = {
   modelID: string
 }
 
+export function sameDelegationModel(
+  current: DelegationModel | null | undefined,
+  next: DelegationModel | null | undefined,
+) {
+  if (!current || !next) return !current && !next
+  return current.providerID === next.providerID && current.modelID === next.modelID
+}
+
 export type DelegationSettings = {
   level: DelegationLevel
   workerModel?: DelegationModel

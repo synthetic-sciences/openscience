@@ -25,7 +25,12 @@ import { ProviderLogo } from "./ProviderLogo"
 import { modelGroup, modelGroupLabel, modelGroupRank } from "../model-groups"
 import { FilterMenu, PanelBody, PanelHeader, PanelScroll, RowCopy, SearchInput, Section } from "./_shared"
 import { settingsApi } from "./api"
-import { type CapabilityPreferences, type DelegationModel, publishCapabilityPreferences } from "../prompt-capabilities"
+import {
+  type CapabilityPreferences,
+  type DelegationModel,
+  publishCapabilityPreferences,
+  sameDelegationModel,
+} from "../prompt-capabilities"
 import "./models.css"
 
 type AvailableModel = ReturnType<ReturnType<typeof useModels>["list"]>[number]
@@ -261,6 +266,9 @@ export default function Models() {
   const setWorkerModel = async (option: WorkerOption) => {
     const previous = preferences()
     if (!previous) return
+    // Kobalte may echo a controlled selection when unrelated Settings state
+    // refreshes. Only a logical model change is a persistence operation.
+    if (sameDelegationModel(previous.delegation_worker_model, option.model)) return
     const next = { ...previous, delegation_worker_model: option.model ?? null }
     preferenceActions.mutate(next)
     setError(undefined)
