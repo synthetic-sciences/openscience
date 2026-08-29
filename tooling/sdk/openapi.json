@@ -543,12 +543,89 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "funding_context": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "personal",
+                            "organization"
+                          ]
+                        },
+                        "organization_id": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "locked": {
+                          "type": "boolean"
+                        },
+                        "organizations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "organization_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "slug": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "membership_status": {
+                                "type": "string"
+                              },
+                              "seat_assigned": {
+                                "type": "boolean"
+                              },
+                              "funding_available": {
+                                "type": "boolean"
+                              },
+                              "effective_permissions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "organization_id",
+                              "name",
+                              "slug",
+                              "status",
+                              "role",
+                              "membership_status",
+                              "seat_assigned",
+                              "funding_available",
+                              "effective_permissions"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "available",
+                        "locked",
+                        "organizations"
+                      ]
                     }
                   },
                   "required": [
                     "session",
                     "balance_usd",
-                    "billing_mode"
+                    "billing_mode",
+                    "funding_context"
                   ]
                 }
               }
@@ -559,6 +636,243 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account/funding-context": {
+      "get": {
+        "operationId": "account.fundingContext.get",
+        "summary": "Get the local funding account selection",
+        "description": "List available Synthetic Sciences organizations and the Personal or organization context used by managed operations.",
+        "responses": {
+          "200": {
+            "description": "Funding context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "organization"
+                      ]
+                    },
+                    "organization_id": {
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "organizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "organization_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "membership_status": {
+                            "type": "string"
+                          },
+                          "seat_assigned": {
+                            "type": "boolean"
+                          },
+                          "funding_available": {
+                            "type": "boolean"
+                          },
+                          "effective_permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "organization_id",
+                          "name",
+                          "slug",
+                          "status",
+                          "role",
+                          "membership_status",
+                          "seat_assigned",
+                          "funding_available",
+                          "effective_permissions"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "available",
+                    "locked",
+                    "organizations"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.fundingContext.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "account.fundingContext.set",
+        "summary": "Choose the funding account for managed operations",
+        "responses": {
+          "200": {
+            "description": "Updated funding context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "organization"
+                      ]
+                    },
+                    "organization_id": {
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "organizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "organization_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "membership_status": {
+                            "type": "string"
+                          },
+                          "seat_assigned": {
+                            "type": "boolean"
+                          },
+                          "funding_available": {
+                            "type": "boolean"
+                          },
+                          "effective_permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "organization_id",
+                          "name",
+                          "slug",
+                          "status",
+                          "role",
+                          "membership_status",
+                          "seat_assigned",
+                          "funding_available",
+                          "effective_permissions"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "available",
+                    "locked",
+                    "organizations"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unavailable organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organization_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "organization_id"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.fundingContext.set({\n  ...\n})"
           }
         ]
       }
@@ -5739,6 +6053,74 @@
                       "purpose": {
                         "type": "string"
                       },
+                      "capability": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          },
+                          "version": {
+                            "type": "string",
+                            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                          },
+                          "manifest_sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "profile": {
+                            "type": "string",
+                            "enum": [
+                              "task",
+                              "smoke"
+                            ]
+                          },
+                          "runtime_digest": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version",
+                          "manifest_sha256",
+                          "profile",
+                          "runtime_digest"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "capability_execution": {
+                        "type": "object",
+                        "properties": {
+                          "network": {
+                            "type": "string",
+                            "const": "none"
+                          },
+                          "lock_digest": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "pip_requirements": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100000
+                          },
+                          "runtime_binary": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "runtime_root": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "network",
+                          "lock_digest",
+                          "pip_requirements"
+                        ],
+                        "additionalProperties": false
+                      },
                       "command": {
                         "type": "string"
                       },
@@ -7527,6 +7909,50 @@
                               "atlas_compute_id",
                               "atlas_run_id"
                             ]
+                          },
+                          "scientific_capability": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                              },
+                              "version": {
+                                "type": "string",
+                                "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                              },
+                              "manifest_sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "profile": {
+                                "type": "string",
+                                "enum": [
+                                  "task",
+                                  "smoke"
+                                ]
+                              },
+                              "runtime_digest": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "execution_network": {
+                                "type": "string",
+                                "const": "none"
+                              },
+                              "lock_digest": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version",
+                              "manifest_sha256",
+                              "profile",
+                              "runtime_digest"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -7911,6 +8337,26 @@
                               "type": "string"
                             }
                           },
+                          "package_lock": {
+                            "type": "object",
+                            "properties": {
+                              "digest": {
+                                "type": "string",
+                                "minLength": 64,
+                                "maxLength": 64
+                              },
+                              "requirements": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100000
+                              }
+                            },
+                            "required": [
+                              "digest",
+                              "requirements"
+                            ],
+                            "additionalProperties": false
+                          },
                           "secret_refs": {
                             "default": [],
                             "type": "array",
@@ -8176,6 +8622,74 @@
                     },
                     "purpose": {
                       "type": "string"
+                    },
+                    "capability": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                        },
+                        "manifest_sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "profile": {
+                          "type": "string",
+                          "enum": [
+                            "task",
+                            "smoke"
+                          ]
+                        },
+                        "runtime_digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version",
+                        "manifest_sha256",
+                        "profile",
+                        "runtime_digest"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "capability_execution": {
+                      "type": "object",
+                      "properties": {
+                        "network": {
+                          "type": "string",
+                          "const": "none"
+                        },
+                        "lock_digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "pip_requirements": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100000
+                        },
+                        "runtime_binary": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "runtime_root": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "network",
+                        "lock_digest",
+                        "pip_requirements"
+                      ],
+                      "additionalProperties": false
                     },
                     "command": {
                       "type": "string"
@@ -9965,6 +10479,50 @@
                             "atlas_compute_id",
                             "atlas_run_id"
                           ]
+                        },
+                        "scientific_capability": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                            },
+                            "manifest_sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "profile": {
+                              "type": "string",
+                              "enum": [
+                                "task",
+                                "smoke"
+                              ]
+                            },
+                            "runtime_digest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "execution_network": {
+                              "type": "string",
+                              "const": "none"
+                            },
+                            "lock_digest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "manifest_sha256",
+                            "profile",
+                            "runtime_digest"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -10348,6 +10906,26 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "package_lock": {
+                          "type": "object",
+                          "properties": {
+                            "digest": {
+                              "type": "string",
+                              "minLength": 64,
+                              "maxLength": 64
+                            },
+                            "requirements": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100000
+                            }
+                          },
+                          "required": [
+                            "digest",
+                            "requirements"
+                          ],
+                          "additionalProperties": false
                         },
                         "secret_refs": {
                           "default": [],
@@ -10773,6 +11351,74 @@
                   },
                   "default_uploads": {
                     "type": "boolean"
+                  },
+                  "capability": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                      },
+                      "version": {
+                        "type": "string",
+                        "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                      },
+                      "manifest_sha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "profile": {
+                        "type": "string",
+                        "enum": [
+                          "task",
+                          "smoke"
+                        ]
+                      },
+                      "runtime_digest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version",
+                      "manifest_sha256",
+                      "profile",
+                      "runtime_digest"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "capability_execution": {
+                    "type": "object",
+                    "properties": {
+                      "network": {
+                        "type": "string",
+                        "const": "none"
+                      },
+                      "lock_digest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "pip_requirements": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100000
+                      },
+                      "runtime_binary": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "runtime_root": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "network",
+                      "lock_digest",
+                      "pip_requirements"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -10867,6 +11513,15 @@
                         "checkpoint": {
                           "type": "string"
                         },
+                        "capability_runtime_digest": {
+                          "type": "string",
+                          "minLength": 64,
+                          "maxLength": 64
+                        },
+                        "network": {
+                          "type": "string",
+                          "const": "deny"
+                        },
                         "warning": {
                           "type": "string"
                         }
@@ -10911,6 +11566,26 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "package_lock": {
+                          "type": "object",
+                          "properties": {
+                            "digest": {
+                              "type": "string",
+                              "minLength": 64,
+                              "maxLength": 64
+                            },
+                            "requirements": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100000
+                            }
+                          },
+                          "required": [
+                            "digest",
+                            "requirements"
+                          ],
+                          "additionalProperties": false
                         },
                         "secret_refs": {
                           "type": "array",
@@ -11382,6 +12057,74 @@
                   },
                   "default_uploads": {
                     "type": "boolean"
+                  },
+                  "capability": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                      },
+                      "version": {
+                        "type": "string",
+                        "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                      },
+                      "manifest_sha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "profile": {
+                        "type": "string",
+                        "enum": [
+                          "task",
+                          "smoke"
+                        ]
+                      },
+                      "runtime_digest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version",
+                      "manifest_sha256",
+                      "profile",
+                      "runtime_digest"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "capability_execution": {
+                    "type": "object",
+                    "properties": {
+                      "network": {
+                        "type": "string",
+                        "const": "none"
+                      },
+                      "lock_digest": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "pip_requirements": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100000
+                      },
+                      "runtime_binary": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "runtime_root": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "network",
+                      "lock_digest",
+                      "pip_requirements"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -11586,6 +12329,74 @@
                     },
                     "purpose": {
                       "type": "string"
+                    },
+                    "capability": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                        },
+                        "manifest_sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "profile": {
+                          "type": "string",
+                          "enum": [
+                            "task",
+                            "smoke"
+                          ]
+                        },
+                        "runtime_digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version",
+                        "manifest_sha256",
+                        "profile",
+                        "runtime_digest"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "capability_execution": {
+                      "type": "object",
+                      "properties": {
+                        "network": {
+                          "type": "string",
+                          "const": "none"
+                        },
+                        "lock_digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "pip_requirements": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100000
+                        },
+                        "runtime_binary": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "runtime_root": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "network",
+                        "lock_digest",
+                        "pip_requirements"
+                      ],
+                      "additionalProperties": false
                     },
                     "command": {
                       "type": "string"
@@ -13375,6 +14186,50 @@
                             "atlas_compute_id",
                             "atlas_run_id"
                           ]
+                        },
+                        "scientific_capability": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                            },
+                            "manifest_sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "profile": {
+                              "type": "string",
+                              "enum": [
+                                "task",
+                                "smoke"
+                              ]
+                            },
+                            "runtime_digest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "execution_network": {
+                              "type": "string",
+                              "const": "none"
+                            },
+                            "lock_digest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "manifest_sha256",
+                            "profile",
+                            "runtime_digest"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -13758,6 +14613,26 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "package_lock": {
+                          "type": "object",
+                          "properties": {
+                            "digest": {
+                              "type": "string",
+                              "minLength": 64,
+                              "maxLength": 64
+                            },
+                            "requirements": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100000
+                            }
+                          },
+                          "required": [
+                            "digest",
+                            "requirements"
+                          ],
+                          "additionalProperties": false
                         },
                         "secret_refs": {
                           "default": [],
@@ -14054,6 +14929,74 @@
                     "purpose": {
                       "type": "string"
                     },
+                    "capability": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                        },
+                        "manifest_sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "profile": {
+                          "type": "string",
+                          "enum": [
+                            "task",
+                            "smoke"
+                          ]
+                        },
+                        "runtime_digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version",
+                        "manifest_sha256",
+                        "profile",
+                        "runtime_digest"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "capability_execution": {
+                      "type": "object",
+                      "properties": {
+                        "network": {
+                          "type": "string",
+                          "const": "none"
+                        },
+                        "lock_digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "pip_requirements": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100000
+                        },
+                        "runtime_binary": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "runtime_root": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "network",
+                        "lock_digest",
+                        "pip_requirements"
+                      ],
+                      "additionalProperties": false
+                    },
                     "command": {
                       "type": "string"
                     },
@@ -15842,6 +16785,50 @@
                             "atlas_compute_id",
                             "atlas_run_id"
                           ]
+                        },
+                        "scientific_capability": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                            },
+                            "manifest_sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "profile": {
+                              "type": "string",
+                              "enum": [
+                                "task",
+                                "smoke"
+                              ]
+                            },
+                            "runtime_digest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "execution_network": {
+                              "type": "string",
+                              "const": "none"
+                            },
+                            "lock_digest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "manifest_sha256",
+                            "profile",
+                            "runtime_digest"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -16225,6 +17212,26 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "package_lock": {
+                          "type": "object",
+                          "properties": {
+                            "digest": {
+                              "type": "string",
+                              "minLength": 64,
+                              "maxLength": 64
+                            },
+                            "requirements": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100000
+                            }
+                          },
+                          "required": [
+                            "digest",
+                            "requirements"
+                          ],
+                          "additionalProperties": false
                         },
                         "secret_refs": {
                           "default": [],
@@ -16521,6 +17528,74 @@
                     "purpose": {
                       "type": "string"
                     },
+                    "capability": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                        },
+                        "manifest_sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "profile": {
+                          "type": "string",
+                          "enum": [
+                            "task",
+                            "smoke"
+                          ]
+                        },
+                        "runtime_digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version",
+                        "manifest_sha256",
+                        "profile",
+                        "runtime_digest"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "capability_execution": {
+                      "type": "object",
+                      "properties": {
+                        "network": {
+                          "type": "string",
+                          "const": "none"
+                        },
+                        "lock_digest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "pip_requirements": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100000
+                        },
+                        "runtime_binary": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "runtime_root": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "network",
+                        "lock_digest",
+                        "pip_requirements"
+                      ],
+                      "additionalProperties": false
+                    },
                     "command": {
                       "type": "string"
                     },
@@ -18309,6 +19384,50 @@
                             "atlas_compute_id",
                             "atlas_run_id"
                           ]
+                        },
+                        "scientific_capability": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                            },
+                            "manifest_sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "profile": {
+                              "type": "string",
+                              "enum": [
+                                "task",
+                                "smoke"
+                              ]
+                            },
+                            "runtime_digest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "execution_network": {
+                              "type": "string",
+                              "const": "none"
+                            },
+                            "lock_digest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "manifest_sha256",
+                            "profile",
+                            "runtime_digest"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -18692,6 +19811,26 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "package_lock": {
+                          "type": "object",
+                          "properties": {
+                            "digest": {
+                              "type": "string",
+                              "minLength": 64,
+                              "maxLength": 64
+                            },
+                            "requirements": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100000
+                            }
+                          },
+                          "required": [
+                            "digest",
+                            "requirements"
+                          ],
+                          "additionalProperties": false
                         },
                         "secret_refs": {
                           "default": [],
@@ -19845,6 +20984,9 @@
                     "managedSupported": {
                       "type": "boolean"
                     },
+                    "managedUnlocked": {
+                      "type": "boolean"
+                    },
                     "aceEnabled": {
                       "type": "boolean"
                     },
@@ -19894,6 +21036,7 @@
                     "balanceUsd",
                     "billingMode",
                     "managedSupported",
+                    "managedUnlocked",
                     "aceEnabled",
                     "lifetimeSpentUsd",
                     "transactions"
@@ -20013,6 +21156,24 @@
                     "releaseNotes",
                     "installed",
                     "restartRequired"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The current installation cannot be updated automatically",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
                   ]
                 }
               }
@@ -20523,6 +21684,802 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.researchTools.telemetry.delete({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/scientific-tools": {
+      "get": {
+        "operationId": "settings.scientificTools",
+        "summary": "Get scientific capability and connector catalogs",
+        "description": "Returns truthful manifest maturity, backend availability, release evidence, and reviewed connector setup records.",
+        "responses": {
+          "200": {
+            "description": "Scientific tools catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schema_version": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "schema_version": {
+                            "type": "number",
+                            "const": 2
+                          },
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+                          },
+                          "version": {
+                            "type": "string",
+                            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                          },
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "analysis",
+                              "visualization",
+                              "bioinformatics",
+                              "cheminformatics",
+                              "structure",
+                              "docking",
+                              "protein_design",
+                              "genomics",
+                              "molecular_modeling",
+                              "quantum",
+                              "mass_spectrometry",
+                              "chromatography",
+                              "synthesis",
+                              "document"
+                            ]
+                          },
+                          "summary": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 600
+                          },
+                          "maturity": {
+                            "type": "string",
+                            "enum": [
+                              "verified",
+                              "experimental",
+                              "blocked"
+                            ]
+                          },
+                          "availability": {
+                            "type": "object",
+                            "properties": {
+                              "local": {
+                                "type": "string",
+                                "enum": [
+                                  "ready",
+                                  "configured",
+                                  "setup_needed",
+                                  "degraded",
+                                  "unavailable",
+                                  "not_applicable"
+                                ]
+                              },
+                              "hosted": {
+                                "type": "string",
+                                "enum": [
+                                  "ready",
+                                  "configured",
+                                  "setup_needed",
+                                  "degraded",
+                                  "unavailable",
+                                  "not_applicable"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "local",
+                              "hosted"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "basis": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1500
+                          },
+                          "source": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "pypi",
+                                  "conda",
+                                  "github",
+                                  "system",
+                                  "nvidia_nim"
+                                ]
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "reference": {
+                                "type": "string",
+                                "format": "uri"
+                              },
+                              "license": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "name",
+                              "version",
+                              "reference"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "runtime": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "python_pack"
+                              },
+                              "pack_id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120
+                              },
+                              "python": {
+                                "type": "string",
+                                "pattern": "^\\d+\\.\\d+\\.\\d+$"
+                              },
+                              "targets": {
+                                "minItems": 1,
+                                "maxItems": 2,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "local",
+                                    "modal"
+                                  ]
+                                }
+                              },
+                              "local_platforms": {
+                                "maxItems": 5,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "darwin-arm64",
+                                    "darwin-x64",
+                                    "linux-arm64",
+                                    "linux-x64",
+                                    "windows-x64"
+                                  ]
+                                }
+                              },
+                              "local_locks": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "image": {
+                                "type": "string",
+                                "pattern": "^[^\\s@]+@sha256:[a-f0-9]{64}$"
+                              },
+                              "lock_digest": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "packages": {
+                                "minItems": 1,
+                                "maxItems": 100,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9_.-]+==[^=<>!~\\s]+$"
+                                }
+                              },
+                              "pip_requirements": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100000
+                              },
+                              "resources": {
+                                "type": "object",
+                                "properties": {
+                                  "cpus": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 16
+                                  },
+                                  "memory_gb": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 64
+                                  },
+                                  "time_minutes": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 120
+                                  },
+                                  "gpu": {
+                                    "type": "string",
+                                    "const": "none"
+                                  }
+                                },
+                                "required": [
+                                  "cpus",
+                                  "memory_gb",
+                                  "time_minutes",
+                                  "gpu"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "network": {
+                                "type": "object",
+                                "properties": {
+                                  "build": {
+                                    "type": "string",
+                                    "const": "package_index_only"
+                                  },
+                                  "execution": {
+                                    "type": "string",
+                                    "const": "none"
+                                  }
+                                },
+                                "required": [
+                                  "build",
+                                  "execution"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "pack_id",
+                              "python",
+                              "targets",
+                              "local_platforms",
+                              "local_locks",
+                              "image",
+                              "lock_digest",
+                              "packages",
+                              "pip_requirements",
+                              "resources",
+                              "network"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "smoke": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120
+                              },
+                              "script_digest": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "language": {
+                                "type": "string",
+                                "const": "python"
+                              },
+                              "result_path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "artifacts": {
+                                "minItems": 1,
+                                "maxItems": 8,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                }
+                              },
+                              "max_artifact_bytes": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0,
+                                "maximum": 1048576
+                              },
+                              "timeout_seconds": {
+                                "type": "integer",
+                                "minimum": 5,
+                                "maximum": 600
+                              },
+                              "summary": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 240
+                              },
+                              "invariants": {
+                                "minItems": 1,
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "script_digest",
+                              "language",
+                              "result_path",
+                              "artifacts",
+                              "max_artifact_bytes",
+                              "timeout_seconds",
+                              "summary",
+                              "invariants"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "hosted": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "nvidia_nim"
+                              },
+                              "adapter_id": {
+                                "type": "string",
+                                "enum": [
+                                  "boltz2",
+                                  "diffdock",
+                                  "evo2",
+                                  "genmol",
+                                  "molmim",
+                                  "msa-search",
+                                  "openfold2",
+                                  "openfold3",
+                                  "proteinmpnn",
+                                  "rfdiffusion"
+                                ]
+                              },
+                              "credential": {
+                                "type": "string",
+                                "const": "nvidia_nim"
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              },
+                              "terms_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "adapter_id",
+                              "credential",
+                              "docs_url",
+                              "terms_url"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "setup": {
+                            "type": "object",
+                            "properties": {
+                              "instructions": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000
+                              },
+                              "requirements": {
+                                "default": [],
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 300
+                                }
+                              }
+                            },
+                            "required": [
+                              "instructions"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "blocker": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1500
+                          },
+                          "current_availability": {
+                            "type": "object",
+                            "properties": {
+                              "local": {
+                                "type": "string",
+                                "enum": [
+                                  "ready",
+                                  "configured",
+                                  "setup_needed",
+                                  "degraded",
+                                  "unavailable",
+                                  "not_applicable"
+                                ]
+                              },
+                              "hosted": {
+                                "type": "string",
+                                "enum": [
+                                  "ready",
+                                  "configured",
+                                  "setup_needed",
+                                  "degraded",
+                                  "unavailable",
+                                  "not_applicable"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "local",
+                              "hosted"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "schema_version",
+                          "id",
+                          "version",
+                          "name",
+                          "category",
+                          "summary",
+                          "maturity",
+                          "availability",
+                          "basis",
+                          "source",
+                          "current_availability"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "schema_version": {
+                            "type": "number",
+                            "const": 1
+                          },
+                          "capability": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "string"
+                              },
+                              "manifest_sha256": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "profile": {
+                                "type": "string",
+                                "const": "smoke"
+                              },
+                              "runtime_digest": {
+                                "type": "string",
+                                "pattern": "^[a-f0-9]{64}$"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version",
+                              "manifest_sha256",
+                              "profile",
+                              "runtime_digest"
+                            ]
+                          },
+                          "target": {
+                            "type": "string",
+                            "enum": [
+                              "local",
+                              "modal"
+                            ]
+                          },
+                          "job_id": {
+                            "type": "string"
+                          },
+                          "app_version": {
+                            "type": "string"
+                          },
+                          "release_sha": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{40}$"
+                          },
+                          "verified_at": {
+                            "type": "string"
+                          },
+                          "metrics": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            }
+                          },
+                          "artifacts": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "size": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "sha256": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "size",
+                                "sha256"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "schema_version",
+                          "capability",
+                          "target",
+                          "job_id",
+                          "app_version",
+                          "verified_at",
+                          "metrics",
+                          "artifacts"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "connectors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "schema_version": {
+                            "type": "number",
+                            "const": 1
+                          },
+                          "id": {
+                            "type": "string",
+                            "enum": [
+                              "github",
+                              "benchling",
+                              "box",
+                              "dropbox",
+                              "s3"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "official_setup",
+                              "manual_review",
+                              "unavailable"
+                            ]
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "source_url": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "reviewed_at": {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "read_operations": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "upstream_write_operations": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "writes_enabled_by_catalog": {
+                            "type": "boolean",
+                            "const": false
+                          },
+                          "safety": {
+                            "type": "string"
+                          },
+                          "requirements": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "setup": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "remote"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string",
+                                "format": "uri"
+                              },
+                              "oauth": {
+                                "type": "string",
+                                "enum": [
+                                  "auto",
+                                  "client"
+                                ]
+                              },
+                              "scope": {
+                                "type": "string"
+                              },
+                              "confidential_client": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "name",
+                              "url",
+                              "oauth"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "revision": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          }
+                        },
+                        "required": [
+                          "schema_version",
+                          "id",
+                          "name",
+                          "provider",
+                          "status",
+                          "summary",
+                          "source_url",
+                          "reviewed_at",
+                          "read_operations",
+                          "upstream_write_operations",
+                          "writes_enabled_by_catalog",
+                          "safety",
+                          "requirements",
+                          "revision"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "counts": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "packaged": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "hosted": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "verified": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "experimental": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "blocked": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "total",
+                        "packaged",
+                        "hosted",
+                        "verified",
+                        "experimental",
+                        "blocked"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "schema_version",
+                    "capabilities",
+                    "evidence",
+                    "connectors",
+                    "counts"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.scientificTools({\n  ...\n})"
           }
         ]
       }

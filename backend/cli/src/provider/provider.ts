@@ -14,7 +14,7 @@ import { Instance } from "../project/instance"
 import { ProjectTrust } from "../project/trust"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
-import { OpenScience } from "../openscience"
+import { OpenScience, type FundingSnapshot } from "../openscience"
 import { isAtlasProxyURL, managedOpenRouterBaseURL } from "../openscience/synced-env-policy"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ProviderTokenCommand } from "./token-command"
@@ -54,9 +54,11 @@ export namespace Provider {
     sessionID: string
     messageID: string
     attempt: number
+    /** Immutable account/funding choice for this provider operation. */
+    funding?: FundingSnapshot
   }
 
-  export type RequestTiming = RequestContext & {
+  export type RequestTiming = Pick<RequestContext, "sessionID" | "messageID" | "attempt"> & {
     requestID: string
     providerID: string
     modelID: string
@@ -238,7 +240,9 @@ export namespace Provider {
     }
     const signal = signals.length === 1 ? signals[0]! : AbortSignal.any(signals)
     const timing: Omit<RequestTiming, "completedAt" | "outcome"> = {
-      ...context,
+      sessionID: context.sessionID,
+      messageID: context.messageID,
+      attempt: context.attempt,
       requestID: crypto.randomUUID(),
       providerID: options.providerID,
       modelID: options.modelID,
@@ -450,6 +454,52 @@ export namespace Provider {
 
   export function isAtlasProxyBaseURL(baseURL: unknown): baseURL is string {
     return isAtlasProxyURL(baseURL)
+  }
+
+  /** Enforce the organization-attribution boundary at the last hop before a
+   * provider request. Non-managed routes have the header removed even if a
+   * plugin or custom provider option supplied it; an Atlas proxy request must
+   * carry the same account key captured by its operation snapshot. */
+  export function requestFundingHeaders(input: {
+    baseURL: unknown
+    apiKey: unknown
+    headers?: HeadersInit
+    funding?: FundingSnapshot
+  }): Headers {
+    const headers = new Headers(input.headers)
+    headers.delete("X-Organization-ID")
+    headers.delete("OpenScience-Funding-Protocol")
+    if (!isAtlasProxyBaseURL(input.baseURL) || !Auth.isAtlasApiKey(input.apiKey)) return headers
+    if (!input.funding) throw new Error("Managed inference has no funding-account snapshot. Retry the operation.")
+    if (input.funding.api_key !== input.apiKey) {
+      throw new Error("The connected account changed during managed inference. Retry the operation.")
+    }
+    for (const [key, value] of Object.entries(OpenScience.fundingHeaders(input.funding))) headers.set(key, value)
+    return headers
+  }
+
+  /** Stable only for the exact managed provider operation and serialized body.
+   * Atlas scopes it again to the authenticated user and selected Wallet. */
+  export function managedIdempotencyKey(input: {
+    endpoint: string
+    body: string
+    sessionID: string
+    messageID: string
+    operation: string
+  }) {
+    const hash = new Bun.CryptoHasher("sha256")
+    for (const value of [
+      "openscience-managed-v1",
+      input.sessionID,
+      input.messageID,
+      input.operation,
+      input.endpoint,
+      input.body,
+    ]) {
+      hash.update(value)
+      hash.update("\0")
+    }
+    return `os_${hash.digest("hex")}`
   }
 
   const PUBLIC_PROVIDER_BASE_URLS: Record<string, string> = {
@@ -2295,12 +2345,41 @@ export namespace Provider {
           opts.headers = headers
         }
 
-        return fetchWithIdleWatchdog(fetchFn, input, opts, {
+        const apiKey = typeof options["apiKey"] === "string" ? options["apiKey"] : undefined
+        const managed = isAtlasProxyBaseURL(options["baseURL"]) && Auth.isAtlasApiKey(apiKey)
+        const funding = managed
+          ? await OpenScience.managedRequestSnapshot(apiKey, requestContext.getStore()?.funding)
+          : undefined
+        opts.headers = requestFundingHeaders({
+          baseURL: options["baseURL"],
+          apiKey,
+          headers: opts.headers as HeadersInit | undefined,
+          funding,
+        })
+        const context = requestContext.getStore()
+        const sessionID = context?.sessionID ?? opts.headers.get("x-openscience-session")
+        const messageID = context?.messageID ?? opts.headers.get("x-openscience-request")
+        if (managed && sessionID && messageID && typeof opts.body === "string") {
+          const endpoint = input instanceof Request ? input.url : input instanceof URL ? input.href : String(input)
+          opts.headers.set(
+            "Idempotency-Key",
+            managedIdempotencyKey({
+              endpoint,
+              body: opts.body,
+              sessionID,
+              messageID,
+              operation: "model",
+            }),
+          )
+        }
+
+        const response = await fetchWithIdleWatchdog(fetchFn, input, opts, {
           providerID: model.providerID,
           modelID: model.id,
           idleTimeout,
           totalTimeout: options["timeout"],
         })
+        return funding ? OpenScience.validateFundingResponse(response, funding) : response
       }
 
       // Special case: google-vertex-anthropic uses a subpath import

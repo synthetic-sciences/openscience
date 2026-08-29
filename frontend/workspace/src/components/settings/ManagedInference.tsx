@@ -64,6 +64,14 @@ export async function commitBilling<T>(write: () => Promise<{ data?: T }>, apply
   return true
 }
 
+export async function refreshAccount(
+  wallet: () => Promise<unknown>,
+  billing: () => Promise<unknown>,
+  providers: () => Promise<unknown>,
+): Promise<void> {
+  await Promise.all([wallet(), billing(), providers()])
+}
+
 export function ManagedInference(props: { onError?: (error: string | undefined) => void }) {
   const sdk = useGlobalSDK()
   const globalSync = useGlobalSync()
@@ -97,6 +105,21 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     props.onError?.(undefined)
     void Promise.all([loadWallet(), loadBilling()])
   }
+  const sync = (context: string) => {
+    setRefreshing(true)
+    return globalSync
+      .refreshProviders()
+      .catch((error) =>
+        props.onError?.(
+          `${context}, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
+        ),
+      )
+      .finally(() => setRefreshing(false))
+  }
+  const account = () => {
+    props.onError?.(undefined)
+    void refreshAccount(loadWallet, loadBilling, () => sync("The funding account changed"))
+  }
   const update = (value: Mode) => {
     if (busy()) return
     const previous = mode()
@@ -122,15 +145,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
         // reload. This fetch can be several megabytes and must not make the
         // already-saved setting feel stuck.
         setBusy(false)
-        setRefreshing(true)
-        void globalSync
-          .refreshProviders()
-          .catch((error) =>
-            props.onError?.(
-              `Model access was saved, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
-            ),
-          )
-          .finally(() => setRefreshing(false))
+        void sync("Model access was saved")
       })
       .catch((error) => {
         setMode(previous)
@@ -150,6 +165,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   onMount(() => {
     refresh()
     window.addEventListener("focus", refresh)
+    window.addEventListener("openscience:account-changed", account)
     const visibility = () => {
       if (document.visibilityState === "visible") void loadWallet()
     }
@@ -164,6 +180,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   })
   onCleanup(() => {
     window.removeEventListener("focus", refresh)
+    window.removeEventListener("openscience:account-changed", account)
     unsubscribe()
   })
 

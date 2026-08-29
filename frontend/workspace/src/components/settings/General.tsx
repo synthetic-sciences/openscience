@@ -22,6 +22,18 @@ type Account = {
   user?: Record<string, unknown> & { email?: string }
   balance_usd?: number | null
   billing_mode?: { mode: "byok" | "managed" } | null
+  funding_context?: {
+    type: "personal" | "organization"
+    organization_id?: string
+    available: boolean
+    locked: boolean
+    organizations: Array<{
+      organization_id: string
+      name: string
+      status: string
+      membership_status: string
+    }>
+  }
 }
 
 export default function General() {
@@ -32,6 +44,7 @@ export default function General() {
   const [account, setAccount] = createSignal<Account | undefined>()
   const [error, setError] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
+  const [fundingBusy, setFundingBusy] = createSignal(false)
   const [showAdvanced, setShowAdvanced] = createSignal(false)
 
   const loadAccount = async () => {
@@ -83,9 +96,37 @@ export default function General() {
     if (!current.session) return "No Synthetic Sciences account is connected to this device."
     return "Connected to Synthetic Sciences on this device."
   }
-  const org = () => {
-    const u = account()?.user ?? {}
-    return (u.organization ?? u.org ?? u.team ?? u.organization_name) as string | undefined
+  const fundingLabel = () => {
+    const context = account()?.funding_context
+    if (context?.type !== "organization" || !context.organization_id) return "Personal"
+    return (
+      context.organizations.find((organization) => organization.organization_id === context.organization_id)?.name ??
+      "Unavailable team"
+    )
+  }
+  const switchWorkspace = async () => {
+    if (fundingBusy()) return
+    setFundingBusy(true)
+    setError(undefined)
+    try {
+      const response = await sdk.client.account.loginBrowser()
+      if (!response.data?.ok) {
+        throw new Error(typeof response.data?.error === "string" ? response.data.error : "Sign in did not complete")
+      }
+      window.dispatchEvent(new Event("openscience:account-changed"))
+      await loadAccount()
+      showToast({
+        variant: "success",
+        title: "Workspace switched",
+        description: `OpenScience is now connected to ${fundingLabel()}.`,
+      })
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause)
+      setError(detail)
+      showToast({ variant: "error", title: "Workspace unchanged", description: detail })
+    } finally {
+      setFundingBusy(false)
+    }
   }
 
   return (
@@ -111,10 +152,34 @@ export default function General() {
               <Row icon="star" title="Wallet">
                 <span class="settings-account-value">{wallet()}</span>
               </Row>
-              <Show when={org()}>
-                <Row icon="home" title="Organization">
-                  <span class="settings-account-value">{org()}</span>
+              <Show when={account()?.session === true}>
+                <Row
+                  icon="home"
+                  title="Workspace"
+                  description="Switching opens Synthetic Sciences so you can approve Personal or one of your teams."
+                >
+                  <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
+                    <span class="settings-account-value">{fundingLabel()}</span>
+                    <Button
+                      size="small"
+                      variant="secondary"
+                      disabled={fundingBusy()}
+                      onClick={() => void switchWorkspace()}
+                    >
+                      {fundingBusy() ? "Waiting for approval…" : "Switch workspace"}
+                    </Button>
+                  </div>
                 </Row>
+                <Show when={fundingBusy()}>
+                  <div class="px-4 py-3 text-12-regular text-text-weak" role="status" aria-live="polite">
+                    Continue in your browser. Your current workspace stays active until approval completes.
+                  </div>
+                </Show>
+                <Show when={account()?.funding_context?.available === false}>
+                  <div class="px-4 py-3 text-12-regular text-text-weak" role="status">
+                    This workspace is no longer available. Switch workspaces to choose Personal or another team.
+                  </div>
+                </Show>
               </Show>
               <Row icon="bolt" title="Wallet and billing" description="Manage Ace, payment methods, and receipts.">
                 <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>

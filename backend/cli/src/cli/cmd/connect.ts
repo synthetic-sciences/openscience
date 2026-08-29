@@ -33,7 +33,7 @@ async function syncAndReport() {
   )
 }
 
-/** Validate + persist a pasted/CI-supplied thk_ key. */
+/** Validate and persist a pasted or CI-supplied OpenScience API key. */
 async function finishWithKey(key: string): Promise<boolean> {
   const spinner = prompts.spinner()
   spinner.start("Validating key...")
@@ -73,19 +73,19 @@ async function tryBrowserLogin(): Promise<boolean> {
 }
 
 /** Headless fallback: point the user at the dashboard, then accept a
- *  pasted thk_ key. */
+ *  pasted OpenScience API key. */
 async function manualKeyLogin(): Promise<boolean> {
   prompts.log.info("Finish login from any device with a browser:")
   prompts.log.message(
-    `1. Open ${OpenScience.authPageUrl()} and sign in\n` + `2. Create a CLI API key (starts with thk_) and copy it`,
+    `1. Open ${OpenScience.authPageUrl()} and sign in\n` + `2. Create an OpenScience API key and copy it`,
   )
 
   if (!process.stdin.isTTY) {
-    prompts.log.error("No interactive terminal. Re-run with `--key thk_...` or set SYNSC_CLI_KEY.")
+    prompts.log.error("No interactive terminal. Re-run with `--key ...` or set SYNSC_CLI_KEY.")
     return false
   }
 
-  const pasted = await prompts.password({ message: "Paste your thk_ API key" })
+  const pasted = await prompts.password({ message: "Paste your OpenScience API key" })
   if (prompts.isCancel(pasted)) {
     prompts.cancel("Cancelled")
     return false
@@ -127,7 +127,7 @@ export const LoginCommand = cmd({
     yargs
       .option("key", {
         type: "string",
-        describe: "paste a thk_ API key directly (for headless / CI machines)",
+        describe: "paste an OpenScience API key directly (for headless / CI machines)",
       })
       .option("browser", {
         type: "boolean",

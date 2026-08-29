@@ -4,6 +4,8 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { OpenScience } from "../../src/openscience"
 import { SessionResearch } from "../../src/session/research"
 
+const funding = Object.freeze({ api_key: "thk_test", user_id: "user_test", account: "personal" })
+
 describe("session processor snapshot routing", () => {
   test("tracks only when the model can execute an advertised tool", () => {
     expect(SessionProcessor.tracks({ tools: {}, toolcall: true })).toBe(false)
@@ -36,7 +38,7 @@ describe("session processor snapshot routing", () => {
     try {
       await expect(
         SessionProcessor.withManagedCallAuthorization(
-          { credentialSource: "managed", sessionID: "session-null-balance" },
+          { credentialSource: "managed", sessionID: "session-null-balance", funding },
           () => {
             providerDispatches++
             return "provider-dispatched"
@@ -61,7 +63,7 @@ describe("session processor snapshot routing", () => {
     try {
       await expect(
         SessionProcessor.withManagedCallAuthorization(
-          { credentialSource: "managed", sessionID: "session-zero-balance" },
+          { credentialSource: "managed", sessionID: "session-zero-balance", funding },
           () => {
             providerDispatches++
             return "provider-dispatched"
@@ -83,7 +85,7 @@ describe("session processor snapshot routing", () => {
     try {
       expect(
         await SessionProcessor.withManagedCallAuthorization(
-          { credentialSource: "managed", sessionID: "session-funded-balance" },
+          { credentialSource: "managed", sessionID: "session-funded-balance", funding },
           () => {
             providerDispatches++
             return "provider-dispatched"

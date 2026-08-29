@@ -27,6 +27,7 @@ import { ProjectAccess } from "@/project/access"
 import { resolveCredentialSource, telemetryRoute } from "@/session/billing-gate"
 import { randomUUID } from "node:crypto"
 import { Flag } from "@/flag/flag"
+import { OpenScience } from "@/openscience"
 
 export namespace Agent {
   export const Info = z
@@ -573,6 +574,12 @@ export namespace Agent {
 
     try {
       const defaultModel = selected
+      const funding = route === "managed" ? await OpenScience.getFundingSnapshot() : undefined
+      if (route === "managed" && !funding) {
+        throw new Error(
+          "Managed agent generation could not snapshot the connected funding account. Retry after signing in.",
+        )
+      }
       const language = await Provider.getLanguage(model)
 
       const system = [PROMPT_GENERATE]
@@ -637,7 +644,7 @@ export namespace Agent {
         },
       }).catch(() => false)
       requestStarted = true
-      const requestContext = { sessionID, messageID, attempt: 1 }
+      const requestContext = { sessionID, messageID, attempt: 1, ...(funding ? { funding } : {}) }
 
       if (oauthStream) {
         const result = Provider.withRequestContext(requestContext, () =>

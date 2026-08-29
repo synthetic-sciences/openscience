@@ -22,16 +22,24 @@ const context = {
 const restores: Array<{ mockRestore(): void }> = []
 const sessionPath = path.join(Global.Path.data, "openscience-session.json")
 
-function managedAce() {
+function managedAce(ace = true) {
+  const snapshot = Object.freeze({
+    api_key: "thk_search.secret",
+    user_id: "user-search",
+    account: "user-search",
+    organization_id: "org_search",
+  })
+  const funding = spyOn(OpenScience, "getFundingSnapshot").mockResolvedValue(snapshot)
   const billing = spyOn(OpenScience, "getBillingMode").mockResolvedValue({
     mode: "managed",
     balance_cents: 2_000,
-    ace_enabled: true,
+    ace_enabled: ace,
     managed_supported: true,
     managed_unlocked: true,
     balance_usd: 20,
   })
-  restores.push(billing)
+  restores.push(funding, billing)
+  return { snapshot, billing }
 }
 
 afterEach(async () => {
@@ -41,7 +49,7 @@ afterEach(async () => {
 
 describe("research_search", () => {
   test("does not start a second provider when managed settlement is unknown", async () => {
-    managedAce()
+    const { snapshot } = managedAce()
     const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue(null)
     restores.push(dispatch)
     const fetcher = spyOn(globalThis, "fetch").mockImplementation(
@@ -67,6 +75,31 @@ describe("research_search", () => {
       operationId: "call_search",
     })
     expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(dispatch.mock.calls[0]?.[3]).toBe(snapshot)
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  test("uses the exact organization snapshot for a funded Wallet when Ace reload is off", async () => {
+    const { snapshot, billing } = managedAce(false)
+    const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue(null)
+    restores.push(dispatch)
+    const fetcher = spyOn(globalThis, "fetch").mockImplementation(
+      (async () =>
+        new Response(
+          'data: {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"community fallback"}]}}\n\n',
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        )) as unknown as typeof fetch,
+    )
+    restores.push(fetcher)
+
+    const tool = await ResearchSearchTool.init({ model: { providerID: "openai", modelID: "gpt-test" } })
+    const result = await tool.execute(tool.parameters.parse({ query: "funded organization search" }), context)
+
+    expect(JSON.parse(result.output)).toMatchObject({ type: "search_unavailable", operation_id: "call_search" })
+    expect(Object.isFrozen(snapshot)).toBe(true)
+    expect(billing.mock.calls[0]?.[0]).toBe(snapshot)
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(dispatch.mock.calls[0]?.[3]).toBe(snapshot)
     expect(fetcher).not.toHaveBeenCalled()
   })
 

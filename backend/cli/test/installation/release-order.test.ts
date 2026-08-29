@@ -92,6 +92,8 @@ test("production publish requires a complete exact-source npm rehearsal before r
   expect(gate).not.toContain("continue-on-error")
 
   expect(npmPreflight).toContain("- npm-test-gate")
+  expect(npmPreflight).toContain("Require release tag token")
+  expect(npmPreflight).toContain("RELEASE_GITHUB_TOKEN must have repo and workflow scopes")
   expect(signingPreflight).toContain("- npm-test-gate")
   expect(version).toContain("- npm-test-gate")
   expect(version).toContain("ARTIFACT_SOURCE: ${{ steps.version.outputs.artifact_source }}")
@@ -242,6 +244,9 @@ test("production release keeps signed publishing as the default and falls back t
   expect(desktop).toContain("OpenScience-mac-x64.dmg OpenScience-mac-x64.zip")
   expect(prepare).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
   expect(publish).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
+  expect(publish).toContain("token: ${{ secrets.RELEASE_GITHUB_TOKEN }}")
+  expect(publish).toContain("GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}")
+  expect(publish).not.toContain("GITHUB_TOKEN: ${{ github.token }}")
   expect(publish).toContain("!cancelled() &&")
   expect(publish).toContain("needs.build-desktop.result == 'success'")
   expect(publish).not.toContain("inputs.release_mode == 'unsigned' || needs.build-desktop.result == 'success'")
@@ -342,7 +347,24 @@ test("desktop packaging explicitly separates signed and unsigned installers", as
   expect(config).toContain("forceCodeSigning: signed")
   expect(config).toContain("hardenedRuntime: true")
   expect(config).toContain("notarize: signed && process.env.APPLE_ID ? true : false")
+  expect(config).toContain("dmg: { sign: signed }")
   expect(config).toContain("signExecutable: signed")
+
+  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
+  const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
+  const image = desktop.slice(
+    desktop.indexOf("Notarize and staple signed macOS disk image"),
+    desktop.indexOf("Build unsigned desktop installer"),
+  )
+  expect(image).toContain("matrix.signing == 'mac'")
+  expect(image).toContain('codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"')
+  expect(image).toContain('xcrun notarytool submit "$OPENSCIENCE_DMG"')
+  expect(image).toContain('xcrun stapler staple "$OPENSCIENCE_DMG"')
+  expect(image).toContain('xcrun stapler validate "$OPENSCIENCE_DMG"')
+  expect(image).toContain("spctl -a -t open --context context:primary-signature")
+  expect(desktop.indexOf("Notarize and staple signed macOS disk image")).toBeLessThan(
+    desktop.indexOf("Verify or upload immutable desktop artifacts"),
+  )
 })
 
 test("production mac updater archives preserve the exact OpenScience.app bundle name", async () => {

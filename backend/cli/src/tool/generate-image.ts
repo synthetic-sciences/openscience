@@ -379,8 +379,9 @@ export const GenerateImageTool = Tool.define("generate_image", {
         "OpenScience refused to send your connected OpenRouter key to the managed wallet proxy. Reconnect OpenRouter and retry.",
       )
     }
+    const funding = managed ? await OpenScience.managedRequestSnapshot(key) : undefined
     if (managed) {
-      const balance = await OpenScience.getBalance().catch(() => null)
+      const balance = await OpenScience.getBalance(funding).catch(() => null)
       if (balance !== null && balance <= 0) {
         OpenScience.invalidateBalance()
         throw new Error(
@@ -413,14 +414,26 @@ export const GenerateImageTool = Tool.define("generate_image", {
       "Content-Type": "application/json",
       "HTTP-Referer": "https://syntheticsciences.ai",
       "X-Title": "OpenScience",
+      ...(funding ? OpenScience.fundingHeaders(funding) : {}),
     }
     const request = async (endpoint: string, payload: Record<string, unknown>) => {
+      const text = JSON.stringify(payload)
+      const idempotency = managed
+        ? Provider.managedIdempotencyKey({
+            endpoint: `${base}/${endpoint}`,
+            body: text,
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            operation: "generate-image",
+          })
+        : undefined
       const response = await fetch(`${base}/${endpoint}`, {
         method: "POST",
         signal: AbortSignal.any([ctx.abort, AbortSignal.timeout(120_000)]),
-        headers,
-        body: JSON.stringify(payload),
+        headers: { ...headers, ...(idempotency ? { "Idempotency-Key": idempotency } : {}) },
+        body: text,
       })
+      if (funding) await OpenScience.validateFundingResponse(response, funding)
       const raw = (
         await readBoundedImageResponse(response, response.ok ? MAX_IMAGE_RESPONSE_BYTES : MAX_IMAGE_ERROR_BYTES)
       ).toString("utf8")
@@ -470,6 +483,7 @@ export const GenerateImageTool = Tool.define("generate_image", {
     })
     await Bus.publish(File.Event.Edited, { file: output })
     await Bus.publish(FileWatcher.Event.Updated, { file: output, event: approved ? "change" : "add" })
+    if (managed) OpenScience.invalidateBalance()
 
     const attachments = generatedImageAttachments({
       bytes: image.bytes,

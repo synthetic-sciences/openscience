@@ -52,7 +52,10 @@ export default {
         "OpenScience accesses network volumes only when you choose a project or file there.",
     },
   },
-  dmg: { sign: false },
+  // Sign the outermost installer as well as the app bundle. The release
+  // workflow notarizes and staples this signed DMG after electron-builder
+  // finishes so Gatekeeper can validate the exact downloaded container.
+  dmg: { sign: signed },
   win: {
     target: ["nsis"],
     icon: "build/icon.ico",

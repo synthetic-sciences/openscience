@@ -10,6 +10,7 @@ import { Provider } from "../../src/provider/provider"
 import { Auth } from "../../src/auth"
 import { OutboundTelemetry } from "../../src/telemetry/outbound"
 import * as BillingGate from "../../src/session/billing-gate"
+import { OpenScience } from "../../src/openscience"
 
 const restores: Array<{ mockRestore(): void }> = []
 
@@ -1061,10 +1062,18 @@ test("agent configuration generation records provider errors under the model req
       const getModel = spyOn(Provider, "getModel").mockResolvedValue(model)
       const getLanguage = spyOn(Provider, "getLanguage").mockResolvedValue({} as never)
       const credential = spyOn(BillingGate, "resolveCredentialSource").mockResolvedValue("managed")
+      const snapshot = Object.freeze({
+        api_key: "thk_agent.secret",
+        user_id: "user-agent",
+        account: "user-agent",
+        organization_id: "org-agent",
+      })
+      const funding = spyOn(OpenScience, "getFundingSnapshot").mockResolvedValue(snapshot)
+      const context = spyOn(Provider, "withRequestContext")
       const auth = spyOn(Auth, "get").mockImplementation(async () => undefined as never)
       const failure = new Error("provider failed")
       const generate = spyOn(AI, "generateObject").mockRejectedValue(failure)
-      restores.push(getModel, getLanguage, credential, auth, generate)
+      restores.push(getModel, getLanguage, credential, funding, context, auth, generate)
 
       await expect(
         Agent.generate({
@@ -1074,6 +1083,7 @@ test("agent configuration generation records provider errors under the model req
       ).rejects.toThrow("provider failed")
 
       const request = telemetry.modelRequest.mock.calls[0]?.[0]
+      expect(context.mock.calls[0]?.[0].funding).toBe(snapshot)
       expect(telemetry.modelResponse).not.toHaveBeenCalled()
       expect(telemetry.modelUsage).not.toHaveBeenCalled()
       expect(telemetry.error).toHaveBeenCalledTimes(1)

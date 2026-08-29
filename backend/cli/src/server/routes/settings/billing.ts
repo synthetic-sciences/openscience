@@ -34,13 +34,15 @@ const BillingPatch = z.object({
 })
 
 async function readState(): Promise<BillingState> {
-  const cfg = await Config.getGlobal()
-  const session = await OpenScience.getSession().catch(() => null)
-  const credits = session ? await OpenScience.getCredits().catch(() => null) : null
+  const [cfg, state] = await Promise.all([
+    Config.getGlobal(),
+    OpenScience.getReconciledFundingState().catch(() => null),
+  ])
+  const credits = state ? await OpenScience.getCredits(state.snapshot).catch(() => null) : null
   return {
     llm: cfg.billing?.llm ?? null,
     compute: "byok",
-    wallet: { signedIn: !!session, balanceUsd: credits?.balanceUsd ?? null },
+    wallet: { signedIn: !!state, balanceUsd: credits?.balanceUsd ?? null },
   }
 }
 

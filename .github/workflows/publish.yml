@@ -220,6 +220,16 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Require release tag token
+        shell: bash
+        env:
+          RELEASE_GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
+        run: |
+          if [[ -z "$RELEASE_GITHUB_TOKEN" ]]; then
+            echo "::error::RELEASE_GITHUB_TOKEN must have repo and workflow scopes so the guarded release commit can update the version tag."
+            exit 1
+          fi
+
       # Authenticate and prove ownership of every package before creating a
       # draft release or making the first immutable npm registry write.
       - name: Preflight npm publisher identity and ownership
@@ -781,6 +791,33 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
+      - name: Notarize and staple signed macOS disk image
+        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing == 'mac'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          OPENSCIENCE_DMG: frontend/desktop/dist/${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          [[ -s "$OPENSCIENCE_DMG" ]] || {
+            echo "::error::electron-builder did not produce $OPENSCIENCE_DMG"
+            exit 1
+          }
+          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
+          details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
+          grep -Fq 'Authority=Developer ID Application:' <<<"$details"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details"
+          xcrun notarytool submit "$OPENSCIENCE_DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+          xcrun stapler staple "$OPENSCIENCE_DMG"
+          xcrun stapler validate "$OPENSCIENCE_DMG"
+          spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
+
       - name: Build unsigned desktop installer
         if: steps.existing.outputs.found != 'true' && (inputs.release_mode == 'unsigned' || (inputs.release_mode == 'signed' && matrix.signing == 'windows' && steps.windows-signing.outputs.enabled != 'true'))
         shell: bash
@@ -1087,6 +1124,9 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.version.outputs.source }}
+          # github.token cannot push a tag whose release commit updates a
+          # workflow file; use the dedicated repo + workflow scoped token.
+          token: ${{ secrets.RELEASE_GITHUB_TOKEN }}
 
       - uses: ./.github/actions/setup-bun
 
@@ -1254,7 +1294,7 @@ jobs:
           OPENSCIENCE_RELEASE_SOURCE: ${{ needs.version.outputs.source }}
           OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
           OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
           # Fine-grained PAT with push access to synthetic-sciences/homebrew-tap;
           # github.token is repo-scoped and can't update the tap.
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

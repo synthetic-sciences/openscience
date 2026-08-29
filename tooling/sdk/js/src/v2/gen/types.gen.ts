@@ -2774,10 +2774,106 @@ export type AccountGetResponses = {
       managed_supported: boolean
       managed_unlocked: boolean
     } | null
+    funding_context: {
+      type: "personal" | "organization"
+      organization_id?: string
+      available: boolean
+      locked: boolean
+      organizations: Array<{
+        organization_id: string
+        name: string
+        slug: string
+        status: string
+        role: string
+        membership_status: string
+        seat_assigned: boolean
+        funding_available: boolean
+        effective_permissions: Array<string>
+      }>
+    }
   }
 }
 
 export type AccountGetResponse = AccountGetResponses[keyof AccountGetResponses]
+
+export type AccountFundingContextGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/funding-context"
+}
+
+export type AccountFundingContextGetResponses = {
+  /**
+   * Funding context
+   */
+  200: {
+    type: "personal" | "organization"
+    organization_id?: string
+    available: boolean
+    locked: boolean
+    organizations: Array<{
+      organization_id: string
+      name: string
+      slug: string
+      status: string
+      role: string
+      membership_status: string
+      seat_assigned: boolean
+      funding_available: boolean
+      effective_permissions: Array<string>
+    }>
+  }
+}
+
+export type AccountFundingContextGetResponse =
+  AccountFundingContextGetResponses[keyof AccountFundingContextGetResponses]
+
+export type AccountFundingContextSetData = {
+  body?: {
+    organization_id: string | null
+  }
+  path?: never
+  query?: never
+  url: "/account/funding-context"
+}
+
+export type AccountFundingContextSetErrors = {
+  /**
+   * Unavailable organization
+   */
+  400: {
+    error: string
+  }
+}
+
+export type AccountFundingContextSetError = AccountFundingContextSetErrors[keyof AccountFundingContextSetErrors]
+
+export type AccountFundingContextSetResponses = {
+  /**
+   * Updated funding context
+   */
+  200: {
+    type: "personal" | "organization"
+    organization_id?: string
+    available: boolean
+    locked: boolean
+    organizations: Array<{
+      organization_id: string
+      name: string
+      slug: string
+      status: string
+      role: string
+      membership_status: string
+      seat_assigned: boolean
+      funding_available: boolean
+      effective_permissions: Array<string>
+    }>
+  }
+}
+
+export type AccountFundingContextSetResponse =
+  AccountFundingContextSetResponses[keyof AccountFundingContextSetResponses]
 
 export type AccountBalanceData = {
   body?: never
@@ -4208,6 +4304,20 @@ export type SettingsComputeJobsListResponses = {
     id: string
     name: string
     purpose?: string
+    capability?: {
+      id: string
+      version: string
+      manifest_sha256: string
+      profile: "task" | "smoke"
+      runtime_digest: string
+    }
+    capability_execution?: {
+      network: "none"
+      lock_digest: string
+      pip_requirements: string
+      runtime_binary?: string
+      runtime_root?: string
+    }
     command: string
     cwd?: string
     target:
@@ -4751,6 +4861,15 @@ export type SettingsComputeJobsListResponses = {
                 | "remote_unverified"
             }
       }
+      scientific_capability?: {
+        id: string
+        version: string
+        manifest_sha256: string
+        profile: "task" | "smoke"
+        runtime_digest: string
+        execution_network?: "none"
+        lock_digest?: string
+      }
     }
     capture_error?: string
     cleanup_error?: string
@@ -4855,6 +4974,10 @@ export type SettingsComputeJobsListResponses = {
       environment?: string
       image: string
       packages?: Array<string>
+      package_lock?: {
+        digest: string
+        requirements: string
+      }
       secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       gpu: string
       network: "unrestricted" | "none"
@@ -4943,6 +5066,20 @@ export type SettingsComputeJobsStartData = {
     approval?: string
     sessionID: string
     default_uploads?: boolean
+    capability?: {
+      id: string
+      version: string
+      manifest_sha256: string
+      profile: "task" | "smoke"
+      runtime_digest: string
+    }
+    capability_execution?: {
+      network: "none"
+      lock_digest: string
+      pip_requirements: string
+      runtime_binary?: string
+      runtime_root?: string
+    }
   }
   path?: never
   query?: {
@@ -4968,6 +5105,20 @@ export type SettingsComputeJobsStartResponses = {
     id: string
     name: string
     purpose?: string
+    capability?: {
+      id: string
+      version: string
+      manifest_sha256: string
+      profile: "task" | "smoke"
+      runtime_digest: string
+    }
+    capability_execution?: {
+      network: "none"
+      lock_digest: string
+      pip_requirements: string
+      runtime_binary?: string
+      runtime_root?: string
+    }
     command: string
     cwd?: string
     target:
@@ -5511,6 +5662,15 @@ export type SettingsComputeJobsStartResponses = {
                 | "remote_unverified"
             }
       }
+      scientific_capability?: {
+        id: string
+        version: string
+        manifest_sha256: string
+        profile: "task" | "smoke"
+        runtime_digest: string
+        execution_network?: "none"
+        lock_digest?: string
+      }
     }
     capture_error?: string
     cleanup_error?: string
@@ -5615,6 +5775,10 @@ export type SettingsComputeJobsStartResponses = {
       environment?: string
       image: string
       packages?: Array<string>
+      package_lock?: {
+        digest: string
+        requirements: string
+      }
       secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       gpu: string
       network: "unrestricted" | "none"
@@ -5704,6 +5868,20 @@ export type SettingsComputeJobsPlanData = {
     approval?: string
     sessionID: string
     default_uploads?: boolean
+    capability?: {
+      id: string
+      version: string
+      manifest_sha256: string
+      profile: "task" | "smoke"
+      runtime_digest: string
+    }
+    capability_execution?: {
+      network: "none"
+      lock_digest: string
+      pip_requirements: string
+      runtime_binary?: string
+      runtime_root?: string
+    }
   }
   path?: never
   query?: {
@@ -5742,6 +5920,8 @@ export type SettingsComputeJobsPlanResponses = {
         }
         artifact_patterns: Array<string>
         checkpoint?: string
+        capability_runtime_digest?: string
+        network?: "deny"
         warning: string
       }
     | {
@@ -5752,6 +5932,10 @@ export type SettingsComputeJobsPlanResponses = {
         environment?: string
         image: string
         packages: Array<string>
+        package_lock?: {
+          digest: string
+          requirements: string
+        }
         secret_refs: Array<"nvidia_nim" | "nvidia_ngc">
         gpu: string
         resources?: {
@@ -5928,6 +6112,20 @@ export type SettingsComputeJobsRetryResponses = {
     id: string
     name: string
     purpose?: string
+    capability?: {
+      id: string
+      version: string
+      manifest_sha256: string
+      profile: "task" | "smoke"
+      runtime_digest: string
+    }
+    capability_execution?: {
+      network: "none"
+      lock_digest: string
+      pip_requirements: string
+      runtime_binary?: string
+      runtime_root?: string
+    }
     command: string
     cwd?: string
     target:
@@ -6471,6 +6669,15 @@ export type SettingsComputeJobsRetryResponses = {
                 | "remote_unverified"
             }
       }
+      scientific_capability?: {
+        id: string
+        version: string
+        manifest_sha256: string
+        profile: "task" | "smoke"
+        runtime_digest: string
+        execution_network?: "none"
+        lock_digest?: string
+      }
     }
     capture_error?: string
     cleanup_error?: string
@@ -6575,6 +6782,10 @@ export type SettingsComputeJobsRetryResponses = {
       environment?: string
       image: string
       packages?: Array<string>
+      package_lock?: {
+        digest: string
+        requirements: string
+      }
       secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       gpu: string
       network: "unrestricted" | "none"
@@ -6657,6 +6868,20 @@ export type SettingsComputeJobsReleaseResponses = {
     id: string
     name: string
     purpose?: string
+    capability?: {
+      id: string
+      version: string
+      manifest_sha256: string
+      profile: "task" | "smoke"
+      runtime_digest: string
+    }
+    capability_execution?: {
+      network: "none"
+      lock_digest: string
+      pip_requirements: string
+      runtime_binary?: string
+      runtime_root?: string
+    }
     command: string
     cwd?: string
     target:
@@ -7200,6 +7425,15 @@ export type SettingsComputeJobsReleaseResponses = {
                 | "remote_unverified"
             }
       }
+      scientific_capability?: {
+        id: string
+        version: string
+        manifest_sha256: string
+        profile: "task" | "smoke"
+        runtime_digest: string
+        execution_network?: "none"
+        lock_digest?: string
+      }
     }
     capture_error?: string
     cleanup_error?: string
@@ -7304,6 +7538,10 @@ export type SettingsComputeJobsReleaseResponses = {
       environment?: string
       image: string
       packages?: Array<string>
+      package_lock?: {
+        digest: string
+        requirements: string
+      }
       secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       gpu: string
       network: "unrestricted" | "none"
@@ -7382,6 +7620,20 @@ export type SettingsComputeJobsCancelResponses = {
     id: string
     name: string
     purpose?: string
+    capability?: {
+      id: string
+      version: string
+      manifest_sha256: string
+      profile: "task" | "smoke"
+      runtime_digest: string
+    }
+    capability_execution?: {
+      network: "none"
+      lock_digest: string
+      pip_requirements: string
+      runtime_binary?: string
+      runtime_root?: string
+    }
     command: string
     cwd?: string
     target:
@@ -7925,6 +8177,15 @@ export type SettingsComputeJobsCancelResponses = {
                 | "remote_unverified"
             }
       }
+      scientific_capability?: {
+        id: string
+        version: string
+        manifest_sha256: string
+        profile: "task" | "smoke"
+        runtime_digest: string
+        execution_network?: "none"
+        lock_digest?: string
+      }
     }
     capture_error?: string
     cleanup_error?: string
@@ -8029,6 +8290,10 @@ export type SettingsComputeJobsCancelResponses = {
       environment?: string
       image: string
       packages?: Array<string>
+      package_lock?: {
+        digest: string
+        requirements: string
+      }
       secret_refs?: Array<"nvidia_nim" | "nvidia_ngc">
       gpu: string
       network: "unrestricted" | "none"
@@ -8358,6 +8623,7 @@ export type SettingsWalletGetResponses = {
     balanceUsd: number | null
     billingMode: "managed" | "byok" | null
     managedSupported: boolean
+    managedUnlocked: boolean
     aceEnabled: boolean
     lifetimeSpentUsd: number | null
     transactions: Array<{
@@ -8401,6 +8667,17 @@ export type SettingsUpdatesInstallData = {
   query?: never
   url: "/settings/updates"
 }
+
+export type SettingsUpdatesInstallErrors = {
+  /**
+   * The current installation cannot be updated automatically
+   */
+  409: {
+    error: string
+  }
+}
+
+export type SettingsUpdatesInstallError = SettingsUpdatesInstallErrors[keyof SettingsUpdatesInstallErrors]
 
 export type SettingsUpdatesInstallResponses = {
   /**
@@ -8568,6 +8845,177 @@ export type SettingsResearchToolsTelemetryDeleteResponses = {
 
 export type SettingsResearchToolsTelemetryDeleteResponse =
   SettingsResearchToolsTelemetryDeleteResponses[keyof SettingsResearchToolsTelemetryDeleteResponses]
+
+export type SettingsScientificToolsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/scientific-tools"
+}
+
+export type SettingsScientificToolsResponses = {
+  /**
+   * Scientific tools catalog
+   */
+  200: {
+    schema_version: 1
+    capabilities: Array<{
+      schema_version: 2
+      id: string
+      version: string
+      name: string
+      category:
+        | "analysis"
+        | "visualization"
+        | "bioinformatics"
+        | "cheminformatics"
+        | "structure"
+        | "docking"
+        | "protein_design"
+        | "genomics"
+        | "molecular_modeling"
+        | "quantum"
+        | "mass_spectrometry"
+        | "chromatography"
+        | "synthesis"
+        | "document"
+      summary: string
+      maturity: "verified" | "experimental" | "blocked"
+      availability: {
+        local: "ready" | "configured" | "setup_needed" | "degraded" | "unavailable" | "not_applicable"
+        hosted: "ready" | "configured" | "setup_needed" | "degraded" | "unavailable" | "not_applicable"
+      }
+      basis: string
+      source: {
+        kind: "pypi" | "conda" | "github" | "system" | "nvidia_nim"
+        name: string
+        version: string
+        reference: string
+        license?: string
+      }
+      runtime?: {
+        kind: "python_pack"
+        pack_id: string
+        python: string
+        targets: Array<"local" | "modal">
+        local_platforms: Array<"darwin-arm64" | "darwin-x64" | "linux-arm64" | "linux-x64" | "windows-x64">
+        local_locks: {
+          [key: string]: string
+        }
+        image: string
+        lock_digest: string
+        packages: Array<string>
+        pip_requirements: string
+        resources: {
+          cpus: number
+          memory_gb: number
+          time_minutes: number
+          gpu: "none"
+        }
+        network: {
+          build: "package_index_only"
+          execution: "none"
+        }
+      }
+      smoke?: {
+        id: string
+        script_digest: string
+        language: "python"
+        result_path: string
+        artifacts: Array<string>
+        max_artifact_bytes: number
+        timeout_seconds: number
+        summary: string
+        invariants: Array<string>
+      }
+      hosted?: {
+        kind: "nvidia_nim"
+        adapter_id:
+          | "boltz2"
+          | "diffdock"
+          | "evo2"
+          | "genmol"
+          | "molmim"
+          | "msa-search"
+          | "openfold2"
+          | "openfold3"
+          | "proteinmpnn"
+          | "rfdiffusion"
+        credential: "nvidia_nim"
+        docs_url: string
+        terms_url: string
+      }
+      setup?: {
+        instructions: string
+        requirements?: Array<string>
+      }
+      blocker?: string
+      current_availability: {
+        local: "ready" | "configured" | "setup_needed" | "degraded" | "unavailable" | "not_applicable"
+        hosted: "ready" | "configured" | "setup_needed" | "degraded" | "unavailable" | "not_applicable"
+      }
+    }>
+    evidence: {
+      [key: string]: {
+        schema_version: 1
+        capability: {
+          id: string
+          version: string
+          manifest_sha256: string
+          profile: "smoke"
+          runtime_digest: string
+        }
+        target: "local" | "modal"
+        job_id: string
+        app_version: string
+        release_sha?: string
+        verified_at: string
+        metrics: {
+          [key: string]: string | number | boolean
+        }
+        artifacts: Array<{
+          path: string
+          size: number
+          sha256: string
+        }>
+      }
+    }
+    connectors: Array<{
+      schema_version: 1
+      id: "github" | "benchling" | "box" | "dropbox" | "s3"
+      name: string
+      provider: string
+      status: "official_setup" | "manual_review" | "unavailable"
+      summary: string
+      source_url: string
+      reviewed_at: string
+      read_operations: Array<string>
+      upstream_write_operations: Array<string>
+      writes_enabled_by_catalog: false
+      safety: string
+      requirements: Array<string>
+      setup?: {
+        type: "remote"
+        name: string
+        url: string
+        oauth: "auto" | "client"
+        scope?: string
+        confidential_client?: boolean
+      }
+      revision: string
+    }>
+    counts: {
+      total: number
+      packaged: number
+      hosted: number
+      verified: number
+      experimental: number
+      blocked: number
+    }
+  }
+}
+
+export type SettingsScientificToolsResponse = SettingsScientificToolsResponses[keyof SettingsScientificToolsResponses]
 
 export type AuthRemoveData = {
   body?: never
