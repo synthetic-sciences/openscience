@@ -2,7 +2,7 @@
 // real endpoint:
 //   • Account   → client.account.get / client.account.logout, billing link.
 //   • Appearance → the extracted AppearanceSections (display mode, sounds, updates, …).
-import { Component, Show, createMemo, createSignal, onMount, type JSX } from "solid-js"
+import { Component, Show, createSignal, onMount, type JSX } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon, type IconProps } from "@synsci/ui/icon"
 import { useDialog } from "@synsci/ui/context/dialog"
@@ -12,7 +12,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { URLS } from "@/config/urls"
 import { AppearanceSections } from "../settings-general"
-import { FilterMenu, PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
+import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { walletBalanceLabel } from "./credit-balance"
 import { DataUse } from "./DataUse"
 import "./preference-panels.css"
@@ -96,48 +96,15 @@ export default function General() {
     if (!current.session) return "No Synthetic Sciences account is connected to this device."
     return "Connected to Synthetic Sciences on this device."
   }
-  const fundingOptions = createMemo(() => {
+  const fundingLabel = () => {
     const context = account()?.funding_context
-    const organizations = context?.organizations ?? []
-    const options = [
-      { id: "personal", label: "Personal" },
-      ...organizations.map((organization) => ({ id: organization.organization_id, label: organization.name })),
-    ]
-    if (
-      context?.type === "organization" &&
-      context.organization_id &&
-      !organizations.some((organization) => organization.organization_id === context.organization_id)
-    ) {
-      options.push({ id: context.organization_id, label: "Unavailable team" })
-    }
-    return options
-  })
-  const fundingID = () => {
-    const context = account()?.funding_context
-    return context?.type === "organization" && context.organization_id ? context.organization_id : "personal"
+    if (context?.type !== "organization" || !context.organization_id) return "Personal"
+    return (
+      context.organizations.find((organization) => organization.organization_id === context.organization_id)?.name ??
+      "Unavailable team"
+    )
   }
-  const fundingLabel = () => fundingOptions().find((option) => option.id === fundingID())?.label ?? "Personal"
-  const setFunding = async (id: string) => {
-    if (fundingBusy() || id === fundingID()) return
-    setFundingBusy(true)
-    setError(undefined)
-    try {
-      const result = await sdk.client.account.fundingContext.set({ organization_id: id === "personal" ? null : id })
-      const issue = (result as { error?: unknown }).error
-      if (issue) {
-        throw new Error(typeof issue === "string" ? issue : "The funding account could not be changed")
-      }
-      window.dispatchEvent(new Event("openscience:account-changed"))
-      await loadAccount()
-    } catch (cause) {
-      const detail = cause instanceof Error ? cause.message : String(cause)
-      setError(detail)
-      showToast({ variant: "error", title: "Funding account unchanged", description: detail })
-    } finally {
-      setFundingBusy(false)
-    }
-  }
-  const changeAccount = async () => {
+  const switchWorkspace = async () => {
     if (fundingBusy()) return
     setFundingBusy(true)
     setError(undefined)
@@ -150,13 +117,13 @@ export default function General() {
       await loadAccount()
       showToast({
         variant: "success",
-        title: "Workspace connected",
-        description: "This device now uses the selected account.",
+        title: "Workspace switched",
+        description: `OpenScience is now connected to ${fundingLabel()}.`,
       })
     } catch (cause) {
       const detail = cause instanceof Error ? cause.message : String(cause)
       setError(detail)
-      showToast({ variant: "error", title: "Account unchanged", description: detail })
+      showToast({ variant: "error", title: "Workspace unchanged", description: detail })
     } finally {
       setFundingBusy(false)
     }
@@ -189,37 +156,28 @@ export default function General() {
                 <Row
                   icon="home"
                   title="Workspace"
-                  description="Managed models and research search use this workspace. Provider keys and subscriptions stay personal."
+                  description="Switching opens Synthetic Sciences so you can approve Personal or one of your teams."
                 >
-                  <Show
-                    when={account()?.funding_context?.locked !== true}
-                    fallback={
-                      <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
-                        <span class="settings-account-value">{fundingLabel()}</span>
-                        <Button
-                          size="small"
-                          variant="secondary"
-                          disabled={fundingBusy()}
-                          onClick={() => void changeAccount()}
-                        >
-                          {fundingBusy() ? "Waiting for browser…" : "Change account"}
-                        </Button>
-                      </div>
-                    }
-                  >
-                    <FilterMenu
-                      ariaLabel="Ace funding account"
-                      options={fundingOptions()}
-                      value={fundingID()}
-                      onSelect={(id) => void setFunding(id)}
-                    />
-                  </Show>
+                  <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
+                    <span class="settings-account-value">{fundingLabel()}</span>
+                    <Button
+                      size="small"
+                      variant="secondary"
+                      disabled={fundingBusy()}
+                      onClick={() => void switchWorkspace()}
+                    >
+                      {fundingBusy() ? "Waiting for approval…" : "Switch workspace"}
+                    </Button>
+                  </div>
                 </Row>
+                <Show when={fundingBusy()}>
+                  <div class="px-4 py-3 text-12-regular text-text-weak" role="status" aria-live="polite">
+                    Continue in your browser. Your current workspace stays active until approval completes.
+                  </div>
+                </Show>
                 <Show when={account()?.funding_context?.available === false}>
                   <div class="px-4 py-3 text-12-regular text-text-weak" role="status">
-                    {account()?.funding_context?.locked
-                      ? "This workspace is no longer available. Sign in again to choose Personal or another team."
-                      : "This team is no longer available. Choose Personal or another team before using Ace."}
+                    This workspace is no longer available. Switch workspaces to choose Personal or another team.
                   </div>
                 </Show>
               </Show>

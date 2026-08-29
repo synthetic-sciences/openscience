@@ -30,26 +30,36 @@ describe("General preference writes", () => {
   })
 })
 
-describe("General Ace funding", () => {
-  test("offers Personal and team Wallet contexts without changing provider credentials", async () => {
+describe("General workspace switching", () => {
+  test("requires browser reauthorization instead of relabeling the active credential locally", async () => {
     const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
-    const start = source.indexOf("const setFunding")
-    const funding = source.slice(start, source.indexOf("return (", start))
-    const changed = 'window.dispatchEvent(new Event("openscience:account-changed"))'
-    const event = funding.indexOf(changed)
     expect(source).toContain('title="Workspace"')
-    expect(source).toContain('id: "personal", label: "Personal"')
-    expect(source).toContain("sdk.client.account.fundingContext.set")
-    expect(event).toBeGreaterThan(-1)
-    expect(funding.indexOf("await loadAccount()")).toBeGreaterThan(event)
-    expect(source).toContain("Provider keys and subscriptions stay personal.")
+    expect(source).toContain("Switch workspace")
+    expect(source).toContain("sdk.client.account.loginBrowser()")
+    expect(source).not.toContain("sdk.client.account.fundingContext.set")
+    expect(source).not.toContain("<FilterMenu")
+    expect(source).toContain("approve Personal or one of your teams")
   })
 
-  test("shows a fresh browser sign-in instead of a failing picker for a scoped workspace key", async () => {
+  test("keeps the current workspace active while browser approval is pending or fails", async () => {
     const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
-    expect(source).toContain("account()?.funding_context?.locked !== true")
-    expect(source).toContain("sdk.client.account.loginBrowser()")
-    expect(source).toContain('"Change account"')
-    expect(source).toContain("Sign in again to choose Personal or another team.")
+    const start = source.indexOf("const switchWorkspace")
+    const flow = source.slice(start, source.indexOf("return (", start))
+    const changed = 'window.dispatchEvent(new Event("openscience:account-changed"))'
+    const event = flow.indexOf(changed)
+    expect(flow.indexOf("sdk.client.account.loginBrowser()")).toBeGreaterThan(-1)
+    expect(event).toBeGreaterThan(-1)
+    expect(flow.indexOf("await loadAccount()")).toBeGreaterThan(event)
+    expect(source).toContain("Your current workspace stays active until approval completes.")
+    expect(source).toContain('title: "Workspace unchanged"')
+    expect(source).toContain("disabled={fundingBusy()}")
+  })
+
+  test("shows the resolved Personal, team, and unavailable workspace labels", async () => {
+    const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
+    expect(source).toContain('return "Personal"')
+    expect(source).toContain('"Unavailable team"')
+    expect(source).toContain("description: `OpenScience is now connected to ${fundingLabel()}.`")
+    expect(source).toContain("Switch workspaces to choose Personal or another team.")
   })
 })
