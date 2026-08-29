@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs"
 import {
   blankConnectorForm,
   buildConnectorConfig,
+  catalogPresetConfig,
   connectorFormFromCatalog,
   connectorFormFromConfig,
+  connectorConflictsWithCatalogPreset,
   connectorIdentity,
   connectorMatchesCatalogSetup,
 } from "./connector-form"
@@ -101,6 +103,70 @@ describe("Connector Settings form behavior", () => {
         requireClientSecret: true,
       }),
     ).toThrow("OAuth client secret is required")
+  })
+
+  test("keeps the recommended preset disabled without starting OAuth", () => {
+    const setup = {
+      type: "remote",
+      name: "givemeanode",
+      url: "https://mcp.givemeanode.com",
+      oauth: "auto",
+      one_click_connect: true,
+    } as const
+    const config = catalogPresetConfig(setup)
+
+    expect(config).toEqual({
+      type: "remote",
+      url: "https://mcp.givemeanode.com",
+      oauth: {},
+      enabled: false,
+    })
+    expect(JSON.stringify(config)).not.toMatch(/api[_-]?key|authorization|clientSecret/i)
+    expect(connectorConflictsWithCatalogPreset(undefined, setup)).toBe(false)
+    expect(connectorConflictsWithCatalogPreset(config, setup)).toBe(false)
+    expect(connectorConflictsWithCatalogPreset({ ...config, headers: { Authorization: "Bearer custom" } }, setup)).toBe(
+      true,
+    )
+    expect(connectorConflictsWithCatalogPreset({ ...config, timeout: 60_000 }, setup)).toBe(true)
+    expect(
+      connectorConflictsWithCatalogPreset({ type: "remote", url: "https://different.example", oauth: {} }, setup),
+    ).toBe(true)
+    expect(() =>
+      catalogPresetConfig({
+        type: "remote",
+        name: "manual",
+        url: "https://mcp.example.com",
+        oauth: "auto",
+      }),
+    ).toThrow("requires setup review")
+  })
+
+  test("runs the recommended preset as setup, browser OAuth, inspection, with rollback on failure", () => {
+    const source = readFileSync(new URL("./Connectors.tsx", import.meta.url), "utf8")
+    const start = source.indexOf("async function addCatalogPreset")
+    const end = source.indexOf("function editConnector", start)
+    const preset = source.slice(start, end)
+
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    expect(preset).toContain("catalogPresetConfig(setup)")
+    expect(preset).toContain("sdk.client.mcp.config.set")
+    expect(preset).toContain("beginAuthentication(setup.name)")
+    expect(preset).toContain("await inspect(setup.name)")
+    expect(preset).toContain('.remove({ name: setup.name, scope: "global" })')
+  })
+
+  test("treats an already-authorized start as settled instead of waiting on a dead browser flow", () => {
+    const source = readFileSync(new URL("./Connectors.tsx", import.meta.url), "utf8")
+    const start = source.indexOf("async function beginAuthentication")
+    const end = source.indexOf("async function restorePendingAuthorizations", start)
+    const authentication = source.slice(start, end)
+
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    expect(authentication).toContain('started.state === "settled"')
+    expect(authentication).toContain("acceptAuthenticationResult(name, started.result)")
+    expect(authentication).toContain("waitForAuthentication(name, started)")
   })
 
   test("uses recognizable connector identities and transport-specific fallbacks", () => {

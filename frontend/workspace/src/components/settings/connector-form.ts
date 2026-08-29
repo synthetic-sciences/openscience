@@ -31,6 +31,17 @@ export interface ConnectorFormState {
   previous?: ConfiguredMcp
 }
 
+export interface CatalogConnectorSetup {
+  type: "remote"
+  name: string
+  url: string
+  oauth: "auto" | "client"
+  scope?: string
+  confidential_client?: boolean
+  one_click_disabled?: boolean
+  one_click_connect?: boolean
+}
+
 export function blankConnectorForm(type: McpType): ConnectorFormState {
   return {
     name: "",
@@ -49,14 +60,7 @@ export function blankConnectorForm(type: McpType): ConnectorFormState {
   }
 }
 
-export function connectorFormFromCatalog(setup: {
-  type: "remote"
-  name: string
-  url: string
-  oauth: "auto" | "client"
-  scope?: string
-  confidential_client?: boolean
-}): ConnectorFormState {
+export function connectorFormFromCatalog(setup: CatalogConnectorSetup): ConnectorFormState {
   return {
     ...blankConnectorForm("remote"),
     name: setup.name,
@@ -66,6 +70,29 @@ export function connectorFormFromCatalog(setup: {
     initiallyDisabled: true,
     requireClientSecret: setup.confidential_client === true,
   }
+}
+
+/** Build the only state a reviewed one-click preset may persist. It lands off;
+ * the browser OAuth transaction is the separate step that may enable it. */
+export function catalogPresetConfig(setup: CatalogConnectorSetup) {
+  if ((!setup.one_click_disabled && !setup.one_click_connect) || setup.oauth !== "auto") {
+    throw new Error("This catalog entry requires setup review")
+  }
+  const disabled = buildConnectorConfig(connectorFormFromCatalog(setup))
+  if (disabled.type !== "remote" || disabled.enabled !== false) {
+    throw new Error("Catalog preset must be saved disabled")
+  }
+  return disabled
+}
+
+export function connectorConflictsWithCatalogPreset(config: ConfiguredMcp | undefined, setup: CatalogConnectorSetup) {
+  if (!config) return false
+  return (
+    !connectorMatchesCatalogSetup(config, setup) ||
+    config.type !== "remote" ||
+    Boolean(config.headers && Object.keys(config.headers).length) ||
+    Boolean(config.timeout)
+  )
 }
 
 export function connectorMatchesCatalogSetup(

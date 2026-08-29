@@ -95,6 +95,8 @@ export namespace Session {
           partID: z.string().optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
+          turns: z.number().int().nonnegative().optional(),
+          files: z.string().array().optional(),
         })
         .optional(),
     })

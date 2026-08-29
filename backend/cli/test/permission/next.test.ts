@@ -4,6 +4,7 @@ import { PermissionNext } from "../../src/permission/next"
 import { Instance } from "../../src/project/instance"
 import { Storage } from "../../src/storage/storage"
 import { tmpdir } from "../fixture/fixture"
+import { ShellRisk } from "../../src/permission/shell-risk"
 
 // fromConfig tests
 
@@ -1079,6 +1080,97 @@ test("ask - allows all patterns when all match allow rules", async () => {
     },
   })
 })
+
+test("shell risk classifier keeps audited reads, tests, and builds contained", () => {
+  const commands = [
+    'rg -n "permission" backend/cli/src',
+    "git status --short",
+    "git diff --check",
+    "git log --oneline -5",
+    "git branch --show-current",
+    "/usr/bin/git status --short",
+    "bun test backend/cli/test/permission/next.test.ts",
+    "bun run typecheck",
+    "npm run build",
+    "pnpm test",
+    "yarn lint",
+    "cargo test --workspace",
+    "./gradlew test",
+    "go test ./...",
+    "ninja",
+    "meson test -C build",
+    "pytest -q",
+    "cd backend && rg --files | head -n 5",
+    "find backend -type f -name '*.ts'",
+    "sed -n '1,20p' package.json",
+    "date +%s",
+    "hostname",
+    "file package.json",
+    "tar -tf release.tar",
+    "unzip -l release.zip",
+  ]
+  for (const command of commands) {
+    expect(ShellRisk.classify(command), command).toMatchObject({ level: "contained" })
+    expect(PermissionNext.risk("bash", { shell: { command } }), command).toBe("contained")
+  }
+})
+
+test("shell risk classifier fails closed for destructive, remote, dynamic, and ambiguous commands", () => {
+  const commands = [
+    "rm -rf build",
+    "rmdir generated",
+    "mv output final",
+    "cp source target",
+    "git reset --hard HEAD~1",
+    "git clean -fdx",
+    "git checkout -- package.json",
+    "git restore --source=HEAD --worktree .",
+    "git rebase main",
+    "git push --force-with-lease origin main",
+    "git push -f origin main",
+    "git -c diff.external=./evil diff",
+    "git diff --ext-diff",
+    "kill -TERM 1234",
+    "pkill -f worker",
+    "launchctl unload service.plist",
+    "psql -c 'DROP TABLE runs'",
+    "kubectl delete namespace research",
+    "aws s3 rm s3://bucket --recursive",
+    "gcloud projects delete project-id",
+    "az group delete --name research",
+    "docker rm -f worker",
+    "echo result > result.txt",
+    "cat < input.txt",
+    "printf ok 2>&1",
+    "echo $(git status --short)",
+    "echo `date`",
+    "rg TODO &",
+    "if rg TODO; then echo yes; fi",
+    "unknown-command && rg TODO",
+    "PATH=. rg TODO",
+    "./rg TODO",
+    "sed -i.bak 's/a/b/' file.txt",
+    "find . -type f -delete",
+    "find . -type f -fls result.txt",
+    "sort -oresult.txt input.txt",
+    "tar -tf release.tar --delete file.txt",
+    "tar -tf release.tar --checkpoint-action=exec=rm",
+    "date 010112002026",
+    "hostname replacement-host",
+    "file -C -m custom.magic",
+    "ninja install",
+    "meson install -C build",
+    "npm install package",
+    "bun run deploy",
+    'python -c \'open("result.txt", "w").write("x")\'',
+  ]
+  for (const command of commands) {
+    expect(ShellRisk.classify(command), command).toMatchObject({ level: "risky" })
+    expect(PermissionNext.risk("bash", { shell: { command } }), command).toBe("risky")
+  }
+  expect(PermissionNext.risk("bash", {})).toBe("unknown")
+})
+
 test("project action modes are execution-time authority floors", () => {
   expect(PermissionNext.modeAction({ mode: "ask", permission: "edit", configured: "allow", granted: "allow" })).toBe(
     "ask",
@@ -1109,6 +1201,115 @@ test("project action modes are execution-time authority floors", () => {
   expect(PermissionNext.modeAction({ mode: "full", permission: "network", configured: "deny", granted: "allow" })).toBe(
     "deny",
   )
+
+  const safeShell = { shell: { command: "rg --files" } }
+  const destructiveShell = { shell: { command: "rm -rf build" } }
+  expect(
+    PermissionNext.modeAction({
+      mode: "approve",
+      permission: "bash",
+      configured: "allow",
+      granted: "ask",
+      metadata: safeShell,
+    }),
+  ).toBe("allow")
+  expect(
+    PermissionNext.modeAction({
+      mode: "approve",
+      permission: "bash",
+      configured: "allow",
+      granted: "allow",
+      metadata: destructiveShell,
+    }),
+  ).toBe("ask")
+  expect(
+    PermissionNext.modeAction({
+      mode: "ask",
+      permission: "bash",
+      configured: "allow",
+      granted: "allow",
+      metadata: safeShell,
+    }),
+  ).toBe("ask")
+  expect(
+    PermissionNext.modeAction({
+      mode: "full",
+      permission: "bash",
+      configured: "allow",
+      granted: "ask",
+      metadata: destructiveShell,
+    }),
+  ).toBe("allow")
+  expect(
+    PermissionNext.modeAction({
+      mode: "full",
+      permission: "bash",
+      configured: "deny",
+      granted: "allow",
+      metadata: destructiveShell,
+    }),
+  ).toBe("deny")
+})
+
+test("Ask risky shell floor cannot be weakened by standing approval or pending settlement", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const request = (id: string, sessionID: string) =>
+        PermissionNext.ask({
+          id,
+          sessionID,
+          permission: "bash",
+          patterns: ["rm -rf build"],
+          metadata: { shell: { command: "rm -rf build" } },
+          always: ["rm *"],
+          ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
+          mode: "approve",
+        })
+
+      const first = request("permission_shell_floor_first", "session_shell_floor")
+      const second = request("permission_shell_floor_second", "session_shell_floor")
+      expect((await PermissionNext.list()).map((item) => item.id)).toEqual(
+        expect.arrayContaining(["permission_shell_floor_first", "permission_shell_floor_second"]),
+      )
+
+      await PermissionNext.reply({ requestID: "permission_shell_floor_first", reply: "project" })
+      await expect(first).resolves.toBeUndefined()
+      expect((await PermissionNext.list()).some((item) => item.id === "permission_shell_floor_second")).toBe(true)
+      await PermissionNext.reply({ requestID: "permission_shell_floor_second", reply: "reject" })
+      await expect(second).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+
+      const later = request("permission_shell_floor_later", "session_shell_floor_later")
+      expect((await PermissionNext.list()).some((item) => item.id === "permission_shell_floor_later")).toBe(true)
+      await PermissionNext.reply({ requestID: "permission_shell_floor_later", reply: "reject" })
+      await expect(later).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+
+      await expect(
+        PermissionNext.ask({
+          sessionID: "session_shell_floor_safe",
+          permission: "bash",
+          patterns: ["rg --files"],
+          metadata: { shell: { command: "rg --files" } },
+          always: ["rg *"],
+          ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
+          mode: "approve",
+        }),
+      ).resolves.toBeUndefined()
+
+      await expect(
+        PermissionNext.ask({
+          sessionID: "session_shell_floor_full",
+          permission: "bash",
+          patterns: ["rm -rf build"],
+          metadata: { shell: { command: "rm -rf build" } },
+          always: ["rm *"],
+          ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
+          mode: "full",
+        }),
+      ).resolves.toBeUndefined()
+    },
+  })
 })
 
 test("Ask always ignores prior grants while Ask risky requires a user grant", async () => {

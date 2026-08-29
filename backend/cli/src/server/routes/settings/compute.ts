@@ -20,12 +20,12 @@ import { SecretFile } from "../../../util/secret-file"
 import { OpenScience } from "../../../openscience"
 import { ModalAdapter } from "../../../compute/modal/adapter"
 import { ModalVolume } from "../../../compute/modal/volume"
-import { Env } from "../../../env"
 import { SessionFilesystem } from "../../../session/filesystem"
 import { ManagedEnvironments } from "../../../science/kernel/environment-manager"
 import { ComputeSecrets } from "../../../compute/secrets"
 import { ComputeCapabilities } from "../../../compute/capabilities"
 import { resolveCredentialFields } from "./credentials"
+import { CredentialLifecycle } from "../../../credentials/lifecycle"
 
 const Directory = z.object({
   directory: z.string().trim().min(1).optional(),
@@ -93,8 +93,10 @@ function modalDownloadDisposition(remote: string) {
 //   • SSH host profiles with pinned host-key identity and governed dispatch.
 //
 // Modal credentials are inert and resolve only inside its trusted adapter.
-// Providers that still run through shipped CLI skills retain their legacy
-// environment bridge until they gain equivalent control-plane adapters.
+// Generic provider records resolve only through the host-only
+// withProviderEnv() admission seam. Bash, Task, kernels, plugins, and local MCP
+// do not receive them; each provider still needs a reviewed native CLI caller
+// before the agent can execute it.
 
 export namespace ComputeSettings {
   const storePath = path.join(Global.Path.data, "settings-compute.json")
@@ -128,29 +130,104 @@ export namespace ComputeSettings {
   }
 
   // ── GPU provider catalog ──
-  // `verified` = a first-class provider whose integration we've validated;
-  // surfaced as the green "verified" badge vs a plain "connected" one.
+  // Integration depth is a product contract, not a marketing badge. Modal has
+  // a first-party governed adapter. The remaining entries are encrypted
+  // credential records for provider-specific native CLI callers; they never
+  // become generic shell environment variables, and saving a key does not
+  // prove the provider is reachable.
   export interface ProviderSpec {
     id: string
     name: string
-    verified: boolean
+    integration: "integrated" | "cli_credential"
     placeholder: string
     hint: string
+    credential: {
+      label: string
+      environment: string
+      aliases: string[]
+      docs_url: string
+    }
   }
 
   const CATALOG: ProviderSpec[] = [
-    { id: "modal", name: "Modal", verified: true, placeholder: "ak-… : as-…", hint: "Serverless GPU compute." },
-    { id: "tensorpool", name: "TensorPool", verified: true, placeholder: "tp-…", hint: "On-demand GPU clusters." },
-    { id: "lambda", name: "Lambda Labs", verified: true, placeholder: "secret_…", hint: "Cloud GPU instances." },
+    {
+      id: "modal",
+      name: "Modal",
+      integration: "integrated",
+      placeholder: "ak-… : as-…",
+      hint: "First-party governed jobs, artifacts, cancellation, and connection checks.",
+      credential: {
+        label: "Token ID and token secret",
+        environment: "MODAL_TOKEN_ID + MODAL_TOKEN_SECRET",
+        aliases: [],
+        docs_url: "https://modal.com/docs/sdk/js/latest",
+      },
+    },
+    {
+      id: "tensorpool",
+      name: "TensorPool",
+      integration: "cli_credential",
+      placeholder: "tp-…",
+      hint: "Encrypted credential record for a provider-specific CLI broker; generic agent shells never receive it.",
+      credential: {
+        label: "API key",
+        environment: "TENSORPOOL_KEY",
+        aliases: ["TENSORPOOL_API_KEY"],
+        docs_url: "https://docs.tensorpool.dev/",
+      },
+    },
+    {
+      id: "lambda",
+      name: "Lambda",
+      integration: "cli_credential",
+      placeholder: "secret_…",
+      hint: "Encrypted credential record for a provider-specific CLI broker; generic agent shells never receive it.",
+      credential: {
+        label: "Cloud API key",
+        environment: "LAMBDA_API_KEY",
+        aliases: ["LAMBDA_LABS_API_KEY"],
+        docs_url: "https://docs.lambda.ai/public-cloud/cloud-api/",
+      },
+    },
     {
       id: "prime_intellect",
       name: "Prime Intellect",
-      verified: false,
+      integration: "cli_credential",
       placeholder: "pi-…",
-      hint: "Decentralized GPU marketplace.",
+      hint: "Encrypted credential record for a provider-specific CLI broker; generic agent shells never receive it.",
+      credential: {
+        label: "API key",
+        environment: "PRIME_API_KEY",
+        aliases: ["PRIME_INTELLECT_API_KEY"],
+        docs_url: "https://docs.primeintellect.ai/cli-reference/introduction",
+      },
     },
-    { id: "vast", name: "Vast.ai", verified: false, placeholder: "vast api key", hint: "Spot GPU marketplace." },
-    { id: "runpod", name: "RunPod", verified: false, placeholder: "rpa_…", hint: "Community & secure GPU cloud." },
+    {
+      id: "vast",
+      name: "Vast.ai",
+      integration: "cli_credential",
+      placeholder: "vast api key",
+      hint: "Encrypted credential record for a provider-specific CLI broker; generic agent shells never receive it.",
+      credential: {
+        label: "API key",
+        environment: "VAST_API_KEY",
+        aliases: [],
+        docs_url: "https://docs.vast.ai/cli/authentication",
+      },
+    },
+    {
+      id: "runpod",
+      name: "RunPod",
+      integration: "cli_credential",
+      placeholder: "rpa_…",
+      hint: "Encrypted credential record for a provider-specific CLI broker; generic agent shells never receive it.",
+      credential: {
+        label: "API key",
+        environment: "RUNPOD_API_KEY",
+        aliases: [],
+        docs_url: "https://docs.runpod.io/runpodctl/overview",
+      },
+    },
   ]
 
   // ── Schemas ──
@@ -163,15 +240,23 @@ export namespace ComputeSettings {
     hostname: z.string().trim().min(1).max(253).regex(/^\S+$/).optional(),
     user: z.string().trim().min(1).max(120).regex(/^\S+$/).optional(),
     port: z.number().int().min(1).max(65_535).optional(),
+    identity_file: z.string().optional(),
+    proxy_jump: z.string().optional(),
   })
   export type SshConfigHost = z.infer<typeof SshConfigHost>
 
   export const Provider = z.object({
     id: z.string(),
     name: z.string(),
-    verified: z.boolean(),
+    integration: z.enum(["integrated", "cli_credential"]),
     placeholder: z.string(),
     hint: z.string(),
+    credential: z.object({
+      label: z.string(),
+      environment: z.string(),
+      aliases: z.string().array(),
+      docs_url: z.string().url(),
+    }),
     connected: z.boolean(),
     enabled: z.boolean(),
     source: z.enum(["stored", "account", "modal_toml"]).nullable(),
@@ -179,6 +264,16 @@ export namespace ComputeSettings {
     last_used: z.string().nullable(),
   })
   export type Provider = z.infer<typeof Provider>
+
+  export const ProviderDoctor = z.object({
+    ok: z.boolean(),
+    provider: z.string(),
+    cli: z.string(),
+    command: z.string(),
+    checked_at: z.string(),
+    error: z.string().optional(),
+  })
+  export type ProviderDoctor = z.infer<typeof ProviderDoctor>
 
   export const Modal = z.object({
     app: z.string().trim().min(1).default("openscience"),
@@ -332,7 +427,6 @@ export namespace ComputeSettings {
     vast: ["VAST_API_KEY"],
     runpod: ["RUNPOD_API_KEY"],
   }
-  const owned = new Map<string, string>()
   const canonicalProvider = (target: string) => (target === "prime" ? "prime_intellect" : target)
 
   /** Map one provider's decrypted key to the canonical env var names its real
@@ -424,7 +518,7 @@ export namespace ComputeSettings {
     return ModalFile.parse(file)
   }
 
-  export async function providerEnv(target: string): Promise<Record<string, string>> {
+  async function providerEnvUnlocked(target: string): Promise<{ env: Record<string, string>; revision: string }> {
     target = canonicalProvider(target)
     const entry = (await read()).providers[target]
     if (!entry?.enabled) throw new Error(`Compute provider ${target} is disabled`)
@@ -438,42 +532,48 @@ export namespace ComputeSettings {
       return mapProviderEnv(target, await decrypt(entry.key))
     })()
     if (!Object.keys(env).length) throw new Error(`Compute provider ${target} has invalid credentials`)
-    return env
+    OpenScience.registerSecretValues(Object.values(env))
+    const revision = entry.key ?? (entry.source === "modal_toml" && entry.path ? `modal_toml:${entry.path}` : undefined)
+    if (!revision) throw new Error(`Compute provider ${target} has no stored credential authority`)
+    return { env, revision }
   }
 
-  /** Keep legacy skill-based providers working without exposing Modal tokens.
-   *  Explicit shell exports win over values owned by this settings store. */
-  export async function applyComputeEnv(): Promise<void> {
-    const stored = await read()
-    const env: Record<string, string> = {}
-    const secrets: string[] = []
-    for (const [target, entry] of Object.entries(stored.providers)) {
-      if (target === "modal" || !entry.enabled || !entry.key) continue
-      const key = await decrypt(entry.key).catch(() => undefined)
-      if (!key) continue
-      for (const [name, value] of Object.entries(mapProviderEnv(target, key))) {
-        env[name] = value
-        secrets.push(value)
-      }
+  /** Credential-bearing admission seam for a reviewed provider CLI adapter.
+   * The mutation lease stays held until `action` has spawned and durably
+   * registered any child that can outlive it. Generic Bash, Task, kernel, and
+   * local MCP paths never call this function and therefore never receive these
+   * values. Modal keeps its deeper first-party adapter instead. */
+  export async function withProviderEnv<T>(
+    target: string,
+    base: NodeJS.ProcessEnv,
+    action: (env: Record<string, string>, credentialRevision: string) => T | Promise<T>,
+  ): Promise<T> {
+    target = canonicalProvider(target)
+    const spec = CATALOG.find((item) => item.id === target)
+    if (!spec || spec.integration !== "cli_credential") {
+      throw new Error(`Compute provider ${target} does not use the reviewed CLI credential bridge`)
     }
-    for (const [name, value] of owned) {
-      if (name in env) continue
-      if (process.env[name] === value) delete process.env[name]
-      owned.delete(name)
-    }
-    for (const [name, value] of Object.entries(env)) {
-      const previous = owned.get(name)
-      if (process.env[name] && process.env[name] !== previous) {
-        owned.delete(name)
-        continue
-      }
-      process.env[name] = value
-      await Promise.resolve()
-        .then(() => Env.set(name, value))
-        .catch(() => undefined)
-      owned.set(name, value)
-    }
-    OpenScience.registerSecretValues(secrets)
+    return CredentialLifecycle.admit(async () => {
+      const credential = await providerEnvUnlocked(target)
+      const clean = OpenScience.filterControlPlaneEnv(base)
+      return action({ ...clean, ...credential.env }, credential.revision)
+    })
+  }
+
+  /** Record a successful, read-only native provider invocation. The opaque
+   * encrypted value closes the rotate-while-running race: a late response for
+   * key A can never make replacement key B look verified. */
+  export async function markProviderUsed(target: string, credentialRevision: string): Promise<void> {
+    target = canonicalProvider(target)
+    await CredentialLifecycle.serialized(() =>
+      update((current) => {
+        const entry = current.providers[target]
+        if (!entry?.enabled || entry.key !== credentialRevision) {
+          throw new Error(`Compute provider ${target} changed before its connection check completed`)
+        }
+        entry.last_used = new Date().toISOString()
+      }),
+    )
   }
 
   function sshConfigTokens(value: string) {
@@ -513,51 +613,167 @@ export namespace ComputeSettings {
     return tokens
   }
 
-  /** Read literal Host stanzas without executing ssh(1), Match exec, Include,
-   *  ProxyCommand, or any other user-configured program. Import copies only
-   *  host, user, and port into the fixed broker transport; wildcard/negated
-   *  entries and identity/proxy directives are deliberately ignored. */
+  const SSH_CONFIG_MAX_DEPTH = 4
+  const SSH_CONFIG_MAX_FILES = 32
+  const SSH_CONFIG_MAX_BYTES = 1024 * 1024
+
+  function inside(root: string, candidate: string) {
+    const relative = path.relative(root, candidate)
+    return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+  }
+
+  async function identityFile(value: string, base: string): Promise<string> {
+    if (!value || /[%$\u0000\r\n]/.test(value)) throw new Error("SSH IdentityFile must be a literal local path")
+    const expanded = value.startsWith("~/") ? path.join(os.homedir(), value.slice(2)) : value
+    const candidate = path.isAbsolute(expanded) ? expanded : path.resolve(base, expanded)
+    const canonical = await fs.realpath(candidate).catch(() => undefined)
+    const info = canonical ? await fs.stat(canonical).catch(() => undefined) : undefined
+    if (!canonical || !info?.isFile()) throw new Error(`SSH identity file does not exist: ${value}`)
+    if (/[%$\u0000\r\n]/.test(canonical)) throw new Error("SSH IdentityFile must resolve to a literal local path")
+    if (process.platform !== "win32" && (info.mode & 0o077) !== 0) {
+      throw new Error(`SSH identity file permissions are too broad: ${value}`)
+    }
+    return canonical
+  }
+
+  function expandedProxyJump(value: string | undefined, hosts: Map<string, SshConfigHost>) {
+    if (!value) return undefined
+    return value
+      .split(",")
+      .map((hop) => {
+        if (hop.includes("@") || hop.includes(":") || hop.startsWith("[")) return hop
+        const saved = hosts.get(hop)
+        if (!saved) return hop
+        const destination = saved.user
+          ? `${saved.user}@${saved.hostname ?? saved.alias}`
+          : (saved.hostname ?? saved.alias)
+        return saved.port ? `${destination}:${saved.port}` : destination
+      })
+      .join(",")
+  }
+
+  /** Parse a bounded, data-only subset of OpenSSH config. Includes are read
+   * recursively only beneath the initial config directory, with hard depth,
+   * file, and byte caps. Match and ProxyCommand are never evaluated; a Host
+   * stanza that depends on ProxyCommand is omitted instead of being imported
+   * with misleading connectivity. */
   export async function sshConfigHosts(filepath = path.join(os.homedir(), ".ssh", "config")): Promise<SshConfigHost[]> {
-    const text = await Bun.file(filepath)
-      .text()
-      .catch(() => undefined)
-    if (!text) return []
+    const initial = await fs.realpath(filepath).catch(() => undefined)
+    if (!initial) return []
+    const root = path.dirname(initial)
     const found = new Map<string, SshConfigHost>()
     let aliases: string[] = []
-    let values: Omit<SshConfigHost, "alias"> = {}
-    const flush = () => {
+    let values: Omit<SshConfigHost, "alias"> & { identityBase?: string; unsupportedProxy?: boolean } = {}
+    let inMatch = false
+    let files = 0
+    let bytes = 0
+    const active = new Set<string>()
+    const flush = async () => {
       for (const alias of aliases) {
-        if (found.has(alias)) continue
-        const parsed = SshConfigHost.safeParse({ alias, ...values })
+        if (found.has(alias) || values.unsupportedProxy) continue
+        const identity = values.identity_file
+          ? await identityFile(values.identity_file, values.identityBase ?? root).catch(() => undefined)
+          : undefined
+        const parsed = SshConfigHost.safeParse({
+          alias,
+          hostname: values.hostname,
+          user: values.user,
+          port: values.port,
+          identity_file: identity,
+          proxy_jump: values.proxy_jump,
+        })
         if (parsed.success) found.set(alias, parsed.data)
       }
       aliases = []
       values = {}
     }
-    for (const line of text.split(/\r?\n/)) {
-      const match = line.trim().match(/^([^\s=]+)(?:\s+|\s*=\s*)(.*)$/)
-      if (!match) continue
-      const key = match[1]!.toLowerCase()
-      const tokens = sshConfigTokens(match[2]!)
-      if (key === "host") {
-        flush()
-        aliases = tokens.filter((alias) => alias && !alias.startsWith("!") && !/[*?\[\]]/.test(alias))
-        continue
+
+    const includes = async (pattern: string, base: string) => {
+      if (!pattern || /[%$\u0000\r\n]/.test(pattern)) return []
+      const expanded = pattern.startsWith("~/") ? path.join(os.homedir(), pattern.slice(2)) : pattern
+      const absolute = path.isAbsolute(expanded) ? expanded : path.resolve(base, expanded)
+      if (!inside(root, absolute)) return []
+      const relative = path.relative(root, absolute).split(path.sep).join("/")
+      const matches: string[] = []
+      for await (const match of new Bun.Glob(relative).scan({
+        cwd: root,
+        absolute: true,
+        onlyFiles: true,
+        followSymlinks: false,
+      })) {
+        matches.push(match)
+        if (matches.length > SSH_CONFIG_MAX_FILES) throw new Error("SSH config Include match limit exceeded")
       }
-      if (key === "match") {
-        flush()
-        continue
+      const result: string[] = []
+      for (const match of matches.toSorted()) {
+        const canonical = await fs.realpath(match).catch(() => undefined)
+        if (canonical && inside(root, canonical)) result.push(canonical)
       }
-      if (!aliases.length || !tokens[0]) continue
-      if (key === "hostname" && !tokens[0].includes("%")) values.hostname ??= tokens[0]
-      if (key === "user" && !tokens[0].includes("%") && !tokens[0].includes("@")) values.user ??= tokens[0]
-      if (key === "port") {
-        const port = Number(tokens[0])
-        if (Number.isInteger(port) && port >= 1 && port <= 65_535) values.port ??= port
+      return result
+    }
+
+    const parseFile = async (file: string, depth: number): Promise<void> => {
+      if (depth > SSH_CONFIG_MAX_DEPTH) throw new Error("SSH config Include depth limit exceeded")
+      if (active.has(file)) return
+      if (++files > SSH_CONFIG_MAX_FILES) throw new Error("SSH config Include limit exceeded")
+      active.add(file)
+      try {
+        const buffer = await fs.readFile(file)
+        bytes += buffer.byteLength
+        if (bytes > SSH_CONFIG_MAX_BYTES) throw new Error("SSH config byte limit exceeded")
+        for (const line of buffer.toString("utf8").split(/\r?\n/)) {
+          const match = line.trim().match(/^([^\s=]+)(?:\s+|\s*=\s*)(.*)$/)
+          if (!match) continue
+          const key = match[1]!.toLowerCase()
+          const tokens = sshConfigTokens(match[2]!)
+          if (key === "host") {
+            await flush()
+            inMatch = false
+            aliases = tokens.filter((alias) => alias && !alias.startsWith("!") && !/[*?\[\]]/.test(alias))
+            continue
+          }
+          if (key === "match") {
+            await flush()
+            inMatch = true
+            continue
+          }
+          if (key === "include") {
+            if (inMatch) continue
+            if (tokens.length > 16) throw new Error("SSH config Include pattern limit exceeded")
+            for (const token of tokens) {
+              for (const included of await includes(token, path.dirname(file))) await parseFile(included, depth + 1)
+            }
+            continue
+          }
+          if (!aliases.length || !tokens[0] || inMatch) continue
+          if (key === "hostname" && !tokens[0].includes("%")) values.hostname ??= tokens[0]
+          if (key === "user" && !tokens[0].includes("%") && !tokens[0].includes("@")) values.user ??= tokens[0]
+          if (key === "port") {
+            const port = Number(tokens[0])
+            if (Number.isInteger(port) && port >= 1 && port <= 65_535) values.port ??= port
+          }
+          if (key === "identityfile" && !values.identity_file) {
+            values.identity_file = tokens[0]
+            values.identityBase = path.dirname(file)
+          }
+          if (key === "proxyjump" && tokens[0]?.toLowerCase() !== "none") values.proxy_jump ??= tokens[0]
+          if (key === "proxycommand" && tokens[0]?.toLowerCase() !== "none") values.unsupportedProxy = true
+        }
+      } finally {
+        active.delete(file)
       }
     }
-    flush()
-    return [...found.values()].toSorted((a, b) => a.alias.localeCompare(b.alias))
+
+    try {
+      await parseFile(initial, 0)
+      await flush()
+    } catch {
+      return []
+    }
+    return [...found.values()]
+      .map((item) => ({ ...item, proxy_jump: expandedProxyJump(item.proxy_jump, found) }))
+      .map((item) => SshConfigHost.parse(item))
+      .toSorted((a, b) => a.alias.localeCompare(b.alias))
   }
 
   // Build the client-facing view — never includes the encrypted key.
@@ -567,9 +783,10 @@ export namespace ComputeSettings {
       return {
         id: spec.id,
         name: spec.name,
-        verified: spec.verified,
+        integration: spec.integration,
         placeholder: spec.placeholder,
         hint: spec.hint,
+        credential: spec.credential,
         connected: !!entry,
         enabled: entry?.enabled ?? false,
         source: entry?.source ?? null,
@@ -611,17 +828,23 @@ export namespace ComputeSettings {
     ) {
       throw new Error(`Could not sync ${target} to your Synthetic Sciences account`)
     }
-    const stored = await update(async (current) => {
-      const existing = current.providers[target]
-      current.providers[target] = {
-        key: await encrypt(key),
-        source: authenticated ? "account" : "stored",
-        enabled: existing?.enabled ?? false,
-        connected_at: existing?.connected_at ?? new Date().toISOString(),
-        last_used: existing?.last_used ?? null,
-      }
-    })
-    await applyComputeEnv()
+    const stored = await CredentialLifecycle.mutate(`compute-provider.set:${target}`, () =>
+      update(async (current) => {
+        const existing = current.providers[target]
+        const sameCredential = existing?.key
+          ? await decrypt(existing.key)
+              .then((value) => value === key)
+              .catch(() => false)
+          : false
+        current.providers[target] = {
+          key: await encrypt(key),
+          source: authenticated ? "account" : "stored",
+          enabled: existing?.enabled ?? false,
+          connected_at: existing?.connected_at ?? new Date().toISOString(),
+          last_used: sameCredential ? (existing?.last_used ?? null) : null,
+        }
+      }),
+    )
     return view(stored)
   }
 
@@ -631,16 +854,18 @@ export namespace ComputeSettings {
       throw new HTTPException(400, {
         message: file.error ?? "Modal config does not contain one usable profile.",
       })
-    const stored = await update((current) => {
-      const existing = current.providers.modal
-      current.providers.modal = {
-        source: "modal_toml",
-        path: path.resolve(filepath),
-        enabled: true,
-        connected_at: existing?.connected_at ?? new Date().toISOString(),
-        last_used: existing?.last_used ?? null,
-      }
-    })
+    const stored = await CredentialLifecycle.mutate("compute-provider.configure:modal", () =>
+      update((current) => {
+        const existing = current.providers.modal
+        current.providers.modal = {
+          source: "modal_toml",
+          path: path.resolve(filepath),
+          enabled: true,
+          connected_at: existing?.connected_at ?? new Date().toISOString(),
+          last_used: null,
+        }
+      }),
+    )
     return view(stored, Promise.resolve(file))
   }
 
@@ -650,25 +875,27 @@ export namespace ComputeSettings {
     if (entry?.source === "account" && !(await OpenScience.deletePortableCredential(target))) {
       throw new Error(`Could not remove ${target} from your Synthetic Sciences account`)
     }
-    const stored = await update((current) => {
-      delete current.providers[target]
-    })
-    await applyComputeEnv()
+    const stored = await CredentialLifecycle.mutate(`compute-provider.remove:${target}`, () =>
+      update((current) => {
+        delete current.providers[target]
+      }),
+    )
     return view(stored)
   }
 
   export async function setProviderEnabled(target: string, enabled: boolean): Promise<Info> {
     target = canonicalProvider(target)
-    const stored = await update((current) => {
-      const entry = current.providers[target]
-      if (!entry) throw new Error(`Compute provider ${target} is not connected`)
-      entry.enabled = enabled
-    })
-    await applyComputeEnv()
+    const stored = await CredentialLifecycle.mutate(`compute-provider.enabled:${target}`, () =>
+      update((current) => {
+        const entry = current.providers[target]
+        if (!entry) throw new Error(`Compute provider ${target} is not connected`)
+        entry.enabled = enabled
+      }),
+    )
     return view(stored)
   }
 
-  export async function reconcileAccountProviders(
+  async function reconcileAccountProvidersUnlocked(
     portable: Record<string, { fields: Record<string, string>; updated_at?: string | null }>,
   ): Promise<void> {
     const incoming = Object.fromEntries(Object.entries(portable).filter(([id]) => isProvider(id)))
@@ -687,16 +914,35 @@ export namespace ComputeSettings {
               : undefined
             : payload.fields.api_key
         if (!key) continue
+        const sameCredential = existing?.key
+          ? await decrypt(existing.key)
+              .then((value) => value === key)
+              .catch(() => false)
+          : false
         current.providers[id] = {
           key: await encrypt(key),
           source: "account",
           enabled: existing?.enabled ?? true,
           connected_at: payload.updated_at ?? existing?.connected_at ?? new Date().toISOString(),
-          last_used: existing?.last_used ?? null,
+          last_used: sameCredential ? (existing?.last_used ?? null) : null,
         }
       }
     })
-    await applyComputeEnv()
+  }
+
+  /** Reconcile portable provider records when no credential mutation is
+   * already active. Dashboard sync uses the explicitly named held-mutation
+   * variant below to avoid recursively acquiring the same cross-process lease. */
+  export async function reconcileAccountProviders(
+    portable: Record<string, { fields: Record<string, string>; updated_at?: string | null }>,
+  ): Promise<void> {
+    await CredentialLifecycle.mutate("compute-providers.reconcile", () => reconcileAccountProvidersUnlocked(portable))
+  }
+
+  export async function reconcileAccountProvidersDuringCredentialMutation(
+    portable: Record<string, { fields: Record<string, string>; updated_at?: string | null }>,
+  ): Promise<void> {
+    await reconcileAccountProvidersUnlocked(portable)
   }
 
   export async function updateModal(input: ModalPatch): Promise<Info> {
@@ -724,9 +970,10 @@ export namespace ComputeSettings {
   }
 
   export async function modalContext(): Promise<ModalAdapter.Context> {
-    const [env, config] = await Promise.all([providerEnv("modal"), modalConfig()])
-    OpenScience.registerSecretValues([env.MODAL_TOKEN_ID!, env.MODAL_TOKEN_SECRET!])
-    return { ...config, tokenId: env.MODAL_TOKEN_ID!, tokenSecret: env.MODAL_TOKEN_SECRET! }
+    return CredentialLifecycle.admit(async () => {
+      const [{ env }, config] = await Promise.all([providerEnvUnlocked("modal"), modalConfig()])
+      return { ...config, tokenId: env.MODAL_TOKEN_ID!, tokenSecret: env.MODAL_TOKEN_SECRET! }
+    })
   }
 
   export function modalResolver() {
@@ -754,8 +1001,14 @@ export namespace ComputeSettings {
   }
 
   export async function addSshHost(input: Omit<SshHost, "id">): Promise<Info> {
+    const identity = input.identity_file ? await identityFile(input.identity_file, os.homedir()) : undefined
     const stored = await update((current) => {
-      current.ssh_hosts.push({ id: id(), ...input, notes: input.notes?.trim() || undefined })
+      current.ssh_hosts.push({
+        id: id(),
+        ...input,
+        identity_file: identity,
+        notes: input.notes?.trim() || undefined,
+      })
     })
     return view(stored)
   }
@@ -793,6 +1046,7 @@ export namespace ComputeSettings {
         ...current.ssh_hosts[index]!,
         host_key: probe.host_key,
         fingerprint: probe.fingerprint,
+        proxy_jump_host_keys: probe.proxy_jump_host_keys,
       })
     })
     return view(stored)
@@ -863,6 +1117,29 @@ export const ComputeSettingsRoutes = lazy(() =>
         const target = c.req.valid("param").id
         if (!ComputeSettings.isProvider(target)) return c.json({ error: "Unknown provider" }, 400)
         return c.json(await ComputeSettings.setProviderEnabled(target, c.req.valid("json").enabled))
+      },
+    )
+    .post(
+      "/provider/:id/doctor",
+      describeRoute({
+        summary: "Run the provider's reviewed read-only native connection check",
+        operationId: "settings.compute.provider.doctor",
+        responses: {
+          200: {
+            description: "Connection check result",
+            content: { "application/json": { schema: resolver(ComputeSettings.ProviderDoctor) } },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("param", z.object({ id: z.string() })),
+      async (c) => {
+        const target = c.req.valid("param").id
+        if (!ComputeSettings.isProvider(target) || target === "modal") {
+          return c.json({ error: "Provider does not use the native CLI connection check" }, 400)
+        }
+        const { ProviderCli } = await import("../../../compute/provider-cli")
+        return c.json(await ProviderCli.doctor(target))
       },
     )
     .delete(
@@ -1057,7 +1334,10 @@ export const ComputeSettingsRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", ComputeSettings.SshHost.omit({ id: true, fingerprint: true, host_key: true })),
+      validator(
+        "json",
+        ComputeSettings.SshHost.omit({ id: true, fingerprint: true, host_key: true, proxy_jump_host_keys: true }),
+      ),
       async (c) => c.json(await ComputeSettings.addSshHost(c.req.valid("json"))),
     )
     .post(

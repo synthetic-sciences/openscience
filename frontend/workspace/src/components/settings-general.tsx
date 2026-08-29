@@ -10,6 +10,7 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { URLS } from "@/config/urls"
+import { formatUpdateBytes, updateController } from "./settings/update-controller"
 import { PanelBody, PanelHeader, PanelScroll, Section as SettingsSection } from "./settings/_shared"
 import "./settings-general.css"
 
@@ -48,59 +49,25 @@ export const AppearanceSections: Component = () => {
     demoSoundState = { cleanup: undefined, timeout: undefined }
   })
 
+  const updates = updateController(platform)
   const [store, setStore] = createStore<{
-    checking: boolean
-    installing: boolean
-    available?: string
     releases: Array<{ version: string; name: string; notes: string; publishedAt?: string; url: string }>
-  }>({
-    checking: false,
-    installing: false,
-    releases: [],
-  })
+  }>({ releases: [] })
 
   onMount(() => {
+    updates.start()
     void platform
       .listUpdates?.()
       .then((releases) => setStore("releases", releases))
       .catch(() => undefined)
   })
 
-  const install = () => {
-    if (!platform.update || store.installing) return
-    setStore("installing", true)
-    void platform
-      .update()
-      .then((result) => {
-        setStore("installing", false)
-        setStore("available", undefined)
-        showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: result.installed ? `OpenScience ${result.version ?? ""} installed` : "OpenScience is up to date",
-          description: result.restartScheduled
-            ? "Restarting OpenScience now."
-            : result.restartRequired
-              ? "Restart OpenScience once to finish the update."
-              : "You're running the latest version of OpenScience.",
-        })
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-        setStore("installing", false)
-      })
-  }
-
   const check = () => {
     if (!platform.checkUpdate) return
-    setStore("checking", true)
-
-    void platform
-      .checkUpdate({ refresh: true })
+    void updates
+      .check()
       .then((result) => {
-        if (!result.updateAvailable) {
-          setStore("available", undefined)
+        if (!result?.updateAvailable) {
           showToast({
             variant: "success",
             icon: "circle-check",
@@ -109,40 +76,36 @@ export const AppearanceSections: Component = () => {
           })
           return
         }
-
-        setStore("available", result.version ?? "Update available")
-
-        const actions = platform.update
-          ? [
-              {
-                label: "Install update",
-                onClick: install,
-              },
-              {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss" as const,
-              },
-            ]
-          : [
-              {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss" as const,
-              },
-            ]
-
         showToast({
-          persistent: true,
           icon: "download",
           title: language.t("toast.update.title"),
           description: language.t("toast.update.description", { version: result.version ?? "" }),
-          actions,
         })
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
-      .finally(() => setStore("checking", false))
+  }
+
+  const updateAction = () => {
+    const run =
+      updates.state.phase === "ready" || updates.state.phase === "restart_blocked" ? updates.apply : updates.stage
+    void run().catch((error: unknown) => {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
+
+  const cancelUpdate = () => {
+    void updates.cancel().catch((error: unknown) => {
+      showToast({
+        title: "OpenScience kept the update",
+        description: error instanceof Error ? error.message : String(error),
+      })
+    })
   }
 
   const languageOptions = createMemo(() =>
@@ -414,21 +377,75 @@ export const AppearanceSections: Component = () => {
 
           <SettingsRow
             title={language.t("settings.updates.row.check.title")}
-            description={language.t("settings.updates.row.check.description")}
+            description={
+              updates.state.phase === "ready"
+                ? updates.state.migration_required
+                  ? `OpenScience ${updates.state.version} is verified. It will move to your user Applications folder before restarting because this installation is administrator-owned.`
+                  : `OpenScience ${updates.state.version} is signed, verified, and ready to restart.`
+                : updates.state.phase === "succeeded"
+                  ? `Updated to OpenScience ${updates.state.version}. The relaunched workspace passed its health check.`
+                  : updates.state.phase === "restarting"
+                    ? `Restarting into OpenScience ${updates.state.version}. The app will reopen automatically.`
+                    : updates.state.phase === "restart_blocked"
+                      ? (updates.state.error ?? "OpenScience is waiting for the local runtime to finish safely.")
+                      : updates.state.phase === "downloading"
+                        ? `${formatUpdateBytes(updates.state.transferred)}${updates.state.total ? ` of ${formatUpdateBytes(updates.state.total)}` : ""} downloaded.`
+                        : ["extracting", "verifying"].includes(updates.state.phase)
+                          ? "Verifying the signed, notarized app before restart."
+                          : updates.state.phase === "failed"
+                            ? (updates.state.error ?? "The update could not be prepared.")
+                            : language.t("settings.updates.row.check.description")
+            }
           >
             <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
-              <Show when={store.available && platform.update}>
-                <Button size="small" variant="primary" disabled={store.installing} onClick={install}>
-                  {store.installing ? "Updating & restarting…" : `Update to ${store.available}`}
+              <Show when={updates.state.available && platform.stageUpdate}>
+                <Button
+                  size="small"
+                  variant="primary"
+                  disabled={["downloading", "extracting", "verifying", "restarting"].includes(updates.state.phase)}
+                  onClick={updateAction}
+                >
+                  {updates.state.phase === "ready"
+                    ? updates.state.migration_required
+                      ? "Move & restart"
+                      : "Restart to update"
+                    : updates.state.phase === "restarting"
+                      ? "Restarting…"
+                      : updates.state.phase === "restart_blocked"
+                        ? "Retry restart"
+                        : ["downloading", "extracting", "verifying"].includes(updates.state.phase)
+                          ? "Preparing…"
+                          : updates.state.phase === "failed"
+                            ? "Retry download"
+                            : `Download ${updates.state.available}`}
+                </Button>
+              </Show>
+              <Show when={updates.state.available && !platform.stageUpdate}>
+                <Button size="small" variant="primary" onClick={() => platform.openLink(URLS.releases)}>
+                  Download installer
+                </Button>
+              </Show>
+              <Show
+                when={
+                  platform.cancelUpdate &&
+                  ["downloading", "extracting", "verifying", "ready"].includes(updates.state.phase)
+                }
+              >
+                <Button size="small" variant="secondary" disabled={updates.state.cancelling} onClick={cancelUpdate}>
+                  {updates.state.cancelling
+                    ? "Discarding…"
+                    : updates.state.phase === "ready"
+                      ? "Discard"
+                      : "Cancel download"}
                 </Button>
               </Show>
               <Button
                 size="small"
                 variant="secondary"
-                disabled={store.checking || !platform.checkUpdate}
+                disabled={updates.state.checking || !platform.checkUpdate}
                 onClick={check}
               >
-                {store.checking
+                {updates.state.checking
                   ? language.t("settings.updates.action.checking")
                   : language.t("settings.updates.action.checkNow")}
               </Button>

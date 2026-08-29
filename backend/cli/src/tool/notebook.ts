@@ -378,8 +378,7 @@ class PythonKernel implements Kernel {
     try {
       proc = spawn(wrapped.file, wrapped.args, {
         cwd,
-        env: {
-          ...OpenScience.kernelEnv(process.env),
+        env: OpenScience.kernelEnv(process.env, {
           ...OpenScience.pythonThreadCapEnv(process.env),
           ...(opts?.env ?? {}),
           ATLAS_CLI_CONFIG_PATH: configPath,
@@ -387,7 +386,7 @@ class PythonKernel implements Kernel {
           XDG_CACHE_HOME: path.join(cachePath, "xdg"),
           PYTHONPYCACHEPREFIX: path.join(cachePath, "pycache"),
           PYTHONUNBUFFERED: "1",
-        },
+        }),
         stdio: ["pipe", "pipe", "pipe"],
         // Own process group so killing the kernel reaps its children too — a scanpy
         // run forks joblib/BLAS workers that would otherwise be orphaned and keep

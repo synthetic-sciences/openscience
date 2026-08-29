@@ -6,6 +6,7 @@ import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { openUrl } from "../../util/open-url"
 import { probeProtectedFolderAccess } from "../../file/protected-folder-access"
+import { GracefulShutdown } from "../../process/graceful-shutdown"
 import {
   LOCAL_WORKSPACE_PORTS,
   findWorkspaceServer,
@@ -152,17 +153,16 @@ export const WebCommand = cmd({
       process.once("SIGINT", stop)
       process.once("SIGTERM", stop)
     })
-    // Hard-exit on Ctrl+C. Force-close active connections first, but never let
-    // a stalled server.stop() (long-lived `/event` SSE streams) or an in-flight
-    // background config sync (a pending fetch keeps Bun's loop alive) block the
-    // exit — a watchdog forces it, and process.exit ignores dangling sockets.
-    const watchdog = setTimeout(() => process.exit(0), 2000)
+    // Force-close sockets, then await the same bounded runtime/ledger disposal
+    // used by the authenticated desktop handoff. A final watchdog still keeps
+    // a broken native transport from trapping shutdown forever.
+    const watchdog = setTimeout(() => process.exit(1), 10_000)
     watchdog.unref?.()
     try {
       await server.stop(true)
-    } catch {
-      // ignore — exiting regardless
+      await GracefulShutdown.run({ timeoutMs: 8_000 })
+    } finally {
+      clearTimeout(watchdog)
     }
-    process.exit(0)
   },
 })

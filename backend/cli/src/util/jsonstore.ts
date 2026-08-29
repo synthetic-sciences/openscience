@@ -1,7 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
+import { randomUUID } from "node:crypto"
 import { Lock } from "./lock"
-import { DataRootBarrier } from "@/global/data-root-barrier"
+import { FileLease } from "@/util/file-lease"
 
 /**
  * Shared persistence for small JSON-object credential stores (auth.json,
@@ -19,73 +20,12 @@ import { DataRootBarrier } from "@/global/data-root-barrier"
  */
 export namespace JsonStore {
   const LOCK_TIMEOUT = 10_000
-  const INVALID_LOCK_GRACE = 5_000
-
-  function running(pid: number) {
-    try {
-      process.kill(pid, 0)
-      return true
-    } catch (error) {
-      return (error as NodeJS.ErrnoException).code === "EPERM"
-    }
-  }
-
-  async function abandoned(lockpath: string) {
-    const owner = await Bun.file(lockpath)
-      .json()
-      .catch(() => undefined)
-    if (owner && typeof owner === "object" && "pid" in owner && typeof owner.pid === "number") {
-      return !running(owner.pid)
-    }
-    const stat = await fs.stat(lockpath).catch(() => undefined)
-    return !!stat && Date.now() - stat.mtimeMs > INVALID_LOCK_GRACE
-  }
-
-  async function fileLock(filepath: string) {
-    const lockpath = `${filepath}.lock`
-    const start = Date.now()
-    await fs.mkdir(path.dirname(filepath), { recursive: true })
-
-    const acquire = async (): Promise<Awaited<ReturnType<typeof fs.open>>> => {
-      const handle = await fs.open(lockpath, "wx", 0o600).catch(async (error: NodeJS.ErrnoException) => {
-        if (error.code !== "EEXIST") throw error
-        if (await abandoned(lockpath)) {
-          await fs.unlink(lockpath).catch(() => undefined)
-          return acquire()
-        }
-        if (Date.now() - start >= LOCK_TIMEOUT) {
-          throw new Error(`Timed out waiting for another OpenScience process to release ${filepath}`)
-        }
-        await Bun.sleep(15)
-        return acquire()
-      })
-      return handle
-    }
-
-    const handle = await acquire()
-    await handle.writeFile(JSON.stringify({ pid: process.pid, created: Date.now() })).catch(async (error) => {
-      await handle.close().catch(() => undefined)
-      await fs.unlink(lockpath).catch(() => undefined)
-      throw error
-    })
-    await handle.sync().catch(async (error) => {
-      await handle.close().catch(() => undefined)
-      await fs.unlink(lockpath).catch(() => undefined)
-      throw error
-    })
-    return {
-      async [Symbol.asyncDispose]() {
-        await handle.close().catch(() => undefined)
-        await fs.unlink(lockpath).catch(() => undefined)
-      },
-    }
-  }
 
   async function parse(filepath: string): Promise<Record<string, unknown>> {
     const file = Bun.file(filepath)
     if (!(await file.exists())) return {}
     const text = await file.text()
-    if (!text.trim()) return {}
+    if (!text.trim()) throw new Error("JSON store is empty or truncated")
     return JSON.parse(text) as Record<string, unknown>
   }
 
@@ -112,11 +52,28 @@ export namespace JsonStore {
   }
 
   async function replace(filepath: string, data: Record<string, unknown>) {
-    const temp = `${filepath}.${process.pid}.tmp`
-    await Bun.write(temp, JSON.stringify(data, null, 2), { mode: 0o600 })
-    await fs.chmod(temp, 0o600)
+    await fs.mkdir(path.dirname(filepath), { recursive: true })
+    const temp = `${filepath}.${process.pid}.${randomUUID()}.tmp`
     try {
+      const handle = await fs.open(temp, "wx", 0o600)
+      await handle
+        .writeFile(JSON.stringify(data, null, 2), "utf8")
+        .then(() => handle.chmod(0o600))
+        .then(() => handle.sync())
+        .finally(() => handle.close())
       await fs.rename(temp, filepath)
+      // POSIX rename durability requires the containing directory to reach
+      // stable storage as well. Windows does not support opening directories
+      // through this API, while ReplaceFile semantics already make the rename
+      // the atomic commit point there.
+      if (process.platform !== "win32") {
+        const directory = await fs.open(path.dirname(filepath), "r")
+        try {
+          await directory.sync()
+        } finally {
+          await directory.close()
+        }
+      }
     } catch (error) {
       await fs.unlink(temp).catch(() => {})
       throw error
@@ -129,11 +86,12 @@ export namespace JsonStore {
     filepath: string,
     fn: (data: Record<string, unknown>) => Record<string, unknown> | void | Promise<Record<string, unknown> | void>,
   ): Promise<void> {
-    await using operation = await DataRootBarrier.enter(filepath)
     using _ = await Lock.write(filepath)
-    await using file = await fileLock(filepath)
-    const data = await load(filepath)
-    const next = (await fn(data)) ?? data
-    await replace(filepath, next)
+    await using lease = await FileLease.acquire(`${filepath}.lock`, LOCK_TIMEOUT)
+    await lease.during(async () => {
+      const data = await load(filepath)
+      const next = (await fn(data)) ?? data
+      await replace(filepath, next)
+    })
   }
 }

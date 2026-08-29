@@ -1,4 +1,9 @@
-Use this tool when you need to ask the user questions during execution. This allows you to:
+Use this tool only when the active independence posture allows pausing for user input. Set `reason` precisely:
+- `planning`: collaborate on an approach or preference (Interactive only)
+- `consequential`: the choice materially changes scope, outcome, cost, or risk (Interactive and Balanced)
+- `missing_authority`: required authority or input is unavailable and progress is blocked (all modes)
+
+This allows you to:
 1. Gather user preferences or requirements
 2. Clarify ambiguous instructions
 3. Get decisions on implementation choices as you work
@@ -7,4 +12,5 @@ Use this tool when you need to ask the user questions during execution. This all
 Usage notes:
 - When `custom` is enabled (default), a "Type your own answer" option is added automatically; don't include "Other" or catch-all options
 - Answers are returned as arrays of labels; set `multiple: true` to allow selecting more than one
-- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label
+- Planning and consequential questions must provide at least two concrete choices, put the recommended choice first, and add "(Recommended)" at the end of its label
+- Independent mode must choose the recommended safe path and continue for planning and consequential decisions; do not relabel a preference as missing authority

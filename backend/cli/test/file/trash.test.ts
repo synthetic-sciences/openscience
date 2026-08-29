@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import crypto from "node:crypto"
 import fs from "node:fs/promises"
 import path from "node:path"
+import { SafeTrashIO } from "../../src/file/safe-trash-io"
 import { FileTrash } from "../../src/file/trash"
 import { WindowsSafeIO } from "../../src/file/windows-safe-io"
 import { Global } from "../../src/global"
@@ -563,4 +564,30 @@ describe("recoverable source file trash", () => {
       },
     })
   })
+
+  test.skipIf(process.platform === "win32")(
+    "restores an unapproved entry raced into a purge pathname before mutation",
+    async () => {
+      await using tmp = await tmpdir()
+      const target = path.join(tmp.path, "approved-directory")
+      const retained = path.join(tmp.path, "approved-retained")
+      await fs.mkdir(target)
+      await Bun.write(path.join(target, "identity"), "approved\n")
+      const approved = await SafeTrashIO.inspect(target)
+
+      await expect(
+        SafeTrashIO.remove(target, approved, {
+          afterFinalEntryVerify: async () => {
+            await fs.rename(target, retained)
+            await fs.mkdir(target)
+            await Bun.write(path.join(target, "identity"), "replacement\n")
+          },
+        }),
+      ).rejects.toThrow("identity changed during purge")
+
+      expect(await Bun.file(path.join(target, "identity")).text()).toBe("replacement\n")
+      expect(await Bun.file(path.join(retained, "identity")).text()).toBe("approved\n")
+      expect((await fs.readdir(tmp.path)).some((name) => name.startsWith(".openscience-purge-"))).toBe(false)
+    },
+  )
 })

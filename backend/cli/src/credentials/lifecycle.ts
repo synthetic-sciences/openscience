@@ -1,5 +1,6 @@
 import fs from "node:fs/promises"
 import path from "node:path"
+import { AsyncLocalStorage } from "node:async_hooks"
 import { Global } from "../global"
 import { FileLease } from "../util/file-lease"
 import { Log } from "../util/log"
@@ -58,6 +59,67 @@ export namespace CredentialLifecycle {
     retryAt: number
     retryDelay: number
   } = { retryAt: 0, retryDelay: 250 }
+  interface LeaseFrame {
+    active: boolean
+    accepting: boolean
+    /** Nested authority writes triggered by one admitted SDK call must be
+     * ordered even when the SDK starts them in sibling async branches. */
+    tail: Promise<void>
+  }
+  interface MutationOwner {
+    active: boolean
+  }
+  const leaseContext = new AsyncLocalStorage<LeaseFrame>()
+  const mutationContext = new AsyncLocalStorage<MutationOwner>()
+
+  async function rootLease<T>(action: () => T | Promise<T>): Promise<T> {
+    await using lease = await FileLease.acquire(mutationLock, mutationLeaseTimeout)
+    const frame: LeaseFrame = { active: true, accepting: true, tail: Promise.resolve() }
+    return await lease.during(() =>
+      leaseContext.run(frame, async () => {
+        try {
+          return await action()
+        } finally {
+          // An SDK callback can start a write without awaiting the returned
+          // promise. Do not release the cross-process lease until every write
+          // registered during this scope has settled.
+          frame.accepting = false
+          // Drain to stability. A nested write registered immediately before
+          // closure may replace `tail` while the previous promise is settling.
+          for (;;) {
+            const tail = frame.tail
+            await tail
+            if (tail === frame.tail) break
+          }
+          frame.active = false
+        }
+      }),
+    )
+  }
+
+  async function withMutationLease<T>(action: () => T | Promise<T>): Promise<T> {
+    const frame = leaseContext.getStore()
+    if (!frame?.active || !frame.accepting) return rootLease(action)
+    const owner = mutationContext.getStore()
+    if (owner?.active) return await action()
+
+    const previous = frame.tail
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    // Keep tail non-rejecting: each caller receives its own error, while later
+    // writes still get a chance to run and the root scope can always drain.
+    frame.tail = previous.then(() => gate)
+    await previous
+    const nextOwner: MutationOwner = { active: true }
+    try {
+      return await mutationContext.run(nextOwner, async () => await action())
+    } finally {
+      nextOwner.active = false
+      release()
+    }
+  }
 
   function parse(value: unknown): Revision {
     if (!value || typeof value !== "object") throw new Error("credential revision is not an object")
@@ -172,20 +234,42 @@ export namespace CredentialLifecycle {
 
   /** Serialize credential-adjacent metadata writes without publishing a revision. */
   export async function serialized<T>(action: () => T | Promise<T>): Promise<T> {
-    await using lease = await FileLease.acquire(mutationLock, mutationLeaseTimeout)
-    return await lease.during(async () => {
-      return await action()
-    })
+    return withMutationLease(action)
   }
 
   /** Hold the cross-process mutation lease from freshness check through child
    * spawn and durable owner registration, closing the snapshot-to-spawn race. */
   export async function admit<T>(action: () => T | Promise<T>): Promise<T> {
-    await using lease = await FileLease.acquire(mutationLock, mutationLeaseTimeout)
-    return await lease.during(async () => {
+    const frame = leaseContext.getStore()
+    if (frame?.active && frame.accepting) {
+      await ensureFresh()
+      return await action()
+    }
+    return rootLease(async () => {
       await ensureFresh()
       return await action()
     })
+  }
+
+  /**
+   * Atomically verify a credential-bearing network dispatch, then release the
+   * mutation lease as soon as the request has been handed to the host fetch
+   * implementation. The remote response never holds the global credential
+   * lock, so an unrelated slow MCP server cannot block credential removal.
+   */
+  export async function dispatch<T>(verify: () => void | Promise<void>, start: () => Promise<T>): Promise<T> {
+    let pending: Promise<T> | undefined
+    await withMutationLease(async () => {
+      await ensureFresh()
+      await verify()
+      pending = start()
+      // The host request can reject before the short credential lease has
+      // finished releasing. Attach a handler immediately so runtimes do not
+      // classify that intentional later-awaited rejection as unhandled.
+      void pending.catch(() => undefined)
+    })
+    if (!pending) throw new Error("Credential dispatch did not start")
+    return await pending
   }
 
   /**
@@ -224,8 +308,7 @@ export namespace CredentialLifecycle {
     let failure: unknown
     let failed = false
     {
-      await using lease = await FileLease.acquire(mutationLock, mutationLeaseTimeout)
-      await lease.during(async () => {
+      await withMutationLease(async () => {
         // Evaluate the condition under the same lease as the mutation. This
         // is the compare-and-mutate seam for account-key revocation: a late
         // response for key A cannot clear key B after B has been saved.

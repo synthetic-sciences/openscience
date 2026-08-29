@@ -7,10 +7,16 @@
 import { createSignal, createMemo, onMount, onCleanup, For, Show, type JSX } from "solid-js"
 import { Dialog } from "@synsci/ui/dialog"
 import { useDialog } from "@synsci/ui/context/dialog"
+import { Icon } from "@synsci/ui/icon"
 import { useSync } from "@/context/sync"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconSearch } from "@/atlas/shared/Icon"
 import { skillCatalogSnapshot } from "./skill-permissions"
+import { skillIconFor } from "./skill-icon"
+import "./skills-browser.css"
+
+const SKILL_LIBRARY_INITIAL_ROWS = 60
+const SKILL_LIBRARY_ROW_BATCH = 60
 
 interface SkillRow {
   name: string
@@ -195,20 +201,7 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
                     <button
                       type="button"
                       onClick={() => props.onPick(skill.name)}
-                      class="atlas-skill-row"
-                      style={{
-                        all: "unset",
-                        cursor: "pointer",
-                        display: "flex",
-                        "flex-direction": "column",
-                        gap: "2px",
-                        padding: "7px 8px",
-                        "border-radius": "4px",
-                        width: "100%",
-                        "box-sizing": "border-box",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-accent-subtle)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      class="atlas-skill-row atlas-skill-row--popover"
                     >
                       <span
                         style={{
@@ -275,24 +268,35 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
  * `onPick(name)` and closes the dialog; the caller decides what "pick"
  * means (the right pane prefills `/<name> ` into the composer).
  */
-export function SkillLibraryDialog(props: { onPick: (name: string) => void }): JSX.Element {
+export function SkillLibraryDialog(props: { onPick: (name: string) => void; initialQuery?: string }): JSX.Element {
   const sync = useSync()
   const dialog = useDialog()
-  const [query, setQuery] = createSignal("")
+  const [query, setQuery] = createSignal(props.initialQuery ?? "")
+  const [visibleRows, setVisibleRows] = createSignal(SKILL_LIBRARY_INITIAL_ROWS)
 
-  const groups = createMemo(() => {
-    const all = ((sync.data.skill ?? []) as SkillRow[]).filter((s) => s.entry !== false)
+  const matches = createMemo(() => {
+    const all = skillCatalogSnapshot((sync.data.skill ?? []) as SkillRow[], {
+      permission: sync.data.config.permission,
+    }).allowed
     const q = query().trim().toLowerCase()
-    const filtered = q
-      ? all.filter(
-          (s) =>
-            s.name.toLowerCase().includes(q) ||
-            (s.description ?? "").toLowerCase().includes(q) ||
-            (s.tags ?? []).some((t) => t.toLowerCase().includes(q)),
-        )
-      : all
+    return (
+      q
+        ? all.filter(
+            (s) =>
+              s.name.toLowerCase().includes(q) ||
+              (s.description ?? "").toLowerCase().includes(q) ||
+              (s.tags ?? []).some((t) => t.toLowerCase().includes(q)),
+          )
+        : all
+    ).toSorted(
+      (a, b) => (a.category || originOf(a)).localeCompare(b.category || originOf(b)) || a.name.localeCompare(b.name),
+    )
+  })
+
+  const visible = createMemo(() => matches().slice(0, visibleRows()))
+  const groups = createMemo(() => {
     const map = new Map<string, SkillRow[]>()
-    for (const s of filtered) {
+    for (const s of visible()) {
       const label = s.category || originOf(s)
       const arr = map.get(label) ?? []
       arr.push(s)
@@ -303,7 +307,16 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void }): J
       .sort((a, b) => a.label.localeCompare(b.label))
   })
 
-  const total = createMemo(() => groups().reduce((n, g) => n + g.items.length, 0))
+  const total = createMemo(() => matches().length)
+  const shown = createMemo(() => visible().length)
+  const hasMore = createMemo(() => shown() < total())
+
+  const revealMore = () => setVisibleRows((value) => Math.min(total(), value + SKILL_LIBRARY_ROW_BATCH))
+  const handleScroll = (event: Event) => {
+    if (!hasMore()) return
+    const target = event.currentTarget as HTMLElement
+    if (target.scrollHeight - target.scrollTop - target.clientHeight < 240) revealMore()
+  }
 
   const pick = (name: string) => {
     props.onPick(name)
@@ -337,8 +350,12 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void }): J
           <input
             autofocus
             value={query()}
-            onInput={(e) => setQuery(e.currentTarget.value)}
+            onInput={(e) => {
+              setQuery(e.currentTarget.value)
+              setVisibleRows(SKILL_LIBRARY_INITIAL_ROWS)
+            }}
             placeholder="Search skills…"
+            aria-label="Search the skill library"
             style={{
               all: "unset",
               flex: 1,
@@ -356,12 +373,13 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void }): J
               color: "var(--color-text-faint)",
             }}
           >
-            Skills: {total()}
+            Skills: {shown() === total() ? total() : `${shown()} of ${total()}`}
           </span>
         </div>
 
         <div
           class="atlas-scroll"
+          onScroll={handleScroll}
           style={{
             flex: 1,
             "min-height": 0,
@@ -413,80 +431,82 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void }): J
                       <button
                         type="button"
                         onClick={() => pick(skill.name)}
-                        class="atlas-skill-row"
-                        style={{
-                          all: "unset",
-                          cursor: "pointer",
-                          display: "flex",
-                          "flex-direction": "column",
-                          gap: "3px",
-                          padding: "8px 10px",
-                          "border-radius": "4px",
-                          border: "1px solid transparent",
-                          width: "100%",
-                          "box-sizing": "border-box",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "var(--color-accent-subtle)"
-                          e.currentTarget.style.borderColor = "var(--color-border)"
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "transparent"
-                          e.currentTarget.style.borderColor = "transparent"
-                        }}
+                        class="atlas-skill-row atlas-skill-row--dialog"
+                        aria-label={`Use the ${skill.name} skill`}
                       >
                         <span
+                          aria-hidden="true"
                           style={{
-                            "font-family": FONT_MONO,
-                            "font-size": "14px",
-                            "font-weight": "var(--font-weight-medium)",
-                            color: "var(--color-text)",
+                            width: "32px",
+                            height: "32px",
+                            display: "grid",
+                            "place-items": "center",
+                            "border-radius": "var(--radius-sm)",
+                            background: "var(--color-accent-subtle)",
+                            color: "var(--color-text-muted)",
                           }}
                         >
-                          /{skill.name}
+                          <Icon name={skillIconFor(skill)} size="small" />
                         </span>
-                        <Show when={skill.description}>
+                        <span style={{ display: "flex", "min-width": 0, "flex-direction": "column", gap: "3px" }}>
                           <span
                             style={{
-                              "font-family": FONT_SANS,
-                              "font-size": "13px",
-                              color: "var(--color-text-muted)",
-                              "line-height": 1.5,
-                              display: "-webkit-box",
-                              "-webkit-line-clamp": "2",
-                              "-webkit-box-orient": "vertical",
-                              overflow: "hidden",
+                              "font-family": FONT_MONO,
+                              "font-size": "14px",
+                              "font-weight": "var(--font-weight-medium)",
+                              color: "var(--color-text)",
                             }}
                           >
-                            {skill.description}
+                            /{skill.name}
                           </span>
-                        </Show>
-                        <Show when={(skill.tags ?? []).length > 0}>
-                          <div style={{ display: "flex", "flex-wrap": "wrap", gap: "4px", "margin-top": "2px" }}>
-                            <For each={(skill.tags ?? []).slice(0, 6)}>
-                              {(tag) => (
-                                <span
-                                  style={{
-                                    "font-family": FONT_MONO,
-                                    "font-size": "11px",
-                                    color: "var(--color-text-faint)",
-                                    background: "var(--color-accent-subtle)",
-                                    padding: "1px 6px",
-                                    "border-radius": "4px",
-                                  }}
-                                >
-                                  {tag}
-                                </span>
-                              )}
-                            </For>
-                          </div>
-                        </Show>
+                          <Show when={skill.description}>
+                            <span
+                              style={{
+                                "font-family": FONT_SANS,
+                                "font-size": "13px",
+                                color: "var(--color-text-muted)",
+                                "line-height": 1.5,
+                                display: "-webkit-box",
+                                "-webkit-line-clamp": "2",
+                                "-webkit-box-orient": "vertical",
+                                overflow: "hidden",
+                              }}
+                            >
+                              {skill.description}
+                            </span>
+                          </Show>
+                          <Show when={(skill.tags ?? []).length > 0}>
+                            <span style={{ display: "flex", "flex-wrap": "wrap", gap: "4px", "margin-top": "2px" }}>
+                              <For each={(skill.tags ?? []).slice(0, 6)}>
+                                {(tag) => (
+                                  <span
+                                    style={{
+                                      "font-family": FONT_MONO,
+                                      "font-size": "11px",
+                                      color: "var(--color-text-faint)",
+                                      background: "var(--color-accent-subtle)",
+                                      padding: "1px 6px",
+                                      "border-radius": "4px",
+                                    }}
+                                  >
+                                    {tag}
+                                  </span>
+                                )}
+                              </For>
+                            </span>
+                          </Show>
+                        </span>
                       </button>
                     )}
                   </For>
                 </div>
               )}
             </For>
+            <Show when={hasMore()}>
+              <button type="button" class="atlas-skill-browser__more" onClick={revealMore}>
+                Show more skills
+              </button>
+            </Show>
           </Show>
         </div>
       </div>

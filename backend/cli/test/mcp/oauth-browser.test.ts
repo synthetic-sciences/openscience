@@ -6,6 +6,8 @@ const auth = await import("@modelcontextprotocol/sdk/client/auth.js")
 // Track open() calls and control failure behavior
 let openShouldFail = false
 let openCalledWith: string | undefined
+let finishAuthCalls = 0
+let connectWithoutAuthorization = false
 
 mock.module("open", () => ({
   default: async (url: string) => {
@@ -34,7 +36,7 @@ class MockUnauthorizedError extends Error {
 const transportCalls: Array<{
   type: "streamable" | "sse"
   url: string
-  options: { authProvider?: unknown }
+  options: { authProvider?: unknown; requestInit?: { headers?: Record<string, string> } }
 }> = []
 
 // Mock the transport constructors
@@ -42,7 +44,13 @@ mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     url: string
     authProvider: { redirectToAuthorization?: (url: URL) => Promise<void> } | undefined
-    constructor(url: URL, options?: { authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> } }) {
+    constructor(
+      url: URL,
+      options?: {
+        authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> }
+        requestInit?: { headers?: Record<string, string> }
+      },
+    ) {
       this.url = url.toString()
       this.authProvider = options?.authProvider
       transportCalls.push({
@@ -52,6 +60,7 @@ mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
       })
     }
     async start() {
+      if (connectWithoutAuthorization) return
       // Simulate OAuth redirect by calling the authProvider's redirectToAuthorization
       if (this.authProvider?.redirectToAuthorization) {
         await this.authProvider.redirectToAuthorization(new URL("https://auth.example.com/authorize?client_id=test"))
@@ -60,6 +69,7 @@ mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
     }
     async finishAuth(_code: string) {
       // Mock successful auth completion
+      finishAuthCalls++
     }
   },
 }))
@@ -85,6 +95,11 @@ mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
     async connect(transport: { start: () => Promise<void> }) {
       await transport.start()
     }
+    setNotificationHandler() {}
+    async listTools() {
+      return { tools: [] }
+    }
+    async close() {}
   },
 }))
 
@@ -98,6 +113,8 @@ beforeEach(() => {
   openShouldFail = false
   openCalledWith = undefined
   transportCalls.length = 0
+  finishAuthCalls = 0
+  connectWithoutAuthorization = false
 })
 
 // Import modules after mocking
@@ -107,6 +124,8 @@ const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
 const { Instance } = await import("../../src/project/instance")
 const { ProjectTrust } = await import("../../src/project/trust")
 const { tmpdir } = await import("../fixture/fixture")
+const { Config } = await import("../../src/config/config")
+const { McpAuth } = await import("../../src/mcp/auth")
 
 async function trust() {
   const status = await ProjectTrust.status(Instance.project)
@@ -233,6 +252,7 @@ test("open() is called with the authorization URL", async () => {
             "test-oauth-server-3": {
               type: "remote",
               url: "https://example.com/mcp",
+              headers: { "X-Tenant": "tenant-123" },
             },
           },
         }),
@@ -262,6 +282,143 @@ test("open() is called with the authorization URL", async () => {
       expect(openCalledWith).toBeDefined()
       expect(typeof openCalledWith).toBe("string")
       expect(openCalledWith!).toContain("https://")
+      expect(transportCalls.find((call) => call.type === "streamable")?.options.requestInit?.headers).toEqual({
+        "X-Tenant": "tenant-123",
+      })
+    },
+  })
+})
+
+test("a restarted OAuth flow cannot exchange its code after connector authority changes", async () => {
+  const name = "restart-authority-change"
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        `${dir}/openscience.json`,
+        JSON.stringify({
+          $schema: "https://syntheticsciences.ai/config.json",
+          mcp: { [name]: { type: "remote", url: "https://original.example/mcp" } },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      await MCP.startAuth(name)
+      expect(await McpAuth.pendingOAuthFlow(name)).toMatchObject({ serverUrl: "https://original.example/mcp" })
+
+      await Config.setMcp(name, { type: "remote", url: "https://replacement.example/mcp" }, "project")
+      const error = await MCP.finishAuth(name, "old-authorization-code").then(
+        () => undefined,
+        (cause) => cause,
+      )
+      expect(String(error)).toContain("changed after OAuth")
+      expect(finishAuthCalls).toBe(0)
+      expect(await McpAuth.pendingOAuthFlow(name)).toBeUndefined()
+    },
+  })
+})
+
+test("a resumed exact flow restarts its callback listener without creating a replacement", async () => {
+  const name = "restart-callback-listener"
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        `${dir}/openscience.json`,
+        JSON.stringify({
+          $schema: "https://syntheticsciences.ai/config.json",
+          mcp: { [name]: { type: "remote", url: "https://example.com/mcp" } },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const started = await MCP.startAuth(name)
+      expect(started.state).toBe("pending")
+      if (started.state !== "pending") throw new Error("Expected pending OAuth authorization")
+      const pending = await McpAuth.pendingOAuthFlow(name)
+      expect(pending?.authorizationUrl).toBe(started.authorizationUrl)
+      await McpOAuthCallback.stop()
+
+      const waiting = MCP.waitForAuth(name, started.flowId).catch(() => undefined)
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const response = await fetch("http://127.0.0.1:19876/mcp/oauth/callback/health").catch(() => undefined)
+        if (response?.ok) break
+        await Bun.sleep(10)
+      }
+      const callback = await fetch(
+        `http://127.0.0.1:19876/mcp/oauth/callback?state=${encodeURIComponent(pending!.state)}&code=resumed-code`,
+      )
+      expect(callback.status).toBe(200)
+      await waiting
+      expect(finishAuthCalls).toBe(1)
+    },
+  })
+})
+
+test("waiting on a settled flow ID never creates a replacement operation", async () => {
+  const name = "stale-wait"
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        `${dir}/openscience.json`,
+        JSON.stringify({
+          $schema: "https://syntheticsciences.ai/config.json",
+          mcp: { [name]: { type: "remote", url: "https://example.com/mcp" } },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const started = await MCP.startAuth(name)
+      expect(started.state).toBe("pending")
+      if (started.state !== "pending") throw new Error("Expected pending OAuth authorization")
+      await MCP.cancelAuth(name, started.flowId)
+
+      await expect(MCP.waitForAuth(name, started.flowId)).rejects.toThrow(/No matching pending|changed before waiting/)
+      expect(await MCP.pendingAuth(name)).toBeUndefined()
+      expect(await McpAuth.pendingOAuthFlow(name)).toBeUndefined()
+    },
+  })
+})
+
+test("an already-authorized start returns a settled result and leaves no dead browser flow", async () => {
+  const name = "already-authorized-start"
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        `${dir}/openscience.json`,
+        JSON.stringify({
+          $schema: "https://syntheticsciences.ai/config.json",
+          mcp: { [name]: { type: "remote", url: "https://example.com/mcp" } },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      connectWithoutAuthorization = true
+
+      const started = await MCP.startAuth(name)
+
+      expect(started).toEqual({ state: "settled", result: { status: "connected" } })
+      expect(await MCP.pendingAuth(name)).toBeUndefined()
+      expect(await McpAuth.pendingOAuthFlow(name)).toBeUndefined()
+      expect((await MCP.status())[name]).toEqual({ status: "connected" })
     },
   })
 })

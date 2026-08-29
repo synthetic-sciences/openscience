@@ -4,7 +4,7 @@ import path from "path"
 import { BashTool, normalizeBashInput } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { executionSession, tmpdir } from "../fixture/fixture"
-import type { PermissionNext } from "../../src/permission/next"
+import { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { Shell } from "../../src/shell/shell"
@@ -114,6 +114,7 @@ describe("tool.bash permissions", () => {
         expect(requests.length).toBe(1)
         expect(requests[0].permission).toBe("bash")
         expect(requests[0].patterns).toContain("echo hello")
+        expect(requests[0].metadata).toEqual({ shell: { command: "echo hello" } })
       },
     })
   })
@@ -142,6 +143,7 @@ describe("tool.bash permissions", () => {
         expect(requests[0].permission).toBe("bash")
         expect(requests[0].patterns).toContain("echo foo")
         expect(requests[0].patterns).toContain("echo bar")
+        expect(requests[0].metadata).toEqual({ shell: { command: "echo foo && echo bar" } })
       },
     })
   })
@@ -278,7 +280,7 @@ describe("tool.bash permissions", () => {
     })
   })
 
-  test("does not ask for bash permission when command is cd only", async () => {
+  test("preserves exact source at the authorization boundary for cd-only commands", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
@@ -299,7 +301,87 @@ describe("tool.bash permissions", () => {
           testCtx,
         )
         const bashReq = requests.find((r) => r.permission === "bash")
-        expect(bashReq).toBeUndefined()
+        expect(bashReq).toMatchObject({
+          patterns: ["cd ."],
+          metadata: { shell: { command: "cd ." } },
+        })
+      },
+    })
+  })
+
+  test("Ask risky allows an audited read through the real Bash permission boundary", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const base = await context()
+        const result = await bash.execute(
+          {
+            command: "rg --version",
+            description: "Check ripgrep version",
+          },
+          {
+            ...base,
+            ask: async (request: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) =>
+              PermissionNext.ask({
+                ...request,
+                sessionID: base.sessionID,
+                ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
+                mode: "approve",
+              }),
+          },
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.output.toLowerCase()).toContain("ripgrep")
+        expect((await PermissionNext.list()).some((item) => item.sessionID === base.sessionID)).toBe(false)
+      },
+    })
+  })
+
+  test("Ask risky blocks a destructive command before Bash changes the workspace", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const victim = path.join(tmp.path, "victim")
+        await Bun.write(victim, "keep")
+        const bash = await BashTool.init()
+        const base = await context()
+        const execution = bash
+          .execute(
+            {
+              command: "rm -rf victim",
+              description: "Remove test victim",
+            },
+            {
+              ...base,
+              ask: async (request: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) =>
+                PermissionNext.ask({
+                  ...request,
+                  id: "permission_bash_risky_boundary",
+                  sessionID: base.sessionID,
+                  ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
+                  mode: "approve",
+                }),
+            },
+          )
+          .catch((error) => error)
+
+        let pending: PermissionNext.Request | undefined
+        for (let attempt = 0; attempt < 100 && !pending; attempt++) {
+          pending = (await PermissionNext.list()).find((item) => item.id === "permission_bash_risky_boundary")
+          if (!pending) await Bun.sleep(5)
+        }
+        expect(pending).toMatchObject({
+          permission: "bash",
+          metadata: { shell: { command: "rm -rf victim" } },
+        })
+        expect(await Bun.file(victim).exists()).toBe(true)
+
+        await PermissionNext.reply({ requestID: "permission_bash_risky_boundary", reply: "reject" })
+        expect(await execution).toBeInstanceOf(PermissionNext.RejectedError)
+        expect(await Bun.file(victim).exists()).toBe(true)
       },
     })
   })

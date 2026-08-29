@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
+import fs from "node:fs/promises"
 
 const server = new McpServer({ name: "capability-test", version: "1.0.0" })
 
@@ -8,9 +9,26 @@ server.registerTool(
   {
     description: "Echo a value",
   },
-  async () => ({
-    content: [{ type: "text", text: "ok" }],
-  }),
+  async () => {
+    const ready = process.env.OPENSCIENCE_MCP_REQUEST_READY
+    const release = process.env.OPENSCIENCE_MCP_REQUEST_RELEASE
+    if (ready && release) {
+      await fs.writeFile(ready, "ready")
+      for (let attempt = 0; attempt < 500; attempt++) {
+        if (
+          await fs.stat(release).then(
+            () => true,
+            () => false,
+          )
+        )
+          break
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+    }
+    return {
+      content: [{ type: "text", text: "ok" }],
+    }
+  },
 )
 
 server.registerResource(

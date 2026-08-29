@@ -217,7 +217,7 @@ export const StatusCommand = cmd({
         credits?.lifetimeSpentCents === null || credits?.lifetimeSpentCents === undefined
           ? ""
           : ` (spent $${(credits.lifetimeSpentCents / 100).toFixed(2)} lifetime)`
-      prompts.log.info(`Wallet: $${balanceUsd.toFixed(2)}${spent}`)
+      prompts.log.info(`Purchased Wallet: $${balanceUsd.toFixed(2)}${spent}`)
     }
     if (mode) {
       prompts.log.info("Routing: per-provider (auto) — your key if set, else Synthetic Sciences credits.")

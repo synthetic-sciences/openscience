@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { canSelectManaged, commitBilling, formatCreditBalance, walletBalanceLabel } from "./ManagedInference"
+import {
+  aceContractLabel,
+  canSelectManaged,
+  commitBilling,
+  formatCreditBalance,
+  walletBalanceLabel,
+} from "./ManagedInference"
 
 const source = await Bun.file(new URL("./ManagedInference.tsx", import.meta.url)).text()
 
@@ -25,6 +31,24 @@ test("formats the purchased-credit balance to exact cents", () => {
   expect(formatCreditBalance(984)).toBe("$984.00")
   expect(formatCreditBalance(984.6)).toBe("$984.60")
   expect(formatCreditBalance(0)).toBe("$0.00")
+})
+
+test("renders the server-authoritative Ace activation and fixed reload terms", () => {
+  expect(
+    aceContractLabel({
+      activationAuthorizationUsd: 0,
+      reloadThresholdUsd: 5,
+      reloadAmountUsd: 20,
+      serviceMarginPercent: 2,
+      processingFeeDisclosedSeparately: true,
+      reloadControlledByAce: true,
+    }),
+  ).toBe(
+    "Ace is a $0 authorization, not a purchase or subscription. While Ace is on, a purchased Wallet balance below $5 triggers one fixed $20 reload; the processing fee is disclosed separately before payment.",
+  )
+  expect(source).toContain("wallet()?.aceContract")
+  expect(source).not.toContain("below a 2-credit")
+  expect(source).not.toContain("turn it on or off anytime")
 })
 
 test("allows Managed whenever the server authorizes Wallet or reload access", () => {
@@ -85,10 +109,10 @@ test("does not redirect the Managed choice and gives an explicit zero-balance ac
   const update = source.slice(source.indexOf("const update ="), source.indexOf("// The mode can change"))
 
   expect(update).not.toContain("openLink")
-  expect(source).toContain('return "No Wallet balance"')
+  expect(source).toContain('return "No purchased balance"')
   expect(source).toContain('return "Turn on Ace"')
   expect(source).toContain('option.value === "managed" && !canSelectManaged(wallet())')
-  expect(source).toContain("Add Wallet funds or turn on Ace to use Managed models")
+  expect(source).toContain("Add purchased Wallet funds or turn on Ace to use Managed models")
 })
 
 // The provider catalog is intentionally not part of this helper. It is a

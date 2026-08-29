@@ -55,6 +55,21 @@ export const SYNCED_SERVICE_ENV_KEYS = [
   "PINECONE_API_KEY",
 ] as const
 
+/** Device-local CLI compute credentials are host capabilities, not ordinary
+ * shell configuration. Generic Bash, Task, kernel, and local MCP processes
+ * must never inherit them; the trusted compute provider broker adds back only
+ * the selected provider's fields for one reviewed invocation. */
+export const LOCAL_COMPUTE_CLI_ENV_KEYS = [
+  "TENSORPOOL_KEY",
+  "TENSORPOOL_API_KEY",
+  "LAMBDA_API_KEY",
+  "LAMBDA_LABS_API_KEY",
+  "PRIME_API_KEY",
+  "PRIME_INTELLECT_API_KEY",
+  "VAST_API_KEY",
+  "RUNPOD_API_KEY",
+] as const
+
 /** Compute credentials accepted by older Atlas sync responses. Keep this
  * explicit denylist separate from local credential handling: a user may still
  * configure their own local/SSH/scheduler/Modal runtime, but Atlas must never
@@ -80,14 +95,7 @@ export const RETIRED_SYNCED_COMPUTE_ENV_KEYS = new Set<string>([
   "AZURE_OPENAI_ENDPOINT",
   "TINKER_API_KEY",
   "TINKER_BASE_URL",
-  "TENSORPOOL_KEY",
-  "TENSORPOOL_API_KEY",
-  "LAMBDA_API_KEY",
-  "LAMBDA_LABS_API_KEY",
-  "PRIME_API_KEY",
-  "PRIME_INTELLECT_API_KEY",
-  "VAST_API_KEY",
-  "RUNPOD_API_KEY",
+  ...LOCAL_COMPUTE_CLI_ENV_KEYS,
 ])
 
 const MANAGED_SYNCED_LLM_KEYS = new Set(["OPENROUTER_API_KEY"])

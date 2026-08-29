@@ -52,6 +52,17 @@ import { ACCOUNT_REQUIRED_MESSAGE, isScientificCapabilityCanary, requiresOpenSci
 import { OutboundTelemetry } from "./telemetry/outbound"
 import { purgeRetiredAtlasAgentInstall } from "./skill/retired-install"
 import { SELF_RESTART_ARG, SelfRestart } from "./process/self-restart"
+import { DARWIN_UPDATE_SWAP_ARG, DarwinUpdateSwap } from "./process/darwin-update-swap"
+import { GracefulShutdown } from "./process/graceful-shutdown"
+
+if (process.argv[2] === DARWIN_UPDATE_SWAP_ARG) {
+  try {
+    process.exit(await DarwinUpdateSwap.run(process.argv[3] ?? ""))
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  }
+}
 
 if (process.argv[2] === SELF_RESTART_ARG) {
   try {
@@ -176,14 +187,6 @@ const cli = yargs(hideBin(process.argv))
         await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
       }
 
-      // Legacy skill-based compute providers still consume their enabled keys
-      // from subprocess environments. Modal remains adapter-only.
-      if (!capabilityCanary) {
-        await import("./server/routes/settings/compute")
-          .then((m) => m.ComputeSettings.applyComputeEnv())
-          .catch(() => {})
-      }
-
       // First authenticated startup quietly provisions the app-owned Python
       // and R starters. The command does not wait for package resolution; the
       // first kernel request joins the same lease-backed setup if it is still
@@ -295,6 +298,7 @@ async function run() {
     // Most notably, some docker-container-based MCP servers don't handle such signals unless
     // run using `docker run --init`.
     // Explicitly exit to avoid any hanging subprocesses.
+    await GracefulShutdown.run({ timeoutMs: 8_000 }).catch(() => undefined)
     await OutboundTelemetry.drain({ timeoutMs: 2_000 }).catch(() => undefined)
     await disposeDataRootOperation().catch(() => undefined)
     await Log.flush().catch(() => undefined)

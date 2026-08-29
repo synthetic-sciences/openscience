@@ -13,6 +13,7 @@ import {
   isSyncedEnvAllowed,
   BYOK_LLM_ENV_KEYS,
   SYNCED_SERVICE_ENV_KEYS,
+  LOCAL_COMPUTE_CLI_ENV_KEYS,
   managedOpenRouterBaseURL,
 } from "./synced-env-policy"
 import { isAtlasManagedKey } from "../credentials/managed-key"
@@ -137,9 +138,12 @@ const SAFE_SYNCED_KEYS = new Set([
   "OPENSCIENCE_RUNTIME",
 ])
 
-// Modal credentials belong to its trusted adapter and never enter
-// agent-controlled shells, including when supplied by an explicit export.
-const CONTROL_PLANE_ENV_KEYS = new Set(["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"])
+// Control-plane capabilities belong to trusted host adapters and never enter
+// agent-controlled children, including when supplied by an explicit export or
+// project configuration. Deny the desktop-update namespace so future updater
+// capabilities cannot become child-process ambient authority by accident.
+const CONTROL_PLANE_ENV_KEYS = new Set(["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", ...LOCAL_COMPUTE_CLI_ENV_KEYS])
+const CONTROL_PLANE_ENV_PREFIXES = ["OPENSCIENCE_DESKTOP_UPDATE_", "OPENSCIENCE_DESKTOP_PARENT_"]
 
 /**
  * Persistent CLI auth session.
@@ -1128,7 +1132,7 @@ export namespace OpenScience {
               module.reconcileAccountCredentialFields(portable),
             ),
             import("../server/routes/settings/compute").then((module) =>
-              module.ComputeSettings.reconcileAccountProviders(portable),
+              module.ComputeSettings.reconcileAccountProvidersDuringCredentialMutation(portable),
             ),
           ])
 
@@ -1354,11 +1358,23 @@ export namespace OpenScience {
     return result
   }
 
-  export function filterEnvForSubprocess(env: NodeJS.ProcessEnv): Record<string, string> {
+  /** Strip host-only capabilities before composing any agent-controlled child
+   * environment. Call this again after trusted base env and project-authored
+   * overlays are merged so an overlay can never restore ambient authority. */
+  export function filterControlPlaneEnv(env: NodeJS.ProcessEnv): Record<string, string> {
     const result: Record<string, string> = {}
     for (const [key, value] of Object.entries(env)) {
       if (!value) continue
       if (CONTROL_PLANE_ENV_KEYS.has(key)) continue
+      if (CONTROL_PLANE_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
+      result[key] = value
+    }
+    return result
+  }
+
+  export function filterEnvForSubprocess(env: NodeJS.ProcessEnv): Record<string, string> {
+    const result: Record<string, string> = {}
+    for (const [key, value] of Object.entries(filterControlPlaneEnv(env))) {
       if (isManagedAtlasKey(value)) continue
       // Entries ending in `_` (LC_, XDG_) are true prefixes; the rest are exact
       // names. Treating all as prefixes let HOME match HOMEBREW_GITHUB_API_TOKEN,
@@ -1381,8 +1397,7 @@ export namespace OpenScience {
    * OpenScience host and can only enter a kernel through an explicit start env. */
   export function filterEnvForKernel(env: NodeJS.ProcessEnv): Record<string, string> {
     const result: Record<string, string> = {}
-    for (const [key, value] of Object.entries(env)) {
-      if (!value) continue
+    for (const [key, value] of Object.entries(filterControlPlaneEnv(env))) {
       const runtime =
         SAFE_ENV_PREFIXES.some((prefix) => (prefix.endsWith("_") ? key.startsWith(prefix) : key === prefix)) ||
         KERNEL_RUNTIME_KEYS.has(key)
@@ -1391,8 +1406,8 @@ export namespace OpenScience {
     return result
   }
 
-  export function kernelEnv(env: NodeJS.ProcessEnv = process.env) {
-    return {
+  export function kernelEnv(env: NodeJS.ProcessEnv = process.env, overlay: NodeJS.ProcessEnv = {}) {
+    return filterControlPlaneEnv({
       ...filterEnvForKernel(env),
       // A denied ~/.gitconfig is a hard error in Git (unlike a missing file).
       // Arbitrary kernels must not read host Git credentials/config, so point
@@ -1400,7 +1415,8 @@ export namespace OpenScience {
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: os.devNull,
       GIT_TERMINAL_PROMPT: "0",
-    }
+      ...overlay,
+    })
   }
 
   /** Host credential files that an OS-sandboxed kernel must not read. Atlas

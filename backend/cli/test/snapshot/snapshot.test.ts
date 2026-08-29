@@ -220,16 +220,40 @@ test("special characters in filenames", async () => {
   })
 })
 
+test("patch and revert preserve filenames containing newlines", async () => {
+  if (process.platform === "win32") return
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+      const file = `${tmp.path}/line\nbreak.txt`
+      await Bun.write(file, "newline")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(file)
+      expect(await Snapshot.revert([patch])).toMatchObject({ status: "applied", removed: ["line\nbreak.txt"] })
+      expect(await Bun.file(file).exists()).toBe(false)
+    },
+  })
+})
+
 test("revert with empty patches", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      // Should not crash with empty patches
-      expect(Snapshot.revert([])).resolves.toBeUndefined()
+      // Should not crash with empty patches and should report an honest no-op.
+      await expect(Snapshot.revert([])).resolves.toEqual({
+        status: "noop",
+        restored: [],
+        removed: [],
+        skipped: [],
+        errors: [],
+      })
 
-      // Should not crash with patches that have empty file lists
-      expect(Snapshot.revert([{ hash: "dummy", files: [] }])).resolves.toBeUndefined()
+      await expect(Snapshot.revert([{ hash: "dummy", files: [] }])).resolves.toMatchObject({ status: "noop" })
     },
   })
 })
@@ -263,14 +287,14 @@ test("revert non-existent file", async () => {
 
       // Try to revert a file that doesn't exist in the snapshot
       // This should not crash
-      expect(
+      await expect(
         Snapshot.revert([
           {
             hash: before!,
             files: [`${tmp.path}/nonexistent.txt`],
           },
         ]),
-      ).resolves.toBeUndefined()
+      ).resolves.toEqual({ status: "noop", restored: [], removed: [], skipped: [], errors: [] })
     },
   })
 })
@@ -625,8 +649,10 @@ test("revert ignores malformed patch files outside the worktree", async () => {
         const before = await Snapshot.track()
         expect(before).toBeTruthy()
 
-        await Snapshot.revert([{ hash: before!, files: [outside] }])
+        const result = await Snapshot.revert([{ hash: before!, files: [outside] }])
 
+        expect(result.status).toBe("partial")
+        expect(result.errors[0]?.message).toContain("outside")
         expect(await Bun.file(outside).text()).toBe("keep")
       },
     })
@@ -649,8 +675,10 @@ test("revert ignores malformed patch files through a symlinked parent", async ()
         expect(before).toBeTruthy()
 
         await $`ln -s ${outside} ${tmp.path}/linked`.quiet()
-        await Snapshot.revert([{ hash: before!, files: [`${tmp.path}/linked/owned.txt`] }])
+        const result = await Snapshot.revert([{ hash: before!, files: [`${tmp.path}/linked/owned.txt`] }])
 
+        expect(result.status).toBe("partial")
+        expect(result.errors[0]?.message).toContain("symlinked parent")
         expect(await Bun.file(`${outside}/owned.txt`).text()).toBe("keep")
       },
     })
@@ -755,8 +783,93 @@ test("restore function", async () => {
 
       expect(await Bun.file(`${tmp.path}/a.txt`).exists()).toBe(true)
       expect(await Bun.file(`${tmp.path}/a.txt`).text()).toBe(tmp.extra.aContent)
-      expect(await Bun.file(`${tmp.path}/new.txt`).exists()).toBe(true) // New files should remain
+      expect(await Bun.file(`${tmp.path}/new.txt`).exists()).toBe(false)
       expect(await Bun.file(`${tmp.path}/b.txt`).text()).toBe(tmp.extra.bContent)
+    },
+  })
+})
+
+test("revert restores the exact target tree across create edit delete rename symlink mode and untracked changes", async () => {
+  if (process.platform === "win32") return
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Bun.write(`${tmp.path}/edited.txt`, "before edit")
+      await Bun.write(`${tmp.path}/deleted.txt`, "before delete")
+      await Bun.write(`${tmp.path}/rename-old.txt`, "before rename")
+      await Bun.write(`${tmp.path}/script.sh`, "#!/bin/sh\necho before\n")
+      await fs.chmod(`${tmp.path}/script.sh`, 0o755)
+      await fs.symlink("a.txt", `${tmp.path}/link.txt`)
+      await Bun.write(`${tmp.path}/untracked.txt`, "untracked before")
+
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/edited.txt`, "after edit")
+      await fs.rm(`${tmp.path}/deleted.txt`)
+      await fs.rename(`${tmp.path}/rename-old.txt`, `${tmp.path}/rename-new.txt`)
+      await fs.rm(`${tmp.path}/link.txt`)
+      await fs.symlink("b.txt", `${tmp.path}/link.txt`)
+      await fs.chmod(`${tmp.path}/script.sh`, 0o644)
+      await Bun.write(`${tmp.path}/untracked.txt`, "untracked after")
+      await Bun.write(`${tmp.path}/created.txt`, "after create")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(`${tmp.path}/rename-old.txt`)
+      expect(patch.files).toContain(`${tmp.path}/rename-new.txt`)
+      const result = await Snapshot.revert([patch])
+
+      expect(result.status).toBe("applied")
+      expect(result.errors).toEqual([])
+      expect(result.restored).toEqual(
+        expect.arrayContaining([
+          "deleted.txt",
+          "edited.txt",
+          "link.txt",
+          "rename-old.txt",
+          "script.sh",
+          "untracked.txt",
+        ]),
+      )
+      expect(result.removed).toEqual(expect.arrayContaining(["created.txt", "rename-new.txt"]))
+      expect(await Bun.file(`${tmp.path}/edited.txt`).text()).toBe("before edit")
+      expect(await Bun.file(`${tmp.path}/deleted.txt`).text()).toBe("before delete")
+      expect(await Bun.file(`${tmp.path}/rename-old.txt`).text()).toBe("before rename")
+      expect(await Bun.file(`${tmp.path}/rename-new.txt`).exists()).toBe(false)
+      expect(await fs.readlink(`${tmp.path}/link.txt`)).toBe("a.txt")
+      expect((await fs.stat(`${tmp.path}/script.sh`)).mode & 0o777).toBe(0o755)
+      expect(await Bun.file(`${tmp.path}/untracked.txt`).text()).toBe("untracked before")
+      expect(await Bun.file(`${tmp.path}/created.txt`).exists()).toBe(false)
+      expect((await $`git status --porcelain -- untracked.txt`.cwd(tmp.path).quiet().text()).trim()).toBe(
+        "?? untracked.txt",
+      )
+    },
+  })
+})
+
+test("restore reports and preserves an exact snapshot tree", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Bun.write(`${tmp.path}/target.txt`, "target")
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/target.txt`, "changed")
+      await Bun.write(`${tmp.path}/extra.txt`, "extra")
+      const result = await Snapshot.restore(before!)
+
+      expect(result).toEqual({
+        status: "applied",
+        restored: ["target.txt"],
+        removed: ["extra.txt"],
+        skipped: [],
+        errors: [],
+      })
+      expect(await Bun.file(`${tmp.path}/target.txt`).text()).toBe("target")
+      expect(await Bun.file(`${tmp.path}/extra.txt`).exists()).toBe(false)
     },
   })
 })

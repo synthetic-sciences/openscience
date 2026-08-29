@@ -76,7 +76,7 @@ async function onboardManaged(): Promise<void> {
 
   const credits = await OpenScience.getCredits().catch(() => null)
   const balance = credits?.balanceUsd ?? null
-  prompts.log.info(balance === null ? "Wallet: unavailable" : `Wallet: $${balance.toFixed(2)}`)
+  prompts.log.info(balance === null ? "Purchased Wallet: unavailable" : `Purchased Wallet: $${balance.toFixed(2)}`)
 
   if (balance !== null && balance <= 0) {
     const add = await prompts.confirm({
@@ -367,7 +367,7 @@ export const DoctorCommand = cmd({
       if (mode) {
         const suffix = mode.managed_unlocked ? "" : " (Managed off)"
         const amount = credits ? `$${credits.balanceUsd.toFixed(2)}` : "unavailable"
-        prompts.log.info(`Wallet: ${amount}${suffix}`)
+        prompts.log.info(`Purchased Wallet: ${amount}${suffix}`)
       }
     } else {
       prompts.log.info("Synthetic Sciences account: not connected  (run `openscience login`)")

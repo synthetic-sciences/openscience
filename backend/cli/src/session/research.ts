@@ -1190,12 +1190,19 @@ export namespace SessionResearch {
     return progress ? ("finalize" as const) : ("block" as const)
   }
 
-  export async function preflight(sessionID: string, balance: number) {
+  export async function preflight(sessionID: string, balance: number): Promise<ReturnType<typeof budget>> {
     const contract = await read(sessionID)
     if (!contract) return "allow" as const
-    const decision = budget(contract, balance)
+    // The decision and its one-call finalization reservation must be made from
+    // the same durable state transition. Computing `decision` from the read
+    // above allowed two CLI processes to both observe `finalizationCalls === 0`
+    // before either write landed, so both could dispatch the supposedly unique
+    // reserved call. JsonStore.update serializes this callback through both its
+    // in-process lock and its on-disk FileLease.
+    let decision: ReturnType<typeof budget> = "allow"
     await JsonStore.update(file(sessionID), (data) => {
       const current = Contract.parse(data)
+      decision = budget(current, balance)
       return {
         ...current,
         budget: {

@@ -159,7 +159,9 @@ describe("launch settings truth pass", () => {
 
     expect(connectors).toContain("sdk.client.mcp.inspect({ name })")
     expect(connectors).toContain('sdk.client.mcp.config.set({ name, config: next, scope: "global" })')
-    expect(connectors).toContain("sdk.client.mcp.auth.authenticate({ name })")
+    expect(connectors).toContain("beginAuthentication(name)")
+    expect(connectors).toContain('started.state === "settled"')
+    expect(connectors).toContain('authPath(name, "/wait")')
     expect(connectors).toContain("sdk.client.mcp.auth.remove({ name })")
     expect(connectors).toContain('detail()?.auth === "authenticated" || s()?.status === "connected"')
     expect(connectors).toContain("saved, but could not connect")
@@ -214,7 +216,7 @@ describe("launch settings truth pass", () => {
 
     expect(services).toContain("Encrypted on this machine")
     expect(services).toContain("{count()} saved")
-    expect(services).toContain('<span class="settings-chip">Saved</span>')
+    expect(services).toContain('<span class="settings-chip">Credential saved</span>')
     expect(services).not.toContain("connected={service.connected}")
     expect(services).not.toContain("Connected and ready")
   })

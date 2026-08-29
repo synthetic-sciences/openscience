@@ -9,6 +9,16 @@ import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import "./preference-panels.css"
 
 type Entry = { name: string; path: string; bytes: number; kind: "dir" | "file" }
+type Relocation = {
+  id?: string
+  phase: "copying" | "ready" | "publishing" | "published" | "switched" | "recovery_required"
+  source?: string
+  target?: string
+  started_at?: string
+  updated_at?: string
+  active?: boolean
+  error?: string
+}
 type Usage = {
   data_dir: string
   managed: boolean
@@ -21,6 +31,7 @@ type Usage = {
   scanning?: boolean
   updated_at?: string | null
   scan_error?: string | null
+  relocation?: Relocation | null
 }
 
 function fmt(bytes: number): string {
@@ -55,6 +66,49 @@ export async function storageLocationChoice(open: () => Promise<string | string[
     )
 }
 
+export function storageRelocationCopy(value: Relocation) {
+  if (value.phase === "recovery_required") {
+    return {
+      title: "Storage move needs attention",
+      detail: value.error ?? "OpenScience could not safely read the recovery record.",
+      tone: "critical" as const,
+    }
+  }
+  if (!value.active) {
+    return {
+      title: "Storage move was interrupted",
+      detail: "Your current data is still protected. Resume to recover the verified transaction safely.",
+      tone: "warning" as const,
+    }
+  }
+  if (value.phase === "copying") {
+    return {
+      title: "Copying and verifying data",
+      detail: "The current location remains active until the verified copy is ready.",
+      tone: "neutral" as const,
+    }
+  }
+  if (value.phase === "ready" || value.phase === "publishing") {
+    return {
+      title: "Preparing the verified copy",
+      detail: "The current location remains active while the destination is committed.",
+      tone: "neutral" as const,
+    }
+  }
+  if (value.phase === "published") {
+    return {
+      title: "Switching storage location",
+      detail: "The verified destination is ready. OpenScience is switching running servers together.",
+      tone: "neutral" as const,
+    }
+  }
+  return {
+    title: "Finalizing storage location",
+    detail: "The new location is active. OpenScience is finishing recovery metadata.",
+    tone: "neutral" as const,
+  }
+}
+
 export const Storage: Component = () => {
   const sdk = useGlobalSDK()
   const platform = usePlatform()
@@ -73,7 +127,7 @@ export const Storage: Component = () => {
   let poll: ReturnType<typeof setTimeout> | undefined
   const schedulePoll = (next: Usage) => {
     if (poll) clearTimeout(poll)
-    poll = next.scanning ? setTimeout(() => void load({ background: true }), 1_500) : undefined
+    poll = next.scanning || busy() ? setTimeout(() => void load({ background: true }), 1_500) : undefined
   }
   const load = async (options: { background?: boolean; refresh?: boolean } = {}) => {
     const background = options.background ?? false
@@ -116,10 +170,11 @@ export const Storage: Component = () => {
     if (choice.kind === "selected") setTarget(choice.path)
   }
 
-  const relocate = async () => {
-    const next = target().trim()
+  const relocate = async (requested?: string) => {
+    const next = (requested ?? target()).trim()
     if (!next || busy()) return
     setBusy(true)
+    void load({ background: true })
     setError(undefined)
     setStatus(undefined)
     try {
@@ -145,6 +200,7 @@ export const Storage: Component = () => {
   const resetLocation = async () => {
     if (busy()) return
     setBusy(true)
+    void load({ background: true })
     setError(undefined)
     setStatus(undefined)
     try {
@@ -207,6 +263,47 @@ export const Storage: Component = () => {
                 </button>
               </div>
             )}
+          </Show>
+          <Show when={usage()?.relocation}>
+            {(relocation) => {
+              const copy = () => storageRelocationCopy(relocation())
+              return (
+                <div class="settings-alert" data-tone={copy().tone} role="status" aria-live="polite">
+                  <Icon
+                    name={
+                      copy().tone === "critical"
+                        ? "alert-circle"
+                        : copy().tone === "warning"
+                          ? "alert-circle"
+                          : "refresh"
+                    }
+                    size="small"
+                    class="shrink-0 text-icon-weak-base"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <strong class="block text-12-medium text-text-strong">{copy().title}</strong>
+                    <span class="block text-12-regular text-text-weak">{copy().detail}</span>
+                    <Show when={relocation().target}>
+                      <code class="mt-1 block truncate text-11-regular text-text-weak" title={relocation().target}>
+                        {relocation().target}
+                      </code>
+                    </Show>
+                  </div>
+                  <Show
+                    when={!relocation().active && relocation().target && relocation().phase !== "recovery_required"}
+                  >
+                    <button
+                      type="button"
+                      class="settings-preference-action shrink-0"
+                      disabled={busy()}
+                      onClick={() => void relocate(relocation().target)}
+                    >
+                      Resume safely
+                    </button>
+                  </Show>
+                </div>
+              )
+            }}
           </Show>
 
           <Show

@@ -85,6 +85,7 @@ import { Auth } from "@/auth"
 import { SafeFileIO } from "@/file/safe-io"
 import { OutboundTelemetry } from "@/telemetry/outbound"
 import { resolveTelemetryRoute } from "./billing-gate"
+import { UpdateQuiescence } from "@/process/update-quiescence"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -207,6 +208,13 @@ export namespace SessionPrompt {
     }
   }
 
+  const processActive = new Set<string>()
+  const activityKey = (sessionID: string) => `${Instance.project.id}:${sessionID}`
+
+  export function activeCount() {
+    return processActive.size
+  }
+
   const state = Instance.state(
     () => {
       const data: Record<
@@ -222,7 +230,8 @@ export namespace SessionPrompt {
       return data
     },
     async (current) => {
-      for (const item of Object.values(current)) {
+      for (const [sessionID, item] of Object.entries(current)) {
+        processActive.delete(activityKey(sessionID))
         item.abort.abort()
         for (const callback of item.callbacks) {
           callback.reject()
@@ -473,6 +482,7 @@ export namespace SessionPrompt {
       abort: controller,
       callbacks: [],
     }
+    processActive.add(activityKey(sessionID))
     return controller.signal
   }
 
@@ -492,6 +502,7 @@ export namespace SessionPrompt {
       item.reject()
     }
     delete s[sessionID]
+    processActive.delete(activityKey(sessionID))
     // Flush any coalesced (debounced) streaming part writes now, so the final
     // text/reasoning content is durable the moment the turn goes idle. cancel()
     // is sync (invoked from a `using` disposer), so this can't be awaited; log
@@ -1635,7 +1646,14 @@ export namespace SessionPrompt {
 
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
     const session = await Session.get(sessionID)
-    const abort = start(sessionID)
+    const abort = await AuthoritySignal.exclusive(async () => {
+      const release = UpdateQuiescence.enter()
+      try {
+        return start(sessionID)
+      } finally {
+        release()
+      }
+    })
     if (!abort) {
       return new Promise<MessageV2.WithParts>((resolve, reject) => {
         const callbacks = state()[sessionID].callbacks
@@ -1646,7 +1664,7 @@ export namespace SessionPrompt {
     using _ = defer(() => cancel(sessionID, abort))
 
     await using lease = await FileLease.acquire(loopLeasePath(session.projectID, sessionID), LOOP_LEASE_TIMEOUT, abort)
-    return lease.during(async () => {
+    return await lease.during(async () => {
       try {
         return await execute(sessionID, session, abort)
       } finally {
@@ -2075,7 +2093,7 @@ export namespace SessionPrompt {
         consequential: "ask",
         blocked: "ask",
         instruction:
-          "At planning and consequential choice points, pause and use the question tool. Put one recommended option first, explain its impact, and keep routine implementation details moving.",
+          "At planning and consequential choice points, pause and use the question tool with reason planning or consequential. Put one recommended option first, explain its impact, and keep routine implementation details moving.",
       } as const
     }
     if (autonomy === "autonomous") {
@@ -2084,7 +2102,7 @@ export namespace SessionPrompt {
         consequential: "decide",
         blocked: "ask",
         instruction:
-          "Choose the recommended path for routine and consequential decisions, record the assumption in the trace, and ask only when missing authority or required input makes progress impossible.",
+          "Choose the recommended path for routine and consequential decisions, record the assumption in the trace, and use the question tool only with reason missing_authority when required authority or input makes progress impossible.",
       } as const
     }
     return {
@@ -2092,7 +2110,7 @@ export namespace SessionPrompt {
       consequential: "ask",
       blocked: "ask",
       instruction:
-        "Choose safe, reversible options yourself. Ask only when ambiguity is consequential or materially changes scope, and put one recommended option first with its impact.",
+        "Choose safe, reversible options yourself. Use the question tool with reason consequential only when ambiguity materially changes scope or outcome, and put one recommended option first with its impact.",
     } as const
   }
 

@@ -360,7 +360,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const started = reserved.createdAt
 
       await using attemptLease = await TaskAttempt.acquire(identity, Number.POSITIVE_INFINITY, ctx.abort)
-      return attemptLease.during(async () => {
+      return await attemptLease.during(async () => {
         const current = await TaskAttempt.read(identity)
         if (!current) throw new Error(`Durable Task attempt ${ctx.callID} disappeared after reservation`)
         if (current.status === "completed" && current.result) return current.result

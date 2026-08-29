@@ -9,15 +9,18 @@ const Setup = z
     oauth: z.enum(["auto", "client"]),
     scope: z.string().optional(),
     confidential_client: z.boolean().optional(),
+    one_click_disabled: z.boolean().optional(),
+    one_click_connect: z.boolean().optional(),
   })
   .strict()
 
 export const ConnectorCatalogEntry = z
   .object({
     schema_version: z.literal(1),
-    id: z.enum(["github", "benchling", "box", "dropbox", "s3"]),
+    id: z.enum(["github", "benchling", "box", "dropbox", "s3", "givemeanode"]),
     name: z.string(),
     provider: z.string(),
+    recommended: z.boolean().default(false),
     status: z.enum(["official_setup", "manual_review", "unavailable"]),
     summary: z.string(),
     source_url: z.string().url(),
@@ -37,6 +40,42 @@ function revision(value: ConnectorCatalogEntry) {
 }
 
 const entries = ConnectorCatalogEntry.array().parse([
+  {
+    schema_version: 1,
+    id: "givemeanode",
+    name: "GiveMeANode",
+    provider: "San Francisco Compute",
+    recommended: true,
+    status: "official_setup",
+    summary:
+      "Official hosted MCP server for agent-driven GPU nodes, jobs, storage, logs, metrics, and isolated sandboxes.",
+    source_url: "https://givemeanode.com/docs",
+    reviewed_at: "2026-08-29",
+    read_operations: [
+      "Node, job, storage, log, metric, and account inspection",
+      "GPU catalog and resource availability inspection",
+    ],
+    upstream_write_operations: [
+      "Create, start, stop, and delete billable GPU resources",
+      "Submit or cancel jobs and run commands",
+      "Upload or delete storage objects and manage sandboxes",
+    ],
+    writes_enabled_by_catalog: false,
+    safety:
+      "One click saves the exact reviewed endpoint off, then opens browser OAuth. MCP credentials, configured headers, and local connector environment values are encrypted at rest. Setup does not invoke a tool or create a paid resource; every later invocation still crosses MCP permissions. Review billing limits and stop or delete resources explicitly.",
+    requirements: [
+      "A GiveMeANode account",
+      "One browser OAuth 2.1 approval",
+      "Billing limits reviewed before any paid compute invocation",
+    ],
+    setup: {
+      type: "remote",
+      name: "givemeanode",
+      url: "https://mcp.givemeanode.com",
+      oauth: "auto",
+      one_click_connect: true,
+    },
+  },
   {
     schema_version: 1,
     id: "github",

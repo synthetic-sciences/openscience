@@ -2,6 +2,7 @@ import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { OpenScience } from "../../openscience"
+import { ACE_CONTRACT, aceActivationCopy } from "../../openscience/ace-contract"
 
 const BILLING_URL = process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || "https://app.syntheticsciences.ai/billing"
 
@@ -32,7 +33,7 @@ const BillingShowCommand = cmd({
       prompts.outro("Done")
       return
     }
-    prompts.log.info(credits ? `Wallet      : $${credits.balanceUsd.toFixed(2)}` : "Wallet      : unavailable")
+    prompts.log.info(credits ? `Purchased Wallet: $${credits.balanceUsd.toFixed(2)}` : "Purchased Wallet: unavailable")
     prompts.log.info("Model access: choose BYOK / Subscription or Managed in web Settings.")
     if (!mode.managed_supported) {
       prompts.log.warn(
@@ -41,7 +42,7 @@ const BillingShowCommand = cmd({
     } else if (!mode.managed_unlocked) {
       prompts.log.info("Managed access is off. Enable Ace in Billing or use remaining purchased Wallet credit.")
     }
-    prompts.log.info("Review wallet, auto-reload, and usage at " + BILLING_URL + ".")
+    prompts.log.info("Review the purchased Wallet, Ace authorization, and usage at " + BILLING_URL + ".")
     prompts.outro("Done")
   },
 })
@@ -53,10 +54,10 @@ const BillingTopupCommand = cmd({
     UI.empty()
     prompts.intro("openscience billing")
     prompts.log.info(`Open: ${BILLING_URL}`)
-    prompts.log.info("20 credits add $20 to your wallet; the processing fee is shown separately at checkout.")
     prompts.log.info(
-      "Auto-reload adds 20 credits below a 2-credit purchased balance; turn it on or off anytime in Billing.",
+      `${ACE_CONTRACT.reloadAmountUsd} credits add $${ACE_CONTRACT.reloadAmountUsd} to your purchased Wallet; the processing fee is shown separately at checkout.`,
     )
+    prompts.log.info(aceActivationCopy())
     prompts.log.info("Provider accounts and local models remain available and never draw down your wallet.")
     // Open the URL using execFile (no shell) so BILLING_URL can't be
     // interpreted as a shell expression. BILLING_URL itself is either an

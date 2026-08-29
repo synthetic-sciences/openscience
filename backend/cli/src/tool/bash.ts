@@ -321,14 +321,22 @@ export const BashTool = Tool.define("bash", async () => {
       const { existsSync, mkdirSync } = await import("fs")
       if (!existsSync(cwd)) mkdirSync(cwd, { recursive: true })
 
-      if (patterns.size > 0) {
-        await ctx.ask({
-          permission: "bash",
-          patterns: Array.from(patterns),
-          always: Array.from(always),
-          metadata: {},
-        })
-      }
+      // Preserve the exact source at the authorization boundary. Extracted
+      // command patterns remain useful for configured deny rules and approval
+      // labels, but they intentionally omit redirects, substitutions, and
+      // compound syntax. PermissionNext classifies the exact source so those
+      // constructs cannot bypass the Ask-risky mode floor. Even a cd-only or
+      // syntactically unusual call crosses this boundary and fails closed.
+      await ctx.ask({
+        permission: "bash",
+        patterns: patterns.size > 0 ? Array.from(patterns) : [params.command],
+        always: Array.from(always),
+        metadata: {
+          shell: {
+            command: params.command,
+          },
+        },
+      })
 
       // Seed the BYOK secret cache so redact() below masks the user's own
       // provider keys (auth.json + shell env), not just synced managed ones.

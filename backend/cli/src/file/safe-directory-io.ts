@@ -34,6 +34,11 @@ export namespace SafeDirectoryIO {
     afterMutation?: (source: string, target: string) => void | Promise<void>
   }
 
+  export type SwapOptions = {
+    afterVerify?: (left: string, right: string) => void | Promise<void>
+    afterMutation?: (left: string, right: string) => void | Promise<void>
+  }
+
   type Directory = {
     fd: number
     expected: string
@@ -48,6 +53,7 @@ export namespace SafeDirectoryIO {
     linkat(fromDir: number, from: Buffer, toDir: number, to: Buffer, flags: number): number
     renameat(fromDir: number, from: Buffer, toDir: number, to: Buffer): number
     renameNoReplace(fromDir: number, from: Buffer, toDir: number, to: Buffer): number
+    renameSwap(fromDir: number, from: Buffer, toDir: number, to: Buffer): number
     unlinkat(dir: number, name: Buffer, flags: number): number
     errno(): number
   }
@@ -64,6 +70,7 @@ export namespace SafeDirectoryIO {
   const O_CLOEXEC = process.platform === "darwin" ? 0x01000000 : 0x00080000
   const RENAME_EXCL = 0x4
   const RENAME_NOREPLACE = 0x1
+  const RENAME_SWAP = 0x2
   const natives = { value: undefined as Native | undefined }
 
   function libraries() {
@@ -152,6 +159,7 @@ export namespace SafeDirectoryIO {
       renameat: symbols.renameat as Native["renameat"],
       renameNoReplace: (fromDir, from, toDir, to) =>
         exclusive(fromDir, from, toDir, to, process.platform === "darwin" ? RENAME_EXCL : RENAME_NOREPLACE),
+      renameSwap: (fromDir, from, toDir, to) => exclusive(fromDir, from, toDir, to, RENAME_SWAP),
       unlinkat: symbols.unlinkat as Native["unlinkat"],
       errno,
     }
@@ -476,6 +484,13 @@ export namespace SafeDirectoryIO {
     )
   }
 
+  function swap(directory: Directory, left: string, right: string) {
+    const api = native()
+    invoke("atomic swap", `${left} <-> ${right}`, () =>
+      api.renameSwap(directory.fd, name(left), directory.fd, name(right)),
+    )
+  }
+
   async function syncMove(from: Directory, to: Directory) {
     await sync(from.fd, true)
     if (from.fd !== to.fd) await sync(to.fd, true)
@@ -656,6 +671,89 @@ export namespace SafeDirectoryIO {
       throw cause
     } finally {
       await Promise.all([current.close(), from.close(), ...(!same ? [to.close()] : [])])
+    }
+  }
+
+  export async function swapEntries(
+    left: string,
+    right: string,
+    leftExpected: Entry,
+    rightExpected: Entry,
+    options?: SwapOptions,
+  ) {
+    if (process.platform !== "darwin") throw new Error("Atomic application exchange requires macOS")
+    const leftPath = direct(left)
+    const rightPath = direct(right)
+    if (leftPath.parent !== rightPath.parent) throw new Error("Atomic exchange entries must be siblings")
+    const parent = await openExisting(leftPath.parent)
+    const state = { swapped: false }
+    try {
+      await verify(parent)
+      const [leftEntry, rightEntry] = await Promise.all([
+        openEntry(parent, leftPath.file, leftPath.path),
+        openEntry(parent, rightPath.file, rightPath.path),
+      ])
+      try {
+        if (!matches(leftEntry.entry, leftExpected) || !matches(rightEntry.entry, rightExpected)) {
+          throw new Error("Atomic exchange entries changed after approval")
+        }
+      } finally {
+        await Promise.all([leftEntry.close(), rightEntry.close()])
+      }
+      await options?.afterVerify?.(leftPath.path, rightPath.path)
+      await verify(parent)
+      const [finalLeft, finalRight] = await Promise.all([
+        openEntry(parent, leftPath.file, leftPath.path),
+        openEntry(parent, rightPath.file, rightPath.path),
+      ])
+      try {
+        if (!matches(finalLeft.entry, leftExpected) || !matches(finalRight.entry, rightExpected)) {
+          throw new Error("Atomic exchange entries changed before mutation")
+        }
+      } finally {
+        await Promise.all([finalLeft.close(), finalRight.close()])
+      }
+      swap(parent, leftPath.file, rightPath.file)
+      state.swapped = true
+      await options?.afterMutation?.(leftPath.path, rightPath.path)
+      await sync(parent.fd, true)
+      const [receivedLeft, receivedRight] = await Promise.all([
+        openEntry(parent, leftPath.file, leftPath.path),
+        openEntry(parent, rightPath.file, rightPath.path),
+      ])
+      try {
+        if (!matches(receivedLeft.entry, rightExpected) || !matches(receivedRight.entry, leftExpected)) {
+          throw new Error("Atomic exchange produced unexpected directory entries")
+        }
+      } finally {
+        await Promise.all([receivedLeft.close(), receivedRight.close()])
+      }
+      await verify(parent)
+    } catch (cause) {
+      if (!state.swapped) throw cause
+      try {
+        const [rollbackLeft, rollbackRight] = await Promise.all([
+          openEntry(parent, leftPath.file, leftPath.path),
+          openEntry(parent, rightPath.file, rightPath.path),
+        ])
+        try {
+          if (!matches(rollbackLeft.entry, rightExpected) || !matches(rollbackRight.entry, leftExpected)) {
+            throw new Error("Atomic exchange entries changed before rollback")
+          }
+        } finally {
+          await Promise.all([rollbackLeft.close(), rollbackRight.close()])
+        }
+        swap(parent, leftPath.file, rightPath.file)
+        await sync(parent.fd, true)
+      } catch (error) {
+        throw new AggregateError(
+          [cause, error],
+          "Atomic exchange failed and could not be rolled back without replacing an unapproved entry",
+        )
+      }
+      throw cause
+    } finally {
+      await parent.close()
     }
   }
 }

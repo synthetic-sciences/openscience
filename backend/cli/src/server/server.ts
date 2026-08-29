@@ -61,7 +61,7 @@ import { SandboxSettingsRoutes } from "./routes/settings/sandbox"
 import { BillingSettingsRoutes } from "./routes/settings/billing"
 import { WalletSettingsRoutes } from "./routes/settings/wallet"
 import { SettingsUsageRoutes } from "./routes/settings/usage"
-import { UpdatesSettingsRoutes } from "./routes/settings/updates"
+import { UpdatesSettingsRoutes, desktopUpdateShutdownAuthorized } from "./routes/settings/updates"
 import { ResearchToolsSettingsRoutes } from "./routes/settings/research-tools"
 import { ScientificToolsSettingsRoutes } from "./routes/settings/scientific-tools"
 import { projectSelection } from "./project-selection"
@@ -83,11 +83,24 @@ export namespace Server {
   let _corsWhitelist: string[] = []
   let _server: Bun.Server<unknown> | undefined
   let credentialLifecycleReady = false
+  let credentialLifecycleBaseline: Promise<void> | undefined
 
   function startCredentialLifecycle() {
     if (credentialLifecycleReady) return
     credentialLifecycleReady = true
-    CredentialLifecycle.onRevoke(async () => {
+    CredentialLifecycle.onRevoke(async ({ reason }) => {
+      if (reason === "mcp-auth.migrate") return
+      const mcpAuthority =
+        reason.startsWith("mcp-config.") ||
+        ["mcp-auth.set:", "mcp-auth.remove:", "mcp-auth.tokens:", "mcp-auth.tokens.refresh:", "mcp-auth.client:"].some(
+          (prefix) => reason.startsWith(prefix),
+        )
+      if (mcpAuthority) {
+        // MCP authority is scoped to MCP transports. Do not stop unrelated
+        // notebooks, compute, or shell commands when an OAuth token refreshes.
+        await Promise.all([CredentialProcessLedger.revoke("mcp"), Instance.disposeAll({ strict: true })])
+        return
+      }
       // Compute jobs and long-running Bash commands do not live in Instance
       // state. MCP and LSP do, and their disposal callbacks close the
       // underlying transports/processes.
@@ -95,10 +108,12 @@ export namespace Server {
         ComputeJobs.cancelCredentialProcesses(),
         CommandRuntime.stopAll(),
         CredentialProcessLedger.revoke("mcp"),
-        Instance.disposeAll(),
+        Instance.disposeAll({ strict: true }),
       ])
     })
-    CredentialLifecycle.watch()
+    credentialLifecycleBaseline = CredentialLifecycle.ensureFresh().then(() => {
+      CredentialLifecycle.watch()
+    })
   }
 
   // Per-process secret marking trusted in-process calls (Server.internalFetch).
@@ -120,6 +135,13 @@ export namespace Server {
     () =>
       // TODO: Break server.ts into smaller route files to fix type inference
       app
+        .use(async (_c, next) => {
+          // Reconcile a durable credential revision before any request can
+          // initialize project state. Running revokers from inside that state
+          // initializer would otherwise wait on the very state being built.
+          await credentialLifecycleBaseline
+          return next()
+        })
         // 404/410 and friends are cacheable by default (RFC 7231 §6.1), and a
         // JSON body with no Cache-Control is fair game for heuristic caching
         // too. A browser that cached one stale-project 410 for /provider then
@@ -195,6 +217,13 @@ export namespace Server {
           if (
             !health &&
             !preflight &&
+            !(
+              c.req.path === "/settings/updates/dispose" &&
+              desktopUpdateShutdownAuthorized(
+                c.req.header("authorization"),
+                process.env.OPENSCIENCE_DESKTOP_UPDATE_TOKEN,
+              )
+            ) &&
             !isDeploymentAuthorized(process.env["OPENSCIENCE_AUTH_TOKEN"], c.req.header("authorization"))
           ) {
             c.header("WWW-Authenticate", 'Bearer realm="openscience"')

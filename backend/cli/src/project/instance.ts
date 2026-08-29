@@ -76,9 +76,9 @@ export const Instance = {
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)
   },
-  async dispose() {
+  async dispose(options: { strict?: boolean } = {}) {
     Log.Default.info("disposing instance", { directory: Instance.directory })
-    await State.dispose(Instance.directory)
+    await State.dispose(Instance.directory, options)
     cache.delete(Instance.directory)
     GlobalBus.emit("event", {
       directory: Instance.directory,
@@ -90,12 +90,13 @@ export const Instance = {
       },
     })
   },
-  async disposeAll() {
+  async disposeAll(options: { strict?: boolean } = {}) {
     if (disposal.all) return disposal.all
 
     disposal.all = iife(async () => {
       Log.Default.info("disposing all instances")
       const entries = [...cache.entries()]
+      const failures: unknown[] = []
       for (const [key, value] of entries) {
         if (cache.get(key) !== value) continue
 
@@ -111,9 +112,14 @@ export const Instance = {
 
         if (cache.get(key) !== value) continue
 
-        await context.provide(ctx, async () => {
-          await Instance.dispose()
-        })
+        await context
+          .provide(ctx, async () => {
+            await Instance.dispose(options)
+          })
+          .catch((error) => failures.push(error))
+      }
+      if (failures.length) {
+        throw new AggregateError(failures, "One or more OpenScience project instances could not be disposed")
       }
     }).finally(() => {
       disposal.all = undefined

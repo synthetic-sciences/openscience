@@ -20,14 +20,22 @@ describe("workspace account gate", () => {
     expect(gate).not.toContain("ChatGPT")
     expect(gate).toContain("<DesktopOnboarding>{props.children}</DesktopOnboarding>")
     expect(gate).not.toContain("Setup overview")
-    expect(onboarding).toContain("Your account is connected")
-    expect(onboarding).toContain("Open workspace")
-    expect(onboarding).toContain("Model setup is not required")
+    expect(onboarding).toContain("Account connected")
+    expect(onboarding).toContain("Open a folder")
+    expect(onboarding).toContain("Model setup is optional")
   })
 
   test("returns to the full-page gate immediately after Settings disconnects", async () => {
     const general = await Bun.file(new URL("../components/settings/General.tsx", import.meta.url)).text()
     expect(general).toContain("sdk.client.account.logout()")
     expect(general).toContain('window.dispatchEvent(new Event("openscience:account-changed"))')
+  })
+
+  test("keeps signed-out updates reachable without claiming unsupported in-app capability", async () => {
+    const gate = await Bun.file(new URL("./AccountGate.tsx", import.meta.url)).text()
+    expect(gate).toContain("<SignedOutUpdate />")
+    expect(gate).toContain("platform.stageUpdate")
+    expect(gate).toContain("Automatic installation is unavailable in this browser or desktop build")
+    expect(gate).toContain("Download installer")
   })
 })

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import {
   SLASH_NATIVE,
+  SLASH_CONTEXTUAL,
   SLASH_ACTION_SKILLS,
   SLASH_QUERY_LIMIT,
   compactSlashItems,
@@ -32,7 +33,10 @@ test("slash menu exposes accessible listbox semantics without an entrance animat
   expect(component).toContain("slashOptionId(cmd)")
   expect(component).toContain("compactSlashItems(items, compactSkillNames)")
   expect(component).toContain("slashMatches(all, query, SLASH_QUERY_LIMIT)")
-  expect(component).toContain('<DialogSettings initial="skills" />')
+  expect(component).toContain('item.slash !== "stop" || working()')
+  expect(component).toContain("<SkillLibraryDialog")
+  expect(component).toContain("initialQuery={cmd.searchText}")
+  expect(component).toContain('if (!edit || !replaceSlash("", false)) return')
   expect(styles).toMatch(/\.workspace-composer__slash-row\s*\{[^}]*display: grid/s)
   expect(styles).toMatch(/\.workspace-composer__slash-group\s*\{[^}]*display: grid/s)
   expect(styles).toMatch(/\.workspace-composer__slash-heading\s*\{[^}]*font-size: 12px/s)
@@ -54,14 +58,32 @@ test("empty slash stays bounded to native commands plus the selected skill short
   const commands = [
     ...SLASH_NATIVE.map((name) => command(name)),
     command("undo"),
+    command("redo"),
+    command("stop"),
     command("recommended", "skill"),
     command("hidden-library-skill", "skill"),
   ]
 
   expect(compactSlashItems(commands, new Set(["recommended"])).map((item) => item.trigger)).toEqual([
     ...SLASH_NATIVE,
+    ...SLASH_CONTEXTUAL,
     "recommended",
   ])
+})
+
+test("slash skills use the same subject-aware icon resolver as the skills catalog", () => {
+  expect(
+    slashIcon({
+      id: "skill.protein-folding",
+      trigger: "protein-folding",
+      title: "Protein folding",
+      description: "Analyze protein sequences",
+      source: "skill",
+      category: "skill",
+      type: "skill",
+      skillCategory: "biology",
+    }),
+  ).toBe("braces")
 })
 
 test("query ranking returns at most ten best matches with stable accessible IDs", () => {
@@ -112,6 +134,7 @@ test("slash hierarchy keeps frequent native actions ahead of a stable skills cat
   ].toSorted(sortSlash)
 
   expect(SLASH_NATIVE).toEqual(["compact", "context", "plan", "goal", "status"])
+  expect(SLASH_CONTEXTUAL).toEqual(["undo", "redo", "stop"])
   expect(items.slice(0, 5).map((item) => item.trigger)).toEqual([...SLASH_NATIVE])
   expect(items.slice(0, 5).every((item) => slashGroup(item) === "Commands")).toBe(true)
   expect(slashGroup(items.find((item) => item.trigger === "review")!)).toBe("Skills")

@@ -246,8 +246,21 @@
 }
 
 .skills-workspace__identity {
-  display: block;
+  display: grid;
   min-width: 0;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.skills-workspace__skill-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--settings-radius-control, var(--atlas-radius-sm));
+  background: var(--color-surface-solid);
+  color: var(--color-text-muted);
 }
 
 .skills-workspace__form-icon,
@@ -676,6 +689,16 @@
 }
 
 @container skills-workspace (max-width: 460px) {
+  .skills-workspace__identity {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .skills-workspace__skill-icon {
+    width: 28px;
+    height: 28px;
+  }
+
   .skills-workspace__toolbar-controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -701,7 +724,9 @@
 @media (pointer: coarse) {
   .skills-workspace .settings-control,
   .skills-workspace__state > button,
-  .skills-workspace__form-actions button {
+  .skills-workspace__form-actions button,
+  .skills-workspace__pin {
+    min-width: 44px;
     min-height: 44px;
   }
 }

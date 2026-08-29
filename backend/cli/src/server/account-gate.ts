@@ -38,8 +38,22 @@ export function requiresAccountForRequest(input: {
   upgrade?: string
 }): boolean {
   const method = input.method.toUpperCase()
+  const updateRecovery =
+    (method === "GET" &&
+      ["/settings/updates", "/settings/updates/", "/settings/updates/state", "/settings/updates/releases"].includes(
+        input.path,
+      )) ||
+    (method === "POST" &&
+      ["/settings/updates/stage", "/settings/updates/apply", "/settings/updates/dispose"].includes(input.path)) ||
+    (method === "DELETE" && input.path === "/settings/updates/stage")
   if (method === "OPTIONS" || method === "HEAD") return false
-  if (input.path === "/global/health" || input.path === "/doc" || input.path.startsWith("/account")) return false
+  if (
+    input.path === "/global/health" ||
+    input.path === "/doc" ||
+    updateRecovery ||
+    input.path.startsWith("/account")
+  )
+    return false
   const root = input.path.split("/").filter(Boolean)[0]
   if (root && API_ROOTS.has(root)) return true
   if (method === "GET" && input.accept?.includes("text/html") && !input.upgrade) return false

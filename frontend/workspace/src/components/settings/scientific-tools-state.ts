@@ -42,9 +42,10 @@ export interface CapabilityEvidenceRecord {
 }
 
 export interface ConnectorCatalogRecord {
-  id: "github" | "benchling" | "box" | "dropbox" | "s3"
+  id: "github" | "benchling" | "box" | "dropbox" | "s3" | "givemeanode"
   name: string
   provider: string
+  recommended: boolean
   status: "official_setup" | "manual_review" | "unavailable"
   summary: string
   source_url: string
@@ -62,6 +63,8 @@ export interface ConnectorCatalogRecord {
     oauth: "auto" | "client"
     scope?: string
     confidential_client?: boolean
+    one_click_disabled?: boolean
+    one_click_connect?: boolean
   }
 }
 

@@ -127,6 +127,40 @@
   color: var(--color-error);
 }
 
+.account-gate__update {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-background) 88%, var(--color-text) 3%);
+}
+
+.account-gate__update strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.account-gate__update p {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.account-gate__update-actions {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+}
+
+.account-gate__update-actions button {
+  min-height: 40px;
+}
+
 .account-gate__note {
   text-align: center;
   color: var(--color-text-faint);

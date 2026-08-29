@@ -396,16 +396,19 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
 
 .workspace-composer__slash-row {
   display: grid;
-  grid-template-columns: 20px minmax(96px, 0.38fr) minmax(0, 1fr) auto;
+  min-height: 40px;
+  grid-template-columns: 28px minmax(96px, 0.38fr) minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 10px;
 }
 
 .workspace-composer__slash-icon {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--surface-base-hover);
   color: var(--text-weaker);
 }
 
@@ -447,7 +450,7 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
   }
 
   .workspace-composer__slash-row {
-    grid-template-columns: 20px minmax(0, 1fr) auto;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
   }
 
   .workspace-composer__slash-detail {
@@ -1173,6 +1176,10 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
 }
 
 @media (pointer: coarse) {
+  .workspace-composer__slash-row {
+    min-height: 44px;
+  }
+
   form.workspace-composer .workspace-composer__research-tools {
     height: 44px;
   }

@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { describeRoute, resolver } from "hono-openapi"
 import z from "zod"
 import { OpenScience } from "../../../openscience"
+import { ACE_CONTRACT } from "../../../openscience/ace-contract"
 import { lazy } from "../../../util/lazy"
 
 // Settings → Billing. Read-only view of pay-as-you-go Credits: balance,
@@ -11,11 +12,19 @@ import { lazy } from "../../../util/lazy"
 // session, and to empty sections when an Atlas endpoint is unavailable.
 export const WalletState = z.object({
   signedIn: z.boolean(),
-  balanceUsd: z.number().nullable().describe("Wallet balance in USD; null when signed out or unavailable"),
+  balanceUsd: z.number().nullable().describe("Purchased Wallet balance in USD; null when signed out or unavailable"),
   billingMode: z.enum(["managed", "byok"]).nullable(),
   managedSupported: z.boolean(),
   managedUnlocked: z.boolean(),
   aceEnabled: z.boolean(),
+  aceContract: z.object({
+    activationAuthorizationUsd: z.number().nonnegative(),
+    reloadThresholdUsd: z.number().positive(),
+    reloadAmountUsd: z.number().positive(),
+    serviceMarginPercent: z.number().nonnegative(),
+    processingFeeDisclosedSeparately: z.boolean(),
+    reloadControlledByAce: z.boolean(),
+  }),
   lifetimeSpentUsd: z.number().nullable(),
   transactions: z.array(
     z.object({
@@ -36,6 +45,7 @@ const SIGNED_OUT: WalletState = {
   managedSupported: false,
   managedUnlocked: false,
   aceEnabled: false,
+  aceContract: { ...ACE_CONTRACT },
   lifetimeSpentUsd: null,
   transactions: [],
 }
@@ -61,6 +71,7 @@ async function readWallet(): Promise<WalletState> {
     // older access response still tied managed_unlocked to Ace consent.
     managedUnlocked: Boolean(mode?.managed_unlocked || mode?.ace_enabled || (balance !== null && balance > 0)),
     aceEnabled: mode?.ace_enabled ?? false,
+    aceContract: { ...ACE_CONTRACT },
     lifetimeSpentUsd:
       credits?.lifetimeSpentCents === null || credits?.lifetimeSpentCents === undefined
         ? null
@@ -79,7 +90,7 @@ export const WalletSettingsRoutes = lazy(() =>
   new Hono().get(
     "/",
     describeRoute({
-      summary: "Get wallet balance, routing mode, and recent transactions",
+      summary: "Get purchased Wallet balance, routing mode, and recent transactions",
       operationId: "settings.wallet.get",
       responses: {
         200: {

@@ -3,6 +3,7 @@ import { Database, type SQLQueryBindings } from "bun:sqlite"
 import { createHash, randomUUID } from "node:crypto"
 import { constants, createReadStream, existsSync } from "node:fs"
 import path from "node:path"
+import z from "zod"
 import { JsonStore } from "../util/jsonstore"
 import { SecretBox } from "../util/secret-box"
 
@@ -293,6 +294,180 @@ async function reseal(legacy: string, target: string, data: Record<string, unkno
       } catch {}
     }
     if (Object.keys(moved).length > 0) out[service] = { ...entry, fields: moved }
+  }
+  return out
+}
+
+const mcpAuthTokens = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string().optional(),
+  expiresAt: z.number().optional(),
+  scope: z.string().optional(),
+})
+const mcpAuthClientInfo = z.object({
+  clientId: z.string(),
+  clientSecret: z.string().optional(),
+  clientIdIssuedAt: z.number().optional(),
+  clientSecretExpiresAt: z.number().optional(),
+})
+const mcpAuthCallback = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("code"), value: z.string() }),
+  z.object({ type: z.literal("error"), value: z.string() }),
+  z.object({ type: z.literal("cancelled") }),
+])
+const mcpAuthFingerprint = z.string().regex(/^[a-f0-9]{64}$/)
+const mcpAuthPlainEntry = z.object({
+  tokens: mcpAuthTokens.optional(),
+  clientInfo: mcpAuthClientInfo.optional(),
+  codeVerifier: z.string().optional(),
+  oauthState: z.string().optional(),
+  oauthStartedAt: z.number().optional(),
+  oauthAuthorizationUrl: z.string().url().optional(),
+  oauthServerUrl: z.string().url().optional(),
+  oauthAuthorityFingerprint: mcpAuthFingerprint.optional(),
+  oauthAllowDisabled: z.boolean().optional(),
+  oauthSettling: z.boolean().optional(),
+  oauthCompletedState: z.string().optional(),
+  oauthCompletedAt: z.number().optional(),
+  oauthCompletedFinalized: z.boolean().optional(),
+  oauthCompletedAuthorityFingerprint: mcpAuthFingerprint.optional(),
+  oauthCallback: mcpAuthCallback.optional(),
+  serverUrl: z.string().optional(),
+  credentialAuthorityFingerprint: mcpAuthFingerprint.optional(),
+})
+const mcpAuthStoredEntry = z.object({
+  storageVersion: z.literal(1),
+  tokens: mcpAuthTokens.optional(),
+  clientInfo: mcpAuthClientInfo.optional(),
+  codeVerifier: z.string().optional(),
+  oauthState: z.string().optional(),
+  oauthStartedAt: z.number().optional(),
+  // These are deliberately strings here. The URL and fingerprint constraints
+  // are checked after an encrypted value has been opened.
+  oauthAuthorizationUrl: z.string().optional(),
+  oauthServerUrl: z.string().optional(),
+  oauthAuthorityFingerprint: z.string().optional(),
+  oauthAllowDisabled: z.boolean().optional(),
+  oauthSettling: z.boolean().optional(),
+  oauthCompletedState: z.string().optional(),
+  oauthCompletedAt: z.number().optional(),
+  oauthCompletedFinalized: z.boolean().optional(),
+  oauthCompletedAuthorityFingerprint: z.string().optional(),
+  oauthCallback: mcpAuthCallback.optional(),
+  serverUrl: z.string().optional(),
+  credentialAuthorityFingerprint: z.string().optional(),
+})
+
+type McpAuthRecord = Record<string, unknown>
+type McpAuthLocation = { owner: McpAuthRecord; key: string }
+
+function mcpAuthAuthorityLocations(entry: McpAuthRecord): McpAuthLocation[] {
+  const result: McpAuthLocation[] = []
+  const add = (owner: unknown, key: string) => {
+    if (!owner || typeof owner !== "object" || Array.isArray(owner)) return
+    const record = owner as McpAuthRecord
+    if (record[key] !== undefined) result.push({ owner: record, key })
+  }
+  add(entry.tokens, "accessToken")
+  add(entry.tokens, "refreshToken")
+  add(entry.clientInfo, "clientSecret")
+  add(entry, "codeVerifier")
+  add(entry, "oauthState")
+  add(entry, "oauthAuthorizationUrl")
+  add(entry, "oauthAuthorityFingerprint")
+  add(entry, "oauthCompletedState")
+  add(entry, "oauthCompletedAuthorityFingerprint")
+  add(entry, "credentialAuthorityFingerprint")
+  const callback = entry.oauthCallback
+  if (
+    callback &&
+    typeof callback === "object" &&
+    !Array.isArray(callback) &&
+    ((callback as McpAuthRecord).type === "code" || (callback as McpAuthRecord).type === "error")
+  ) {
+    add(callback, "value")
+  }
+  return result
+}
+
+function mcpAuthMalformed(name: string, reason: string): Error {
+  return new Error(`malformed MCP auth entry for ${name}: ${reason}`)
+}
+
+/** Re-key a complete MCP auth store under the target root's machine key.
+ *
+ * This is intentionally an all-or-nothing translation. Every entry and every
+ * authority-bearing value is parsed, opened, semantically checked, re-sealed,
+ * and opened again before any candidate reaches JsonStore.update. One damaged
+ * sibling therefore cannot land the otherwise valid half of a store and make
+ * the target's next MCP read fail. */
+async function resealMcpAuth(legacy: string, target: string, data: Record<string, unknown>) {
+  const prefix = "openscience-secret:v1:"
+  const parsed: Array<
+    | { name: string; type: "plain"; entry: z.infer<typeof mcpAuthPlainEntry> }
+    | { name: string; type: "stored"; entry: z.infer<typeof mcpAuthStoredEntry> }
+  > = []
+  let versioned = false
+  let encrypted = false
+
+  // Complete validation happens before either key is read and before an output
+  // object exists. Do not skip malformed primitives or unsupported versions:
+  // merging either would leave a store McpAuth itself refuses to read.
+  for (const [name, raw] of Object.entries(data)) {
+    if (raw && typeof raw === "object" && !Array.isArray(raw) && "storageVersion" in raw) {
+      const result = mcpAuthStoredEntry.safeParse(raw)
+      if (!result.success) throw mcpAuthMalformed(name, result.error.issues[0]?.message ?? "invalid v1 envelope")
+      versioned = true
+      encrypted ||= mcpAuthAuthorityLocations(result.data as McpAuthRecord).some(({ owner, key }) =>
+        (owner[key] as string).startsWith(prefix),
+      )
+      parsed.push({ name, type: "stored", entry: result.data })
+      continue
+    }
+    const result = mcpAuthPlainEntry.safeParse(raw)
+    if (!result.success) throw mcpAuthMalformed(name, result.error.issues[0]?.message ?? "invalid legacy envelope")
+    parsed.push({ name, type: "plain", entry: result.data })
+  }
+
+  if (!versioned) return Object.fromEntries(parsed.map(({ name, entry }) => [name, entry]))
+  const [from, to] = await Promise.all([
+    encrypted ? fs.readFile(path.join(legacy, "credentials.key")).catch(() => undefined) : Promise.resolve(undefined),
+    fs.readFile(path.join(target, "credentials.key")).catch(() => undefined),
+  ])
+  if ((encrypted && !from) || !to) return undefined
+
+  const out: Record<string, unknown> = {}
+  for (const current of parsed) {
+    if (current.type === "plain") {
+      out[current.name] = current.entry
+      continue
+    }
+
+    const plain = structuredClone(current.entry) as McpAuthRecord
+    delete plain.storageVersion
+    for (const { owner, key } of mcpAuthAuthorityLocations(plain)) {
+      const value = owner[key]
+      if (typeof value !== "string") throw mcpAuthMalformed(current.name, `${key} is not a string`)
+      owner[key] = value.startsWith(prefix) ? SecretBox.open(from!, value.slice(prefix.length)) : value
+    }
+    const decoded = mcpAuthPlainEntry.safeParse(plain)
+    if (!decoded.success) {
+      throw mcpAuthMalformed(current.name, decoded.error.issues[0]?.message ?? "invalid decrypted authority")
+    }
+
+    const candidate = { storageVersion: 1, ...structuredClone(decoded.data) } as McpAuthRecord
+    for (const { owner, key } of mcpAuthAuthorityLocations(candidate)) {
+      const value = owner[key]
+      if (typeof value !== "string") throw mcpAuthMalformed(current.name, `${key} is not a string`)
+      const sealed = SecretBox.seal(to, value)
+      if (SecretBox.open(to, sealed) !== value) throw mcpAuthMalformed(current.name, `${key} did not re-seal exactly`)
+      owner[key] = `${prefix}${sealed}`
+    }
+    const verified = mcpAuthStoredEntry.safeParse(candidate)
+    if (!verified.success) {
+      throw mcpAuthMalformed(current.name, verified.error.issues[0]?.message ?? "invalid translated envelope")
+    }
+    out[current.name] = verified.data
   }
   return out
 }
@@ -637,9 +812,15 @@ export async function resolveDataDirectory(input: {
           // Credentials are the one store whose values are not portable on
           // their own; everything else is plaintext JSON that means the same
           // thing in either root.
-          const legacyData = name === "credentials.json" ? await reseal(legacy, target, raw) : raw
+          const legacyData =
+            name === "credentials.json"
+              ? await reseal(legacy, target, raw)
+              : name === "mcp-auth.json"
+                ? await resealMcpAuth(legacy, target, raw)
+                : raw
           if (!legacyData) {
-            notes.push("legacy credentials.json not imported: its machine key is unreadable")
+            notes.push(`legacy ${name} not imported: its machine key is unreadable`)
+            if (!deferred.includes(name)) deferred.push(name)
             return 0
           }
           if (!Object.keys(legacyData).some((key) => !(key in previous))) return 0
@@ -651,6 +832,11 @@ export async function resolveDataDirectory(input: {
           return count.value
         })().catch((error: unknown) => {
           notes.push(`legacy ${name} not imported: ${error instanceof Error ? error.message : String(error)}`)
+          // An unreadable encrypted MCP entry may become recoverable after the
+          // operator restores the matching machine key/store. Keep the exact
+          // store pending so a completed migration marker does not strand all
+          // otherwise valid entries behind the source-mtime rescan filter.
+          if (name === "mcp-auth.json" && !deferred.includes(name)) deferred.push(name)
           return 0
         })
         if (outcome > 0) {

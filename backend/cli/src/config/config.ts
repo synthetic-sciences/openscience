@@ -28,6 +28,9 @@ import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { ProjectTrust } from "../project/trust"
 import { State } from "../project/state"
+import { McpSecretStorage } from "../mcp/secret-storage"
+import { McpRemoteUrl } from "../mcp/remote-url"
+import { CredentialLifecycle } from "../credentials/lifecycle"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -584,7 +587,13 @@ export namespace Config {
   export const McpRemote = z
     .object({
       type: z.literal("remote").describe("Type of MCP server connection"),
-      url: z.string().describe("URL of the remote MCP server"),
+      url: z
+        .string()
+        .refine(McpRemoteUrl.validEndpoint, {
+          message:
+            "Remote MCP URLs require HTTPS (loopback HTTP allowed) and must not contain credentials or query data",
+        })
+        .describe("HTTPS URL of the remote MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
       headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
       oauth: z
@@ -653,17 +662,31 @@ export namespace Config {
 
   export function restoreMcp(value: Mcp, previous?: Mcp): Mcp {
     if (value.type === "local") {
-      const stored = previous?.type === "local" ? previous.environment : undefined
+      const sameCommand =
+        previous?.type === "local" && JSON.stringify(previous.command) === JSON.stringify(value.command)
+      const stored = sameCommand ? previous.environment : undefined
       return {
         ...value,
         environment: restoreRecord(value.environment, stored, "environment"),
       }
     }
-    const stored = previous?.type === "remote" ? previous : undefined
+    const stored = (() => {
+      if (previous?.type !== "remote") return undefined
+      try {
+        return McpRemoteUrl.endpoint(previous.url).toString() === McpRemoteUrl.endpoint(value.url).toString()
+          ? previous
+          : undefined
+      } catch {
+        return undefined
+      }
+    })()
     const oauth = (() => {
       if (!value.oauth || typeof value.oauth !== "object") return value.oauth
       if (value.oauth.clientSecret !== MCP_SECRET_MASK) return value.oauth
-      const secret = stored?.oauth && typeof stored.oauth === "object" ? stored.oauth.clientSecret : undefined
+      const secret =
+        stored?.oauth && typeof stored.oauth === "object" && stored.oauth.clientId === value.oauth.clientId
+          ? stored.oauth.clientSecret
+          : undefined
       if (!secret) throw new Error("Replace the masked value for oauth.clientSecret before saving")
       return {
         ...value.oauth,
@@ -1419,10 +1442,31 @@ export namespace Config {
       })
         .then(async (mod) => {
           const { provider, model, ...rest } = mod.default
-          if (provider && model) result.model = `${provider}/${model}`
-          result["$schema"] = "https://syntheticsciences.ai/config.json"
-          result = mergeDeep(result, rest)
-          await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+          const files = ["config.json", "openscience.json", "openscience.jsonc"].map((name) =>
+            path.join(Global.Path.config, name),
+          )
+          await CredentialLifecycle.serialized(async () => {
+            // Re-read every source under the shared config lease. The initial
+            // lazy-load snapshot may be stale if another process wrote MCP
+            // authority while the TOML module was loading.
+            let current: Info = {}
+            for (const file of files) {
+              const raw = await fs.readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
+                if (error.code === "ENOENT") return undefined
+                throw error
+              })
+              if (!raw) continue
+              const protectedText = await sealedConfigText(raw, file)
+              if (protectedText !== raw) await durableConfigWrite(file, protectedText)
+              current = mergeDeep(current, await McpSecretStorage.reveal(parseConfig(protectedText, file)))
+            }
+            if (provider && model) current.model = `${provider}/${model}`
+            current["$schema"] = "https://syntheticsciences.ai/config.json"
+            result = mergeDeep(current, rest)
+            const target = path.join(Global.Path.config, "config.json")
+            const protectedText = await sealedConfigText(JSON.stringify(result, null, 2), target)
+            await durableConfigWrite(target, protectedText)
+          })
           await fs.unlink(legacy)
         })
         .catch(() => {})
@@ -1440,54 +1484,159 @@ export namespace Config {
         throw new JsonError({ path: filepath }, { cause: err })
       })
     if (!text) return {}
+    text = await protectConfigText(text, filepath)
+    if (!text) return {}
     return load(text, filepath)
   }
 
-  async function load(text: string, configFilepath: string) {
-    const original = text
-    text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
-      return process.env[varName] || ""
-    })
+  async function loadFileWithoutMigration(filepath: string): Promise<Info> {
+    const text = await Bun.file(filepath)
+      .text()
+      .catch((err) => {
+        if (err.code === "ENOENT") return
+        throw new JsonError({ path: filepath }, { cause: err })
+      })
+    if (!text) return {}
+    return load(text, filepath)
+  }
 
-    const fileMatches = text.match(/\{file:[^}]+\}/g)
-    if (fileMatches) {
-      const configDir = path.dirname(configFilepath)
-      const lines = text.split("\n")
-
-      for (const match of fileMatches) {
-        const lineIndex = lines.findIndex((line) => line.includes(match))
-        if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
-          continue // Skip if line is commented
-        }
-        let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
-        if (filePath.startsWith("~/")) {
-          filePath = path.join(os.homedir(), filePath.slice(2))
-        }
-        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
-        const fileContent = (
-          await Bun.file(resolvedPath)
-            .text()
-            .catch((error) => {
-              const errMsg = `bad file reference: "${match}"`
-              if (error.code === "ENOENT") {
-                throw new InvalidError(
-                  {
-                    path: configFilepath,
-                    message: errMsg + ` ${resolvedPath} does not exist`,
-                  },
-                  { cause: error },
-                )
-              }
-              throw new InvalidError({ path: configFilepath, message: errMsg }, { cause: error })
-            })
-        ).trim()
-        // escape newlines/quotes, strip outer quotes
-        text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
-      }
-    }
-
+  async function sealedConfigText(text: string, filepath: string): Promise<string> {
     const errors: JsoncParseError[] = []
-    const data = parseJsonc(text, errors, { allowTrailingComma: true })
+    const value = parseJsonc(text, errors, { allowTrailingComma: true }) as unknown
+    if (errors.length || !value || typeof value !== "object" || Array.isArray(value)) return text
+    let result = text
+    for (const item of McpSecretStorage.paths(value)) {
+      const sealed = await McpSecretStorage.seal(item.value, item.context)
+      if (sealed === item.value) continue
+      result = applyEdits(
+        result,
+        modify(result, item.path, sealed, {
+          formattingOptions: { insertSpaces: true, tabSize: 2 },
+        }),
+      )
+    }
+    if (result === text) return text
+
+    const checked = parseJsonc(result, [], { allowTrailingComma: true }) as unknown
+    const revealed = await McpSecretStorage.reveal(checked)
+    const expected = Object.fromEntries(
+      await Promise.all(
+        McpSecretStorage.paths(value).map(async (item) => [
+          item.path.join("\u0000"),
+          await McpSecretStorage.open(item.value, item.context),
+        ]),
+      ),
+    )
+    const actual = Object.fromEntries(
+      McpSecretStorage.paths(revealed).map((item) => [item.path.join("\u0000"), item.value]),
+    )
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      throw new JsonError({ path: filepath, message: "Encrypted MCP fields did not round-trip exactly" })
+    }
+    return result
+  }
+
+  async function durableConfigWrite(filepath: string, text: string): Promise<void> {
+    const parsed = parseConfig(text, filepath)
+    await McpSecretStorage.reveal(parsed).catch((error) => {
+      throw new JsonError({ path: filepath, message: "An encrypted MCP field could not be verified" }, { cause: error })
+    })
+    await fs.mkdir(path.dirname(filepath), { recursive: true })
+    const temporary = `${filepath}.${process.pid}.${crypto.randomUUID()}.tmp`
+    try {
+      const handle = await fs.open(temporary, "wx", 0o600)
+      await handle
+        .writeFile(text, "utf8")
+        .then(() => handle.chmod(0o600))
+        .then(() => handle.sync())
+        .finally(() => handle.close())
+      const persisted = await fs.readFile(temporary, "utf8")
+      if (persisted !== text) throw new Error("Config candidate changed before commit")
+      await McpSecretStorage.reveal(parseConfig(persisted, filepath))
+      await fs.rename(temporary, filepath)
+      if (process.platform !== "win32") {
+        const directory = await fs.open(path.dirname(filepath), "r")
+        await directory.sync().finally(() => directory.close())
+      }
+    } catch (error) {
+      await fs.rm(temporary, { force: true }).catch(() => undefined)
+      throw error
+    }
+  }
+
+  async function protectConfigText(text: string, filepath: string): Promise<string | undefined> {
+    if ((await sealedConfigText(text, filepath)) === text) return text
+    // Re-read under the same cross-process lease used by every config RMW.
+    // Computing from the pre-lease snapshot could overwrite a sibling setMcp
+    // that landed between read and migration.
+    return CredentialLifecycle.serialized(async () => {
+      const current = await fs.readFile(filepath, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return undefined
+        throw error
+      })
+      if (current === undefined) return undefined
+      const protectedText = await sealedConfigText(current, filepath)
+      if (protectedText !== current) await durableConfigWrite(filepath, protectedText)
+      return protectedText
+    })
+  }
+
+  async function ensureConfigSchema(filepath: string): Promise<void> {
+    await CredentialLifecycle.serialized(async () => {
+      const current = await fs.readFile(filepath, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return undefined
+        throw error
+      })
+      if (!current) return
+      const parsed = parseJsonc(current, [], { allowTrailingComma: true }) as Record<string, unknown> | undefined
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.$schema) return
+      const updated = applyEdits(
+        current,
+        modify(current, ["$schema"], "https://syntheticsciences.ai/config.json", {
+          formattingOptions: { insertSpaces: true, tabSize: 2 },
+        }),
+      )
+      await durableConfigWrite(filepath, await sealedConfigText(updated, filepath))
+    })
+  }
+
+  async function resolveReferences(value: unknown, configFilepath: string): Promise<unknown> {
+    if (typeof value === "string") {
+      let resolved = value.replace(/\{env:([^}]+)\}/g, (_, varName: string) => process.env[varName] || "")
+      const matches = [...resolved.matchAll(/\{file:([^}]+)\}/g)]
+      for (const match of matches) {
+        const reference = match[0]
+        let filePath = match[1]
+        if (filePath.startsWith("~/")) filePath = path.join(os.homedir(), filePath.slice(2))
+        const absolute = path.isAbsolute(filePath) ? filePath : path.resolve(path.dirname(configFilepath), filePath)
+        const contents = await Bun.file(absolute)
+          .text()
+          .catch((error: NodeJS.ErrnoException) => {
+            const message = `bad file reference: "${reference}"`
+            if (error.code === "ENOENT") {
+              throw new InvalidError(
+                { path: configFilepath, message: `${message} ${absolute} does not exist` },
+                { cause: error },
+              )
+            }
+            throw new InvalidError({ path: configFilepath, message }, { cause: error })
+          })
+        resolved = resolved.replace(reference, contents.trim())
+      }
+      return resolved
+    }
+    if (Array.isArray(value)) return Promise.all(value.map((item) => resolveReferences(item, configFilepath)))
+    if (!value || typeof value !== "object") return value
+    return Object.fromEntries(
+      await Promise.all(
+        Object.entries(value).map(async ([key, item]) => [key, await resolveReferences(item, configFilepath)]),
+      ),
+    )
+  }
+
+  async function load(text: string, configFilepath: string) {
+    const errors: JsoncParseError[] = []
+    const raw = parseJsonc(text, errors, { allowTrailingComma: true })
     if (errors.length) {
       const lines = text.split("\n")
       const errorDetails = errors
@@ -1510,13 +1659,18 @@ export namespace Config {
       })
     }
 
-    const parsed = Info.safeParse(data)
+    // Bound MCP envelopes intentionally use the literal, persisted authority
+    // representation as associated data. Reveal them before expanding
+    // `{env:...}` / `{file:...}` references so a legitimate reference-backed
+    // URL, client ID, scope, or local command cannot change the seal context.
+    const revealed = await McpSecretStorage.reveal(raw)
+    const parsed = Info.safeParse(await resolveReferences(revealed, configFilepath))
     if (parsed.success) {
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://syntheticsciences.ai/config.json"
-        // Write the $schema to the original text to preserve variables like {env:VAR}
-        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://syntheticsciences.ai/config.json",')
-        await Bun.write(configFilepath, updated).catch(() => {})
+        // Patch the latest bytes under the same cross-process lease as every
+        // config mutation. A read must never resurrect stale MCP authority.
+        await ensureConfigSchema(configFilepath).catch(() => undefined)
       }
       const data = parsed.data
       if (data.plugin) {
@@ -1641,9 +1795,18 @@ export namespace Config {
     // config, never as project config, so PATCH /config appeared to save but the
     // change vanished on the next Instance reload.
     const filepath = projectConfigFile()
-    const existing = await loadFile(filepath)
-    await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
-    await Instance.dispose()
+    // Read (and, for a legacy plaintext MCP config, migrate) before entering
+    // the update mutation. protectConfigText owns the same cross-process
+    // credential lease, so doing this inside `write` would self-deadlock.
+    await loadFile(filepath)
+    const write = async () => {
+      const existing = await loadFileWithoutMigration(filepath)
+      const protectedConfig = await McpSecretStorage.protect(mergeDeep(existing, config))
+      await durableConfigWrite(filepath, JSON.stringify(protectedConfig, null, 2))
+      await Instance.dispose({ strict: config.mcp !== undefined })
+    }
+    if (config.mcp === undefined) return CredentialLifecycle.serialized(write)
+    return CredentialLifecycle.mutate("mcp-config.project-update", write)
   }
 
   function globalConfigFile() {
@@ -1713,9 +1876,12 @@ export namespace Config {
    * invalidate it afterwards. Announcing a disposal that the provider map has
    * not honoured yet is the bug; the two belong together.
    */
-  async function disposeGlobalInstances(options: { preserveInstances?: boolean } = {}) {
+  async function disposeGlobalInstances(options: { preserveInstances?: boolean; strict?: boolean } = {}) {
     globalRevision++
-    if (!options.preserveInstances) await Instance.disposeAll().catch(() => undefined)
+    if (!options.preserveInstances) {
+      if (options.strict) await Instance.disposeAll({ strict: true })
+      else await Instance.disposeAll().catch(() => undefined)
+    }
     // Lazy because provider.ts imports Config — the same cycle-break
     // provider/models.ts and openscience/index.ts already use to reach it.
     // Best-effort like the disposal above: the config file is already written
@@ -1752,30 +1918,34 @@ export namespace Config {
   }
 
   async function patchConfigPath(scope: Scope, target: string[], value: unknown) {
-    const filepath = scope === "global" ? globalConfigFile() : projectConfigFile()
-    const before = await Bun.file(filepath)
-      .text()
-      .catch((err) => {
-        if (err.code === "ENOENT") return "{}"
-        throw new JsonError({ path: filepath }, { cause: err })
+    const write = async () => {
+      const filepath = scope === "global" ? globalConfigFile() : projectConfigFile()
+      const before = await Bun.file(filepath)
+        .text()
+        .catch((err) => {
+          if (err.code === "ENOENT") return "{}"
+          throw new JsonError({ path: filepath }, { cause: err })
+        })
+      const edits = modify(before, target, value, {
+        formattingOptions: {
+          insertSpaces: true,
+          tabSize: 2,
+        },
       })
-    const edits = modify(before, target, value, {
-      formattingOptions: {
-        insertSpaces: true,
-        tabSize: 2,
-      },
-    })
-    const updated = applyEdits(before, edits)
-    await fs.mkdir(path.dirname(filepath), { recursive: true })
-    await Bun.write(filepath, updated)
-    const parsed = parseConfig(updated, filepath)
-    global.reset()
-    if (scope === "global") {
-      await disposeGlobalInstances()
-    } else {
-      await Instance.dispose()
+      const updated = applyEdits(before, edits)
+      const protectedText = await sealedConfigText(updated, filepath)
+      await durableConfigWrite(filepath, protectedText)
+      const parsed = parseConfig(protectedText, filepath)
+      global.reset()
+      if (scope === "global") {
+        await disposeGlobalInstances({ strict: target[0] === "mcp" })
+      } else {
+        await Instance.dispose({ strict: target[0] === "mcp" })
+      }
+      return { config: parsed, path: filepath }
     }
-    return { config: parsed, path: filepath }
+    if (target[0] !== "mcp") return CredentialLifecycle.serialized(write)
+    return CredentialLifecycle.mutate(`mcp-config.patch:${target[1] ?? "root"}`, write)
   }
 
   export async function setMcp(name: string, mcp: Mcp, scope: Scope = "global") {
@@ -1866,13 +2036,15 @@ export namespace Config {
    *  removing keys, unlike the deep-merging updateGlobal). Validates that the
    *  content parses and matches the schema before writing. */
   export async function replaceGlobal(content: string) {
-    const filepath = globalConfigFile()
-    const parsed = parseConfig(content, filepath)
-    await fs.mkdir(path.dirname(filepath), { recursive: true })
-    await Bun.write(filepath, content)
-    global.reset()
-    await disposeGlobalInstances()
-    return parsed
+    return CredentialLifecycle.mutate("mcp-config.replace-global", async () => {
+      const filepath = globalConfigFile()
+      const parsed = parseConfig(content, filepath)
+      const protectedText = await sealedConfigText(content, filepath)
+      await durableConfigWrite(filepath, protectedText)
+      global.reset()
+      await disposeGlobalInstances({ strict: true })
+      return parsed
+    })
   }
 
   function parseConfig(text: string, filepath: string): Info {
@@ -1910,34 +2082,42 @@ export namespace Config {
   }
 
   export async function updateGlobal(config: Info, options: { preserveInstances?: boolean } = {}) {
-    const filepath = globalConfigFile()
-    const before = await Bun.file(filepath)
-      .text()
-      .catch((err) => {
-        if (err.code === "ENOENT") return "{}"
-        throw new JsonError({ path: filepath }, { cause: err })
+    const write = async () => {
+      const filepath = globalConfigFile()
+      const before = await Bun.file(filepath)
+        .text()
+        .catch((err) => {
+          if (err.code === "ENOENT") return "{}"
+          throw new JsonError({ path: filepath }, { cause: err })
+        })
+
+      const existingProtected = parseConfig(before, filepath)
+      const existing = await McpSecretStorage.reveal(existingProtected)
+      const protectedMerged = await McpSecretStorage.protect(mergeDeep(existing, config))
+      const next = await (async () => {
+        if (!filepath.endsWith(".jsonc")) {
+          const protectedText = await sealedConfigText(JSON.stringify(protectedMerged, null, 2), filepath)
+          await durableConfigWrite(filepath, protectedText)
+          return parseConfig(protectedText, filepath)
+        }
+
+        const updated = patchJsonc(before, protectedMerged)
+        const protectedText = await sealedConfigText(updated, filepath)
+        const merged = parseConfig(protectedText, filepath)
+        await durableConfigWrite(filepath, protectedText)
+        return merged
+      })()
+
+      global.reset()
+      await disposeGlobalInstances({
+        preserveInstances: options.preserveInstances ?? canPreserveInstances(config),
+        strict: config.mcp !== undefined,
       })
 
-    const next = await (async () => {
-      if (!filepath.endsWith(".jsonc")) {
-        const existing = parseConfig(before, filepath)
-        const merged = mergeDeep(existing, config)
-        await Bun.write(filepath, JSON.stringify(merged, null, 2))
-        return merged
-      }
-
-      const updated = patchJsonc(before, config)
-      const merged = parseConfig(updated, filepath)
-      await Bun.write(filepath, updated)
-      return merged
-    })()
-
-    global.reset()
-    await disposeGlobalInstances({
-      preserveInstances: options.preserveInstances ?? canPreserveInstances(config),
-    })
-
-    return next
+      return McpSecretStorage.reveal(next)
+    }
+    if (config.mcp === undefined) return CredentialLifecycle.serialized(write)
+    return CredentialLifecycle.mutate("mcp-config.update-global", write)
   }
 
   export async function directories() {

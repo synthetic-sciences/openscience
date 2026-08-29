@@ -311,11 +311,10 @@ class RKernel implements Kernel {
     try {
       proc = spawn(wrapped.file, wrapped.args, {
         cwd,
-        env: {
-          ...OpenScience.kernelEnv(process.env),
+        env: OpenScience.kernelEnv(process.env, {
           ...(opts?.env ?? {}),
           ATLAS_CLI_CONFIG_PATH: configPath,
-        },
+        }),
         stdio: ["pipe", "pipe", "pipe"],
         // Own process group so killing the kernel reaps its worker children (#102).
         detached: process.platform !== "win32",

@@ -18,10 +18,22 @@ type Wallet = {
   managedSupported: boolean
   managedUnlocked: boolean
   aceEnabled: boolean
+  aceContract?: {
+    activationAuthorizationUsd: number
+    reloadThresholdUsd: number
+    reloadAmountUsd: number
+    serviceMarginPercent: number
+    processingFeeDisclosedSeparately: boolean
+    reloadControlledByAce: boolean
+  }
 }
 
 export const canSelectManaged = (wallet: Wallet | undefined) =>
   Boolean(wallet?.signedIn && wallet.managedSupported && wallet.managedUnlocked)
+
+export function aceContractLabel(contract: NonNullable<Wallet["aceContract"]>) {
+  return `Ace is a $${contract.activationAuthorizationUsd} authorization, not a purchase or subscription. While Ace is on, a purchased Wallet balance below $${contract.reloadThresholdUsd} triggers one fixed $${contract.reloadAmountUsd} reload; the processing fee is disclosed separately before payment.`
+}
 
 const MODES: { value: Mode; title: string; body: string }[] = [
   {
@@ -32,7 +44,7 @@ const MODES: { value: Mode; title: string; body: string }[] = [
   {
     value: "managed",
     title: "Managed",
-    body: "Use your Wallet balance for supported models without configuring a provider key.",
+    body: "Use your purchased Wallet balance for supported models without configuring a provider key.",
   },
 ]
 
@@ -160,7 +172,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     if (!wallet()) return "Checking account"
     if (!wallet()!.signedIn) return "Account required"
     if (!wallet()!.managedSupported) return "Managed unavailable"
-    if (!wallet()!.managedUnlocked) return "No Wallet balance"
+    if (!wallet()!.managedUnlocked) return "No purchased balance"
     if (wallet()!.aceEnabled) return "Ace on"
     return "Wallet funded"
   }
@@ -190,7 +202,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
                 class="models-routing__option"
                 title={
                   option.value === "managed" && managedUnavailable()
-                    ? "Add Wallet funds or turn on Ace to use Managed models"
+                    ? "Add purchased Wallet funds or turn on Ace to use Managed models"
                     : undefined
                 }
                 onClick={() => update(option.value)}
@@ -230,9 +242,15 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
         </div>
       </div>
 
+      <Show when={wallet()?.aceContract}>
+        {(contract) => (
+          <p class="settings-inline-note text-12-regular text-text-weak">{aceContractLabel(contract())}</p>
+        )}
+      </Show>
+
       <Show when={wallet() && !wallet()!.signedIn}>
         <p class="settings-inline-note text-12-regular text-text-weak">
-          Managed access requires a Synthetic Sciences account with Wallet funds or Ace auto reload.
+          Sign in to use purchased Wallet funds or authorize Ace.
         </p>
       </Show>
     </div>

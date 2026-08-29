@@ -27,6 +27,8 @@ export namespace SafeTrashIO {
 
   export type Hooks = {
     afterDirectoryVerify?: (operation: "move" | "restore" | "remove", target: string) => void | Promise<void>
+    afterEntryVerify?: (operation: "remove", target: string) => void | Promise<void>
+    afterFinalEntryVerify?: (operation: "remove", target: string) => void | Promise<void>
   }
 
   type Directory = {
@@ -803,36 +805,60 @@ export namespace SafeTrashIO {
       } finally {
         await close(opened.fd)
       }
-      const tomb = `.openscience-purge-${crypto.randomUUID()}`
-      renameExclusive(target.parent, target.child, target.parent, tomb)
-      const current = await openFile(target.parent, tomb)
+      await hooks?.afterEntryVerify?.("remove", target.resolved)
+      await verify(target.parent)
+      const final = await openFile(target.parent, target.child).catch((cause: NodeJS.ErrnoException) => {
+        if (cause.code === "ENOENT" || cause.errno === ENOENT) return
+        throw cause
+      })
+      if (!final) return false
       try {
-        if (approved && !sameObject(current.identity, approved)) {
-          throw new Error(`Trash payload identity changed during purge for ${target.resolved}`)
+        if (approved && !sameObject(final.identity, approved)) {
+          throw new Error(`Trash payload identity changed before purge for ${target.resolved}`)
         }
-        if (current.identity.kind === "file") {
-          const removed = attempt(() => native().unlinkat(target.parent.fd, name(tomb), 0))
-          if (!removed.ok) throw error("unlinkat", target.resolved, removed.errno)
-          await sync(target.parent.fd, true)
-          return true
+        await hooks?.afterFinalEntryVerify?.("remove", target.resolved)
+        const tomb = `.openscience-purge-${crypto.randomUUID()}`
+        renameExclusive(target.parent, target.child, target.parent, tomb)
+        const current = await openFile(target.parent, tomb)
+        try {
+          if (approved && !sameObject(current.identity, approved)) {
+            try {
+              renameExclusive(target.parent, tomb, target.parent, target.child)
+              await sync(target.parent.fd, true)
+            } catch (rollback) {
+              throw new AggregateError(
+                [new Error(`Trash payload identity changed during purge for ${target.resolved}`), rollback],
+                `Unapproved trash entry was quarantined at ${path.join(target.parent.expected, tomb)}`,
+              )
+            }
+            throw new Error(`Trash payload identity changed during purge for ${target.resolved}`)
+          }
+          if (current.identity.kind === "file") {
+            const removed = attempt(() => native().unlinkat(target.parent.fd, name(tomb), 0))
+            if (!removed.ok) throw error("unlinkat", target.resolved, removed.errno)
+            await sync(target.parent.fd, true)
+            return true
+          }
+        } finally {
+          await close(current.fd)
         }
+        const directory = await openChild(target.parent, tomb, path.join(target.parent.expected, tomb))
+        try {
+          if (directory.before.dev !== target.parent.before.dev) {
+            throw new Error(`Refusing to purge a mounted trash root: ${target.resolved}`)
+          }
+          await empty(directory, directory.before.dev)
+          await sync(directory.fd, true)
+        } finally {
+          await directory.close()
+        }
+        const removed = attempt(() => native().unlinkat(target.parent.fd, name(tomb), AT_REMOVEDIR))
+        if (!removed.ok) throw error("unlinkat", target.resolved, removed.errno)
+        await sync(target.parent.fd, true)
+        return true
       } finally {
-        await close(current.fd)
+        await close(final.fd)
       }
-      const directory = await openChild(target.parent, tomb, path.join(target.parent.expected, tomb))
-      try {
-        if (directory.before.dev !== target.parent.before.dev) {
-          throw new Error(`Refusing to purge a mounted trash root: ${target.resolved}`)
-        }
-        await empty(directory, directory.before.dev)
-        await sync(directory.fd, true)
-      } finally {
-        await directory.close()
-      }
-      const removed = attempt(() => native().unlinkat(target.parent.fd, name(tomb), AT_REMOVEDIR))
-      if (!removed.ok) throw error("unlinkat", target.resolved, removed.errno)
-      await sync(target.parent.fd, true)
-      return true
     } catch (cause) {
       if ((cause as NodeJS.ErrnoException).code === "ENOENT") return false
       throw cause

@@ -1,5 +1,5 @@
 import "@/index.css"
-import { ErrorBoundary, Show, Suspense, onMount, type ParentProps } from "solid-js"
+import { ErrorBoundary, Show, Suspense, onCleanup, onMount, type ParentProps } from "solid-js"
 import { A, Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { I18nProvider } from "@synsci/ui/context"
@@ -85,6 +85,16 @@ function ServerKey(props: ParentProps) {
   )
 }
 
+function DesktopReadySignal() {
+  const platform = usePlatform()
+  onMount(() => {
+    if (platform.platform !== "desktop") return
+    document.documentElement.dataset.openscienceReady = "true"
+  })
+  onCleanup(() => delete document.documentElement.dataset.openscienceReady)
+  return null
+}
+
 export function AppInterface(props: { defaultUrl?: string }) {
   const platform = usePlatform()
 
@@ -126,6 +136,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
   return (
     <ServerProvider defaultUrl={defaultServerUrl()}>
       <ServerKey>
+        <DesktopReadySignal />
         <AccountGate>
           <GlobalSDKProvider>
             <GlobalSyncProvider>

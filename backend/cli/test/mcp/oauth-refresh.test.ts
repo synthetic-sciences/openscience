@@ -4,6 +4,9 @@ import fs from "fs/promises"
 import { Global } from "../../src/global"
 import { McpAuth } from "../../src/mcp/auth"
 import { McpOAuthProvider } from "../../src/mcp/oauth-provider"
+import { Log } from "../../src/util/log"
+
+const authorityFingerprint = "d".repeat(64)
 
 beforeEach(async () => {
   await fs.mkdir(Global.Path.data, { recursive: true })
@@ -42,7 +45,13 @@ function serve(token: (params: URLSearchParams, origin: string) => Promise<Respo
 }
 
 function provider(name: string, url: string) {
-  return new McpOAuthProvider(name, url, { clientId: "client-1" }, { onRedirect: async () => {} })
+  return new McpOAuthProvider(
+    name,
+    url,
+    { clientId: "client-1" },
+    { onRedirect: async () => {} },
+    { verify: async () => undefined, authorityFingerprint },
+  )
 }
 
 test("expired tokens refresh once across concurrent callers", async () => {
@@ -62,7 +71,10 @@ test("expired tokens refresh once across concurrent callers", async () => {
   const url = `http://127.0.0.1:${server.port}`
   await McpAuth.set(
     name,
-    { tokens: { accessToken: "stale-access", refreshToken: "rotate-1", expiresAt: Date.now() / 1000 - 60 } },
+    {
+      tokens: { accessToken: "stale-access", refreshToken: "rotate-1", expiresAt: Date.now() / 1000 - 60 },
+      credentialAuthorityFingerprint: authorityFingerprint,
+    },
     url,
   )
 
@@ -107,7 +119,10 @@ test("failed refresh recovers with the rotated token another process persisted",
   const url = `http://127.0.0.1:${server.port}`
   await McpAuth.set(
     name,
-    { tokens: { accessToken: "stale-access", refreshToken: "revoked-1", expiresAt: Date.now() / 1000 - 60 } },
+    {
+      tokens: { accessToken: "stale-access", refreshToken: "revoked-1", expiresAt: Date.now() / 1000 - 60 },
+      credentialAuthorityFingerprint: authorityFingerprint,
+    },
     url,
   )
 
@@ -138,7 +153,10 @@ test("failed refresh uses a still-valid access token another process persisted",
   const url = `http://127.0.0.1:${server.port}`
   await McpAuth.set(
     name,
-    { tokens: { accessToken: "stale-access", refreshToken: "revoked-1", expiresAt: Date.now() / 1000 - 60 } },
+    {
+      tokens: { accessToken: "stale-access", refreshToken: "revoked-1", expiresAt: Date.now() / 1000 - 60 },
+      credentialAuthorityFingerprint: authorityFingerprint,
+    },
     url,
   )
 
@@ -148,4 +166,157 @@ test("failed refresh uses a still-valid access token another process persisted",
 
   server.stop(true)
   await McpAuth.remove(name)
+})
+
+test("an SDK refresh loser cannot invalidate a newer rotated winner", async () => {
+  const name = "refresh-loser-preserves-winner"
+  const url = "https://refresh.example/mcp"
+  await McpAuth.set(
+    name,
+    {
+      tokens: {
+        accessToken: "access-1",
+        refreshToken: "refresh-1",
+        expiresAt: Date.now() / 1000 + 3600,
+      },
+      credentialAuthorityFingerprint: authorityFingerprint,
+    },
+    url,
+  )
+
+  const winner = provider(name, url)
+  const loser = provider(name, url)
+  expect((await winner.tokens())?.refresh_token).toBe("refresh-1")
+  expect((await loser.tokens())?.refresh_token).toBe("refresh-1")
+
+  // The winner's SDK exchange rotates R1 -> R2 before the losing exchange
+  // reports invalid_grant and asks the provider to invalidate its rejected
+  // credentials.
+  await winner.saveTokens({
+    access_token: "access-2",
+    token_type: "Bearer",
+    refresh_token: "refresh-2",
+    expires_in: 3600,
+  })
+  await loser.invalidateCredentials("tokens")
+
+  expect((await McpAuth.getForAuthority(name, url, authorityFingerprint))?.tokens).toMatchObject({
+    accessToken: "access-2",
+    refreshToken: "refresh-2",
+  })
+  await McpAuth.remove(name)
+})
+
+test("refresh keeps the current refresh token and scope when the server omits replacements", async () => {
+  const name = "refresh-preserves-optional-fields"
+  const server = serve(() =>
+    Response.json({
+      access_token: "fresh-access",
+      token_type: "Bearer",
+      expires_in: 3600,
+    }),
+  )
+  const url = `http://127.0.0.1:${server.port}`
+  await McpAuth.set(
+    name,
+    {
+      tokens: {
+        accessToken: "stale-access",
+        refreshToken: "keep-refresh",
+        expiresAt: Date.now() / 1000 - 60,
+        scope: "read tools",
+      },
+      credentialAuthorityFingerprint: authorityFingerprint,
+    },
+    url,
+  )
+
+  const tokens = await provider(name, url).tokens()
+  expect(tokens?.access_token).toBe("fresh-access")
+  expect(tokens?.refresh_token).toBe("keep-refresh")
+  expect(tokens?.scope).toBe("read tools")
+  expect((await McpAuth.get(name))?.tokens).toMatchObject({
+    accessToken: "fresh-access",
+    refreshToken: "keep-refresh",
+    scope: "read tools",
+  })
+
+  server.stop(true)
+  await McpAuth.remove(name)
+})
+
+test("OAuth refresh never follows a redirect carrying the refresh token", async () => {
+  const name = "refresh-no-redirect"
+  let sinkRequests = 0
+  const sink = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch(req) {
+      sinkRequests++
+      await req.text()
+      return Response.json({ access_token: "leaked", token_type: "Bearer" })
+    },
+  })
+  const source = serve(
+    (_params, origin) =>
+      new Response(null, {
+        status: 307,
+        headers: { location: `http://127.0.0.1:${sink.port}/leak`, "x-origin": origin },
+      }),
+  )
+  const url = `http://127.0.0.1:${source.port}`
+  await McpAuth.set(
+    name,
+    {
+      tokens: { accessToken: "stale", refreshToken: "never-forward", expiresAt: Date.now() / 1000 - 60 },
+      credentialAuthorityFingerprint: authorityFingerprint,
+    },
+    url,
+  )
+
+  await provider(name, url).tokens()
+  expect(sinkRequests).toBe(0)
+  expect((await McpAuth.getForUrl(name, url))?.tokens?.refreshToken).toBe("never-forward")
+
+  source.stop(true)
+  sink.stop(true)
+  await McpAuth.remove(name)
+})
+
+test("provider-controlled refresh errors never enter OpenScience logs", async () => {
+  const name = "refresh-log-redaction"
+  const marker = `provider-private-${crypto.randomUUID()}`
+  const server = serve(() =>
+    Response.json(
+      {
+        error: "invalid_grant",
+        error_description: marker,
+      },
+      { status: 400 },
+    ),
+  )
+  const url = `http://127.0.0.1:${server.port}`
+  await McpAuth.set(
+    name,
+    {
+      tokens: { accessToken: "stale-access", refreshToken: "stale-refresh", expiresAt: Date.now() / 1000 - 60 },
+      credentialAuthorityFingerprint: authorityFingerprint,
+    },
+    url,
+  )
+
+  try {
+    await Log.flush()
+    const before = await Bun.file(Log.file()).text()
+    const tokens = await provider(name, url).tokens()
+    await Log.flush()
+    const appended = (await Bun.file(Log.file()).text()).slice(before.length)
+
+    expect(tokens?.access_token).toBe("stale-access")
+    expect(appended).toContain("token refresh failed; re-authentication may be required")
+    expect(appended).not.toContain(marker)
+  } finally {
+    server.stop(true)
+    await McpAuth.remove(name)
+  }
 })

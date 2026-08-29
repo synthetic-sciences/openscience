@@ -570,6 +570,213 @@ describe("OpenScience data directory", () => {
     expect(SecretBox.open(after, store.modal.fields.MODAL_TOKEN)).toBe("recovered")
   })
 
+  test("re-seals encrypted MCP auth entries while preserving target-owned entries", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    const before = Buffer.alloc(32, 3)
+    const after = Buffer.alloc(32, 4)
+    const prefix = "openscience-secret:v1:"
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.mkdir(target, { recursive: true })
+    await fs.writeFile(path.join(legacy, "credentials.key"), before)
+    await fs.writeFile(path.join(target, "credentials.key"), after)
+    await fs.writeFile(
+      path.join(legacy, "mcp-auth.json"),
+      JSON.stringify({
+        recovered: {
+          storageVersion: 1,
+          tokens: {
+            accessToken: `${prefix}${SecretBox.seal(before, "legacy-access")}`,
+            refreshToken: `${prefix}${SecretBox.seal(before, "legacy-refresh")}`,
+          },
+          clientInfo: {
+            clientId: "legacy-client",
+            clientSecret: `${prefix}${SecretBox.seal(before, "legacy-secret")}`,
+          },
+          codeVerifier: `${prefix}${SecretBox.seal(before, "legacy-verifier")}`,
+          oauthState: `${prefix}${SecretBox.seal(before, "legacy-state")}`,
+          oauthAuthorizationUrl: `${prefix}${SecretBox.seal(before, "https://id.example/authorize?state=legacy")}`,
+          oauthAuthorityFingerprint: `${prefix}${SecretBox.seal(before, "a".repeat(64))}`,
+          oauthCompletedState: `${prefix}${SecretBox.seal(before, "legacy-completed-state")}`,
+          oauthCompletedAuthorityFingerprint: `${prefix}${SecretBox.seal(before, "b".repeat(64))}`,
+          credentialAuthorityFingerprint: `${prefix}${SecretBox.seal(before, "c".repeat(64))}`,
+          oauthCallback: { type: "code", value: `${prefix}${SecretBox.seal(before, "legacy-code")}` },
+          serverUrl: "https://mcp.example",
+        },
+        current: {
+          storageVersion: 1,
+          tokens: { accessToken: `${prefix}${SecretBox.seal(before, "must-not-win")}` },
+        },
+      }),
+    )
+    await fs.writeFile(
+      path.join(target, "mcp-auth.json"),
+      JSON.stringify({
+        current: {
+          storageVersion: 1,
+          tokens: { accessToken: `${prefix}${SecretBox.seal(after, "target-access")}` },
+        },
+      }),
+    )
+
+    await resolveDataDirectory({ home, legacy })
+
+    const store = JSON.parse(await fs.readFile(path.join(target, "mcp-auth.json"), "utf8"))
+    expect(SecretBox.open(after, store.recovered.tokens.accessToken.slice(prefix.length))).toBe("legacy-access")
+    expect(SecretBox.open(after, store.recovered.tokens.refreshToken.slice(prefix.length))).toBe("legacy-refresh")
+    expect(SecretBox.open(after, store.recovered.clientInfo.clientSecret.slice(prefix.length))).toBe("legacy-secret")
+    expect(SecretBox.open(after, store.recovered.codeVerifier.slice(prefix.length))).toBe("legacy-verifier")
+    expect(SecretBox.open(after, store.recovered.oauthState.slice(prefix.length))).toBe("legacy-state")
+    expect(SecretBox.open(after, store.recovered.oauthAuthorizationUrl.slice(prefix.length))).toBe(
+      "https://id.example/authorize?state=legacy",
+    )
+    expect(SecretBox.open(after, store.recovered.oauthAuthorityFingerprint.slice(prefix.length))).toBe("a".repeat(64))
+    expect(SecretBox.open(after, store.recovered.oauthCompletedState.slice(prefix.length))).toBe(
+      "legacy-completed-state",
+    )
+    expect(SecretBox.open(after, store.recovered.oauthCompletedAuthorityFingerprint.slice(prefix.length))).toBe(
+      "b".repeat(64),
+    )
+    expect(SecretBox.open(after, store.recovered.credentialAuthorityFingerprint.slice(prefix.length))).toBe(
+      "c".repeat(64),
+    )
+    expect(SecretBox.open(after, store.recovered.oauthCallback.value.slice(prefix.length))).toBe("legacy-code")
+    expect(SecretBox.open(after, store.current.tokens.accessToken.slice(prefix.length))).toBe("target-access")
+  })
+
+  test("does not partially import an MCP authority store when any encrypted entry is unreadable", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    const before = Buffer.alloc(32, 5)
+    const after = Buffer.alloc(32, 6)
+    const prefix = "openscience-secret:v1:"
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.mkdir(target, { recursive: true })
+    await fs.writeFile(path.join(legacy, "credentials.key"), before)
+    await fs.writeFile(path.join(target, "credentials.key"), after)
+    await fs.writeFile(
+      path.join(legacy, "mcp-auth.json"),
+      JSON.stringify({
+        readable: {
+          storageVersion: 1,
+          tokens: { accessToken: `${prefix}${SecretBox.seal(before, "must-not-partially-land")}` },
+        },
+        broken: {
+          storageVersion: 1,
+          tokens: { accessToken: `${prefix}not-valid-gcm` },
+        },
+      }),
+    )
+    await fs.writeFile(
+      path.join(target, "mcp-auth.json"),
+      JSON.stringify({
+        current: {
+          storageVersion: 1,
+          tokens: { accessToken: `${prefix}${SecretBox.seal(after, "keep-current")}` },
+        },
+      }),
+    )
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.error).toBeUndefined()
+    expect(result.warning).toContain("mcp-auth.json")
+    const store = JSON.parse(await fs.readFile(path.join(target, "mcp-auth.json"), "utf8"))
+    expect(Object.keys(store)).toEqual(["current"])
+    expect(SecretBox.open(after, store.current.tokens.accessToken.slice(prefix.length))).toBe("keep-current")
+    const source = JSON.parse(await fs.readFile(path.join(legacy, "mcp-auth.json"), "utf8"))
+    expect(SecretBox.open(before, source.readable.tokens.accessToken.slice(prefix.length))).toBe(
+      "must-not-partially-land",
+    )
+    const marker = JSON.parse(await fs.readFile(path.join(target, ".xdg-data-migration-v2.json"), "utf8"))
+    expect(marker.pending).toContain("mcp-auth.json")
+  })
+
+  test("does not partially import an MCP authority store when a sibling v1 entry is malformed", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    const before = Buffer.alloc(32, 9)
+    const after = Buffer.alloc(32, 10)
+    const prefix = "openscience-secret:v1:"
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.mkdir(target, { recursive: true })
+    await fs.writeFile(path.join(legacy, "credentials.key"), before)
+    await fs.writeFile(path.join(target, "credentials.key"), after)
+    await fs.writeFile(
+      path.join(legacy, "mcp-auth.json"),
+      JSON.stringify({
+        recovered: {
+          storageVersion: 1,
+          tokens: { accessToken: `${prefix}${SecretBox.seal(before, "must-not-partially-land")}` },
+        },
+        malformed: { storageVersion: 1, tokens: { accessToken: 123 } },
+      }),
+    )
+    await fs.writeFile(
+      path.join(target, "mcp-auth.json"),
+      JSON.stringify({
+        current: {
+          storageVersion: 1,
+          tokens: { accessToken: `${prefix}${SecretBox.seal(after, "keep-current")}` },
+        },
+      }),
+    )
+
+    const result = await resolveDataDirectory({ home, legacy })
+
+    expect(result.error).toBeUndefined()
+    expect(result.warning).toContain("mcp-auth.json")
+    const store = JSON.parse(await fs.readFile(path.join(target, "mcp-auth.json"), "utf8"))
+    expect(Object.keys(store)).toEqual(["current"])
+    expect(SecretBox.open(after, store.current.tokens.accessToken.slice(prefix.length))).toBe("keep-current")
+    const source = JSON.parse(await fs.readFile(path.join(legacy, "mcp-auth.json"), "utf8"))
+    expect(SecretBox.open(before, source.recovered.tokens.accessToken.slice(prefix.length))).toBe(
+      "must-not-partially-land",
+    )
+    const migration = JSON.parse(await fs.readFile(path.join(target, ".xdg-data-migration-v2.json"), "utf8"))
+    expect(migration.pending).toContain("mcp-auth.json")
+  })
+
+  test("retries an MCP authority store after its missing source machine key is restored", async () => {
+    const home = await root()
+    const legacy = path.join(home, "share", "openscience")
+    const target = path.join(home, ".openscience")
+    const before = Buffer.alloc(32, 7)
+    const after = Buffer.alloc(32, 8)
+    const prefix = "openscience-secret:v1:"
+    await fs.mkdir(legacy, { recursive: true })
+    await fs.mkdir(target, { recursive: true })
+    await fs.writeFile(path.join(target, "credentials.key"), after)
+    await fs.writeFile(
+      path.join(legacy, "mcp-auth.json"),
+      JSON.stringify({
+        recovered: {
+          storageVersion: 1,
+          tokens: { accessToken: `${prefix}${SecretBox.seal(before, "restored-access")}` },
+        },
+      }),
+    )
+
+    const first = await resolveDataDirectory({ home, legacy })
+    expect(first.warning).toContain("mcp-auth.json")
+    expect(JSON.parse(await fs.readFile(path.join(target, ".xdg-data-migration-v2.json"), "utf8")).pending).toContain(
+      "mcp-auth.json",
+    )
+    expect(fsSync.existsSync(path.join(target, "mcp-auth.json"))).toBe(false)
+
+    await fs.writeFile(path.join(legacy, "credentials.key"), before)
+    const second = await resolveDataDirectory({ home, legacy })
+    expect(second.error).toBeUndefined()
+    const store = JSON.parse(await fs.readFile(path.join(target, "mcp-auth.json"), "utf8"))
+    expect(SecretBox.open(after, store.recovered.tokens.accessToken.slice(prefix.length))).toBe("restored-access")
+    expect(
+      JSON.parse(await fs.readFile(path.join(target, ".xdg-data-migration-v2.json"), "utf8")).pending,
+    ).not.toContain("mcp-auth.json")
+  })
+
   unreadable("does not import an artifact whose blob never landed", async () => {
     const home = await root()
     const legacy = path.join(home, "share", "openscience")

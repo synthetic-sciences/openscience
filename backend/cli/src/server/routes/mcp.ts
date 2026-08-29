@@ -157,14 +157,10 @@ export const McpRoutes = lazy(() =>
         operationId: "mcp.auth.start",
         responses: {
           200: {
-            description: "OAuth flow started",
+            description: "OAuth flow started or existing credentials settled",
             content: {
               "application/json": {
-                schema: resolver(
-                  z.object({
-                    authorizationUrl: z.string().describe("URL to open in browser for authorization"),
-                  }),
-                ),
+                schema: resolver(MCP.AuthStart),
               },
             },
           },
@@ -180,6 +176,51 @@ export const McpRoutes = lazy(() =>
         const result = await MCP.startAuth(name)
         return c.json(result)
       },
+    )
+    .get(
+      "/:name/auth/pending",
+      describeRoute({
+        summary: "Read pending MCP OAuth",
+        description: "Return the exact resumable browser authorization operation, if one exists.",
+        operationId: "mcp.auth.pending",
+        responses: {
+          200: {
+            description: "Pending OAuth operation",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    pending: z.boolean(),
+                    authorizationUrl: z.string().optional(),
+                    flowId: z.string().optional(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const pending = await MCP.pendingAuth(c.req.param("name"))
+        return c.json(pending ? { pending: true, ...pending } : { pending: false })
+      },
+    )
+    .post(
+      "/:name/auth/wait",
+      describeRoute({
+        summary: "Wait for MCP OAuth",
+        description: "Wait for an already-started browser OAuth operation without launching a second browser.",
+        operationId: "mcp.auth.wait",
+        responses: {
+          200: {
+            description: "OAuth authentication completed",
+            content: { "application/json": { schema: resolver(MCP.Status) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("query", z.object({ flow_id: z.string().min(1) })),
+      async (c) => c.json(await MCP.waitForAuth(c.req.param("name"), c.req.valid("query").flow_id)),
     )
     .post(
       "/:name/auth/callback",
@@ -239,6 +280,32 @@ export const McpRoutes = lazy(() =>
         }
         const status = await MCP.authenticate(name)
         return c.json(status)
+      },
+    )
+    .delete(
+      "/:name/auth/pending",
+      describeRoute({
+        summary: "Cancel pending MCP OAuth",
+        description: "Cancel only the pending browser authorization flow without deleting existing credentials.",
+        operationId: "mcp.auth.cancel",
+        responses: {
+          200: {
+            description: "Pending OAuth flow cancelled",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ success: z.literal(true) })),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("query", z.object({ flow_id: z.string().min(1) })),
+      async (c) => {
+        const name = c.req.param("name")
+        const { flow_id } = c.req.valid("query")
+        await MCP.cancelAuth(name, flow_id)
+        return c.json({ success: true as const })
       },
     )
     .delete(

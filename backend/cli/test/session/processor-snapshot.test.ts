@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { SessionProcessor } from "../../src/session/processor"
 import { MessageV2 } from "../../src/session/message-v2"
+import { OpenScience } from "../../src/openscience"
+import { SessionResearch } from "../../src/session/research"
 
 describe("session processor snapshot routing", () => {
   test("tracks only when the model can execute an advertised tool", () => {
@@ -25,6 +27,75 @@ describe("session processor snapshot routing", () => {
         metadata: { openscience_state: "paused", action: "retry" },
       },
     })
+  })
+
+  test("does not dispatch a managed provider call when the balance is unavailable", async () => {
+    const balance = spyOn(OpenScience, "getBalance").mockResolvedValue(null)
+    const reserve = spyOn(SessionResearch, "preflight").mockResolvedValue("allow")
+    let providerDispatches = 0
+    try {
+      await expect(
+        SessionProcessor.withManagedCallAuthorization(
+          { credentialSource: "managed", sessionID: "session-null-balance" },
+          () => {
+            providerDispatches++
+            return "provider-dispatched"
+          },
+        ),
+      ).rejects.toMatchObject({
+        name: "APIError",
+        data: { statusCode: 503, isRetryable: true, metadata: { openscience_state: "paused" } },
+      })
+      expect(reserve).not.toHaveBeenCalled()
+      expect(providerDispatches).toBe(0)
+    } finally {
+      balance.mockRestore()
+      reserve.mockRestore()
+    }
+  })
+
+  test("does not dispatch a managed provider call at a zero balance", async () => {
+    const balance = spyOn(OpenScience, "getBalance").mockResolvedValue(0)
+    const reserve = spyOn(SessionResearch, "preflight").mockResolvedValue("allow")
+    let providerDispatches = 0
+    try {
+      await expect(
+        SessionProcessor.withManagedCallAuthorization(
+          { credentialSource: "managed", sessionID: "session-zero-balance" },
+          () => {
+            providerDispatches++
+            return "provider-dispatched"
+          },
+        ),
+      ).rejects.toThrow("cannot safely fund another research step")
+      expect(reserve).not.toHaveBeenCalled()
+      expect(providerDispatches).toBe(0)
+    } finally {
+      balance.mockRestore()
+      reserve.mockRestore()
+    }
+  })
+
+  test("dispatches exactly once after a positive managed balance is reserved", async () => {
+    const balance = spyOn(OpenScience, "getBalance").mockResolvedValue(10)
+    const reserve = spyOn(SessionResearch, "preflight").mockResolvedValue("allow")
+    let providerDispatches = 0
+    try {
+      expect(
+        await SessionProcessor.withManagedCallAuthorization(
+          { credentialSource: "managed", sessionID: "session-funded-balance" },
+          () => {
+            providerDispatches++
+            return "provider-dispatched"
+          },
+        ),
+      ).toEqual({ creditDecision: "allow", value: "provider-dispatched" })
+      expect(reserve).toHaveBeenCalledTimes(1)
+      expect(providerDispatches).toBe(1)
+    } finally {
+      balance.mockRestore()
+      reserve.mockRestore()
+    }
   })
 
   test("turns content filtering without a textual handoff into a retryable provider error", () => {

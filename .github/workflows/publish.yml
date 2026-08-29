@@ -855,6 +855,89 @@ jobs:
             }
           done
 
+  verify-desktop-updater:
+    needs:
+      - version
+      - build-desktop
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            dmg: OpenScience-mac-arm64.dmg
+            zip: OpenScience-mac-arm64.zip
+          - arch: x64
+            dmg: OpenScience-mac-x64.dmg
+            zip: OpenScience-mac-x64.zip
+    runs-on: macos-14
+    timeout-minutes: 15
+    permissions:
+      # Draft release assets are hidden from read-only workflow tokens. This
+      # job only downloads and verifies the already immutable payloads.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.source }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Download the exact stable-channel macOS artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          OPENSCIENCE_DMG: ${{ matrix.dmg }}
+          OPENSCIENCE_ZIP: ${{ matrix.zip }}
+        run: |
+          set -euo pipefail
+          gh release download "$OPENSCIENCE_TAG" --pattern "$OPENSCIENCE_DMG" --pattern "$OPENSCIENCE_ZIP"
+          assets="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
+          for name in "$OPENSCIENCE_DMG" "$OPENSCIENCE_ZIP"; do
+            expected="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$assets")"
+            actual="sha256:$(shasum -a 256 "$name" | awk '{print $1}')"
+            [[ "$expected" =~ ^sha256:[0-9a-f]{64}$ && "$actual" == "$expected" ]] || {
+              echo "::error::$name does not match its immutable GitHub release digest"
+              exit 1
+            }
+          done
+
+      - name: Exercise the updater against the exact ZIP and DMG app
+        shell: bash
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARCH: ${{ matrix.arch }}
+          OPENSCIENCE_DMG: ${{ matrix.dmg }}
+          OPENSCIENCE_ZIP: ${{ matrix.zip }}
+          OPENSCIENCE_TRUSTED: ${{ inputs.release_mode == 'signed' }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          mountpoint="$RUNNER_TEMP/openscience-dmg-$OPENSCIENCE_ARCH"
+          mkdir -p "$mountpoint"
+          cleanup() { hdiutil detach "$mountpoint" -quiet 2>/dev/null || true; }
+          trap cleanup EXIT
+          hdiutil attach "$OPENSCIENCE_DMG" -readonly -nobrowse -mountpoint "$mountpoint" -quiet
+          current="$mountpoint/OpenScience.app"
+          [[ -d "$current" && ! -L "$current" ]] || {
+            echo "::error::$OPENSCIENCE_DMG has no real top-level OpenScience.app"
+            exit 1
+          }
+          if [[ "$OPENSCIENCE_TRUSTED" == "true" ]]; then
+            details="$(codesign -dv --verbose=4 "$current" 2>&1)"
+            grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details" || {
+              echo "::error::$OPENSCIENCE_DMG is not signed by the configured OpenScience team"
+              exit 1
+            }
+          fi
+          bun frontend/desktop/script/update-artifact-canary.mjs \
+            --zip "$OPENSCIENCE_ZIP" \
+            --current "$current" \
+            --version "$OPENSCIENCE_VERSION" \
+            --arch "$OPENSCIENCE_ARCH" \
+            --trusted "$OPENSCIENCE_TRUSTED"
+
   verify-native-cli:
     needs:
       - version
@@ -983,12 +1066,14 @@ jobs:
       - prepare-npm
       - sign-macos-cli
       - build-desktop
+      - verify-desktop-updater
     if: >-
       !cancelled() &&
       needs.version.result == 'success' &&
       needs.prepare-npm.result == 'success' &&
       needs.sign-macos-cli.result == 'success' &&
-      needs.build-desktop.result == 'success'
+      needs.build-desktop.result == 'success' &&
+      needs.verify-desktop-updater.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

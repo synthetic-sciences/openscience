@@ -18,7 +18,7 @@ export const BillingState = z.object({
     .describe("@deprecated Compatibility field. Compute always uses user-owned infrastructure."),
   wallet: z.object({
     signedIn: z.boolean().describe("Whether a Synthetic Sciences session is available"),
-    balanceUsd: z.number().nullable().describe("Credit balance in USD; null when signed out or unavailable"),
+    balanceUsd: z.number().nullable().describe("Purchased Wallet balance in USD; null when signed out or unavailable"),
   }),
 })
 export type BillingState = z.infer<typeof BillingState>

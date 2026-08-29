@@ -941,10 +941,10 @@ export const SessionRoutes = lazy(() =>
         operationId: "session.revert",
         responses: {
           200: {
-            description: "Updated session",
+            description: "Completed undo transaction",
             content: {
               "application/json": {
-                schema: resolver(Session.Info),
+                schema: resolver(SessionRevert.RevertResult),
               },
             },
           },
@@ -961,11 +961,18 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         log.info("revert", c.req.valid("json"))
-        const session = await SessionRevert.revert({
-          sessionID,
-          ...c.req.valid("json"),
-        })
-        return c.json(session)
+        try {
+          const result = await SessionRevert.revert({
+            sessionID,
+            ...c.req.valid("json"),
+          })
+          return c.json(result)
+        } catch (error) {
+          if (error instanceof SessionRevert.UnavailableError || error instanceof SessionRevert.TransactionError) {
+            throw new HTTPException(400, { message: error.message })
+          }
+          throw error
+        }
       },
     )
     .post(
@@ -994,8 +1001,15 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const session = await SessionRevert.unrevert({ sessionID })
-        return c.json(session)
+        try {
+          const session = await SessionRevert.unrevert({ sessionID })
+          return c.json(session)
+        } catch (error) {
+          if (error instanceof SessionRevert.UnavailableError || error instanceof SessionRevert.TransactionError) {
+            throw new HTTPException(400, { message: error.message })
+          }
+          throw error
+        }
       },
     )
     .post(

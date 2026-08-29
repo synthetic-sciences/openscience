@@ -16,7 +16,7 @@ const actions: JSX.CSSProperties = {
 /** Promise-based, focus-contained alternatives to browser confirm/prompt/alert. */
 export function confirmDialog(
   dialog: DialogController,
-  opts: { title: string; message?: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean },
+  opts: { title: string; message?: JSX.Element; confirmLabel?: string; cancelLabel?: string; danger?: boolean },
 ): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false

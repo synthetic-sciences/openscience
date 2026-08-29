@@ -51,6 +51,55 @@ export namespace SessionProcessor {
     })
   }
 
+  type CreditDecision = "allow" | "finalize" | "block"
+
+  /**
+   * Keep the wallet decision and the provider-dispatch seam in one helper so
+   * every managed call is fail-closed. The callback is never entered when the
+   * balance is unavailable, zero/negative, or the durable research reservation
+   * is exhausted. BYOK and first-party subscription calls bypass wallet reads.
+   */
+  export async function withManagedCallAuthorization<T>(
+    input: {
+      credentialSource: Parameters<typeof requiresWalletBalance>[0]
+      sessionID: string
+      creditDecision?: CreditDecision
+    },
+    dispatch: (creditDecision: CreditDecision | undefined) => T | Promise<T>,
+  ): Promise<{ creditDecision: CreditDecision | undefined; value: T }> {
+    if (!requiresWalletBalance(input.credentialSource)) {
+      return { creditDecision: input.creditDecision, value: await dispatch(input.creditDecision) }
+    }
+
+    const balance = await OpenScience.getBalance()
+    if (balance === null) {
+      throw managedPauseError(
+        "Managed access is paused because OpenScience could not verify your Ace balance. Existing responses, Results, checkpoints, and remote jobs are preserved. Retry when the connection returns, or switch to a direct BYOK, ChatGPT, or local model.",
+      )
+    }
+
+    // An unaffordable call must not consume the one durable finalization
+    // reservation: no provider dispatch can follow at a zero/negative balance.
+    if (balance <= 0) {
+      OpenScience.invalidateBalance()
+      throw new Error(
+        "Your Ace balance cannot safely fund another research step and its final response. Existing Results and checkpoints are preserved. Add credits at app.syntheticsciences.ai/billing, or switch model access to Accounts in Settings → Models.",
+      )
+    }
+
+    const creditDecision = input.creditDecision ?? (await SessionResearch.preflight(input.sessionID, balance))
+    if (creditDecision === "block") {
+      // Drop the 30s cache so a top-up is visible on the next attempt instead
+      // of blocking until the TTL expires.
+      OpenScience.invalidateBalance()
+      throw new Error(
+        "Your Ace balance cannot safely fund another research step and its final response. Existing Results and checkpoints are preserved. Add credits at app.syntheticsciences.ai/billing, or switch model access to Accounts in Settings → Models.",
+      )
+    }
+
+    return { creditDecision, value: await dispatch(creditDecision) }
+  }
+
   /** True when the last `threshold` TOOL calls are the same tool with the same
    *  input, ignoring reasoning/text/step parts interleaved between them. A naive
    *  "last N raw parts" check was defeated by reasoning models, which emit a
@@ -516,7 +565,6 @@ export namespace SessionProcessor {
     let needsCompaction = false
     let overflow = false
     let creditDecision: "allow" | "finalize" | "block" | undefined
-    let runtimeDecision: Awaited<ReturnType<typeof SessionResearch.runtimePreflight>> | undefined
 
     const toolOutcomes = createToolOutcomeCoordinator({
       abort: input.abort,
@@ -573,81 +621,75 @@ export namespace SessionProcessor {
             const credentialSource = await resolveCredentialSource(input.model.providerID, input.model.id)
             traceRoute = telemetryRoute(credentialSource, input.model)
 
-            // Managed calls require a live balance decision. Direct BYOK, OAuth,
-            // and local calls keep working from the cached account session during
-            // a control-plane outage and never spend Ace credits.
-            if (requiresWalletBalance(credentialSource)) {
-              const balance = await OpenScience.getBalance()
-              if (balance === null) {
-                throw managedPauseError(
-                  "Managed access is paused because OpenScience could not verify your Ace balance. Existing responses, Results, checkpoints, and remote jobs are preserved. Retry when the connection returns, or switch to a direct BYOK, ChatGPT, or local model.",
-                )
-              }
-              creditDecision ??= await SessionResearch.preflight(input.sessionID, balance)
-              if (balance <= 0 || creditDecision === "block") {
-                // Drop the 30s cache so a top-up is visible on the next
-                // attempt instead of blocking until the TTL expires.
-                OpenScience.invalidateBalance()
-                throw new Error(
-                  "Your Ace balance cannot safely fund another research step and its final response. Existing Results and checkpoints are preserved. Add credits at app.syntheticsciences.ai/billing, or switch model access to Accounts in Settings → Models.",
-                )
-              }
-            }
-
-            // The conversation-first Research agent does not create or require
-            // legacy research contracts, so an old persisted contract must not
-            // silently reintroduce bounded-run finalization or block a turn.
-            // Keep the gate for specialist/legacy agents that still opt into
-            // that contract explicitly. Ace balance safety above is separate.
-            runtimeDecision = ToolSelection.minimalResearchAgent(streamInput.agent.name)
-              ? { decision: "allow" }
-              : await SessionResearch.runtimePreflight(input.sessionID)
-            if (runtimeDecision.decision === "block") {
-              throw new Error(SessionResearch.exhaustionMessage(runtimeDecision))
-            }
-
             const requestContext = {
               sessionID: input.sessionID,
               messageID: input.assistantMessage.id,
               attempt: attempt + 1,
             }
+            const authorized = await withManagedCallAuthorization(
+              {
+                credentialSource,
+                sessionID: input.sessionID,
+                creditDecision,
+              },
+              async (nextCreditDecision) => {
+                creditDecision = nextCreditDecision
+
+                // The conversation-first Research agent does not create or require
+                // legacy research contracts, so an old persisted contract must not
+                // silently reintroduce bounded-run finalization or block a turn.
+                // Keep the gate for specialist/legacy agents that still opt into
+                // that contract explicitly. Ace balance safety above is separate.
+                const runtime: SessionResearch.RuntimeDecision = ToolSelection.minimalResearchAgent(
+                  streamInput.agent.name,
+                )
+                  ? ({ decision: "allow" } as const)
+                  : await SessionResearch.runtimePreflight(input.sessionID)
+                if (runtime.decision === "block") {
+                  throw new Error(SessionResearch.exhaustionMessage(runtime))
+                }
+
+                const finalizing = creditDecision === "finalize" || runtime.decision === "finalize"
+                const finalTurn = runtime.decision === "finalize" && runtime.finalizationCall === 2
+                const textOnly = runtime.textOnly === true || finalTurn
+                const request = finalizing
+                  ? {
+                      ...streamInput,
+                      // The first reserved turn may save/checkpoint work. The last
+                      // one is deliberately text-only so an agent cannot consume
+                      // the entire reserve on another tool loop and strand the user
+                      // without a usable partial result.
+                      tools: textOnly ? {} : streamInput.tools,
+                      system: [
+                        ...streamInput.system,
+                        runtime.textOnly
+                          ? `Cumulative research-runtime usage jumped directly past its hard limit (${runtime.reason ?? "configured limit reached"}). This is the single emergency finalization response. No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
+                          : creditDecision === "finalize"
+                            ? "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now."
+                            : finalTurn
+                              ? `This is the last reserved finalization turn for the research runtime budget (${runtime.reason ?? "configured limit reached"}). No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
+                              : `The research contract runtime budget is at its finalization boundary (${runtime.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
+                      ],
+                    }
+                  : streamInput
+                return Provider.withRequestContext(requestContext, () =>
+                  LLM.stream({
+                    ...request,
+                    route: traceRoute,
+                    trace: { messageID: input.assistantMessage.id, attempt: attempt + 1 },
+                    onReasoningEffortResolved: async (effort) => {
+                      if (input.assistantMessage.reasoningEffort === effort) return
+                      input.assistantMessage.reasoningEffort = effort
+                      await Session.updateMessage(input.assistantMessage)
+                    },
+                  }),
+                )
+              },
+            )
+            creditDecision = authorized.creditDecision
+            const stream = authorized.value
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
-            const finalizing = creditDecision === "finalize" || runtimeDecision.decision === "finalize"
-            const finalTurn = runtimeDecision.decision === "finalize" && runtimeDecision.finalizationCall === 2
-            const textOnly = runtimeDecision.textOnly === true || finalTurn
-            const request = finalizing
-              ? {
-                  ...streamInput,
-                  // The first reserved turn may save/checkpoint work. The last
-                  // one is deliberately text-only so an agent cannot consume
-                  // the entire reserve on another tool loop and strand the user
-                  // without a usable partial result.
-                  tools: textOnly ? {} : streamInput.tools,
-                  system: [
-                    ...streamInput.system,
-                    runtimeDecision.textOnly
-                      ? `Cumulative research-runtime usage jumped directly past its hard limit (${runtimeDecision.reason ?? "configured limit reached"}). This is the single emergency finalization response. No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
-                      : creditDecision === "finalize"
-                        ? "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now."
-                        : finalTurn
-                          ? `This is the last reserved finalization turn for the research runtime budget (${runtimeDecision.reason ?? "configured limit reached"}). No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
-                          : `The research contract runtime budget is at its finalization boundary (${runtimeDecision.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
-                  ],
-                }
-              : streamInput
-            const stream = await Provider.withRequestContext(requestContext, () =>
-              LLM.stream({
-                ...request,
-                route: traceRoute,
-                trace: { messageID: input.assistantMessage.id, attempt: attempt + 1 },
-                onReasoningEffortResolved: async (effort) => {
-                  if (input.assistantMessage.reasoningEffort === effort) return
-                  input.assistantMessage.reasoningEffort = effort
-                  await Session.updateMessage(input.assistantMessage)
-                },
-              }),
-            )
 
             for await (const value of Provider.withRequestContextIterable(requestContext, stream.fullStream)) {
               input.abort.throwIfAborted()

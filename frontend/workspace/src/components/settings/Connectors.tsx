@@ -27,8 +27,10 @@ import {
 import {
   blankConnectorForm,
   buildConnectorConfig,
+  catalogPresetConfig,
   connectorFormFromCatalog,
   connectorFormFromConfig,
+  connectorConflictsWithCatalogPreset,
   connectorIdentity,
   connectorMatchesCatalogSetup,
   maskConnectorConfig,
@@ -40,6 +42,8 @@ import {
 import type { ConnectorCatalogRecord, ScientificToolsResponse } from "./scientific-tools-state"
 
 type McpConfig = NonNullable<Config["mcp"]>[string]
+type PendingAuthorization = { authorizationUrl: string; flowId: string }
+type AuthenticationStart = ({ state: "pending" } & PendingAuthorization) | { state: "settled"; result: McpStatus }
 
 function isConfigured(value: McpConfig | undefined): value is ConfiguredMcp {
   return !!value && typeof value === "object" && "type" in value
@@ -64,6 +68,7 @@ export default function Connectors() {
   const [expanded, setExpanded] = createSignal<string>()
   const [editing, setEditing] = createSignal<string | undefined>()
   const [form, setForm] = createSignal<ConnectorFormState | undefined>()
+  const [pendingAuthorizations, setPendingAuthorizations] = createSignal<Record<string, PendingAuthorization>>({})
   const busy = (key?: string) => (key ? busyKeys().has(key) : busyKeys().size > 0)
   const setBusy = (key: string, value: boolean) =>
     setBusyKeys((current) => {
@@ -137,6 +142,7 @@ export default function Connectors() {
   onMount(() => {
     void refresh().catch(() => undefined)
     void loadCatalog()
+    void restorePendingAuthorizations()
   })
 
   function dot(s: McpStatus | undefined): "active" | "muted" | "error" | "pending" {
@@ -199,27 +205,110 @@ export default function Connectors() {
     }
   }
 
-  async function authenticate(name: string) {
-    const key = `row:${name}`
+  const authPath = (name: string, suffix = "") => `/mcp/${encodeURIComponent(name)}/auth${suffix}`
+  const fetcher = () => platform.fetch ?? fetch
+  function setPendingAuthorization(name: string, value?: PendingAuthorization) {
+    setPendingAuthorizations((current) => {
+      const next = { ...current }
+      if (value) next[name] = value
+      else delete next[name]
+      return next
+    })
+  }
+  async function acceptAuthenticationResult(name: string, result: McpStatus): Promise<McpStatus> {
+    if (result.status !== "connected") {
+      throw new Error(
+        result.status === "failed" ? result.error : `Connector returned ${result.status.replaceAll("_", " ")}`,
+      )
+    }
+    await refresh()
+    await inspect(name)
+    return result
+  }
+  async function waitForAuthentication(name: string, operation: PendingAuthorization): Promise<McpStatus> {
+    setPendingAuthorization(name, operation)
+    try {
+      const result = await settingsApi<McpStatus>(
+        server.url,
+        fetcher(),
+        `${authPath(name, "/wait")}?flow_id=${encodeURIComponent(operation.flowId)}`,
+        { method: "POST" },
+      )
+      return await acceptAuthenticationResult(name, result)
+    } finally {
+      setPendingAuthorization(name)
+    }
+  }
+  async function beginAuthentication(name: string): Promise<McpStatus> {
+    const existing = pendingAuthorizations()[name]
+    if (existing) return waitForAuthentication(name, existing)
+    const key = `auth-start:${name}`
+    if (busy(key)) throw new Error("Authorization is already starting")
+    setBusy(key, true)
+    let started: AuthenticationStart
+    try {
+      started = await settingsApi<AuthenticationStart>(server.url, fetcher(), authPath(name), { method: "POST" })
+      if (started.state === "settled") return await acceptAuthenticationResult(name, started.result)
+      setPendingAuthorization(name, started)
+      await Promise.resolve(platform.openLink(started.authorizationUrl)).catch(() => undefined)
+    } finally {
+      setBusy(key, false)
+    }
+    return waitForAuthentication(name, started)
+  }
+  async function restorePendingAuthorizations() {
+    const configured = Object.entries(sync.data.config.mcp ?? {}).filter(
+      (entry): entry is [string, ConfiguredMcp] => isConfigured(entry[1]) && entry[1].type === "remote",
+    )
+    await Promise.all(
+      configured.map(async ([name]) => {
+        const result = await settingsApi<{ pending: boolean; authorizationUrl?: string; flowId?: string }>(
+          server.url,
+          fetcher(),
+          authPath(name, "/pending"),
+        ).catch(() => undefined)
+        if (!result?.pending || !result.authorizationUrl || !result.flowId) return
+        const operation = { authorizationUrl: result.authorizationUrl, flowId: result.flowId }
+        setPendingAuthorization(name, operation)
+        void waitForAuthentication(name, operation).catch(() => undefined)
+      }),
+    )
+  }
+  async function cancelAuthentication(name: string) {
+    const operation = pendingAuthorizations()[name]
+    if (!operation) return
+    const key = `auth-cancel:${name}`
     if (busy(key)) return
     setBusy(key, true)
     try {
-      const result = await sdk.client.mcp.auth.authenticate({ name })
-      if (!result.data) throw new Error("The connector did not return an authentication result.")
-      await refresh()
-      await inspect(name)
-      if (result.data.status !== "connected") {
-        throw new Error(
-          result.data.status === "failed"
-            ? result.data.error
-            : `Connector returned ${result.data.status.replaceAll("_", " ")}`,
-        )
-      }
-      showToast({ variant: "success", title: `"${name}" connected` })
-    } catch (err) {
-      showToast({ variant: "error", title: "Authentication failed", description: message(err) })
+      await settingsApi<{ success: true }>(
+        server.url,
+        fetcher(),
+        `${authPath(name, "/pending")}?flow_id=${encodeURIComponent(operation.flowId)}`,
+        { method: "DELETE" },
+      )
+      setPendingAuthorization(name)
+      showToast({ title: `Authorization for "${name}" cancelled` })
+    } catch (error) {
+      showToast({ variant: "error", title: "Could not cancel authorization", description: message(error) })
     } finally {
       setBusy(key, false)
+    }
+  }
+
+  async function authenticate(name: string) {
+    const key = `row:${name}`
+    if (busy(key) || pendingAuthorizations()[name]) return
+    try {
+      await beginAuthentication(name)
+      showToast({ variant: "success", title: `"${name}" connected` })
+    } catch (err) {
+      const description = message(err)
+      showToast({
+        variant: description.toLowerCase().includes("cancel") ? undefined : "error",
+        title: description.toLowerCase().includes("cancel") ? "Authorization cancelled" : "Authentication failed",
+        description,
+      })
     }
   }
 
@@ -254,6 +343,81 @@ export default function Connectors() {
     if (!entry.setup) return
     setEditing(undefined)
     setForm(connectorFormFromCatalog(entry.setup))
+  }
+  async function addCatalogPreset(entry: ConnectorCatalogRecord) {
+    const setup = entry.setup
+    if (!setup?.one_click_disabled && !setup?.one_click_connect) return reviewCatalogSetup(entry)
+    const key = `catalog:${entry.id}`
+    if (busy(key)) return
+    const current = sync.data.config.mcp?.[setup.name]
+    const configured = isConfigured(current) ? current : undefined
+    if (connectorConflictsWithCatalogPreset(configured, setup)) {
+      showToast({
+        variant: "error",
+        title: `Connector name "${setup.name}" is already in use`,
+        description: "Review or remove the existing custom configuration before applying the recommended preset.",
+      })
+      return
+    }
+    setBusy(key, true)
+    setBusy(`row:${setup.name}`, true)
+    let created = false
+    try {
+      const config = catalogPresetConfig(setup)
+      if (!configured) {
+        await sdk.client.mcp.config.set({ name: setup.name, config, scope: "global" })
+        sync.set("config", "mcp", setup.name, maskConnectorConfig(config))
+        created = true
+      }
+      await refresh()
+      if (setup.one_click_connect) {
+        await beginAuthentication(setup.name)
+        sync.set("config", "mcp", setup.name, { ...maskConnectorConfig(config), enabled: true })
+        await refresh()
+        await inspect(setup.name)
+        showToast({
+          variant: "success",
+          title: `${entry.name} connected`,
+          description: "No tool was invoked and no paid compute resource was created during setup.",
+        })
+        return
+      }
+      showToast({
+        variant: "success",
+        title: `${entry.name} added safely off`,
+        description: "No network call, OAuth token, tool invocation, or paid resource was created.",
+      })
+    } catch (error) {
+      let rollbackProblem = ""
+      if (created && setup.one_click_connect) {
+        await sdk.client.mcp.config
+          .remove({ name: setup.name, scope: "global" })
+          .then(() => {
+            sync.set("config", "mcp", (current = {}) => {
+              const next = { ...current }
+              delete next[setup.name]
+              return next
+            })
+          })
+          .catch((cause) => {
+            rollbackProblem = message(cause)
+          })
+        await refresh().catch(() => undefined)
+      }
+      showToast({
+        variant: "error",
+        title: setup.one_click_connect ? `${entry.name} was not connected` : `${entry.name} preset was not added`,
+        description:
+          created && setup.one_click_connect
+            ? rollbackProblem
+              ? `${message(error)} Automatic cleanup also failed: ${rollbackProblem}. Review the saved connector before retrying.`
+              : `${message(error)} The new preset and its local OAuth authority were rolled back.`
+            : message(error),
+      })
+    } finally {
+      setBusy(key, false)
+      setBusy(`row:${setup.name}`, false)
+    }
   }
   function editConnector(name: string, config: ConfiguredMcp) {
     setEditing(name)
@@ -410,7 +574,8 @@ export default function Connectors() {
                 <SectionLabel label="Reviewed setup catalog" count={catalogEntries().length} />
                 <p class="connectors-catalog__lead">
                   These records prefill reviewed upstream setup only. Nothing is installed, enabled, or granted write
-                  access until you review and save it.
+                  access until you review and save it. A one-click connection opens the provider's browser OAuth; setup
+                  itself does not invoke a tool or create a paid resource.
                 </p>
                 <div class="connectors-catalog__list" role="list">
                   <For each={catalogEntries()}>
@@ -425,7 +590,7 @@ export default function Connectors() {
                           <div class="connectors-catalog__copy">
                             <div class="connectors-catalog__title">
                               <strong>{entry.name}</strong>
-                              <span>{catalogStatusText(entry.status)}</span>
+                              <span>{entry.recommended ? "Recommended" : catalogStatusText(entry.status)}</span>
                             </div>
                             <p>{entry.summary}</p>
                             <small>{entry.safety}</small>
@@ -454,10 +619,30 @@ export default function Connectors() {
                               <button
                                 type="button"
                                 class="connectors-action"
-                                disabled={configured()}
-                                onClick={() => reviewCatalogSetup(entry)}
+                                disabled={
+                                  entry.setup?.one_click_connect
+                                    ? busy(`catalog:${entry.id}`) || status()[entry.setup!.name]?.status === "connected"
+                                    : entry.setup?.one_click_disabled
+                                      ? busy(`catalog:${entry.id}`) || configured()
+                                      : configured()
+                                }
+                                onClick={() => void addCatalogPreset(entry)}
                               >
-                                {configured() ? "Configured" : "Review setup"}
+                                {entry.setup?.one_click_connect
+                                  ? busy(`catalog:${entry.id}`)
+                                    ? "Connecting…"
+                                    : status()[entry.setup!.name]?.status === "connected"
+                                      ? "Connected"
+                                      : "Connect"
+                                  : entry.setup?.one_click_disabled
+                                    ? busy(`catalog:${entry.id}`)
+                                      ? "Adding…"
+                                      : configured()
+                                        ? "Saved off"
+                                        : "Add safely off"
+                                    : configured()
+                                      ? "Configured"
+                                      : "Review setup"}
                               </button>
                             </Show>
                           </div>
@@ -517,12 +702,16 @@ export default function Connectors() {
                                 <button
                                   type="button"
                                   class="connectors-action"
-                                  disabled={busy(`row:${name}`)}
+                                  disabled={
+                                    busy(`row:${name}`) || busy(`auth-start:${name}`) || !!pendingAuthorizations()[name]
+                                  }
                                   onClick={() => void authenticate(name)}
                                 >
-                                  {detail()?.auth === "authenticated" || s()?.status === "connected"
-                                    ? "Reconnect"
-                                    : "Connect"}
+                                  {pendingAuthorizations()[name]
+                                    ? "Waiting…"
+                                    : detail()?.auth === "authenticated" || s()?.status === "connected"
+                                      ? "Reconnect"
+                                      : "Connect"}
                                 </button>
                               </Show>
                               <IconButton
@@ -549,6 +738,33 @@ export default function Connectors() {
                               />
                             </div>
                           </div>
+                          <Show when={pendingAuthorizations()[name]}>
+                            {(authorization) => (
+                              <div class="connectors-oauth" role="status" aria-live="polite">
+                                <div>
+                                  <strong>Waiting for browser authorization</strong>
+                                  <span>You can reopen the provider page or cancel this exact attempt.</span>
+                                </div>
+                                <div class="connectors-oauth__actions">
+                                  <button
+                                    type="button"
+                                    class="connectors-detail-action"
+                                    onClick={() => platform.openLink(authorization().authorizationUrl)}
+                                  >
+                                    Open authorization page
+                                  </button>
+                                  <button
+                                    type="button"
+                                    class="connectors-detail-action"
+                                    disabled={busy(`auth-cancel:${name}`)}
+                                    onClick={() => void cancelAuthentication(name)}
+                                  >
+                                    {busy(`auth-cancel:${name}`) ? "Cancelling…" : "Cancel"}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </Show>
                           <Show when={expanded() === name}>
                             <div class="connectors-details">
                               <Show

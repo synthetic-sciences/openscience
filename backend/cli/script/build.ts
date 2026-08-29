@@ -115,7 +115,7 @@ for (const item of targets) {
       execArgv: [`--user-agent=openscience/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
-    entrypoints: ["./src/index.ts"],
+    entrypoints: ["./src/bootstrap.ts"],
     define: {
       ...keyDefines,
       OPENSCIENCE_VERSION: `'${Script.version}'`,

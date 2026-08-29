@@ -43,4 +43,21 @@ describe("Storage settings recovery", () => {
       }),
     ).resolves.toEqual({ kind: "error", message: "native bridge unavailable" })
   })
+
+  test("describes active phases without fake percentages and offers truthful interrupted recovery", () => {
+    expect(subject.storageRelocationCopy({ phase: "copying", active: true })).toEqual({
+      title: "Copying and verifying data",
+      detail: "The current location remains active until the verified copy is ready.",
+      tone: "neutral",
+    })
+    expect(subject.storageRelocationCopy({ phase: "publishing", active: false })).toEqual({
+      title: "Storage move was interrupted",
+      detail: "Your current data is still protected. Resume to recover the verified transaction safely.",
+      tone: "warning",
+    })
+
+    const source = readFileSync(fileURLToPath(new URL("./Storage.tsx", import.meta.url)), "utf8")
+    expect(source).toContain("Resume safely")
+    expect(source).not.toContain("aria-valuenow={relocation")
+  })
 })

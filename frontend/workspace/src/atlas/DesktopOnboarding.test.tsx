@@ -3,9 +3,16 @@ import { fileURLToPath } from "node:url"
 import type { JSX } from "solid-js"
 import { createServer } from "vite"
 import solid from "vite-plugin-solid"
+import type { ProjectCreateInput } from "@/components/dialog-create-project"
 import { canUseManaged } from "./desktop-onboarding-access"
 
+type DesktopPreferences = {
+  desktop_onboarding_version?: number
+  desktop_onboarding_operations?: Record<string, string>
+}
+
 const cleanups: Array<() => void> = []
+const mounted = new Map<HTMLElement, () => void>()
 const server = await createServer({
   root: fileURLToPath(new URL("../..", import.meta.url)),
   mode: "production",
@@ -24,6 +31,7 @@ const [subject, web] = await Promise.all([
 afterAll(() => server.close())
 afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup())
+  mounted.clear()
   document.body.replaceChildren()
   window.history.replaceState({}, "", "/")
 })
@@ -31,8 +39,26 @@ afterEach(() => {
 const mount = (view: () => JSX.Element) => {
   const host = document.createElement("div")
   document.body.append(host)
-  cleanups.push(web.render(view, host))
+  const dispose = web.render(view, host)
+  let active = true
+  const cleanup = () => {
+    if (!active) return
+    active = false
+    dispose()
+    host.remove()
+  }
+  mounted.set(host, cleanup)
+  cleanups.push(cleanup)
   return host
+}
+
+const unmount = (host: HTMLElement) => {
+  const cleanup = mounted.get(host)
+  if (!cleanup) return
+  cleanup()
+  mounted.delete(host)
+  const index = cleanups.indexOf(cleanup)
+  if (index >= 0) cleanups.splice(index, 1)
 }
 
 const json = (value: unknown, status = 200) =>
@@ -88,7 +114,7 @@ describe("desktop onboarding", () => {
   })
 
   test("creates the selected folder project before marking setup complete and opening it", async () => {
-    const requests: string[] = []
+    const events: string[] = []
     const opened: string[] = []
     const touched: string[] = []
     const platform = {
@@ -104,20 +130,33 @@ describe("desktop onboarding", () => {
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         const pathname = new URL(String(input)).pathname
         const key = `${init?.method ?? "GET"} ${pathname}`
-        requests.push(key)
         if (key === "GET /settings/preferences") return json({ desktop_onboarding_version: 0 })
         if (key === "GET /account") return json({ session: true, user: { email: "researcher@example.com" } })
         if (key === "GET /settings/wallet") {
           return json({ signedIn: true, managedSupported: true, managedUnlocked: true, balanceUsd: 20 })
         }
+        if (key === "POST /settings/preferences/onboarding-operation") {
+          events.push("bind")
+          return json({ operation_id: "00000000-0000-4000-8000-000000000001" })
+        }
+        if (key === "DELETE /settings/preferences/onboarding-operation") {
+          events.push("clear")
+          return new Response(null, { status: 204 })
+        }
         if (key === "POST /global/project") {
+          events.push("create")
           expect(JSON.parse(String(init?.body))).toEqual({
             name: "Cell atlas",
             sources: [{ path: "/Users/research/Cell atlas", access: "write" }],
+            operation_id: expect.any(String),
           })
           return json({ id: "prj_cell", worktree: "/managed/cell", name: "Cell atlas", time: { created: 1 } }, 201)
         }
-        if (key === "PATCH /settings/preferences") return json({ desktop_onboarding_version: 1 })
+        if (key === "PATCH /settings/preferences") {
+          const body = JSON.parse(String(init?.body)) as DesktopPreferences
+          if (body.desktop_onboarding_version === 1) events.push("complete")
+          return json({ desktop_onboarding_version: body.desktop_onboarding_version ?? 0, ...body })
+        }
         return json({ error: "not_found" }, 404)
       }) as typeof fetch,
     }
@@ -128,8 +167,14 @@ describe("desktop onboarding", () => {
         server: {
           url: "http://127.0.0.1:4096",
           projects: {
-            open: (worktree: string) => opened.push(worktree),
-            touch: (id: string) => touched.push(id),
+            open: (worktree: string) => {
+              events.push("open")
+              opened.push(worktree)
+            },
+            touch: (id: string) => {
+              events.push("touch")
+              touched.push(id)
+            },
           },
         },
         children: "Workspace ready",
@@ -144,8 +189,7 @@ describe("desktop onboarding", () => {
     open?.click()
     await settle(() => host.textContent?.includes("Workspace ready") === true)
 
-    expect(requests.filter((request) => request === "POST /global/project")).toHaveLength(1)
-    expect(requests.indexOf("POST /global/project")).toBeLessThan(requests.indexOf("PATCH /settings/preferences"))
+    expect(events).toEqual(["bind", "create", "complete", "open", "touch", "clear"])
     expect(opened).toEqual(["/managed/cell"])
     expect(touched).toEqual(["prj_cell"])
   })
@@ -211,5 +255,239 @@ describe("desktop onboarding", () => {
     await expect(flow(draft)).rejects.toThrow("preferences unavailable")
     await flow(draft)
     expect({ creates, completes }).toEqual({ creates: 1, completes: 2 })
+  })
+
+  test("keeps an ambiguous create retry on one operation and binds a different draft to a new operation", async () => {
+    const operations = ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
+    const requests: Array<ProjectCreateInput & { operation_id: string }> = []
+    let firstCreate = true
+    const flow = subject.createOnboardingProjectFlow({
+      operationID: () => operations.shift()!,
+      create: async (input) => {
+        requests.push(input)
+        if (firstCreate) {
+          firstCreate = false
+          throw new Error("response lost")
+        }
+        return {
+          id: input.name === "Folder" ? "prj_folder" : "prj_blank",
+          worktree: input.name === "Folder" ? "/managed/folder" : "/managed/blank",
+          time: { created: 1 },
+        }
+      },
+      markComplete: async () => {},
+      activate() {},
+    })
+    const folder = { name: "Folder", sources: [{ path: "/research/folder", access: "write" as const }] }
+    await expect(flow(folder)).rejects.toThrow("response lost")
+    await flow(folder)
+    await flow({ name: "Blank", sources: [] })
+
+    expect(requests.map((request) => request.operation_id)).toEqual([
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+    ])
+    expect(requests.at(-1)).toMatchObject({ name: "Blank", sources: [] })
+  })
+
+  test("reuses the persisted operation after a failed completion and a full component remount", async () => {
+    let version = 0
+    let operations: Record<string, string> = {}
+    let completions = 0
+    const posted: Array<ProjectCreateInput & { operation_id: string }> = []
+    const events: string[] = []
+    const platform = {
+      platform: "desktop" as const,
+      openLink() {},
+      async restart() {},
+      back() {},
+      forward() {},
+      async notify() {},
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const pathname = new URL(String(input)).pathname
+        const request = `${init?.method ?? "GET"} ${pathname}`
+        if (request === "GET /settings/preferences") return json({ desktop_onboarding_version: version })
+        if (request === "GET /account") return json({ session: true })
+        if (request === "GET /settings/wallet") {
+          return json({ signedIn: true, managedSupported: false, managedUnlocked: false })
+        }
+        if (request === "POST /settings/preferences/onboarding-operation") {
+          const { fingerprint } = JSON.parse(String(init?.body)) as { fingerprint: string }
+          const existing = operations[fingerprint]
+          operations[fingerprint] ??= crypto.randomUUID()
+          if (!existing) events.push("bind")
+          return json({ operation_id: operations[fingerprint] })
+        }
+        if (request === "DELETE /settings/preferences/onboarding-operation") {
+          const { fingerprint } = JSON.parse(String(init?.body)) as { fingerprint: string }
+          delete operations[fingerprint]
+          events.push("clear")
+          return new Response(null, { status: 204 })
+        }
+        if (request === "PATCH /settings/preferences") {
+          const body = JSON.parse(String(init?.body)) as DesktopPreferences
+          if (body.desktop_onboarding_version === 1) {
+            completions++
+            if (completions === 1) {
+              events.push("completion-lost")
+              return json({ message: "preferences unavailable" }, 503)
+            }
+            version = 1
+            events.push("complete")
+          }
+          return json({ desktop_onboarding_version: version })
+        }
+        if (request === "POST /global/project") {
+          const body = JSON.parse(String(init?.body)) as ProjectCreateInput & { operation_id: string }
+          posted.push(body)
+          events.push(posted.length === 1 ? "create" : "replay")
+          return json(
+            { id: "prj_replay", worktree: "/managed/replay", name: body.name, time: { created: 1 } },
+            posted.length === 1 ? 201 : 200,
+          )
+        }
+        return json({ error: "not_found" }, 404)
+      }) as typeof fetch,
+    }
+    const view = () =>
+      subject.DesktopOnboardingController({
+        desktop: true,
+        platform,
+        server: {
+          url: "http://127.0.0.1:4096",
+          projects: {
+            open: () => events.push("open"),
+            touch: () => events.push("touch"),
+          },
+        },
+        children: "Workspace ready",
+      })
+
+    const first = mount(view)
+    await settle(() => first.textContent?.includes("Start a blank project") === true)
+    Array.from(first.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("Start a blank project"))
+      ?.click()
+    await settle(() => first.textContent?.includes("preferences unavailable") === true)
+    const persisted = { ...operations }
+    expect(Object.keys(persisted)).toEqual([
+      subject.onboardingDraftFingerprint({ name: "New research project", sources: [] }),
+    ])
+
+    unmount(first)
+    window.history.replaceState({}, "", "/")
+    const second = mount(view)
+    await settle(() => second.textContent?.includes("Start a blank project") === true)
+    Array.from(second.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("Start a blank project"))
+      ?.click()
+    await settle(() => second.textContent?.includes("Workspace ready") === true)
+
+    expect(posted).toHaveLength(2)
+    expect(posted[0]!.operation_id).toBe(posted[1]!.operation_id)
+    expect(posted[0]!.operation_id).toBe(Object.values(persisted)[0])
+    expect(operations).toEqual({})
+    expect(events).toEqual(["bind", "create", "completion-lost", "replay", "complete", "open", "touch", "clear"])
+  })
+
+  test("creates the newly selected workspace when completion failed after another choice", async () => {
+    const posted: Array<ProjectCreateInput & { operation_id: string }> = []
+    const operations: Record<string, string> = {}
+    const bindingSnapshots: Array<Record<string, string>> = []
+    const opened: string[] = []
+    let completions = 0
+    const platform = {
+      platform: "desktop" as const,
+      openLink() {},
+      async restart() {},
+      back() {},
+      forward() {},
+      async notify() {},
+      async openDirectoryPickerDialog() {
+        return "/Users/research/Folder choice"
+      },
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const pathname = new URL(String(input)).pathname
+        const key = `${init?.method ?? "GET"} ${pathname}`
+        if (key === "GET /settings/preferences") return json({ desktop_onboarding_version: 0 })
+        if (key === "GET /account") return json({ session: true, user: { email: "researcher@example.com" } })
+        if (key === "GET /settings/wallet") {
+          return json({ signedIn: true, managedSupported: true, managedUnlocked: true, balanceUsd: 20 })
+        }
+        if (key === "POST /settings/preferences/onboarding-operation") {
+          const { fingerprint } = JSON.parse(String(init?.body)) as { fingerprint: string }
+          operations[fingerprint] ??= crypto.randomUUID()
+          bindingSnapshots.push({ ...operations })
+          return json({ operation_id: operations[fingerprint] })
+        }
+        if (key === "DELETE /settings/preferences/onboarding-operation") {
+          const { fingerprint } = JSON.parse(String(init?.body)) as { fingerprint: string }
+          delete operations[fingerprint]
+          bindingSnapshots.push({ ...operations })
+          return new Response(null, { status: 204 })
+        }
+        if (key === "POST /global/project") {
+          const body = JSON.parse(String(init?.body)) as ProjectCreateInput & { operation_id: string }
+          posted.push(body)
+          const folder = body.sources.length > 0
+          return json(
+            {
+              id: folder ? "prj_folder" : "prj_blank",
+              worktree: folder ? "/managed/folder" : "/managed/blank",
+              name: body.name,
+              time: { created: 1 },
+            },
+            201,
+          )
+        }
+        if (key === "PATCH /settings/preferences") {
+          const body = JSON.parse(String(init?.body)) as DesktopPreferences
+          completions++
+          if (completions === 1) return json({ message: "preferences unavailable" }, 503)
+          return json({ desktop_onboarding_version: 1 })
+        }
+        return json({ error: "not_found" }, 404)
+      }) as typeof fetch,
+    }
+    const host = mount(() =>
+      subject.DesktopOnboardingController({
+        desktop: true,
+        platform,
+        server: {
+          url: "http://127.0.0.1:4096",
+          projects: { open: (worktree: string) => opened.push(worktree), touch() {} },
+        },
+        children: "Workspace ready",
+      }),
+    )
+    await settle(() => host.textContent?.includes("Open a folder") === true)
+
+    Array.from(host.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("Open a folder"))
+      ?.click()
+    await settle(() => host.textContent?.includes("preferences unavailable") === true)
+    Array.from(host.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("Start a blank project"))
+      ?.click()
+    await settle(() => host.textContent?.includes("Workspace ready") === true)
+
+    expect(posted).toHaveLength(2)
+    expect(posted[0]).toMatchObject({
+      name: "Folder choice",
+      sources: [{ path: "/Users/research/Folder choice", access: "write" }],
+    })
+    expect(posted[1]).toMatchObject({ name: "New research project", sources: [] })
+    expect(posted.map((request) => request.operation_id)).toEqual([
+      expect.stringMatching(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u),
+      expect.stringMatching(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u),
+    ])
+    expect(posted[0]!.operation_id).not.toBe(posted[1]!.operation_id)
+    expect(Object.values(bindingSnapshots[0]!)).toEqual([posted[0]!.operation_id])
+    expect(Object.values(bindingSnapshots[1]!).toSorted()).toEqual(
+      [posted[0]!.operation_id, posted[1]!.operation_id].toSorted(),
+    )
+    expect(bindingSnapshots[2]).toEqual(bindingSnapshots[0])
+    expect(opened).toEqual(["/managed/blank"])
   })
 })

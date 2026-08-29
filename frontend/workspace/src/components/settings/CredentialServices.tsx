@@ -117,7 +117,7 @@ export const CredentialServices: Component<{
     if (saving()) return
     const confirmed = await confirmDialog(dialog, {
       title: `Remove ${service.label} credentials?`,
-      message: "This removes the saved credentials from this machine. You can connect the service again at any time.",
+      message: "This removes the saved credentials from this machine. It does not change external cloud resources.",
       confirmLabel: "Remove credentials",
       danger: true,
     })
@@ -211,16 +211,20 @@ export const CredentialServices: Component<{
                       <div class="flex min-w-0 flex-wrap items-center gap-2">
                         <strong>{service.label}</strong>
                         <Show when={service.connected}>
-                          <span class="settings-chip">Saved</span>
+                          <span class="settings-chip">Credential saved</span>
                         </Show>
                       </div>
-                      <span>
-                        {service.connected
-                          ? service.source === "account"
-                            ? "Synced from your Synthetic Sciences account"
-                            : "Encrypted on this machine"
-                          : service.description}
-                      </span>
+                      <span>{service.description}</span>
+                      <Show when={service.connected}>
+                        <span>
+                          {service.source === "account"
+                            ? "Encrypted and synced through your Synthetic Sciences account"
+                            : "Encrypted on this machine"}
+                          {service.set_fields.length
+                            ? ` · ${service.set_fields.length} field${service.set_fields.length === 1 ? "" : "s"} saved`
+                            : ""}
+                        </span>
+                      </Show>
                     </div>
                     <div class="settings-list-actions ml-auto max-w-full flex-wrap justify-end">
                       <Show when={service.connected}>
@@ -236,7 +240,7 @@ export const CredentialServices: Component<{
                         </button>
                       </Show>
                       <Button size="small" variant="secondary" disabled={saving()} onClick={() => open(service.id)}>
-                        {editing() === service.id ? "Cancel" : service.connected ? "Update" : "Connect"}
+                        {editing() === service.id ? "Cancel" : service.connected ? "Update" : "Add credential"}
                       </Button>
                     </div>
                   </div>

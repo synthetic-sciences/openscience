@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { installFromGit } from "./skills-settings"
+import { skillIconFor } from "./skill-icon"
 
 const source = () => readFileSync(fileURLToPath(new URL("./SkillsPage.tsx", import.meta.url)), "utf8")
 const styles = () => readFileSync(fileURLToPath(new URL("./skills-page.css", import.meta.url)), "utf8")
@@ -27,7 +28,7 @@ test("skills catalog keeps readable type, aligned controls, and semantic states"
   expect(page).toContain('label: "All categories"')
   expect(page).toContain('icon="alert-circle"')
   expect(page).toContain('action="Try again"')
-  expect(page).toContain("CATEGORY_ICON")
+  expect(page).toContain('class="skills-workspace__skill-icon"')
   expect(page).toContain("skillIconFor")
   expect(page).toContain("words === words.toUpperCase()")
   expect(css).toContain("font-size: 14px")
@@ -47,8 +48,10 @@ test("skills catalog is intrinsically responsive inside narrow panes", () => {
   expect(css).toMatch(/\.skills-workspace\s*\{[^}]*min-width: 0/s)
   expect(css).toMatch(/\.skills-workspace__body\s*\{[^}]*overflow-x: hidden/s)
   expect(css).toMatch(
-    /\.skills-workspace__row\s*\{[^}]*grid-template-columns: minmax\(190px, 0\.9fr\) minmax\(260px, 1\.4fr\) 32px/s,
+    /\.skills-workspace__row\s*\{[^}]*grid-template-columns: minmax\(190px, 0\.9fr\) minmax\(260px, 1\.4fr\) 72px/s,
   )
+  expect(css).toMatch(/\.skills-workspace__identity\s*\{[^}]*grid-template-columns: 32px minmax\(0, 1fr\)/s)
+  expect(css).toMatch(/\.skills-workspace__skill-icon\s*\{[^}]*width: 32px;[^}]*height: 32px/s)
   expect(css).toContain("@container skills-workspace (max-width: 800px)")
   expect(css).toContain("@container skills-workspace (max-width: 460px)")
   expect(css).not.toContain("minmax(210px")
@@ -100,8 +103,8 @@ test("settings skills bound hidden DOM and make toggle feedback immediate", () =
   expect(page).toContain('sync.set("config", "permission", change.optimistic')
   expect(page).toContain("permissionWrites = permissionWrites.then")
   expect(page).not.toContain("disabled={permissionBusy()}")
-  expect(page).toContain("visibleSkills(")
-  expect(page).toContain("visibleSkills(skills() ?? initialSkills, [])")
+  expect(page).toContain("visibleShelves()")
+  expect(page).toContain("items.slice(0, remaining)")
 })
 
 test("skill tags remain whole and switches keep compact geometry", () => {
@@ -116,7 +119,7 @@ test("skill tags remain whole and switches keep compact geometry", () => {
   )
   expect(css).toMatch(/\.skills-workspace__tags span\s*\{[^}]*min-width: max-content;[^}]*flex: 0 0 auto/s)
   expect(css).toMatch(
-    /@container skills-workspace \(max-width: 640px\)[\s\S]*?\.skills-workspace__tags\s*\{[^}]*display: none/s,
+    /@container skills-workspace \(max-width: 640px\)[\s\S]*?\.skills-workspace__tags\s*\{[^}]*display: flex;[^}]*flex-wrap: wrap/s,
   )
   expect(switchCss).toMatch(/\[data-slot="switch-control"\]\s*\{[^}]*width: 34px;[^}]*height: 20px/s)
   expect(switchCss).toMatch(/\[data-component="switch"\]\s*\{[^}]*min-width: 32px;[^}]*min-height: 32px/s)
@@ -124,12 +127,10 @@ test("skill tags remain whole and switches keep compact geometry", () => {
 })
 
 test("skill icons use subject metadata with a stable fallback", () => {
-  const page = source()
-
-  expect(page).toContain('biology: "activity"')
-  expect(page).toContain('databases: "server"')
-  expect(page).toContain('"cloud-compute": "cloud"')
-  expect(page).toContain("for (const char of category || skill.name)")
+  expect(skillIconFor({ name: "cell-culture", category: "biology" })).toBe("activity")
+  expect(skillIconFor({ name: "postgres", category: "databases" })).toBe("server")
+  expect(skillIconFor({ name: "gpu-jobs", category: "cloud-compute" })).toBe("cloud")
+  expect(skillIconFor({ name: "custom-thing" })).toBe(skillIconFor({ name: "custom-thing" }))
 })
 
 test("global skill installation does not select a filesystem project", async () => {

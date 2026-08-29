@@ -60,6 +60,17 @@ async function dirSize(target: string, seen: Set<string>): Promise<number> {
   return bytes
 }
 
+const Relocation = z.object({
+  id: z.string().optional(),
+  phase: z.enum(["copying", "ready", "publishing", "published", "switched", "recovery_required"]),
+  source: z.string().optional(),
+  target: z.string().optional(),
+  started_at: z.string().optional(),
+  updated_at: z.string().optional(),
+  active: z.boolean().optional(),
+  error: z.string().optional(),
+})
+
 const Usage = z.object({
   data_dir: z.string(),
   managed: z.boolean(),
@@ -71,6 +82,7 @@ const Usage = z.object({
   scanning: z.boolean(),
   updated_at: z.string().nullable(),
   scan_error: z.string().nullable(),
+  relocation: Relocation.nullable(),
   entries: z.array(z.object({ name: z.string(), path: z.string(), bytes: z.number(), kind: z.enum(["dir", "file"]) })),
 })
 
@@ -177,10 +189,13 @@ export const StorageRoutes = lazy(() =>
       async (c) => {
         const dataDir = await fs.realpath(Global.Path.data)
         refreshUsage(dataDir, c.req.valid("query").refresh === "1")
-        const pointer = await Bun.file(pointerPath)
-          .text()
-          .then((text) => text.trim() || null)
-          .catch(() => null)
+        const [pointer, relocation] = await Promise.all([
+          Bun.file(pointerPath)
+            .text()
+            .then((text) => text.trim() || null)
+            .catch(() => null),
+          DataRelocation.state().then((value) => value ?? null),
+        ])
         return c.json({
           data_dir: dataDir,
           managed: Global.Path.dataManaged,
@@ -193,6 +208,7 @@ export const StorageRoutes = lazy(() =>
           scanning: Boolean(usageScan.promise),
           updated_at: usageScan.value?.updated_at ?? null,
           scan_error: usageScan.error ?? null,
+          relocation,
         })
       },
     )

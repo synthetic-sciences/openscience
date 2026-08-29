@@ -35,7 +35,14 @@ describe("scientific tools settings catalog", () => {
       experimental: 52,
       blocked: 2,
     })
-    expect(body.connectors.map((entry) => entry.id)).toEqual(["github", "benchling", "box", "dropbox", "s3"])
+    expect(body.connectors.map((entry) => entry.id)).toEqual([
+      "givemeanode",
+      "github",
+      "benchling",
+      "box",
+      "dropbox",
+      "s3",
+    ])
     expect(body.connectors.every((entry) => entry.writes_enabled_by_catalog === false)).toBe(true)
     expect(body.connectors.every((entry) => /^[a-f0-9]{64}$/.test(entry.revision))).toBe(true)
     expect(

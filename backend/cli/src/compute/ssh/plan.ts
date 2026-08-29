@@ -18,6 +18,9 @@ export namespace SshPlan {
     host: z.string(),
     user: z.string().optional(),
     port: z.number().int().positive().max(65_535).optional(),
+    identity_file: z.string().optional(),
+    proxy_jump: z.string().optional(),
+    proxy_jump_host_key_digests: z.string().length(64).array().max(8).optional(),
     label: z.string(),
     scheduler: z.enum(["none", "slurm", "pbs"]),
     host_notes: z.string().optional(),
@@ -51,6 +54,9 @@ export namespace SshPlan {
     host: string
     user?: string
     port?: number
+    identity_file?: string
+    proxy_jump?: string
+    proxy_jump_host_keys?: string[]
     scheduler: "none" | "slurm" | "pbs"
     workdir?: string
     notes?: string
@@ -100,6 +106,13 @@ export namespace SshPlan {
     if (!input.host.host_key || !input.host.fingerprint) {
       throw new Error(`Test ${input.host.label} once to pin its SSH host key before dispatch`)
     }
+    const proxyJumpHostKeyDigests = input.host.proxy_jump_host_keys?.map((line) => {
+      const material = line.trim().split(/\s+/).slice(1, 3).join(" ")
+      if (!/^(?:ssh-(?:ed25519|rsa)|ecdsa-)\S*\s+\S+$/.test(material)) {
+        throw new Error(`Saved SSH ProxyJump host-key material is invalid for ${input.host.label}`)
+      }
+      return new Bun.CryptoHasher("sha256").update(material).digest("hex")
+    })
     const upload = await ModalPlan.files(input.cwd, input.uploads, "SSH")
     const value = {
       provider: "ssh" as const,
@@ -108,6 +121,9 @@ export namespace SshPlan {
       host: input.host.host,
       user: input.host.user,
       port: input.host.port,
+      identity_file: input.host.identity_file,
+      proxy_jump: input.host.proxy_jump,
+      proxy_jump_host_key_digests: proxyJumpHostKeyDigests?.length ? proxyJumpHostKeyDigests : undefined,
       label: input.host.label,
       scheduler: input.host.scheduler,
       host_notes: input.host.notes?.trim() || undefined,
@@ -123,7 +139,7 @@ export namespace SshPlan {
       uploads: upload.files.map((file) => ({ path: file.path, size: file.size, sha256: file.sha256 })),
       upload_bytes: upload.bytes,
       outputs: input.outputs.toSorted(),
-      warning: `This command will run on ${input.host.label} through your SSH agent. OpenScience pins ${input.host.fingerprint}, stages only the reviewed inputs, and downloads only declared outputs. Saved host notes are advisory and are never executed automatically.`,
+      warning: `This command will run on ${input.host.label} through ${input.host.identity_file ? "the selected identity file" : "your SSH agent"}${input.host.proxy_jump ? ` via the saved ProxyJump chain ${input.host.proxy_jump}` : ""}. OpenScience pins ${input.host.fingerprint}${proxyJumpHostKeyDigests?.length ? ` and ${proxyJumpHostKeyDigests.length} jump-host key${proxyJumpHostKeyDigests.length === 1 ? "" : "s"}` : ""}, stages only the reviewed inputs, and downloads only declared outputs. Saved host notes are advisory and are never executed automatically.`,
     }
     // The durable job id/remote folder and absolute local scratch root are
     // minted per conversation. The reviewed security/workload contract binds

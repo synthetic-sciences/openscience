@@ -15,6 +15,7 @@ import { Network } from "@/settings/network"
 import { SessionTraceStore } from "@/session/trace-store"
 import { ProjectTrust } from "@/project/trust"
 import { ProjectAccess } from "@/project/access"
+import { ShellRisk } from "./shell-risk"
 
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
@@ -38,7 +39,6 @@ export namespace PermissionNext {
   const PASSIVE = new Set(["glob", "grep", "list", "question", "read", "skill", "todoread"])
   const CONTAINED = new Set([
     "artifact",
-    "bash",
     "batch",
     "edit",
     "lsp",
@@ -67,8 +67,19 @@ export namespace PermissionNext {
     "websearch",
   ])
 
-  export function risk(permission: string): Risk {
+  const ShellMetadata = z.object({
+    shell: z.object({
+      command: z.string().min(1),
+    }),
+  })
+
+  export function risk(permission: string, metadata?: Record<string, unknown>): Risk {
     if (PASSIVE.has(permission)) return "passive"
+    if (permission === "bash") {
+      const parsed = ShellMetadata.safeParse(metadata)
+      if (!parsed.success) return "unknown"
+      return ShellRisk.classify(parsed.data.shell.command).level
+    }
     if (CONTAINED.has(permission)) return "contained"
     if (RISKY.has(permission)) return "risky"
     return "unknown"
@@ -79,18 +90,24 @@ export namespace PermissionNext {
    * A deny always wins. Ask always ignores every prior allow for actions that
    * can change state. Ask risky accepts an explicit user grant for a risky
    * boundary, but a config/session allow cannot silently weaken the mode.
-   * Unknown permission kinds remain fail-closed even under Full access.
+   * Risky or ambiguous shell commands are an unbypassable Ask-risky floor;
+   * standing approvals cannot turn a future destructive command into an
+   * automatic action. Full access retains its explicit no-prompt shell
+   * behavior, while unknown permission kinds remain fail-closed.
    */
   export function modeAction(input: {
     mode: ProjectAccess.Mode
     permission: string
     configured: Action
     granted: Action
+    metadata?: Record<string, unknown>
   }): Action {
     if (input.configured === "deny") return "deny"
-    const level = risk(input.permission)
+    const level = risk(input.permission, input.metadata)
+    if (input.mode === "full" && input.permission === "bash") return input.configured
     if (level === "unknown") return "ask"
     if (input.mode === "ask" && level !== "passive") return "ask"
+    if (input.mode === "approve" && input.permission === "bash" && level === "risky") return "ask"
     if (input.mode === "approve" && level === "risky") {
       return input.granted === "allow" ? "allow" : "ask"
     }
@@ -356,6 +373,7 @@ export namespace PermissionNext {
                 permission: request.permission,
                 configured: evaluate(request.permission, pattern, policy).action,
                 granted: evaluate(request.permission, pattern, approved).action,
+                metadata: request.metadata,
               })
             : base.action,
         }
@@ -391,6 +409,13 @@ export namespace PermissionNext {
   async function settle(s: State, reply: Reply) {
     for (const [id, pending] of Object.entries(s.pending)) {
       if (pending.mode === "ask") continue
+      if (
+        pending.mode === "approve" &&
+        pending.info.permission === "bash" &&
+        risk(pending.info.permission, pending.info.metadata) !== "contained"
+      ) {
+        continue
+      }
       const ok =
         (await filesystem(pending.info)) ||
         (pending.info.patterns.length > 0 &&

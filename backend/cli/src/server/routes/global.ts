@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import crypto from "node:crypto"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
 import z from "zod"
@@ -39,6 +40,21 @@ const ProjectSource = z.object({
   access: SessionFilesystem.Access.default("write"),
 })
 
+const ProjectCreate = z
+  .object({
+    name: ProjectName,
+    sources: ProjectSource.array().max(10).default([]),
+    operation_id: z.string().uuid().optional(),
+  })
+  .strict()
+
+function projectFingerprint(input: z.infer<typeof ProjectCreate>) {
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify({ name: input.name, sources: input.sources }))
+    .digest("hex")
+}
+
 export const GlobalRoutes = lazy(() =>
   new Hono()
     .get(
@@ -75,7 +91,7 @@ export const GlobalRoutes = lazy(() =>
       describeRoute({
         summary: "Create project",
         description:
-          "Create an app-managed project with an opaque identity and optional project-scoped access to source locations explicitly selected by the user. Source paths never become the project identity.",
+          "Create an app-managed project with an opaque identity and optional project-scoped access to source locations explicitly selected by the user. Source paths never become the project identity. Reusing an operation_id with the exact same draft safely replays its original result.",
         operationId: "global.project.create",
         responses: {
           201: {
@@ -86,29 +102,47 @@ export const GlobalRoutes = lazy(() =>
               },
             },
           },
+          200: {
+            description: "Existing project information for a replayed operation",
+            content: {
+              "application/json": {
+                schema: resolver(Project.Info),
+              },
+            },
+          },
+          409: { description: "Operation id was already bound to a different project draft" },
           ...errors(400),
         },
       }),
-      validator(
-        "json",
-        z
-          .object({
-            name: ProjectName,
-            sources: ProjectSource.array().max(10).default([]),
-          })
-          .strict(),
-      ),
+      validator("json", ProjectCreate),
       async (c) => {
         const input = c.req.valid("json")
-        const project = await ManagedProject.create(input.name, async (created) => {
+        const checkpoint = async (created: Project.Info) => {
           await Instance.provide({
             directory: created.worktree,
             fn: async () => {
               await SessionFilesystem.seedProject({ projectID: created.id, grants: input.sources })
             },
           })
+        }
+        if (!input.operation_id) return c.json(await ManagedProject.create(input.name, checkpoint), 201)
+
+        const result = await ManagedProject.createIdempotent({
+          operationID: input.operation_id,
+          fingerprint: projectFingerprint(input),
+          name: input.name,
+          checkpoint,
         })
-        return c.json(project, 201)
+        if (result.status === "conflict") {
+          return c.json(
+            {
+              error: "project_operation_conflict",
+              message: "This project operation is already bound to a different workspace choice.",
+            },
+            409,
+          )
+        }
+        return c.json(result.project, result.status === "created" ? 201 : 200)
       },
     )
     .get(

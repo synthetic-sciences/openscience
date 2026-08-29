@@ -4,6 +4,12 @@ import z from "zod"
 import { Installation } from "../../../installation"
 import { lazy } from "../../../util/lazy"
 import { SelfRestart } from "../../../process/self-restart"
+import { SessionPrompt } from "../../../session/prompt"
+import { ComputeJobs } from "../../../compute/jobs"
+import { AuthoritySignal } from "../../../project/authority-signal"
+import { UpdateQuiescence } from "../../../process/update-quiescence"
+import { timingSafeEqual } from "../../../util/timing-safe"
+import { GracefulShutdown } from "../../../process/graceful-shutdown"
 
 const RELEASES = "https://github.com/synthetic-sciences/openscience/releases"
 const RELEASES_API = "https://api.github.com/repos/synthetic-sciences/openscience/releases?per_page=20"
@@ -42,6 +48,36 @@ export function supportsAutomaticUpdate(method: string) {
   return ["curl", "npm", "pnpm", "yarn", "bun", "brew", "choco", "scoop", "desktop"].includes(method)
 }
 
+export function desktopUpdateShutdownAuthorized(authorization: string | undefined, token: string | undefined) {
+  if (!token || !authorization?.startsWith("Bearer ")) return false
+  const candidate = authorization.slice("Bearer ".length)
+  return !!candidate && timingSafeEqual(candidate, token)
+}
+
+export type DesktopUpdateActivity = {
+  sessions: number
+  compute: number
+  pty: number
+  kernel: number
+  mcp: number
+  admitted?: number
+}
+
+export function desktopUpdateBlockers(input: DesktopUpdateActivity) {
+  const noun = (count: number, singular: string, plural = `${singular}s`) =>
+    count ? [`${count} ${count === 1 ? singular : plural}`] : []
+  const categorized = input.pty + input.kernel + input.mcp
+  const transitioning = Math.max(0, (input.admitted ?? categorized) - categorized)
+  return [
+    ...noun(input.sessions, "agent run"),
+    ...noun(input.compute, "compute job"),
+    ...noun(input.pty, "interactive terminal"),
+    ...noun(input.kernel, "kernel execution"),
+    ...noun(input.mcp, "MCP request"),
+    ...(transitioning && !input.sessions && !input.compute ? noun(transitioning, "runtime transition") : []),
+  ]
+}
+
 export function createUpdateInstaller(input: {
   resolve: () => Promise<UpdateResult>
   upgrade: (method: Installation.Method, target: string) => Promise<void>
@@ -64,7 +100,7 @@ export function createUpdateInstaller(input: {
       await input.upgrade(result.method as Installation.Method, result.latest)
       return InstallResult.parse({
         ...result,
-        installed: true,
+        installed: result.method !== "desktop",
         restartRequired: true,
         restartScheduled: false,
       })
@@ -160,6 +196,139 @@ export const UpdatesSettingsRoutes = lazy(() =>
       async (c) => {
         return c.json(await update(c.req.query("refresh") === "1"))
       },
+    )
+    .get(
+      "/state",
+      describeRoute({
+        summary: "Get desktop update progress",
+        operationId: "settings.updates.state",
+        responses: {
+          200: {
+            description: "Desktop update state",
+            content: { "application/json": { schema: resolver(Installation.DesktopUpdateState) } },
+          },
+        },
+      }),
+      async (c) => c.json(await Installation.desktopUpdateState()),
+    )
+    .post(
+      "/stage",
+      describeRoute({
+        summary: "Download and verify the desktop update",
+        operationId: "settings.updates.stage",
+        responses: {
+          202: {
+            description: "Desktop update staging began",
+            content: { "application/json": { schema: resolver(Installation.DesktopUpdateState) } },
+          },
+        },
+      }),
+      async (c) => {
+        const result = await update(true)
+        if (result.method !== "desktop") throw new Error("Staged updates are available only in the desktop app")
+        return c.json(await Installation.stageDesktopUpdate(result.latest), 202)
+      },
+    )
+    .post(
+      "/apply",
+      describeRoute({
+        summary: "Restart into a verified desktop update",
+        operationId: "settings.updates.apply",
+        responses: {
+          202: {
+            description: "Desktop restart scheduled",
+            content: { "application/json": { schema: resolver(Installation.DesktopUpdateState) } },
+          },
+          409: {
+            description: "Active work must finish before restart",
+            content: { "application/json": { schema: resolver(Failure) } },
+          },
+        },
+      }),
+      async (c) => {
+        const desktop = await Installation.desktopUpdateState().catch(() => undefined)
+        if (desktop?.phase === "restart_blocked" && desktop.version) {
+          return c.json(await Installation.applyDesktopUpdate(desktop.version), 202)
+        }
+        const outcome = await AuthoritySignal.exclusive(async () => {
+          const sessions = SessionPrompt.activeCount()
+          const compute = ComputeJobs.activeCount()
+          const runtime = UpdateQuiescence.inventory()
+          const blockers = desktopUpdateBlockers({ sessions, compute, ...runtime })
+          if (blockers.length) {
+            return {
+              error: `Finish active work before restarting OpenScience: ${blockers.join(", ")}.`,
+            }
+          }
+
+          const staged = desktop ?? (await Installation.desktopUpdateState())
+          if (staged.phase !== "ready" || !staged.version) {
+            return { error: "The desktop update is not verified and ready yet." }
+          }
+
+          let release: (() => void) | undefined
+          try {
+            release = UpdateQuiescence.begin()
+            const value = await Installation.applyDesktopUpdate(staged.version)
+            // A successful handoff deliberately keeps admission closed until
+            // Electron stops this backend and launches the verified bundle.
+            release = undefined
+            return { value }
+          } catch (error) {
+            return { error: error instanceof Error ? error.message : String(error) }
+          } finally {
+            release?.()
+          }
+        })
+        if ("error" in outcome) return c.json(Failure.parse({ error: outcome.error }), 409)
+        return c.json(outcome.value, 202)
+      },
+    )
+    .post(
+      "/dispose",
+      describeRoute({
+        summary: "Gracefully release runtimes before a desktop restart",
+        operationId: "settings.updates.dispose",
+        responses: {
+          204: { description: "Every process-local runtime was released" },
+          401: {
+            description: "The desktop capability token is missing or invalid",
+            content: { "application/json": { schema: resolver(Failure) } },
+          },
+          503: {
+            description: "Runtime disposal did not finish within the bounded handoff",
+            content: { "application/json": { schema: resolver(Failure) } },
+          },
+        },
+      }),
+      async (c) => {
+        if (
+          !desktopUpdateShutdownAuthorized(c.req.header("authorization"), process.env.OPENSCIENCE_DESKTOP_UPDATE_TOKEN)
+        ) {
+          c.header("WWW-Authenticate", 'Bearer realm="openscience-desktop-update"')
+          return c.json(Failure.parse({ error: "The desktop update capability is invalid." }), 401)
+        }
+        const result = await GracefulShutdown.run({ timeoutMs: 4_000 }).then(
+          () => ({ ok: true as const }),
+          (error) => ({ error: error instanceof Error ? error.message : String(error) }),
+        )
+        if ("error" in result) return c.json(Failure.parse({ error: result.error }), 503)
+        return c.body(null, 204)
+      },
+    )
+    .delete(
+      "/stage",
+      describeRoute({
+        summary: "Cancel or discard a staged desktop update",
+        operationId: "settings.updates.cancel",
+        responses: {
+          200: {
+            description: "Desktop update discarded",
+            content: { "application/json": { schema: resolver(Installation.DesktopUpdateState) } },
+          },
+        },
+      }),
+      async (c) => c.json(await Installation.cancelDesktopUpdate()),
     )
     .post(
       "/",

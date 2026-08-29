@@ -70,7 +70,8 @@ const CATALOG: ServiceSpec[] = [
   {
     id: "aws",
     label: "AWS",
-    description: "Access key for S3, Bedrock, and other AWS services.",
+    description:
+      "Credential-only bridge for AWS CLI/SDK skills such as S3 and Bedrock; OpenScience does not provide a first-party AWS job adapter.",
     category: "compute",
     fields: [
       { name: "access_key_id", label: "Access key ID", type: "text", placeholder: "AKIA…" },
@@ -88,7 +89,8 @@ const CATALOG: ServiceSpec[] = [
   {
     id: "gcp",
     label: "Google Cloud",
-    description: "Service-account credentials for GCP APIs and storage.",
+    description:
+      "Credential-only bridge for Google Cloud CLI/SDK skills; OpenScience does not provide a first-party Google Cloud job adapter.",
     category: "compute",
     fields: [
       { name: "project_id", label: "Project ID", type: "text", optional: true },
@@ -113,7 +115,8 @@ const CATALOG: ServiceSpec[] = [
   {
     id: "azure",
     label: "Microsoft Azure",
-    description: "Service principal or API credentials for Azure workloads.",
+    description:
+      "Credential-only bridge for Azure CLI/SDK skills; OpenScience does not provide a first-party Azure job adapter.",
     category: "compute",
     fields: [
       { name: "tenant_id", label: "Tenant ID", type: "text", optional: true },
@@ -127,7 +130,8 @@ const CATALOG: ServiceSpec[] = [
   {
     id: "nvidia",
     label: "NVIDIA API",
-    description: "API key for NVIDIA NIM / build.nvidia.com models.",
+    description:
+      "Trusted credential for reviewed NVIDIA NIM and BioNeMo requests; it is not an NVIDIA compute-backend connection.",
     category: "compute",
     fields: [{ name: "api_key", label: "API key", type: "password", placeholder: "nvapi-…" }],
     trusted: true,
@@ -135,7 +139,8 @@ const CATALOG: ServiceSpec[] = [
   {
     id: "nvidia_ngc",
     label: "NVIDIA NGC Registry",
-    description: "Device-local NGC key for approved NVIDIA container pulls on trusted compute adapters.",
+    description:
+      "Device-local registry credential for approved NVIDIA container pulls on an existing trusted adapter; it does not add an NVIDIA compute backend.",
     category: "compute",
     fields: [{ name: "api_key", label: "NGC API key", type: "password" }],
     trusted: true,

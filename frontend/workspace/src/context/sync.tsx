@@ -220,11 +220,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const client = sdk.client
           const [, setStore] = child()
           const res = await client.session.revert({ sessionID, messageID })
-          if (res.data)
+          const payload: unknown = res.data
+          const data = (() => {
+            if (!payload || typeof payload !== "object") return
+            if (!("session" in payload)) return payload as ReturnType<typeof getSession>
+            return (payload as { session?: ReturnType<typeof getSession> }).session
+          })()
+          if (data)
             setStore(
               produce((draft) => {
                 const m = Binary.search(draft.session, sessionID, (s) => s.id)
-                if (m.found) draft.session[m.index] = res.data!
+                if (m.found) draft.session[m.index] = data
               }),
             )
           const next = await client.session
@@ -232,6 +238,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             .then((d) => d.data ?? [])
             .catch(() => [])
           setStore("session_diff", sessionID, reconcile(next, { key: "file" }))
+          if (!payload || typeof payload !== "object" || !("status" in payload)) return
+          const result = payload as { status?: unknown; turns?: unknown; files?: unknown }
+          return {
+            status: typeof result.status === "string" ? result.status : undefined,
+            turns: typeof result.turns === "number" ? result.turns : undefined,
+            files: Array.isArray(result.files)
+              ? result.files.filter((file): file is string => typeof file === "string")
+              : undefined,
+          }
         },
         async unrevert(sessionID: string) {
           const client = sdk.client

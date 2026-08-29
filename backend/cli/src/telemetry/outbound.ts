@@ -250,12 +250,12 @@ async function atomic(filepath: string, value: string): Promise<void> {
 
 async function withStateLease<T>(operation: () => Promise<T>): Promise<T> {
   await using lease = await FileLease.acquire(stateLeasePath, 30_000)
-  return lease.during(operation)
+  return await lease.during(operation)
 }
 
 async function withConsentSyncLease<T>(operation: () => Promise<T>): Promise<T> {
   await using lease = await FileLease.acquire(consentSyncLeasePath, 30_000)
-  return lease.during(operation)
+  return await lease.during(operation)
 }
 
 async function readConsent(): Promise<{ value: ConsentFile; absent: boolean; corrupt: boolean }> {

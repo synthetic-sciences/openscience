@@ -20,6 +20,7 @@ import { ModalPlan } from "./modal/plan"
 import { ArtifactStore } from "../artifact/store"
 import { CredentialProcessLedger } from "../credentials/process-ledger"
 import { AuthoritySignal } from "../project/authority-signal"
+import { UpdateQuiescence } from "../process/update-quiescence"
 import { SshAdapter } from "./ssh/adapter"
 import { SshPlan } from "./ssh/plan"
 import { WindowsJobLauncher } from "../process/windows-job-launcher"
@@ -49,6 +50,21 @@ export namespace ComputeJobs {
   export const Scheduler = z.enum(["none", "slurm", "pbs"])
   export type Scheduler = z.infer<typeof Scheduler>
 
+  const proxyJumpSegment =
+    /^(?:[A-Za-z0-9_][A-Za-z0-9._-]{0,119}@)?(?:\[[0-9A-Fa-f:]+\]|[A-Za-z0-9_](?:[A-Za-z0-9._-]{0,251}[A-Za-z0-9_])?)(?::([0-9]{1,5}))?$/
+
+  function validProxyJump(value: string) {
+    const hops = value.split(",")
+    if (!hops.length || hops.length > 4) return false
+    return hops.every((hop) => {
+      const match = hop.match(proxyJumpSegment)
+      if (!match || hop.startsWith("-") || hop.includes("..")) return false
+      if (!match[1]) return true
+      const port = Number(match[1])
+      return Number.isInteger(port) && port >= 1 && port <= 65_535
+    })
+  }
+
   export const Host = z.object({
     id: z.string(),
     label: z.string().trim().min(1).max(120),
@@ -69,6 +85,33 @@ export namespace ComputeJobs {
       .refine((value) => !value.startsWith("-"), "SSH users cannot begin with a hyphen")
       .optional(),
     port: z.number().int().min(1).max(65_535).optional(),
+    identity_file: z
+      .string()
+      .trim()
+      .min(1)
+      .max(4_096)
+      .refine((value) => !/[\u0000\r\n]/.test(value), "SSH identity paths must contain one line")
+      .refine((value) => !/[%$]/.test(value), "SSH identity paths must be literal and cannot contain % or $")
+      .refine((value) => path.isAbsolute(value) || value.startsWith("~/"), "SSH identity paths must be absolute")
+      .optional(),
+    proxy_jump: z
+      .string()
+      .trim()
+      .min(1)
+      .max(1_024)
+      .refine(validProxyJump, "SSH ProxyJump must contain only user, host, and optional port hops")
+      .optional(),
+    proxy_jump_host_keys: z
+      .array(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .max(16_000)
+          .refine((value) => !value.includes("\n"), "SSH host keys must contain one line"),
+      )
+      .max(8)
+      .optional(),
     scheduler: Scheduler.default("none"),
     workdir: z.string().optional(),
     notes: z
@@ -100,6 +143,7 @@ export namespace ComputeJobs {
     pbs: z.boolean(),
     fingerprint: z.string().startsWith("SHA256:").optional(),
     host_key: z.string().optional(),
+    proxy_jump_host_keys: z.string().array().max(8).optional(),
     error: z.string().optional(),
   })
   export type Probe = z.infer<typeof Probe>
@@ -431,6 +475,13 @@ export namespace ComputeJobs {
   const locks = new Map<string, Promise<void>>()
   const terminal = new Set<Status>(["succeeded", "failed", "cancelled", "interrupted"])
   const recoveryDelay = 15_000
+
+  /** Process-wide in-flight runtimes and recovery claims. Desktop update
+   *  quiescence uses this conservative count so a restart never tears down a
+   *  local process or loses ownership of a remote lifecycle mid-transition. */
+  export function activeCount() {
+    return active.size + claims.size
+  }
 
   async function activate(key: string, runtime: Omit<Runtime, "dataRoot">): Promise<void> {
     const current = active.get(key)
@@ -1519,7 +1570,23 @@ export namespace ComputeJobs {
     const destination = host.user ? `${host.user}@${host.host}` : host.host
     if (destination.startsWith("-")) throw new Error("SSH destinations cannot begin with a hyphen")
     const port = host.port ? ["-p", String(host.port)] : []
-    return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", ...port, "--", destination, script]
+    const identity = host.identity_file ? ["-o", "IdentitiesOnly=yes", "-i", host.identity_file] : []
+    const jump = host.proxy_jump ? ["-J", host.proxy_jump] : []
+    return [
+      "ssh",
+      "-F",
+      "/dev/null",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ConnectTimeout=8",
+      ...identity,
+      ...jump,
+      ...port,
+      "--",
+      destination,
+      script,
+    ]
   }
 
   export function command(
@@ -2476,6 +2543,27 @@ export namespace ComputeJobs {
         error: `SSH host key changed: expected ${parsed.fingerprint}, received ${scanned.fingerprint}`,
       })
     }
+    const jumpMaterial = (lines: string[] | undefined) =>
+      (lines ?? []).map((line) => line.trim().split(/\s+/).slice(1, 3).join(" "))
+    if (
+      parsed.proxy_jump_host_keys?.length &&
+      JSON.stringify(jumpMaterial(parsed.proxy_jump_host_keys)) !==
+        JSON.stringify(jumpMaterial(scanned.proxy_jump_host_keys))
+    ) {
+      return Probe.parse({
+        ok: false,
+        host: parsed.label,
+        latency_ms: Math.round(performance.now() - started),
+        python: false,
+        gpu: false,
+        slurm: false,
+        pbs: false,
+        fingerprint: scanned.fingerprint,
+        host_key: scanned.host_key,
+        proxy_jump_host_keys: scanned.proxy_jump_host_keys,
+        error: "An SSH ProxyJump host key changed. Review the jump host before replacing this saved connection.",
+      })
+    }
     const script = [
       "printf 'connected=1\\n'",
       "printf 'hostname='; hostname 2>/dev/null || true",
@@ -2492,8 +2580,9 @@ export namespace ComputeJobs {
       const agent = process.env.SSH_AUTH_SOCK
       const detached = process.platform !== "win32"
       const proc = spawn(argv[0]!, argv.slice(1), {
-        // The broker owns SSH authentication, so it passes only the agent
-        // socket—not private-key files or arbitrary shell credentials.
+        // The broker owns SSH authentication. A selected identity is supplied
+        // only as a validated -i path; arbitrary shell credentials and user
+        // ssh_config execution remain unavailable.
         env: agent
           ? { ...OpenScience.kernelEnv(process.env), SSH_AUTH_SOCK: agent }
           : OpenScience.kernelEnv(process.env),
@@ -2569,6 +2658,7 @@ export namespace ComputeJobs {
           pbs,
           fingerprint: scanned.fingerprint,
           host_key: scanned.host_key,
+          proxy_jump_host_keys: scanned.proxy_jump_host_keys,
           error: error || undefined,
         })
       } finally {
@@ -3297,6 +3387,15 @@ export namespace ComputeJobs {
   }
 
   export async function start(input: Request, options: Options = {}): Promise<Job> {
+    const release = await AuthoritySignal.exclusive(async () => UpdateQuiescence.enter())
+    try {
+      return await startAdmitted(input, options)
+    } finally {
+      release()
+    }
+  }
+
+  async function startAdmitted(input: Request, options: Options = {}): Promise<Job> {
     const parsed = Request.parse(input)
     if (parsed.secret_refs?.length && parsed.target.kind !== "modal") {
       throw new Error("Trusted compute secret references are currently supported only by Modal")

@@ -25,6 +25,13 @@ type Account = {
 type AccountState = "loading" | "ready" | "error"
 type Configured = "ace" | "api"
 type Busy = "folder" | "blank" | "ace" | "api"
+type DesktopPreferences = {
+  desktop_onboarding_version: number
+}
+
+type DesktopOnboardingOperation = {
+  operation_id: string
+}
 
 const providers = [
   { id: "anthropic", label: "Anthropic" },
@@ -43,6 +50,18 @@ export function folderProjectName(path: string) {
   return name?.slice(0, 100) || "Research project"
 }
 
+export function onboardingDraftFingerprint(draft: ProjectCreateInput) {
+  // Match the canonical values accepted by the project route. Array order is
+  // intentionally preserved because it is part of that route's fingerprint.
+  return JSON.stringify({
+    name: draft.name
+      .normalize("NFC")
+      .trim()
+      .replace(/[ \t]+/gu, " "),
+    sources: draft.sources.map((source) => ({ path: source.path.trim(), access: source.access })),
+  })
+}
+
 export async function configureProviderKey(input: {
   saveKey: () => Promise<unknown>
   selectByok: () => Promise<unknown>
@@ -54,26 +73,59 @@ export async function configureProviderKey(input: {
 }
 
 export function createOnboardingProjectFlow(input: {
-  create: (project: ProjectCreateInput) => Promise<ProjectRecord>
+  create: (project: ProjectCreateInput & { operation_id: string }) => Promise<ProjectRecord>
   markComplete: () => Promise<unknown>
-  activate: (project: ProjectRecord) => void
+  activate: (project: ProjectRecord) => void | Promise<void>
+  operationID?: () => string
+  loadOperationID?: (fingerprint: string) => string | undefined | Promise<string | undefined>
+  persistOperationID?: (fingerprint: string, operationID: string) => void | Promise<void>
+  clearOperationID?: (fingerprint: string) => void | Promise<void>
 }) {
-  let project: ProjectRecord | undefined
-  let creating: Promise<ProjectRecord> | undefined
+  type Attempt = {
+    operationID?: string
+    persisted: boolean
+    binding?: Promise<string>
+    project?: ProjectRecord
+    creating?: Promise<ProjectRecord>
+  }
+  const attempts = new Map<string, Attempt>()
 
   return async (draft: ProjectCreateInput) => {
-    if (!project) {
-      creating ??= input.create(draft)
+    const key = onboardingDraftFingerprint(draft)
+    let attempt = attempts.get(key)
+    if (!attempt) {
+      attempt = { persisted: false }
+      attempts.set(key, attempt)
+    }
+
+    if (!attempt.project) {
+      attempt.binding ??= (async () => {
+        if (!attempt!.persisted) {
+          const saved = await input.loadOperationID?.(key)
+          attempt!.operationID = saved ?? attempt!.operationID ?? input.operationID?.() ?? crypto.randomUUID()
+          if (!saved) await input.persistOperationID?.(key, attempt!.operationID)
+          attempt!.persisted = true
+        }
+        return attempt!.operationID!
+      })()
+      let operationID: string
       try {
-        project = await creating
+        operationID = await attempt.binding
       } finally {
-        creating = undefined
+        attempt.binding = undefined
+      }
+      attempt.creating ??= input.create({ ...draft, operation_id: operationID })
+      try {
+        attempt.project = await attempt.creating
+      } finally {
+        attempt.creating = undefined
       }
     }
 
     await input.markComplete()
-    input.activate(project)
-    return project
+    await input.activate(attempt.project)
+    await input.clearOperationID?.(key)
+    return attempt.project
   }
 }
 
@@ -133,8 +185,10 @@ export function DesktopOnboardingController(
 
   onMount(() => {
     if (!desktop) return
-    void settingsApi<{ desktop_onboarding_version: number }>(server.url, fetcher(), "/settings/preferences")
-      .then((value) => setComplete(value.desktop_onboarding_version >= 1))
+    void settingsApi<DesktopPreferences>(server.url, fetcher(), "/settings/preferences")
+      .then((value) => {
+        setComplete(value.desktop_onboarding_version >= 1)
+      })
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
       .finally(() => setReady(true))
     // Account and wallet data enrich optional model setup but never delay the
@@ -167,9 +221,30 @@ export function DesktopOnboardingController(
       server.projects.open(project.worktree)
       server.projects.touch(project.id)
       window.history.replaceState(window.history.state, "", projectHref(project))
-      setComplete(true)
     },
+    loadOperationID: async (fingerprint) =>
+      (
+        await settingsApi<DesktopOnboardingOperation>(
+          server.url,
+          fetcher(),
+          "/settings/preferences/onboarding-operation",
+          {
+            method: "POST",
+            body: JSON.stringify({ fingerprint }),
+          },
+        )
+      ).operation_id,
+    clearOperationID: (fingerprint) =>
+      settingsApi(server.url, fetcher(), "/settings/preferences/onboarding-operation", {
+        method: "DELETE",
+        body: JSON.stringify({ fingerprint }),
+      }),
   })
+
+  const createProject = async (draft: ProjectCreateInput) => {
+    await projectFlow(draft)
+    setComplete(true)
+  }
 
   const run = async (kind: Busy, action: () => Promise<unknown>) => {
     if (busy()) return
@@ -196,7 +271,7 @@ export function DesktopOnboardingController(
       })
       const path = Array.isArray(result) ? result[0] : result
       if (!path) return
-      await projectFlow({
+      await createProject({
         name: folderProjectName(path),
         sources: [{ path, access: "write" }],
       })
@@ -204,7 +279,7 @@ export function DesktopOnboardingController(
   }
 
   const startBlank = async () => {
-    await run("blank", () => projectFlow({ name: "New research project", sources: [] }))
+    await run("blank", () => createProject({ name: "New research project", sources: [] }))
   }
 
   const useAce = async () => {

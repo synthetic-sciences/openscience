@@ -64,6 +64,7 @@ import {
   SKILL_PREFERENCES_EVENT,
 } from "@/atlas/skill-permissions"
 import { DialogSettings } from "./dialog-settings"
+import { SkillLibraryDialog } from "@/atlas/SkillsBrowser"
 import "./prompt-input.css"
 import {
   ATTACHMENT_ACCEPT,
@@ -891,7 +892,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
     const catalog = new Map(sync.data.command.map((item) => [item.name, item]))
     const local = command.options
-      .filter((item) => item.slash && !item.disabled)
+      .filter((item) => item.slash && !item.disabled && (item.slash !== "stop" || working()))
       .map((item) => ({
         id: item.id,
         actionID: item.id,
@@ -946,6 +947,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         source: "skill" as const,
         category: "skill" as const,
         type: slashActionSkill(s.name) ? ("action" as const) : ("skill" as const),
+        skillCategory: s.category,
+        skillTags: s.tags,
         skillState: (loaded.has(s.name)
           ? "loaded"
           : pinned.has(s.name)
@@ -1018,7 +1021,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setIntent(intent)
   }
 
-  const replaceSlash = (value: string) => {
+  const replaceSlash = (value: string, restoreFocus = true) => {
     const selection = window.getSelection()
     const cursor = getCursorPosition(editorRef)
     const text = prompt
@@ -1043,8 +1046,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     selection.removeAllRanges()
     selection.addRange(range)
     handleInput()
-    requestAnimationFrame(() => editorRef.focus({ preventScroll: true }))
+    if (restoreFocus) requestAnimationFrame(() => editorRef.focus({ preventScroll: true }))
     return true
+  }
+
+  const insertEditorText = (cursor: number, value: string) => {
+    editorRef.focus({ preventScroll: true })
+    setCursorPosition(editorRef, cursor)
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return cursor
+
+    const range = selection.getRangeAt(0)
+    const node = document.createTextNode(value)
+    range.deleteContents()
+    range.insertNode(node)
+    range.setStart(node, value.length)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    handleInput()
+    return cursor + value.length
   }
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
@@ -1052,7 +1073,34 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("popover", null)
 
     if (cmd.type === "browse") {
-      dialog.show(() => <DialogSettings initial="skills" />)
+      const cursor = getCursorPosition(editorRef)
+      const text = prompt
+        .current()
+        .map((part) => ("content" in part ? part.content : ""))
+        .join("")
+      const edit = slashEdit(text, cursor, "")
+      if (!edit || !replaceSlash("", false)) return
+
+      let restoreCursor = edit.cursor
+      dialog.show(
+        () => (
+          <SkillLibraryDialog
+            initialQuery={cmd.searchText}
+            onPick={(name) => {
+              recordRecentSkill(name, skillStorage)
+              restoreCursor = insertEditorText(restoreCursor, `/${name} `)
+            }}
+          />
+        ),
+        {
+          onClose: () => {
+            requestAnimationFrame(() => {
+              editorRef.focus({ preventScroll: true })
+              setCursorPosition(editorRef, restoreCursor)
+            })
+          },
+        },
+      )
       return
     }
     if (cmd.source === "skill") recordRecentSkill(cmd.trigger, skillStorage)

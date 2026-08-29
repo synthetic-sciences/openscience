@@ -112,7 +112,8 @@
   transition:
     background-color 150ms var(--agent-ease),
     color 150ms var(--agent-ease),
-    opacity 150ms var(--agent-ease);
+    opacity 150ms var(--agent-ease),
+    transform 150ms var(--agent-ease);
 }
 
 .session-sidebar__archived {

@@ -1,3 +1,5 @@
+import { skillIconFor } from "@/atlas/skill-icon"
+
 export interface SlashCommand {
   id: string
   trigger: string
@@ -12,6 +14,9 @@ export interface SlashCommand {
   actionID?: string
   /** Why a skill is in the compact empty-query shortlist. */
   skillState?: "loaded" | "pinned" | "recent" | "recommended"
+  /** Subject metadata used by the shared skill-icon resolver. */
+  skillCategory?: string
+  skillTags?: readonly string[]
   /** Search-only text lets local actions survive the already-filtered list hook. */
   searchText?: string
   /** Ephemeral query rank assigned by slashMatches before grouped rendering. */
@@ -76,6 +81,7 @@ export function slashEdit(text: string, cursor: number, value: string): SlashEdi
 // workflow belongs in the toggleable Skills section instead of masquerading as
 // an app command.
 export const SLASH_NATIVE = ["compact", "context", "plan", "goal", "status"] as const
+export const SLASH_CONTEXTUAL = ["undo", "redo", "stop"] as const
 export const SLASH_ACTION_SKILLS = ["init", "stop", "handoff", "checkpoint"] as const
 export const SLASH_QUERY_LIMIT = 10
 export const SLASH_SHORTLIST_LIMIT = 5
@@ -96,6 +102,8 @@ export function slashRank(command: SlashCommand) {
   if (command.resultRank !== undefined) return command.resultRank
   const core = SLASH_NATIVE.findIndex((name) => name === command.trigger)
   if (core >= 0) return core
+  const contextual = SLASH_CONTEXTUAL.findIndex((name) => name === command.trigger)
+  if (contextual >= 0) return 20 + contextual
   if (command.source === "builtin") return 100
   if (command.source === "project") return 200
   if (command.source === "mcp") return 300
@@ -129,7 +137,14 @@ export function slashIcon(command: SlashCommand) {
   if (command.trigger === "sources") return "book-open" as const
   if (command.trigger === "export") return "download" as const
   if (command.trigger === "handoff") return "arrow-right" as const
-  if (command.type === "skill") return "flask" as const
+  if (command.source === "skill") {
+    return skillIconFor({
+      name: command.trigger,
+      description: command.description,
+      category: command.skillCategory,
+      tags: command.skillTags,
+    })
+  }
   if (command.source === "mcp") return "mcp" as const
   if (command.category === "research") return "research" as const
   if (command.category === "evidence") return "artifact" as const
@@ -191,6 +206,7 @@ export function compactSlashItems(commands: readonly SlashCommand[], skillNames:
     .filter(
       (command) =>
         SLASH_NATIVE.some((name) => name === command.trigger) ||
+        SLASH_CONTEXTUAL.some((name) => name === command.trigger) ||
         (command.source === "skill" && skillNames.has(command.trigger)),
     )
     .toSorted(sortSlash)

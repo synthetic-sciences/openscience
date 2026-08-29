@@ -106,6 +106,67 @@ export namespace Installation {
     }),
   )
 
+  export const DesktopUpdateState = z.object({
+    phase: z.enum([
+      "idle",
+      "downloading",
+      "extracting",
+      "verifying",
+      "ready",
+      "restarting",
+      "restart_blocked",
+      "succeeded",
+      "failed",
+    ]),
+    version: z.string().optional(),
+    transferred: z.number().nonnegative().optional(),
+    total: z.number().positive().optional(),
+    progress: z.number().min(0).max(1).optional(),
+    completed_at: z.string().optional(),
+    error: z.string().optional(),
+    migration_required: z.boolean().optional(),
+  })
+  export type DesktopUpdateState = z.infer<typeof DesktopUpdateState>
+
+  async function desktopRequest(method: "GET" | "POST" | "DELETE", body?: unknown) {
+    const url = process.env.OPENSCIENCE_DESKTOP_UPDATE_URL
+    const token = process.env.OPENSCIENCE_DESKTOP_UPDATE_TOKEN
+    if (!url || !token) throw new Error("The desktop update service is unavailable")
+    const response = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (!response.ok) {
+      const message = await response
+        .json()
+        .then((value) => value.error)
+        .catch(() => undefined)
+      throw new UpgradeFailedError({ stderr: message ?? `Desktop update failed (${response.status})` })
+    }
+    return DesktopUpdateState.parse(await response.json())
+  }
+
+  export function desktopUpdateState() {
+    return desktopRequest("GET")
+  }
+
+  export function stageDesktopUpdate(target: string) {
+    return desktopRequest("POST", { action: "stage", version: target })
+  }
+
+  export function applyDesktopUpdate(target: string) {
+    return desktopRequest("POST", { action: "apply", version: target })
+  }
+
+  export function cancelDesktopUpdate() {
+    return desktopRequest("DELETE")
+  }
+
   async function getBrewFormula() {
     const tapFormula = await $`brew list --formula openscience/tap/openscience`.throws(false).quiet().text()
     if (tapFormula.includes("openscience")) return "openscience/tap/openscience"
@@ -116,22 +177,7 @@ export namespace Installation {
 
   export async function upgrade(method: Method, target: string) {
     if (method === "desktop") {
-      const url = process.env.OPENSCIENCE_DESKTOP_UPDATE_URL
-      const token = process.env.OPENSCIENCE_DESKTOP_UPDATE_TOKEN
-      if (!url || !token) throw new Error("The desktop update service is unavailable")
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ version: target }),
-        signal: AbortSignal.timeout(30 * 60_000),
-      })
-      if (!response.ok) {
-        const message = await response
-          .json()
-          .then((value) => value.error)
-          .catch(() => undefined)
-        throw new UpgradeFailedError({ stderr: message ?? `Desktop update failed (${response.status})` })
-      }
+      await stageDesktopUpdate(target)
       log.info("desktop update staged", { target })
       return
     }

@@ -128,7 +128,17 @@ describe("ComputeJobs command adapters", () => {
       host,
     )
 
-    expect(command.argv.slice(0, 7)).toEqual(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-p", "2222"])
+    expect(command.argv.slice(0, 9)).toEqual([
+      "ssh",
+      "-F",
+      "/dev/null",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ConnectTimeout=8",
+      "-p",
+      "2222",
+    ])
     expect(command.argv).toContain("researcher@hpc.example.org")
     expect(command.argv.at(-1)).toContain("sbatch --wait --parsable")
     expect(command.argv.at(-1)).toContain("--cpus-per-task=8")
@@ -172,9 +182,70 @@ describe("ComputeJobs command adapters", () => {
     })
     const argv = SshAdapter.argv(imported, "/tmp/known-hosts", "true")
 
-    expect(argv).toContain("/dev/null")
+    expect(argv).toContain("/tmp/known-hosts.ssh_config")
     expect(argv).toContain("researcher@login.cluster.example")
     expect(argv).not.toContain("lab")
+  })
+
+  test("passes only validated IdentityFile and ProxyJump options to the fixed SSH adapter", () => {
+    const identity = path.join(os.homedir(), ".ssh", "lab_ed25519")
+    const imported = ComputeJobs.Host.parse({
+      id: "private-lab",
+      label: "Private lab",
+      host: "login.private.example",
+      user: "researcher",
+      identity_file: identity,
+      proxy_jump: "jump@bastion.example.org:2200",
+      scheduler: "none",
+      concurrency: 2,
+    })
+    const argv = SshAdapter.argv(imported, "/tmp/known-hosts", "true")
+
+    expect(argv).toContain("IdentitiesOnly=yes")
+    expect(argv).toContain(identity)
+    expect(argv).toContain("jump@bastion.example.org:2200")
+    expect(argv).not.toContain("ProxyCommand")
+    expect(() => ComputeJobs.Host.parse({ ...imported, proxy_jump: "bad; touch /tmp/owned" })).toThrow("SSH ProxyJump")
+    expect(() => ComputeJobs.Host.parse({ ...imported, proxy_jump: "researcher@-oProxyCommand=bad" })).toThrow(
+      "SSH ProxyJump",
+    )
+  })
+
+  test("writes a broker-owned SSH config so ProxyJump children use the pinned host-key file", async () => {
+    if (!Bun.which("ssh-keygen")) return
+    await using tmp = await tmpdir()
+    const fixture = path.join(tmp.path, "fixture-host-key")
+    const generated = Bun.spawn(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", fixture], {
+      stdout: "ignore",
+      stderr: "pipe",
+    })
+    expect(await generated.exited).toBe(0)
+    const [algorithm, key] = (await Bun.file(`${fixture}.pub`).text()).trim().split(/\s+/)
+    const identified = Bun.spawn(["ssh-keygen", "-lf", `${fixture}.pub`, "-E", "sha256"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const fingerprint = (await new Response(identified.stdout).text()).trim().split(/\s+/)[1]
+    expect(await identified.exited).toBe(0)
+    const pinned = ComputeJobs.Host.parse({
+      id: "private-lab",
+      label: "Private lab",
+      host: "login.private.example",
+      scheduler: "none",
+      concurrency: 2,
+      fingerprint,
+      host_key: `login.private.example ${algorithm} ${key}`,
+      proxy_jump: "jump@bastion.example.org:2200",
+      proxy_jump_host_keys: [`[bastion.example.org]:2200 ${algorithm} ${key}`],
+    })
+
+    const known = await SshAdapter.known(pinned, tmp.path)
+    const config = await Bun.file(`${known}.ssh_config`).text()
+    expect(await Bun.file(known).text()).toContain(`[bastion.example.org]:2200 ${algorithm}`)
+    expect(config).toContain(`UserKnownHostsFile \"${known}\"`)
+    expect(config).toContain("StrictHostKeyChecking yes")
+    expect(config).not.toContain("ProxyCommand")
+    expect(SshAdapter.argv(pinned, known, "true")).toContain(`${known}.ssh_config`)
   })
 
   test("binds SSH resources, modules, and container into the approved digest", async () => {
@@ -186,6 +257,8 @@ describe("ComputeJobs command adapters", () => {
       notes: "Use the research partition; installations belong under /scratch/team/envs.",
       fingerprint: `SHA256:${"a".repeat(43)}`,
       host_key: `hpc.example.org ssh-ed25519 ${Buffer.from("test-key").toString("base64")}`,
+      proxy_jump: "jump@bastion.example.org:2200",
+      proxy_jump_host_keys: [`bastion.example.org ssh-ed25519 ${Buffer.from("jump-test-key").toString("base64")}`],
     })
     await Instance.provide({
       directory: tmp.path,
@@ -222,6 +295,12 @@ describe("ComputeJobs command adapters", () => {
           { ...pinned, port: 2200 },
           { ...pinned, workdir: "/different/base" },
           { ...pinned, notes: "Use a different partition." },
+          {
+            ...pinned,
+            proxy_jump_host_keys: [
+              `bastion.example.org ssh-ed25519 ${Buffer.from("different-jump-key").toString("base64")}`,
+            ],
+          },
         ]) {
           await expect(
             ComputeJobs.start({ ...request, approval: approved.digest }, { root, workspace, hosts: [changed] }),

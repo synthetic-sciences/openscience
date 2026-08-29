@@ -11,7 +11,7 @@
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 15000",
     "build": "bun run script/build.ts",
-    "dev": "bun --no-env-file run --conditions=browser ./src/index.ts"
+    "dev": "bun --no-env-file run --conditions=browser ./src/bootstrap.ts"
   },
   "bin": {
     "openscience": "./bin/openscience"

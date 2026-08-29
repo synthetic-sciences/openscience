@@ -15,6 +15,7 @@ import { ProcessIdentity } from "@/process/process-identity"
 import * as ExecutionFiles from "@/science/execution/files"
 import { ExecutionHistory } from "@/science/execution/history"
 import { Log } from "@/util/log"
+import { UpdateQuiescence } from "@/process/update-quiescence"
 import type {
   ExecuteOptions,
   ExecuteResult,
@@ -757,6 +758,7 @@ const entry = async (identity: KernelIdentity, options?: KernelStartOptions, han
   // claim, child creation, durable process identity, and in-memory handoff as
   // one indivisible spawn boundary with trust/filesystem mutations.
   const start = AuthoritySignal.exclusive(async () => {
+    UpdateQuiescence.assertOpen()
     // A cancelled start may still be queued behind the revoker that replaced
     // it. Refuse it before it can borrow and dispose the replacement's lease.
     if (stale()) throw new KernelStartupCancelled()
@@ -912,6 +914,20 @@ export namespace KernelRuntime {
   }
 
   export async function execute(
+    identity: KernelIdentity,
+    code: string,
+    options?: ExecuteOptions,
+    start?: KernelStartOptions,
+  ): Promise<ExecuteResult> {
+    const releaseUpdate = await AuthoritySignal.exclusive(async () => UpdateQuiescence.enter("kernel"))
+    try {
+      return await executeAdmitted(identity, code, options, start)
+    } finally {
+      releaseUpdate()
+    }
+  }
+
+  async function executeAdmitted(
     identity: KernelIdentity,
     code: string,
     options?: ExecuteOptions,

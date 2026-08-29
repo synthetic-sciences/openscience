@@ -1,20 +1,26 @@
 // @refresh reload
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
-import { Platform, PlatformProvider } from "@/context/platform"
+import { Platform, PlatformProvider, type DesktopUpdateState } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { openscienceFetch } from "@/utils/openscience-fetch"
 import { URLS } from "@/config/urls"
 import { openNativeDirectoryPicker } from "@/utils/native-picker"
 import { normalizeServerUrl } from "@/context/server"
-import { resolveDefaultServerUrl, resolveDesktopServerUrl, resolveServerRoute } from "@/config/server-url"
+import {
+  hasDesktopUpdateCapability,
+  resolveDefaultServerUrl,
+  resolveDesktopServerUrl,
+  resolveServerRoute,
+} from "@/config/server-url"
 import pkg from "../package.json"
 import { waitForUpdatedServer, type UpdateHealth } from "@/utils/update-restart"
 import { updateError } from "@/utils/update-error"
 
 const DEFAULT_SERVER_URL_KEY = "openscience.settings.dat:defaultServerUrl"
 const desktopUrl = resolveDesktopServerUrl(location.search, window.location.origin)
+const desktopUpdateAvailable = Boolean(desktopUrl && hasDesktopUpdateCapability(location.search))
 
 const stored = () => {
   if (desktopUrl) return
@@ -45,6 +51,14 @@ const server = () =>
     hostedDomain: URLS.host,
     dev: import.meta.env.DEV,
   })
+
+async function desktopUpdateRequest(pathname: string, method: "GET" | "POST" | "DELETE") {
+  const url = resolveServerRoute(pathname, server(), window.location.origin)
+  const response = await openscienceFetch(url, { method, headers: { Accept: "application/json" } })
+  const body = await response.json().catch(() => undefined)
+  if (!response.ok) throw new Error(updateError(body, response.status))
+  return body as DesktopUpdateState
+}
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -112,6 +126,10 @@ const platform: Platform = {
     const result = (await response.json()) as { updateAvailable: boolean; latest?: string }
     return { updateAvailable: result.updateAvailable, version: result.latest }
   },
+  updateState: desktopUpdateAvailable ? () => desktopUpdateRequest("/settings/updates/state", "GET") : undefined,
+  stageUpdate: desktopUpdateAvailable ? () => desktopUpdateRequest("/settings/updates/stage", "POST") : undefined,
+  applyUpdate: desktopUpdateAvailable ? () => desktopUpdateRequest("/settings/updates/apply", "POST") : undefined,
+  cancelUpdate: desktopUpdateAvailable ? () => desktopUpdateRequest("/settings/updates/stage", "DELETE") : undefined,
   update: async () => {
     const healthUrl = resolveServerRoute("/global/health", server(), window.location.origin)
     const before = await openscienceFetch(healthUrl, { headers: { Accept: "application/json" } })

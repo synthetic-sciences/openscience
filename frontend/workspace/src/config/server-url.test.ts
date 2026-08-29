@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { resolveDefaultServerUrl, resolveDesktopServerUrl, resolveServerRoute } from "./server-url"
+import {
+  hasDesktopUpdateCapability,
+  resolveDefaultServerUrl,
+  resolveDesktopServerUrl,
+  resolveServerRoute,
+} from "./server-url"
 
 const base = {
   hostname: "127.0.0.1",
@@ -32,6 +37,13 @@ describe("resolveDesktopServerUrl", () => {
   test("pins the native app to the random loopback origin", () => {
     expect(resolveDesktopServerUrl("?desktop=1", "http://127.0.0.1:43819")).toBe("http://127.0.0.1:43819")
     expect(resolveDesktopServerUrl("", "http://127.0.0.1:43819")).toBeUndefined()
+  })
+
+  test("enables native staging only when the host advertises its trusted updater", () => {
+    expect(hasDesktopUpdateCapability("?desktop=1&desktop-update=1")).toBe(true)
+    expect(hasDesktopUpdateCapability("?desktop=1")).toBe(false)
+    expect(hasDesktopUpdateCapability("?desktop-update=1")).toBe(false)
+    expect(hasDesktopUpdateCapability("")).toBe(false)
   })
 })
 

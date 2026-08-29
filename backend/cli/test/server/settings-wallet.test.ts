@@ -58,6 +58,14 @@ test("uses current Atlas access plus purchased Wallet truth without calling the 
     managedSupported: true,
     managedUnlocked: true,
     aceEnabled: false,
+    aceContract: {
+      activationAuthorizationUsd: 0,
+      reloadThresholdUsd: 5,
+      reloadAmountUsd: 20,
+      serviceMarginPercent: 2,
+      processingFeeDisclosedSeparately: true,
+      reloadControlledByAce: true,
+    },
   })
   expect(await OpenScience.getBalance()).toBe(25)
 
@@ -306,6 +314,6 @@ test("uses null only when the signed-in balance is genuinely unavailable", async
 test("wallet route presents PAYG billing without plan copy", async () => {
   const source = await Bun.file(new URL("../../src/server/routes/settings/wallet.ts", import.meta.url)).text()
   expect(source).toContain("pay-as-you-go Credits")
-  expect(source).toContain("Get wallet balance, routing mode, and recent transactions")
+  expect(source).toContain("Get purchased Wallet balance, routing mode, and recent transactions")
   expect(source).not.toMatch(/subscription|plan mode|manage plan/i)
 })

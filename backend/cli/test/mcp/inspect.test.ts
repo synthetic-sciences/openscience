@@ -67,6 +67,85 @@ process.exit(0)
   expect(detail.errors).toEqual({})
 })
 
+test("an in-flight MCP tool request blocks update until its response is settled", async () => {
+  await using tmp = await tmpdir()
+  const runner = `${tmp.path}/request-quiescence.ts`
+  const ready = `${tmp.path}/request-ready`
+  const release = `${tmp.path}/request-release`
+  const server = new URL("../fixture/mcp-capabilities.mjs", import.meta.url).pathname
+
+  await Bun.write(
+    `${tmp.path}/openscience.json`,
+    JSON.stringify({
+      mcp: {
+        blocking: {
+          type: "local",
+          command: [process.execPath, server],
+          environment: {
+            OPENSCIENCE_MCP_REQUEST_READY: ready,
+            OPENSCIENCE_MCP_REQUEST_RELEASE: release,
+          },
+        },
+      },
+    }),
+  )
+
+  await Bun.write(
+    runner,
+    `
+import fs from "node:fs/promises"
+import { MCP } from ${JSON.stringify(new URL("../../src/mcp/index.ts", import.meta.url).href)}
+import { Instance } from ${JSON.stringify(new URL("../../src/project/instance.ts", import.meta.url).href)}
+import { ProjectTrust } from ${JSON.stringify(new URL("../../src/project/trust.ts", import.meta.url).href)}
+import { UpdateQuiescence } from ${JSON.stringify(new URL("../../src/process/update-quiescence.ts", import.meta.url).href)}
+
+async function waitFor(check, label) {
+  for (let attempt = 0; attempt < 500; attempt++) {
+    if (await check()) return
+    await Bun.sleep(10)
+  }
+  throw new Error(label)
+}
+
+const result = await Instance.provide({
+  directory: process.argv[2],
+  fn: async () => {
+    const trust = await ProjectTrust.status(Instance.project)
+    await ProjectTrust.update(Instance.project, { trusted: true, root: trust.root })
+    const tools = await MCP.tools()
+    const execute = tools.blocking_echo?.execute
+    if (!execute) throw new Error("Missing MCP echo tool")
+    const pending = execute({}, { toolCallId: "request-quiescence", messages: [] })
+    await waitFor(() => fs.stat(process.argv[3]).then(() => true, () => false), "MCP request did not start")
+    const active = UpdateQuiescence.active("mcp")
+    let blocked = false
+    try { UpdateQuiescence.begin() } catch { blocked = true }
+    await Bun.write(process.argv[4], "release")
+    await pending
+    await waitFor(() => UpdateQuiescence.active("mcp") === 0, "MCP request admission did not release")
+    await MCP.disposeLocal()
+    return { active, blocked, settled: UpdateQuiescence.active("mcp") }
+  },
+})
+process.stdout.write(JSON.stringify(result))
+process.exit(0)
+`,
+  )
+
+  const proc = spawn([process.execPath, runner, tmp.path, ready, release], {
+    cwd: tmp.path,
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [output, error, exit] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  expect(exit, error).toBe(0)
+  expect(JSON.parse(output)).toEqual({ active: 1, blocked: true, settled: 0 })
+})
+
 const posixTest = process.platform === "win32" ? test.skip : test
 
 posixTest("local MCP disposal reaps a direct child that starts a new session", async () => {

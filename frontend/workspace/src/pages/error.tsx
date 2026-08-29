@@ -5,6 +5,7 @@ import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconAlertCircle, IconCopy, IconRefresh } from "@/atlas/shared/Icon"
+import { updateController } from "@/components/settings/update-controller"
 
 export type InitError = {
   name: string
@@ -207,10 +208,13 @@ interface ErrorPageProps {
 
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const platform = usePlatform()
+  const updates = updateController(platform)
+  updates.start()
   const language = useLanguage()
   const [copied, setCopied] = createSignal(false)
   const [store, setStore] = createStore({
     checking: false,
+    updating: false,
     version: undefined as string | undefined,
     updateError: undefined as string | undefined,
   })
@@ -220,8 +224,8 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
     setStore("checking", true)
     setStore("updateError", undefined)
     try {
-      const result = await platform.checkUpdate({ refresh: true })
-      if (result.updateAvailable && result.version) setStore("version", result.version)
+      const result = await updates.check()
+      if (result?.updateAvailable && result.version) setStore("version", result.version)
     } catch (error) {
       setStore("updateError", error instanceof Error ? error.message : String(error))
     } finally {
@@ -230,9 +234,23 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   }
 
   async function installUpdate() {
-    if (!platform.update || !platform.restart) return
-    await platform.update()
-    await platform.restart()
+    if (store.updating) return
+    setStore("updating", true)
+    setStore("updateError", undefined)
+    try {
+      if (platform.stageUpdate && platform.applyUpdate) {
+        if (updates.state.phase === "ready") await updates.apply()
+        else await updates.stage()
+        return
+      }
+      if (!platform.update || !platform.restart) return
+      await platform.update()
+      await platform.restart()
+    } catch (error) {
+      setStore("updateError", error instanceof Error ? error.message : String(error))
+    } finally {
+      setStore("updating", false)
+    }
   }
 
   const detail = () => formatError(props.error, language.t)
@@ -353,13 +371,24 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
                 </Button>
               }
             >
-              <Button size="large" onClick={installUpdate}>
-                Update to {store.version}
+              <Button
+                size="large"
+                onClick={installUpdate}
+                disabled={
+                  store.updating ||
+                  ["downloading", "extracting", "verifying", "restarting"].includes(updates.state.phase)
+                }
+              >
+                {updates.state.phase === "ready"
+                  ? "Restart to update"
+                  : ["downloading", "extracting", "verifying"].includes(updates.state.phase)
+                    ? "Preparing update…"
+                    : `Download ${store.version}`}
               </Button>
             </Show>
           </Show>
         </div>
-        <Show when={store.updateError}>
+        <Show when={store.updateError ?? updates.state.error}>
           {(message) => (
             <p role="alert" style={{ margin: 0, color: "var(--color-error)", "font-size": "12px" }}>
               Update check failed: {message()}

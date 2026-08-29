@@ -54,6 +54,7 @@ import {
   IconArchive,
   IconShield,
   IconSplit,
+  IconRefresh,
   IconX,
 } from "@/atlas/shared/Icon"
 import { StatusDot } from "@/atlas/shared/StatusDot"
@@ -69,10 +70,22 @@ import { sessionUnavailable } from "@/pages/session-availability"
 import { publicContextAvailable, sanitizePublicContexts } from "@/pages/public-contexts"
 import { useExecutionAuthority } from "@/atlas/use-execution-authority"
 import { sessionEntryTarget } from "@/pages/session-entry"
+import { shouldConfirmUndo, undoPreview, undoSummary, type UndoPreview } from "@/pages/session-undo"
 import "./session-header.css"
+import "./session-undo.css"
 import "../components/chat-surface.css"
 
 type SyncSession = ReturnType<typeof useSync>["data"]["session"][number]
+type RevertInfo = NonNullable<SyncSession["revert"]> & { turns?: number; files?: string[] }
+
+function requestError(error: unknown) {
+  if (error && typeof error === "object" && "data" in error) {
+    const data = (error as { data?: { message?: string } }).data
+    if (data?.message) return data.message
+  }
+  if (error instanceof Error) return error.message
+  return String(error)
+}
 
 /**
  * Session page — new visual identity (Synthetic Sciences wordmark + sessions
@@ -150,6 +163,9 @@ export default function Page(): JSX.Element {
   const [creating, setCreating] = createSignal(false)
   const pending: { value?: Promise<string | undefined>; context?: SessionContext } = {}
   const [mobileSessionsOpen, setMobileSessionsOpen] = createSignal(false)
+  const [undoOperation, setUndoOperation] = createSignal<
+    { type: "confirm" | "undo"; messageID: string } | { type: "restore" } | undefined
+  >()
   const [sessionsCollapsed, setSessionsCollapsed] = createSignal(readSessionSidebar())
   const [sessionsWidth, setSessionsWidth] = createSignal(readSessionSidebarWidth())
   const [sessionListReady, setSessionListReady] = createSignal<string>()
@@ -530,7 +546,7 @@ export default function Page(): JSX.Element {
     if (index < 0 || index >= childSessions().length - 1) return
     return childSessions()[index + 1]
   })
-  const revertInfo = createMemo(() => activeSession()?.revert)
+  const revertInfo = createMemo(() => activeSession()?.revert as RevertInfo | undefined)
   onMount(() => {
     const onOpenContext = (event: Event) => {
       const context = (event as CustomEvent).detail?.context
@@ -549,6 +565,10 @@ export default function Page(): JSX.Element {
   const sessionStatus = createMemo(() =>
     params.id ? (sync.data.session_status?.[params.id] as { type?: string } | undefined)?.type : undefined,
   )
+  const sessionBusy = () => {
+    const status = sessionStatus()
+    return Boolean(status && status !== "idle")
+  }
   // A message is a compaction boundary when it carries a `compaction` part.
   const compactionPart = (id: string) => (sync.data.part[id] ?? []).find((part) => part.type === "compaction")
   const hasCompactionPart = (id: string) => Boolean(compactionPart(id))
@@ -574,6 +594,14 @@ export default function Page(): JSX.Element {
     if (!revertID) return 0
     return messages().filter((m) => m.role === "user" && m.id >= revertID).length
   })
+  const revertedPreview = createMemo<UndoPreview>(() => ({
+    turns: revertInfo()?.turns ?? revertedCount(),
+    files: revertInfo()?.files ?? [],
+  }))
+  const undoing = (messageID: string) => {
+    const operation = undoOperation()
+    return operation?.type === "undo" && operation.messageID === messageID
+  }
 
   const nextTurnID = (messageID: string) => {
     const turns = turnMessages()
@@ -583,31 +611,66 @@ export default function Page(): JSX.Element {
 
   const revertTo = async (messageID: string) => {
     const id = params.id
-    if (!id) return
-    const ok = await confirmDialog(dialog, {
-      title: "Undo from here?",
-      message:
-        "Hides this message and everything after it, and rolls back the file changes they made. You can restore until you send the next message.",
-      confirmLabel: "Undo",
-      danger: true,
-    })
-    if (!ok) return
+    if (!id || undoOperation()) return
+    if (sessionBusy()) {
+      toast.info("Undo available when this response finishes")
+      return
+    }
+    const preview = undoPreview(messages(), sync.data.part, messageID, projectPath())
+    setUndoOperation({ type: "confirm", messageID })
     try {
-      await sync.session.revert(id, messageID)
-      toast.success("Reverted", "Files rolled back. Send a message to continue from here.")
-    } catch (e: any) {
-      toast.error("Undo failed", e?.message ?? String(e))
+      if (shouldConfirmUndo(preview)) {
+        const ok = await confirmDialog(dialog, {
+          title: "Undo from here?",
+          message: (
+            <div class="session-undo-preview">
+              <p>
+                <strong>{undoSummary(preview)}</strong> will be hidden and its file changes rolled back. You can restore
+                everything until you send another message.
+              </p>
+              <Show when={preview.files.length > 0}>
+                <ul class="session-undo-preview__files" aria-label="Files that will be rolled back">
+                  <For each={preview.files.slice(0, 6)}>{(file) => <li title={file}>{file}</li>}</For>
+                  <Show when={preview.files.length > 6}>
+                    <li class="session-undo-preview__more">+{preview.files.length - 6} more</li>
+                  </Show>
+                </ul>
+              </Show>
+            </div>
+          ),
+          confirmLabel: "Undo",
+        })
+        if (!ok) return
+      }
+      setUndoOperation({ type: "undo", messageID })
+      const result = await sync.session.revert(id, messageID)
+      const applied = {
+        turns: result?.turns ?? preview.turns,
+        files: result?.files ?? preview.files,
+      }
+      toast.success("Undone", `${undoSummary(applied)} rolled back. Restore remains available below the conversation.`)
+    } catch (error: unknown) {
+      toast.error("Undo failed", requestError(error))
+    } finally {
+      setUndoOperation(undefined)
     }
   }
 
   const restoreRevert = async () => {
     const id = params.id
-    if (!id) return
+    if (!id || undoOperation()) return
+    if (sessionBusy()) {
+      toast.info("Restore available when this response finishes")
+      return
+    }
+    setUndoOperation({ type: "restore" })
     try {
       await sync.session.unrevert(id)
-      toast.success("Messages restored")
-    } catch (e: any) {
-      toast.error("Restore failed", e?.message ?? String(e))
+      toast.success("Undo restored", `${undoSummary(revertedPreview())} restored.`)
+    } catch (error: unknown) {
+      toast.error("Restore failed", requestError(error))
+    } finally {
+      setUndoOperation(undefined)
     }
   }
 
@@ -699,6 +762,7 @@ export default function Page(): JSX.Element {
         description: language.t("command.session.undo.description"),
         category: language.t("command.category.session"),
         slash: "undo",
+        disabled: sessionBusy(),
         onSelect: () => void revertTo(last.id),
       })
     }
@@ -709,16 +773,9 @@ export default function Page(): JSX.Element {
         description: language.t("command.session.redo.description"),
         category: language.t("command.category.session"),
         slash: "redo",
+        disabled: sessionBusy(),
         onSelect: () => void restoreRevert(),
       })
-    }
-    const failure = (error: unknown) => {
-      if (error && typeof error === "object" && "data" in error) {
-        const data = (error as { data?: { message?: string } }).data
-        if (data?.message) return data.message
-      }
-      if (error instanceof Error) return error.message
-      return "Request failed"
     }
     const action = (name: string, title: string, description: string) => ({
       id: `session.${name}`,
@@ -740,7 +797,7 @@ export default function Page(): JSX.Element {
         }
         void sdk.client.session.command(request).catch((error: unknown) => {
           console.error(`${name} failed`, error)
-          toast.error(`Could not run /${name}`, failure(error))
+          toast.error(`Could not run /${name}`, requestError(error))
         })
       },
     })
@@ -1259,6 +1316,25 @@ export default function Page(): JSX.Element {
                                   }}
                                 />
                                 <div class="session-turn-actions" role="group" aria-label="Turn actions">
+                                  <Show when={!revertInfo()}>
+                                    <button
+                                      type="button"
+                                      class="session-turn-action"
+                                      disabled={Boolean(undoOperation()) || sessionBusy()}
+                                      aria-busy={undoing(message.id)}
+                                      onClick={() => void revertTo(message.id)}
+                                      aria-label="Undo conversation from this turn"
+                                      title="Undo from here"
+                                    >
+                                      <Show
+                                        when={undoing(message.id)}
+                                        fallback={<IconRefresh size={12} strokeWidth={1.5} />}
+                                      >
+                                        <AsciiSpinner size={10} />
+                                      </Show>
+                                      Undo
+                                    </button>
+                                  </Show>
                                   <button
                                     type="button"
                                     class="session-turn-action"
@@ -1310,40 +1386,24 @@ export default function Page(): JSX.Element {
               >
                 <div class="session-prompt-dock__inner">
                   <Show when={revertInfo()}>
-                    <div
-                      class="mb-3"
-                      style={{
-                        display: "flex",
-                        "align-items": "center",
-                        gap: "12px",
-                        padding: "8px 12px",
-                        border: "1px solid var(--color-border)",
-                        "border-radius": "8px",
-                        "font-size": "12px",
-                        "font-family": FONT_SANS,
-                        color: "var(--color-text-muted)",
-                        background: "var(--color-bg)",
-                      }}
-                    >
-                      <span style={{ flex: 1, "min-width": 0 }}>
-                        Conversation reverted. {revertedCount()} turn{revertedCount() === 1 ? "" : "s"} hidden and file
-                        changes rolled back. Sending a new message makes this permanent.
+                    <div class="session-undo-bar" role="status" aria-live="polite">
+                      <span class="session-undo-bar__copy">
+                        <strong>{undoSummary(revertedPreview())} undone.</strong> Restore it now, or send a message to
+                        keep this version.
                       </span>
                       <button
                         type="button"
+                        class="session-undo-bar__restore"
+                        disabled={Boolean(undoOperation()) || sessionBusy()}
+                        aria-busy={undoOperation()?.type === "restore"}
                         onClick={() => void restoreRevert()}
-                        style={{
-                          border: "1px solid var(--color-border)",
-                          background: "transparent",
-                          color: "inherit",
-                          padding: "4px 10px",
-                          "border-radius": "8px",
-                          "font-size": "12px",
-                          "font-weight": "var(--font-weight-regular)",
-                          cursor: "pointer",
-                          "white-space": "nowrap",
-                        }}
                       >
+                        <Show
+                          when={undoOperation()?.type === "restore"}
+                          fallback={<IconRefresh size={12} strokeWidth={1.5} />}
+                        >
+                          <AsciiSpinner size={10} />
+                        </Show>
                         Restore
                       </button>
                     </div>

@@ -32,6 +32,7 @@
 
 .startup-update__copy {
   display: grid;
+  gap: 3px;
   min-width: 0;
   flex: 1;
   line-height: 1.25;
@@ -50,14 +51,32 @@
   overflow: hidden;
   color: var(--text-weak);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.startup-update__copy progress {
+  width: min(360px, 100%);
+  height: 3px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  accent-color: var(--text-interactive-base);
+}
+
+.startup-update__copy progress::-webkit-progress-bar {
+  background: var(--surface-interactive-weak);
+}
+
+.startup-update__copy progress::-webkit-progress-value {
+  background: var(--text-interactive-base);
+}
+
 .startup-update__dismiss {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   place-items: center;
   border: 0;
@@ -80,5 +99,12 @@
 
   .startup-update__copy {
     flex-basis: calc(100% - 84px);
+  }
+
+  .startup-update__copy strong,
+  .startup-update__copy small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
 }

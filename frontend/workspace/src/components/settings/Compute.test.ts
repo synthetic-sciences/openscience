@@ -50,4 +50,16 @@ describe("Compute Settings interaction contract", () => {
     expect(component).toContain("proxy commands")
     expect(component).toContain('method: "POST"')
   })
+
+  test("keeps provider verification explicit and SSH authentication configurable", async () => {
+    const component = await source
+
+    expect(component).toContain("`/provider/${item.id}/doctor`")
+    expect(component).toContain("Last successful native check")
+    expect(component).toContain("No resource was created.")
+    expect(component).toContain('label="Identity file"')
+    expect(component).toContain('label="ProxyJump"')
+    expect(component).toContain("Key bytes")
+    expect(component).toContain("are never copied into OpenScience storage")
+  })
 })

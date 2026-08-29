@@ -1,6 +1,7 @@
 import { test, expect, afterAll, spyOn } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import os from "os"
 import { Project } from "../../src/project/project"
 import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -93,8 +94,20 @@ test("connecting a provider stores its key without exposing it to the process en
   const body = await res.text()
   expect(body).not.toContain("tp-test-secret-123")
   const info = JSON.parse(body)
-  expect(info.providers.find((p: { id: string }) => p.id === "tensorpool").connected).toBe(true)
-  expect(info.providers.find((p: { id: string }) => p.id === "tensorpool").enabled).toBe(false)
+  expect(info.providers.find((p: { id: string }) => p.id === "tensorpool")).toMatchObject({
+    connected: true,
+    enabled: false,
+    integration: "cli_credential",
+    credential: {
+      label: "API key",
+      environment: "TENSORPOOL_KEY",
+      aliases: ["TENSORPOOL_API_KEY"],
+      docs_url: "https://docs.tensorpool.dev/",
+    },
+  })
+  expect(info.providers.find((p: { id: string }) => p.id === "modal")).toMatchObject({
+    integration: "integrated",
+  })
 })
 
 test("SSH host notes persist, remain editable, and clear without changing connection identity", async () => {
@@ -146,22 +159,32 @@ test("SSH host notes persist, remain editable, and clear without changing connec
   }
 })
 
-test("SSH config discovery reads literal hosts without executing or expanding config directives", async () => {
+test("SSH config discovery safely resolves bounded includes, identity files, and ProxyJump", async () => {
   await using tmp = await tmpdir()
   const config = path.join(tmp.path, "config")
+  const identity = path.join(tmp.path, "lab-key")
+  const included = path.join(tmp.path, "conf.d", "bastion.conf")
+  await fs.mkdir(path.dirname(included))
+  await fs.writeFile(identity, "test-private-key", { mode: 0o600 })
+  await Bun.write(included, ["Host bastion", "  HostName bastion.example.org", "  User jump", "  Port 2200"].join("\n"))
   await Bun.write(
     config,
     [
+      "Include conf.d/*.conf",
       "Host lab login",
       '  HostName "login.cluster.example" # display target',
       "  User researcher",
       "  Port 2222",
       "  ProxyJump bastion",
+      "  IdentityFile ./lab-key",
       "Host *.internal !blocked.internal",
       "  User wildcard-user",
+      "Host command-only",
+      "  HostName hidden.internal",
+      "  ProxyCommand sh -c bad",
       "Match host lab",
       "  User should-not-override",
-      "Include ~/.ssh/conf.d/*",
+      "  Include conf.d/*.conf",
       "Host tokenized",
       "  HostName %h.example.org",
       "  Port invalid",
@@ -169,10 +192,40 @@ test("SSH config discovery reads literal hosts without executing or expanding co
   )
 
   expect(await ComputeSettings.sshConfigHosts(config)).toEqual([
-    { alias: "lab", hostname: "login.cluster.example", user: "researcher", port: 2222 },
-    { alias: "login", hostname: "login.cluster.example", user: "researcher", port: 2222 },
+    { alias: "bastion", hostname: "bastion.example.org", user: "jump", port: 2200 },
+    {
+      alias: "lab",
+      hostname: "login.cluster.example",
+      user: "researcher",
+      port: 2222,
+      identity_file: await fs.realpath(identity),
+      proxy_jump: "jump@bastion.example.org:2200",
+    },
+    {
+      alias: "login",
+      hostname: "login.cluster.example",
+      user: "researcher",
+      port: 2222,
+      identity_file: await fs.realpath(identity),
+      proxy_jump: "jump@bastion.example.org:2200",
+    },
     { alias: "tokenized" },
   ])
+})
+
+test("SSH config discovery fails closed when Include nesting exceeds its bound", async () => {
+  await using tmp = await tmpdir()
+  const files = Array.from({ length: 6 }, (_, index) => path.join(tmp.path, `config-${index}`))
+  for (let index = 0; index < files.length; index++) {
+    await Bun.write(
+      files[index]!,
+      index === files.length - 1
+        ? "Host should-not-import\n  HostName hidden.example.org\n"
+        : `Include ${path.basename(files[index + 1]!)}\n`,
+    )
+  }
+
+  expect(await ComputeSettings.sshConfigHosts(files[0])).toEqual([])
 })
 
 test("modal credentials resolve only for the trusted control plane while enabled", async () => {
@@ -180,7 +233,7 @@ test("modal credentials resolve only for the trusted control plane while enabled
   expect(res.status).toBe(200)
   expect(process.env["MODAL_TOKEN_ID"]).toBeUndefined()
   expect(process.env["MODAL_TOKEN_SECRET"]).toBeUndefined()
-  await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("disabled")
+  await expect(ComputeSettings.modalContext()).rejects.toThrow("disabled")
 
   const enabled = await ComputeSettingsRoutes().request("/provider/modal/enabled", {
     method: "POST",
@@ -188,9 +241,9 @@ test("modal credentials resolve only for the trusted control plane while enabled
     body: JSON.stringify({ enabled: true }),
   })
   expect(enabled.status).toBe(200)
-  expect(await ComputeSettings.providerEnv("modal")).toEqual({
-    MODAL_TOKEN_ID: "ak-test-id",
-    MODAL_TOKEN_SECRET: "as-test-secret",
+  expect(await ComputeSettings.modalContext()).toMatchObject({
+    tokenId: "ak-test-id",
+    tokenSecret: "as-test-secret",
   })
   expect(process.env["MODAL_TOKEN_ID"]).toBeUndefined()
   expect(process.env["MODAL_TOKEN_SECRET"]).toBeUndefined()
@@ -200,7 +253,7 @@ test("modal credentials resolve only for the trusted control plane while enabled
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ enabled: false }),
   })
-  await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("disabled")
+  await expect(ComputeSettings.modalContext()).rejects.toThrow("disabled")
 })
 
 test("Modal can use an active ~/.modal.toml profile without copying its tokens", async () => {
@@ -234,14 +287,14 @@ test("Modal can use an active ~/.modal.toml profile without copying its tokens",
   expect(JSON.stringify(info)).not.toContain("ak-from-toml")
   expect(JSON.stringify(info)).not.toContain("as-from-toml")
   expect(JSON.stringify(info)).not.toContain(tmp.path)
-  expect(await ComputeSettings.providerEnv("modal")).toEqual({
-    MODAL_TOKEN_ID: "ak-from-toml",
-    MODAL_TOKEN_SECRET: "as-from-toml",
+  expect(await ComputeSettings.modalContext()).toMatchObject({
+    tokenId: "ak-from-toml",
+    tokenSecret: "as-from-toml",
   })
   expect(await ComputeSettings.modalConfig()).toMatchObject({ environment: "research-lab" })
 
   await ComputeSettings.setProviderEnabled("modal", false)
-  await expect(ComputeSettings.providerEnv("modal")).rejects.toThrow("disabled")
+  await expect(ComputeSettings.modalContext()).rejects.toThrow("disabled")
   await ComputeSettings.disconnectProvider("modal")
 })
 
@@ -311,9 +364,9 @@ test("Modal config discovery validates and selects the default profile", async (
     enabled: true,
     source: "modal_toml",
   })
-  expect(await ComputeSettings.providerEnv("modal")).toEqual({
-    MODAL_TOKEN_ID: "ak-id",
-    MODAL_TOKEN_SECRET: "as-secret",
+  expect(await ComputeSettings.modalContext()).toMatchObject({
+    tokenId: "ak-id",
+    tokenSecret: "as-secret",
   })
   await ComputeSettings.disconnectProvider("modal")
 })
@@ -573,23 +626,229 @@ test("disconnecting a provider removes its stored control-plane credential", asy
   expect(process.env["VAST_API_KEY"]).toBe("from-shell")
 })
 
-test("re-saving a key updates the value resolved by the control plane", async () => {
+test("re-saving a key updates only the reviewed provider invocation environment", async () => {
+  delete process.env["RUNPOD_API_KEY"]
   await connect("runpod", "rpa_first")
   await ComputeSettings.setProviderEnabled("runpod", true)
-  expect(await ComputeSettings.providerEnv("runpod")).toEqual({ RUNPOD_API_KEY: "rpa_first" })
-  expect(process.env["RUNPOD_API_KEY"]).toBe("rpa_first")
+  expect(process.env["RUNPOD_API_KEY"]).toBeUndefined()
+  const first = await ComputeSettings.withProviderEnv(
+    "runpod",
+    { PATH: "/usr/bin", RUNPOD_API_KEY: "ambient", LAMBDA_API_KEY: "unrelated" },
+    async (env) => {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          "console.log(JSON.stringify({ runpod: process.env.RUNPOD_API_KEY, lambda: process.env.LAMBDA_API_KEY }))",
+        ],
+        { env, stdout: "pipe", stderr: "pipe" },
+      )
+      const [exit, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ])
+      if (exit !== 0) throw new Error(stderr)
+      return JSON.parse(stdout) as { runpod: string; lambda?: string }
+    },
+  )
+  expect(first).toEqual({ runpod: "rpa_first" })
   await connect("runpod", "rpa_second")
-  expect(await ComputeSettings.providerEnv("runpod")).toEqual({ RUNPOD_API_KEY: "rpa_second" })
-  expect(process.env["RUNPOD_API_KEY"]).toBe("rpa_second")
+  expect(process.env["RUNPOD_API_KEY"]).toBeUndefined()
+  expect(await ComputeSettings.withProviderEnv("runpod", { PATH: "/usr/bin" }, async (env) => env.RUNPOD_API_KEY)).toBe(
+    "rpa_second",
+  )
   await ComputeSettingsRoutes().request("/provider/runpod", { method: "DELETE" })
   expect(process.env["RUNPOD_API_KEY"]).toBeUndefined()
-  await expect(ComputeSettings.providerEnv("runpod")).rejects.toThrow("disabled")
+  await expect(ComputeSettings.withProviderEnv("runpod", { PATH: "/usr/bin" }, async () => undefined)).rejects.toThrow(
+    "disabled",
+  )
 })
 
-test("does not reclaim a provider variable replaced by the shell", async () => {
+test(
+  "native provider doctor is read-only, isolated, and records last_used only after success",
+  async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    const marker = path.join(tmp.path, "doctor-marker")
+    const cli = path.join(bin, "runpodctl")
+    const previousPath = process.env.PATH
+    await fs.mkdir(bin)
+    await fs.writeFile(
+      cli,
+      [
+        "#!/bin/sh",
+        'test "$1" = "user" || exit 11',
+        'test "$RUNPOD_API_KEY" = "rpa_doctor_test" || exit 12',
+        'test -z "$LAMBDA_API_KEY" || exit 13',
+        `printf '%s' "$HOME" > ${JSON.stringify(marker)}`,
+      ].join("\n"),
+      { mode: 0o700 },
+    )
+    process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`
+    try {
+      await connect("runpod", "rpa_doctor_test")
+      await ComputeSettings.setProviderEnabled("runpod", true)
+      const checked = await ComputeSettingsRoutes().request("/provider/runpod/doctor", { method: "POST" })
+      expect(checked.status).toBe(200)
+      expect(await checked.json()).toMatchObject({
+        ok: true,
+        provider: "runpod",
+        cli: "runpodctl",
+        command: "runpodctl user",
+      })
+      expect((await fs.readFile(marker, "utf8")).startsWith(os.tmpdir())).toBe(true)
+      const used = (await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used
+      expect(used).toBeString()
+
+      await fs.writeFile(cli, "#!/bin/sh\necho rejected >&2\nexit 7\n", { mode: 0o700 })
+      const failed = await ComputeSettingsRoutes().request("/provider/runpod/doctor", { method: "POST" })
+      expect(await failed.json()).toMatchObject({ ok: false, error: expect.stringContaining("rejected") })
+      expect((await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used).toBe(used)
+
+      await connect("runpod", "rpa_replacement_key")
+      expect((await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used).toBeNull()
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH
+      else process.env.PATH = previousPath
+      await ComputeSettings.disconnectProvider("runpod")
+    }
+  },
+  nativeLifecycleTimeout,
+)
+
+test(
+  "native provider doctors use the fixed official read-only contract for every credential provider",
+  async () => {
+    if (process.platform === "win32") return
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    const previousPath = process.env.PATH
+    const previousOpenAI = process.env.OPENAI_API_KEY
+    const credentials = [
+      "TENSORPOOL_KEY",
+      "TENSORPOOL_API_KEY",
+      "LAMBDA_API_KEY",
+      "LAMBDA_LABS_API_KEY",
+      "PRIME_API_KEY",
+      "PRIME_INTELLECT_API_KEY",
+      "VAST_API_KEY",
+      "RUNPOD_API_KEY",
+    ]
+    const contracts: {
+      provider: string
+      cli: string
+      key: string
+      environment: string[]
+      args: string[]
+      header?: string
+    }[] = [
+      {
+        provider: "tensorpool",
+        cli: "tp",
+        key: "tensorpool-contract-key",
+        environment: ["TENSORPOOL_KEY"],
+        args: ["--no-input", "me"],
+      },
+      {
+        provider: "lambda",
+        cli: "curl",
+        key: "lambda-contract-key",
+        environment: [],
+        args: [
+          "--fail-with-body",
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "12",
+          "--request",
+          "GET",
+          "--url",
+          "https://cloud.lambda.ai/api/v1/instances",
+          "--header",
+          "accept: application/json",
+          "--header",
+          "@-",
+        ],
+        header: "Authorization: Bearer lambda-contract-key",
+      },
+      {
+        provider: "prime_intellect",
+        cli: "prime",
+        key: "prime-contract-key",
+        environment: ["PRIME_API_KEY"],
+        args: ["whoami"],
+      },
+      {
+        provider: "vast",
+        cli: "vastai",
+        key: "vast-contract-key",
+        environment: ["VAST_API_KEY"],
+        args: ["show", "user", "--raw"],
+      },
+      {
+        provider: "runpod",
+        cli: "runpodctl",
+        key: "runpod-contract-key",
+        environment: ["RUNPOD_API_KEY"],
+        args: ["user"],
+      },
+    ]
+    await fs.mkdir(bin)
+    try {
+      for (const contract of contracts) {
+        const args = path.join(tmp.path, `${contract.provider}.args`)
+        const header = path.join(tmp.path, `${contract.provider}.header`)
+        const checks = credentials.map((name) =>
+          contract.environment.includes(name)
+            ? `test "$${name}" = ${JSON.stringify(contract.key)} || exit 21`
+            : `test -z "$${name}" || exit 22`,
+        )
+        await fs.writeFile(
+          path.join(bin, contract.cli),
+          [
+            "#!/bin/sh",
+            ...checks,
+            'test -z "$OPENAI_API_KEY" || exit 24',
+            `printf '%s\\n' "$@" > ${JSON.stringify(args)}`,
+            ...(contract.header
+              ? [`IFS= read -r value || exit 23`, `printf '%s' "$value" > ${JSON.stringify(header)}`]
+              : []),
+          ].join("\n"),
+          { mode: 0o700 },
+        )
+        process.env.PATH = `${bin}${path.delimiter}${previousPath ?? ""}`
+        process.env.OPENAI_API_KEY = "unrelated-model-secret"
+        await connect(contract.provider, contract.key)
+        await ComputeSettings.setProviderEnabled(contract.provider, true)
+
+        const response = await ComputeSettingsRoutes().request(`/provider/${contract.provider}/doctor`, {
+          method: "POST",
+        })
+        expect(await response.json()).toMatchObject({ ok: true, provider: contract.provider, cli: contract.cli })
+        expect((await fs.readFile(args, "utf8")).trimEnd().split("\n")).toEqual(contract.args)
+        if (contract.header) expect(await fs.readFile(header, "utf8")).toBe(contract.header)
+        expect(
+          (await ComputeSettings.get()).providers.find((item) => item.id === contract.provider)?.last_used,
+        ).toBeString()
+      }
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH
+      else process.env.PATH = previousPath
+      if (previousOpenAI === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = previousOpenAI
+      for (const contract of contracts) await ComputeSettings.disconnectProvider(contract.provider)
+    }
+  },
+  nativeLifecycleTimeout,
+)
+
+test("provider settings never mutate an explicit shell export", async () => {
+  delete process.env["PRIME_API_KEY"]
   await connect("prime", "prime_stored_first")
   await ComputeSettings.setProviderEnabled("prime", true)
-  expect(process.env["PRIME_API_KEY"]).toBe("prime_stored_first")
+  expect(process.env["PRIME_API_KEY"]).toBeUndefined()
   process.env["PRIME_API_KEY"] = "prime_from_shell"
 
   await connect("prime", "prime_stored_second")
@@ -609,7 +868,7 @@ test("preserves a provider variable replaced while a project instance is active"
     fn: async () => {
       await connect("vast", "vast_owned_first")
       await ComputeSettings.setProviderEnabled("vast", true)
-      expect(process.env["VAST_API_KEY"]).toBe("vast_owned_first")
+      expect(process.env["VAST_API_KEY"]).toBeUndefined()
       process.env["VAST_API_KEY"] = "vast_from_shell"
 
       await connect("vast", "vast_owned_second")
@@ -620,6 +879,89 @@ test("preserves a provider variable replaced while a project instance is active"
     },
   })
   delete process.env["VAST_API_KEY"]
+})
+
+test("a second server observes CLI provider rotation and removal before another approved invocation", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-compute-credential-revision-"))
+  const mutate = path.join(root, "mutate.ts")
+  const worker = path.join(root, "worker.ts")
+  const ready = path.join(root, "ready")
+  const rotated = path.join(root, "rotated")
+  const routes = new URL("../../src/server/routes/settings/compute.ts", import.meta.url).href
+  const lifecycle = new URL("../../src/credentials/lifecycle.ts", import.meta.url).href
+
+  await Bun.write(
+    mutate,
+    [
+      `import { ComputeSettings } from ${JSON.stringify(routes)}`,
+      `const action = process.argv[2]`,
+      `if (action === "remove") {`,
+      `  await ComputeSettings.disconnectProvider("runpod")`,
+      `} else {`,
+      `  await ComputeSettings.connectProvider("runpod", process.argv[3])`,
+      `  if (action === "initial") await ComputeSettings.setProviderEnabled("runpod", true)`,
+      `}`,
+    ].join("\n"),
+  )
+  await Bun.write(
+    worker,
+    [
+      `import fs from "node:fs/promises"`,
+      `import { ComputeSettings } from ${JSON.stringify(routes)}`,
+      `import { CredentialLifecycle } from ${JSON.stringify(lifecycle)}`,
+      `await CredentialLifecycle.ensureFresh()`,
+      `const initial = await ComputeSettings.withProviderEnv("runpod", { PATH: "/usr/bin", LAMBDA_API_KEY: "must-not-leak" }, async (env) => ({ ...env }))`,
+      `if (initial.RUNPOD_API_KEY !== "rpa_initial" || initial.LAMBDA_API_KEY) throw new Error("initial provider boundary mismatch")`,
+      `let revoked = 0`,
+      `CredentialLifecycle.onRevoke(() => { revoked++ })`,
+      `CredentialLifecycle.watch(25)`,
+      `await fs.writeFile(${JSON.stringify(ready)}, "ready")`,
+      `for (let i = 0; i < 400 && revoked < 1; i++) await Bun.sleep(10)`,
+      `await CredentialLifecycle.ensureFresh()`,
+      `if (revoked < 1) throw new Error("rotation was not observed")`,
+      `const next = await ComputeSettings.withProviderEnv("runpod", { PATH: "/usr/bin", RUNPOD_API_KEY: "ambient-old" }, async (env) => ({ ...env }))`,
+      `if (next.RUNPOD_API_KEY !== "rpa_rotated") throw new Error("rotated provider credential was not loaded")`,
+      `await fs.writeFile(${JSON.stringify(rotated)}, "rotated")`,
+      `for (let i = 0; i < 400 && revoked < 2; i++) await Bun.sleep(10)`,
+      `await CredentialLifecycle.ensureFresh()`,
+      `if (revoked < 2) throw new Error("removal was not observed")`,
+      `let disabled = false`,
+      `try { await ComputeSettings.withProviderEnv("runpod", { PATH: "/usr/bin" }, async () => undefined) } catch (error) { disabled = String(error).includes("disabled") }`,
+      `if (!disabled) throw new Error("removed provider stayed invokable")`,
+      `CredentialLifecycle.stopWatching()`,
+    ].join("\n"),
+  )
+
+  const env = { ...process.env }
+  for (const name of VARS) delete env[name]
+  Object.assign(env, {
+    OPENSCIENCE_DATA_DIR: root,
+    OPENSCIENCE_CONFIG_DIR: path.join(root, "config"),
+    OPENSCIENCE_TEST_HOME: path.join(root, "home"),
+    XDG_STATE_HOME: path.join(root, "state"),
+    XDG_CACHE_HOME: path.join(root, "cache"),
+  })
+  const run = async (args: string[]) => {
+    const child = Bun.spawn([process.execPath, mutate, ...args], { env, stdout: "pipe", stderr: "pipe" })
+    const [exit, error] = await Promise.all([child.exited, new Response(child.stderr).text()])
+    if (exit !== 0) throw new Error(error)
+  }
+
+  try {
+    await run(["initial", "rpa_initial"])
+    const live = Bun.spawn([process.execPath, worker], { env, stdout: "pipe", stderr: "pipe" })
+    for (let i = 0; i < 400 && !(await Bun.file(ready).exists()); i++) await Bun.sleep(10)
+    expect(await Bun.file(ready).exists()).toBe(true)
+    await run(["rotate", "rpa_rotated"])
+    for (let i = 0; i < 400 && !(await Bun.file(rotated).exists()); i++) await Bun.sleep(10)
+    expect(await Bun.file(rotated).exists()).toBe(true)
+    await run(["remove"])
+    const [exit, error] = await Promise.all([live.exited, new Response(live.stderr).text()])
+    if (exit !== 0) throw new Error(error)
+    expect(exit).toBe(0)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
 })
 
 test(
