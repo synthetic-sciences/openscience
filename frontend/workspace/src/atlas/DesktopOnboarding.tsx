@@ -1,11 +1,19 @@
-import { For, Show, createMemo, createSignal, onMount, type ParentProps } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onMount, type ParentProps } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { TextField } from "@synsci/ui/text-field"
+import { IconFolder, IconPlus } from "@/atlas/shared/Icon"
+import { Wordmark } from "@/atlas/Wordmark"
 import { settingsApi } from "@/components/settings/api"
+import type { ProjectCreateInput } from "@/components/dialog-create-project"
 import { URLS } from "@/config/urls"
 import { usePlatform } from "@/context/platform"
+import type { Platform } from "@/context/platform"
 import { useServer } from "@/context/server"
+import type { ProjectRecord } from "@/pages/home-projects"
+import { projectHref } from "@/utils/project-route"
 import { canUseManaged, type ManagedWallet } from "./desktop-onboarding-access"
+import { AsciiSpinner } from "./shared/AsciiSpinner"
+import { projectPrefs } from "./store/projectPrefs"
 import "./DesktopOnboarding.css"
 
 type Account = {
@@ -16,6 +24,7 @@ type Account = {
 
 type AccountState = "loading" | "ready" | "error"
 type Configured = "ace" | "api"
+type Busy = "folder" | "blank" | "ace" | "api"
 
 const providers = [
   { id: "anthropic", label: "Anthropic" },
@@ -28,8 +37,69 @@ const formatBalance = (value: number | null | undefined) => {
   return `${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value)} balance`
 }
 
-export function DesktopOnboarding(props: ParentProps) {
-  const desktop = new URLSearchParams(window.location.search).get("desktop") === "1"
+export function folderProjectName(path: string) {
+  const normalized = path.trim().replace(/[\\/]+$/u, "")
+  const name = normalized.split(/[\\/]/u).filter(Boolean).at(-1)?.trim()
+  return name?.slice(0, 100) || "Research project"
+}
+
+export async function configureProviderKey(input: {
+  saveKey: () => Promise<unknown>
+  selectByok: () => Promise<unknown>
+}) {
+  // Persist the credential first. If selecting BYOK fails, a useful local key
+  // remains, while the app never enters BYOK with no credential to use.
+  await input.saveKey()
+  await input.selectByok()
+}
+
+export function createOnboardingProjectFlow(input: {
+  create: (project: ProjectCreateInput) => Promise<ProjectRecord>
+  markComplete: () => Promise<unknown>
+  activate: (project: ProjectRecord) => void
+}) {
+  let project: ProjectRecord | undefined
+  let creating: Promise<ProjectRecord> | undefined
+
+  return async (draft: ProjectCreateInput) => {
+    if (!project) {
+      creating ??= input.create(draft)
+      try {
+        project = await creating
+      } finally {
+        creating = undefined
+      }
+    }
+
+    await input.markComplete()
+    input.activate(project)
+    return project
+  }
+}
+
+export function DesktopOnboardingLoading() {
+  return (
+    <main class="desktop-onboarding" aria-label="Loading desktop setup">
+      <section class="desktop-onboarding__shell desktop-onboarding__shell--loading">
+        <Wordmark size="sm" />
+        <div class="desktop-onboarding__loading" role="status" aria-live="polite">
+          <AsciiSpinner label="Preparing your workspace…" color="var(--text-weak)" />
+        </div>
+      </section>
+    </main>
+  )
+}
+
+type ServerProjects = ReturnType<typeof useServer>["projects"]
+type OnboardingServer = {
+  url: string
+  projects: Pick<ServerProjects, "open" | "touch">
+}
+
+export function DesktopOnboardingController(
+  props: ParentProps & { server: OnboardingServer; platform: Platform; desktop?: boolean },
+) {
+  const desktop = props.desktop ?? new URLSearchParams(window.location.search).get("desktop") === "1"
   const [complete, setComplete] = createSignal(!desktop)
   const [ready, setReady] = createSignal(!desktop)
   const [provider, setProvider] = createSignal("anthropic")
@@ -38,10 +108,11 @@ export function DesktopOnboarding(props: ParentProps) {
   const [wallet, setWallet] = createSignal<ManagedWallet>()
   const [accountState, setAccountState] = createSignal<AccountState>("loading")
   const [configured, setConfigured] = createSignal<Configured>()
-  const [busy, setBusy] = createSignal<"workspace" | "ace" | "api">()
+  const [busy, setBusy] = createSignal<Busy>()
   const [error, setError] = createSignal<string>()
-  const server = useServer()
-  const platform = usePlatform()
+  let errorElement: HTMLParagraphElement | undefined
+  const server = props.server
+  const platform = props.platform
   const fetcher = () => platform.fetch ?? fetch
 
   const loadAccount = async () => {
@@ -67,19 +138,77 @@ export function DesktopOnboarding(props: ParentProps) {
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
       .finally(() => setReady(true))
     // Account and wallet data enrich optional model setup but never delay the
-    // primary route into the workspace.
+    // primary route into a useful workspace.
     void loadAccount()
+  })
+
+  createEffect(() => {
+    if (!error()) return
+    queueMicrotask(() => errorElement?.focus())
   })
 
   const identity = createMemo(
     () => account()?.user?.email ?? account()?.user?.name ?? "Synthetic Sciences account connected",
   )
 
-  const useAce = async () => {
+  const projectFlow = createOnboardingProjectFlow({
+    create: (input) =>
+      settingsApi<ProjectRecord>(server.url, fetcher(), "/global/project", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    markComplete: () =>
+      settingsApi(server.url, fetcher(), "/settings/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({ desktop_onboarding_version: 1 }),
+      }),
+    activate: (project) => {
+      projectPrefs.unhide(project.id, project.worktree)
+      server.projects.open(project.worktree)
+      server.projects.touch(project.id)
+      window.history.replaceState(window.history.state, "", projectHref(project))
+      setComplete(true)
+    },
+  })
+
+  const run = async (kind: Busy, action: () => Promise<unknown>) => {
     if (busy()) return
-    setBusy("ace")
+    setBusy(kind)
     setError(undefined)
-    await (async () => {
+    try {
+      await action()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const openFolder = async () => {
+    await run("folder", async () => {
+      if (!platform.openDirectoryPickerDialog) {
+        throw new Error("The system folder picker is unavailable. Start a blank project, then connect a folder later.")
+      }
+      const result = await platform.openDirectoryPickerDialog({
+        title: "Open a research folder",
+        multiple: false,
+        serverUrl: server.url,
+      })
+      const path = Array.isArray(result) ? result[0] : result
+      if (!path) return
+      await projectFlow({
+        name: folderProjectName(path),
+        sources: [{ path, access: "write" }],
+      })
+    })
+  }
+
+  const startBlank = async () => {
+    await run("blank", () => projectFlow({ name: "New research project", sources: [] }))
+  }
+
+  const useAce = async () => {
+    await run("ace", async () => {
       const known = accountState() === "ready" ? true : await loadAccount()
       if (!known) throw new Error("Couldn't verify your Ace access. Check the connection and retry.")
       if (!canUseManaged(wallet())) {
@@ -91,68 +220,81 @@ export function DesktopOnboarding(props: ParentProps) {
         body: JSON.stringify({ mode: "managed" }),
       })
       setConfigured("ace")
-    })().catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
-    setBusy(undefined)
+    })
   }
 
   const saveKey = async () => {
     const value = key().trim()
-    if (!value || busy()) return
-    setBusy("api")
-    setError(undefined)
-    await (async () => {
-      await settingsApi(server.url, fetcher(), "/account/billing-mode", {
-        method: "POST",
-        body: JSON.stringify({ mode: "byok" }),
-      })
-      await settingsApi(server.url, fetcher(), `/auth/${encodeURIComponent(provider())}`, {
-        method: "PUT",
-        body: JSON.stringify({ type: "api", key: value }),
+    if (!value) return
+    await run("api", async () => {
+      await configureProviderKey({
+        saveKey: () =>
+          settingsApi(server.url, fetcher(), `/auth/${encodeURIComponent(provider())}`, {
+            method: "PUT",
+            body: JSON.stringify({ type: "api", key: value }),
+          }),
+        selectByok: () =>
+          settingsApi(server.url, fetcher(), "/account/billing-mode", {
+            method: "POST",
+            body: JSON.stringify({ mode: "byok" }),
+          }),
       })
       setKey("")
       setConfigured("api")
-    })().catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
-    setBusy(undefined)
-  }
-
-  const openWorkspace = async () => {
-    if (busy()) return
-    setBusy("workspace")
-    setError(undefined)
-    await settingsApi(server.url, fetcher(), "/settings/preferences", {
-      method: "PATCH",
-      body: JSON.stringify({ desktop_onboarding_version: 1 }),
     })
-      .then(() => setComplete(true))
-      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
-    setBusy(undefined)
   }
 
   return (
-    <Show when={ready()} fallback={<main class="desktop-onboarding" aria-label="Loading desktop setup" />}>
+    <Show when={ready()} fallback={<DesktopOnboardingLoading />}>
       <Show
         when={complete()}
         fallback={
-          <main class="desktop-onboarding" aria-labelledby="desktop-onboarding-title">
+          <main class="desktop-onboarding" aria-labelledby="desktop-onboarding-title" aria-busy={Boolean(busy())}>
             <section class="desktop-onboarding__shell">
               <header class="desktop-onboarding__header">
-                <div class="desktop-onboarding__brand">
-                  <span class="desktop-onboarding__mark" aria-hidden="true">
-                    OS
-                  </span>
-                  <span>OpenScience</span>
-                </div>
+                <Wordmark size="sm" />
                 <span class="desktop-onboarding__account-state">Account connected</span>
               </header>
 
               <div class="desktop-onboarding__content">
                 <div class="desktop-onboarding__intro">
-                  <p>Ready to work</p>
-                  <h1 id="desktop-onboarding-title">Open your workspace</h1>
+                  <p>YOUR FIRST WORKSPACE</p>
+                  <h1 id="desktop-onboarding-title">Start with your research</h1>
                   <span>
-                    Your account is connected. Start now, or optionally set up model access below. You can change it
-                    anytime in Customize.
+                    Open an existing folder to keep files, sessions, and results together. You can change model and
+                    compute access anytime in Customize.
                   </span>
+                </div>
+
+                <div class="desktop-onboarding__workspace-actions" aria-label="Choose your first workspace">
+                  <button
+                    type="button"
+                    class="desktop-onboarding__workspace-action desktop-onboarding__workspace-action--primary"
+                    disabled={Boolean(busy())}
+                    onClick={() => void openFolder()}
+                  >
+                    <span class="desktop-onboarding__workspace-icon" aria-hidden="true">
+                      <IconFolder size={19} strokeWidth={1.55} />
+                    </span>
+                    <span>
+                      <strong>{busy() === "folder" ? "Opening folder…" : "Open a folder"}</strong>
+                      <small>Recommended · continue with an existing research directory</small>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    class="desktop-onboarding__workspace-action"
+                    disabled={Boolean(busy())}
+                    onClick={() => void startBlank()}
+                  >
+                    <span class="desktop-onboarding__workspace-icon" aria-hidden="true">
+                      <IconPlus size={18} strokeWidth={1.65} />
+                    </span>
+                    <span>
+                      <strong>{busy() === "blank" ? "Creating project…" : "Start a blank project"}</strong>
+                      <small>Create a clean workspace and connect folders later</small>
+                    </span>
+                  </button>
                 </div>
 
                 <details class="desktop-onboarding__models">
@@ -222,7 +364,11 @@ export function DesktopOnboarding(props: ParentProps) {
                       <div class="desktop-onboarding__credentials">
                         <label>
                           <span>Provider</span>
-                          <select value={provider()} onChange={(event) => setProvider(event.currentTarget.value)}>
+                          <select
+                            value={provider()}
+                            disabled={Boolean(busy())}
+                            onChange={(event) => setProvider(event.currentTarget.value)}
+                          >
                             <For each={providers}>{(item) => <option value={item.id}>{item.label}</option>}</For>
                           </select>
                         </label>
@@ -232,6 +378,7 @@ export function DesktopOnboarding(props: ParentProps) {
                             hideLabel
                             type="password"
                             value={key()}
+                            disabled={Boolean(busy())}
                             onChange={setKey}
                             placeholder="Paste provider key"
                             autocomplete="off"
@@ -261,16 +408,13 @@ export function DesktopOnboarding(props: ParentProps) {
               </div>
 
               <Show when={error()}>
-                <p class="desktop-onboarding__error" role="alert">
+                <p ref={errorElement} class="desktop-onboarding__error" role="alert" tabindex="-1">
                   {error()}
                 </p>
               </Show>
 
               <footer class="desktop-onboarding__footer">
-                <span>Model setup is not required to open the workspace.</span>
-                <Button variant="primary" size="small" disabled={Boolean(busy())} onClick={() => void openWorkspace()}>
-                  {busy() === "workspace" ? "Opening…" : "Open workspace"}
-                </Button>
+                <span>Model setup is optional. Your project is created before setup is marked complete.</span>
               </footer>
             </section>
           </main>
@@ -279,5 +423,15 @@ export function DesktopOnboarding(props: ParentProps) {
         {props.children}
       </Show>
     </Show>
+  )
+}
+
+export function DesktopOnboarding(props: ParentProps) {
+  const server = useServer()
+  const platform = usePlatform()
+  return (
+    <DesktopOnboardingController server={server} platform={platform}>
+      {props.children}
+    </DesktopOnboardingController>
   )
 }

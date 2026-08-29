@@ -19,27 +19,7 @@
 }
 
 .account-gate__brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   margin-bottom: 10px;
-  color: var(--color-text);
-  font-size: 13px;
-  font-weight: var(--font-weight-medium);
-  letter-spacing: -0.01em;
-}
-
-.account-gate__mark {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--color-border-strong) 72%, transparent);
-  border-radius: 8px;
-  background: var(--color-background-element);
-  color: var(--color-text-muted);
-  font-size: 9px;
-  letter-spacing: 0.04em;
 }
 
 .account-gate__eyebrow {
@@ -85,7 +65,7 @@
 }
 
 .account-gate__actions button {
-  min-height: 32px;
+  min-height: 40px;
 }
 
 .account-gate__actions--end {
@@ -172,5 +152,9 @@
     padding: 20px;
     border: 0;
     border-radius: 0;
+  }
+
+  .account-gate__actions button {
+    min-height: 44px;
   }
 }

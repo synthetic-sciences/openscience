@@ -7,6 +7,7 @@ import { useServer } from "@/context/server"
 import { fetchSetupSession } from "./setup-session"
 import { AsciiSpinner } from "./shared/AsciiSpinner"
 import { DesktopOnboarding } from "./DesktopOnboarding"
+import { Wordmark } from "./Wordmark"
 import "./AccountGate.css"
 
 type State = "checking" | "signed-in" | "signed-out" | "unavailable"
@@ -95,10 +96,7 @@ export function AccountGate(props: ParentProps) {
         <main class="account-gate" aria-labelledby="account-gate-title">
           <section class="account-gate__panel">
             <div class="account-gate__brand">
-              <span class="account-gate__mark" aria-hidden="true">
-                OS
-              </span>
-              <span>OpenScience</span>
+              <Wordmark size="sm" />
             </div>
             <Switch>
               <Match when={state() === "checking"}>
