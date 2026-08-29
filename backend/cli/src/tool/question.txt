@@ -13,4 +13,4 @@ Usage notes:
 - When `custom` is enabled (default), a "Type your own answer" option is added automatically; don't include "Other" or catch-all options
 - Answers are returned as arrays of labels; set `multiple: true` to allow selecting more than one
 - Planning and consequential questions must provide at least two concrete choices, put the recommended choice first, and add "(Recommended)" at the end of its label
-- Independent mode must choose the recommended safe path and continue for planning and consequential decisions; do not relabel a preference as missing authority
+- Independent mode must choose the recommended safe path and continue for planning and consequential decisions; do not relabel a preference as missing authority. If a planning or consequential call is emitted anyway, the runtime resolves its first recommended option without opening question UI and records that assumption in the tool trace.

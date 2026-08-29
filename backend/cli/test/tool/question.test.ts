@@ -93,24 +93,39 @@ describe("tool.question", () => {
     const tool = await QuestionTool.init()
     const balanced = { ...ctx, extra: { delegationSettings: { level: "standard", autonomy: "balanced" } } }
 
-    await expect(tool.execute({ reason: "planning", questions: [decision] }, balanced)).rejects.toThrow(
-      "Balanced mode does not pause for routine planning",
-    )
+    const routine = await tool.execute({ reason: "planning", questions: [decision] }, balanced)
     expect(askSpy).not.toHaveBeenCalled()
+    expect(routine.output).toContain(
+      'Assumption recorded: "Which implementation should we use?"="Safe path (Recommended)"',
+    )
+    expect(routine.metadata).toMatchObject({
+      autonomy: "balanced",
+      reason: "planning",
+      resolution: "recommended",
+      assumptions: [{ selection: "Safe path (Recommended)" }],
+    })
 
     askSpy.mockResolvedValueOnce([["Safe path (Recommended)"]])
-    await tool.execute({ reason: "consequential", questions: [decision] }, balanced)
+    const consequential = await tool.execute({ reason: "consequential", questions: [decision] }, balanced)
     expect(askSpy).toHaveBeenCalledTimes(1)
+    expect(consequential.metadata).toMatchObject({ resolution: "user" })
   })
 
   test("Independent makes the recommended call unless authority is genuinely missing", async () => {
     const tool = await QuestionTool.init()
     const independent = { ...ctx, extra: { delegationSettings: { level: "standard", autonomy: "autonomous" } } }
 
-    await expect(tool.execute({ reason: "consequential", questions: [decision] }, independent)).rejects.toThrow(
-      "Independent mode does not pause",
-    )
+    const choice = await tool.execute({ reason: "consequential", questions: [decision] }, independent)
     expect(askSpy).not.toHaveBeenCalled()
+    expect(choice.output).toContain(
+      'Assumption recorded: "Which implementation should we use?"="Safe path (Recommended)"',
+    )
+    expect(choice.metadata).toMatchObject({
+      autonomy: "autonomous",
+      reason: "consequential",
+      resolution: "recommended",
+      assumptions: [{ selection: "Safe path (Recommended)" }],
+    })
 
     askSpy.mockResolvedValueOnce([["Provide access"]])
     const result = await tool.execute(
@@ -127,7 +142,11 @@ describe("tool.question", () => {
       independent,
     )
     expect(askSpy).toHaveBeenCalledTimes(1)
-    expect(result.metadata).toMatchObject({ autonomy: "autonomous", reason: "missing_authority" })
+    expect(result.metadata).toMatchObject({
+      autonomy: "autonomous",
+      reason: "missing_authority",
+      resolution: "user",
+    })
   })
 
   test("planning and consequential choices fail closed without a recommendation", async () => {
