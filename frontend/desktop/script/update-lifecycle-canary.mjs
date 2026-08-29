@@ -290,7 +290,9 @@ async function main() {
     const previous = await extractArchive(previousArchive, path.join(workspace, "previous"))
     const previousTrust = await verify(previous, previousVersion, { trusted: true, current: previous })
     if (previousTrust?.team !== team) {
-      throw new Error(`Previous signed stable belongs to Apple team ${previousTrust?.team || "unknown"}, expected ${team}`)
+      throw new Error(
+        `Previous signed stable belongs to Apple team ${previousTrust?.team || "unknown"}, expected ${team}`,
+      )
     }
 
     await copyPrevious(previous, target)

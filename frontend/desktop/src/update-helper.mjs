@@ -584,10 +584,7 @@ async function waitForHealth(payload) {
             throw uncertainProcess(`OpenScience ${payload.version} exited before startup health committed`)
           }
         }
-        if (
-          process.env.NODE_ENV === "test" &&
-          process.env.OPENSCIENCE_UPDATE_TEST_HEALTH_FAILURE === "after-healthy"
-        ) {
+        if (process.env.NODE_ENV === "test" && process.env.OPENSCIENCE_UPDATE_TEST_HEALTH_FAILURE === "after-healthy") {
           await stopUnhealthy(payload, health.process_identity)
           for (let attempt = 0; attempt < 300; attempt++) {
             const service = await observedProcess(health.service_identity)
