@@ -13,8 +13,9 @@ function metadata(part: MessageV2.ToolPart): Record<string, unknown> {
 export function observableToolStatus(part: MessageV2.ToolPart): ObservableToolStatus {
   if (part.state.status !== "completed") return part.state.status
   const meta = metadata(part)
+  if (meta.outcome === "partial") return "partial"
   if (part.tool === "task") {
-    if (meta.outcome === "partial" || meta.stopReason === "max_steps") return "partial"
+    if (meta.stopReason === "max_steps") return "partial"
     if (meta.outcome === "timed_out" || meta.outcome === "error") return "error"
   }
   if (meta.ok === false) return "error"

@@ -27,6 +27,8 @@ import { SearchDedupe } from "./search-dedupe"
 import { SessionLoopState } from "./loop-state"
 import { InvalidCall } from "@/tool/invalid-call"
 import { ToolSelection } from "./tool-selection"
+import { ProjectAccess } from "@/project/access"
+import { Instance } from "@/project/instance"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -209,22 +211,17 @@ export namespace SessionProcessor {
     }
   }
 
-  /** A provider policy finish is a terminal response, but it is not a usable
-   * response when the provider supplied no text, file, or action. Preserve the
-   * provider's finish reason while giving the durable message (and therefore
-   * every client) an explicit error instead of completing an invisible turn. */
+  /** A provider policy finish is terminal, but tool side effects are not a
+   * textual handoff. Preserve the finish reason while giving every client a
+   * retryable error whenever the provider filters the final answer, including
+   * turns where one or more tools already ran. */
   export function emptyContentFilterError(finish: string | undefined, parts: MessageV2.Part[]) {
     if (finish !== "content-filter") return
-    const hasOutput = parts.some(
-      (part) =>
-        (part.type === "text" && !part.ignored && part.text.trim().length > 0) ||
-        part.type === "file" ||
-        part.type === "tool",
-    )
-    if (hasOutput) return
+    const hasText = parts.some((part) => part.type === "text" && !part.ignored && part.text.trim().length > 0)
+    if (hasText) return
     return new MessageV2.APIError({
       message:
-        "The provider blocked this response with its content filter and returned no content. Retry the request or choose another model.",
+        "The provider blocked this response with its content filter and returned no textual handoff. Retry the request or choose another model.",
       isRetryable: true,
       metadata: {
         action: "retry",
@@ -774,6 +771,7 @@ export namespace SessionProcessor {
                         permission: "doom_loop",
                         patterns: [value.toolName],
                         sessionID: input.assistantMessage.sessionID,
+                        mode: (await ProjectAccess.status(Instance.project)).mode,
                         metadata: {
                           tool: value.toolName,
                           input: value.input,

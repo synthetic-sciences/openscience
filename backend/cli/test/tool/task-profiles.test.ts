@@ -6,6 +6,7 @@ import {
   assertTaskContinuation,
   childPermissionRules,
   classifyTaskOutcome,
+  normalizeTaskAttemptInput,
   summarizeTurn,
   taskHandoff,
   taskText,
@@ -289,7 +290,7 @@ test("Task runtime has no per-turn dispatch quota or default deadline", async ()
 })
 
 test("Task outcomes distinguish bounded partial work from completion and failure", () => {
-  expect(classifyTaskOutcome({ finish: "stop" })).toEqual({
+  expect(classifyTaskOutcome({ finish: "stop", hasText: true })).toEqual({
     outcome: "completed",
     stopReason: "completed",
   })
@@ -309,8 +310,35 @@ test("Task outcomes distinguish bounded partial work from completion and failure
     outcome: "partial",
     stopReason: "tool_failures",
   })
-  expect(classifyTaskOutcome({ finish: "stop", toolCalls: 5, failedToolCalls: 4 })).toEqual({
+  expect(classifyTaskOutcome({ finish: "stop", hasText: true, toolCalls: 5, failedToolCalls: 4 })).toEqual({
     outcome: "completed",
     stopReason: "completed",
   })
+  expect(classifyTaskOutcome({ finish: "stop" })).toEqual({
+    outcome: "error",
+    stopReason: "empty_handoff",
+  })
+  expect(classifyTaskOutcome({ finish: "stop", toolCalls: 1, partialToolCalls: 1 })).toEqual({
+    outcome: "partial",
+    stopReason: "tool_partial",
+  })
+})
+
+test("Task preserves byte-exact long assignments and rejects internal compaction markers", () => {
+  const prompt = `Collect these exact identifiers and destinations without guessing:\n${"🧬ßλ".repeat(1_000)}`
+  const normalized = normalizeTaskAttemptInput(
+    { description: "Collect exact papers", prompt, subagent_type: "explore" },
+    "ses_parent",
+  )
+  expect(normalized.prompt).toBe(prompt)
+  expect(() =>
+    normalizeTaskAttemptInput(
+      {
+        description: "Collect exact papers",
+        prompt: `${prompt.slice(0, 200)}…[+1712 chars]`,
+        subagent_type: "explore",
+      },
+      "ses_parent",
+    ),
+  ).toThrow("No child was started")
 })

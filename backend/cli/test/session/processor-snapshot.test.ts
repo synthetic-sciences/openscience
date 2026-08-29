@@ -27,13 +27,13 @@ describe("session processor snapshot routing", () => {
     })
   })
 
-  test("turns only an empty content-filter finish into a retryable provider error", () => {
+  test("turns content filtering without a textual handoff into a retryable provider error", () => {
     const error = SessionProcessor.emptyContentFilterError("content-filter", [])
     expect(error && MessageV2.fromError(error, { providerID: "openrouter" })).toEqual({
       name: "APIError",
       data: {
         message:
-          "The provider blocked this response with its content filter and returned no content. Retry the request or choose another model.",
+          "The provider blocked this response with its content filter and returned no textual handoff. Retry the request or choose another model.",
         isRetryable: true,
         metadata: { action: "retry", provider_finish_reason: "content-filter" },
       },
@@ -50,6 +50,29 @@ describe("session processor snapshot routing", () => {
         },
       ]),
     ).toBeUndefined()
+
+    const filteredAfterTool = SessionProcessor.emptyContentFilterError("content-filter", [
+      {
+        id: "part_tool",
+        sessionID: "session",
+        messageID: "message",
+        type: "tool",
+        tool: "research_search",
+        callID: "call_search",
+        state: {
+          status: "completed",
+          input: { query: "latest protein folding benchmark" },
+          output: '{"status":"partial","type":"search_unavailable"}',
+          title: "Managed search pending",
+          metadata: { outcome: "partial", stopReason: "operation_pending" },
+          time: { start: 1, end: 2 },
+        },
+      },
+    ])
+    expect(filteredAfterTool && MessageV2.fromError(filteredAfterTool, { providerID: "openrouter" })).toMatchObject({
+      name: "APIError",
+      data: { isRetryable: true, metadata: { provider_finish_reason: "content-filter" } },
+    })
     expect(SessionProcessor.emptyContentFilterError("stop", [])).toBeUndefined()
   })
 })

@@ -96,6 +96,22 @@ test("exposes bounded Task checkpoints as partial without mutating retained outp
   expect(task).toEqual(before)
 })
 
+test("exposes unsettled managed search as partial instead of transport-completed", () => {
+  const search = completed(
+    "research_search",
+    {
+      outcome: "partial",
+      stopReason: "operation_pending",
+      operationId: "call_search",
+      creditState: "pending",
+    },
+    "Managed search pending",
+  )
+
+  expect(observableToolStatus(search)).toBe("partial")
+  expect(observableToolFailure(search)).toBeUndefined()
+})
+
 test("counts terminal Task failures while keeping partial checkpoints non-failing", () => {
   const timedOut = completed("task", { outcome: "timed_out" }, "Collect literature")
   const failed = completed("task", { outcome: "error" }, "Analyze cohort")

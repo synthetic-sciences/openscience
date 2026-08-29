@@ -392,7 +392,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
 
   // Token estimate for one message, mirroring what toModelMessages actually SHIPS so
   // selectTail sizes the verbatim tail against reality: a compacted tool call counts its
-  // 1-line summary + truncated args (not the cleared body), images are the flat estimate,
+  // 1-line summary + reduced args (Task assignments remain exact), images are the flat estimate,
   // and NON-image file/attachment payloads (a PDF's base64) are counted by size instead of
   // silently 0 — a huge PDF turn must not look tiny to the tail budget. (Superseded/dedupe
   // is cross-message state selectTail doesn't have; the tail is recent, where a part is the
@@ -417,7 +417,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       if (part.type === "tool") {
         const compacted = part.state.status === "completed" && !!part.state.time.compacted
         total += Token.estimate(
-          JSON.stringify((compacted ? MessageV2.truncateArgs(part.state.input) : part.state.input) ?? {}),
+          JSON.stringify(MessageV2.compactToolInput(part.tool, part.state.input, compacted) ?? {}),
         )
         if (part.state.status === "completed") {
           total += Token.estimate(compacted ? MessageV2.toolSummary(part.tool, part.state) : part.state.output)

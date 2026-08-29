@@ -5,6 +5,7 @@ import { FirecrawlSearch } from "@/research/firecrawl"
 import { ResearchRouting } from "@/research/routing"
 import { resolveCredentialFields } from "@/server/routes/settings/credentials"
 import { SearchDedupe } from "@/session/search-dedupe"
+import type { MessageV2 } from "@/session/message-v2"
 import { Tool } from "./tool"
 
 const COMMUNITY_URL = "https://mcp.exa.ai/mcp"
@@ -46,7 +47,17 @@ export const ResearchSearchParameters = z
     { message: "published_after must not be later than published_before" },
   )
 
-type Params = z.infer<typeof ResearchSearchParameters>
+export type Params = z.infer<typeof ResearchSearchParameters>
+
+export type ResearchSearchMetadata = {
+  searchSource: Params["source"]
+  searchMode: Params["mode"]
+  resultCount?: number
+  creditState: "byok" | "community" | "free" | "funded" | "pending" | "unavailable"
+  outcome: "completed" | "partial"
+  stopReason?: "operation_pending" | "search_unavailable"
+  operationId?: string
+}
 
 type CommunityResponse = {
   result?: { content?: Array<{ type?: string; text?: string }> }
@@ -68,7 +79,7 @@ function completed(value: unknown) {
 
 function unavailable(message: string, retryable = false, warnings: string[] = [], operationID?: string) {
   return {
-    status: "completed" as const,
+    status: "partial" as const,
     type: "search_unavailable" as const,
     message,
     retryable,
@@ -78,13 +89,51 @@ function unavailable(message: string, retryable = false, warnings: string[] = []
   }
 }
 
-function metadata(input: Params, state: string, count?: number) {
+function metadata(
+  input: Params,
+  state: ResearchSearchMetadata["creditState"],
+  count?: number,
+  operationID?: string,
+): ResearchSearchMetadata {
+  const partial = state === "pending" || state === "unavailable"
   return {
     searchSource: input.source,
     searchMode: input.mode,
     ...(count === undefined ? {} : { resultCount: count }),
     creditState: state,
+    outcome: partial ? "partial" : "completed",
+    ...(state === "pending" ? { stopReason: "operation_pending" as const } : {}),
+    ...(state === "unavailable" ? { stopReason: "search_unavailable" as const } : {}),
+    ...(operationID ? { operationId: operationID } : {}),
   }
+}
+
+/** Return the last unresolved operation for this exact normalized search. The
+ * transcript is the durable ledger, so a later tool call reconciles the same
+ * idempotency key instead of starting another paid provider request. */
+export function pendingManagedOperation(messages: MessageV2.WithParts[], input: Params) {
+  const expected = SearchDedupe.key("research_search", input)
+  if (!expected) return
+  const part = messages
+    .flatMap((message) => message.parts)
+    .filter(
+      (part): part is MessageV2.ToolPart & { state: MessageV2.ToolStateCompleted } =>
+        part.type === "tool" &&
+        (part.tool === "research_search" || part.tool === "websearch") &&
+        part.state.status === "completed" &&
+        SearchDedupe.key(part.tool, part.state.input) === expected,
+    )
+    .at(-1)
+  if (!part) return
+  const output = (() => {
+    try {
+      return record(JSON.parse(part.state.output))
+    } catch {
+      return undefined
+    }
+  })()
+  const operation = output?.type === "search_unavailable" && output.retryable === true ? output.operation_id : undefined
+  return typeof operation === "string" ? operation : undefined
 }
 
 function warnings(value: unknown) {
@@ -225,7 +274,7 @@ async function fallback(input: Params, ctx: Tool.Context, warning: string) {
   return community(input, ctx, [warning])
 }
 
-export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, Record<string, unknown>>(
+export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, ResearchSearchMetadata>(
   "research_search",
   async () => {
     return {
@@ -266,7 +315,7 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
         // The managed service is the pricing and settlement authority for Ace
         // search. It can choose Firecrawl without exposing that provider key to
         // this process. Replays use one durable operation key.
-        const operationID = ctx.callID || randomUUID()
+        const operationID = pendingManagedOperation(ctx.messages, input) ?? ctx.callID ?? randomUUID()
         const response = await OpenScience.dispatchResearchSearch(input as ResearchSearchInput, operationID, ctx.abort)
         if (!response) {
           return {
@@ -279,7 +328,7 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
               ),
             ),
             title: "Managed search pending",
-            metadata: metadata(input, "pending"),
+            metadata: metadata(input, "pending", undefined, operationID),
           }
         }
         const failure = detail(response.body)
@@ -318,7 +367,7 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
               ),
             ),
             title: "Managed search pending",
-            metadata: metadata(input, "pending"),
+            metadata: metadata(input, "pending", undefined, operationID),
           }
         }
         if (response.status === 429) {

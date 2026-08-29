@@ -67,6 +67,11 @@ const parameters = z.object({
  * an interrupted, already-completed child can permanently poison its parent. */
 export function normalizeTaskAttemptInput(input: unknown, parentSessionID: string) {
   const parsed = parameters.parse(input)
+  if (MessageV2.hasArgTruncationMarker(parsed.prompt)) {
+    throw new Error(
+      "Task assignment contains OpenScience's internal argument-compaction marker (…[+N chars]). No child was started. Reconstruct and submit the complete assignment instead of executing truncated text.",
+    )
+  }
   return {
     ...parsed,
     session_id: taskContinuationID(parsed.session_id, parentSessionID),
@@ -221,7 +226,7 @@ export function taskText(messages: MessageV2.WithParts[], previous: Set<string>)
 
 export type TaskOutcome = {
   outcome: "completed" | "partial" | "error"
-  stopReason: "completed" | "max_steps" | "tool_failures" | "provider_error"
+  stopReason: "completed" | "max_steps" | "tool_failures" | "tool_partial" | "provider_error" | "empty_handoff"
 }
 
 /**
@@ -250,11 +255,18 @@ export function classifyTaskOutcome(input: {
   hasText?: boolean
   toolCalls?: number
   failedToolCalls?: number
+  partialToolCalls?: number
 }): TaskOutcome {
-  if (input.error) return { outcome: input.hasText ? "partial" : "error", stopReason: "provider_error" }
+  if (input.error || input.finish === "content-filter") {
+    return { outcome: input.hasText ? "partial" : "error", stopReason: "provider_error" }
+  }
   if (input.finish === "max-steps") return { outcome: "partial", stopReason: "max_steps" }
+  if (input.partialToolCalls) return { outcome: "partial", stopReason: "tool_partial" }
   if (input.toolCalls && input.failedToolCalls === input.toolCalls) {
     return { outcome: "partial", stopReason: "tool_failures" }
+  }
+  if (!input.hasText) {
+    return { outcome: input.toolCalls ? "partial" : "error", stopReason: "empty_handoff" }
   }
   return { outcome: "completed", stopReason: "completed" }
 }
@@ -565,20 +577,20 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         const text = taskText(complete, previous)
         const child = execution.result?.info.role === "assistant" ? execution.result.info : terminal?.info
         const failedToolCalls = summary.filter((part) => part.state.status === "error").length
+        const partialToolCalls = summary.filter((part) => part.state.status === "partial").length
         const taskOutcome = classifyTaskOutcome({
           finish: child?.finish,
           error: execution.error ?? child?.error,
           hasText: text.trim().length > 0,
           toolCalls: summary.length,
           failedToolCalls,
+          partialToolCalls,
         })
         const raw =
           text ||
           (taskOutcome.outcome === "error"
             ? `The child failed before emitting textual findings after ${summary.length} tool calls in this turn.`
-            : taskOutcome.outcome === "completed"
-              ? "The child completed without emitting textual findings."
-              : `The child stopped before emitting textual findings after ${summary.length} tool calls in this turn.`)
+            : `The child stopped before emitting textual findings after ${summary.length} tool calls in this turn.`)
         const handoff = taskHandoff(raw)
         const activeMs = timing.activeMs
         const output = [
@@ -586,9 +598,13 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             ? ["[Child reached its bounded step limit; partial result follows.]"]
             : taskOutcome.stopReason === "tool_failures"
               ? ["[Every child tool call failed; treat the following as a partial, blocked result.]"]
-              : taskOutcome.stopReason === "provider_error"
-                ? ["[Child stopped on a provider error; its usable partial result follows.]"]
-                : []),
+              : taskOutcome.stopReason === "tool_partial"
+                ? ["[One or more child tool operations remain partial or unsettled; treat this as a partial result.]"]
+                : taskOutcome.stopReason === "provider_error"
+                  ? ["[Child stopped on a provider error; its usable partial result follows.]"]
+                  : taskOutcome.stopReason === "empty_handoff"
+                    ? ["[Child ended without a textual handoff; treat this result as incomplete.]"]
+                    : []),
           handoff.text,
         ]
           .filter(Boolean)
@@ -603,6 +619,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             durationMs: Date.now() - started,
             toolCalls: summary.length,
             failedToolCalls,
+            partialToolCalls,
             usage,
             effort,
             delegation: settings,

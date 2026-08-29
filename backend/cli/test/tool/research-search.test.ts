@@ -3,7 +3,10 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { Global } from "../../src/global"
 import { OpenScience } from "../../src/openscience"
+import type { MessageV2 } from "../../src/session/message-v2"
+import { SessionProcessor } from "../../src/session/processor"
 import { ResearchSearchTool } from "../../src/tool/research-search"
+import { classifyTaskOutcome, normalizeTaskAttemptInput, summarizeTurn } from "../../src/tool/task"
 
 const context = {
   sessionID: "ses_search",
@@ -52,12 +55,155 @@ describe("research_search", () => {
     const tool = await ResearchSearchTool.init({ model: { providerID: "openai", modelID: "gpt-test" } })
     const result = await tool.execute(tool.parameters.parse({ query: "current protein folding benchmarks" }), context)
     expect(JSON.parse(result.output)).toMatchObject({
+      status: "partial",
       type: "search_unavailable",
       retryable: true,
       operation_id: "call_search",
     })
+    expect(result.metadata).toMatchObject({
+      creditState: "pending",
+      outcome: "partial",
+      stopReason: "operation_pending",
+      operationId: "call_search",
+    })
     expect(dispatch).toHaveBeenCalledTimes(1)
     expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  test("reconciles an unresolved identical managed search with its durable operation id", async () => {
+    managedAce()
+    const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue(null)
+    restores.push(dispatch)
+    const tool = await ResearchSearchTool.init({ model: { providerID: "openai", modelID: "gpt-test" } })
+    const input = tool.parameters.parse({ query: "current protein folding benchmarks", mode: "fast" })
+    const first = await tool.execute(input, context)
+    const prior = {
+      info: {
+        id: "msg_prior",
+        sessionID: context.sessionID,
+        role: "assistant",
+        parentID: "msg_user",
+        modelID: "gpt-test",
+        providerID: "openai",
+        agent: "research",
+        mode: "",
+        path: { cwd: "/tmp", root: "/tmp" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1, completed: 2 },
+      },
+      parts: [
+        {
+          id: "part_prior",
+          sessionID: context.sessionID,
+          messageID: "msg_prior",
+          type: "tool",
+          callID: "call_search",
+          tool: "research_search",
+          state: {
+            status: "completed",
+            input,
+            output: first.output,
+            title: first.title,
+            metadata: first.metadata,
+            time: { start: 1, end: 2 },
+          },
+        },
+      ],
+    } as MessageV2.WithParts
+
+    const second = await tool.execute(input, {
+      ...context,
+      callID: "call_search_retry",
+      messages: [prior],
+    })
+
+    expect(dispatch.mock.calls.map((call) => call[1])).toEqual(["call_search", "call_search"])
+    expect(JSON.parse(second.output)).toMatchObject({ operation_id: "call_search", status: "partial" })
+    expect(second.metadata).toMatchObject({ operationId: "call_search", outcome: "partial" })
+
+    const terminal = structuredClone(prior)
+    terminal.info.id = "msg_terminal"
+    terminal.parts[0]!.messageID = "msg_terminal"
+    if (terminal.parts[0]!.type !== "tool" || terminal.parts[0]!.state.status !== "completed") {
+      throw new Error("Expected terminal search fixture")
+    }
+    terminal.parts[0]!.state.output = JSON.stringify({
+      status: "partial",
+      type: "search_unavailable",
+      retryable: false,
+    })
+    await tool.execute(input, {
+      ...context,
+      callID: "call_search_fresh",
+      messages: [prior, terminal],
+    })
+    expect(dispatch.mock.calls.map((call) => call[1])).toEqual(["call_search", "call_search", "call_search_fresh"])
+  })
+
+  test("long assignment through pending search and tool-only content filter cannot settle Task as Completed", async () => {
+    managedAce()
+    const dispatch = spyOn(OpenScience, "dispatchResearchSearch").mockResolvedValue(null)
+    restores.push(dispatch)
+    const prompt = `Collect these exact identifiers and destinations without guessing:\n${"🧬ßλ".repeat(1_000)}`
+    const assignment = normalizeTaskAttemptInput(
+      { description: "Collect exact papers", prompt, subagent_type: "explore" },
+      "ses_parent",
+    )
+    expect(assignment.prompt).toBe(prompt)
+
+    const tool = await ResearchSearchTool.init({ model: { providerID: "openai", modelID: "gpt-test" } })
+    const input = tool.parameters.parse({ query: "six exact paper identifiers" })
+    const result = await tool.execute(input, context)
+    const search = {
+      id: "part_search",
+      sessionID: "ses_child",
+      messageID: "msg_child",
+      type: "tool",
+      callID: "call_search",
+      tool: "research_search",
+      state: {
+        status: "completed",
+        input,
+        output: result.output,
+        title: result.title,
+        metadata: result.metadata,
+        time: { start: 1, end: 2 },
+      },
+    } as MessageV2.ToolPart
+    const turn = {
+      info: {
+        id: "msg_child",
+        sessionID: "ses_child",
+        role: "assistant",
+        parentID: "msg_user",
+        modelID: "model",
+        providerID: "provider",
+        agent: "research",
+        mode: "",
+        path: { cwd: "/tmp", root: "/tmp" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: "content-filter",
+        time: { created: 0, completed: 2 },
+      },
+      parts: [search],
+    } as MessageV2.WithParts
+    const { summary } = summarizeTurn([turn], new Set())
+    const filtered = SessionProcessor.emptyContentFilterError("content-filter", turn.parts)
+    const outcome = classifyTaskOutcome({
+      finish: "content-filter",
+      error: filtered,
+      hasText: false,
+      toolCalls: summary.length,
+      failedToolCalls: summary.filter((part) => part.state.status === "error").length,
+      partialToolCalls: summary.filter((part) => part.state.status === "partial").length,
+    })
+
+    expect(JSON.parse(result.output)).toMatchObject({ status: "partial", operation_id: "call_search" })
+    expect(summary[0]?.state.status).toBe("partial")
+    expect(filtered).toBeDefined()
+    expect(outcome).toEqual({ outcome: "error", stopReason: "provider_error" })
   })
 
   test("preserves the existing community search rule for the Free community route", async () => {
@@ -228,10 +374,12 @@ describe("research_search", () => {
     const output = JSON.parse(result.output)
 
     expect(output).toMatchObject({
+      status: "partial",
       type: "search_unavailable",
       retryable: true,
       operation_id: "call_search",
     })
+    expect(result.metadata).toMatchObject({ outcome: "partial", stopReason: "operation_pending" })
     if (status === 503) expect(output.warnings).toContain("Upstream search provider did not respond.")
     expect(fetcher).not.toHaveBeenCalled()
   })
@@ -284,7 +432,11 @@ describe("research_search", () => {
       type: "search_unavailable",
       message: "Reconnect or correct the request.",
     })
-    expect(result.metadata).toMatchObject({ creditState: "unavailable" })
+    expect(result.metadata).toMatchObject({
+      creditState: "unavailable",
+      outcome: "partial",
+      stopReason: "search_unavailable",
+    })
     expect(fetcher).not.toHaveBeenCalled()
   })
 

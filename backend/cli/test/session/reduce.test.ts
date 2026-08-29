@@ -187,6 +187,11 @@ describe("session.message-v2.truncateArgs (P2.3)", () => {
     const out = MessageV2.truncateArgs({ filePath: "/a", count: 5, deep: { a: 1 } }, 200)
     expect(out).toEqual({ filePath: "/a", count: 5, deep: { a: 1 } })
   })
+
+  test("recognizes only the internal argument-compaction marker", () => {
+    expect(MessageV2.hasArgTruncationMarker("assignment…[+1712 chars]")).toBe(true)
+    expect(MessageV2.hasArgTruncationMarker("ordinary [1712 chars] assignment")).toBe(false)
+  })
 })
 
 describe("session.message-v2.toModelMessages — compacted tool args (P2.3)", () => {
@@ -208,6 +213,21 @@ describe("session.message-v2.toModelMessages — compacted tool args (P2.3)", ()
     ]
     const s = JSON.stringify(MessageV2.toModelMessages(input, model))
     expect(s).toContain("x".repeat(1000))
+  })
+
+  test("keeps a compacted Task assignment byte-exact", () => {
+    const prompt = `Collect six exact identifiers:\n${"🧬ßλ".repeat(400)}`
+    const state = completedTool("task", { description: "Collect papers", prompt, subagent_type: "explore" }, "done", {
+      compacted: true,
+      metadata: { handoff: "## Outcome\nPartial" },
+    })
+    const input: MessageV2.WithParts[] = [
+      { info: assistantInfo("a1", "u1"), parts: [toolPart("a1", "t1", "task", state)] },
+    ]
+    const rendered = JSON.stringify(MessageV2.toModelMessages(input, model))
+
+    expect(rendered).toContain(JSON.stringify(prompt).slice(1, -1))
+    expect(rendered).not.toContain("…[+")
   })
 
   test("truncates oversized args of a SUPERSEDED (duplicate) tool call — its output is a stub, so the args are dead weight", () => {
