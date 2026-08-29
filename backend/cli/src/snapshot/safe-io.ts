@@ -21,6 +21,7 @@ export namespace SnapshotSafeIO {
 
   export type Hooks = {
     afterParentVerify?: (operation: Operation, target: string) => void | Promise<void>
+    writeChunkLimit?: (offset: number, remaining: number) => number
   }
 
   type Directory = {
@@ -244,19 +245,23 @@ export namespace SnapshotSafeIO {
     })
   }
 
-  function write(fd: number, bytes: Uint8Array, offset: number) {
+  function write(fd: number, bytes: Uint8Array, offset: number, requested?: number) {
+    const remaining = bytes.byteLength - offset
+    const length = requested === undefined ? remaining : Math.min(remaining, requested)
+    if (!Number.isSafeInteger(length) || length <= 0) throw new Error("Invalid handle-relative snapshot write length")
     return new Promise<number>((resolve, reject) => {
-      nodefs.write(fd, bytes, offset, bytes.byteLength - offset, null, (error, count) =>
-        error ? reject(error) : resolve(count),
-      )
+      nodefs.write(fd, bytes, offset, length, null, (error, count) => (error ? reject(error) : resolve(count)))
     })
   }
 
-  async function writeAll(fd: number, bytes: Uint8Array) {
+  async function writeAll(fd: number, bytes: Uint8Array, hooks?: Hooks) {
     const offset = { value: 0 }
     while (offset.value < bytes.byteLength) {
-      const count = await write(fd, bytes, offset.value)
+      const remaining = bytes.byteLength - offset.value
+      const requested = hooks?.writeChunkLimit?.(offset.value, remaining)
+      const count = await write(fd, bytes, offset.value, requested)
       if (!count) throw new Error("Handle-relative snapshot write made no progress")
+      if (count > remaining) throw new Error("Handle-relative snapshot write exceeded the remaining buffer")
       offset.value += count
     }
   }
@@ -377,10 +382,14 @@ export namespace SnapshotSafeIO {
       if (opened.errno === ENOENT) return
       throw failure("openat", path.join(parent.expected, child), opened.errno)
     }
+    const before = await stat(opened.value).catch(async (error) => {
+      await close(opened.value).catch(() => undefined)
+      throw error
+    })
     const directory: Directory = {
       fd: opened.value,
       expected: path.join(parent.expected, child),
-      before: await stat(opened.value),
+      before,
       close: () => close(opened.value),
     }
     try {
@@ -473,7 +482,7 @@ export namespace SnapshotSafeIO {
     }
   }
 
-  async function stage(parent: Directory, entry: Entry) {
+  async function stage(parent: Directory, entry: Entry, hooks?: Hooks) {
     const staged = tomb("snapshot-stage")
     if (entry.kind === "symlink") {
       const created = attempt(() => native().symlinkat(linkTarget(entry.target), parent.fd, name(staged)))
@@ -489,18 +498,20 @@ export namespace SnapshotSafeIO {
       ),
     )
     if (!opened.ok) throw failure("openat", path.join(parent.expected, staged), opened.errno)
+    const state = { closed: false }
     try {
-      await writeAll(opened.value, entry.content)
+      await writeAll(opened.value, entry.content, hooks)
       await chmod(opened.value, entry.mode)
       await sync(opened.value)
+      await close(opened.value)
+      state.closed = true
     } catch (error) {
+      if (!state.closed) await close(opened.value).catch(() => undefined)
       const cleanup = attempt(() => native().unlinkat(parent.fd, name(staged), 0))
       if (!cleanup.ok && cleanup.errno !== ENOENT) {
         throw new AggregateError([error, failure("unlinkat", staged, cleanup.errno)], "Snapshot stage cleanup failed")
       }
       throw error
-    } finally {
-      await close(opened.value)
     }
     return staged
   }
@@ -532,7 +543,7 @@ export namespace SnapshotSafeIO {
       await verify(destination)
       await hooks?.afterParentVerify?.("restore", parsed.path)
       await verify(destination)
-      state.staged = await stage(destination, entry)
+      state.staged = await stage(destination, entry, hooks)
       await verify(destination)
 
       const candidate = tomb("snapshot-backup")

@@ -17,6 +17,7 @@ export namespace Snapshot {
 
   type TestHooks = {
     afterMutationParentVerify?: (operation: "remove" | "restore", target: string) => void | Promise<void>
+    writeChunkLimit?: (offset: number, remaining: number) => number
   }
 
   const hooks = { value: undefined as TestHooks | undefined }
@@ -317,14 +318,20 @@ export namespace Snapshot {
             root,
             relative,
             { kind: "symlink", target: new TextDecoder().decode(entry.content) },
-            { afterParentVerify: hooks.value?.afterMutationParentVerify },
+            {
+              afterParentVerify: hooks.value?.afterMutationParentVerify,
+              writeChunkLimit: hooks.value?.writeChunkLimit,
+            },
           )
         } else {
           await SnapshotSafeIO.restore(
             root,
             relative,
             { kind: "file", content: entry.content, mode: entry.mode === "100755" ? 0o755 : 0o644 },
-            { afterParentVerify: hooks.value?.afterMutationParentVerify },
+            {
+              afterParentVerify: hooks.value?.afterMutationParentVerify,
+              writeChunkLimit: hooks.value?.writeChunkLimit,
+            },
           )
         }
         restored.push(relative)

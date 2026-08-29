@@ -775,6 +775,37 @@ test("revert fails closed when a verified restore parent is swapped for an exter
   }
 })
 
+test("revert writes every byte when the host accepts only short writes", async () => {
+  if (process.platform === "win32") return
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const file = path.join(tmp.path, "partial-write.bin")
+      const original = Uint8Array.from({ length: 1025 }, (_, index) => index % 251)
+      await Bun.write(file, original)
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+      await Bun.write(file, new Uint8Array([0xff]))
+      const patch = await Snapshot.patch(before!)
+      const writes = { value: 0 }
+
+      using short = Snapshot.testing({
+        writeChunkLimit: (_offset, remaining) => {
+          writes.value++
+          return Math.min(3, remaining)
+        },
+      })
+      const result = await Snapshot.revert([patch])
+      const restored = Buffer.from(await Bun.file(file).arrayBuffer())
+
+      expect(result.status).toBe("applied")
+      expect(writes.value).toBeGreaterThan(300)
+      expect(restored.equals(original)).toBe(true)
+    },
+  })
+})
+
 test("diff reports worktree-only/shared edits and ignores primary-only", async () => {
   await using tmp = await bootstrap()
   const worktreePath = `${tmp.path}-worktree`
