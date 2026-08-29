@@ -104,7 +104,26 @@ export const AccountRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const state = await OpenScience.getReconciledFundingState()
+        const state = await OpenScience.getReconciledFundingState().catch((error) => {
+          if (!(error instanceof FundingContextError)) throw error
+          return "stale-scope" as const
+        })
+        if (state === "stale-scope") {
+          // A stale or mismatched local workspace scope must not take down the
+          // whole account summary; the settings panel needs the session row so
+          // the user can sign in again and repair the scope.
+          return c.json({
+            session: true,
+            balance_usd: null,
+            billing_mode: null,
+            funding_context: {
+              type: "personal" as const,
+              available: false,
+              locked: false,
+              organizations: [],
+            },
+          })
+        }
         if (!state) {
           return c.json({
             session: false,

@@ -140,7 +140,7 @@ export function AccountGate(props: ParentProps) {
                     <TextField
                       type="password"
                       hideLabel
-                      placeholder="thk_…"
+                      placeholder="thk_… or osk_…"
                       value={key()}
                       disabled={busy()}
                       onChange={setKey}

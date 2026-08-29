@@ -1636,16 +1636,27 @@ export namespace OpenScience {
     // Modern organization-scoped keys report their immutable scope here.
     // Keep this best-effort so older servers without /api/v1/auth/status and
     // legacy personal keys continue to connect exactly as before.
-    const status = await atlasFetch(
-      `${API_BASE}/api/v1/auth/status`,
-      {
-        headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
-      },
-      1_500,
-    )
-      .then(async (response) => (response.ok ? ((await response.json()) as AuthStatusResponse) : undefined))
-      .catch(() => undefined)
+    const probeStatus = (timeout: number) =>
+      atlasFetch(
+        `${API_BASE}/api/v1/auth/status`,
+        {
+          headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+        },
+        timeout,
+      )
+        .then(async (response) => (response.ok ? ((await response.json()) as AuthStatusResponse) : undefined))
+        .catch(() => undefined)
+    const status =
+      (await probeStatus(1_500)) ??
+      // An organization workspace key cannot connect without its immutable
+      // scope, so give the status endpoint a real chance before giving up.
+      (isOrganizationWorkspaceKey(key) ? await probeStatus(10_000) : undefined)
     const pinned = loginOrganizationID(status?.api_key?.organization_id)
+    if (isOrganizationWorkspaceKey(key) && !pinned) {
+      throw new Error(
+        "Couldn't verify this organization key's workspace. Check your connection and try again.",
+      )
+    }
     const selected = (() => {
       const context = status?.funding_context
       if (context?.type !== "organization") return undefined
