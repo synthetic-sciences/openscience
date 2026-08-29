@@ -44,7 +44,9 @@ async function waitEntry(previous: Set<string>) {
 }
 
 function passingBootstrap(python: string) {
-  return { argv: [python, "-I", "-c", "pass"], timeout: 1_000 }
+  // The full CI suite can delay governed child registration by several
+  // seconds under load. This is a success fixture, not a timeout test.
+  return { argv: [python, "-I", "-c", "pass"], timeout: 10_000 }
 }
 
 async function fixture() {
@@ -213,7 +215,7 @@ describe("ModalVolume", () => {
           ].join("; "),
           marker,
         ],
-        timeout: 1_000,
+        timeout: 10_000,
       },
     })
 
@@ -307,7 +309,7 @@ describe("ModalVolume", () => {
       probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
       bootstrap: {
         argv: [python, "-I", "-c", "import sys; sys.stderr.write('bootstrap-only'); raise SystemExit(7)"],
-        timeout: 1_000,
+        timeout: 10_000,
       },
     })
     const nonzero = await ModalVolume.command({
@@ -328,7 +330,7 @@ describe("ModalVolume", () => {
       probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
       bootstrap: {
         argv: [python, "-I", "-c", "import os, signal; os.kill(os.getpid(), signal.SIGTERM)"],
-        timeout: 1_000,
+        timeout: 10_000,
       },
     })
     const signalled = await ModalVolume.command({
@@ -396,7 +398,7 @@ describe("ModalVolume", () => {
     const previous = new Set((await ledger()).map((entry) => entry.id))
     await using _testing = ModalVolume.testing({
       probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
-      bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 100 },
+      bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 5_000 },
     })
     const running = ModalVolume.command({
       tokenId: "ak-test",
@@ -429,7 +431,7 @@ describe("ModalVolume", () => {
     const reason = new DOMException("abort after cleanup failure", "AbortError")
     await using _testing = ModalVolume.testing({
       probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
-      bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 100 },
+      bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 5_000 },
       afterBootstrapSettled: () => controller.abort(reason),
     })
     const running = ModalVolume.command(
