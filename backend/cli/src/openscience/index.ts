@@ -1653,9 +1653,7 @@ export namespace OpenScience {
       (isOrganizationWorkspaceKey(key) ? await probeStatus(10_000) : undefined)
     const pinned = loginOrganizationID(status?.api_key?.organization_id)
     if (isOrganizationWorkspaceKey(key) && !pinned) {
-      throw new Error(
-        "Couldn't verify this organization key's workspace. Check your connection and try again.",
-      )
+      throw new Error("Couldn't verify this organization key's workspace. Check your connection and try again.")
     }
     const selected = (() => {
       const context = status?.funding_context
