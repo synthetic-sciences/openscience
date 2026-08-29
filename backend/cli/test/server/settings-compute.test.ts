@@ -15,6 +15,8 @@ import { Log } from "../../src/util/log"
 import { Global } from "../../src/global"
 import { ModalVolume } from "../../src/compute/modal/volume"
 import { ProviderCli } from "../../src/compute/provider-cli"
+import { JsonStore } from "../../src/util/jsonstore"
+import { OpenScience } from "../../src/openscience"
 import { executionSession, sandboxedExecution, tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
@@ -635,6 +637,88 @@ test("disconnecting a provider removes its stored control-plane credential", asy
   expect(process.env["VAST_API_KEY"]).toBe("from-shell")
 })
 
+test("account provider removal stays disabled when remote deletion succeeds but local cleanup fails", async () => {
+  await using tmp = await tmpdir()
+  const settingsPath = path.join(Global.Path.data, "settings-compute.json")
+  const authenticated = spyOn(OpenScience, "isAuthenticated").mockResolvedValue(true)
+  const saveRemote = spyOn(OpenScience, "savePortableCredential").mockResolvedValue(true)
+  const deleteRemote = spyOn(OpenScience, "deletePortableCredential").mockResolvedValue(true)
+  let updateFailure: ReturnType<typeof spyOn> | undefined
+  try {
+    await connect("lambda", "lambda-removal-sentinel")
+    await ComputeSettings.setProviderEnabled("lambda", true)
+
+    const originalUpdate = JsonStore.update
+    let settingsWrites = 0
+    updateFailure = spyOn(JsonStore, "update").mockImplementation(async (filepath, fn) => {
+      if (filepath === settingsPath && ++settingsWrites === 2) {
+        throw new Error("injected local finalization failure")
+      }
+      return originalUpdate(filepath, fn)
+    })
+    await expect(ComputeSettings.disconnectProvider("lambda")).rejects.toThrow("injected local finalization failure")
+    updateFailure.mockRestore()
+    updateFailure = undefined
+
+    expect(deleteRemote).toHaveBeenCalledTimes(1)
+    const tombstone = JSON.parse(await fs.readFile(settingsPath, "utf8")).providers.lambda
+    expect(tombstone).toMatchObject({
+      enabled: false,
+      removal: { remote: true, token: expect.any(String) },
+    })
+    expect(tombstone.key).toBeUndefined()
+    await expect(ComputeSettings.withProviderEnv("lambda", {}, async () => undefined)).rejects.toThrow("disabled")
+    expect((await ComputeSettings.get()).providers.find((item) => item.id === "lambda")).toMatchObject({
+      connected: false,
+      enabled: false,
+    })
+    await ComputeSettings.reconcileAccountProviders({
+      lambda: { fields: { api_key: "stale-account-copy" } },
+    })
+    await expect(ComputeSettings.withProviderEnv("lambda", {}, async () => undefined)).rejects.toThrow("disabled")
+    await expect(ComputeSettings.connectProvider("lambda", "must-not-reconnect-over-tombstone")).rejects.toThrow(
+      "removal is pending",
+    )
+    expect(saveRemote).toHaveBeenCalledTimes(1)
+
+    const verify = path.join(tmp.path, "verify-compute-tombstone.ts")
+    const routes = new URL("../../src/server/routes/settings/compute.ts", import.meta.url).href
+    await Bun.write(
+      verify,
+      [
+        `import { ComputeSettings } from ${JSON.stringify(routes)}`,
+        `let blocked = false`,
+        `try { await ComputeSettings.withProviderEnv("lambda", {}, async () => undefined) } catch (error) { blocked = String(error).includes("disabled") }`,
+        `if (!blocked) throw new Error("tombstoned provider became admissible after restart")`,
+      ].join("\n"),
+    )
+    const child = Bun.spawn([process.execPath, verify], {
+      env: {
+        ...process.env,
+        OPENSCIENCE_DATA_DIR: Global.Path.data,
+        OPENSCIENCE_CONFIG_DIR: path.join(tmp.path, "restart-config"),
+        OPENSCIENCE_TEST_HOME: path.join(tmp.path, "restart-home"),
+        XDG_STATE_HOME: path.join(tmp.path, "restart-state"),
+        XDG_CACHE_HOME: path.join(tmp.path, "restart-cache"),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [exit, error] = await Promise.all([child.exited, new Response(child.stderr).text()])
+    if (exit !== 0) throw new Error(error)
+
+    await ComputeSettings.disconnectProvider("lambda")
+    expect(deleteRemote).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(await fs.readFile(settingsPath, "utf8")).providers.lambda).toBeUndefined()
+  } finally {
+    updateFailure?.mockRestore()
+    await ComputeSettings.disconnectProvider("lambda").catch(() => undefined)
+    deleteRemote.mockRestore()
+    saveRemote.mockRestore()
+    authenticated.mockRestore()
+  }
+})
+
 test("re-saving a key updates only the reviewed provider invocation environment", async () => {
   delete process.env["RUNPOD_API_KEY"]
   await connect("runpod", "rpa_first")
@@ -681,6 +765,7 @@ test(
     await using tmp = await tmpdir()
     const bin = path.join(tmp.path, "bin")
     const marker = path.join(tmp.path, "doctor-marker")
+    const replacementMarker = path.join(tmp.path, "replacement-received-credential")
     const cli = path.join(bin, "runpodctl")
     const previousPath = process.env.PATH
     await fs.mkdir(bin)
@@ -709,10 +794,20 @@ test(
       expect((await fs.readFile(marker, "utf8")).startsWith(os.tmpdir())).toBe(true)
       const used = (await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used
       expect(used).toBeString()
+      const persisted = JSON.parse(await fs.readFile(path.join(Global.Path.data, "settings-compute.json"), "utf8"))
+      expect(persisted.providers.runpod.executable).toMatchObject({
+        version: 1,
+        name: "runpodctl",
+        path: await fs.realpath(cli),
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      })
 
-      await fs.writeFile(cli, "#!/bin/sh\necho rejected >&2\nexit 7\n", { mode: 0o700 })
+      await fs.writeFile(cli, `#!/bin/sh\nprintf '%s' "$RUNPOD_API_KEY" > ${JSON.stringify(replacementMarker)}\n`, {
+        mode: 0o700,
+      })
       const failed = await ProviderCli.doctor("runpod", { executableDirectories: [bin] })
-      expect(failed).toMatchObject({ ok: false, error: expect.stringContaining("rejected") })
+      expect(failed).toMatchObject({ ok: false, error: expect.stringContaining("changed after it was approved") })
+      expect(await Bun.file(replacementMarker).exists()).toBe(false)
       expect((await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used).toBe(used)
 
       await connect("runpod", "rpa_replacement_key")

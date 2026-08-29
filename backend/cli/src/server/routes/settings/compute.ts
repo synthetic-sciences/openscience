@@ -26,6 +26,7 @@ import { ComputeSecrets } from "../../../compute/secrets"
 import { ComputeCapabilities } from "../../../compute/capabilities"
 import { resolveCredentialFields } from "./credentials"
 import { CredentialLifecycle } from "../../../credentials/lifecycle"
+import { TrustedExecutable } from "../../../process/trusted-executable"
 
 const Directory = z.object({
   directory: z.string().trim().min(1).optional(),
@@ -332,6 +333,21 @@ export namespace ComputeSettings {
   export type Info = z.infer<typeof Info>
 
   // ── On-disk shape (secrets live here only) ──
+  const ExecutableAttestation = z.object({
+    version: z.literal(1),
+    name: z.string().min(1),
+    path: z.string().min(1),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    size: z.string().regex(/^\d+$/),
+    device: z.string().regex(/^\d+$/),
+    inode: z.string().regex(/^\d+$/),
+    mode: z.string().regex(/^\d+$/),
+  })
+  const ProviderRemoval = z.object({
+    token: z.string().uuid(),
+    remote: z.boolean(),
+    requested_at: z.string(),
+  })
   const StoredProvider = z.object({
     key: z.string().optional(),
     source: z.enum(["stored", "account", "modal_toml"]).default("stored"),
@@ -339,6 +355,8 @@ export namespace ComputeSettings {
     enabled: z.boolean().default(false),
     connected_at: z.string(),
     last_used: z.string().nullable().default(null),
+    executable: ExecutableAttestation.optional(),
+    removal: ProviderRemoval.optional(),
   })
   const ModalStored = z.preprocess((value) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return value
@@ -521,7 +539,7 @@ export namespace ComputeSettings {
   async function providerEnvUnlocked(target: string): Promise<{ env: Record<string, string>; revision: string }> {
     target = canonicalProvider(target)
     const entry = (await read()).providers[target]
-    if (!entry?.enabled) throw new Error(`Compute provider ${target} is disabled`)
+    if (!entry?.enabled || entry.removal) throw new Error(`Compute provider ${target} is disabled`)
     const env = await (async () => {
       if (target === "modal" && entry.source === "modal_toml" && entry.path) {
         const file = await readModal(entry.path)
@@ -568,12 +586,32 @@ export namespace ComputeSettings {
     await CredentialLifecycle.serialized(() =>
       update((current) => {
         const entry = current.providers[target]
-        if (!entry?.enabled || entry.key !== credentialRevision) {
+        if (!entry?.enabled || entry.removal || entry.key !== credentialRevision) {
           throw new Error(`Compute provider ${target} changed before its connection check completed`)
         }
         entry.last_used = new Date().toISOString()
       }),
     )
+  }
+
+  /** Persist the first exact provider CLI identity before a credential is
+   * admitted. A later binary at the same path never silently replaces it. */
+  export async function pinProviderExecutable(
+    target: string,
+    attestation: TrustedExecutable.Attestation,
+  ): Promise<TrustedExecutable.Attestation> {
+    target = canonicalProvider(target)
+    let pinned: TrustedExecutable.Attestation | undefined
+    await CredentialLifecycle.serialized(() =>
+      update((current) => {
+        const entry = current.providers[target]
+        if (!entry?.enabled || entry.removal) throw new Error(`Compute provider ${target} is disabled`)
+        if (!entry.executable) entry.executable = ExecutableAttestation.parse(attestation)
+        pinned = entry.executable
+      }),
+    )
+    if (!pinned) throw new Error(`Compute provider ${target} executable attestation was not persisted`)
+    return pinned
   }
 
   function sshConfigTokens(value: string) {
@@ -780,6 +818,7 @@ export namespace ComputeSettings {
   async function view(stored: Stored, file = modalFile(), configHosts = sshConfigHosts()): Promise<Info> {
     const providers = CATALOG.map((spec) => {
       const entry = stored.providers[spec.id]
+      const connected = !!entry && !entry.removal
       return {
         id: spec.id,
         name: spec.name,
@@ -787,11 +826,11 @@ export namespace ComputeSettings {
         placeholder: spec.placeholder,
         hint: spec.hint,
         credential: spec.credential,
-        connected: !!entry,
-        enabled: entry?.enabled ?? false,
-        source: entry?.source ?? null,
-        connected_at: entry?.connected_at ?? null,
-        last_used: entry?.last_used ?? null,
+        connected,
+        enabled: connected ? (entry?.enabled ?? false) : false,
+        source: connected ? (entry?.source ?? null) : null,
+        connected_at: connected ? (entry?.connected_at ?? null) : null,
+        last_used: connected ? (entry?.last_used ?? null) : null,
       }
     })
     return {
@@ -814,23 +853,30 @@ export namespace ComputeSettings {
 
   export async function connectProvider(target: string, key: string): Promise<Info> {
     target = canonicalProvider(target)
-    const authenticated = await OpenScience.isAuthenticated()
-    const accountFields =
-      target === "modal"
-        ? (() => {
-            const [token_id, token_secret] = key.split(":").map((part) => part.trim())
-            return token_id && token_secret ? { token_id, token_secret } : undefined
-          })()
-        : { api_key: key }
-    if (
-      authenticated &&
-      (!accountFields || !(await OpenScience.savePortableCredential(target, accountFields, target)))
-    ) {
-      throw new Error(`Could not sync ${target} to your Synthetic Sciences account`)
-    }
-    const stored = await CredentialLifecycle.mutate(`compute-provider.set:${target}`, () =>
-      update(async (current) => {
+    const stored = await CredentialLifecycle.mutate(`compute-provider.set:${target}`, async () => {
+      const before = (await read()).providers[target]
+      if (before?.removal) {
+        throw new Error(`Compute provider ${target} removal is pending; retry disconnect before reconnecting`)
+      }
+      const authenticated = await OpenScience.isAuthenticated()
+      const accountFields =
+        target === "modal"
+          ? (() => {
+              const [token_id, token_secret] = key.split(":").map((part) => part.trim())
+              return token_id && token_secret ? { token_id, token_secret } : undefined
+            })()
+          : { api_key: key }
+      if (
+        authenticated &&
+        (!accountFields || !(await OpenScience.savePortableCredential(target, accountFields, target)))
+      ) {
+        throw new Error(`Could not sync ${target} to your Synthetic Sciences account`)
+      }
+      return update(async (current) => {
         const existing = current.providers[target]
+        if (existing?.removal) {
+          throw new Error(`Compute provider ${target} removal is pending; retry disconnect before reconnecting`)
+        }
         const sameCredential = existing?.key
           ? await decrypt(existing.key)
               .then((value) => value === key)
@@ -842,9 +888,10 @@ export namespace ComputeSettings {
           enabled: existing?.enabled ?? false,
           connected_at: existing?.connected_at ?? new Date().toISOString(),
           last_used: sameCredential ? (existing?.last_used ?? null) : null,
+          executable: existing?.executable,
         }
-      }),
-    )
+      })
+    })
     return view(stored)
   }
 
@@ -857,6 +904,9 @@ export namespace ComputeSettings {
     const stored = await CredentialLifecycle.mutate("compute-provider.configure:modal", () =>
       update((current) => {
         const existing = current.providers.modal
+        if (existing?.removal) {
+          throw new Error("Compute provider modal removal is pending; retry disconnect before reconnecting")
+        }
         current.providers.modal = {
           source: "modal_toml",
           path: path.resolve(filepath),
@@ -871,13 +921,32 @@ export namespace ComputeSettings {
 
   export async function disconnectProvider(target: string): Promise<Info> {
     target = canonicalProvider(target)
-    const entry = (await read()).providers[target]
-    if (entry?.source === "account" && !(await OpenScience.deletePortableCredential(target))) {
+    const tombstoned = await CredentialLifecycle.mutate(`compute-provider.remove:${target}:tombstone`, () =>
+      update((current) => {
+        const entry = current.providers[target]
+        if (!entry || entry.removal) return
+        current.providers[target] = {
+          source: entry.source,
+          enabled: false,
+          connected_at: entry.connected_at,
+          last_used: null,
+          executable: entry.executable,
+          removal: {
+            token: crypto.randomUUID(),
+            remote: entry.source === "account",
+            requested_at: new Date().toISOString(),
+          },
+        }
+      }),
+    )
+    const pending = tombstoned.providers[target]?.removal
+    if (!pending) return view(tombstoned)
+    if (pending.remote && !(await OpenScience.deletePortableCredential(target))) {
       throw new Error(`Could not remove ${target} from your Synthetic Sciences account`)
     }
-    const stored = await CredentialLifecycle.mutate(`compute-provider.remove:${target}`, () =>
+    const stored = await CredentialLifecycle.mutate(`compute-provider.remove:${target}:finalize`, () =>
       update((current) => {
-        delete current.providers[target]
+        if (current.providers[target]?.removal?.token === pending.token) delete current.providers[target]
       }),
     )
     return view(stored)
@@ -888,7 +957,7 @@ export namespace ComputeSettings {
     const stored = await CredentialLifecycle.mutate(`compute-provider.enabled:${target}`, () =>
       update((current) => {
         const entry = current.providers[target]
-        if (!entry) throw new Error(`Compute provider ${target} is not connected`)
+        if (!entry || entry.removal) throw new Error(`Compute provider ${target} is not connected`)
         entry.enabled = enabled
       }),
     )
@@ -901,11 +970,13 @@ export namespace ComputeSettings {
     const incoming = Object.fromEntries(Object.entries(portable).filter(([id]) => isProvider(id)))
     await update(async (current) => {
       for (const [id, entry] of Object.entries(current.providers)) {
+        if (entry.removal) continue
         if (entry.source !== "account" || id in incoming) continue
         delete current.providers[id]
       }
       for (const [id, payload] of Object.entries(incoming)) {
         const existing = current.providers[id]
+        if (existing?.removal) continue
         if (existing?.source === "stored" || existing?.source === "modal_toml") continue
         const key =
           id === "modal"
@@ -925,6 +996,7 @@ export namespace ComputeSettings {
           enabled: existing?.enabled ?? true,
           connected_at: payload.updated_at ?? existing?.connected_at ?? new Date().toISOString(),
           last_used: sameCredential ? (existing?.last_used ?? null) : null,
+          executable: existing?.executable,
         }
       }
     })

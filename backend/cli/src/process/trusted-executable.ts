@@ -1,4 +1,5 @@
 import { constants as FS } from "node:fs"
+import { createHash } from "node:crypto"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -7,6 +8,27 @@ import path from "node:path"
  * Project configuration may influence PATH, so credentialed brokers use only
  * fixed OS/package-manager install roots (or an explicit internal test root). */
 export namespace TrustedExecutable {
+  export interface Attestation {
+    version: 1
+    name: string
+    path: string
+    sha256: string
+    size: string
+    device: string
+    inode: string
+    mode: string
+  }
+
+  export class ReplacedError extends Error {
+    constructor(name: string, options?: ErrorOptions) {
+      super(
+        `Trusted executable ${name} changed after it was approved; disconnect and reconnect the provider to approve the new binary`,
+        options,
+      )
+      this.name = "TrustedExecutableReplacedError"
+    }
+  }
+
   function systemDirectories() {
     if (process.platform === "win32") {
       const windows = process.env.SYSTEMROOT ?? process.env.WINDIR ?? "C:\\Windows"
@@ -68,5 +90,80 @@ export namespace TrustedExecutable {
         return canonical
       }
     }
+  }
+
+  async function fingerprint(name: string, executablePath: string): Promise<Attestation> {
+    if (!path.isAbsolute(executablePath)) throw new Error(`Trusted executable path must be absolute: ${name}`)
+    const noFollow = typeof FS.O_NOFOLLOW === "number" ? FS.O_NOFOLLOW : 0
+    const handle = await fs.open(executablePath, FS.O_RDONLY | noFollow).catch((error) => {
+      throw new ReplacedError(name, { cause: error })
+    })
+    try {
+      const before = await handle.stat({ bigint: true })
+      if (!before.isFile()) throw new ReplacedError(name)
+      if (process.platform !== "win32" && (before.mode & 0o111n) === 0n) throw new ReplacedError(name)
+      const hash = createHash("sha256")
+      const chunk = Buffer.allocUnsafe(64 * 1024)
+      let position = 0
+      for (;;) {
+        const { bytesRead } = await handle.read(chunk, 0, chunk.byteLength, position)
+        if (!bytesRead) break
+        hash.update(chunk.subarray(0, bytesRead))
+        position += bytesRead
+      }
+      const after = await handle.stat({ bigint: true })
+      const stable =
+        before.dev === after.dev &&
+        before.ino === after.ino &&
+        before.size === after.size &&
+        before.mode === after.mode &&
+        before.mtimeMs === after.mtimeMs &&
+        before.ctimeMs === after.ctimeMs
+      if (!stable) throw new ReplacedError(name)
+      return {
+        version: 1,
+        name,
+        path: executablePath,
+        sha256: hash.digest("hex"),
+        size: before.size.toString(),
+        device: before.dev.toString(),
+        inode: before.ino.toString(),
+        mode: before.mode.toString(),
+      }
+    } finally {
+      await handle.close()
+    }
+  }
+
+  function same(left: Attestation, right: Attestation) {
+    return (
+      left.version === right.version &&
+      left.name === right.name &&
+      left.path === right.path &&
+      left.sha256 === right.sha256 &&
+      left.size === right.size &&
+      left.device === right.device &&
+      left.inode === right.inode &&
+      left.mode === right.mode
+    )
+  }
+
+  /** Resolve a reviewed executable and capture an exact, durable file identity.
+   * Credential-bearing callers persist this value before admitting a secret. */
+  export async function attest(
+    name: string,
+    options: { systemOnly?: boolean; directories?: string[] } = {},
+  ): Promise<Attestation | undefined> {
+    const executablePath = await resolve(name, options)
+    if (!executablePath) return
+    return fingerprint(name, executablePath)
+  }
+
+  /** Re-open and hash the pinned canonical path. Both file identity and content
+   * must still match immediately before the credential-bearing spawn. */
+  export async function revalidate(attestation: Attestation): Promise<string> {
+    const current = await fingerprint(attestation.name, attestation.path)
+    if (!same(attestation, current)) throw new ReplacedError(attestation.name)
+    return attestation.path
   }
 }

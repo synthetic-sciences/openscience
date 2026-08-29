@@ -382,6 +382,19 @@ export namespace ProviderCli {
     let credentialRevision: string | undefined
     try {
       if (options.signal?.aborted) throw new Error(`${spec.cli} operation was cancelled before launch`)
+      const selected = await TrustedExecutable.attest(spec.cli, { directories: options.executableDirectories })
+      if (!selected) {
+        return {
+          ok: false,
+          provider: target,
+          cli: spec.cli,
+          command: spec.display,
+          checked_at: checked,
+          error: `${spec.cli} is not installed. Install it from ${spec.docs}, then retry.`,
+        }
+      }
+      const pinned = await ComputeSettings.pinProviderExecutable(target, selected)
+      await TrustedExecutable.revalidate(pinned)
       const result = await ComputeSettings.withProviderEnv(target, process.env, async (provided, revision) => {
         if (options.signal?.aborted) throw new Error(`${spec.cli} operation was cancelled before launch`)
         credentialRevision = revision
@@ -412,28 +425,21 @@ export namespace ProviderCli {
           fs.mkdir(isolated.XDG_STATE_HOME, { recursive: true }),
           fs.mkdir(isolated.TMPDIR, { recursive: true }),
         ])
-        const binary = await TrustedExecutable.resolve(spec.cli, { directories: options.executableDirectories })
-        if (!binary) return { missing: true as const }
+        // Re-open and hash the exact pinned path after credential admission and
+        // immediately before spawn. A mutable package-manager root is never
+        // itself treated as executable authority.
+        const binary = await TrustedExecutable.revalidate(pinned)
         launched = await launch(
           target,
           spec,
           binary,
-          { ...isolated, PATH: TrustedExecutable.searchPath() },
+          { ...isolated, PATH: TrustedExecutable.searchPath({ systemOnly: true }) },
           root,
           stdin,
         )
-        return { missing: false as const }
+        return { launched: true as const }
       })
-      if (result.missing) {
-        return {
-          ok: false,
-          provider: target,
-          cli: spec.cli,
-          command: spec.display,
-          checked_at: checked,
-          error: `${spec.cli} is not installed. Install it from ${spec.docs}, then retry.`,
-        }
-      }
+      if (!result.launched) throw new Error(`${spec.cli} launch did not establish executable authority`)
       if (!launched || !credentialRevision) throw new Error(`${spec.cli} launch did not establish credential authority`)
       let timer: ReturnType<typeof setTimeout> | undefined
       let abort: (() => void) | undefined

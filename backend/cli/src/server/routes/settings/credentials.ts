@@ -201,6 +201,13 @@ const StoreEntry = z.object({
   fields: z.record(z.string(), z.string()),
   updated_at: z.string(),
   source: z.enum(["local", "account"]).default("local"),
+  removal: z
+    .object({
+      token: z.string().uuid(),
+      remote: z.boolean(),
+      requested_at: z.string(),
+    })
+    .optional(),
 })
 type StoreEntry = z.infer<typeof StoreEntry>
 const Store = z.record(z.string(), StoreEntry)
@@ -395,7 +402,7 @@ export async function resolveCredentialFields(id: string): Promise<Record<string
   const spec = specFor(id)
   if (!spec?.trusted) return
   const entry = (await readStore())[id]
-  if (!entry) return
+  if (!entry || entry.removal) return
   const fields = await validDecryptedFields(id, entry)
   if (!Object.keys(fields).length) return
   OpenScience.registerSecretValues(Object.values(fields))
@@ -439,6 +446,7 @@ async function readDecryptedEnv(): Promise<CredentialEnv> {
   let gcp: string | undefined
   let materializationError: unknown
   for (const [id, entry] of Object.entries(store)) {
+    if (entry.removal) continue
     const fields = await validDecryptedFields(id, entry)
     if (specFor(id)?.trusted) secrets.push(...Object.values(fields))
     if (id === "gcp") gcp = fields.service_account_json
@@ -523,11 +531,13 @@ export async function reconcileAccountCredentialFields(
   const incoming = Object.fromEntries(Object.entries(portable).filter(([id]) => PORTABLE_CREDENTIAL_IDS.has(id)))
   await updateStore(async (current) => {
     for (const [id, entry] of Object.entries(current)) {
+      if (entry.removal) continue
       if (!PORTABLE_CREDENTIAL_IDS.has(id) || entry.source !== "account" || id in incoming) continue
       delete current[id]
     }
     for (const [id, payload] of Object.entries(incoming)) {
       const existing = current[id]
+      if (existing?.removal) continue
       // A device-local override remains authoritative until its next save
       // successfully reaches the account. Account-owned entries follow the
       // dashboard across devices.
@@ -579,7 +589,8 @@ async function view(store: Store) {
     CATALOG.map(async (spec) => {
       seen.add(spec.id)
       const entry = store[spec.id]
-      const set = entry ? Object.keys(await validDecryptedFields(spec.id, entry)) : []
+      const active = entry && !entry.removal ? entry : undefined
+      const set = active ? Object.keys(await validDecryptedFields(spec.id, active)) : []
       const required = spec.fields.filter((field) => !field.optional).map((field) => field.name)
       return {
         id: spec.id,
@@ -596,14 +607,14 @@ async function view(store: Store) {
         })),
         connected: required.length ? required.every((field) => set.includes(field)) : set.length > 0,
         set_fields: set,
-        updated_at: entry?.updated_at ?? null,
-        source: entry?.source ?? null,
+        updated_at: active?.updated_at ?? null,
+        source: active?.source ?? null,
       }
     }),
   )
   const custom = await Promise.all(
     Object.entries(store)
-      .filter(([id]) => !seen.has(id))
+      .filter(([id, entry]) => !seen.has(id) && !entry.removal)
       .map(async ([id, entry]) => {
         const names = Object.keys(await validDecryptedFields(id, entry))
         return {
@@ -691,6 +702,9 @@ export const CredentialsRoutes = lazy(() =>
         const store = await mutateCredentialStore(id, `settings-credential.set:${id}`, () =>
           updateStore(async (current) => {
             const entry = current[id] ?? { fields: {}, updated_at: new Date().toISOString() }
+            if (entry.removal) {
+              throw new Error(`Credential ${id} removal is pending; retry removal before reconnecting`)
+            }
             const fields = { ...entry.fields }
             for (const [name, value] of Object.entries(body.fields)) {
               const trimmed = value.trim()
@@ -739,14 +753,37 @@ export const CredentialsRoutes = lazy(() =>
       async (c) => {
         const id = c.req.valid("param").id
         const spec = specFor(id)
-        if (spec?.category === "compute" && spec.portable !== false && (await OpenScience.isAuthenticated())) {
-          if (!(await OpenScience.deletePortableCredential(id))) {
-            return c.json({ error: `${spec.label} could not be removed from your account` }, 502)
-          }
-        }
-        const store = await mutateCredentialStore(id, `settings-credential.remove:${id}`, () =>
+        const remote = !!(
+          spec?.category === "compute" &&
+          spec.portable !== false &&
+          (await OpenScience.isAuthenticated())
+        )
+        const tombstoned = await mutateCredentialStore(id, `settings-credential.remove:${id}:tombstone`, () =>
           updateStore((current) => {
-            delete current[id]
+            const entry = current[id]
+            if (entry?.removal) return
+            if (!entry && !remote) return
+            current[id] = {
+              label: entry?.label ?? spec?.label,
+              fields: {},
+              updated_at: new Date().toISOString(),
+              source: entry?.source ?? "account",
+              removal: {
+                token: crypto.randomUUID(),
+                remote: remote || (spec?.category === "compute" && entry?.source === "account"),
+                requested_at: new Date().toISOString(),
+              },
+            }
+          }),
+        )
+        const pending = tombstoned[id]?.removal
+        if (!pending) return c.json({ services: await view(tombstoned) })
+        if (pending.remote && !(await OpenScience.deletePortableCredential(id))) {
+          return c.json({ error: `${spec?.label ?? id} could not be removed from your account` }, 502)
+        }
+        const store = await mutateCredentialStore(id, `settings-credential.remove:${id}:finalize`, () =>
+          updateStore((current) => {
+            if (current[id]?.removal?.token === pending.token) delete current[id]
           }),
         )
         return c.json({ services: await view(store) })
