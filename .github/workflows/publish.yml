@@ -17,7 +17,7 @@ on:
         required: false
         type: string
       release_mode:
-        description: "Signed notarizes macOS and signs Windows; unsigned publishes native archives and unsigned desktop installers"
+        description: "Signed notarizes macOS and signs Windows when credentials exist; unsigned publishes native archives and unsigned desktop installers"
         required: true
         default: signed
         type: choice
@@ -68,7 +68,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       actions: read
-      contents: read
+      # GitHub only returns draft releases to tokens with push access. Exact
+      # version resumes need the draft's immutable artifact-source marker.
+      contents: write
     outputs:
       source: ${{ steps.candidate.outputs.source }}
       run_id: ${{ steps.candidate.outputs.run_id }}
@@ -87,21 +89,31 @@ jobs:
           expected="${GITHUB_SHA,,}"
           if [[ -n "$EXACT_VERSION" ]]; then
             release_error="$RUNNER_TEMP/npm-test-gate-release-error.txt"
-            if release_json="$(gh api "/repos/$GH_REPO/releases/tags/v$EXACT_VERSION" 2>"$release_error")"; then
+            if ! release_pages="$(gh api --paginate --slurp \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/$GH_REPO/releases?per_page=100" 2>"$release_error")"; then
+              cat "$release_error" >&2
+              echo "::error::Could not inspect v$EXACT_VERSION before validating its npm test rehearsal."
+              exit 1
+            fi
+            release_json="$(jq -c --arg tag "v$EXACT_VERSION" '
+              [.[] | .[] | select(.tag_name == $tag)]
+              | if length == 0 then empty
+                elif length == 1 then .[0]
+                else error("multiple releases use the requested tag")
+                end
+            ' <<<"$release_pages")"
+            if [[ -n "$release_json" ]]; then
               marker="$(jq -r 'try ((.body // "") | capture("<!-- openscience-release-source:(?<source>[0-9a-f]{40}) -->"; "i").source) catch ""' <<<"$release_json")"
               if [[ ! "$marker" =~ ^[0-9a-fA-F]{40}$ ]]; then
                 echo "::error::Existing release v$EXACT_VERSION is missing its immutable artifact-source marker."
                 exit 1
               fi
               expected="${marker,,}"
-            elif grep -qi 'HTTP 404' "$release_error"; then
+            else
               # A first exact-version dispatch has no release yet and is bound
               # to this workflow checkout. version.ts will create the draft.
               expected="${GITHUB_SHA,,}"
-            else
-              cat "$release_error" >&2
-              echo "::error::Could not inspect v$EXACT_VERSION before validating its npm test rehearsal."
-              exit 1
             fi
           fi
           if [[ ! "$expected" =~ ^[0-9a-f]{40}$ ]]; then
@@ -244,6 +256,25 @@ jobs:
             exit 1
           fi
 
+      - name: Validate optional Windows signing credentials
+        if: inputs.release_mode == 'signed'
+        shell: bash
+        env:
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$WINDOWS_CSC_LINK" && -z "$WINDOWS_CSC_KEY_PASSWORD" ]]; then
+            echo "::warning::Windows signing is not configured; the Windows installer will be published unsigned."
+            echo "### Windows installer will be unsigned" >> "$GITHUB_STEP_SUMMARY"
+            echo "The signed release will still sign and notarize macOS. Windows SmartScreen may warn about the unsigned Windows installer." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [[ -z "$WINDOWS_CSC_LINK" || -z "$WINDOWS_CSC_KEY_PASSWORD" ]]; then
+            echo "::error::Windows signing is partially configured. Set both WINDOWS_CSC_LINK and WINDOWS_CSC_KEY_PASSWORD, or remove both to publish Windows unsigned."
+            exit 1
+          fi
+
       - name: Record unsigned native release mode
         if: inputs.release_mode == 'unsigned'
         shell: bash
@@ -374,30 +405,24 @@ jobs:
           key: cli-build-${{ needs.version.outputs.version }}
           fail-on-cache-miss: true
 
+      - name: Import Developer ID identity
+        if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'
+        uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
+        with:
+          p12-file-base64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          p12-password: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+
       - name: Developer ID sign and notarize macOS binaries
         if: inputs.release_mode == 'signed' && steps.signed-cli-cache.outputs.cache-hit != 'true'
         shell: bash
         env:
-          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
-          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
           APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
           APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          certificate="$RUNNER_TEMP/openscience-developer-id.p12"
-          keychain="$RUNNER_TEMP/openscience-signing.keychain-db"
-          keychain_password="$(openssl rand -hex 24)"
-          trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true; rm -f "$certificate"' EXIT
-
-          printf '%s' "$APPLE_DEVELOPER_ID_P12_BASE64" | openssl base64 -d -A -out "$certificate"
-          security create-keychain -p "$keychain_password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$certificate" -k "$keychain" -P "$APPLE_DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
-
-          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
+          identities="$(security find-identity -v -p codesigning)"
+          identity="$(sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' <<<"$identities" | head -n 1)"
           if [[ -z "$identity" ]]; then
             echo "::error::The imported certificate does not contain a Developer ID Application identity."
             exit 1
@@ -412,7 +437,7 @@ jobs:
           for binary in "${binaries[@]}"; do
             codesign --force --options runtime --timestamp \
               --identifier ai.syntheticsciences.openscience \
-              --keychain "$keychain" --sign "$identity" "$binary"
+              --sign "$identity" "$binary"
             codesign --verify --strict --verbose=2 "$binary"
             details="$(codesign -dv --verbose=4 "$binary" 2>&1)"
             grep -Fxq 'Identifier=ai.syntheticsciences.openscience' <<<"$details"
@@ -475,6 +500,25 @@ jobs:
           body="$(gh release view "$OPENSCIENCE_TAG" --json body --jq .body)"
           if ! grep -Fq 'The native CLI archives and desktop installers in this release are unsigned.' <<<"$body"; then
             notes="$RUNNER_TEMP/openscience-unsigned-release-notes.txt"
+            printf '%s\n\n%s\n' "$body" "$notice" > "$notes"
+            gh release edit "$OPENSCIENCE_TAG" --notes-file "$notes"
+          fi
+
+      - name: Mark unsigned Windows installer in the release notes
+        if: inputs.release_mode == 'signed'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$WINDOWS_CSC_LINK" && -n "$WINDOWS_CSC_KEY_PASSWORD" ]]; then exit 0; fi
+          body="$(gh release view "$OPENSCIENCE_TAG" --json body --jq .body)"
+          notice='> The macOS downloads in this release are signed and notarized. The Windows installer is unsigned because Windows signing credentials are not configured, so Windows SmartScreen may show a warning.'
+          if ! grep -Fq 'The Windows installer is unsigned because Windows signing credentials are not configured' <<<"$body"; then
+            notes="$RUNNER_TEMP/openscience-unsigned-windows-release-notes.txt"
             printf '%s\n\n%s\n' "$body" "$notice" > "$notes"
             gh release edit "$OPENSCIENCE_TAG" --notes-file "$notes"
           fi
@@ -685,20 +729,32 @@ jobs:
       - if: steps.existing.outputs.found != 'true'
         run: bun install --frozen-lockfile
 
-      - name: Require release signing credentials
-        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing != 'none'
+      - name: Detect optional Windows signing credentials
+        id: windows-signing
+        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing == 'windows'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$CSC_LINK" && -n "$CSC_KEY_PASSWORD" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+
+      - name: Require macOS release signing credentials
+        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && matrix.signing == 'mac'
         shell: bash
         run: |
           test -n "$CSC_LINK" || { echo "::error::Missing desktop code-signing certificate"; exit 1; }
           test -n "$CSC_KEY_PASSWORD" || { echo "::error::Missing desktop certificate password"; exit 1; }
-          if [[ "${{ matrix.signing }}" == "mac" ]]; then
-            test -n "$APPLE_ID" || { echo "::error::Missing APPLE_ID for notarization"; exit 1; }
-            test -n "$APPLE_APP_SPECIFIC_PASSWORD" || { echo "::error::Missing Apple app password"; exit 1; }
-            test -n "$APPLE_TEAM_ID" || { echo "::error::Missing APPLE_TEAM_ID"; exit 1; }
-          fi
+          test -n "$APPLE_ID" || { echo "::error::Missing APPLE_ID for notarization"; exit 1; }
+          test -n "$APPLE_APP_SPECIFIC_PASSWORD" || { echo "::error::Missing Apple app password"; exit 1; }
+          test -n "$APPLE_TEAM_ID" || { echo "::error::Missing APPLE_TEAM_ID"; exit 1; }
         env:
-          CSC_LINK: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_BASE64 || secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -711,7 +767,7 @@ jobs:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
 
       - name: Build signed desktop installer
-        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed'
+        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'signed' && (matrix.signing != 'windows' || steps.windows-signing.outputs.enabled == 'true')
         shell: bash
         run: bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
         env:
@@ -726,7 +782,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Build unsigned desktop installer
-        if: steps.existing.outputs.found != 'true' && inputs.release_mode == 'unsigned'
+        if: steps.existing.outputs.found != 'true' && (inputs.release_mode == 'unsigned' || (inputs.release_mode == 'signed' && matrix.signing == 'windows' && steps.windows-signing.outputs.enabled != 'true'))
         shell: bash
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
