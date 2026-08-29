@@ -395,10 +395,11 @@ describe("ModalVolume", () => {
   test("propagates token-free uv bootstrap cleanup failures instead of returning an offline bridge", async () => {
     const python = Bun.which("python3") ?? Bun.which("python")
     if (!python) throw new Error("Python is required for the Modal Volume driver test")
-    const previous = new Set((await ledger()).map((entry) => entry.id))
+    const bootstrapBaseline = Promise.withResolvers<Set<string>>()
     await using _testing = ModalVolume.testing({
       probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
       bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 5_000 },
+      beforeUv: async () => bootstrapBaseline.resolve(new Set((await ledger()).map((entry) => entry.id))),
     })
     const running = ModalVolume.command({
       tokenId: "ak-test",
@@ -409,7 +410,7 @@ describe("ModalVolume", () => {
       () => undefined,
       (error: unknown) => error,
     )
-    const active = await waitEntry(previous)
+    const active = await waitEntry(await bootstrapBaseline.promise)
     const failure = new Error("synthetic bootstrap cleanup failure")
     const revoke = spyOn(CredentialProcessLedger, "revoke").mockRejectedValue(failure)
 
@@ -426,12 +427,13 @@ describe("ModalVolume", () => {
   test("does not mask a settled bootstrap cleanup failure with a simultaneous caller abort", async () => {
     const python = Bun.which("python3") ?? Bun.which("python")
     if (!python) throw new Error("Python is required for the Modal Volume driver test")
-    const previous = new Set((await ledger()).map((entry) => entry.id))
+    const bootstrapBaseline = Promise.withResolvers<Set<string>>()
     const controller = new AbortController()
     const reason = new DOMException("abort after cleanup failure", "AbortError")
     await using _testing = ModalVolume.testing({
       probe: { argv: [python, "-I", "-c", "raise SystemExit(1)"], timeout: 1_000 },
       bootstrap: { argv: [python, "-I", "-c", "import time; time.sleep(600)"], timeout: 5_000 },
+      beforeUv: async () => bootstrapBaseline.resolve(new Set((await ledger()).map((entry) => entry.id))),
       afterBootstrapSettled: () => controller.abort(reason),
     })
     const running = ModalVolume.command(
@@ -441,7 +443,7 @@ describe("ModalVolume", () => {
       () => undefined,
       (error: unknown) => error,
     )
-    const active = await waitEntry(previous)
+    const active = await waitEntry(await bootstrapBaseline.promise)
     const failure = new Error("synthetic settled cleanup failure")
     const revoke = spyOn(CredentialProcessLedger, "revoke").mockRejectedValue(failure)
 
