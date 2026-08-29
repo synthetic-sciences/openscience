@@ -192,13 +192,17 @@ if (mode === "owner") {
     },
   })
 } else if (mode === "revoke") {
-  await Instance.provide({
-    directory: workspace,
-    init: InstanceBootstrap,
-    fn: async () => {
-      await ProjectTrust.update(Instance.project, { trusted: false })
-    },
-  })
+  try {
+    await Instance.provide({
+      directory: workspace,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await ProjectTrust.update(Instance.project, { trusted: false })
+      },
+    })
+  } finally {
+    await Instance.disposeAll()
+  }
 } else if (mode === "reap") {
   await Instance.provide({
     directory: workspace,
