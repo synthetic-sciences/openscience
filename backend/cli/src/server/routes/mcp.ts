@@ -6,6 +6,19 @@ import { Config } from "../../config/config"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
+const McpAuthPending = z
+  .discriminatedUnion("pending", [
+    z.object({
+      pending: z.literal(true),
+      authorizationUrl: z.string(),
+      flowId: z.string(),
+    }),
+    z.object({
+      pending: z.literal(false),
+    }),
+  ])
+  .meta({ ref: "MCPAuthPending" })
+
 export const McpRoutes = lazy(() =>
   new Hono()
     .get(
@@ -188,13 +201,7 @@ export const McpRoutes = lazy(() =>
             description: "Pending OAuth operation",
             content: {
               "application/json": {
-                schema: resolver(
-                  z.object({
-                    pending: z.boolean(),
-                    authorizationUrl: z.string().optional(),
-                    flowId: z.string().optional(),
-                  }),
-                ),
+                schema: resolver(McpAuthPending),
               },
             },
           },

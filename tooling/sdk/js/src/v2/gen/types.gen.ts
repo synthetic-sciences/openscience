@@ -931,6 +931,8 @@ export type Session = {
     partID?: string
     snapshot?: string
     diff?: string
+    turns?: number
+    files?: Array<string>
   }
 }
 
@@ -1790,7 +1792,7 @@ export type McpRemoteConfig = {
    */
   type: "remote"
   /**
-   * URL of the remote MCP server
+   * HTTPS URL of the remote MCP server
    */
   url: string
   /**
@@ -2454,6 +2456,27 @@ export type McpInspection = {
   }
 }
 
+export type McpAuthStart =
+  | {
+      state: "pending"
+      authorizationUrl: string
+      flowId: string
+    }
+  | {
+      state: "settled"
+      result: McpStatus
+    }
+
+export type McpAuthPending =
+  | {
+      pending: true
+      authorizationUrl: string
+      flowId: string
+    }
+  | {
+      pending: false
+    }
+
 export type Path = {
   home: string
   state: string
@@ -2544,6 +2567,7 @@ export type GlobalProjectCreateData = {
       path: string
       access?: "read" | "write"
     }>
+    operation_id?: string
   }
   path?: never
   query?: never
@@ -2555,11 +2579,19 @@ export type GlobalProjectCreateErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Operation id was already bound to a different project draft
+   */
+  409: unknown
 }
 
 export type GlobalProjectCreateError = GlobalProjectCreateErrors[keyof GlobalProjectCreateErrors]
 
 export type GlobalProjectCreateResponses = {
+  /**
+   * Existing project information for a replayed operation
+   */
+  200: Project
   /**
    * Created project information
    */
@@ -3154,7 +3186,9 @@ export type SettingsCredentialsSetResponse = SettingsCredentialsSetResponses[key
 export type SettingsStorageUsageData = {
   body?: never
   path?: never
-  query?: never
+  query?: {
+    refresh?: "1"
+  }
   url: "/settings/storage"
 }
 
@@ -3173,6 +3207,16 @@ export type SettingsStorageUsageResponses = {
     scanning: boolean
     updated_at: string | null
     scan_error: string | null
+    relocation: {
+      id?: string
+      phase: "copying" | "ready" | "publishing" | "published" | "switched" | "recovery_required"
+      source?: string
+      target?: string
+      started_at?: string
+      updated_at?: string
+      active?: boolean
+      error?: string
+    } | null
     entries: Array<{
       name: string
       path: string
@@ -3264,9 +3308,15 @@ export type SettingsComputeGetResponses = {
     providers?: Array<{
       id: string
       name: string
-      verified: boolean
+      integration: "integrated" | "cli_credential"
       placeholder: string
       hint: string
+      credential: {
+        label: string
+        environment: string
+        aliases: Array<string>
+        docs_url: string
+      }
       connected: boolean
       enabled: boolean
       source: "stored" | "account" | "modal_toml" | null
@@ -3279,6 +3329,9 @@ export type SettingsComputeGetResponses = {
       host: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
+      proxy_jump_host_keys?: Array<string>
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
       /**
@@ -3294,6 +3347,8 @@ export type SettingsComputeGetResponses = {
       hostname?: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
     }>
     modal?: {
       app?: string
@@ -3341,9 +3396,15 @@ export type SettingsComputeEnvironmentsRepairResponses = {
     providers?: Array<{
       id: string
       name: string
-      verified: boolean
+      integration: "integrated" | "cli_credential"
       placeholder: string
       hint: string
+      credential: {
+        label: string
+        environment: string
+        aliases: Array<string>
+        docs_url: string
+      }
       connected: boolean
       enabled: boolean
       source: "stored" | "account" | "modal_toml" | null
@@ -3356,6 +3417,9 @@ export type SettingsComputeEnvironmentsRepairResponses = {
       host: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
+      proxy_jump_host_keys?: Array<string>
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
       /**
@@ -3371,6 +3435,8 @@ export type SettingsComputeEnvironmentsRepairResponses = {
       hostname?: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
     }>
     modal?: {
       app?: string
@@ -3421,9 +3487,15 @@ export type SettingsComputeProviderDisconnectResponses = {
     providers?: Array<{
       id: string
       name: string
-      verified: boolean
+      integration: "integrated" | "cli_credential"
       placeholder: string
       hint: string
+      credential: {
+        label: string
+        environment: string
+        aliases: Array<string>
+        docs_url: string
+      }
       connected: boolean
       enabled: boolean
       source: "stored" | "account" | "modal_toml" | null
@@ -3436,6 +3508,9 @@ export type SettingsComputeProviderDisconnectResponses = {
       host: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
+      proxy_jump_host_keys?: Array<string>
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
       /**
@@ -3451,6 +3526,8 @@ export type SettingsComputeProviderDisconnectResponses = {
       hostname?: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
     }>
     modal?: {
       app?: string
@@ -3513,9 +3590,15 @@ export type SettingsComputeProviderConnectResponses = {
     providers?: Array<{
       id: string
       name: string
-      verified: boolean
+      integration: "integrated" | "cli_credential"
       placeholder: string
       hint: string
+      credential: {
+        label: string
+        environment: string
+        aliases: Array<string>
+        docs_url: string
+      }
       connected: boolean
       enabled: boolean
       source: "stored" | "account" | "modal_toml" | null
@@ -3528,6 +3611,9 @@ export type SettingsComputeProviderConnectResponses = {
       host: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
+      proxy_jump_host_keys?: Array<string>
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
       /**
@@ -3543,6 +3629,8 @@ export type SettingsComputeProviderConnectResponses = {
       hostname?: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
     }>
     modal?: {
       app?: string
@@ -3605,9 +3693,15 @@ export type SettingsComputeProviderEnabledResponses = {
     providers?: Array<{
       id: string
       name: string
-      verified: boolean
+      integration: "integrated" | "cli_credential"
       placeholder: string
       hint: string
+      credential: {
+        label: string
+        environment: string
+        aliases: Array<string>
+        docs_url: string
+      }
       connected: boolean
       enabled: boolean
       source: "stored" | "account" | "modal_toml" | null
@@ -3620,6 +3714,9 @@ export type SettingsComputeProviderEnabledResponses = {
       host: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
+      proxy_jump_host_keys?: Array<string>
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
       /**
@@ -3635,6 +3732,8 @@ export type SettingsComputeProviderEnabledResponses = {
       hostname?: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
     }>
     modal?: {
       app?: string
@@ -3668,6 +3767,42 @@ export type SettingsComputeProviderEnabledResponses = {
 export type SettingsComputeProviderEnabledResponse =
   SettingsComputeProviderEnabledResponses[keyof SettingsComputeProviderEnabledResponses]
 
+export type SettingsComputeProviderDoctorData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/settings/compute/provider/{id}/doctor"
+}
+
+export type SettingsComputeProviderDoctorErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsComputeProviderDoctorError =
+  SettingsComputeProviderDoctorErrors[keyof SettingsComputeProviderDoctorErrors]
+
+export type SettingsComputeProviderDoctorResponses = {
+  /**
+   * Connection check result
+   */
+  200: {
+    ok: boolean
+    provider: string
+    cli: string
+    command: string
+    checked_at: string
+    error?: string
+  }
+}
+
+export type SettingsComputeProviderDoctorResponse =
+  SettingsComputeProviderDoctorResponses[keyof SettingsComputeProviderDoctorResponses]
+
 export type SettingsComputeModalUpdateData = {
   body?: {
     app?: string
@@ -3698,9 +3833,15 @@ export type SettingsComputeModalUpdateResponses = {
     providers?: Array<{
       id: string
       name: string
-      verified: boolean
+      integration: "integrated" | "cli_credential"
       placeholder: string
       hint: string
+      credential: {
+        label: string
+        environment: string
+        aliases: Array<string>
+        docs_url: string
+      }
       connected: boolean
       enabled: boolean
       source: "stored" | "account" | "modal_toml" | null
@@ -3713,6 +3854,9 @@ export type SettingsComputeModalUpdateResponses = {
       host: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
+      proxy_jump_host_keys?: Array<string>
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
       /**
@@ -3728,6 +3872,8 @@ export type SettingsComputeModalUpdateResponses = {
       hostname?: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
     }>
     modal?: {
       app?: string
@@ -3883,9 +4029,15 @@ export type SettingsComputeModalConfigureResponses = {
     providers?: Array<{
       id: string
       name: string
-      verified: boolean
+      integration: "integrated" | "cli_credential"
       placeholder: string
       hint: string
+      credential: {
+        label: string
+        environment: string
+        aliases: Array<string>
+        docs_url: string
+      }
       connected: boolean
       enabled: boolean
       source: "stored" | "account" | "modal_toml" | null
@@ -3898,6 +4050,9 @@ export type SettingsComputeModalConfigureResponses = {
       host: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
+      proxy_jump_host_keys?: Array<string>
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
       /**
@@ -3913,6 +4068,8 @@ export type SettingsComputeModalConfigureResponses = {
       hostname?: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
     }>
     modal?: {
       app?: string
@@ -3981,6 +4138,8 @@ export type SettingsComputeSshAddData = {
     host: string
     user?: string
     port?: number
+    identity_file?: string
+    proxy_jump?: string
     scheduler?: "none" | "slurm" | "pbs"
     workdir?: string
     /**
@@ -4011,9 +4170,15 @@ export type SettingsComputeSshAddResponses = {
     providers?: Array<{
       id: string
       name: string
-      verified: boolean
+      integration: "integrated" | "cli_credential"
       placeholder: string
       hint: string
+      credential: {
+        label: string
+        environment: string
+        aliases: Array<string>
+        docs_url: string
+      }
       connected: boolean
       enabled: boolean
       source: "stored" | "account" | "modal_toml" | null
@@ -4026,6 +4191,9 @@ export type SettingsComputeSshAddResponses = {
       host: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
+      proxy_jump_host_keys?: Array<string>
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
       /**
@@ -4041,6 +4209,8 @@ export type SettingsComputeSshAddResponses = {
       hostname?: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
     }>
     modal?: {
       app?: string
@@ -4106,6 +4276,7 @@ export type SettingsComputeSshTestResponses = {
     pbs: boolean
     fingerprint?: string
     host_key?: string
+    proxy_jump_host_keys?: Array<string>
     error?: string
   }
 }
@@ -4129,9 +4300,15 @@ export type SettingsComputeSshRemoveResponses = {
     providers?: Array<{
       id: string
       name: string
-      verified: boolean
+      integration: "integrated" | "cli_credential"
       placeholder: string
       hint: string
+      credential: {
+        label: string
+        environment: string
+        aliases: Array<string>
+        docs_url: string
+      }
       connected: boolean
       enabled: boolean
       source: "stored" | "account" | "modal_toml" | null
@@ -4144,6 +4321,9 @@ export type SettingsComputeSshRemoveResponses = {
       host: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
+      proxy_jump_host_keys?: Array<string>
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
       /**
@@ -4159,6 +4339,8 @@ export type SettingsComputeSshRemoveResponses = {
       hostname?: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
     }>
     modal?: {
       app?: string
@@ -4224,9 +4406,15 @@ export type SettingsComputeSshUpdateResponses = {
     providers?: Array<{
       id: string
       name: string
-      verified: boolean
+      integration: "integrated" | "cli_credential"
       placeholder: string
       hint: string
+      credential: {
+        label: string
+        environment: string
+        aliases: Array<string>
+        docs_url: string
+      }
       connected: boolean
       enabled: boolean
       source: "stored" | "account" | "modal_toml" | null
@@ -4239,6 +4427,9 @@ export type SettingsComputeSshUpdateResponses = {
       host: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
+      proxy_jump_host_keys?: Array<string>
       scheduler?: "none" | "slurm" | "pbs"
       workdir?: string
       /**
@@ -4254,6 +4445,8 @@ export type SettingsComputeSshUpdateResponses = {
       hostname?: string
       user?: string
       port?: number
+      identity_file?: string
+      proxy_jump?: string
     }>
     modal?: {
       app?: string
@@ -5001,6 +5194,9 @@ export type SettingsComputeJobsListResponses = {
         host: string
         user?: string
         port?: number
+        identity_file?: string
+        proxy_jump?: string
+        proxy_jump_host_keys?: Array<string>
         scheduler?: "none" | "slurm" | "pbs"
         workdir?: string
         /**
@@ -5802,6 +5998,9 @@ export type SettingsComputeJobsStartResponses = {
         host: string
         user?: string
         port?: number
+        identity_file?: string
+        proxy_jump?: string
+        proxy_jump_host_keys?: Array<string>
         scheduler?: "none" | "slurm" | "pbs"
         workdir?: string
         /**
@@ -5965,6 +6164,9 @@ export type SettingsComputeJobsPlanResponses = {
         host: string
         user?: string
         port?: number
+        identity_file?: string
+        proxy_jump?: string
+        proxy_jump_host_key_digests?: Array<string>
         label: string
         scheduler: "none" | "slurm" | "pbs"
         host_notes?: string
@@ -6809,6 +7011,9 @@ export type SettingsComputeJobsRetryResponses = {
         host: string
         user?: string
         port?: number
+        identity_file?: string
+        proxy_jump?: string
+        proxy_jump_host_keys?: Array<string>
         scheduler?: "none" | "slurm" | "pbs"
         workdir?: string
         /**
@@ -7565,6 +7770,9 @@ export type SettingsComputeJobsReleaseResponses = {
         host: string
         user?: string
         port?: number
+        identity_file?: string
+        proxy_jump?: string
+        proxy_jump_host_keys?: Array<string>
         scheduler?: "none" | "slurm" | "pbs"
         workdir?: string
         /**
@@ -8317,6 +8525,9 @@ export type SettingsComputeJobsCancelResponses = {
         host: string
         user?: string
         port?: number
+        identity_file?: string
+        proxy_jump?: string
+        proxy_jump_host_keys?: Array<string>
         scheduler?: "none" | "slurm" | "pbs"
         workdir?: string
         /**
@@ -8365,6 +8576,9 @@ export type SettingsPreferencesGetResponses = {
     show_trace?: boolean
     show_local_models?: boolean
     desktop_onboarding_version?: number
+    desktop_onboarding_operations?: {
+      [key: string]: string
+    }
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
@@ -8418,6 +8632,9 @@ export type SettingsPreferencesUpdateResponses = {
     show_trace?: boolean
     show_local_models?: boolean
     desktop_onboarding_version?: number
+    desktop_onboarding_operations?: {
+      [key: string]: string
+    }
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
@@ -8433,6 +8650,46 @@ export type SettingsPreferencesUpdateResponses = {
 
 export type SettingsPreferencesUpdateResponse =
   SettingsPreferencesUpdateResponses[keyof SettingsPreferencesUpdateResponses]
+
+export type SettingsPreferencesClearOnboardingOperationData = {
+  body?: {
+    fingerprint: string
+  }
+  path?: never
+  query?: never
+  url: "/settings/preferences/onboarding-operation"
+}
+
+export type SettingsPreferencesClearOnboardingOperationResponses = {
+  /**
+   * Onboarding operation cleared
+   */
+  204: void
+}
+
+export type SettingsPreferencesClearOnboardingOperationResponse =
+  SettingsPreferencesClearOnboardingOperationResponses[keyof SettingsPreferencesClearOnboardingOperationResponses]
+
+export type SettingsPreferencesOnboardingOperationData = {
+  body?: {
+    fingerprint: string
+  }
+  path?: never
+  query?: never
+  url: "/settings/preferences/onboarding-operation"
+}
+
+export type SettingsPreferencesOnboardingOperationResponses = {
+  /**
+   * Stable onboarding operation
+   */
+  200: {
+    operation_id: string
+  }
+}
+
+export type SettingsPreferencesOnboardingOperationResponse =
+  SettingsPreferencesOnboardingOperationResponses[keyof SettingsPreferencesOnboardingOperationResponses]
 
 export type PostSettingsLocalStartData = {
   body?: {
@@ -8557,7 +8814,7 @@ export type SettingsBillingGetResponses = {
        */
       signedIn: boolean
       /**
-       * Credit balance in USD; null when signed out or unavailable
+       * Purchased Wallet balance in USD; null when signed out or unavailable
        */
       balanceUsd: number | null
     }
@@ -8595,7 +8852,7 @@ export type SettingsBillingUpdateResponses = {
        */
       signedIn: boolean
       /**
-       * Credit balance in USD; null when signed out or unavailable
+       * Purchased Wallet balance in USD; null when signed out or unavailable
        */
       balanceUsd: number | null
     }
@@ -8618,13 +8875,21 @@ export type SettingsWalletGetResponses = {
   200: {
     signedIn: boolean
     /**
-     * Wallet balance in USD; null when signed out or unavailable
+     * Purchased Wallet balance in USD; null when signed out or unavailable
      */
     balanceUsd: number | null
     billingMode: "managed" | "byok" | null
     managedSupported: boolean
     managedUnlocked: boolean
     aceEnabled: boolean
+    aceContract: {
+      activationAuthorizationUsd: number
+      reloadThresholdUsd: number
+      reloadAmountUsd: number
+      serviceMarginPercent: number
+      processingFeeDisclosedSeparately: boolean
+      reloadControlledByAce: boolean
+    }
     lifetimeSpentUsd: number | null
     transactions: Array<{
       id: string
@@ -8697,6 +8962,186 @@ export type SettingsUpdatesInstallResponses = {
 }
 
 export type SettingsUpdatesInstallResponse = SettingsUpdatesInstallResponses[keyof SettingsUpdatesInstallResponses]
+
+export type SettingsUpdatesStateData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/updates/state"
+}
+
+export type SettingsUpdatesStateResponses = {
+  /**
+   * Desktop update state
+   */
+  200: {
+    phase:
+      | "idle"
+      | "downloading"
+      | "extracting"
+      | "verifying"
+      | "ready"
+      | "restarting"
+      | "restart_blocked"
+      | "succeeded"
+      | "failed"
+    version?: string
+    transferred?: number
+    total?: number
+    progress?: number
+    completed_at?: string
+    error?: string
+    migration_required?: boolean
+  }
+}
+
+export type SettingsUpdatesStateResponse = SettingsUpdatesStateResponses[keyof SettingsUpdatesStateResponses]
+
+export type SettingsUpdatesCancelData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/updates/stage"
+}
+
+export type SettingsUpdatesCancelResponses = {
+  /**
+   * Desktop update discarded
+   */
+  200: {
+    phase:
+      | "idle"
+      | "downloading"
+      | "extracting"
+      | "verifying"
+      | "ready"
+      | "restarting"
+      | "restart_blocked"
+      | "succeeded"
+      | "failed"
+    version?: string
+    transferred?: number
+    total?: number
+    progress?: number
+    completed_at?: string
+    error?: string
+    migration_required?: boolean
+  }
+}
+
+export type SettingsUpdatesCancelResponse = SettingsUpdatesCancelResponses[keyof SettingsUpdatesCancelResponses]
+
+export type SettingsUpdatesStageData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/updates/stage"
+}
+
+export type SettingsUpdatesStageResponses = {
+  /**
+   * Desktop update staging began
+   */
+  202: {
+    phase:
+      | "idle"
+      | "downloading"
+      | "extracting"
+      | "verifying"
+      | "ready"
+      | "restarting"
+      | "restart_blocked"
+      | "succeeded"
+      | "failed"
+    version?: string
+    transferred?: number
+    total?: number
+    progress?: number
+    completed_at?: string
+    error?: string
+    migration_required?: boolean
+  }
+}
+
+export type SettingsUpdatesStageResponse = SettingsUpdatesStageResponses[keyof SettingsUpdatesStageResponses]
+
+export type SettingsUpdatesApplyData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/updates/apply"
+}
+
+export type SettingsUpdatesApplyErrors = {
+  /**
+   * Active work must finish before restart
+   */
+  409: {
+    error: string
+  }
+}
+
+export type SettingsUpdatesApplyError = SettingsUpdatesApplyErrors[keyof SettingsUpdatesApplyErrors]
+
+export type SettingsUpdatesApplyResponses = {
+  /**
+   * Desktop restart scheduled
+   */
+  202: {
+    phase:
+      | "idle"
+      | "downloading"
+      | "extracting"
+      | "verifying"
+      | "ready"
+      | "restarting"
+      | "restart_blocked"
+      | "succeeded"
+      | "failed"
+    version?: string
+    transferred?: number
+    total?: number
+    progress?: number
+    completed_at?: string
+    error?: string
+    migration_required?: boolean
+  }
+}
+
+export type SettingsUpdatesApplyResponse = SettingsUpdatesApplyResponses[keyof SettingsUpdatesApplyResponses]
+
+export type SettingsUpdatesDisposeData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/updates/dispose"
+}
+
+export type SettingsUpdatesDisposeErrors = {
+  /**
+   * The desktop capability token is missing or invalid
+   */
+  401: {
+    error: string
+  }
+  /**
+   * Runtime disposal did not finish within the bounded handoff
+   */
+  503: {
+    error: string
+  }
+}
+
+export type SettingsUpdatesDisposeError = SettingsUpdatesDisposeErrors[keyof SettingsUpdatesDisposeErrors]
+
+export type SettingsUpdatesDisposeResponses = {
+  /**
+   * Every process-local runtime was released
+   */
+  204: void
+}
+
+export type SettingsUpdatesDisposeResponse = SettingsUpdatesDisposeResponses[keyof SettingsUpdatesDisposeResponses]
 
 export type SettingsResearchToolsGetData = {
   body?: never
@@ -8982,9 +9427,10 @@ export type SettingsScientificToolsResponses = {
     }
     connectors: Array<{
       schema_version: 1
-      id: "github" | "benchling" | "box" | "dropbox" | "s3"
+      id: "github" | "benchling" | "box" | "dropbox" | "s3" | "givemeanode"
       name: string
       provider: string
+      recommended?: boolean
       status: "official_setup" | "manual_review" | "unavailable"
       summary: string
       source_url: string
@@ -9001,6 +9447,8 @@ export type SettingsScientificToolsResponses = {
         oauth: "auto" | "client"
         scope?: string
         confidential_client?: boolean
+        one_click_disabled?: boolean
+        one_click_connect?: boolean
       }
       revision: string
     }>
@@ -11430,9 +11878,24 @@ export type SessionRevertError = SessionRevertErrors[keyof SessionRevertErrors]
 
 export type SessionRevertResponses = {
   /**
-   * Updated session
+   * Completed undo transaction
    */
-  200: Session
+  200: {
+    status: "reverted" | "unchanged"
+    session: Session
+    turns: number
+    files: Array<string>
+    filesystem: {
+      status: "applied" | "noop" | "partial"
+      restored: Array<string>
+      removed: Array<string>
+      skipped: Array<string>
+      errors: Array<{
+        file: string
+        message: string
+      }>
+    }
+  }
 }
 
 export type SessionRevertResponse = SessionRevertResponses[keyof SessionRevertResponses]
@@ -16614,17 +17077,98 @@ export type McpAuthStartError = McpAuthStartErrors[keyof McpAuthStartErrors]
 
 export type McpAuthStartResponses = {
   /**
-   * OAuth flow started
+   * OAuth flow started or existing credentials settled
    */
-  200: {
-    /**
-     * URL to open in browser for authorization
-     */
-    authorizationUrl: string
-  }
+  200: McpAuthStart
 }
 
 export type McpAuthStartResponse = McpAuthStartResponses[keyof McpAuthStartResponses]
+
+export type McpAuthCancelData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query: {
+    directory?: string
+    flow_id: string
+  }
+  url: "/mcp/{name}/auth/pending"
+}
+
+export type McpAuthCancelErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type McpAuthCancelError = McpAuthCancelErrors[keyof McpAuthCancelErrors]
+
+export type McpAuthCancelResponses = {
+  /**
+   * Pending OAuth flow cancelled
+   */
+  200: {
+    success: true
+  }
+}
+
+export type McpAuthCancelResponse = McpAuthCancelResponses[keyof McpAuthCancelResponses]
+
+export type McpAuthPendingData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/{name}/auth/pending"
+}
+
+export type McpAuthPendingResponses = {
+  /**
+   * Pending OAuth operation
+   */
+  200: McpAuthPending
+}
+
+export type McpAuthPendingResponse = McpAuthPendingResponses[keyof McpAuthPendingResponses]
+
+export type McpAuthWaitData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query: {
+    directory?: string
+    flow_id: string
+  }
+  url: "/mcp/{name}/auth/wait"
+}
+
+export type McpAuthWaitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type McpAuthWaitError = McpAuthWaitErrors[keyof McpAuthWaitErrors]
+
+export type McpAuthWaitResponses = {
+  /**
+   * OAuth authentication completed
+   */
+  200: McpStatus
+}
+
+export type McpAuthWaitResponse = McpAuthWaitResponses[keyof McpAuthWaitResponses]
 
 export type McpAuthCallbackData = {
   body?: {
@@ -17069,6 +17613,8 @@ export type AppSkillsResponses = {
     }
     origin: "default" | "installed" | "user" | "project"
     entry?: boolean
+    permission_action: PermissionAction
+    recommended: boolean
   }>
 }
 

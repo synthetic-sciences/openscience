@@ -74,8 +74,18 @@
       "post": {
         "operationId": "global.project.create",
         "summary": "Create project",
-        "description": "Create an app-managed project with an opaque identity and optional project-scoped access to source locations explicitly selected by the user. Source paths never become the project identity.",
+        "description": "Create an app-managed project with an opaque identity and optional project-scoped access to source locations explicitly selected by the user. Source paths never become the project identity. Reusing an operation_id with the exact same draft safely replays its original result.",
         "responses": {
+          "200": {
+            "description": "Existing project information for a replayed operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
           "201": {
             "description": "Created project information",
             "content": {
@@ -95,6 +105,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Operation id was already bound to a different project draft"
           }
         },
         "requestBody": {
@@ -130,6 +143,11 @@
                         "path"
                       ]
                     }
+                  },
+                  "operation_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 },
                 "required": [
@@ -1725,7 +1743,7 @@
       "get": {
         "operationId": "settings.storage.usage",
         "summary": "Get storage usage",
-        "description": "Real on-disk sizes for the active OpenScience data directory and its top-level entries.",
+        "description": "Real on-disk sizes for the active OpenScience data directory and its top-level entries. Pass refresh=1 to bypass the result and error retry TTL.",
         "responses": {
           "200": {
             "description": "Usage",
@@ -1785,6 +1803,53 @@
                         }
                       ]
                     },
+                    "relocation": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "copying",
+                                "ready",
+                                "publishing",
+                                "published",
+                                "switched",
+                                "recovery_required"
+                              ]
+                            },
+                            "source": {
+                              "type": "string"
+                            },
+                            "target": {
+                              "type": "string"
+                            },
+                            "started_at": {
+                              "type": "string"
+                            },
+                            "updated_at": {
+                              "type": "string"
+                            },
+                            "active": {
+                              "type": "boolean"
+                            },
+                            "error": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "phase"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "entries": {
                       "type": "array",
                       "items": {
@@ -1827,6 +1892,7 @@
                     "scanning",
                     "updated_at",
                     "scan_error",
+                    "relocation",
                     "entries"
                   ]
                 }
@@ -1834,6 +1900,16 @@
             }
           }
         },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "refresh",
+            "schema": {
+              "type": "string",
+              "const": "1"
+            }
+          }
+        ],
         "x-codeSamples": [
           {
             "lang": "js",
@@ -2008,14 +2084,45 @@
                           "name": {
                             "type": "string"
                           },
-                          "verified": {
-                            "type": "boolean"
+                          "integration": {
+                            "type": "string",
+                            "enum": [
+                              "integrated",
+                              "cli_credential"
+                            ]
                           },
                           "placeholder": {
                             "type": "string"
                           },
                           "hint": {
                             "type": "string"
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "aliases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "environment",
+                              "aliases",
+                              "docs_url"
+                            ]
                           },
                           "connected": {
                             "type": "boolean"
@@ -2062,9 +2169,10 @@
                         "required": [
                           "id",
                           "name",
-                          "verified",
+                          "integration",
                           "placeholder",
                           "hint",
+                          "credential",
                           "connected",
                           "enabled",
                           "source",
@@ -2103,6 +2211,25 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "proxy_jump": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "proxy_jump_host_keys": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000
+                            }
                           },
                           "scheduler": {
                             "default": "none",
@@ -2172,6 +2299,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string"
+                          },
+                          "proxy_jump": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -2354,14 +2487,45 @@
                           "name": {
                             "type": "string"
                           },
-                          "verified": {
-                            "type": "boolean"
+                          "integration": {
+                            "type": "string",
+                            "enum": [
+                              "integrated",
+                              "cli_credential"
+                            ]
                           },
                           "placeholder": {
                             "type": "string"
                           },
                           "hint": {
                             "type": "string"
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "aliases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "environment",
+                              "aliases",
+                              "docs_url"
+                            ]
                           },
                           "connected": {
                             "type": "boolean"
@@ -2408,9 +2572,10 @@
                         "required": [
                           "id",
                           "name",
-                          "verified",
+                          "integration",
                           "placeholder",
                           "hint",
+                          "credential",
                           "connected",
                           "enabled",
                           "source",
@@ -2449,6 +2614,25 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "proxy_jump": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "proxy_jump_host_keys": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000
+                            }
                           },
                           "scheduler": {
                             "default": "none",
@@ -2518,6 +2702,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string"
+                          },
+                          "proxy_jump": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -2700,14 +2890,45 @@
                           "name": {
                             "type": "string"
                           },
-                          "verified": {
-                            "type": "boolean"
+                          "integration": {
+                            "type": "string",
+                            "enum": [
+                              "integrated",
+                              "cli_credential"
+                            ]
                           },
                           "placeholder": {
                             "type": "string"
                           },
                           "hint": {
                             "type": "string"
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "aliases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "environment",
+                              "aliases",
+                              "docs_url"
+                            ]
                           },
                           "connected": {
                             "type": "boolean"
@@ -2754,9 +2975,10 @@
                         "required": [
                           "id",
                           "name",
-                          "verified",
+                          "integration",
                           "placeholder",
                           "hint",
+                          "credential",
                           "connected",
                           "enabled",
                           "source",
@@ -2795,6 +3017,25 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "proxy_jump": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "proxy_jump_host_keys": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000
+                            }
                           },
                           "scheduler": {
                             "default": "none",
@@ -2864,6 +3105,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string"
+                          },
+                          "proxy_jump": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -3082,14 +3329,45 @@
                           "name": {
                             "type": "string"
                           },
-                          "verified": {
-                            "type": "boolean"
+                          "integration": {
+                            "type": "string",
+                            "enum": [
+                              "integrated",
+                              "cli_credential"
+                            ]
                           },
                           "placeholder": {
                             "type": "string"
                           },
                           "hint": {
                             "type": "string"
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "aliases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "environment",
+                              "aliases",
+                              "docs_url"
+                            ]
                           },
                           "connected": {
                             "type": "boolean"
@@ -3136,9 +3414,10 @@
                         "required": [
                           "id",
                           "name",
-                          "verified",
+                          "integration",
                           "placeholder",
                           "hint",
+                          "credential",
                           "connected",
                           "enabled",
                           "source",
@@ -3177,6 +3456,25 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "proxy_jump": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "proxy_jump_host_keys": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000
+                            }
                           },
                           "scheduler": {
                             "default": "none",
@@ -3246,6 +3544,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string"
+                          },
+                          "proxy_jump": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -3438,14 +3742,45 @@
                           "name": {
                             "type": "string"
                           },
-                          "verified": {
-                            "type": "boolean"
+                          "integration": {
+                            "type": "string",
+                            "enum": [
+                              "integrated",
+                              "cli_credential"
+                            ]
                           },
                           "placeholder": {
                             "type": "string"
                           },
                           "hint": {
                             "type": "string"
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "aliases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "environment",
+                              "aliases",
+                              "docs_url"
+                            ]
                           },
                           "connected": {
                             "type": "boolean"
@@ -3492,9 +3827,10 @@
                         "required": [
                           "id",
                           "name",
-                          "verified",
+                          "integration",
                           "placeholder",
                           "hint",
+                          "credential",
                           "connected",
                           "enabled",
                           "source",
@@ -3533,6 +3869,25 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "proxy_jump": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "proxy_jump_host_keys": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000
+                            }
                           },
                           "scheduler": {
                             "default": "none",
@@ -3602,6 +3957,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string"
+                          },
+                          "proxy_jump": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -3797,6 +4158,77 @@
         ]
       }
     },
+    "/settings/compute/provider/{id}/doctor": {
+      "post": {
+        "operationId": "settings.compute.provider.doctor",
+        "summary": "Run the provider's reviewed read-only native connection check",
+        "responses": {
+          "200": {
+            "description": "Connection check result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "cli": {
+                      "type": "string"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "checked_at": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "provider",
+                    "cli",
+                    "command",
+                    "checked_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.compute.provider.doctor({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/compute/modal": {
       "patch": {
         "operationId": "settings.compute.modal.update",
@@ -3821,14 +4253,45 @@
                           "name": {
                             "type": "string"
                           },
-                          "verified": {
-                            "type": "boolean"
+                          "integration": {
+                            "type": "string",
+                            "enum": [
+                              "integrated",
+                              "cli_credential"
+                            ]
                           },
                           "placeholder": {
                             "type": "string"
                           },
                           "hint": {
                             "type": "string"
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "aliases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "environment",
+                              "aliases",
+                              "docs_url"
+                            ]
                           },
                           "connected": {
                             "type": "boolean"
@@ -3875,9 +4338,10 @@
                         "required": [
                           "id",
                           "name",
-                          "verified",
+                          "integration",
                           "placeholder",
                           "hint",
+                          "credential",
                           "connected",
                           "enabled",
                           "source",
@@ -3916,6 +4380,25 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "proxy_jump": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "proxy_jump_host_keys": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000
+                            }
                           },
                           "scheduler": {
                             "default": "none",
@@ -3985,6 +4468,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string"
+                          },
+                          "proxy_jump": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -4397,14 +4886,45 @@
                           "name": {
                             "type": "string"
                           },
-                          "verified": {
-                            "type": "boolean"
+                          "integration": {
+                            "type": "string",
+                            "enum": [
+                              "integrated",
+                              "cli_credential"
+                            ]
                           },
                           "placeholder": {
                             "type": "string"
                           },
                           "hint": {
                             "type": "string"
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "aliases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "environment",
+                              "aliases",
+                              "docs_url"
+                            ]
                           },
                           "connected": {
                             "type": "boolean"
@@ -4451,9 +4971,10 @@
                         "required": [
                           "id",
                           "name",
-                          "verified",
+                          "integration",
                           "placeholder",
                           "hint",
+                          "credential",
                           "connected",
                           "enabled",
                           "source",
@@ -4492,6 +5013,25 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "proxy_jump": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "proxy_jump_host_keys": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000
+                            }
                           },
                           "scheduler": {
                             "default": "none",
@@ -4561,6 +5101,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string"
+                          },
+                          "proxy_jump": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -4800,14 +5346,45 @@
                           "name": {
                             "type": "string"
                           },
-                          "verified": {
-                            "type": "boolean"
+                          "integration": {
+                            "type": "string",
+                            "enum": [
+                              "integrated",
+                              "cli_credential"
+                            ]
                           },
                           "placeholder": {
                             "type": "string"
                           },
                           "hint": {
                             "type": "string"
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "aliases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "environment",
+                              "aliases",
+                              "docs_url"
+                            ]
                           },
                           "connected": {
                             "type": "boolean"
@@ -4854,9 +5431,10 @@
                         "required": [
                           "id",
                           "name",
-                          "verified",
+                          "integration",
                           "placeholder",
                           "hint",
+                          "credential",
                           "connected",
                           "enabled",
                           "source",
@@ -4895,6 +5473,25 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "proxy_jump": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "proxy_jump_host_keys": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000
+                            }
                           },
                           "scheduler": {
                             "default": "none",
@@ -4964,6 +5561,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string"
+                          },
+                          "proxy_jump": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -5152,6 +5755,16 @@
                     "minimum": 1,
                     "maximum": 65535
                   },
+                  "identity_file": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "proxy_jump": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
                   "scheduler": {
                     "default": "none",
                     "type": "string",
@@ -5236,6 +5849,13 @@
                     "host_key": {
                       "type": "string"
                     },
+                    "proxy_jump_host_keys": {
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "error": {
                       "type": "string"
                     }
@@ -5306,14 +5926,45 @@
                           "name": {
                             "type": "string"
                           },
-                          "verified": {
-                            "type": "boolean"
+                          "integration": {
+                            "type": "string",
+                            "enum": [
+                              "integrated",
+                              "cli_credential"
+                            ]
                           },
                           "placeholder": {
                             "type": "string"
                           },
                           "hint": {
                             "type": "string"
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "aliases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "environment",
+                              "aliases",
+                              "docs_url"
+                            ]
                           },
                           "connected": {
                             "type": "boolean"
@@ -5360,9 +6011,10 @@
                         "required": [
                           "id",
                           "name",
-                          "verified",
+                          "integration",
                           "placeholder",
                           "hint",
+                          "credential",
                           "connected",
                           "enabled",
                           "source",
@@ -5401,6 +6053,25 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "proxy_jump": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "proxy_jump_host_keys": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000
+                            }
                           },
                           "scheduler": {
                             "default": "none",
@@ -5470,6 +6141,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string"
+                          },
+                          "proxy_jump": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -5698,14 +6375,45 @@
                           "name": {
                             "type": "string"
                           },
-                          "verified": {
-                            "type": "boolean"
+                          "integration": {
+                            "type": "string",
+                            "enum": [
+                              "integrated",
+                              "cli_credential"
+                            ]
                           },
                           "placeholder": {
                             "type": "string"
                           },
                           "hint": {
                             "type": "string"
+                          },
+                          "credential": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string"
+                              },
+                              "environment": {
+                                "type": "string"
+                              },
+                              "aliases": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "docs_url": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "environment",
+                              "aliases",
+                              "docs_url"
+                            ]
                           },
                           "connected": {
                             "type": "boolean"
@@ -5752,9 +6460,10 @@
                         "required": [
                           "id",
                           "name",
-                          "verified",
+                          "integration",
                           "placeholder",
                           "hint",
+                          "credential",
                           "connected",
                           "enabled",
                           "source",
@@ -5793,6 +6502,25 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                          },
+                          "proxy_jump": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1024
+                          },
+                          "proxy_jump_host_keys": {
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 16000
+                            }
                           },
                           "scheduler": {
                             "default": "none",
@@ -5862,6 +6590,12 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 65535
+                          },
+                          "identity_file": {
+                            "type": "string"
+                          },
+                          "proxy_jump": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -8472,6 +9206,25 @@
                                 "minimum": 1,
                                 "maximum": 65535
                               },
+                              "identity_file": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 4096
+                              },
+                              "proxy_jump": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1024
+                              },
+                              "proxy_jump_host_keys": {
+                                "maxItems": 8,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 16000
+                                }
+                              },
                               "scheduler": {
                                 "default": "none",
                                 "type": "string",
@@ -11042,6 +11795,25 @@
                               "minimum": 1,
                               "maximum": 65535
                             },
+                            "identity_file": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "proxy_jump": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1024
+                            },
+                            "proxy_jump_host_keys": {
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16000
+                              }
+                            },
                             "scheduler": {
                               "default": "none",
                               "type": "string",
@@ -11723,6 +12495,21 @@
                           "type": "integer",
                           "exclusiveMinimum": 0,
                           "maximum": 65535
+                        },
+                        "identity_file": {
+                          "type": "string"
+                        },
+                        "proxy_jump": {
+                          "type": "string"
+                        },
+                        "proxy_jump_host_key_digests": {
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 64,
+                            "maxLength": 64
+                          }
                         },
                         "label": {
                           "type": "string"
@@ -14749,6 +15536,25 @@
                               "minimum": 1,
                               "maximum": 65535
                             },
+                            "identity_file": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "proxy_jump": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1024
+                            },
+                            "proxy_jump_host_keys": {
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16000
+                              }
+                            },
                             "scheduler": {
                               "default": "none",
                               "type": "string",
@@ -17347,6 +18153,25 @@
                               "type": "integer",
                               "minimum": 1,
                               "maximum": 65535
+                            },
+                            "identity_file": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "proxy_jump": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1024
+                            },
+                            "proxy_jump_host_keys": {
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16000
+                              }
                             },
                             "scheduler": {
                               "default": "none",
@@ -19947,6 +20772,25 @@
                               "minimum": 1,
                               "maximum": 65535
                             },
+                            "identity_file": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            "proxy_jump": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1024
+                            },
+                            "proxy_jump_host_keys": {
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 16000
+                              }
+                            },
                             "scheduler": {
                               "default": "none",
                               "type": "string",
@@ -20146,6 +20990,20 @@
                       "minimum": 0,
                       "maximum": 9007199254740991
                     },
+                    "desktop_onboarding_operations": {
+                      "default": {},
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "atlas_enabled": {
                       "default": false,
                       "type": "boolean"
@@ -20277,6 +21135,20 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "desktop_onboarding_operations": {
+                      "default": {},
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
                     },
                     "atlas_enabled": {
                       "default": false,
@@ -20463,6 +21335,93 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.preferences.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/preferences/onboarding-operation": {
+      "post": {
+        "operationId": "settings.preferences.onboardingOperation",
+        "summary": "Get or create the durable operation for an exact desktop onboarding draft",
+        "responses": {
+          "200": {
+            "description": "Stable onboarding operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "operation_id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
+                  },
+                  "required": [
+                    "operation_id"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fingerprint": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": [
+                  "fingerprint"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.preferences.onboardingOperation({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "settings.preferences.clearOnboardingOperation",
+        "summary": "Clear one completed desktop onboarding draft binding",
+        "responses": {
+          "204": {
+            "description": "Onboarding operation cleared"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fingerprint": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  }
+                },
+                "required": [
+                  "fingerprint"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.preferences.clearOnboardingOperation({\n  ...\n})"
           }
         ]
       }
@@ -20798,7 +21757,7 @@
                           "type": "boolean"
                         },
                         "balanceUsd": {
-                          "description": "Credit balance in USD; null when signed out or unavailable",
+                          "description": "Purchased Wallet balance in USD; null when signed out or unavailable",
                           "anyOf": [
                             {
                               "type": "number"
@@ -20873,7 +21832,7 @@
                           "type": "boolean"
                         },
                         "balanceUsd": {
-                          "description": "Credit balance in USD; null when signed out or unavailable",
+                          "description": "Purchased Wallet balance in USD; null when signed out or unavailable",
                           "anyOf": [
                             {
                               "type": "number"
@@ -20944,7 +21903,7 @@
     "/settings/wallet": {
       "get": {
         "operationId": "settings.wallet.get",
-        "summary": "Get wallet balance, routing mode, and recent transactions",
+        "summary": "Get purchased Wallet balance, routing mode, and recent transactions",
         "responses": {
           "200": {
             "description": "Wallet state",
@@ -20957,7 +21916,7 @@
                       "type": "boolean"
                     },
                     "balanceUsd": {
-                      "description": "Wallet balance in USD; null when signed out or unavailable",
+                      "description": "Purchased Wallet balance in USD; null when signed out or unavailable",
                       "anyOf": [
                         {
                           "type": "number"
@@ -20989,6 +21948,41 @@
                     },
                     "aceEnabled": {
                       "type": "boolean"
+                    },
+                    "aceContract": {
+                      "type": "object",
+                      "properties": {
+                        "activationAuthorizationUsd": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "reloadThresholdUsd": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "reloadAmountUsd": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "serviceMarginPercent": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "processingFeeDisclosedSeparately": {
+                          "type": "boolean"
+                        },
+                        "reloadControlledByAce": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "activationAuthorizationUsd",
+                        "reloadThresholdUsd",
+                        "reloadAmountUsd",
+                        "serviceMarginPercent",
+                        "processingFeeDisclosedSeparately",
+                        "reloadControlledByAce"
+                      ]
                     },
                     "lifetimeSpentUsd": {
                       "anyOf": [
@@ -21038,6 +22032,7 @@
                     "managedSupported",
                     "managedUnlocked",
                     "aceEnabled",
+                    "aceContract",
                     "lifetimeSpentUsd",
                     "transactions"
                   ]
@@ -21184,6 +22179,347 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.install({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/updates/state": {
+      "get": {
+        "operationId": "settings.updates.state",
+        "summary": "Get desktop update progress",
+        "responses": {
+          "200": {
+            "description": "Desktop update state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "phase": {
+                      "type": "string",
+                      "enum": [
+                        "idle",
+                        "downloading",
+                        "extracting",
+                        "verifying",
+                        "ready",
+                        "restarting",
+                        "restart_blocked",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "transferred": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "progress": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "completed_at": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "migration_required": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "phase"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.state({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/updates/stage": {
+      "post": {
+        "operationId": "settings.updates.stage",
+        "summary": "Download and verify the desktop update",
+        "responses": {
+          "202": {
+            "description": "Desktop update staging began",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "phase": {
+                      "type": "string",
+                      "enum": [
+                        "idle",
+                        "downloading",
+                        "extracting",
+                        "verifying",
+                        "ready",
+                        "restarting",
+                        "restart_blocked",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "transferred": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "progress": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "completed_at": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "migration_required": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "phase"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.stage({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "settings.updates.cancel",
+        "summary": "Cancel or discard a staged desktop update",
+        "responses": {
+          "200": {
+            "description": "Desktop update discarded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "phase": {
+                      "type": "string",
+                      "enum": [
+                        "idle",
+                        "downloading",
+                        "extracting",
+                        "verifying",
+                        "ready",
+                        "restarting",
+                        "restart_blocked",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "transferred": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "progress": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "completed_at": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "migration_required": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "phase"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.cancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/updates/apply": {
+      "post": {
+        "operationId": "settings.updates.apply",
+        "summary": "Restart into a verified desktop update",
+        "responses": {
+          "202": {
+            "description": "Desktop restart scheduled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "phase": {
+                      "type": "string",
+                      "enum": [
+                        "idle",
+                        "downloading",
+                        "extracting",
+                        "verifying",
+                        "ready",
+                        "restarting",
+                        "restart_blocked",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "transferred": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "progress": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "completed_at": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "migration_required": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "phase"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Active work must finish before restart",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.apply({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/updates/dispose": {
+      "post": {
+        "operationId": "settings.updates.dispose",
+        "summary": "Gracefully release runtimes before a desktop restart",
+        "responses": {
+          "204": {
+            "description": "Every process-local runtime was released"
+          },
+          "401": {
+            "description": "The desktop capability token is missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Runtime disposal did not finish within the bounded handoff",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.dispose({\n  ...\n})"
           }
         ]
       }
@@ -22305,7 +23641,8 @@
                               "benchling",
                               "box",
                               "dropbox",
-                              "s3"
+                              "s3",
+                              "givemeanode"
                             ]
                           },
                           "name": {
@@ -22313,6 +23650,10 @@
                           },
                           "provider": {
                             "type": "string"
+                          },
+                          "recommended": {
+                            "default": false,
+                            "type": "boolean"
                           },
                           "status": {
                             "type": "string",
@@ -22384,6 +23725,12 @@
                                 "type": "string"
                               },
                               "confidential_client": {
+                                "type": "boolean"
+                              },
+                              "one_click_disabled": {
+                                "type": "boolean"
+                              },
+                              "one_click_connect": {
                                 "type": "boolean"
                               }
                             },
@@ -29379,11 +30726,97 @@
         "description": "Revert a specific message in a session, undoing its effects and restoring the previous state.",
         "responses": {
           "200": {
-            "description": "Updated session",
+            "description": "Completed undo transaction",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Session"
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "reverted",
+                        "unchanged"
+                      ]
+                    },
+                    "session": {
+                      "$ref": "#/components/schemas/Session"
+                    },
+                    "turns": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "filesystem": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "applied",
+                            "noop",
+                            "partial"
+                          ]
+                        },
+                        "restored": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "removed": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "skipped": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "errors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "file": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "file",
+                              "message"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "restored",
+                        "removed",
+                        "skipped",
+                        "errors"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "session",
+                    "turns",
+                    "files",
+                    "filesystem"
+                  ]
                 }
               }
             }
@@ -49092,20 +50525,11 @@
         "description": "Start OAuth authentication flow for a Model Context Protocol (MCP) server.",
         "responses": {
           "200": {
-            "description": "OAuth flow started",
+            "description": "OAuth flow started or existing credentials settled",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "authorizationUrl": {
-                      "description": "URL to open in browser for authorization",
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "authorizationUrl"
-                  ]
+                  "$ref": "#/components/schemas/MCPAuthStart"
                 }
               }
             }
@@ -49194,6 +50618,187 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.mcp.auth.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/mcp/{name}/auth/pending": {
+      "get": {
+        "operationId": "mcp.auth.pending",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "summary": "Read pending MCP OAuth",
+        "description": "Return the exact resumable browser authorization operation, if one exists.",
+        "responses": {
+          "200": {
+            "description": "Pending OAuth operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MCPAuthPending"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.mcp.auth.pending({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "mcp.auth.cancel",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "flow_id",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "summary": "Cancel pending MCP OAuth",
+        "description": "Cancel only the pending browser authorization flow without deleting existing credentials.",
+        "responses": {
+          "200": {
+            "description": "Pending OAuth flow cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.mcp.auth.cancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/mcp/{name}/auth/wait": {
+      "post": {
+        "operationId": "mcp.auth.wait",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "flow_id",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "summary": "Wait for MCP OAuth",
+        "description": "Wait for an already-started browser OAuth operation without launching a second browser.",
+        "responses": {
+          "200": {
+            "description": "OAuth authentication completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MCPStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.mcp.auth.wait({\n  ...\n})"
           }
         ]
       }
@@ -50330,13 +51935,21 @@
                       },
                       "entry": {
                         "type": "boolean"
+                      },
+                      "permission_action": {
+                        "$ref": "#/components/schemas/PermissionAction"
+                      },
+                      "recommended": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
                       "name",
                       "description",
                       "location",
-                      "origin"
+                      "origin",
+                      "permission_action",
+                      "recommended"
                     ]
                   }
                 }
@@ -53955,6 +55568,17 @@
               },
               "diff": {
                 "type": "string"
+              },
+              "turns": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -55879,7 +57503,7 @@
             "const": "remote"
           },
           "url": {
-            "description": "URL of the remote MCP server",
+            "description": "HTTPS URL of the remote MCP server",
             "type": "string"
           },
           "enabled": {
@@ -57817,6 +59441,82 @@
           "resources",
           "prompts",
           "errors"
+        ]
+      },
+      "MCPAuthStart": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "pending"
+              },
+              "authorizationUrl": {
+                "type": "string"
+              },
+              "flowId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "authorizationUrl",
+              "flowId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "settled"
+              },
+              "result": {
+                "$ref": "#/components/schemas/MCPStatus"
+              }
+            },
+            "required": [
+              "state",
+              "result"
+            ]
+          }
+        ]
+      },
+      "MCPAuthPending": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "pending": {
+                "type": "boolean",
+                "const": true
+              },
+              "authorizationUrl": {
+                "type": "string"
+              },
+              "flowId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pending",
+              "authorizationUrl",
+              "flowId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "pending": {
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "required": [
+              "pending"
+            ]
+          }
         ]
       },
       "Path": {
