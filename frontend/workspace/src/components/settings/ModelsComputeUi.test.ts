@@ -18,13 +18,14 @@ describe("models and compute settings UI contract", () => {
     expect(source).not.toContain("managed-inference-${option.value")
     expect(source).toContain("aria-pressed=")
     expect(source).toContain("setMode(value)")
-    expect(source).toContain("setBusy(false)")
-    expect(source.indexOf("setBusy(false)")).toBeLessThan(source.indexOf(".refreshProviders()"))
+    const update = source.slice(source.indexOf("const update ="), source.indexOf("// The mode can change"))
+    expect(update).toContain("setBusy(false)")
+    expect(update.indexOf("setBusy(false)")).toBeLessThan(update.indexOf("void sync("))
 
     expect(source.indexOf('title: "BYOK / Subscription"')).toBeLessThan(source.indexOf('title: "Managed"'))
     for (const description of [
       "Use connected provider keys or models included with an eligible subscription.",
-      "Use your Ace balance for supported models without configuring a provider key.",
+      "Use your purchased Wallet balance for supported models without configuring a provider key.",
     ]) {
       expect(source.split(description)).toHaveLength(2)
     }
