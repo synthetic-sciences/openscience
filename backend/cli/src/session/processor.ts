@@ -276,7 +276,7 @@ export namespace SessionProcessor {
     if (hasText) return
     return new MessageV2.APIError({
       message:
-        "The provider blocked this response with its content filter and returned no textual handoff. Retry the request or choose another model.",
+        "The provider blocked this response with its content filter and returned no content or textual handoff. Retry the request or choose another model.",
       isRetryable: true,
       metadata: {
         action: "retry",
