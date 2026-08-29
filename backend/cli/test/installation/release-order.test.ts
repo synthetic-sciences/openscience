@@ -53,7 +53,8 @@ test("production publish requires a complete exact-source npm rehearsal before r
 
   expect(gate).toContain("needs: release-source")
   expect(gate).toContain("actions: read")
-  expect(gate).toContain("contents: read")
+  expect(gate).toContain("contents: write")
+  expect(gate).toContain("GitHub only returns draft releases to tokens with push access")
   expect(gate).toContain("steps.candidate.outputs.source")
   expect(gate).toContain('"/repos/$GH_REPO/releases?per_page=100"')
   expect(gate).toContain("gh api --paginate --slurp")

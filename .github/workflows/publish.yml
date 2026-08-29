@@ -68,7 +68,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       actions: read
-      contents: read
+      # GitHub only returns draft releases to tokens with push access. Exact
+      # version resumes need the draft's immutable artifact-source marker.
+      contents: write
     outputs:
       source: ${{ steps.candidate.outputs.source }}
       run_id: ${{ steps.candidate.outputs.run_id }}
