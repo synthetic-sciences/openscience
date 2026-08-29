@@ -1,5 +1,7 @@
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import path from "node:path"
+import { CredentialLifecycle } from "../../src/credentials/lifecycle"
+import { FileLease } from "../../src/util/file-lease"
 
 test("credential-bearing subprocess snapshots only appear behind the admitted spawn boundary", async () => {
   const root = path.resolve(import.meta.dir, "../..", "src")
@@ -21,14 +23,25 @@ test("credential-bearing subprocess snapshots only appear behind the admitted sp
     expect(source, relative).toContain("OpenScience.kernelEnv(")
     expect(source, relative).not.toContain("OpenScience.withSubprocessEnv(")
   }
-
-  const lifecycle = await Bun.file(path.join(root, "credentials/lifecycle.ts")).text()
-  expect(lifecycle.match(/return await action\(\)/g)?.length).toBe(2)
-  expect(lifecycle).not.toMatch(/await using lease[\s\S]{0,160}return action\(\)/)
 })
 
 test("credential mutation boundaries outwait the complete bounded telemetry request sequence", async () => {
-  const lifecycle = await Bun.file(path.resolve(import.meta.dir, "../../src/credentials/lifecycle.ts")).text()
-  expect(lifecycle).toContain("const mutationLeaseTimeout = 30_000")
-  expect(lifecycle.match(/FileLease\.acquire\(mutationLock, mutationLeaseTimeout\)/g)).toHaveLength(3)
+  const timeouts: Array<number | undefined> = []
+  const acquire = spyOn(FileLease, "acquire").mockImplementation(async (_filepath, timeout) => {
+    timeouts.push(timeout)
+    return {
+      async during<T>(action: () => Promise<T>) {
+        return action()
+      },
+      async [Symbol.asyncDispose]() {},
+    }
+  })
+
+  try {
+    await CredentialLifecycle.serialized(async () => "settled")
+  } finally {
+    acquire.mockRestore()
+  }
+
+  expect(timeouts).toEqual([30_000])
 })

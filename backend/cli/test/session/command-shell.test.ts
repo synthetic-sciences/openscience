@@ -4,6 +4,7 @@ import path from "node:path"
 import { Command } from "../../src/command"
 import { Instance } from "../../src/project/instance"
 import { ProjectTrust } from "../../src/project/trust"
+import { PermissionNext } from "../../src/permission/next"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { tmpdir, trustProject } from "../fixture/fixture"
@@ -55,19 +56,32 @@ test("trusted command shell interpolation uses the governed shell boundary", asy
       const session = await Session.create({
         permission: [{ permission: "bash", pattern: "*", action: "allow" }],
       })
-      let failure: unknown
-      await SessionPrompt.command({
+      const execution = SessionPrompt.command({
         sessionID: session.id,
         command: "review",
         arguments: "",
-        model: "test/model",
-      }).catch((error) => {
-        failure = error
+        // The contract under test ends after interpolation. A missing model
+        // makes the following provider phase fail immediately and locally.
+        model: "missing-provider/missing-model",
+      }).catch((error) => error)
+
+      let approval: PermissionNext.Request | undefined
+      for (let attempt = 0; attempt < 100 && !approval; attempt++) {
+        approval = (await PermissionNext.list()).find(
+          (item) => item.sessionID === session.id && item.permission === "bash",
+        )
+        if (!approval) await Bun.sleep(5)
+      }
+      expect(approval).toMatchObject({
+        permission: "bash",
+        metadata: { shell: { command: expect.stringContaining("printf governed") } },
       })
-      expect(await Bun.file(tmp.extra).exists(), failure instanceof Error ? failure.message : String(failure)).toBe(
-        true,
-      )
+      await PermissionNext.reply({ requestID: approval!.id, reply: "once" })
+
+      const failure = await execution
+      expect(failure).toBeInstanceOf(Error)
+      expect(await Bun.file(tmp.extra).exists()).toBe(true)
       expect(await Bun.file(tmp.extra).text()).toBe("governed")
     },
   })
-}, 30_000)
+}, 10_000)

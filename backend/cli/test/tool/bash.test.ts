@@ -316,10 +316,11 @@ describe("tool.bash permissions", () => {
       fn: async () => {
         const bash = await BashTool.init()
         const base = await context()
+        const command = process.platform === "win32" ? "cd" : "pwd"
         const result = await bash.execute(
           {
-            command: "rg --version",
-            description: "Check ripgrep version",
+            command,
+            description: "Read the current working directory",
           },
           {
             ...base,
@@ -333,7 +334,7 @@ describe("tool.bash permissions", () => {
           },
         )
         expect(result.metadata.exit).toBe(0)
-        expect(result.output.toLowerCase()).toContain("ripgrep")
+        expect(path.isAbsolute(result.output.trim())).toBe(true)
         expect((await PermissionNext.list()).some((item) => item.sessionID === base.sessionID)).toBe(false)
       },
     })
