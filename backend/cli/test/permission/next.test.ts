@@ -1171,6 +1171,16 @@ test("shell risk classifier fails closed for destructive, remote, dynamic, and a
   expect(PermissionNext.risk("bash", {})).toBe("unknown")
 })
 
+test("shell risk script and build target parsing stays linear on adversarial names", () => {
+  const valid = `test:${"unit-".repeat(20_000)}final`
+  const ambiguous = `ci-${"--".repeat(20_000)}:`
+
+  expect(ShellRisk.classify(`bun run ${valid}`)).toMatchObject({ level: "contained" })
+  expect(ShellRisk.classify(`make ${valid}`)).toMatchObject({ level: "contained" })
+  expect(ShellRisk.classify(`bun run ${ambiguous}`)).toMatchObject({ level: "risky" })
+  expect(ShellRisk.classify(`make ${ambiguous}`)).toMatchObject({ level: "risky" })
+})
+
 test("project action modes are execution-time authority floors", () => {
   expect(PermissionNext.modeAction({ mode: "ask", permission: "edit", configured: "allow", granted: "allow" })).toBe(
     "ask",

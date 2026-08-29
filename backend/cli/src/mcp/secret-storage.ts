@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import path from "node:path"
 import { Global } from "../global"
 import { SecretBox } from "../util/secret-box"
@@ -18,6 +19,24 @@ export namespace McpSecretStorage {
 
   async function key(): Promise<Buffer> {
     return SecretFile.key(keyPath)
+  }
+
+  export type IdentifierDomain = "connector-operation-lock" | "oauth-authority" | "oauth-flow" | "oauth-settlement-lock"
+
+  /**
+   * Produce a stable, machine-local identifier without publishing a digest of
+   * low-entropy credential material. The fixed prefix and closed domain set
+   * prevent one identifier class from being replayed as another; the existing
+   * credentials key keeps the output deterministic across processes and data
+   * root relocation while denying an offline guessing oracle to anyone who
+   * only obtains a fingerprint or lock filename.
+   */
+  export async function identifier(domain: IdentifierDomain, value: string): Promise<string> {
+    const hmac = crypto.createHmac("sha256", await key())
+    hmac.end(`openscience:mcp:identifier:v1\0${domain}\0${value}`)
+    const digest = hmac.read()
+    if (!Buffer.isBuffer(digest)) throw new Error("MCP identifier HMAC did not finalize synchronously")
+    return digest.toString("hex")
   }
 
   export function sealed(value: string): boolean {

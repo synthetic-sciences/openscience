@@ -178,9 +178,36 @@ export namespace ShellRisk {
     "zsh",
   ])
 
-  const SAFE_SCRIPT = /^(build|check|ci|lint|test|typecheck)(?:[:_-][a-z0-9._-]+)*$/i
-  const SAFE_MAKE_TARGET = /^(all|build|check|ci|lint|test|typecheck)(?:[-_:][a-z0-9._-]+)*$/i
+  const SAFE_SCRIPTS = new Set(["build", "check", "ci", "lint", "test", "typecheck"])
+  const SAFE_MAKE_TARGETS = new Set(["all", ...SAFE_SCRIPTS])
   const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+
+  /** Validate the same root[:_-]segment language as the former regex without
+   * overlapping nested repetitions. Colons delimit non-empty segments; dash
+   * and underscore remain valid within a segment for common script names. */
+  function safeTarget(value: string, roots: ReadonlySet<string>): boolean {
+    const lower = value.toLowerCase()
+    const root = [...roots].find((candidate) => lower.startsWith(candidate))
+    if (!root) return false
+    let index = root.length
+    if (index === lower.length) return true
+
+    while (index < lower.length) {
+      const separator = lower.charCodeAt(index)
+      if (separator !== 45 && separator !== 58 && separator !== 95) return false // -, :, _
+      index += 1
+      const start = index
+      while (index < lower.length) {
+        const code = lower.charCodeAt(index)
+        const body =
+          (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 45 || code === 46 || code === 95
+        if (!body) break
+        index += 1
+      }
+      if (index === start) return false
+    }
+    return true
+  }
 
   function executable(value: string) {
     return value.replaceAll("\\", "/").split("/").at(-1)?.toLowerCase() ?? ""
@@ -386,8 +413,8 @@ export namespace ShellRisk {
   function packageManager(command: string, args: string[]): Result {
     const first = args[0]?.toLowerCase()
     if (first === "test") return contained(`${command} test`)
-    if (first === "run" && SAFE_SCRIPT.test(args[1] ?? "")) return contained(`${command} local script`)
-    if (command === "yarn" && SAFE_SCRIPT.test(first ?? "")) return contained("yarn local script")
+    if (first === "run" && safeTarget(args[1] ?? "", SAFE_SCRIPTS)) return contained(`${command} local script`)
+    if (command === "yarn" && safeTarget(first ?? "", SAFE_SCRIPTS)) return contained("yarn local script")
     return risky(`${command} command is not an audited local test or build`)
   }
 
@@ -412,7 +439,7 @@ export namespace ShellRisk {
     }
     if (["make", "gmake"].includes(command)) {
       const targets = args.filter((arg) => !arg.startsWith("-") && !ASSIGNMENT.test(arg))
-      return targets.length > 0 && targets.every((target) => SAFE_MAKE_TARGET.test(target))
+      return targets.length > 0 && targets.every((target) => safeTarget(target, SAFE_MAKE_TARGETS))
         ? contained("local make build or test")
         : risky("make target is not an audited local test or build")
     }
@@ -432,7 +459,7 @@ export namespace ShellRisk {
     }
     if (command === "ninja") {
       const targets = args.filter((arg) => !arg.startsWith("-") && !ASSIGNMENT.test(arg))
-      return targets.every((target) => SAFE_MAKE_TARGET.test(target))
+      return targets.every((target) => safeTarget(target, SAFE_MAKE_TARGETS))
         ? contained("local ninja build or test")
         : risky("ninja target is not an audited local test or build")
     }

@@ -40,6 +40,7 @@ import { CredentialLifecycle } from "@/credentials/lifecycle"
 import { FileLease } from "@/util/file-lease"
 import { Global } from "@/global"
 import { McpRemoteUrl } from "./remote-url"
+import { McpSecretStorage } from "./secret-storage"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -113,7 +114,7 @@ export namespace MCP {
     )
   }
 
-  function oauthAuthorityFingerprint(entry: Config.Mcp): string {
+  async function oauthAuthorityFingerprint(entry: Config.Mcp): Promise<string> {
     if (entry.type !== "remote") throw new Error("OAuth authority requires a remote MCP configuration")
     const authority = {
       type: entry.type,
@@ -121,14 +122,11 @@ export namespace MCP {
       headers: entry.headers ?? {},
       oauth: entry.oauth ?? null,
     }
-    return crypto
-      .createHash("sha256")
-      .update(JSON.stringify(canonical(authority)))
-      .digest("hex")
+    return McpSecretStorage.identifier("oauth-authority", JSON.stringify(canonical(authority)))
   }
 
-  function oauthFlowId(state: string): string {
-    return crypto.createHash("sha256").update(state).digest("hex")
+  function oauthFlowId(state: string): Promise<string> {
+    return McpSecretStorage.identifier("oauth-flow", state)
   }
 
   async function withConnectorOperation<T>(
@@ -136,17 +134,20 @@ export namespace MCP {
     action: () => Promise<T>,
     timeout = 2 * DEFAULT_TIMEOUT,
   ): Promise<T> {
-    const digest = crypto.createHash("sha256").update(mcpName).digest("hex")
+    const digest = await McpSecretStorage.identifier("connector-operation-lock", mcpName)
     const lock = path.join(Global.Path.data, "mcp-operations", `${digest}.lock`)
     await using lease = await FileLease.acquire(lock, timeout)
     return await lease.during(action)
   }
 
-  function oauthFlowMatches(config: Config.Mcp, flow: Awaited<ReturnType<typeof McpAuth.pendingOAuthFlow>>): boolean {
+  async function oauthFlowMatches(
+    config: Config.Mcp,
+    flow: Awaited<ReturnType<typeof McpAuth.pendingOAuthFlow>>,
+  ): Promise<boolean> {
     if (!flow || config.type !== "remote" || !flow.serverUrl || !flow.authorityFingerprint) return false
     return (
       new URL(config.url).toString() === flow.serverUrl &&
-      oauthAuthorityFingerprint(config) === flow.authorityFingerprint &&
+      (await oauthAuthorityFingerprint(config)) === flow.authorityFingerprint &&
       (config.enabled !== false || flow.allowDisabled === true)
     )
   }
@@ -174,7 +175,8 @@ export namespace MCP {
   function remoteCredentialFetch(mcpName: string, expected: Config.Mcp, options: { allowDisabled?: boolean } = {}) {
     if (expected.type !== "remote") throw new Error(`MCP connector ${mcpName} is not remote`)
     const endpointOrigin = McpRemoteUrl.endpoint(expected.url).origin
-    const fingerprint = oauthAuthorityFingerprint(expected)
+    let fingerprint: Promise<string> | undefined
+    const authorityFingerprint = () => (fingerprint ??= oauthAuthorityFingerprint(expected))
     return (url: string | URL, init?: RequestInit) => {
       let approved: RequestInit | undefined
       return CredentialLifecycle.dispatch(
@@ -186,7 +188,8 @@ export namespace MCP {
             // Configured headers are authority for the MCP endpoint, not for a
             // discovered OAuth issuer. Never forward them across origins.
             for (const name of Object.keys(current.headers ?? {})) headers.delete(name)
-            const accessToken = (await McpAuth.getForAuthority(mcpName, current.url, fingerprint))?.tokens?.accessToken
+            const accessToken = (await McpAuth.getForAuthority(mcpName, current.url, await authorityFingerprint()))
+              ?.tokens?.accessToken
             if (accessToken && headers.get("authorization") === `Bearer ${accessToken}`) {
               headers.delete("authorization")
             }
@@ -196,7 +199,8 @@ export namespace MCP {
           const authorization = headers.get("authorization")
           if (!authorization?.toLowerCase().startsWith("bearer ")) return
           const configured = new Headers(current.headers).get("authorization")
-          const oauth = (await McpAuth.getForAuthority(mcpName, current.url, fingerprint))?.tokens?.accessToken
+          const oauth = (await McpAuth.getForAuthority(mcpName, current.url, await authorityFingerprint()))?.tokens
+            ?.accessToken
           if (authorization !== configured && authorization !== (oauth ? `Bearer ${oauth}` : undefined)) {
             throw new Error(`MCP connector ${mcpName} tried to dispatch with stale OAuth authority`)
           }
@@ -729,14 +733,14 @@ export namespace MCP {
       // OAuth is enabled by default for remote servers unless explicitly disabled with oauth: false
       const oauthDisabled = mcp.oauth === false
       const oauthConfig = typeof mcp.oauth === "object" ? mcp.oauth : undefined
-      const fingerprint = oauthAuthorityFingerprint(mcp)
+      const fingerprint = oauthDisabled ? undefined : await oauthAuthorityFingerprint(mcp)
       let authProvider: McpOAuthProvider | undefined
 
       // Passive startup must never perform dynamic registration or create new
       // OAuth authority. Supply a provider only when URL-bound tokens already
       // exist; explicit startAuth owns all registration and browser flow writes.
-      const storedOAuth = oauthDisabled ? undefined : await McpAuth.getForAuthority(key, mcp.url, fingerprint)
-      if (!oauthDisabled && storedOAuth?.tokens) {
+      const storedOAuth = fingerprint ? await McpAuth.getForAuthority(key, mcp.url, fingerprint) : undefined
+      if (fingerprint && storedOAuth?.tokens) {
         authProvider = new McpOAuthProvider(
           key,
           mcp.url,
@@ -1381,7 +1385,7 @@ export namespace MCP {
         .join("")
       await McpAuth.updateOAuthState(mcpName, oauthState, {
         serverUrl: mcpConfig.url,
-        authorityFingerprint: oauthAuthorityFingerprint(mcpConfig),
+        authorityFingerprint: await oauthAuthorityFingerprint(mcpConfig),
         allowDisabled: mcpConfig.enabled === false,
       })
 
@@ -1411,7 +1415,7 @@ export namespace MCP {
               () => undefined,
             ),
           flowState: oauthState,
-          authorityFingerprint: oauthAuthorityFingerprint(mcpConfig),
+          authorityFingerprint: await oauthAuthorityFingerprint(mcpConfig),
           allowDisabled: mcpConfig.enabled === false,
         },
       )
@@ -1445,7 +1449,7 @@ export namespace MCP {
           return {
             state: "pending",
             authorizationUrl: capturedUrl.toString(),
-            flowId: oauthFlowId(oauthState),
+            flowId: await oauthFlowId(oauthState),
           }
         }
 
@@ -1503,13 +1507,13 @@ export namespace MCP {
     let persisted = await McpAuth.pendingOAuthFlow(mcpName)
     if (persisted) {
       const current = (await Config.getExecution()).mcp?.[mcpName]
-      if (!current || !isMcpConfigured(current) || !oauthFlowMatches(current, persisted)) {
+      if (!current || !isMcpConfigured(current) || !(await oauthFlowMatches(current, persisted))) {
         await closePendingOAuthTransport(mcpName, persisted.state).catch(() => undefined)
         await McpAuth.clearOAuthFlow(mcpName, persisted.state)
         persisted = undefined
       }
     }
-    if (options.expectedFlowId && (!persisted || oauthFlowId(persisted.state) !== options.expectedFlowId)) {
+    if (options.expectedFlowId && (!persisted || (await oauthFlowId(persisted.state)) !== options.expectedFlowId)) {
       throw new Error(`OAuth authorization changed before waiting for MCP server: ${mcpName}`)
     }
     if (persisted?.callback?.type === "code") return finishAuth(mcpName, persisted.callback.value)
@@ -1540,7 +1544,7 @@ export namespace MCP {
       ? {
           state: "pending",
           authorizationUrl: persisted.authorizationUrl!,
-          flowId: oauthFlowId(persisted.state),
+          flowId: await oauthFlowId(persisted.state),
         }
       : await startAuth(mcpName)
     if (started.state === "settled") return started.result
@@ -1655,8 +1659,8 @@ export namespace MCP {
     const flow = await McpAuth.pendingOAuthFlow(mcpName)
     if (!flow?.authorizationUrl) return undefined
     const config = (await Config.getExecution()).mcp?.[mcpName]
-    if (!config || !isMcpConfigured(config) || !oauthFlowMatches(config, flow)) return undefined
-    return { authorizationUrl: flow.authorizationUrl, flowId: oauthFlowId(flow.state) }
+    if (!config || !isMcpConfigured(config) || !(await oauthFlowMatches(config, flow))) return undefined
+    return { authorizationUrl: flow.authorizationUrl, flowId: await oauthFlowId(flow.state) }
   }
 
   /**
@@ -1683,7 +1687,7 @@ export namespace MCP {
       configured && isMcpConfigured(configured) && configured.type === "remote"
         ? (configured.timeout ?? DEFAULT_TIMEOUT)
         : DEFAULT_TIMEOUT
-    const digest = crypto.createHash("sha256").update(`${mcpName}\0${observed.state}`).digest("hex")
+    const digest = await McpSecretStorage.identifier("oauth-settlement-lock", `${mcpName}\0${observed.state}`)
     const lock = path.join(Global.Path.data, "mcp-oauth-settlement", `${digest}.lock`)
     await using lease = await FileLease.acquire(lock, exchangeTimeout + DEFAULT_TIMEOUT)
     return await lease.during(async () => {
@@ -1699,7 +1703,7 @@ export namespace MCP {
           config.type !== "remote" ||
           !observed.serverUrl ||
           !observed.authorityFingerprint ||
-          !oauthFlowMatches(config, observed) ||
+          !(await oauthFlowMatches(config, observed)) ||
           !(await McpAuth.completedOAuthFlow(
             mcpName,
             observed.state,
@@ -1727,7 +1731,7 @@ export namespace MCP {
 
     const cfg = await Config.getExecution()
     const current = cfg.mcp?.[mcpName]
-    if (!current || !isMcpConfigured(current) || !oauthFlowMatches(current, flow)) {
+    if (!current || !isMcpConfigured(current) || !(await oauthFlowMatches(current, flow))) {
       await closePendingOAuthTransport(mcpName, flowState).catch(() => undefined)
       await McpAuth.clearOAuthFlow(mcpName, flowState)
       throw new Error(`MCP server ${mcpName} changed after OAuth authorization started; authorization was cancelled`)
@@ -1858,19 +1862,19 @@ export namespace MCP {
       // user cancellation races just after it, revoke that exact recent grant
       // instead of reporting Cancel while leaving credentials active.
       const completed = await McpAuth.recentOAuthCompletion(mcpName)
-      if (!completed || completed.finalized || oauthFlowId(completed.state) !== flowId) {
+      if (!completed || completed.finalized || (await oauthFlowId(completed.state)) !== flowId) {
         throw new Error(`No matching pending OAuth authorization for MCP server: ${mcpName}`)
       }
       await removeAuthLocked(mcpName, { reconnect: false })
       return
     }
-    if (oauthFlowId(flow.state) !== flowId) {
+    if ((await oauthFlowId(flow.state)) !== flowId) {
       throw new Error(`OAuth authorization changed before cancellation for MCP server: ${mcpName}`)
     }
     const cancelled = await McpOAuthCallback.cancelPending(mcpName, flow.state)
     if (!cancelled) {
       const completed = await McpAuth.recentOAuthCompletion(mcpName)
-      if (!completed || completed.finalized || oauthFlowId(completed.state) !== flowId) {
+      if (!completed || completed.finalized || (await oauthFlowId(completed.state)) !== flowId) {
         throw new Error(`OAuth authorization changed before cancellation for MCP server: ${mcpName}`)
       }
       await removeAuthLocked(mcpName, { reconnect: false })
@@ -1901,7 +1905,7 @@ export namespace MCP {
   export async function hasStoredTokens(mcpName: string): Promise<boolean> {
     const config = (await Config.getExecution()).mcp?.[mcpName]
     if (!config || !isMcpConfigured(config) || config.type !== "remote") return false
-    const entry = await McpAuth.getForAuthority(mcpName, config.url, oauthAuthorityFingerprint(config))
+    const entry = await McpAuth.getForAuthority(mcpName, config.url, await oauthAuthorityFingerprint(config))
     return !!entry?.tokens
   }
 
@@ -1913,7 +1917,7 @@ export namespace MCP {
   export async function getAuthStatus(mcpName: string): Promise<AuthStatus> {
     const config = (await Config.getExecution()).mcp?.[mcpName]
     if (!config || !isMcpConfigured(config) || config.type !== "remote") return "not_authenticated"
-    const entry = await McpAuth.getForAuthority(mcpName, config.url, oauthAuthorityFingerprint(config))
+    const entry = await McpAuth.getForAuthority(mcpName, config.url, await oauthAuthorityFingerprint(config))
     if (!entry?.tokens) return "not_authenticated"
     return entry.tokens.expiresAt !== undefined && entry.tokens.expiresAt < Date.now() / 1000
       ? "expired"
