@@ -85,10 +85,14 @@ function assertContract(spec: Spec) {
 test("live and published OpenAPI expose the exact resumable MCP OAuth lifecycle", async () => {
   const root = path.resolve(import.meta.dir, "../../../..")
   const live = (await Server.openapi()) as unknown as Spec
+  const repeated = (await Server.openapi()) as unknown as Spec
   const published = JSON.parse(await Bun.file(path.join(root, "tooling/sdk/openapi.json")).text()) as Spec
 
   assertContract(live)
+  assertContract(repeated)
   assertContract(published)
+  expect(repeated.components?.schemas?.MCPAuthStart).toEqual(live.components?.schemas?.MCPAuthStart)
+  expect(repeated.components?.schemas?.MCPAuthPending).toEqual(live.components?.schemas?.MCPAuthPending)
   expect(published.components?.schemas?.MCPAuthStart).toEqual(live.components?.schemas?.MCPAuthStart)
   expect(published.components?.schemas?.MCPAuthPending).toEqual(live.components?.schemas?.MCPAuthPending)
 })

@@ -85,6 +85,7 @@ export namespace Server {
   let _server: Bun.Server<unknown> | undefined
   let credentialLifecycleReady = false
   let credentialLifecycleBaseline: Promise<void> | undefined
+  let openapiDocument: ReturnType<typeof generateSpecs> | undefined
 
   function startCredentialLifecycle() {
     if (credentialLifecycleReady) return
@@ -838,18 +839,24 @@ export namespace Server {
   }
 
   export async function openapi() {
-    // Cast to break excessive type recursion from long route chains
-    const result = await generateSpecs(App() as Hono, {
-      documentation: {
-        info: {
-          title: "openscience",
-          version: "1.0.0",
-          description: "openscience api",
+    if (!openapiDocument) {
+      // hono-openapi resolves nested route schemas in place. Generate the
+      // static application contract once so later callers retain components.
+      openapiDocument = generateSpecs(App() as Hono, {
+        documentation: {
+          info: {
+            title: "openscience",
+            version: "1.0.0",
+            description: "openscience api",
+          },
+          openapi: "3.1.1",
         },
-        openapi: "3.1.1",
-      },
-    })
-    return result
+      }).catch((error) => {
+        openapiDocument = undefined
+        throw error
+      })
+    }
+    return openapiDocument
   }
 
   export function listen(opts: { port: number; cors?: string[] }) {
