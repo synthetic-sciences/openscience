@@ -16,9 +16,10 @@ Use this skill for Lambda Cloud instance discovery and lifecycle planning. Do no
 ## OpenScience credential boundary
 
 - A key saved in **Customize > Compute > Lambda** is encrypted control-plane data. It is not exported into Bash, Task, notebooks, kernels, plugins, or MCP servers.
-- **Test connection** runs a reviewed read-only `GET https://cloud.lambda.ai/api/v1/instances` request. The bearer header is supplied to `curl` over stdin, so the key is not placed in argv or a temporary file.
+- Use `provider_compute` with `list_resources`, `resource_status`, or `list_availability` for live instance and capacity reads. `account` is the same reviewed instance-list request used by **Test connection**.
+- The bearer header is supplied to pinned `curl` over stdin, so the key is not placed in argv or a temporary file.
 - OpenScience updates `last_used` only after the API returns success.
-- Never print, log, persist, or put the key in a URL. A generic shell is unauthenticated unless the user configured it separately.
+- Never print, log, persist, or put the key in a URL. The saved credential cannot launch, restart, terminate, or change resources; a generic shell is unauthenticated unless the user configured it separately.
 
 ## API contract
 

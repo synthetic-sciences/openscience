@@ -1182,6 +1182,7 @@ test("shell risk script and build target parsing stays linear on adversarial nam
 })
 
 test("project action modes are execution-time authority floors", () => {
+  expect(PermissionNext.risk("provider_compute")).toBe("risky")
   expect(PermissionNext.modeAction({ mode: "ask", permission: "edit", configured: "allow", granted: "allow" })).toBe(
     "ask",
   )

@@ -44,6 +44,7 @@ import { State } from "@/project/state"
 import { ProjectTrust } from "@/project/trust"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { GenerateImageTool } from "./generate-image"
+import { ProviderComputeTool } from "./provider-compute"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -178,6 +179,7 @@ export namespace ToolRegistry {
       ResearchContractTool,
       ScientificCapabilityTool,
       ComputeJobTool,
+      ProviderComputeTool,
       ...custom.filter((tool) => !compatibility.has(tool.id) && tool.id !== PythonTool.id && tool.id !== RTool.id),
     ]
   }
@@ -245,7 +247,7 @@ export namespace ToolRegistry {
             return !!agent?.name && ARTIFACT_AGENTS.includes(agent.name)
           }
 
-          if (t.id === "compute_job" || t.id === "scientific_capability") {
+          if (t.id === "compute_job" || t.id === "scientific_capability" || t.id === "provider_compute") {
             return !!agent?.name && (COMPUTE_AGENTS.includes(agent.name) || agent.name === "researchagent-test")
           }
 

@@ -875,7 +875,7 @@ const Compute: Component = () => {
 
           <Section
             title="GPU provider credentials"
-            subtitle="Store encrypted credentials for provider-specific native brokers. Saving does not contact a provider; Test connection runs one reviewed read-only native check."
+            subtitle="Store encrypted credentials for reviewed read-only agent operations. Credentials never enter agent shells; paid and mutating provider actions remain unavailable through this broker."
           >
             <Panel>
               <For each={cliProviders()}>
@@ -899,7 +899,7 @@ const Compute: Component = () => {
                             {item.credential.aliases.length ? ` · aliases ${item.credential.aliases.join(", ")}` : ""}
                           </span>
                           <Show when={item.last_used}>
-                            {(value) => <span>Last successful native check {new Date(value()).toLocaleString()}</span>}
+                            {(value) => <span>Last successful broker use {new Date(value()).toLocaleString()}</span>}
                           </Show>
                         </div>
                         <div class="settings-list-actions ml-auto max-w-full flex-wrap justify-end">

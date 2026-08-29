@@ -21,7 +21,17 @@ import { TrustedExecutable } from "../process/trusted-executable"
  * and deletion remain unavailable through this bridge.
  */
 export namespace ProviderCli {
-  type Provider = "tensorpool" | "lambda" | "prime_intellect" | "vast" | "runpod"
+  export const PROVIDERS = ["tensorpool", "lambda", "prime_intellect", "vast", "runpod"] as const
+  export type Provider = (typeof PROVIDERS)[number]
+  export const OPERATIONS = [
+    "account",
+    "list_resources",
+    "resource_status",
+    "list_jobs",
+    "job_status",
+    "list_availability",
+  ] as const
+  export type Operation = (typeof OPERATIONS)[number]
 
   interface Spec {
     cli: string
@@ -32,7 +42,7 @@ export namespace ProviderCli {
     stdin?: (env: Record<string, string>) => Buffer
   }
 
-  const SPECS: Record<Provider, Spec> = {
+  const DOCTOR_SPECS: Record<Provider, Spec> = {
     tensorpool: {
       cli: "tp",
       args: ["--no-input", "me"],
@@ -87,6 +97,118 @@ export namespace ProviderCli {
     },
   }
 
+  const RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+
+  function lambda(url: string): Spec {
+    return {
+      cli: "curl",
+      args: [
+        "--fail-with-body",
+        "--silent",
+        "--show-error",
+        "--max-time",
+        "12",
+        "--request",
+        "GET",
+        "--url",
+        url,
+        "--header",
+        "accept: application/json",
+        "--header",
+        "@-",
+      ],
+      display: `curl GET ${url}`,
+      docs: "https://docs.lambda.ai/public-cloud/cloud-api/",
+      environment: [],
+      stdin: (env) => Buffer.from(`Authorization: Bearer ${env.LAMBDA_API_KEY}\n`, "utf8"),
+    }
+  }
+
+  function operationSpec(target: Provider, operation: Operation, resourceID?: string): Spec {
+    const needsID = operation === "resource_status" || operation === "job_status"
+    if (needsID && (!resourceID || !RESOURCE_ID.test(resourceID))) {
+      throw new Error(
+        `${operation} requires a provider resource id using only letters, numbers, dot, colon, dash, or underscore`,
+      )
+    }
+    if (!needsID && resourceID !== undefined) throw new Error(`${operation} does not accept a resource id`)
+    const id = resourceID!
+
+    if (target === "tensorpool") {
+      const common = { cli: "tp", docs: "https://docs.tensorpool.dev/cli/overview", environment: ["TENSORPOOL_KEY"] }
+      if (operation === "account") return { ...common, args: ["--no-input", "me"], display: "tp --no-input me" }
+      if (operation === "list_resources") return { ...common, args: ["cluster", "list"], display: "tp cluster list" }
+      if (operation === "resource_status")
+        return { ...common, args: ["cluster", "info", id], display: `tp cluster info ${id}` }
+      if (operation === "list_jobs") return { ...common, args: ["job", "list"], display: "tp job list" }
+      if (operation === "job_status") return { ...common, args: ["job", "info", id], display: `tp job info ${id}` }
+    }
+
+    if (target === "lambda") {
+      if (operation === "account" || operation === "list_resources") {
+        return lambda("https://cloud.lambda.ai/api/v1/instances")
+      }
+      if (operation === "resource_status") {
+        return lambda(`https://cloud.lambda.ai/api/v1/instances/${encodeURIComponent(id)}`)
+      }
+      if (operation === "list_availability") return lambda("https://cloud.lambda.ai/api/v1/instance-types")
+    }
+
+    if (target === "prime_intellect") {
+      const common = {
+        cli: "prime",
+        docs: "https://docs.primeintellect.ai/cli-reference/introduction",
+        environment: ["PRIME_API_KEY"],
+      }
+      if (operation === "account") return { ...common, args: ["whoami"], display: "prime whoami" }
+      if (operation === "list_resources") return { ...common, args: ["pods", "list"], display: "prime pods list" }
+      if (operation === "resource_status")
+        return { ...common, args: ["pods", "status", id], display: `prime pods status ${id}` }
+      if (operation === "list_availability")
+        return { ...common, args: ["availability", "list"], display: "prime availability list" }
+    }
+
+    if (target === "vast") {
+      const common = { cli: "vastai", docs: "https://docs.vast.ai/cli/", environment: ["VAST_API_KEY"] }
+      if (operation === "account")
+        return { ...common, args: ["show", "user", "--raw"], display: "vastai show user --raw" }
+      if (operation === "list_resources")
+        return { ...common, args: ["show", "instances", "--raw"], display: "vastai show instances --raw" }
+      if (operation === "resource_status")
+        return { ...common, args: ["show", "instance", id, "--raw"], display: `vastai show instance ${id} --raw` }
+    }
+
+    if (target === "runpod") {
+      const common = {
+        cli: "runpodctl",
+        docs: "https://docs.runpod.io/runpodctl/overview",
+        environment: ["RUNPOD_API_KEY"],
+      }
+      if (operation === "account") return { ...common, args: ["user"], display: "runpodctl user" }
+      if (operation === "list_resources")
+        return { ...common, args: ["pod", "list", "--all"], display: "runpodctl pod list --all" }
+      if (operation === "resource_status")
+        return { ...common, args: ["pod", "get", id], display: `runpodctl pod get ${id}` }
+      if (operation === "list_availability") return { ...common, args: ["gpu", "list"], display: "runpodctl gpu list" }
+    }
+
+    throw new Error(`${target} does not support the reviewed read-only ${operation} operation`)
+  }
+
+  export interface Preview {
+    provider: Provider
+    operation: Operation
+    cli: string
+    command: string
+    docs: string
+  }
+
+  export function preview(targetInput: string, operation: Operation, resourceID?: string): Preview {
+    const target = provider(targetInput)
+    const spec = operationSpec(target, operation, resourceID)
+    return { provider: target, operation, cli: spec.cli, command: spec.display, docs: spec.docs }
+  }
+
   const MAX_STDOUT = 256 * 1024
   const MAX_STDERR = 64 * 1024
   const TIMEOUT = 15_000
@@ -114,7 +236,7 @@ export namespace ProviderCli {
 
   function provider(target: string): Provider {
     const canonical = target === "prime" ? "prime_intellect" : target
-    if (!(canonical in SPECS)) throw new Error(`Compute provider ${target} has no reviewed native CLI broker`)
+    if (!(canonical in DOCTOR_SPECS)) throw new Error(`Compute provider ${target} has no reviewed native CLI broker`)
     return canonical as Provider
   }
 
@@ -237,18 +359,31 @@ export namespace ProviderCli {
     }
   }
 
-  export async function doctor(
-    targetInput: string,
-    options: { executableDirectories?: string[] } = {},
-  ): Promise<ComputeSettings.ProviderDoctor> {
-    const target = provider(targetInput)
-    const spec = SPECS[target]
+  export interface InvokeOptions {
+    executableDirectories?: string[]
+    timeoutMs?: number
+    signal?: AbortSignal
+  }
+
+  interface InvokeResult {
+    ok: boolean
+    provider: Provider
+    cli: string
+    command: string
+    checked_at: string
+    output?: string
+    error?: string
+  }
+
+  async function invoke(target: Provider, spec: Spec, options: InvokeOptions = {}): Promise<InvokeResult> {
     const checked = new Date().toISOString()
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), `openscience-${target}-doctor-`))
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), `openscience-${target}-provider-`))
     let launched: Awaited<ReturnType<typeof launch>> | undefined
     let credentialRevision: string | undefined
     try {
+      if (options.signal?.aborted) throw new Error(`${spec.cli} operation was cancelled before launch`)
       const result = await ComputeSettings.withProviderEnv(target, process.env, async (provided, revision) => {
+        if (options.signal?.aborted) throw new Error(`${spec.cli} operation was cancelled before launch`)
         credentialRevision = revision
         const stdin = spec.stdin?.(provided)
         const native = Object.fromEntries(
@@ -301,16 +436,24 @@ export namespace ProviderCli {
       }
       if (!launched || !credentialRevision) throw new Error(`${spec.cli} launch did not establish credential authority`)
       let timer: ReturnType<typeof setTimeout> | undefined
+      let abort: (() => void) | undefined
       const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(
-          () => reject(new Error(`${spec.cli} connection check timed out after ${TIMEOUT}ms`)),
-          TIMEOUT,
+          () => reject(new Error(`${spec.cli} operation timed out after ${options.timeoutMs ?? TIMEOUT}ms`)),
+          options.timeoutMs ?? TIMEOUT,
         )
+      })
+      const cancelled = new Promise<never>((_, reject) => {
+        if (!options.signal) return
+        abort = () => reject(new Error(`${spec.cli} operation was cancelled`))
+        if (options.signal.aborted) abort()
+        else options.signal.addEventListener("abort", abort, { once: true })
       })
       try {
         const [stdout, stderr, status] = await Promise.race([
           Promise.all([launched.stdout, launched.stderr, launched.completion] as const),
           timeout,
+          cancelled,
         ])
         if (status.code !== 0) {
           const detail = OpenScience.redactSecrets(stderr.toString("utf8").trim() || stdout.toString("utf8").trim())
@@ -326,9 +469,17 @@ export namespace ProviderCli {
           }
         }
         await ComputeSettings.markProviderUsed(target, credentialRevision)
-        return { ok: true, provider: target, cli: spec.cli, command: spec.display, checked_at: checked }
+        return {
+          ok: true,
+          provider: target,
+          cli: spec.cli,
+          command: spec.display,
+          checked_at: checked,
+          output: OpenScience.redactSecrets(stdout.toString("utf8").trim()),
+        }
       } finally {
         if (timer) clearTimeout(timer)
+        if (abort) options.signal?.removeEventListener("abort", abort)
       }
     } catch (error) {
       if (launched) await stop(launched.id, launched.child, launched.detached, launched.identity).catch(() => undefined)
@@ -347,6 +498,34 @@ export namespace ProviderCli {
       }
       await fs.rm(root, { recursive: true, force: true }).catch(() => undefined)
     }
+  }
+
+  export interface OperationResult extends InvokeResult {
+    operation: Operation
+  }
+
+  /** Execute one provider-owned read operation. The caller selects only a
+   * reviewed operation and an opaque resource id; it can never supply argv,
+   * an executable, an endpoint, an environment variable, or a request body. */
+  export async function execute(
+    targetInput: string,
+    operation: Operation,
+    resourceID?: string,
+    options: InvokeOptions = {},
+  ): Promise<OperationResult> {
+    const target = provider(targetInput)
+    const spec = operationSpec(target, operation, resourceID)
+    return { ...(await invoke(target, spec, options)), operation }
+  }
+
+  export async function doctor(
+    targetInput: string,
+    options: { executableDirectories?: string[] } = {},
+  ): Promise<ComputeSettings.ProviderDoctor> {
+    const target = provider(targetInput)
+    const result = await invoke(target, DOCTOR_SPECS[target], options)
+    const { output: _output, ...doctor } = result
+    return doctor
   }
 }
 

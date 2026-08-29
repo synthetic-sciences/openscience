@@ -16,9 +16,10 @@ Use this skill for RunPod identity, Pod, and related compute workflows. RunPod p
 ## OpenScience credential boundary
 
 - A key saved in **Customize > Compute > RunPod** is encrypted control-plane data and is not exported to Bash, Task, notebooks, kernels, plugins, or MCP servers.
-- **Test connection** runs exactly `runpodctl user` in an isolated process.
+- Use `provider_compute` with `account`, `list_resources`, `resource_status`, or `list_availability` for live account, Pod, Pod-detail, and GPU availability reads. OpenScience owns the exact reviewed `runpodctl` argv.
+- **Test connection** uses the same boundary for exactly `runpodctl user`.
 - OpenScience updates `last_used` only after the command succeeds.
-- Never print or persist the key. Dashboard storage does not authenticate a generic agent shell.
+- Never print or persist the key. The saved credential cannot create, start, stop, restart, update, delete, transfer, or change resources; dashboard storage does not authenticate a generic agent shell.
 
 ## Current CLI contract
 

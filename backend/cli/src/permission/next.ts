@@ -62,6 +62,7 @@ export namespace PermissionNext {
     "mcp",
     "modal",
     "network",
+    "provider_compute",
     "remote_compute",
     "webfetch",
     "websearch",

@@ -16,9 +16,10 @@ Use this skill for Vast.ai marketplace discovery and instance operations. Offers
 ## OpenScience credential boundary
 
 - A key saved in **Customize > Compute > Vast.ai** is encrypted control-plane data and is not exported to agent shells, notebooks, kernels, plugins, or MCP servers.
-- **Test connection** runs exactly `vastai show user --raw` in an isolated process.
+- Use `provider_compute` with `account`, `list_resources`, or `resource_status` for live account and instance reads. OpenScience selects only `vastai show user --raw`, `show instances --raw`, or one exact `show instance <id> --raw` invocation.
+- **Test connection** uses the same boundary for exactly `vastai show user --raw`.
 - `last_used` changes only after that command succeeds.
-- Never print or persist the key. A generic shell needs independent user-managed authentication.
+- Never print or persist the key. The saved credential cannot search/accept offers or start, stop, destroy, copy, or change instances; a generic shell needs independent user-managed authentication.
 
 ## Current CLI contract
 

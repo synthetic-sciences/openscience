@@ -842,6 +842,197 @@ test(
   nativeLifecycleTimeout,
 )
 
+test("saved provider credentials power only fixed read/list/status broker operations", async () => {
+  if (process.platform === "win32") return
+  await using tmp = await tmpdir()
+  const bin = path.join(tmp.path, "bin")
+  const previousOpenAI = process.env.OPENAI_API_KEY
+  const credentials = [
+    "TENSORPOOL_KEY",
+    "TENSORPOOL_API_KEY",
+    "LAMBDA_API_KEY",
+    "LAMBDA_LABS_API_KEY",
+    "PRIME_API_KEY",
+    "PRIME_INTELLECT_API_KEY",
+    "VAST_API_KEY",
+    "RUNPOD_API_KEY",
+  ]
+  const contracts: {
+    provider: ProviderCli.Provider
+    operation: ProviderCli.Operation
+    resourceID?: string
+    cli: string
+    key: string
+    environment: string[]
+    args: string[]
+    header?: string
+  }[] = [
+    {
+      provider: "tensorpool",
+      operation: "list_resources",
+      cli: "tp",
+      key: "tensorpool-agent-read-key",
+      environment: ["TENSORPOOL_KEY"],
+      args: ["cluster", "list"],
+    },
+    {
+      provider: "lambda",
+      operation: "list_availability",
+      cli: "curl",
+      key: "lambda-agent-read-key",
+      environment: [],
+      args: [
+        "--fail-with-body",
+        "--silent",
+        "--show-error",
+        "--max-time",
+        "12",
+        "--request",
+        "GET",
+        "--url",
+        "https://cloud.lambda.ai/api/v1/instance-types",
+        "--header",
+        "accept: application/json",
+        "--header",
+        "@-",
+      ],
+      header: "Authorization: Bearer lambda-agent-read-key",
+    },
+    {
+      provider: "prime_intellect",
+      operation: "resource_status",
+      resourceID: "pod_123",
+      cli: "prime",
+      key: "prime-agent-read-key",
+      environment: ["PRIME_API_KEY"],
+      args: ["pods", "status", "pod_123"],
+    },
+    {
+      provider: "vast",
+      operation: "list_resources",
+      cli: "vastai",
+      key: "vast-agent-read-key",
+      environment: ["VAST_API_KEY"],
+      args: ["show", "instances", "--raw"],
+    },
+    {
+      provider: "runpod",
+      operation: "resource_status",
+      resourceID: "pod-123",
+      cli: "runpodctl",
+      key: "runpod-agent-read-key",
+      environment: ["RUNPOD_API_KEY"],
+      args: ["pod", "get", "pod-123"],
+    },
+  ]
+  await fs.mkdir(bin)
+  try {
+    process.env.OPENAI_API_KEY = "unrelated-model-secret"
+    for (const contract of contracts) {
+      const args = path.join(tmp.path, `${contract.provider}.agent.args`)
+      const header = path.join(tmp.path, `${contract.provider}.agent.header`)
+      const checks = credentials.map((name) =>
+        contract.environment.includes(name)
+          ? `test "$${name}" = ${JSON.stringify(contract.key)} || exit 21`
+          : `test -z "$${name}" || exit 22`,
+      )
+      await fs.writeFile(
+        path.join(bin, contract.cli),
+        [
+          "#!/bin/sh",
+          ...checks,
+          'test -z "$OPENAI_API_KEY" || exit 24',
+          `printf '%s\\n' "$@" > ${JSON.stringify(args)}`,
+          ...(contract.header
+            ? [`IFS= read -r value || exit 23`, `printf '%s' "$value" > ${JSON.stringify(header)}`]
+            : []),
+          `printf '{"provider":"${contract.provider}","credential":"${contract.key}"}'`,
+        ].join("\n"),
+        { mode: 0o700 },
+      )
+      await connect(contract.provider, contract.key)
+      await ComputeSettings.setProviderEnabled(contract.provider, true)
+
+      const response = await ProviderCli.execute(contract.provider, contract.operation, contract.resourceID, {
+        executableDirectories: [bin],
+      })
+      expect(response).toMatchObject({
+        ok: true,
+        provider: contract.provider,
+        operation: contract.operation,
+        output: expect.stringContaining(contract.provider),
+      })
+      expect(JSON.stringify(response)).not.toContain(contract.key)
+      expect((await fs.readFile(args, "utf8")).trimEnd().split("\n")).toEqual(contract.args)
+      if (contract.header) expect(await fs.readFile(header, "utf8")).toBe(contract.header)
+      expect(
+        (await ComputeSettings.get()).providers.find((item) => item.id === contract.provider)?.last_used,
+      ).toBeString()
+    }
+  } finally {
+    if (previousOpenAI === undefined) delete process.env.OPENAI_API_KEY
+    else process.env.OPENAI_API_KEY = previousOpenAI
+    for (const contract of contracts) await ComputeSettings.disconnectProvider(contract.provider)
+  }
+}, 60_000)
+
+test("provider read broker kills its credential-bearing tree on timeout and caller cancellation", async () => {
+  if (process.platform === "win32") return
+  await using tmp = await tmpdir()
+  const bin = path.join(tmp.path, "bin")
+  const marker = path.join(tmp.path, "provider-read.pid")
+  await fs.mkdir(bin)
+  await fs.writeFile(
+    path.join(bin, "runpodctl"),
+    [
+      "#!/bin/sh",
+      'test "$RUNPOD_API_KEY" = "runpod-bounded-read-key" || exit 21',
+      `printf '%s' "$$" > ${JSON.stringify(marker)}`,
+      "sleep 600",
+    ].join("\n"),
+    { mode: 0o700 },
+  )
+  const gone = async (pid: number) => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      try {
+        process.kill(pid, 0)
+      } catch {
+        return true
+      }
+      await Bun.sleep(20)
+    }
+    return false
+  }
+  try {
+    await connect("runpod", "runpod-bounded-read-key")
+    await ComputeSettings.setProviderEnabled("runpod", true)
+
+    const timedOut = await ProviderCli.execute("runpod", "list_resources", undefined, {
+      executableDirectories: [bin],
+      timeoutMs: 1_000,
+    })
+    const timedOutPID = Number(await fs.readFile(marker, "utf8"))
+    expect(timedOut).toMatchObject({ ok: false, error: expect.stringContaining("timed out") })
+    expect(await gone(timedOutPID)).toBe(true)
+
+    await fs.rm(marker, { force: true })
+    const controller = new AbortController()
+    const pending = ProviderCli.execute("runpod", "list_resources", undefined, {
+      executableDirectories: [bin],
+      signal: controller.signal,
+    })
+    for (let attempt = 0; attempt < 100 && !(await Bun.file(marker).exists()); attempt++) await Bun.sleep(10)
+    const cancelledPID = Number(await fs.readFile(marker, "utf8"))
+    controller.abort()
+    const cancelled = await pending
+    expect(cancelled).toMatchObject({ ok: false, error: expect.stringContaining("cancelled") })
+    expect(await gone(cancelledPID)).toBe(true)
+    expect((await ComputeSettings.get()).providers.find((item) => item.id === "runpod")?.last_used).toBeNull()
+  } finally {
+    await ComputeSettings.disconnectProvider("runpod")
+  }
+}, 30_000)
+
 test(
   "native provider doctors never select a workspace CLI shim from ambient PATH",
   async () => {

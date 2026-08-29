@@ -16,9 +16,10 @@ Use this skill for TensorPool cluster, job, and storage workflows. Treat provide
 ## OpenScience credential boundary
 
 - A key saved in **Customize > Compute > TensorPool** is encrypted control-plane data. It is not exported into Bash, Task, notebooks, kernels, plugins, or MCP servers.
-- Use **Test connection** in that screen for the reviewed read-only check. OpenScience runs exactly `tp --no-input me` in an isolated process and marks `last_used` only if it succeeds.
+- Use `provider_compute` with `account`, `list_resources`, `resource_status`, `list_jobs`, or `job_status` for live reads. OpenScience selects the exact reviewed `tp` argv, admits the key only to that isolated child, and marks `last_used` only after success.
+- **Test connection** uses the same boundary for exactly `tp --no-input me`.
 - Never print, echo, persist, or ask the user to paste a saved key into chat.
-- A generic agent shell can use `tp` only when the user has independently authenticated that shell. Do not claim dashboard storage authenticated the shell.
+- A generic agent shell can use `tp` only when the user has independently authenticated that shell. The saved credential cannot create, submit, edit, attach, destroy, or otherwise mutate resources; do not ask the user to weaken this boundary.
 
 ## Current CLI contract
 
@@ -32,13 +33,15 @@ tp --no-input me
 
 The first-party CLI reads `TENSORPOOL_KEY`. The read-only identity check is `tp --no-input me`.
 
-Safe discovery commands include:
+The broker maps its read operations to these current official commands:
 
 ```bash
 tp cluster list
 tp job list
 tp storage list
 ```
+
+`storage list` is not yet exposed by the broker. Run it only in an independently authenticated user shell.
 
 Before using any other command, run its current `--help`. CLI flags can change independently of this bundled skill.
 

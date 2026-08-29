@@ -16,9 +16,10 @@ Use this skill for Prime Intellect identity, compute, environment, and training 
 ## OpenScience credential boundary
 
 - A key saved in **Customize > Compute > Prime Intellect** is encrypted control-plane data. It is not exported into Bash, Task, notebooks, kernels, plugins, or MCP servers.
-- **Test connection** runs exactly `prime whoami` in an isolated home/config directory using `PRIME_API_KEY` only inside that child process.
+- Use `provider_compute` with `account`, `list_resources`, `resource_status`, or `list_availability` for live identity, pod, status, and availability reads. OpenScience owns the exact reviewed `prime` argv and isolated home/config directory.
+- **Test connection** runs exactly `prime whoami` through the same broker.
 - OpenScience updates `last_used` only after the command succeeds.
-- Never display or persist the key. Do not claim a generic agent shell is authenticated by dashboard storage.
+- Never display or persist the key. The saved credential cannot create or terminate pods, disks, deployments, training, or environments; do not claim a generic agent shell is authenticated by dashboard storage.
 
 ## Current CLI contract
 

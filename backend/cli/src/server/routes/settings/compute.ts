@@ -95,8 +95,8 @@ function modalDownloadDisposition(remote: string) {
 // Modal credentials are inert and resolve only inside its trusted adapter.
 // Generic provider records resolve only through the host-only
 // withProviderEnv() admission seam. Bash, Task, kernels, plugins, and local MCP
-// do not receive them; each provider still needs a reviewed native CLI caller
-// before the agent can execute it.
+// do not receive them. The reviewed provider_compute broker is the sole agent
+// boundary for the exact read-only calls declared in compute/provider-cli.ts.
 
 export namespace ComputeSettings {
   const storePath = path.join(Global.Path.data, "settings-compute.json")
@@ -168,7 +168,7 @@ export namespace ComputeSettings {
       name: "TensorPool",
       integration: "cli_credential",
       placeholder: "tp-…",
-      hint: "Encrypted credential record for a provider-specific CLI broker; generic agent shells never receive it.",
+      hint: "Available to agents through reviewed read-only TensorPool broker operations; generic shells never receive it.",
       credential: {
         label: "API key",
         environment: "TENSORPOOL_KEY",
@@ -181,7 +181,7 @@ export namespace ComputeSettings {
       name: "Lambda",
       integration: "cli_credential",
       placeholder: "secret_…",
-      hint: "Encrypted credential record for a provider-specific CLI broker; generic agent shells never receive it.",
+      hint: "Available to agents through reviewed read-only Lambda API operations; generic shells never receive it.",
       credential: {
         label: "Cloud API key",
         environment: "LAMBDA_API_KEY",
@@ -194,7 +194,7 @@ export namespace ComputeSettings {
       name: "Prime Intellect",
       integration: "cli_credential",
       placeholder: "pi-…",
-      hint: "Encrypted credential record for a provider-specific CLI broker; generic agent shells never receive it.",
+      hint: "Available to agents through reviewed read-only Prime broker operations; generic shells never receive it.",
       credential: {
         label: "API key",
         environment: "PRIME_API_KEY",
@@ -207,7 +207,7 @@ export namespace ComputeSettings {
       name: "Vast.ai",
       integration: "cli_credential",
       placeholder: "vast api key",
-      hint: "Encrypted credential record for a provider-specific CLI broker; generic agent shells never receive it.",
+      hint: "Available to agents through reviewed read-only Vast.ai broker operations; generic shells never receive it.",
       credential: {
         label: "API key",
         environment: "VAST_API_KEY",
@@ -220,7 +220,7 @@ export namespace ComputeSettings {
       name: "RunPod",
       integration: "cli_credential",
       placeholder: "rpa_…",
-      hint: "Encrypted credential record for a provider-specific CLI broker; generic agent shells never receive it.",
+      hint: "Available to agents through reviewed read-only RunPod broker operations; generic shells never receive it.",
       credential: {
         label: "API key",
         environment: "RUNPOD_API_KEY",
