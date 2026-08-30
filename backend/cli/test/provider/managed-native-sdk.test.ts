@@ -181,14 +181,14 @@ test("bundled xAI Chat adapter preserves native Grok 4.6 efforts", async () => {
   const bodies: Record<string, any>[] = []
   const sdk = createXai({
     apiKey: "fixture",
-    fetch: async (_input, init) => {
+    fetch: Object.assign(async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       bodies.push(JSON.parse(init!.body as string))
       return Response.json({
         id: "chat_fixture", object: "chat.completion", created: 1, model: "grok-4.6",
         choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
         usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
       })
-    },
+    }, { preconnect() {} }),
   })
   for (const effort of ["low", "medium", "high", "xhigh"]) {
     const result = await generateText({ model: sdk.languageModel("grok-4.6"), prompt: "Hi",
@@ -202,7 +202,7 @@ test("bundled xAI Responses adapter preserves all four Grok 4.6 efforts", async 
   const bodies: Record<string, any>[] = []
   const sdk = createXai({
     apiKey: "fixture",
-    fetch: async (_input, init) => {
+    fetch: Object.assign(async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       bodies.push(JSON.parse(init!.body as string))
       return Response.json({
         id: "response_fixture",
@@ -220,7 +220,7 @@ test("bundled xAI Responses adapter preserves all four Grok 4.6 efforts", async 
         ],
         usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
       })
-    },
+    }, { preconnect() {} }),
   })
   for (const effort of ["low", "medium", "high", "xhigh"]) {
     const result = await generateText({
