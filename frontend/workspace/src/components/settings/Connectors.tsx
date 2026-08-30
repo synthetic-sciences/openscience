@@ -39,7 +39,8 @@ import {
   type McpType,
   type OAuthMode,
 } from "./connector-form"
-import type { ConnectorCatalogRecord, ScientificToolsResponse } from "./scientific-tools-state"
+import type { ConnectorCatalogRecord } from "./scientific-tools-state"
+import { loadScientificTools } from "./scientific-tools-loader"
 import { ProviderLogo } from "./ProviderLogo"
 
 type McpConfig = NonNullable<Config["mcp"]>[string]
@@ -66,6 +67,7 @@ export default function Connectors() {
   const [catalog, setCatalog] = createSignal<ConnectorCatalogRecord[]>([])
   const [catalogProblem, setCatalogProblem] = createSignal("")
   const [catalogLoading, setCatalogLoading] = createSignal(true)
+  const [catalogExpanded, setCatalogExpanded] = createSignal<string>()
   const [expanded, setExpanded] = createSignal<string>()
   const [editing, setEditing] = createSignal<string | undefined>()
   const [form, setForm] = createSignal<ConnectorFormState | undefined>()
@@ -96,11 +98,11 @@ export default function Connectors() {
     )
   })
 
-  async function loadCatalog() {
+  async function loadCatalog(refresh = false) {
     setCatalogLoading(true)
     try {
       const fetcher = platform.fetch ?? fetch
-      const result = await settingsApi<ScientificToolsResponse>(server.url, fetcher, "/settings/scientific-tools")
+      const result = await loadScientificTools(server.url, fetcher, refresh)
       setCatalog(result.connectors)
       setCatalogProblem("")
     } catch (error) {
@@ -489,39 +491,7 @@ export default function Connectors() {
   return (
     <PanelScroll>
       <div class="connectors-panel">
-        <PanelHeader
-          title="MCP & connectors"
-          description="Connect MCP servers that provide external research tools and data."
-          toolbar={
-            <Show when={!form()}>
-              <Toolbar>
-                <SearchInput
-                  value={search()}
-                  onInput={setSearch}
-                  placeholder="Search connectors"
-                  ariaLabel="Search connectors"
-                />
-                <AddMenu
-                  label="Add connector"
-                  items={[
-                    {
-                      icon: "cloud",
-                      label: "Hosted server",
-                      description: "Connect an MCP endpoint over HTTPS",
-                      onSelect: () => openForm("remote"),
-                    },
-                    {
-                      icon: "console",
-                      label: "Local process",
-                      description: "Run a trusted MCP command on this machine",
-                      onSelect: () => openForm("local"),
-                    },
-                  ]}
-                />
-              </Toolbar>
-            </Show>
-          }
-        />
+        <PanelHeader title="Connectors" description="Use your own MCP servers for research tools and data." />
 
         <PanelBody>
           <Show when={problem()}>
@@ -542,6 +512,33 @@ export default function Connectors() {
               </button>
             </div>
           </Show>
+          <Show when={!form()}>
+            <Toolbar>
+              <SearchInput
+                value={search()}
+                onInput={setSearch}
+                placeholder="Search connectors"
+                ariaLabel="Search connectors"
+              />
+              <AddMenu
+                label="Add connector"
+                items={[
+                  {
+                    icon: "cloud",
+                    label: "Remote server",
+                    description: "Connect your MCP endpoint over HTTPS",
+                    onSelect: () => openForm("remote"),
+                  },
+                  {
+                    icon: "console",
+                    label: "Local process",
+                    description: "Run a trusted MCP command on this machine",
+                    onSelect: () => openForm("local"),
+                  },
+                ]}
+              />
+            </Toolbar>
+          </Show>
           <Show when={form()}>
             {(state) => (
               <ConnectorForm
@@ -558,12 +555,12 @@ export default function Connectors() {
           <Show when={!form()}>
             <Show when={catalogProblem()}>
               <div role="alert" class="settings-alert mb-4" data-tone="critical">
-                <span class="text-12-regular">Reviewed setup catalog unavailable. {catalogProblem()}</span>
+                <span class="text-12-regular">Connector catalog unavailable. {catalogProblem()}</span>
                 <button
                   type="button"
                   class="connectors-detail-action"
                   disabled={catalogLoading()}
-                  onClick={() => void loadCatalog()}
+                  onClick={() => void loadCatalog(true)}
                 >
                   Retry
                 </button>
@@ -571,14 +568,12 @@ export default function Connectors() {
             </Show>
 
             <Show when={catalogEntries().length > 0}>
-              <section class="settings-section connectors-catalog" aria-label="Reviewed connector setup catalog">
-                <SectionLabel label="Reviewed setup catalog" count={catalogEntries().length} />
+              <section class="settings-section connectors-catalog" aria-label="Connector catalog">
+                <SectionLabel label="Connector catalog" count={catalogEntries().length} />
                 <p class="connectors-catalog__lead">
-                  These records prefill reviewed upstream setup only. Nothing is installed, enabled, or granted write
-                  access until you review and save it. A one-click connection opens the provider's browser OAuth; setup
-                  itself does not invoke a tool or create a paid resource.
+                  Choose a connector, check its details, then connect your own account or endpoint.
                 </p>
-                <div class="connectors-catalog__list" role="list">
+                <div class="settings-card connectors-catalog__list" role="list">
                   <For each={catalogEntries()}>
                     {(entry) => {
                       const configured = () => {
@@ -587,67 +582,86 @@ export default function Connectors() {
                         return connectorMatchesCatalogSetup(isConfigured(current) ? current : undefined, entry.setup)
                       }
                       return (
-                        <article class="connectors-catalog__row" role="listitem" data-state={entry.status}>
-                          <ProviderLogo id={entry.id === "s3" ? "aws" : entry.id} label={entry.name} />
-                          <div class="connectors-catalog__copy">
-                            <div class="connectors-catalog__title">
-                              <strong>{entry.name}</strong>
-                              <span>{entry.recommended ? "Recommended" : catalogStatusText(entry.status)}</span>
+                        <article
+                          class="connectors-catalog__row"
+                          role="listitem"
+                          data-state={entry.status}
+                          data-expanded={catalogExpanded() === entry.id ? "true" : undefined}
+                        >
+                          <div class="connectors-catalog__main">
+                            <ProviderLogo id={entry.id === "s3" ? "aws" : entry.id} label={entry.name} size="small" />
+                            <div class="connectors-catalog__copy">
+                              <div class="connectors-catalog__title">
+                                <strong>{entry.name}</strong>
+                                <span>{entry.recommended ? "Recommended" : catalogStatusText(entry.status)}</span>
+                              </div>
+                              <p>{entry.summary}</p>
                             </div>
-                            <p>{entry.summary}</p>
-                            <small>{entry.safety}</small>
-                            <div class="connectors-catalog__contract">
-                              <span>
-                                Requirements: <For each={entry.requirements}>{(item) => <em>{item}</em>}</For>
-                              </span>
-                              <span>
-                                Upstream write surface:{" "}
-                                {entry.upstream_write_operations.length
-                                  ? entry.upstream_write_operations.join("; ")
-                                  : "None declared by the reviewed server contract"}
-                              </span>
-                              <span>Reviewed {entry.reviewed_at}</span>
+                            <div class="connectors-catalog__actions">
+                              <Show when={entry.setup}>
+                                <button
+                                  type="button"
+                                  class="connectors-action"
+                                  disabled={
+                                    entry.setup?.one_click_connect
+                                      ? busy(`catalog:${entry.id}`) ||
+                                        status()[entry.setup!.name]?.status === "connected"
+                                      : entry.setup?.one_click_disabled
+                                        ? busy(`catalog:${entry.id}`) || configured()
+                                        : configured()
+                                  }
+                                  onClick={() => void addCatalogPreset(entry)}
+                                >
+                                  {entry.setup?.one_click_connect
+                                    ? busy(`catalog:${entry.id}`)
+                                      ? "Connecting…"
+                                      : status()[entry.setup!.name]?.status === "connected"
+                                        ? "Connected"
+                                        : "Connect"
+                                    : entry.setup?.one_click_disabled
+                                      ? busy(`catalog:${entry.id}`)
+                                        ? "Adding…"
+                                        : configured()
+                                          ? "Saved off"
+                                          : "Add off"
+                                      : configured()
+                                        ? "Configured"
+                                        : "Review"}
+                                </button>
+                              </Show>
+                              <IconButton
+                                icon={catalogExpanded() === entry.id ? "chevron-down" : "chevron-right"}
+                                variant="ghost"
+                                aria-expanded={catalogExpanded() === entry.id}
+                                aria-label={`${catalogExpanded() === entry.id ? "Hide" : "Show"} ${entry.name} details`}
+                                onClick={() =>
+                                  setCatalogExpanded(catalogExpanded() === entry.id ? undefined : entry.id)
+                                }
+                              />
                             </div>
                           </div>
-                          <div class="connectors-catalog__actions">
-                            <button
-                              type="button"
-                              class="connectors-detail-action"
-                              onClick={() => platform.openLink(entry.source_url)}
-                            >
-                              Upstream source
-                            </button>
-                            <Show when={entry.setup}>
+                          <Show when={catalogExpanded() === entry.id}>
+                            <div class="connectors-catalog__details">
+                              <p>{entry.safety}</p>
+                              <dl>
+                                <div>
+                                  <dt>Requirements</dt>
+                                  <dd>{entry.requirements.join(" · ") || "None"}</dd>
+                                </div>
+                                <div>
+                                  <dt>Write access</dt>
+                                  <dd>{entry.upstream_write_operations.join(" · ") || "None declared"}</dd>
+                                </div>
+                              </dl>
                               <button
                                 type="button"
-                                class="connectors-action"
-                                disabled={
-                                  entry.setup?.one_click_connect
-                                    ? busy(`catalog:${entry.id}`) || status()[entry.setup!.name]?.status === "connected"
-                                    : entry.setup?.one_click_disabled
-                                      ? busy(`catalog:${entry.id}`) || configured()
-                                      : configured()
-                                }
-                                onClick={() => void addCatalogPreset(entry)}
+                                class="connectors-detail-action"
+                                onClick={() => platform.openLink(entry.source_url)}
                               >
-                                {entry.setup?.one_click_connect
-                                  ? busy(`catalog:${entry.id}`)
-                                    ? "Connecting…"
-                                    : status()[entry.setup!.name]?.status === "connected"
-                                      ? "Connected"
-                                      : "Connect"
-                                  : entry.setup?.one_click_disabled
-                                    ? busy(`catalog:${entry.id}`)
-                                      ? "Adding…"
-                                      : configured()
-                                        ? "Saved off"
-                                        : "Add safely off"
-                                    : configured()
-                                      ? "Configured"
-                                      : "Review setup"}
+                                Open source
                               </button>
-                            </Show>
-                          </div>
+                            </div>
+                          </Show>
                         </article>
                       )
                     }}
@@ -659,7 +673,7 @@ export default function Connectors() {
             <Show when={entries().length > 0}>
               <section class="settings-section connectors-section" aria-label="Configured connectors">
                 <SectionLabel label="Connectors" count={entries().length} />
-                <div class="connectors-list" role="list">
+                <div class="settings-card connectors-list" role="list">
                   <For each={entries()}>
                     {(entry) => {
                       const name = entry[0]
@@ -863,10 +877,10 @@ export default function Connectors() {
                   </div>
                   <div class="connectors-empty__copy">
                     <strong>Connect your research tools</strong>
-                    <p>Add a hosted MCP server with optional OAuth, or run a trusted MCP command on this machine.</p>
+                    <p>Add your own remote MCP endpoint or run a trusted MCP command on this machine.</p>
                   </div>
                   <div class="connectors-empty__actions">
-                    <FormButton label="Hosted server" onClick={() => openForm("remote")} />
+                    <FormButton label="Remote server" onClick={() => openForm("remote")} />
                     <FormButton label="Local process" variant="ghost" onClick={() => openForm("local")} />
                   </div>
                 </div>
@@ -904,7 +918,7 @@ function ConnectorForm(props: {
             <Icon name={props.state.type === "remote" ? "cloud" : "console"} size="small" />
           </div>
           <div>
-            <strong>{props.state.type === "remote" ? "Hosted MCP server" : "Local MCP process"}</strong>
+            <strong>{props.state.type === "remote" ? "Remote MCP server" : "Local MCP process"}</strong>
             <p>
               {props.state.type === "remote"
                 ? "Connect over HTTPS and authenticate with OAuth or headers."
@@ -1033,8 +1047,8 @@ function ConnectorForm(props: {
         </div>
         <Show when={props.state.initiallyDisabled && !props.editing}>
           <p class="connectors-form__hint">
-            Reviewed catalog setups are saved off. Enable this connector explicitly, then inspect its discovered tools
-            before approving any invocation.
+            Catalog setups are saved off. Enable this connector explicitly, then inspect its discovered tools before
+            approving any invocation.
           </p>
         </Show>
       </div>

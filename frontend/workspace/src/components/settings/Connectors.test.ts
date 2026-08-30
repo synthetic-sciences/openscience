@@ -205,7 +205,7 @@ describe("Connector Settings form behavior", () => {
         type: "remote",
         url: "https://mcp.example.org/mcp",
       }),
-    ).toEqual({ icon: "cloud", label: "Hosted server" })
+    ).toEqual({ icon: "cloud", label: "Remote server" })
     expect(
       connectorIdentity("analysis", {
         type: "local",

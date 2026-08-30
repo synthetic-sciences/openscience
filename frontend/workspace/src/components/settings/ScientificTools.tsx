@@ -1,22 +1,23 @@
 import { Button } from "@synsci/ui/button"
-import { For, Show, createMemo, createSignal, onMount } from "solid-js"
-import { useGlobalSDK } from "@/context/global-sdk"
+import { Icon } from "@synsci/ui/icon"
+import { For, Show, createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
-import { EmptyState, FilterMenu, PanelBody, PanelHeader, PanelScroll, SearchInput, Toolbar } from "./_shared"
-import { settingsApi } from "./api"
+import { EmptyState, FilterMenu, PanelBody, PanelHeader, PanelScroll, SearchInput, Section } from "./_shared"
 import {
   capabilityState,
   filterScientificCapabilities,
-  type CapabilityEvidenceRecord,
   type ScientificCapabilityRecord,
   type ScientificToolFilter,
   type ScientificToolsResponse,
 } from "./scientific-tools-state"
+import { loadScientificTools } from "./scientific-tools-loader"
+import { ProviderLogo } from "./ProviderLogo"
 import "./scientific-tools.css"
 
+const PAGE_SIZE = 24
+
 export default function ScientificTools() {
-  const sdk = useGlobalSDK()
   const server = useServer()
   const platform = usePlatform()
   const [state, setState] = createSignal<ScientificToolsResponse>()
@@ -27,12 +28,12 @@ export default function ScientificTools() {
   const [expanded, setExpanded] = createSignal<string>()
   const fetchFn = () => platform.fetch ?? fetch
 
-  async function load() {
+  async function load(refresh = false) {
     if (loading() && state()) return
     setLoading(true)
     setProblem("")
     try {
-      setState(await settingsApi<ScientificToolsResponse>(server.url, fetchFn(), "/settings/scientific-tools"))
+      setState(await loadScientificTools(server.url, fetchFn(), refresh))
       setProblem("")
     } catch (error) {
       setProblem(error instanceof Error ? error.message : String(error))
@@ -45,41 +46,34 @@ export default function ScientificTools() {
 
   const records = createMemo(() => state()?.capabilities ?? [])
   const visible = createMemo(() => filterScientificCapabilities(records(), query(), filter()))
-  const evidenceFor = (id: string) =>
-    Object.values(state()?.evidence ?? {}).filter((entry) => entry.capability.id === id)
+  const [limit, setLimit] = createSignal(PAGE_SIZE)
+  const shown = createMemo(() => visible().slice(0, limit()))
+  createEffect(() => {
+    query()
+    filter()
+    setLimit(PAGE_SIZE)
+  })
   const filterOptions = createMemo(() => [
     { id: "all", label: "All", count: records().length },
-    { id: "packaged", label: "Packaged", count: records().filter((item) => item.runtime).length },
-    { id: "hosted", label: "Hosted", count: records().filter((item) => item.hosted).length },
+    { id: "packaged", label: "Available", count: records().filter((item) => item.runtime).length },
     {
       id: "setup",
       label: "Setup needed",
+      count: records().filter((item) => item.current_availability.local === "setup_needed").length,
+    },
+    {
+      id: "blocked",
+      label: "Unavailable",
       count: records().filter(
-        (item) =>
-          item.current_availability.local === "setup_needed" || item.current_availability.hosted === "setup_needed",
+        (item) => item.maturity === "blocked" || item.current_availability.local === "unavailable",
       ).length,
     },
-    { id: "blocked", label: "Blocked", count: records().filter((item) => item.maturity === "blocked").length },
   ])
 
   return (
     <PanelScroll>
       <div class="scientific-tools-panel">
-        <PanelHeader
-          title="Scientific tools"
-          description="A truthful executable inventory: packaged runtimes, hosted previews, setup requirements, blockers, and release evidence."
-          toolbar={
-            <Toolbar>
-              <SearchInput value={query()} onInput={setQuery} placeholder="Search 54 capabilities" />
-              <FilterMenu
-                options={filterOptions()}
-                value={filter()}
-                onSelect={(value) => setFilter(value as ScientificToolFilter)}
-                ariaLabel="Filter scientific capabilities"
-              />
-            </Toolbar>
-          }
-        />
+        <PanelHeader title="Tools" description="Scientific runtimes available through this OpenScience installation." />
         <PanelBody>
           <Show when={problem()}>
             <div class="settings-alert" data-tone="critical" role="alert">
@@ -87,7 +81,7 @@ export default function ScientificTools() {
                 {state() ? "Refresh failed; showing the last loaded catalog." : "Scientific tools are unavailable."}{" "}
                 {problem()}
               </span>
-              <Button size="small" variant="secondary" disabled={loading()} onClick={() => void load()}>
+              <Button size="small" variant="secondary" disabled={loading()} onClick={() => void load(true)}>
                 Retry
               </Button>
             </div>
@@ -100,28 +94,20 @@ export default function ScientificTools() {
           </Show>
 
           <Show when={state()}>
-            {(value) => (
-              <dl class="scientific-tools-metrics" aria-label="Scientific capability coverage">
-                <Metric label="Inventoried" value={value().counts.total} />
-                <Metric label="Packaged" value={value().counts.packaged} />
-                <Metric label="Hosted adapters" value={value().counts.hosted} />
-                <Metric label="Release-verified" value={value().counts.verified} />
-              </dl>
-            )}
-          </Show>
-
-          <Show when={state()}>
-            <section
-              class="scientific-tools-inventory"
-              aria-busy={loading()}
-              aria-label="Scientific capability inventory"
+            <Section
+              id="scientific-tools-inventory"
+              title="Tool catalog"
+              count={visible().length}
+              description="Search the local catalog, then open a row only when you need setup or source details."
             >
-              <div class="scientific-tools-inventory__heading">
-                <div>
-                  <h3>Capability inventory</h3>
-                  <p>Instructional presence and upstream availability never count as an OpenScience executor.</p>
-                </div>
-                <span aria-live="polite">{visible().length}</span>
+              <div class="scientific-tools-toolbar">
+                <SearchInput value={query()} onInput={setQuery} placeholder="Search tools" ariaLabel="Search tools" />
+                <FilterMenu
+                  options={filterOptions()}
+                  value={filter()}
+                  onSelect={(value) => setFilter(value as ScientificToolFilter)}
+                  ariaLabel="Filter scientific tools"
+                />
               </div>
               <Show when={!loading() || visible().length > 0}>
                 <Show
@@ -130,12 +116,11 @@ export default function ScientificTools() {
                     <EmptyState icon="flask" title="No matching capabilities" hint="Change the search or filter." />
                   }
                 >
-                  <div class="scientific-tools-list" role="list">
-                    <For each={visible()}>
+                  <div class="settings-card scientific-tools-list" role="list">
+                    <For each={shown()}>
                       {(record) => (
                         <CapabilityRow
                           record={record}
-                          evidence={evidenceFor(record.id)}
                           expanded={expanded() === record.id}
                           onToggle={() => setExpanded(expanded() === record.id ? undefined : record.id)}
                           onOpenSource={() => platform.openLink(record.source.reference)}
@@ -145,11 +130,24 @@ export default function ScientificTools() {
                   </div>
                 </Show>
               </Show>
-            </section>
+              <Show when={limit() < visible().length}>
+                <div class="scientific-tools-more">
+                  <span>
+                    Showing {shown().length} of {visible().length}
+                  </span>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    onClick={() => setLimit((current) => Math.min(visible().length, current + PAGE_SIZE))}
+                  >
+                    Show more
+                  </Button>
+                </div>
+              </Show>
+            </Section>
 
             <p class="scientific-tools-footnote">
-              Use <code>scientific_capability</code> in Research to run doctor, setup, plan, bounded smoke, lifecycle,
-              and verification actions. Setup and remote execution still require their normal approval.
+              Setup and execution use this device and any provider credentials you configure.
             </p>
           </Show>
         </PanelBody>
@@ -158,26 +156,18 @@ export default function ScientificTools() {
   )
 }
 
-function Metric(props: { label: string; value: number }) {
-  return (
-    <div>
-      <dt>{props.label}</dt>
-      <dd>{props.value}</dd>
-    </div>
-  )
-}
-
 function CapabilityRow(props: {
   record: ScientificCapabilityRecord
-  evidence: CapabilityEvidenceRecord[]
   expanded: boolean
   onToggle: () => void
   onOpenSource: () => void
 }) {
-  const status = () => capabilityState(props.record, props.evidence)
+  const status = () => capabilityState(props.record)
+  const logo = () => (props.record.source.kind === "github" ? "github" : props.record.id)
   return (
     <article class="scientific-tool-row" data-expanded={props.expanded ? "true" : undefined} role="listitem">
       <button type="button" class="scientific-tool-row__toggle" aria-expanded={props.expanded} onClick={props.onToggle}>
+        <ProviderLogo id={logo()} label={props.record.name} size="small" />
         <span class="scientific-tool-row__copy">
           <span class="scientific-tool-row__title">
             <strong>{props.record.name}</strong>
@@ -185,15 +175,11 @@ function CapabilityRow(props: {
           </span>
           <span>{props.record.summary}</span>
         </span>
-        <span class="scientific-tool-row__availability">
-          <small>Local {availabilityLabel(props.record.current_availability.local)}</small>
-          <small>Hosted {availabilityLabel(props.record.current_availability.hosted)}</small>
-        </span>
         <span class="scientific-tool-status" data-tone={status().tone}>
           {status().label}
         </span>
         <span class="scientific-tool-row__disclosure" aria-hidden="true">
-          {props.expanded ? "−" : "+"}
+          <Icon name={props.expanded ? "chevron-down" : "chevron-right"} size="small" />
         </span>
       </button>
       <Show when={props.expanded}>
@@ -220,12 +206,6 @@ function CapabilityRow(props: {
                 </dd>
               </div>
             </Show>
-            <Show when={props.record.hosted}>
-              <div>
-                <dt>Hosted path</dt>
-                <dd>BYOK NVIDIA NIM · no shared credential</dd>
-              </div>
-            </Show>
           </dl>
           <Show when={props.record.blocker}>
             <p class="scientific-tool-row__blocker">{props.record.blocker}</p>
@@ -234,17 +214,6 @@ function CapabilityRow(props: {
             <ul>
               <For each={props.record.setup?.requirements ?? []}>{(requirement) => <li>{requirement}</li>}</For>
             </ul>
-          </Show>
-          <Show when={props.evidence.length > 0}>
-            <div class="scientific-tool-evidence">
-              <For each={props.evidence}>
-                {(entry) => (
-                  <span>
-                    {entry.target} smoke · {new Date(entry.verified_at).toLocaleDateString()}
-                  </span>
-                )}
-              </For>
-            </div>
           </Show>
           <div class="scientific-tool-row__actions">
             <Button size="small" variant="secondary" onClick={props.onOpenSource}>
@@ -255,13 +224,6 @@ function CapabilityRow(props: {
       </Show>
     </article>
   )
-}
-
-function availabilityLabel(value: ScientificCapabilityRecord["availability"]["local"]) {
-  if (value === "configured") return "configured · not live-tested"
-  if (value === "setup_needed") return "setup"
-  if (value === "not_applicable") return "n/a"
-  return value
 }
 
 function categoryLabel(value: string) {

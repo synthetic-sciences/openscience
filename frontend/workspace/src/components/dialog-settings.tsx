@@ -1438,6 +1438,11 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
   // Browser-style history so back/forward chevrons are real navigation.
   const [history, setHistory] = createSignal<SettingsPanelId[]>([initial.id])
   const [cursor, setCursor] = createSignal(0)
+  // Keep the active panel plus the two most recent destinations. Retaining
+  // every panel forever leaves large catalogs, subscriptions, and resources
+  // alive after they disappear, so Customize gets slower the longer it stays
+  // open. A small LRU keeps normal back-and-forth state without accumulating a
+  // hidden settings application behind the visible panel.
   const [mounted, setMounted] = createSignal([initial])
   const [pending, setPending] = createSignal<SettingsPanelId>()
   const [expanded, setExpanded] = createSignal(false)
@@ -1503,7 +1508,7 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
     // module or its first data request is still settling.
     batch(() => {
       const panel = findPanel(id)
-      setMounted((panels) => (panels.some((item) => item.id === id) ? panels : [...panels, panel]))
+      setMounted((panels) => [...panels.filter((item) => item.id !== id), panel].slice(-3))
       setHistory(next)
       setCursor(next.length - 1)
       setPending(id)
@@ -1520,6 +1525,8 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
   const moveHistory = (next: number) => {
     navigationRequest += 1
     batch(() => {
+      const panel = findPanel(history()[next])
+      setMounted((panels) => [...panels.filter((item) => item.id !== panel.id), panel].slice(-3))
       setPending(undefined)
       setCursor(next)
     })

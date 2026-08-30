@@ -8,14 +8,13 @@ import { confirmDialog } from "@/atlas/dialogs"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useProviders } from "@/hooks/use-providers"
-import { isUserProviderConnection } from "@/context/model-catalog"
 import { MODEL_PROVIDERS, MODEL_PROVIDER_LABELS, modelProvider } from "./model-providers"
 import { ProviderLogo } from "./ProviderLogo"
 
 /**
  * `note` says where a key that this panel cannot delete actually lives, so the
  * reader knows where to go and change it. Every non-removable source used to
- * render one blanket "managed externally", which is wrong for a key the user
+ * render one blanket "external", which is wrong for a key the user
  * set themselves in a .env or a config file — nobody else manages it, and the
  * phrase suggests an administrator does.
  */
@@ -31,12 +30,6 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
     note: "set in your .env or shell",
     title: "API key supplied by an environment variable; remove it where it is defined",
   },
-  synced: {
-    label: "dashboard",
-    removable: false,
-    note: "synced from your Synthetic Sciences account",
-    title: "Provider key connected in the Synthetic Sciences account dashboard",
-  },
   config: {
     label: "config",
     removable: false,
@@ -49,16 +42,14 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
     note: "set in openscience.json",
     title: "Custom provider supplied by openscience.json; edit that file to remove it",
   },
-  // Unreachable while isUserProviderConnection filters an Atlas-carried route
-  // out of this list — it is not a connection the reader set up. Kept because
-  // Provider["source"] has to be covered exhaustively, and so the row would
-  // still describe itself honestly rather than fall through to "local file" if
-  // that filter is ever relaxed.
+  // Provider["source"] is exhaustive. Managed routes are filtered from this
+  // device-owned list, but keep a neutral description if the SDK widens the
+  // display source in the future.
   managed: {
-    label: "uses Ace credits",
+    label: "external route",
     removable: false,
-    note: "routed through OpenRouter and billed from Ace credits",
-    title: "Routed through OpenRouter and billed from your Ace balance",
+    note: "not stored on this device",
+    title: "Provider access is supplied outside this installation",
   },
 }
 
@@ -76,13 +67,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
     providers
       .connected()
       .filter((item) => MODEL_PROVIDERS.some((provider) => provider.id === item.id))
-      .filter((item) =>
-        isUserProviderConnection({
-          providerID: item.id,
-          source: item.source,
-          billing: sync.data.config.billing?.llm,
-        }),
-      ),
+      .filter((item) => item.source !== "managed"),
   )
   const source = (item: { id: string }) => SOURCES[(item as { source?: Provider["source"] }).source ?? "api"]
   const refreshAfterSave = (done: string) => {
@@ -267,7 +252,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
                   when={source(item).removable}
                   fallback={
                     <span class="models-provider-note text-11-regular text-text-weak" title={source(item).title}>
-                      {source(item).note ?? "managed externally"}
+                      {source(item).note ?? "configured externally"}
                     </span>
                   }
                 >

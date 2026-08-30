@@ -123,7 +123,7 @@ export function connectorMatchesCatalogSetup(
 /**
  * Gives common connectors a recognizable identity without pretending every
  * MCP server has a bespoke brand asset. Unknown entries fall back to their
- * transport, so a hosted server never looks identical to a local process.
+ * transport, so a remote server never looks identical to a local process.
  */
 export function connectorIdentity(name: string, config: ConfiguredMcp): ConnectorIdentity {
   const target = config.type === "remote" ? config.url : [name, ...config.command].join(" ")
@@ -148,7 +148,7 @@ export function connectorIdentity(name: string, config: ConfiguredMcp): Connecto
   if (/postgres|database|supabase|sqlite/u.test(haystack)) {
     return { icon: "server", label: "Database server" }
   }
-  if (config.type === "remote") return { icon: "cloud", label: "Hosted server" }
+  if (config.type === "remote") return { icon: "cloud", label: "Remote server" }
   return { icon: "console", label: "Local process" }
 }
 

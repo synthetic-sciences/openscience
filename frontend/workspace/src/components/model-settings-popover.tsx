@@ -389,17 +389,25 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const [catalogFocus, setCatalogFocus] = createSignal("")
   const [notice, setNotice] = createSignal("")
   const refs = { content: undefined as HTMLElement | undefined }
-  const current = createMemo(() => local.model.current())
+  const owned = (model: NonNullable<ReturnType<typeof local.model.current>>) =>
+    model.provider.source !== "managed" && !model.provider.id.startsWith("synsci")
+  const current = createMemo(() => {
+    const model = local.model.current()
+    return model && owned(model) ? model : undefined
+  })
   const exact = (model: NonNullable<ReturnType<typeof current>>) => `${model.provider.id}/${model.id}`
   const recent = createMemo(() =>
-    local.model.recent().filter((model): model is NonNullable<typeof model> => Boolean(model)),
+    local.model.recent().filter((model): model is NonNullable<typeof model> => (model ? owned(model) : false)),
   )
   const available = createMemo(() =>
-    local.model.list().filter((model) => local.model.visible({ providerID: model.provider.id, modelID: model.id })),
+    local.model
+      .list()
+      .filter(owned)
+      .filter((model) => local.model.visible({ providerID: model.provider.id, modelID: model.id })),
   )
   const allChoices = createMemo(() =>
     groupModelRoutes({
-      models: local.model.list(),
+      models: local.model.list().filter(owned),
       current: current() ? { providerID: current()!.provider.id, modelID: current()!.id } : undefined,
       recent: recent().map((model) => ({ providerID: model.provider.id, modelID: model.id })),
     }),
@@ -525,12 +533,6 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
     catalogQuery()
     const total = catalog().length
     setCatalogLimit(Math.min(CATALOG_FIRST_CHUNK, total))
-    if (total <= CATALOG_FIRST_CHUNK) return
-    let frame = requestAnimationFrame(function load() {
-      setCatalogLimit((current) => Math.min(total, current + CATALOG_CHUNK))
-      if (catalogLimit() < total) frame = requestAnimationFrame(load)
-    })
-    onCleanup(() => cancelAnimationFrame(frame))
   })
 
   const searchCatalog = (value: string) => {
@@ -596,18 +598,12 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const selectChoice = (choice: ReturnType<typeof choices>[number]) => {
     const selected = current()
     const configured = parseModelRoute(sync.data.config.model)
-    const billing = sync.data.config.billing?.llm
     const model =
       preservedModelRoute(
         choice.routes,
         selected ? { providerID: selected.provider.id, modelID: selected.id } : undefined,
       ) ??
       preservedModelRoute(choice.routes, configured) ??
-      (billing === "managed"
-        ? choice.routes.find((route) => route.provider.id === "openrouter")
-        : billing === "byok"
-          ? choice.routes.find((route) => route.provider.id !== "openrouter")
-          : undefined) ??
       choice.routes.find((route) => route.provider.id === "openai-codex") ??
       choice.model
     local.model.set({ providerID: model.provider.id, modelID: model.id }, { recent: true })
@@ -889,9 +885,19 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                       <p class="model-settings-empty">No models match “{query()}”.</p>
                     </Show>
                     <Show when={catalogLimit() < catalog().length}>
-                      <p class="model-settings-catalog-progress" role="status">
-                        Loading more models…
-                      </p>
+                      <div class="model-settings-catalog-progress">
+                        <span>
+                          Showing {catalogLimit()} of {catalog().length}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCatalogLimit((current) => Math.min(catalog().length, current + CATALOG_CHUNK))
+                          }
+                        >
+                          Show more
+                        </button>
+                      </div>
                     </Show>
                   </Show>
                 </div>

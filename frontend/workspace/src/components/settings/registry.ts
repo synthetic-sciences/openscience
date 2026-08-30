@@ -85,14 +85,14 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   },
   {
     id: "scientific-tools",
-    title: "Scientific tools",
+    title: "Tools",
     icon: "flask",
     section: "capabilities",
     component: lazy(() => import("./ScientificTools")),
   },
   {
     id: "connectors",
-    title: "MCP & connectors",
+    title: "Connectors",
     icon: "mcp",
     section: "capabilities",
     component: lazy(() => import("./Connectors")),

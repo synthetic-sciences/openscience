@@ -1,5 +1,5 @@
 import { Dynamic } from "solid-js/web"
-import { For, Suspense, createEffect, type Accessor, type Component } from "solid-js"
+import { For, Suspense, createEffect, onCleanup, type Accessor, type Component } from "solid-js"
 
 export interface SettingsPanelStackItem<Id extends string = string> {
   id: Id
@@ -7,12 +7,12 @@ export interface SettingsPanelStackItem<Id extends string = string> {
 }
 
 /**
- * Retains every settings panel after its first visit.
+ * Retains the shell's small recent-panel cache.
  *
- * The shell only adds a panel after its module has preloaded, so Suspense is a
- * last-resort guard rather than a visible navigation state. Hidden panels stay
- * mounted: local form state, scroll position, resources, and subscriptions do
- * not restart when the user moves between settings sections.
+ * The shell adds a panel synchronously while its module preloads, so Suspense
+ * is a last-resort guard rather than a blocked navigation state. Recently used
+ * panels keep local form and scroll state; older hidden panels are unmounted so
+ * their subscriptions and oversized trees cannot accumulate indefinitely.
  */
 export function SettingsPanelStack<Id extends string>(props: {
   active: Accessor<Id>
@@ -38,7 +38,10 @@ export function SettingsPanelStack<Id extends string>(props: {
     <For each={props.panels()}>
       {(panel) => (
         <section
-          ref={(element) => slots.set(panel.id, element)}
+          ref={(element) => {
+            slots.set(panel.id, element)
+            onCleanup(() => slots.delete(panel.id))
+          }}
           class="settings-panel-slot"
           data-settings-panel={panel.id}
           hidden={props.active() !== panel.id}

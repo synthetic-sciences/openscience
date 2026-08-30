@@ -340,68 +340,11 @@
   letter-spacing: -0.011em;
 }
 
-.model-settings-model-heading {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.model-settings-model-heading strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.model-settings-quick-access {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--model-control-muted);
-  font-size: 11px;
-  font-weight: var(--font-weight-regular);
-  line-height: 15px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.model-settings-provider {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--model-control-muted);
-  font-size: 11px;
-  font-weight: var(--font-weight-regular);
-  line-height: 15px;
-}
-
-.model-settings-provider [data-component="provider-icon"] {
-  width: 12px;
-  height: 12px;
-}
-
-.model-settings-provider > span[aria-hidden="true"] {
-  width: 12px;
-  height: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: var(--model-control-raised);
-  font-size: 8px;
-}
-
 .model-settings-model small {
   color: var(--model-control-faint);
   font-size: 12px;
   font-weight: var(--font-weight-regular);
   line-height: 16px;
-}
-
-.model-settings-model small .model-settings-provider {
-  display: inline-flex;
 }
 
 .model-settings-more {
@@ -483,12 +426,37 @@
 
 .model-settings-catalog-progress {
   min-height: 34px;
-  margin: 0;
-  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
   color: var(--model-control-faint);
   font-size: 11px;
   line-height: 18px;
-  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-settings-catalog-progress button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--model-control-raised);
+  color: var(--model-control-text);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+}
+
+.model-settings-catalog-progress button:hover,
+.model-settings-catalog-progress button:focus-visible {
+  background: var(--model-control-hover);
+}
+
+.model-settings-catalog-progress button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
 }
 
 .model-settings-manage {
@@ -543,7 +511,7 @@
 }
 
 [data-model-popover-kind="effort"] {
-  width: min(232px, calc(100vw - 24px));
+  width: min(252px, calc(100vw - 24px));
   max-height: min(72dvh, 390px);
 }
 
@@ -560,8 +528,8 @@
 }
 
 [data-model-settings-popover][data-model-popover-kind="effort"] [data-model-option="effort"].model-settings-row {
-  min-height: 36px;
-  padding: 3px 8px;
+  min-height: 40px;
+  padding: 4px 9px;
   border: 1px solid transparent;
   background: transparent;
 }
@@ -639,7 +607,7 @@
   }
 
   [data-model-settings-popover][data-model-popover-kind="effort"] {
-    width: min(232px, calc(100vw - 24px));
+    width: min(252px, calc(100vw - 24px));
   }
 
   [data-model-settings-popover]:not([data-model-settings-view="root"]) [data-model-settings-layout] {
@@ -804,7 +772,6 @@
   }
 
   [data-model-settings-popover] .model-settings-model small,
-  [data-model-settings-popover] .model-settings-provider,
   [data-model-settings-popover] .model-settings-setting small,
   [data-model-settings-popover] [data-model-menu-value] {
     font-size: 12px;
@@ -814,13 +781,5 @@
   .model-settings-heading {
     padding: 10px 20px 5px;
     font-size: 12px;
-  }
-
-  [data-model-settings-popover] details {
-    margin-top: 0;
-  }
-
-  [data-model-settings-popover] details > div {
-    margin-inline: 14px;
   }
 }
