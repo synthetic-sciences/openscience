@@ -54,7 +54,7 @@ describe("workspace-scoped account sync", () => {
             anthropic: {
               connected: true,
               env: { ANTHROPIC_API_KEY: "sk-team-anthropic" },
-              metadata: { source: "organization_byok" },
+              metadata: { source: "workspace_byok" },
             },
             openai: {
               connected: true,
@@ -93,7 +93,7 @@ describe("workspace-scoped account sync", () => {
           anthropic: {
             connected: true,
             env: { ANTHROPIC_API_KEY: "sk-team-must-not-apply" },
-            metadata: { source: "organization_byok" },
+            metadata: { source: "workspace_byok" },
           },
           openalex: {
             connected: true,

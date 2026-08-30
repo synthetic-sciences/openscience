@@ -1777,7 +1777,7 @@ export namespace OpenScience {
         // Defence in depth: even a misconfigured control plane cannot deliver a
         // team secret to Personal or to a flexible legacy funding selection.
         if (
-          svc.metadata?.source === "organization_byok" &&
+          (svc.metadata?.source === "organization_byok" || svc.metadata?.source === "workspace_byok") &&
           !(session.workspace_locked === true && session.organization_id)
         ) {
           continue
