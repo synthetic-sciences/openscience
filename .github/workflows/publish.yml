@@ -387,7 +387,7 @@ jobs:
           DESKTOP_ASSETS: ${{ matrix.assets }}
         run: |
           set -euo pipefail
-          release="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
+          release="$(gh release view "$OPENSCIENCE_TAG" --repo "$GITHUB_REPOSITORY" --json assets)"
           source_label="${OPENSCIENCE_ARTIFACT_SOURCE:0:16}"
           found=0
           total=0
