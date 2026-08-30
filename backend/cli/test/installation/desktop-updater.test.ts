@@ -180,39 +180,51 @@ describe("desktop update release contract", () => {
     const final = { status: "succeeded", version: "3.2.1", recovered: true }
 
     expect(
-      await settleTransaction(info, { status: "succeeded", version: "3.2.1" }, {
-        timeout: 1,
-        waitForExit: async (identity: typeof helper) => {
-          events.push("helper-exit")
-          expect(identity).toEqual(helper)
-          return true
+      await settleTransaction(
+        info,
+        { status: "succeeded", version: "3.2.1" },
+        {
+          timeout: 1,
+          waitForExit: async (identity: typeof helper) => {
+            events.push("helper-exit")
+            expect(identity).toEqual(helper)
+            return true
+          },
+          assertClean: async (value: typeof info) => {
+            events.push("cache-clean")
+            expect(value).toBe(info)
+          },
+          readResult: async (file: string) => {
+            events.push("final-result")
+            expect(file).toBe(info.result)
+            return final
+          },
         },
-        assertClean: async (value: typeof info) => {
-          events.push("cache-clean")
-          expect(value).toBe(info)
-        },
-        readResult: async (file: string) => {
-          events.push("final-result")
-          expect(file).toBe(info.result)
-          return final
-        },
-      }),
+      ),
     ).toEqual(final)
     expect(events).toEqual(["helper-exit", "cache-clean", "final-result"])
 
     await expect(
-      settleTransaction(info, { status: "succeeded", version: "3.2.1" }, {
-        waitForExit: async () => true,
-        assertClean: async () => undefined,
-        readResult: async () => ({ ...final, cleanup_error: "purge failed" }),
-      }),
+      settleTransaction(
+        info,
+        { status: "succeeded", version: "3.2.1" },
+        {
+          waitForExit: async () => true,
+          assertClean: async () => undefined,
+          readResult: async () => ({ ...final, cleanup_error: "purge failed" }),
+        },
+      ),
     ).rejects.toThrow("final state did not match")
     await expect(
-      settleTransaction(info, { status: "succeeded", version: "3.2.1" }, {
-        waitForExit: async () => true,
-        assertClean: async () => undefined,
-        readResult: async () => ({ ...final, status: "failed" }),
-      }),
+      settleTransaction(
+        info,
+        { status: "succeeded", version: "3.2.1" },
+        {
+          waitForExit: async () => true,
+          assertClean: async () => undefined,
+          readResult: async () => ({ ...final, status: "failed" }),
+        },
+      ),
     ).rejects.toThrow("final state did not match")
     await expect(
       settleTransaction({ ...info, helper_identity: undefined }, { status: "succeeded", version: "3.2.1" }),
