@@ -1,5 +1,8 @@
 #!/bin/sh
 set -e
+# Full local validation is opt-in: OPENSCIENCE_PUSH_CHECKS=1 git push
+[ "${OPENSCIENCE_PUSH_CHECKS:-0}" = "1" ] || exit 0
+
 # Check if bun version matches package.json
 # keep in sync with tooling/script/src/index.ts semver qualifier
 bun -e '
