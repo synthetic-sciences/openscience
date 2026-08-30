@@ -57,6 +57,33 @@ function clearManagedLLMEnv() {
 }
 
 const PROXY = `${API_BASE}/api/llm/proxy`
+const ACE = [
+  "openai/gpt-5.6-sol",
+  "openai/gpt-5.6-terra",
+  "openai/gpt-5.6-luna",
+  "openai/gpt-5.5",
+  "openai/gpt-5.4",
+  "openai/gpt-5.4-mini",
+  "anthropic/claude-opus-5",
+  "anthropic/claude-fable-5",
+  "anthropic/claude-sonnet-5",
+  "anthropic/claude-haiku-4.5",
+  "google/gemini-3.1-pro-preview",
+  "google/gemini-3.5-flash",
+  "google/gemini-3.1-flash-lite",
+  "x-ai/grok-4.6",
+  "z-ai/glm-5.3",
+  "z-ai/glm-5.3-flash",
+  "deepseek/deepseek-v4-pro",
+  "deepseek/deepseek-v4-flash",
+  "qwen/qwen3.7-max",
+  "moonshotai/kimi-k3",
+  "moonshotai/kimi-k2.7-code",
+  "minimax/minimax-m3",
+  "mistralai/mistral-large-2512",
+  "meta/muse-spark-1.1",
+  "qwen/qwen3.8-27b",
+] as const
 
 // ── Pure decision helpers ────────────────────────────────────────────────────
 
@@ -449,6 +476,32 @@ test("managed organization inference rejects an old gateway before consuming its
 // ── Availability filter (hermetic, catalog-backed) ───────────────────────────
 
 describe("managed session availability", () => {
+  test("Ace exposes exactly the reviewed 25 models and rejects every other OpenRouter model", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        billing: { llm: "managed" },
+        provider: { openrouter: { whitelist: [...ACE] } },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        clearManagedLLMEnv()
+        Env.set("OPENROUTER_API_KEY", "thk_openrouter")
+        Env.set("OPENROUTER_BASE_URL", `${PROXY}/openrouter/v1`)
+        Provider.invalidate()
+      },
+      fn: async () => {
+        const openrouter = (await Provider.list())["openrouter"]
+        expect(Object.keys(openrouter.models).sort()).toEqual([...ACE].sort())
+        for (const model of ACE) {
+          await expect(Provider.getModel("openrouter", model)).resolves.toBeDefined()
+        }
+        await expect(Provider.getModel("openrouter", "meta-llama/llama-3.3-70b-instruct")).rejects.toThrow()
+      },
+    })
+  })
+
   test("managed ⇒ only OpenRouter loads; unsupported first-party and Meta proxies are dropped", async () => {
     await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
     await Instance.provide({
