@@ -1,38 +1,27 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpenScience } from "@synsci/sdk/v2"
 import { parseArgs } from "util"
 
 export const team = ["ishaan1124", "openscience", "openscience-agent[bot]", "actions-user"]
-
-type Release = {
-  tag_name: string
-  draft: boolean
-  prerelease: boolean
-}
+const teamAuthors = new Set([...team, "Ishaan Gangwani"].map((author) => author.toLowerCase()))
+const stableTag = /^v(\d+)\.(\d+)\.(\d+)$/
+const internalCommit = /^(?:ignore|test|chore|ci|release)(?:\([^)]*\))?!?:/i
+const conventionalPrefix = /^(?:feat|fix|refactor|docs|perf|build|style)(?:\([^)]*\))?!?:\s*/i
 
 export async function getLatestRelease(skip?: string) {
-  const headers: Record<string, string> = { Accept: "application/vnd.github.v3+json" }
-  if (process.env.GH_TOKEN) headers.Authorization = `token ${process.env.GH_TOKEN}`
-  const data = await fetch("https://api.github.com/repos/synthetic-sciences/OpenScience/releases?per_page=100", {
-    headers,
-  }).then((res) => {
-    if (!res.ok) throw new Error(res.statusText)
-    return res.json()
-  })
-
-  const releases = data as Release[]
   const target = skip?.replace(/^v/, "")
+  const tags = await $`git tag --list "v*" --sort=-version:refname`.text()
 
-  for (const release of releases) {
-    if (release.draft) continue
-    const tag = release.tag_name.replace(/^v/, "")
-    if (target && tag === target) continue
-    return tag
+  for (const candidate of tags.split("\n")) {
+    const match = candidate.trim().match(stableTag)
+    if (!match) continue
+    const version = candidate.slice(1)
+    if (target && version === target) continue
+    return version
   }
 
-  throw new Error("No releases found")
+  throw new Error("No stable release tags found")
 }
 
 type Commit = {
@@ -45,46 +34,47 @@ type Commit = {
 export async function getCommits(from: string, to: string): Promise<Commit[]> {
   const fromRef = from.startsWith("v") ? from : `v${from}`
   const toRef = to === "HEAD" ? to : to.startsWith("v") ? to : `v${to}`
+  await $`git rev-parse --verify ${`${fromRef}^{commit}`}`.quiet()
+  await $`git rev-parse --verify ${`${toRef}^{commit}`}`.quiet()
 
-  // Get commit data with GitHub usernames from the API
-  const compare =
-    await $`gh api "/repos/synthetic-sciences/OpenScience/compare/${fromRef}...${toRef}" --jq '.commits[] | {sha: .sha, login: .author.login, message: .commit.message}'`.text()
-
-  const commitData = new Map<string, { login: string | null; message: string }>()
-  for (const line of compare.split("\n").filter(Boolean)) {
-    const data = JSON.parse(line) as { sha: string; login: string | null; message: string }
-    commitData.set(data.sha, { login: data.login, message: data.message.split("\n")[0] ?? "" })
-  }
-
-  // Get commits that touch the relevant packages
+  // One local git walk provides the immutable commit metadata and touched
+  // files. Record/unit separators make author names and subjects unambiguous.
+  const range = `${fromRef}..${toRef}`
   const log =
-    await $`git log ${fromRef}..${toRef} --oneline --format="%H" -- backend/cli tooling/sdk tooling/plugin frontend/workspace frontend/docs`.text()
-  const hashes = log.split("\n").filter(Boolean)
+    await $`git log ${range} --format=%x1e%H%x1f%aN%x1f%s --name-only -- backend/cli frontend/workspace frontend/desktop frontend/landing frontend/docs docs tooling/sdk tooling/plugin README.md ARCHITECTURE.md CONTRIBUTING.md SECURITY.md install`.text()
 
   const commits: Commit[] = []
-  for (const hash of hashes) {
-    const data = commitData.get(hash)
-    if (!data) continue
-
-    const message = data.message
-    if (message.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
-
-    const files = await $`git diff-tree --no-commit-id --name-only -r ${hash}`.text()
+  for (const record of log.split("\x1e")) {
+    const [header, ...paths] = record.trim().split("\n")
+    if (!header) continue
+    const [hash, author, message] = header.split("\x1f")
+    if (!hash || !message || internalCommit.test(message)) continue
     const areas = new Set<string>()
 
-    for (const file of files.split("\n").filter(Boolean)) {
+    for (const file of paths.filter(Boolean)) {
       if (file.startsWith("backend/cli/")) areas.add("core")
       else if (file.startsWith("frontend/workspace/")) areas.add("app")
-      else if (file.startsWith("frontend/docs/")) areas.add("web")
+      else if (file.startsWith("frontend/desktop/")) areas.add("desktop")
+      else if (file.startsWith("frontend/landing/")) areas.add("website")
+      else if (
+        file.startsWith("frontend/docs/") ||
+        file.startsWith("docs/") ||
+        file === "README.md" ||
+        file === "ARCHITECTURE.md" ||
+        file === "CONTRIBUTING.md" ||
+        file === "SECURITY.md"
+      )
+        areas.add("docs")
       else if (file.startsWith("tooling/sdk/")) areas.add("sdk")
       else if (file.startsWith("tooling/plugin/")) areas.add("plugin")
+      else if (file === "install") areas.add("core")
     }
 
     if (areas.size === 0) continue
 
     commits.push({
       hash: hash.slice(0, 7),
-      author: data.login,
+      author: author?.trim() || null,
       message,
       areas,
     })
@@ -117,74 +107,45 @@ function filterRevertedCommits(commits: Commit[]): Commit[] {
 
 const sections = {
   core: "Core",
-  app: "Web",
-  web: "Web",
+  app: "App",
+  desktop: "Desktop",
+  website: "Website",
+  docs: "Docs",
   sdk: "SDK",
   plugin: "SDK",
 } as const
 
 function getSection(areas: Set<string>): string {
   // Priority order for multi-area commits
-  const priority = ["core", "app", "web", "sdk", "plugin"]
+  const priority = ["core", "app", "desktop", "website", "docs", "sdk", "plugin"]
   for (const area of priority) {
     if (areas.has(area)) return sections[area as keyof typeof sections]
   }
   return "Core"
 }
 
-async function summarizeCommit(
-  openscience: Awaited<ReturnType<typeof createOpenScience>>,
-  message: string,
-): Promise<string> {
-  console.log("summarizing commit:", message)
-  const session = await openscience.client.session.create()
-  const result = await openscience.client.session
-    .prompt(
-      {
-        sessionID: session.data!.id,
-        model: { providerID: "synsci", modelID: "claude-sonnet-4-5" },
-        tools: {
-          "*": false,
-        },
-        parts: [
-          {
-            type: "text",
-            text: `Summarize this commit message for a changelog entry. Return ONLY a single line summary starting with a capital letter. Be concise but specific. If the commit message is already well-written, just clean it up (capitalize, fix typos, proper grammar). Do not include any prefixes like "fix:" or "feat:".
-
-Commit: ${message}`,
-          },
-        ],
-      },
-      {
-        signal: AbortSignal.timeout(120_000),
-      },
-    )
-    .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text ?? message)
-  return result.trim()
+function isCommunityAuthor(author: string | null): author is string {
+  return !!author && !teamAuthors.has(author.toLowerCase())
 }
 
-export async function generateChangelog(commits: Commit[], openscience: Awaited<ReturnType<typeof createOpenScience>>) {
-  // Summarize commits in parallel with max 10 concurrent requests
-  const BATCH_SIZE = 10
-  const summaries: string[] = []
-  for (let i = 0; i < commits.length; i += BATCH_SIZE) {
-    const batch = commits.slice(i, i + BATCH_SIZE)
-    const results = await Promise.all(batch.map((c) => summarizeCommit(openscience, c.message)))
-    summaries.push(...results)
-  }
+function humanize(message: string) {
+  const clean = message.replace(conventionalPrefix, "").trim()
+  if (!clean) return message.trim()
+  return clean[0]!.toUpperCase() + clean.slice(1)
+}
 
+export function generateChangelog(commits: Commit[]) {
   const grouped = new Map<string, string[]>()
-  for (let i = 0; i < commits.length; i++) {
-    const commit = commits[i]!
+  for (const commit of commits) {
     const section = getSection(commit.areas)
-    const attribution = commit.author && !team.includes(commit.author) ? ` (@${commit.author})` : ""
-    const entry = `- ${summaries[i]}${attribution}`
+    const attribution = isCommunityAuthor(commit.author) ? ` (${commit.author})` : ""
+    const entry = `- ${humanize(commit.message)}${attribution}`
 
     if (!grouped.has(section)) grouped.set(section, [])
     grouped.get(section)!.push(entry)
   }
 
-  const sectionOrder = ["Core", "Web", "SDK"]
+  const sectionOrder = ["Core", "App", "Desktop", "Website", "Docs", "SDK"]
   const lines: string[] = []
   for (const section of sectionOrder) {
     const entries = grouped.get(section)
@@ -196,25 +157,20 @@ export async function generateChangelog(commits: Commit[], openscience: Awaited<
   return lines
 }
 
-export async function getContributors(from: string, to: string) {
-  const fromRef = from.startsWith("v") ? from : `v${from}`
-  const toRef = to === "HEAD" ? to : to.startsWith("v") ? to : `v${to}`
-  const compare =
-    await $`gh api "/repos/synthetic-sciences/OpenScience/compare/${fromRef}...${toRef}" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
+function contributorsFor(commits: Commit[]) {
   const contributors = new Map<string, Set<string>>()
 
-  for (const line of compare.split("\n").filter(Boolean)) {
-    const { login, message } = JSON.parse(line) as { login: string | null; message: string }
-    const title = message.split("\n")[0] ?? ""
-    if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
-
-    if (login && !team.includes(login)) {
-      if (!contributors.has(login)) contributors.set(login, new Set())
-      contributors.get(login)!.add(title)
-    }
+  for (const commit of commits) {
+    if (!isCommunityAuthor(commit.author)) continue
+    if (!contributors.has(commit.author)) contributors.set(commit.author, new Set())
+    contributors.get(commit.author)!.add(humanize(commit.message))
   }
 
   return contributors
+}
+
+export async function getContributors(from: string, to: string) {
+  return contributorsFor(await getCommits(from, to))
 }
 
 export async function buildNotes(from: string, to: string) {
@@ -226,37 +182,19 @@ export async function buildNotes(from: string, to: string) {
 
   console.log("generating changelog since " + from)
 
-  const openscience = await createOpenScience({ port: 0 })
-  const notes: string[] = []
-
-  try {
-    const lines = await generateChangelog(commits, openscience)
-    notes.push(...lines)
-    console.log("---- Generated Changelog ----")
-    console.log(notes.join("\n"))
-    console.log("-----------------------------")
-  } catch (error) {
-    if (error instanceof Error && error.name === "TimeoutError") {
-      console.log("Changelog generation timed out, using raw commits")
-      for (const commit of commits) {
-        const attribution = commit.author && !team.includes(commit.author) ? ` (@${commit.author})` : ""
-        notes.push(`- ${commit.message}${attribution}`)
-      }
-    } else {
-      throw error
-    }
-  } finally {
-    await openscience.server.close()
-  }
+  const notes = generateChangelog(commits)
+  console.log("---- Generated Changelog ----")
+  console.log(notes.join("\n"))
+  console.log("-----------------------------")
   console.log("changelog generation complete")
 
-  const contributors = await getContributors(from, to)
+  const contributors = contributorsFor(commits)
 
   if (contributors.size > 0) {
     notes.push("")
     notes.push(`**Thank you to ${contributors.size} community contributor${contributors.size > 1 ? "s" : ""}:**`)
-    for (const [username, userCommits] of contributors) {
-      notes.push(`- @${username}:`)
+    for (const [author, userCommits] of contributors) {
+      notes.push(`- ${author}:`)
       for (const c of userCommits) {
         notes.push(`  - ${c}`)
       }
@@ -282,7 +220,7 @@ if (import.meta.main) {
 Usage: bun tooling/repo/changelog.ts [options]
 
 Options:
-  -f, --from <version>   Starting version (default: latest GitHub release)
+  -f, --from <version>   Starting version (default: latest stable git tag)
   -t, --to <ref>         Ending ref (default: HEAD)
   -h, --help             Show this help message
 
