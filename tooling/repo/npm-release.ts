@@ -760,12 +760,27 @@ export async function promoteReleaseToTag(artifacts: PackedPackage[], tag: strin
   const ordered = exactReleaseArtifacts(artifacts)
   const previous = new Map<string, string | undefined>()
   for (const artifact of ordered) previous.set(artifact.name, (await distTags(artifact.name, options))[tag])
+  const native = new Set(nativeReleasePackageNames())
+  const parallel = tag === "latest" ? ordered.filter((artifact) => native.has(artifact.name)) : []
+  const serial = ordered.filter((artifact) => !parallel.includes(artifact))
+  const promote = async (artifact: PackedPackage) => {
+    if (previous.get(artifact.name) === artifact.version) return
+    await addDistTag(artifact.name, artifact.version, tag, options)
+    console.log(`  promoted ${artifact.name}@${artifact.version} to ${tag}`)
+  }
   try {
-    for (const artifact of ordered) {
-      if (previous.get(artifact.name) === artifact.version) continue
-      await addDistTag(artifact.name, artifact.version, tag, options)
-      console.log(`  promoted ${artifact.name}@${artifact.version} to ${tag}`)
+    const batches = Array.from({ length: Math.ceil(parallel.length / 3) }, (_, index) =>
+      parallel.slice(index * 3, index * 3 + 3),
+    )
+    for (const batch of batches) {
+      // Drain every in-flight write/verification before rollback; a rejected
+      // Promise.all could otherwise let a late tag write undo the rollback.
+      const results = await Promise.allSettled(batch.map(promote))
+      const failure = results.find((result) => result.status === "rejected")
+      if (failure?.status === "rejected") throw failure.reason
     }
+    // SDK, plugin, CLI, then launcher retain their dependency/public-entry order.
+    for (const artifact of serial) await promote(artifact)
   } catch (error) {
     const rollbackErrors: unknown[] = []
     for (const artifact of [...ordered].reverse()) {

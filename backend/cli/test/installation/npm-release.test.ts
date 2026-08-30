@@ -108,6 +108,74 @@ async function readState(file: string) {
   return (await Bun.file(file).json()) as FakeState
 }
 
+// A single local registry serializes state mutations while npm command
+// processes overlap. The shared-file fixture cannot safely model concurrency.
+async function tagRegistry(file: string) {
+  const state = await readState(file)
+  const failure = state.failTagReadAfterAdd
+  const failed = new Set<string>()
+  const activity = { current: 0, maximum: 0, rollbackWhileActive: false }
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const args = (await request.json()) as string[]
+      if (args[0] === "view" && args[2] === "dist-tags") {
+        if (failed.delete(args[1])) return Response.json({ exitCode: 1, stderr: "transient dist-tag read failure" })
+        return Response.json({ exitCode: 0, stdout: JSON.stringify(state.tags[args[1]] ?? {}) })
+      }
+      if (args[0] === "dist-tag" && args[1] === "add") {
+        const split = args[2].lastIndexOf("@")
+        const name = args[2].slice(0, split)
+        const version = args[2].slice(split + 1)
+        if (version === "2.0.32") {
+          activity.current++
+          activity.maximum = Math.max(activity.maximum, activity.current)
+          // Make a failed verification beat a sibling's pending write, proving
+          // rollback waits for the entire batch rather than just its rejection.
+          await Bun.sleep(failure ? (name === failure ? 10 : 120) : 60)
+          activity.current--
+          if (name === failure) failed.add(name)
+        } else if (activity.current) activity.rollbackWhileActive = true
+        state.tags[name] ??= {}
+        state.tags[name][args[3]] = version
+        state.tagAdds ??= []
+        state.tagAdds.push(`${name}@${version}:${args[3]}`)
+        return Response.json({ exitCode: 0 })
+      }
+      if (args[0] === "dist-tag" && args[1] === "rm") {
+        if (activity.current) activity.rollbackWhileActive = true
+        delete state.tags[args[2]]?.[args[3]]
+        return Response.json({ exitCode: 0 })
+      }
+      return Response.json({ exitCode: 1, stderr: "unsupported registry command" })
+    },
+  })
+  const command = path.join(root, "npm-tags.ts")
+  await Bun.write(
+    command,
+    `const response = await fetch(process.env.FAKE_NPM_REGISTRY!, {
+      method: "POST", body: JSON.stringify(process.argv.slice(2))
+    });
+    const result = await response.json();
+    process.stdout.write(result.stdout ?? "");
+    process.stderr.write(result.stderr ?? "");
+    process.exit(result.exitCode);`,
+  )
+  return {
+    state,
+    activity,
+    options: {
+      ...fastOptions(file),
+      command: [process.execPath, command],
+      env: { ...fastOptions(file).env, FAKE_NPM_REGISTRY: server.url.toString() },
+    },
+    async [Symbol.asyncDispose]() {
+      server.stop(true)
+    },
+  }
+}
+
 test("packPackage uses Bun's supported destination-only form and inspects the real tarball", async () => {
   const artifact = await fixturePackage()
 
@@ -430,17 +498,23 @@ test("genuine owner E403 fails immediately", async () => {
   expect((await readState(denied)).publishCalls).toBe(1)
 })
 
-test("latest promotion is ordered with launcher last", async () => {
+test("latest promotion runs at most three platforms together and keeps dependencies and launcher last", async () => {
   const base = await fixturePackage()
   const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
   const tags = Object.fromEntries(artifacts.map((artifact) => [artifact.name, { latest: "2.0.31" }]))
   const file = await stateFile({ tags })
+  await using registry = await tagRegistry(file)
 
-  await promoteRelease(artifacts, options(file))
+  await promoteRelease(artifacts, registry.options)
 
-  const state = await readState(file)
-  expect(state.tagAdds).toEqual(releasePromotionNames().map((name) => `${name}@2.0.32:latest`))
+  const state = registry.state
+  const expected = releasePromotionNames().map((name) => `${name}@2.0.32:latest`)
+  expect(state.tagAdds?.toSorted()).toEqual(expected.toSorted())
+  expect(state.tagAdds?.slice(-4)).toEqual(expected.slice(-4))
   expect(state.tagAdds?.at(-1)).toBe("synsci@2.0.32:latest")
+  expect(registry.activity.maximum).toBeGreaterThan(1)
+  expect(registry.activity.maximum).toBeLessThanOrEqual(3)
+  for (const name of releasePackageNames()) expect(state.tags[name].latest).toBe("2.0.32")
 })
 
 test("test promotion moves the full snapshot in release order without changing latest", async () => {
@@ -467,11 +541,33 @@ test("promotion rolls the full snapshot back when mutation succeeds but verifica
   const tags = Object.fromEntries(artifacts.map((artifact) => [artifact.name, { latest: "2.0.31" }]))
   const first = releasePromotionNames()[0]
   const file = await stateFile({ failTagReadAfterAdd: first, tags })
+  await using registry = await tagRegistry(file)
 
-  await expect(promoteRelease(artifacts, options(file))).rejects.toThrow("transient dist-tag read failure")
+  await expect(promoteRelease(artifacts, registry.options)).rejects.toThrow("transient dist-tag read failure")
 
-  const restored = await readState(file)
+  const restored = registry.state
   for (const name of releasePackageNames()) expect(restored.tags[name].latest).toBe("2.0.31")
+  expect(registry.activity.current).toBe(0)
+  expect(registry.activity.rollbackWhileActive).toBe(false)
+  expect(restored.tagAdds?.filter((value) => value.endsWith("@2.0.32:latest")).toSorted()).toEqual(
+    releasePromotionNames()
+      .slice(0, 3)
+      .map((name) => `${name}@2.0.32:latest`)
+      .toSorted(),
+  )
+})
+
+test("parallel promotion failure removes newly created tags only after pending writes settle", async () => {
+  const base = await fixturePackage()
+  const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
+  const file = await stateFile({ failTagReadAfterAdd: releasePromotionNames()[0] })
+  await using registry = await tagRegistry(file)
+
+  await expect(promoteRelease(artifacts, registry.options)).rejects.toThrow("transient dist-tag read failure")
+
+  expect(registry.activity.current).toBe(0)
+  expect(registry.activity.rollbackWhileActive).toBe(false)
+  for (const name of releasePackageNames()) expect(registry.state.tags[name]?.latest).toBeUndefined()
 })
 
 test("test promotion rolls the full snapshot back on a verified tag-write failure", async () => {
