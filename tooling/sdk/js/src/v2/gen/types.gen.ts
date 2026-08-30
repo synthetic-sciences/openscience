@@ -2783,10 +2783,10 @@ export type AccountGetResponses = {
         organization_id: string
         name: string
         slug: string
+        is_personal: boolean
         status: string
         role: string
         membership_status: string
-        seat_assigned: boolean
         funding_available: boolean
         effective_permissions: Array<string>
       }>
@@ -2820,10 +2820,10 @@ export type AccountFundingContextGetResponses = {
       organization_id: string
       name: string
       slug: string
+      is_personal: boolean
       status: string
       role: string
       membership_status: string
-      seat_assigned: boolean
       funding_available: boolean
       effective_permissions: Array<string>
     }>
@@ -2866,10 +2866,10 @@ export type AccountFundingContextSetResponses = {
       organization_id: string
       name: string
       slug: string
+      is_personal: boolean
       status: string
       role: string
       membership_status: string
-      seat_assigned: boolean
       funding_available: boolean
       effective_permissions: Array<string>
     }>

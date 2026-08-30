@@ -77,7 +77,7 @@ test("account GET reports immutable personal and organization credentials", asyn
   }) as typeof fetch
 
   const personal = await AccountRoutes().request("/")
-  expect((await personal.json()).credential).toEqual({ type: "personal", legacy: false })
+  expect((await personal.json()).credential).toEqual({ type: "personal", legacy: true })
 
   await Bun.write(
     session,

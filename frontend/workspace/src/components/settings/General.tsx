@@ -34,6 +34,7 @@ type Account = {
     organizations: Array<{
       organization_id: string
       name: string
+      is_personal: boolean
       status: string
       membership_status: string
     }>
@@ -105,7 +106,7 @@ export default function General() {
     if (context?.type !== "organization" || !context.organization_id) return "Personal"
     return (
       context.organizations.find((organization) => organization.organization_id === context.organization_id)?.name ??
-      "Unavailable team"
+      "Unavailable workspace"
     )
   }
   const switchWorkspace = async () => {
@@ -160,7 +161,7 @@ export default function General() {
                 <Row
                   icon="home"
                   title="Workspace"
-                  description="Switching opens Synthetic Sciences so you can approve Personal or one of your shared workspaces."
+                  description="Switching opens Synthetic Sciences so you can approve any workspace, including Personal."
                 >
                   <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
                     <span class="settings-account-value">{fundingLabel()}</span>
@@ -188,13 +189,13 @@ export default function General() {
                 </Show>
                 <Show when={account()?.funding_context?.available === false}>
                   <div class="px-4 py-3 text-12-regular text-text-weak" role="status">
-                    This workspace is no longer available. Switch workspaces to choose Personal or another team.
+                    This workspace is no longer available. Switch workspaces to choose another one.
                   </div>
                 </Show>
                 <Show when={account()?.credential?.legacy === true}>
                   <div class="px-4 py-3 text-12-regular text-text-weak" role="status">
-                    This legacy thk_ key remains connected to Personal. Use Switch workspace to approve a new Personal
-                    key or an osk_ key for one shared workspace.
+                    This legacy thk_ key remains valid and is mapped to Personal. Use Switch workspace whenever you want
+                    a new osk_ key or a different workspace.
                   </div>
                 </Show>
               </Show>

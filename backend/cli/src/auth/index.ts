@@ -12,7 +12,7 @@ export const OAUTH_DUMMY_KEY = "synsc-oauth-dummy-key"
 const log = Log.create({ service: "auth" })
 
 export namespace Auth {
-  /** A managed Atlas wallet credential (`thk_*`), as opposed to a user-owned
+  /** A managed Atlas wallet credential (`osk_*` or legacy `thk_*`), as opposed to a user-owned
    *  (BYOK) key. Canonical home: `auth/index.ts` is a near-leaf module (only
    *  path/global/jsonstore/zod besides this file's own Config import), so
    *  `provider.ts` - which already imports Auth - depends on this instead of
@@ -84,7 +84,7 @@ export namespace Auth {
     // Settings toggle. This is the ONE choke point both `openscience auth
     // login` (CLI - calls Auth.set directly, see cli/cmd/auth.ts) and the
     // Settings UI (PUT /auth/:providerID -> Auth.set) go through, so it
-    // belongs here rather than in the HTTP route. A `thk_` Atlas token is
+    // belongs here rather than in the HTTP route. An Atlas workspace token is
     // never "own key" material and must not flip the mode; other providers
     // and OAuth credentials are untouched.
     if (key === "openrouter" && info.type === "api" && !isAtlasApiKey(info.key)) {

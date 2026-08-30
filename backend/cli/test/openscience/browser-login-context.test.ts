@@ -16,12 +16,20 @@ const alpha = {
   organization_id: "org_alpha",
   name: "Alpha Lab",
   slug: "alpha-lab",
+  is_personal: false,
   status: "active",
   role: "owner",
   membership_status: "active",
-  seat_assigned: true,
   funding_available: true,
   effective_permissions: ["manage_billing", "use_shared_wallet"],
+}
+
+const personal = {
+  ...alpha,
+  organization_id: "org_personal",
+  name: "Personal",
+  slug: "personal-user",
+  is_personal: true,
 }
 
 type Reply = {
@@ -100,12 +108,12 @@ async function gateway(reply: Reply) {
         }
         if (key === "Bearer thk_legacy-selected.secret") {
           return json({
-            api_key: { organization_id: null, workspace_locked: false },
-            organizations: [alpha],
+            api_key: { organization_id: personal.organization_id, workspace_locked: true },
+            organizations: [personal],
             funding_context: {
               type: "organization",
-              organization_id: alpha.organization_id,
-              locked: false,
+              organization_id: personal.organization_id,
+              locked: true,
             },
           })
         }
@@ -323,7 +331,7 @@ describe("browser login funding context", () => {
     }
   })
 
-  test("keeps a pasted legacy key Personal when modern status suggests an organization", async () => {
+  test("maps a pasted legacy key to its permanent Personal workspace", async () => {
     const atlas = await gateway({})
     try {
       const selected = await OpenScience.loginWithKey("thk_legacy-selected.secret")
@@ -331,23 +339,24 @@ describe("browser login funding context", () => {
         api_key: "thk_legacy-selected.secret",
         user_id: "user-legacy",
       })
-      expect(selected.organization_id).toBeUndefined()
-      expect(selected.workspace_locked).toBeUndefined()
+      expect(selected.organization_id).toBe(personal.organization_id)
+      expect(selected.workspace_locked).toBe(true)
       expect(await OpenScience.getFundingContext()).toMatchObject({
-        type: "personal",
+        type: "organization",
+        organization_id: personal.organization_id,
         available: true,
-        locked: false,
+        locked: true,
       })
 
       expect(await OpenScience.getSession()).toMatchObject({
         api_key: "thk_legacy-selected.secret",
       })
-      expect((await OpenScience.getSession())?.organization_id).toBeUndefined()
-      expect((await OpenScience.getSession())?.workspace_locked).toBeUndefined()
+      expect((await OpenScience.getSession())?.organization_id).toBe(personal.organization_id)
+      expect((await OpenScience.getSession())?.workspace_locked).toBe(true)
 
-      await expect(OpenScience.setFundingContext(alpha.organization_id)).rejects.toThrow("rollback-safe")
+      await expect(OpenScience.setFundingContext(alpha.organization_id)).rejects.toThrow("tied to one workspace")
       expect(atlas.state.syncs.length).toBeGreaterThanOrEqual(1)
-      expect(atlas.state.syncs.every((call) => call.organization === null)).toBe(true)
+      expect(atlas.state.syncs.every((call) => call.organization === personal.organization_id)).toBe(true)
     } finally {
       await atlas.close()
     }

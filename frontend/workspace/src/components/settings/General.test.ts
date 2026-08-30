@@ -38,10 +38,10 @@ describe("General workspace switching", () => {
     expect(source).toContain("sdk.client.account.loginBrowser()")
     expect(source).not.toContain("sdk.client.account.fundingContext.set")
     expect(source).not.toContain("<FilterMenu")
-    expect(source).toContain("approve Personal or one of your shared workspaces")
+    expect(source).toContain("approve any workspace, including Personal")
     expect(source).toContain("Create workspace")
     expect(source).toContain("URLS.dashboardWorkspaces")
-    expect(source).toContain("This legacy thk_ key remains connected to Personal")
+    expect(source).toContain("This legacy thk_ key remains valid and is mapped to Personal")
   })
 
   test("keeps the current workspace active while browser approval is pending or fails", async () => {
@@ -58,11 +58,11 @@ describe("General workspace switching", () => {
     expect(source).toContain("disabled={fundingBusy()}")
   })
 
-  test("shows the resolved Personal, team, and unavailable workspace labels", async () => {
+  test("shows the resolved Personal and unavailable workspace labels", async () => {
     const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
     expect(source).toContain('return "Personal"')
-    expect(source).toContain('"Unavailable team"')
+    expect(source).toContain('"Unavailable workspace"')
     expect(source).toContain("description: `OpenScience is now connected to ${fundingLabel()}.`")
-    expect(source).toContain("Switch workspaces to choose Personal or another team.")
+    expect(source).toContain("Switch workspaces to choose another one.")
   })
 })

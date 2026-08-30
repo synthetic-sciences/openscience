@@ -620,7 +620,7 @@ export class FundingContext extends HeyApiClient {
   /**
    * Get the local funding account selection
    *
-   * List available Synthetic Sciences organizations and the Personal or organization context used by managed operations.
+   * List available Synthetic Sciences workspaces and the workspace used by managed operations.
    */
   public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<AccountFundingContextGetResponses, unknown, ThrowOnError>({

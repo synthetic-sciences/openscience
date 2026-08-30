@@ -14,10 +14,10 @@ const alpha = {
   organization_id: "org_alpha",
   name: "Alpha Lab",
   slug: "alpha-lab",
+  is_personal: false,
   status: "active",
   role: "owner",
   membership_status: "active",
-  seat_assigned: true,
   funding_available: true,
   effective_permissions: ["manage_billing", "use_shared_wallet"],
 }
@@ -26,22 +26,19 @@ const beta = {
   organization_id: "org_beta",
   name: "Beta Lab",
   slug: "beta-lab",
+  is_personal: false,
   status: "active",
   role: "member",
   membership_status: "active",
-  seat_assigned: true,
   funding_available: true,
   effective_permissions: ["use_shared_wallet"],
 }
 
-const unseated = {
+const seatless = {
   ...beta,
-  organization_id: "org_unseated",
-  name: "Unseated Lab",
-  slug: "unseated-lab",
-  seat_assigned: false,
-  funding_available: false,
-  effective_permissions: [],
+  organization_id: "org_seatless",
+  name: "Seatless Lab",
+  slug: "seatless-lab",
 }
 
 afterEach(async () => {
@@ -201,7 +198,7 @@ describe("organization funding context", () => {
     })
   })
 
-  test("requires a fresh login for a legacy key that Atlas has pinned to an organization", async () => {
+  test("migrates a legacy key to the workspace Atlas pins it to", async () => {
     await Bun.write(session, JSON.stringify({ api_key: "thk_old-organization.secret", user_id: "user-context" }))
     globalThis.fetch = (async () =>
       Response.json(
@@ -218,10 +215,18 @@ describe("organization funding context", () => {
         },
       )) as unknown as typeof fetch
 
-    await expect(OpenScience.getFundingContext()).rejects.toThrow("renew this organization workspace credential")
-    expect(await OpenScience.getSession()).toEqual({
+    expect(await OpenScience.getFundingContext()).toEqual({
+      type: "organization",
+      organization_id: alpha.organization_id,
+      available: true,
+      locked: true,
+      organizations: [alpha],
+    })
+    expect(await OpenScience.getSession()).toMatchObject({
       api_key: "thk_old-organization.secret",
       user_id: "user-context",
+      organization_id: alpha.organization_id,
+      workspace_locked: true,
     })
   })
 
@@ -476,18 +481,38 @@ describe("organization funding context", () => {
     ])
   })
 
-  test("refuses an organization without an active funded seat", async () => {
-    await Bun.write(session, JSON.stringify({ api_key: "thk_context.secret", user_id: "user-context" }))
+  test("does not require a paid seat for workspace funding", async () => {
+    await Bun.write(
+      session,
+      JSON.stringify({
+        api_key: "osk_seatless.secret",
+        user_id: "user-context",
+        organization_id: seatless.organization_id,
+        workspace_locked: true,
+      }),
+    )
     globalThis.fetch = (async () =>
-      Response.json({ organizations: [unseated], funding_context: { type: "personal" } })) as unknown as typeof fetch
+      Response.json(
+        {
+          api_key: { organization_id: seatless.organization_id, workspace_locked: true },
+          organizations: [{ ...seatless, seat_assigned: false }],
+          funding_context: { type: "organization", organization_id: seatless.organization_id },
+        },
+        {
+          headers: {
+            "OpenScience-Funding-Protocol": "1",
+            "OpenScience-Funding-Context": `organization:${seatless.organization_id}`,
+          },
+        },
+      )) as unknown as typeof fetch
 
-    const selected = await AccountRoutes().request("/funding-context", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ organization_id: unseated.organization_id }),
+    expect(await OpenScience.getFundingContext()).toEqual({
+      type: "organization",
+      organization_id: seatless.organization_id,
+      available: true,
+      locked: true,
+      organizations: [seatless],
     })
-    expect(selected.status).toBe(400)
-    expect((await Bun.file(session).json()).organization_id).toBeUndefined()
   })
 
   test("adds attribution only to funded and workspace-credential calls", async () => {
@@ -651,7 +676,7 @@ describe("organization funding context", () => {
     expect(await OpenScience.getBalance(snapshot)).toBe(20)
   })
 
-  test("rejects a Personal balance when a modern gateway resolves an organization", async () => {
+  test("accepts the first Personal-workspace response while a legacy key is migrated", async () => {
     const snapshot = Object.freeze({
       api_key: "thk_context.secret",
       user_id: "user-context",
@@ -668,7 +693,7 @@ describe("organization funding context", () => {
         },
       )) as unknown as typeof fetch
 
-    expect(await OpenScience.getBalance(snapshot)).toBeNull()
+    expect(await OpenScience.getBalance(snapshot)).toBe(20)
   })
 
   test("preserves concurrent Personal and organization usage cutover markers", async () => {

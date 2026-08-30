@@ -3,7 +3,7 @@
  *
  * The OpenScience web canvas (node list) and project/session sync proxy
  * through here to the Atlas REST API (`API_BASE/api/v1/*`), authenticated
- * with the user's stored `thk_` key (`OpenScience.getSession()`). This is the
+ * with the user's stored workspace key (`OpenScience.getSession()`). This is the
  * same backend + token the CLI already uses for sync/skills/billing, and
  * the same contract the `atlas` CLI binary speaks (`nodes:list`,
  * `nodes:commit-new`, `auth/github/*`).

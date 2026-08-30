@@ -577,6 +577,9 @@
                               "slug": {
                                 "type": "string"
                               },
+                              "is_personal": {
+                                "type": "boolean"
+                              },
                               "status": {
                                 "type": "string"
                               },
@@ -585,9 +588,6 @@
                               },
                               "membership_status": {
                                 "type": "string"
-                              },
-                              "seat_assigned": {
-                                "type": "boolean"
                               },
                               "funding_available": {
                                 "type": "boolean"
@@ -603,10 +603,10 @@
                               "organization_id",
                               "name",
                               "slug",
+                              "is_personal",
                               "status",
                               "role",
                               "membership_status",
-                              "seat_assigned",
                               "funding_available",
                               "effective_permissions"
                             ]
@@ -671,7 +671,7 @@
       "get": {
         "operationId": "account.fundingContext.get",
         "summary": "Get the local funding account selection",
-        "description": "List available Synthetic Sciences organizations and the Personal or organization context used by managed operations.",
+        "description": "List available Synthetic Sciences workspaces and the workspace used by managed operations.",
         "responses": {
           "200": {
             "description": "Funding context",
@@ -710,6 +710,9 @@
                           "slug": {
                             "type": "string"
                           },
+                          "is_personal": {
+                            "type": "boolean"
+                          },
                           "status": {
                             "type": "string"
                           },
@@ -718,9 +721,6 @@
                           },
                           "membership_status": {
                             "type": "string"
-                          },
-                          "seat_assigned": {
-                            "type": "boolean"
                           },
                           "funding_available": {
                             "type": "boolean"
@@ -736,10 +736,10 @@
                           "organization_id",
                           "name",
                           "slug",
+                          "is_personal",
                           "status",
                           "role",
                           "membership_status",
-                          "seat_assigned",
                           "funding_available",
                           "effective_permissions"
                         ]
@@ -805,6 +805,9 @@
                           "slug": {
                             "type": "string"
                           },
+                          "is_personal": {
+                            "type": "boolean"
+                          },
                           "status": {
                             "type": "string"
                           },
@@ -813,9 +816,6 @@
                           },
                           "membership_status": {
                             "type": "string"
-                          },
-                          "seat_assigned": {
-                            "type": "boolean"
                           },
                           "funding_available": {
                             "type": "boolean"
@@ -831,10 +831,10 @@
                           "organization_id",
                           "name",
                           "slug",
+                          "is_personal",
                           "status",
                           "role",
                           "membership_status",
-                          "seat_assigned",
                           "funding_available",
                           "effective_permissions"
                         ]

@@ -8,7 +8,8 @@
  *
  * Which class a call falls into is decided by the *credential*, not the
  * provider id: the same providerID (e.g. "anthropic") can be BYOK, managed
- * (a synced thk_* proxy token), or OAuth. `resolveCredentialSource` inspects
+ * (a synced osk_* or legacy thk_* proxy token), or OAuth.
+ * `resolveCredentialSource` inspects
  * the resolved key and returns the authoritative class; the gate predicates
  * then key off that so the pre-flight balance check and the post-step usage
  * report agree on exactly what is billable.
@@ -47,7 +48,7 @@ export function isCodexOAuthProvider(providerID: string): boolean {
 
 /**
  * Classify the credential backing a call as one of:
- *   - "managed"    — a thk_* Atlas proxy token or a dashboard-synced secret.
+ *   - "managed"    — an Atlas workspace proxy token or dashboard-synced secret.
  *                    Debits the wallet + is reported for billing.
  *   - "byok"       — the user's own api key (auth.json or shell env).
  *   - "oauth-free" — a first-party OAuth subscription (Claude/ChatGPT/Copilot).
@@ -73,7 +74,7 @@ export async function resolveCredentialSource(providerID: string, _modelID: stri
 
   const provider = await Provider.getProvider(providerID).catch(() => undefined)
 
-  // 1) Managed: a thk_* proxy token. Classified by VALUE, not by how the
+  // 1) Managed: an osk_* or legacy thk_* proxy token. Classified by VALUE, not by how the
   //    credential arrived: the dashboard sync also delivers the user's own
   //    keys (OPENROUTER_API_KEY etc.), and treating "arrived via sync" as
   //    "managed" wallet-gated and billed BYOK keys — exactly what this
@@ -81,7 +82,7 @@ export async function resolveCredentialSource(providerID: string, _modelID: stri
   //    synced-secret set is empty until an in-process sync runs).
   // Classify the one credential the provider will actually send. Raw losing
   // env values must not influence billing: auth.json intentionally overrides
-  // environment credentials, and a stale thk_* next to a winning BYOK key is
+  // environment credentials, and a stale managed key next to a winning BYOK key is
   // not a managed request.
   const effective = provider ? Provider.effectiveKey(provider) : undefined
   if (OpenScience.isManagedKeyValue(effective)) return "managed"

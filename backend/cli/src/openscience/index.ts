@@ -16,7 +16,7 @@ import {
   SYNCED_SERVICE_ENV_KEYS,
   managedOpenRouterBaseURL,
 } from "./synced-env-policy"
-import { isAtlasManagedKey, isOrganizationWorkspaceKey } from "../credentials/managed-key"
+import { isAtlasManagedKey, isWorkspaceKey } from "../credentials/managed-key"
 import { BILLING_URL, DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "../endpoints"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ToolOutputPath } from "../tool/tool-output-path"
@@ -155,15 +155,14 @@ const CONTROL_PLANE_ENV_KEYS = new Set(["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"])
  * — a 401 on any request signals "key revoked or expired, re-auth".
  */
 export interface OpenScienceSession {
-  /** Atlas-issued Personal (`thk_`) or organization-workspace (`osk_`) Bearer token. */
+  /** Atlas-issued workspace (`osk_`) or legacy (`thk_`) Bearer token. */
   api_key: string
   /** Atlas user_id (UUID). Stored for diagnostics; not used for auth. */
   user_id: string
   /** Friendly device label this session was registered under. */
   device_name?: string
-  /** Local, non-secret funding selection. Omitted means the personal account.
-   *  An organization selection is always forwarded explicitly; it is never
-   *  erased merely because a later Atlas status read is unavailable. */
+  /** Local, non-secret workspace selection. Modern sessions always include an
+   *  organization id, including the permanent Personal workspace. */
   organization_id?: string
   /** True when Atlas issued this API key for one immutable workspace,
    *  including Personal. Changing scope requires a fresh browser approval. */
@@ -231,10 +230,10 @@ export interface FundingOrganization {
   organization_id: string
   name: string
   slug: string
+  is_personal: boolean
   status: string
   role: string
   membership_status: string
-  seat_assigned: boolean
   funding_available: boolean
   effective_permissions: string[]
 }
@@ -244,8 +243,8 @@ export interface FundingSnapshot {
   readonly user_id: string
   readonly account: string
   readonly organization_id?: string
-  /** Organization credentials are available only to a browser-approved,
-   * immutable workspace key. A legacy local funding selection is not enough. */
+  /** Modern credentials and migrated legacy keys are pinned to one immutable
+   * workspace. Changing it requires a fresh browser approval. */
   readonly workspace_locked?: boolean
 }
 
@@ -460,17 +459,14 @@ export namespace OpenScience {
   async function writeWorkspaceScope(session: OpenScienceSession): Promise<void> {
     const locked = session.workspace_locked === true || session.organization_locked === true
     if (!locked) {
-      if (isOrganizationWorkspaceKey(session.api_key)) {
+      if (isWorkspaceKey(session.api_key)) {
         throw new FundingContextError("Organization credentials require an immutable organization workspace.")
       }
       await fs.unlink(scopepath).catch(() => undefined)
       return
     }
-    if (session.organization_id && !isOrganizationWorkspaceKey(session.api_key)) {
-      throw new FundingContextError("Sign in again to renew this organization workspace credential.")
-    }
-    if (!session.organization_id && isOrganizationWorkspaceKey(session.api_key)) {
-      throw new FundingContextError("An organization credential cannot be saved as a Personal workspace.")
+    if (!session.organization_id && isWorkspaceKey(session.api_key)) {
+      throw new FundingContextError("A workspace credential is missing its workspace id.")
     }
     const scope: WorkspaceScope = {
       protocol: 1,
@@ -584,8 +580,7 @@ export namespace OpenScience {
   }
 
   /** Credential-sync request for the immutable workspace selected during
-   * browser login. Personal and legacy keys remain unscoped and can never
-   * receive an organization's shared credentials. */
+   * browser login or recovered from a migrated legacy key. */
   async function workspaceAtlasFetch(
     session: Pick<OpenScienceSession, "api_key" | "organization_id" | "workspace_locked">,
     input: string,
@@ -608,9 +603,6 @@ export namespace OpenScience {
     init: RequestInit = {},
     timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
   ): Promise<Response> {
-    if (session.organization_id && !isOrganizationWorkspaceKey(session.api_key)) {
-      throw new FundingContextError("Sign in again to renew this organization workspace credential.")
-    }
     const response = await accountAtlasFetch(session, input, init, timeoutMs, true)
     return validateFundingResponse(response, session)
   }
@@ -652,9 +644,6 @@ export namespace OpenScience {
       const organizationID = scope ? scope.organization_id : persistedOrganizationID
       const locked =
         scope?.workspace_locked === true || data.workspace_locked === true || data.organization_locked === true
-      if (organizationID && locked && !isOrganizationWorkspaceKey(data.api_key)) {
-        throw new FundingContextError("Sign in again to renew this organization workspace credential.")
-      }
       return {
         api_key: data.api_key,
         user_id: data.user_id || "",
@@ -697,7 +686,8 @@ export namespace OpenScience {
   /** Resolve the exact context for a managed proxy key. A request cannot use a
    * new account key with an old operation snapshot, and a corrupt on-disk
    * session cannot fall back to an un-attributed synced token. A standalone
-   * thk_* environment key remains compatible as an explicitly personal key. */
+   * thk_* environment key remains compatible and is mapped by Atlas to its
+   * owner's permanent Personal workspace. */
   export async function managedRequestSnapshot(
     apiKey: string,
     snapshot?: FundingSnapshot | null,
@@ -708,9 +698,6 @@ export namespace OpenScience {
       if (selected.api_key !== apiKey) {
         throw new FundingContextError("The connected account changed during this managed operation. Retry it.")
       }
-      if (selected.organization_id && !isOrganizationWorkspaceKey(apiKey)) {
-        throw new FundingContextError("Sign in again to renew this organization workspace credential.")
-      }
       return selected
     }
     if (existsSync(filepath)) {
@@ -718,7 +705,7 @@ export namespace OpenScience {
         "OpenScience could not safely read the selected funding account. Repair the local session or sign in again.",
       )
     }
-    if (isOrganizationWorkspaceKey(apiKey)) {
+    if (isWorkspaceKey(apiKey)) {
       throw new FundingContextError(
         "An organization environment credential requires a saved workspace scope. Sign in again before using managed services.",
       )
@@ -751,14 +738,21 @@ export namespace OpenScience {
       const context = response.headers.get(FUNDING_CONTEXT_HEADER)
       if ((!context || context === "personal") && protocol !== FUNDING_PROTOCOL) return response
       if (protocol === FUNDING_PROTOCOL && context === "personal") return response
+      // The first request made by an unmigrated thk_ key atomically creates
+      // and pins its Personal workspace on Atlas. Trust that authenticated
+      // protocol proof for this one compatibility request; the next status
+      // reconciliation persists the exact workspace id locally.
+      if (protocol === FUNDING_PROTOCOL && context?.startsWith("organization:") && !isWorkspaceKey(snapshot.api_key)) {
+        return response
+      }
       await response.body?.cancel().catch(() => undefined)
       throw new FundingContextError(
         "The gateway resolved a different workspace for this credential. Sign in again before using managed services.",
       )
     }
-    if (!isOrganizationWorkspaceKey(snapshot.api_key)) {
+    if (!isAtlasManagedKey(snapshot.api_key)) {
       await response.body?.cancel().catch(() => undefined)
-      throw new FundingContextError("Sign in again to renew this organization workspace credential.")
+      throw new FundingContextError("The selected workspace does not have a managed credential.")
     }
     // An explicit rejection cannot spend or leak successful response data. Let
     // the caller preserve its existing 401/402/403 handling instead of
@@ -786,10 +780,10 @@ export namespace OpenScience {
           organization_id: id,
           name: row.name,
           slug: typeof row.slug === "string" ? row.slug : "",
+          is_personal: row.is_personal === true,
           status: typeof row.status === "string" ? row.status : "active",
           role: typeof row.role === "string" ? row.role : "member",
           membership_status: typeof row.membership_status === "string" ? row.membership_status : "active",
-          seat_assigned: row.seat_assigned === true,
           funding_available: row.funding_available === true,
           effective_permissions: Array.isArray(row.effective_permissions)
             ? row.effective_permissions.filter((permission): permission is string => typeof permission === "string")
@@ -804,7 +798,6 @@ export namespace OpenScience {
       !!row &&
       row.status === "active" &&
       row.membership_status === "active" &&
-      row.seat_assigned &&
       row.funding_available &&
       row.effective_permissions.includes("use_shared_wallet")
     )
@@ -827,12 +820,11 @@ export namespace OpenScience {
       if (!response || !operation.organization_id) return response
       return validateFundingResponse(response, operation).catch(() => undefined)
     }
-    // Legacy thk_* keys can only represent Personal funding. If an older
-    // client persisted a local organization choice, ask Atlas for the key's
-    // immutable Personal scope directly. Sending the stale organization first
-    // would be rejected locally before Atlas could repair it.
+    // If an older client persisted a local choice for a thk_* key, ask Atlas
+    // for the key's authoritative migrated scope directly. Sending the stale
+    // id first would be rejected before Atlas could repair it.
     const initial =
-      snapshot.organization_id && !isOrganizationWorkspaceKey(snapshot.api_key)
+      snapshot.organization_id && !isWorkspaceKey(snapshot.api_key)
         ? Object.freeze({ ...snapshot, organization_id: undefined })
         : snapshot
     const first = await request(initial)
@@ -840,7 +832,7 @@ export namespace OpenScience {
     // newly locked Personal key. Retry this read without that header so Atlas
     // can report the immutable scope and repair the local session.
     const response =
-      first?.status === 403 && snapshot.organization_id && isOrganizationWorkspaceKey(snapshot.api_key)
+      first?.status === 403 && snapshot.organization_id && isWorkspaceKey(snapshot.api_key)
         ? await request(Object.freeze({ ...snapshot, organization_id: undefined }))
         : first
     if (!response?.ok) return null
@@ -850,7 +842,9 @@ export namespace OpenScience {
       .json()
       .then((value) => {
         const body = value as AuthStatusResponse
-        const pinned = loginOrganizationID(body.api_key?.organization_id)
+        const selected =
+          body.funding_context?.type === "organization" ? body.funding_context.organization_id : undefined
+        const pinned = loginOrganizationID(body.api_key?.organization_id ?? selected)
         const expected =
           body.funding_context?.type === "organization" && body.funding_context.organization_id
             ? `organization:${body.funding_context.organization_id}`
@@ -911,19 +905,15 @@ export namespace OpenScience {
     return true
   }
 
-  /** Read the local selection plus the organizations Atlas currently allows.
-   * If a selected organization disappears or status cannot be verified, keep
-   * its id and mark it unavailable; managed calls continue sending that id so
-   * Atlas rejects them instead of charging the personal account. */
+  /** Read the local selection plus the workspaces Atlas currently allows.
+   * If a selected workspace disappears or status cannot be verified, keep its
+   * id and mark it unavailable so managed calls fail closed. */
   export async function getFundingContext(operation?: FundingSnapshot): Promise<FundingContext> {
     const snapshot = operation ?? (await getFundingSnapshot())
     if (!snapshot) return { type: "personal", available: true, locked: false, organizations: [] }
     const status = await authStatus(snapshot)
     const pinned = status?.pinned_organization_id
     if (status?.workspace_locked) {
-      if (pinned && !isOrganizationWorkspaceKey(snapshot.api_key)) {
-        throw new FundingContextError("Sign in again to renew this organization workspace credential.")
-      }
       await reconcileWorkspaceScope(snapshot.api_key, pinned)
       if (!pinned) {
         const echoed = status.funding_context
@@ -1006,7 +996,7 @@ export namespace OpenScience {
     if (connected.workspace_locked && requested !== connected.organization_id) {
       throw new FundingContextError("This sign-in is tied to one workspace. Sign in again to choose another account.")
     }
-    if (requested && !isOrganizationWorkspaceKey(connected.api_key)) {
+    if (requested && !isWorkspaceKey(connected.api_key)) {
       throw new FundingContextError("Sign in again to create a rollback-safe organization workspace.")
     }
     if (connected.workspace_locked) return getFundingContext()
@@ -1596,9 +1586,6 @@ export namespace OpenScience {
         throw new Error("Login did not return a valid OpenScience API key.")
       }
       const organizationID = loginOrganizationID(redeemed.organization_id)
-      if (organizationID && !isOrganizationWorkspaceKey(key)) {
-        throw new Error("Organization login returned a legacy credential. Sign in again after the gateway updates.")
-      }
       const workspaceLocked = redeemed.workspace_locked === true || !!organizationID
       const identity = redeemed.user?.user_id || redeemed.user?.id || redeemed.user_id
 
@@ -1633,9 +1620,8 @@ export namespace OpenScience {
     if (!res.ok) {
       throw new Error(`Could not validate key: HTTP ${res.status}`)
     }
-    // Modern organization-scoped keys report their immutable scope here.
-    // Keep this best-effort so older servers without /api/v1/auth/status and
-    // legacy personal keys continue to connect exactly as before.
+    // Modern workspace keys and migrated legacy keys report their immutable
+    // scope here. Keep the status read best-effort for older gateways.
     const probeStatus = (timeout: number) =>
       atlasFetch(
         `${API_BASE}/api/v1/auth/status`,
@@ -1650,9 +1636,9 @@ export namespace OpenScience {
       (await probeStatus(1_500)) ??
       // An organization workspace key cannot connect without its immutable
       // scope, so give the status endpoint a real chance before giving up.
-      (isOrganizationWorkspaceKey(key) ? await probeStatus(10_000) : undefined)
+      (isWorkspaceKey(key) ? await probeStatus(10_000) : undefined)
     const pinned = loginOrganizationID(status?.api_key?.organization_id)
-    if (isOrganizationWorkspaceKey(key) && !pinned) {
+    if (isWorkspaceKey(key) && !pinned) {
       throw new Error("Couldn't verify this organization key's workspace. Check your connection and try again.")
     }
     const selected = (() => {
@@ -1664,13 +1650,10 @@ export namespace OpenScience {
     })()
     const workspaceLocked = status?.api_key?.workspace_locked === true || !!pinned
     const reportedOrganizationID = pinned ?? (workspaceLocked ? undefined : selected)
-    if (pinned && !isOrganizationWorkspaceKey(key)) {
-      throw new Error("This organization credential predates the rollback-safe login flow. Sign in again in a browser.")
-    }
-    // Old flexible Personal keys could carry a dashboard-selected organization
-    // in status. Keep the Personal login, but never turn that legacy selection
-    // into organization funding; a browser-approved `osk_` workspace is required.
-    const organizationID = isOrganizationWorkspaceKey(key) ? reportedOrganizationID : undefined
+    // Atlas maps every legacy thk_ key to its owner's permanent Personal
+    // workspace. Persist that authoritative id so all subsequent requests use
+    // the same shared Wallet, integrations, member limits, and usage ledger.
+    const organizationID = reportedOrganizationID
     // Read profile + credential state only after the immutable scope is known.
     // This prevents a pasted Personal/flexible key from ever receiving team
     // material, while an organization-pinned key sends its exact workspace.

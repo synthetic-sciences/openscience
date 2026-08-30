@@ -349,7 +349,7 @@ export namespace Server {
         // resolves project capabilities inside the route when one is supplied.
         .route("/api/resolve-folder", FolderResolveRoutes())
         // Atlas graph bridge — proxies /api/atlas/* to the Atlas REST API
-        // using the user's stored thk_ key (see routes/atlas-bridge.ts).
+        // using the user's stored workspace key (see routes/atlas-bridge.ts).
         .route("/api/atlas", AtlasBridgeRoutes())
         // Repository tab (status/commit/push/remote) — shells out to git.
         .route("/api/repo", RepoRoutes())
