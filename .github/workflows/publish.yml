@@ -336,14 +336,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-14
+          - runner: macos-15
             target: mac
             arch: arm64
             sidecar: backend/cli/dist/@synsci/openscience-darwin-arm64/bin/openscience
             asset: OpenScience-mac-arm64.dmg
             assets: OpenScience-mac-arm64.dmg OpenScience-mac-arm64.zip
             signing: mac
-          - runner: macos-14
+          - runner: macos-15-intel
             target: mac
             arch: x64
             sidecar: backend/cli/dist/@synsci/openscience-darwin-x64/bin/openscience

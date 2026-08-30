@@ -40,6 +40,8 @@ test("production is a single release pass without a rehearsal gate", async () =>
 test("stable macOS artifacts remain signed, notarized, stapled, and smoked", async () => {
   const workflow = await read(".github/workflows/publish.yml")
 
+  expect(workflow).toContain("runner: macos-15")
+  expect(workflow).toContain("runner: macos-15-intel")
   expect(workflow).toContain("Apple-Actions/import-codesign-certs")
   expect(workflow).toContain("codesign --force --options runtime --timestamp")
   expect(workflow).toContain("xcrun notarytool submit")
