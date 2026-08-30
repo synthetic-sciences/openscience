@@ -1,12 +1,10 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Nav from "@/Nav"
 
 const GITHUB = "https://github.com/synthetic-sciences/openscience"
 const DOCS = `${GITHUB}#readme`
 const RELEASE = `${GITHUB}/releases/latest/download`
-const NPM = "npm i -g @synsci/openscience"
-const CURL = `curl -fsSL ${GITHUB}/raw/main/frontend/landing/public/install | bash`
-const MAC = `curl -fsSL ${GITHUB}/raw/main/frontend/landing/public/install-desktop | bash`
+const NPM = "npm install -g @synsci/openscience"
 
 const DOWNLOADS = {
   "mac-arm64": {
@@ -135,7 +133,7 @@ function Copy({ command }: { command: string }) {
           () => setCopied(false),
         )
       }}
-      className="group flex min-h-14 w-full items-center gap-3 border border-border/60 bg-background/60 px-4 text-left transition-colors duration-300 hover:border-foreground/30 hover:bg-foreground/[0.025] sm:px-5"
+      className="group flex min-h-14 w-full items-center gap-3 border border-border/60 bg-background/60 px-4 text-left transition-colors duration-150 hover:border-foreground/30 hover:bg-foreground/[0.025] sm:px-5"
       aria-label={`Copy command: ${command}`}
     >
       <span className="shrink-0 font-terminal text-[12px] text-[hsl(var(--accent-coral))]">$</span>
@@ -154,6 +152,11 @@ function Copy({ command }: { command: string }) {
 
 export default function Download() {
   const [target, setTarget] = useState<Target>(detect)
+  const selected = useRef(false)
+  const chooseTarget = (value: Target) => {
+    selected.current = true
+    setTarget(value)
+  }
 
   useEffect(() => {
     const title = document.title
@@ -229,7 +232,7 @@ export default function Download() {
     void data.getHighEntropyValues(["architecture"]).then(
       (value) => {
         const architecture = value.architecture?.toLowerCase()
-        if (!architecture) return
+        if (!architecture || selected.current || !/arm|^(x86|x64|x86_64|amd64)$/.test(architecture)) return
         const hinted = architecture.includes("arm")
         setTarget(platform === "linux" ? (hinted ? "linux-arm64" : "linux-x64") : hinted ? "mac-arm64" : "mac-x64")
       },
@@ -261,120 +264,88 @@ export default function Download() {
       </header>
 
       <main className="relative z-10">
-        <section className="mx-auto w-full max-w-[1180px] px-6 pb-20 pt-16 sm:px-10 sm:pb-28 sm:pt-24">
+        <section className="mx-auto w-full max-w-[1180px] px-6 pb-20 pt-12 sm:px-10 sm:pb-24 sm:pt-16">
           <div className="mx-auto max-w-[900px] text-center">
-            <div className="rise text-[13px] tracking-[0.045em] text-foreground/55">The current release</div>
-            <h1 className="rise mt-6 text-balance text-[clamp(48px,7vw,92px)] leading-[0.96] tracking-[-0.035em] [animation-delay:90ms]">
-              Download OpenScience.
+            <div className="text-[13px] tracking-[0.045em] text-foreground/55">Two ways to get started</div>
+            <h1 className="mt-5 text-balance text-[clamp(44px,6vw,76px)] leading-[0.98] tracking-[-0.035em]">
+              Get OpenScience.
             </h1>
-            <p className="rise mx-auto mt-6 max-w-[36ch] text-[16px] leading-7 text-foreground/60 [animation-delay:180ms] sm:text-[18px]">
-              Your research workspace, on your computer.
+            <p className="mx-auto mt-5 max-w-[48ch] text-[16px] leading-7 text-foreground/60 sm:text-[18px]">
+              Download the desktop app or install with npm. Your research workspace runs on your computer either way.
             </p>
-
-            <div className="rise mx-auto mt-9 max-w-[560px] [animation-delay:270ms]">
-              {download.platform === "mac" ? (
-                <>
-                  <a
-                    href={`${RELEASE}/${download.file}`}
-                    className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-7 text-[15px] sm:text-[16px]"
-                    aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
-                  >
-                    <svg width="15" height="16" viewBox="0 0 15 16" fill="none" aria-hidden>
-                      <path d="M7.5 1v9m0 0L11 6.5M7.5 10 4 6.5M1 14.5h13" stroke="currentColor" strokeWidth="1.3" />
-                    </svg>
-                    Download for macOS ({download.detail})
-                  </a>
-                  <div className="mt-3 text-[12.5px] leading-5 text-foreground/55">
-                    Developer ID signed, notarized, and stapled.
-                  </div>
-                  <details className="group mt-5 border-t border-border/50 pt-4 text-left">
-                    <summary className="min-h-11 cursor-pointer list-none py-3 text-center text-[12.5px] text-foreground/55 hover:text-foreground/80">
-                      Install from Terminal
-                    </summary>
-                    <div className="border border-border/50 bg-background/40 p-4 text-[12.5px] leading-5 text-foreground/55">
-                      <p className="mb-3">
-                        The installer verifies the release checksum and app identity before launch.
-                      </p>
-                      <Copy command={MAC} />
-                    </div>
-                  </details>
-                </>
-              ) : (
-                <>
-                  <a
-                    href={`${RELEASE}/${download.file}`}
-                    className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-7 text-[15px] sm:text-[16px]"
-                    aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
-                  >
-                    <svg width="15" height="16" viewBox="0 0 15 16" fill="none" aria-hidden>
-                      <path d="M7.5 1v9m0 0L11 6.5M7.5 10 4 6.5M1 14.5h13" stroke="currentColor" strokeWidth="1.3" />
-                    </svg>
-                    Download for {download.label} ({download.detail})
-                  </a>
-                  <div className="mt-3 text-[12.5px] leading-5 text-foreground/55">
-                    {download.platform === "windows"
-                      ? "Unsigned Windows installer. Microsoft SmartScreen may show a warning."
-                      : `${download.kind} · latest release · free and open source`}
-                  </div>
-                </>
-              )}
-            </div>
           </div>
 
-          <div className="mx-auto mt-14 max-w-[780px] border-y border-border/55">
-            <div className="grid grid-cols-3" role="group" aria-label="Choose your operating system">
-              {PLATFORMS.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  onClick={() => setTarget(item.target)}
-                  className={`relative flex min-h-14 items-center justify-center gap-2.5 px-3 text-[13px] transition-colors duration-300 after:absolute after:bottom-0 after:h-px after:bg-[hsl(var(--accent-coral))] after:transition-all ${
-                    item.id === download.platform
-                      ? "bg-foreground/[0.045] text-foreground after:inset-x-4"
-                      : "text-foreground/55 after:inset-x-1/2 hover:bg-foreground/[0.025] hover:text-foreground/80"
-                  }`}
-                  aria-pressed={item.id === download.platform}
-                >
-                  <PlatformMark platform={item.id} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-            <div
-              className="flex min-h-14 flex-wrap items-center justify-center gap-1 border-t border-border/40 px-4"
-              role="group"
-              aria-label={`Choose ${download.label} architecture`}
-            >
-              {options.map((item) => (
-                <button
-                  type="button"
-                  key={item}
-                  onClick={() => setTarget(item)}
-                  className={`min-h-11 px-4 text-[12.5px] transition-colors ${
-                    item === target ? "text-foreground" : "text-foreground/55 hover:text-foreground/80"
-                  }`}
-                  aria-pressed={item === target}
-                >
-                  {DOWNLOADS[item].detail}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="terminal" className="border-t border-border/40">
-          <div className="mx-auto grid w-full max-w-[1060px] gap-9 px-6 py-20 sm:px-10 sm:py-24 lg:grid-cols-[0.72fr_1.28fr] lg:items-center lg:gap-16">
-            <div>
-              <div className="text-[13px] tracking-[0.045em] text-foreground/55">Command line</div>
-              <h2 className="mt-4 text-[clamp(30px,4vw,48px)] leading-[1.04] tracking-[-0.025em]">Two commands.</h2>
-              <p className="mt-4 max-w-[30ch] text-[15px] leading-7 text-foreground/55">
-                Install once, then open any project.
+          <div className="mx-auto mt-12 grid max-w-[1060px] gap-5 md:grid-cols-2">
+            <section id="desktop" aria-labelledby="desktop-title" className="flex min-w-0 scroll-mt-6 flex-col gap-6 border border-border/60 bg-background/40 p-6 sm:p-8">
+              <div>
+                <div className="text-[12px] tracking-[0.06em] text-foreground/50">Desktop</div>
+                <h2 id="desktop-title" className="mt-3 text-[32px] leading-none tracking-[-0.025em]">Download the app</h2>
+                <p className="mt-4 text-[14px] leading-6 text-foreground/60">A desktop window for your research. No terminal required.</p>
+              </div>
+              <div className="border border-border/55">
+                <div className="grid grid-cols-3" role="group" aria-label="Choose your operating system">
+                  {PLATFORMS.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      onClick={() => chooseTarget(item.target)}
+                      className={`flex min-h-12 items-center justify-center gap-2 px-2 text-[12px] transition-colors duration-150 ${
+                        item.id === download.platform
+                          ? "bg-foreground/[0.065] text-foreground"
+                          : "text-foreground/55 hover:bg-foreground/[0.025] hover:text-foreground/80"
+                      }`}
+                      aria-pressed={item.id === download.platform}
+                    >
+                      <PlatformMark platform={item.id} />
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex min-h-11 flex-wrap items-center justify-center gap-1 border-t border-border/40 px-2" role="group" aria-label={`Choose ${download.label} architecture`}>
+                  {options.map((item) => (
+                    <button
+                      type="button"
+                      key={item}
+                      onClick={() => chooseTarget(item)}
+                      className={`min-h-11 px-4 text-[12.5px] transition-colors duration-150 ${item === target ? "text-foreground" : "text-foreground/55 hover:text-foreground/80"}`}
+                      aria-pressed={item === target}
+                    >
+                      {DOWNLOADS[item].detail}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <a href={`${RELEASE}/${download.file}`} className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-4 text-center text-[14px]" aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}>
+                <svg width="15" height="16" viewBox="0 0 15 16" fill="none" aria-hidden>
+                  <path d="M7.5 1v9m0 0L11 6.5M7.5 10 4 6.5M1 14.5h13" stroke="currentColor" strokeWidth="1.3" />
+                </svg>
+                Download for {download.label} ({download.detail})
+              </a>
+              <p className="text-[12.5px] leading-5 text-foreground/55">
+                {download.platform === "mac"
+                  ? "Open the DMG and drag OpenScience into Applications. Developer ID signed and notarized."
+                  : download.platform === "windows"
+                    ? "Open the installer. Microsoft SmartScreen may warn because this installer is unsigned."
+                    : "Make the AppImage executable, then open it."}
               </p>
-            </div>
-            <div className="space-y-3">
-              <Copy command={NPM} />
-              <Copy command={CURL} />
-            </div>
+            </section>
+
+            <section id="terminal" aria-labelledby="npm-title" className="flex min-w-0 scroll-mt-6 flex-col gap-6 border border-border/60 bg-background/40 p-6 sm:p-8">
+              <div>
+                <div className="text-[12px] tracking-[0.06em] text-foreground/50">Command line</div>
+                <h2 id="npm-title" className="mt-3 text-[32px] leading-none tracking-[-0.025em]">Install with npm</h2>
+                <p className="mt-4 text-[14px] leading-6 text-foreground/60">Run from your terminal. Opens the workspace in your browser.</p>
+              </div>
+              <div className="space-y-2">
+                <div className="text-[12.5px] text-foreground/55">1. Install the CLI</div>
+                <Copy command={NPM} />
+              </div>
+              <div className="space-y-2">
+                <div className="text-[12.5px] text-foreground/55">2. Run in your project folder</div>
+                <Copy command="openscience" />
+              </div>
+              <p className="text-[12.5px] leading-5 text-foreground/55">Requires Node.js and npm. No desktop download needed.</p>
+            </section>
           </div>
         </section>
 
@@ -385,12 +356,10 @@ export default function Download() {
               {[
                 [
                   "01",
-                  "Install",
-                  download.platform === "mac"
-                    ? "Copy the installer command, paste it in Terminal, and OpenScience verifies the download before launching."
-                    : "Open the download and follow your operating system's install prompt.",
+                  "Open",
+                  "Launch the desktop app, or run openscience in your project folder.",
                 ],
-                ["02", "Connect", "Choose a provider account, your own API key, or a local model."],
+                ["02", "Connect", "Choose Ace, a provider account, your own API key, or a local model."],
                 ["03", "Research", "Open a project and start your first research session."],
               ].map((step) => (
                 <div key={step[0]} className="min-h-[150px] bg-background px-6 py-7 sm:px-7">
