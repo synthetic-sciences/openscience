@@ -23456,6 +23456,20 @@
             }
           }
         },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "summary",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "description": "Return a fast account summary without ledger history"
+          }
+        ],
         "x-codeSamples": [
           {
             "lang": "js",

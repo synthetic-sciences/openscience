@@ -9328,7 +9328,12 @@ export type SettingsBillingUpdateResponse = SettingsBillingUpdateResponses[keyof
 export type SettingsWalletGetData = {
   body?: never
   path?: never
-  query?: never
+  query?: {
+    /**
+     * Return a fast account summary without ledger history
+     */
+    summary?: "true" | "false"
+  }
   url: "/settings/wallet"
 }
 

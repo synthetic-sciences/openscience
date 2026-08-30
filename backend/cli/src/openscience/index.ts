@@ -382,8 +382,9 @@ async function fundedAtlasFetch(
   session: FundingSnapshot | OpenScienceSession,
   input: string,
   init: RequestInit = {},
+  timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
 ): Promise<Response> {
-  const response = await accountAtlasFetch(session, input, init, true)
+  const response = await accountAtlasFetch(session, input, init, true, timeoutMs)
   return OpenScience.validateFundingResponse(response, session)
 }
 
@@ -1072,15 +1073,19 @@ export namespace OpenScience {
     return value.balance_cents ?? value.cli_balance_cents ?? value.unified_balance_cents ?? 0
   }
 
-  export async function getCredits(snapshot?: FundingSnapshot): Promise<Credits | null> {
+  export async function getCredits(
+    snapshot?: FundingSnapshot,
+    options: { timeoutMs?: number; lifetimeSpent?: boolean } = {},
+  ): Promise<Credits | null> {
     const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
+    const timeoutMs = options.timeoutMs ?? ATLAS_FETCH_TIMEOUT_MS
     try {
       let currentWallet = true
-      let response = await fundedAtlasFetch(session, `${API_BASE}/api/v1/wallet`)
+      let response = await fundedAtlasFetch(session, `${API_BASE}/api/v1/wallet`, {}, timeoutMs)
       if (response.status === 404 || response.status === 405) {
         currentWallet = false
-        response = await fundedAtlasFetch(session, `${API_BASE}/api/credits`)
+        response = await fundedAtlasFetch(session, `${API_BASE}/api/credits`, {}, timeoutMs)
       }
       if (!response.ok) return null
       const body = (await response.json()) as {
@@ -1094,8 +1099,10 @@ export namespace OpenScience {
         lifetime_spent_cents?: number
       }
       let lifetimeSpent = body.lifetime_spent_cents ?? null
-      if (currentWallet && lifetimeSpent === null) {
-        const metadata = await fundedAtlasFetch(session, `${API_BASE}/api/credits`).catch(() => undefined)
+      if (currentWallet && lifetimeSpent === null && options.lifetimeSpent !== false) {
+        const metadata = await fundedAtlasFetch(session, `${API_BASE}/api/credits`, {}, timeoutMs).catch(
+          () => undefined,
+        )
         if (metadata?.ok) {
           const legacy = (await metadata.json()) as { lifetime_spent_cents?: number }
           lifetimeSpent = legacy.lifetime_spent_cents ?? null
@@ -1161,12 +1168,13 @@ export namespace OpenScience {
   export async function getBillingMode(
     snapshot?: FundingSnapshot,
     knownCredits?: Credits | null | Promise<Credits | null>,
+    timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
   ): Promise<BillingMode | null> {
     const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
     const [configModule, accessResponse, credits] = await Promise.all([
       import("@/config/config"),
-      fundedAtlasFetch(session, `${API_BASE}/api/cli/access`).catch(() => undefined),
+      fundedAtlasFetch(session, `${API_BASE}/api/cli/access`, {}, timeoutMs).catch(() => undefined),
       knownCredits === undefined ? getCredits(session).catch(() => null) : Promise.resolve(knownCredits),
     ])
     const access = accessResponse?.ok

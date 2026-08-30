@@ -4,6 +4,7 @@ import {
   canSelectManaged,
   commitBilling,
   formatCreditBalance,
+  withAccountDeadline,
   walletBalanceLabel,
 } from "./ManagedInference"
 
@@ -82,7 +83,26 @@ describe("Ace model access", () => {
 
   test("refreshes account state immediately and provider availability in the background", () => {
     expect(source).toContain('window.addEventListener("openscience:account-changed", accountChanged)')
-    expect(source).toContain("void Promise.all([loadWallet(), loadBilling()])")
+    expect(source).toContain("void loadBilling()")
+    expect(source).toContain("void loadWallet()")
     expect(source).toContain('void syncProviders("The Ace account changed")')
+  })
+
+  test("renders useful account controls immediately and recovers from a stalled Wallet read", async () => {
+    expect(source).not.toMatch(/Checking account|Checking balance/)
+    expect(source).toContain('"/settings/wallet?summary=true"')
+    expect(source).toContain('return state.account === "error" ? "Account unavailable" : "Ace account"')
+    expect(source).toContain('if (state.account === "error") return "Retry"')
+
+    const state = { aborted: false }
+    const stalled = withAccountDeadline(
+      (signal) =>
+        new Promise<never>(() => {
+          signal.addEventListener("abort", () => (state.aborted = true), { once: true })
+        }),
+      5,
+    )
+    await expect(stalled).rejects.toThrow("Ace account refresh timed out. Try again.")
+    expect(state.aborted).toBe(true)
   })
 })

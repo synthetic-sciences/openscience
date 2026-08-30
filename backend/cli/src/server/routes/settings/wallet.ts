@@ -1,9 +1,12 @@
 import { Hono } from "hono"
-import { describeRoute, resolver } from "hono-openapi"
+import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { OpenScience } from "../../../openscience"
 import { ACE_CONTRACT } from "../../../openscience/ace-contract"
 import { lazy } from "../../../util/lazy"
+import { withTimeout } from "../../../util/timeout"
+
+const WALLET_BUDGET_MS = 2_500
 
 export const WalletState = z.object({
   signedIn: z.boolean(),
@@ -45,24 +48,35 @@ const SIGNED_OUT: WalletState = {
   transactions: [],
 }
 
-async function readWallet(): Promise<WalletState> {
+async function readWallet(summary: boolean): Promise<WalletState> {
   // The local immutable funding snapshot plus gateway response proof is the
   // authorization boundary. Avoid a separate auth-status round trip before
-  // the three Wallet reads so the default Models panel can load them together.
+  // the Wallet reads so the default Models panel can load them together. The
+  // summary skips history and has a short budget; full ledger reads retain the
+  // existing contract for callers that need transaction history.
   const snapshot = await OpenScience.getFundingSnapshot().catch(() => null)
   if (!snapshot) return SIGNED_OUT
-  const creditsRequest = OpenScience.getCredits(snapshot).catch(() => null)
+  const creditsRequest = summary
+    ? withTimeout(
+        OpenScience.getCredits(snapshot, { timeoutMs: WALLET_BUDGET_MS, lifetimeSpent: false }),
+        WALLET_BUDGET_MS,
+      ).catch(() => null)
+    : OpenScience.getCredits(snapshot).catch(() => null)
   const [credits, mode, transactions] = await Promise.all([
     creditsRequest,
-    OpenScience.getBillingMode(snapshot, creditsRequest).catch(() => null),
-    OpenScience.getTransactions(20, snapshot).catch(() => null),
+    summary
+      ? withTimeout(OpenScience.getBillingMode(snapshot, creditsRequest, WALLET_BUDGET_MS), WALLET_BUDGET_MS).catch(
+          () => null,
+        )
+      : OpenScience.getBillingMode(snapshot, creditsRequest).catch(() => null),
+    summary ? Promise.resolve([]) : OpenScience.getTransactions(20, snapshot).catch(() => null),
   ])
   const balance = credits?.balanceUsd ?? null
   return {
     signedIn: true,
     balanceUsd: balance,
     billingMode: mode?.mode ?? null,
-    managedSupported: mode?.managed_supported ?? false,
+    managedSupported: mode?.managed_supported ?? summary,
     managedUnlocked: Boolean(mode?.managed_unlocked || mode?.ace_enabled || (balance !== null && balance > 0)),
     aceEnabled: mode?.ace_enabled ?? false,
     aceContract: { ...ACE_CONTRACT },
@@ -81,6 +95,12 @@ export const WalletSettingsRoutes = lazy(() =>
         200: { description: "Wallet state", content: { "application/json": { schema: resolver(WalletState) } } },
       },
     }),
-    async (c) => c.json(await readWallet()),
+    validator(
+      "query",
+      z.object({
+        summary: z.enum(["true", "false"]).optional().describe("Return a fast account summary without ledger history"),
+      }),
+    ),
+    async (c) => c.json(await readWallet(c.req.valid("query").summary === "true")),
   ),
 )

@@ -2074,10 +2074,17 @@ export class Wallet extends HeyApiClient {
   /**
    * Get purchased wallet and Ace ledger
    */
-  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      summary?: "true" | "false"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "summary" }] }])
     return (options?.client ?? this.client).get<SettingsWalletGetResponses, unknown, ThrowOnError>({
       url: "/settings/wallet",
       ...options,
+      ...params,
     })
   }
 }

@@ -1,5 +1,6 @@
 import { Button } from "@synsci/ui/button"
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createMemo, onCleanup, onMount } from "solid-js"
+import { createStore } from "solid-js/store"
 import { URLS } from "@/config/urls"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -11,7 +12,7 @@ import { ProviderLogo } from "./ProviderLogo"
 export { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
 
 type Mode = "managed" | "byok"
-type BillingState = { llm: Mode | null }
+type BillingState = { llm: Mode | null; wallet?: { signedIn: boolean; balanceUsd: number | null } }
 type LoginResult = { ok: boolean; error?: string }
 type Wallet = {
   signedIn: boolean
@@ -29,6 +30,9 @@ type Wallet = {
     reloadControlledByAce: boolean
   }
 }
+type AccountStatus = "idle" | "loading" | "ready" | "error"
+
+const ACCOUNT_TIMEOUT_MS = 3_000
 
 export const canSelectManaged = (wallet: Wallet | undefined) =>
   Boolean(wallet?.signedIn && wallet.managedSupported && wallet.managedUnlocked)
@@ -58,39 +62,93 @@ export async function commitBilling<T>(write: () => Promise<T>, apply: (data: T)
   apply(result)
 }
 
+export async function withAccountDeadline<T>(request: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+  const controller = new AbortController()
+  const expired = new Promise<never>((_, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error("Ace account refresh timed out. Try again."))
+      controller.abort()
+    }, ms)
+    controller.signal.addEventListener("abort", () => clearTimeout(timeout), { once: true })
+  })
+  return Promise.race([Promise.resolve().then(() => request(controller.signal)), expired]).finally(() =>
+    controller.abort(),
+  )
+}
+
+const accountWallet = (signedIn: boolean): Wallet => ({
+  signedIn,
+  balanceUsd: null,
+  billingMode: null,
+  managedSupported: signedIn,
+  managedUnlocked: false,
+  aceEnabled: false,
+})
+
 export function ManagedInference(props: { onError?: (error: string | undefined) => void }) {
   const sdk = useGlobalSDK()
   const globalSync = useGlobalSync()
   const platform = usePlatform()
   const fetchFn = platform.fetch ?? fetch
-  const [wallet, setWallet] = createSignal<Wallet>()
-  const [mode, setMode] = createSignal<Mode>(normalizeMode(globalSync.data.config.billing?.llm))
-  const [saving, setSaving] = createSignal(false)
-  const [signingIn, setSigningIn] = createSignal(false)
-  const [refreshing, setRefreshing] = createSignal(false)
-  const selected = createMemo(() => MODES.find((item) => item.value === mode()) ?? MODES[0])
+  const [state, setState] = createStore<{
+    wallet?: Wallet
+    mode: Mode
+    saving: boolean
+    signingIn: boolean
+    refreshing: boolean
+    account: AccountStatus
+  }>({
+    mode: normalizeMode(globalSync.data.config.billing?.llm),
+    saving: false,
+    signingIn: false,
+    refreshing: false,
+    account: "idle",
+  })
+  const pending: { wallet?: Promise<void>; refresh?: boolean } = {}
+  const selected = createMemo(() => MODES.find((item) => item.value === state.mode) ?? MODES[0])
 
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
   const fail = (error: unknown) => props.onError?.(reason(error))
-  const loadWallet = () =>
-    settingsApi<Wallet>(sdk.url, fetchFn, "/settings/wallet")
+  const loadWallet = () => {
+    if (pending.wallet) return pending.wallet
+    setState("account", "loading")
+    const request = withAccountDeadline(
+      (signal) => settingsApi<Wallet>(sdk.url, fetchFn, "/settings/wallet?summary=true", { signal }),
+      ACCOUNT_TIMEOUT_MS,
+    )
       .then((next) => {
-        setWallet(next)
-        if (!saving() && next.billingMode) setMode(normalizeMode(next.billingMode))
+        setState("wallet", next)
+        setState("account", "ready")
+        if (!state.saving && next.billingMode) setState("mode", normalizeMode(next.billingMode))
       })
-      .catch(fail)
+      .catch((error) => {
+        setState("account", "error")
+        fail(error)
+      })
+      .finally(() => {
+        if (pending.wallet !== request) return
+        pending.wallet = undefined
+        if (!pending.refresh) return
+        pending.refresh = false
+        void loadWallet()
+      })
+    pending.wallet = request
+    return request
+  }
   const loadBilling = () =>
     settingsApi<BillingState>(sdk.url, fetchFn, "/settings/billing")
       .then((next) => {
-        if (!saving()) setMode(normalizeMode(next.llm))
+        if (!state.saving) setState("mode", normalizeMode(next.llm))
+        if (!state.wallet && next.wallet) setState("wallet", accountWallet(next.wallet.signedIn))
       })
       .catch(fail)
   const refresh = () => {
     props.onError?.(undefined)
-    void Promise.all([loadWallet(), loadBilling()])
+    void loadBilling()
+    void loadWallet()
   }
   const syncProviders = (context: string) => {
-    setRefreshing(true)
+    setState("refreshing", true)
     return globalSync
       .refreshProviders()
       .catch((error) =>
@@ -98,18 +156,20 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
           `${context}, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
         ),
       )
-      .finally(() => setRefreshing(false))
+      .finally(() => setState("refreshing", false))
   }
   const accountChanged = () => {
     props.onError?.(undefined)
-    void Promise.all([loadWallet(), loadBilling()])
+    if (pending.wallet) pending.refresh = true
+    void loadBilling()
+    void loadWallet()
   }
 
   const update = (value: Mode) => {
-    if (saving() || (value === "managed" && !canSelectManaged(wallet()))) return
-    const previous = mode()
-    setMode(value)
-    setSaving(true)
+    if (state.saving || (value === "managed" && !canSelectManaged(state.wallet))) return
+    const previous = state.mode
+    setState("mode", value)
+    setState("saving", true)
     props.onError?.(undefined)
     void commitBilling(
       () =>
@@ -117,24 +177,24 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
           method: "PUT",
           body: JSON.stringify({ llm: value }),
         }),
-      (data) => setMode(normalizeMode(data.llm)),
+      (data) => setState("mode", normalizeMode(data.llm)),
     )
       .then(() => {
         // The routing choice is already durable. Provider synchronization is
         // follow-up work and must not keep the controls feeling stuck.
-        setSaving(false)
+        setState("saving", false)
         void syncProviders("Model access was saved")
       })
       .catch((error) => {
-        setMode(previous)
+        setState("mode", previous)
         fail(error)
       })
-      .finally(() => setSaving(false))
+      .finally(() => setState("saving", false))
   }
 
   const signIn = () => {
-    if (signingIn()) return
-    setSigningIn(true)
+    if (state.signingIn) return
+    setState("signingIn", true)
     props.onError?.(undefined)
     void settingsApi<LoginResult>(sdk.url, fetchFn, "/account/login-browser", { method: "POST" })
       .then((result) => {
@@ -143,7 +203,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
         void syncProviders("The Ace account changed")
       })
       .catch(fail)
-      .finally(() => setSigningIn(false))
+      .finally(() => setState("signingIn", false))
   }
 
   const unsubscribe = globalSync.onProvidersRefreshed(() => void loadBilling())
@@ -158,24 +218,45 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     unsubscribe()
   })
 
-  const managedUnavailable = () => wallet() !== undefined && !canSelectManaged(wallet())
+  const managedUnavailable = () => state.wallet !== undefined && !canSelectManaged(state.wallet)
   const aceLabel = () => {
-    if (!wallet()) return "Checking account"
-    if (!wallet()!.signedIn) return "Account required"
-    if (!wallet()!.managedSupported) return "Ace unavailable"
-    if (!wallet()!.managedUnlocked) return "No purchased balance"
-    if (wallet()!.aceEnabled) return "Ace on"
-    return "Wallet funded"
+    if (!state.wallet) return state.account === "error" ? "Account unavailable" : "Ace account"
+    if (!state.wallet.signedIn) return "Account required"
+    if (!state.wallet.managedSupported) return "Ace unavailable"
+    if (state.wallet.aceEnabled) return "Ace on"
+    if (state.wallet.managedUnlocked) return "Wallet funded"
+    if (state.wallet.balanceUsd === null) return "Account connected"
+    return "No purchased balance"
+  }
+  const balanceLabel = () => {
+    if (state.wallet && !state.wallet.signedIn) return walletBalanceLabel(state.wallet)
+    if (!state.wallet || (state.account === "loading" && state.wallet.balanceUsd === null)) return "Purchased Wallet"
+    return walletBalanceLabel(state.wallet)
   }
   const accountAction = () => {
-    if (!wallet()?.signedIn) return signingIn() ? "Waiting for browser…" : "Sign in"
-    if (!wallet()?.managedSupported) return "Manage Wallet"
-    if (!wallet()?.managedUnlocked) return "Turn on Ace"
-    return wallet()?.aceEnabled ? "Manage Ace" : "Manage Wallet"
+    if (state.wallet && !state.wallet.signedIn) return state.signingIn ? "Waiting for browser…" : "Sign in"
+    if (state.account === "error") return "Retry"
+    if (!state.wallet || (state.account === "loading" && state.wallet.balanceUsd === null)) return "Open Wallet"
+    if (state.wallet.balanceUsd === null && !state.wallet.managedUnlocked && !state.wallet.aceEnabled) return "Refresh"
+    if (!state.wallet.managedSupported) return "Manage Wallet"
+    if (!state.wallet.managedUnlocked) return "Turn on Ace"
+    return state.wallet.aceEnabled ? "Manage Ace" : "Manage Wallet"
   }
   const actOnAccount = () => {
-    if (!wallet()?.signedIn) {
+    if (state.wallet && !state.wallet.signedIn) {
       signIn()
+      return
+    }
+    if (state.account === "error") {
+      refresh()
+      return
+    }
+    if (!state.wallet || (state.account === "loading" && state.wallet.balanceUsd === null)) {
+      platform.openLink(URLS.dashboardBilling)
+      return
+    }
+    if (state.wallet.balanceUsd === null && !state.wallet.managedUnlocked && !state.wallet.aceEnabled) {
+      refresh()
       return
     }
     platform.openLink(URLS.dashboardBilling)
@@ -201,9 +282,9 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
             {(option) => (
               <button
                 type="button"
-                aria-pressed={mode() === option.value}
-                aria-busy={saving()}
-                disabled={saving() || (option.value === "managed" && !canSelectManaged(wallet()))}
+                aria-pressed={state.mode === option.value}
+                aria-busy={state.saving}
+                disabled={state.saving || (option.value === "managed" && !canSelectManaged(state.wallet))}
                 class="models-routing__option"
                 title={
                   option.value === "managed" && managedUnavailable()
@@ -221,23 +302,21 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
         </div>
         <div class="models-routing__details">
           <p id="managed-inference-description" class="models-routing__description" aria-live="polite">
-            {saving() ? `Saving ${selected().title}…` : selected().body}
-            <Show when={!saving() && refreshing()}>
+            {state.saving ? `Saving ${selected().title}…` : selected().body}
+            <Show when={!state.saving && state.refreshing}>
               <span class="models-routing__sync"> Updating model availability…</span>
             </Show>
           </p>
           <div class="models-routing__account">
             <span class="models-routing__account-state">{aceLabel()}</span>
             <span aria-live="polite" class="models-account-summary__balance">
-              <Show when={wallet()} fallback="Checking balance…">
-                {walletBalanceLabel(wallet()!)}
-              </Show>
+              {balanceLabel()}
             </span>
             <Button
               class="settings-panel-action models-secondary-action"
               size="small"
               variant="secondary"
-              disabled={signingIn()}
+              disabled={state.signingIn}
               onClick={actOnAccount}
             >
               {accountAction()}
@@ -246,13 +325,13 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
         </div>
       </div>
 
-      <Show when={wallet()?.aceContract}>
+      <Show when={state.wallet?.aceContract}>
         {(contract) => (
           <p class="settings-inline-note text-12-regular text-text-weak">{aceContractLabel(contract())}</p>
         )}
       </Show>
 
-      <Show when={wallet() && !wallet()!.signedIn}>
+      <Show when={state.wallet && !state.wallet.signedIn}>
         <p class="settings-inline-note text-12-regular text-text-weak">
           Sign in to use purchased Wallet funds or authorize Ace. Your own provider connections remain separate.
         </p>
