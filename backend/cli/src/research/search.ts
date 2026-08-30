@@ -35,6 +35,7 @@ export namespace ResearchSearch {
       `${(options.baseURL ?? API_BASE).replace(/\/+$/, "")}/api/v1/research/search`,
       {
         method: "POST",
+        redirect: "error",
         headers: {
           Authorization: `Bearer ${snapshot.api_key}`,
           ...OpenScience.fundingHeaders(snapshot),
