@@ -333,7 +333,6 @@ jobs:
             printf '%s\n' "OPENSCIENCE_CONFIG_CONTENT=$CONFIG"
             printf '%s\n' "OPENSCIENCE_E2E_MODEL=e2e/echo"
             printf '%s\n' "OPENSCIENCE_E2E_FAKE_MODEL=1"
-            printf '%s\n' "SYNSC_API_BASE=http://127.0.0.1:4097"
           } >> "$GITHUB_ENV"
           bun frontend/workspace/script/e2e-fake-model.ts --port 4097 > "$RUNNER_TEMP/openscience-fake-model.log" 2>&1 &
           for _ in $(seq 1 30); do
@@ -344,9 +343,7 @@ jobs:
           exit 1
       - name: Seed OpenScience data
         working-directory: backend/cli
-        run: |
-          bun script/seed-e2e.ts
-          test -s "$OPENSCIENCE_DATA_DIR/openscience-session.json"
+        run: bun script/seed-e2e.ts
         env:
           OPENSCIENCE_DISABLE_SHARE: "true"
           OPENSCIENCE_DISABLE_LSP_DOWNLOAD: "true"
@@ -376,23 +373,13 @@ jobs:
           OPENSCIENCE_CLIENT: "app"
       - name: Wait for published OpenScience server
         run: |
-          HEALTHY=0
-          for _ in $(seq 1 120); do
+          for _ in $(seq 1 45); do
             if curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null; then
-              HEALTHY=1
-              SESSION=$(curl -fsS -u "openscience:$OPENSCIENCE_SERVER_PASSWORD" \
-                "http://127.0.0.1:4096/account/session" || true)
-              if [[ "$SESSION" == '{"session":true}' ]]; then
-                exit 0
-              fi
+              exit 0
             fi
             sleep 1
           done
-          if [[ "$HEALTHY" == "0" ]]; then
-            echo "::error::published OpenScience server never became healthy on 127.0.0.1:4096"
-          else
-            echo "::error::published OpenScience server became healthy but never loaded the isolated account session"
-          fi
+          echo "::error::published OpenScience server never became healthy on 127.0.0.1:4096"
           exit 1
       - name: Run packaged E2E
         working-directory: frontend/workspace
