@@ -19,7 +19,7 @@ async function gateway(request: Request) {
   requests++
   const organization = request.headers.get("X-Organization-ID")
   expect(request.headers.get("authorization")).toBe(`Bearer osk_fixture_${organization}`)
-  expect(new URL(request.url).pathname).toBe(`/api/organizations/${organization}/ace`)
+  expect(new URL(request.url).pathname).toBe("/api/cli/model-catalog")
   if (organization === "org_a")
     await new Promise<void>((resolve) => {
       release = resolve

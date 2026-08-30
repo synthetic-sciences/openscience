@@ -7,7 +7,7 @@
   },
   "framework": "vite",
   "buildCommand": "bun run build",
-  "installCommand": "bun install",
+  "installCommand": "bun install --frozen-lockfile && cd ../.. && bun install --frozen-lockfile --ignore-scripts --filter '@synsci/docs'",
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/docs", "destination": "/docs/index.html" },

@@ -12,7 +12,7 @@ const headers = {
 }
 async function gateway(request: Request) {
   const url = new URL(request.url)
-  if (url.pathname.endsWith("/ace"))
+  if (url.pathname.endsWith("/model-catalog"))
     return Response.json(
       {
         models: [

@@ -96,9 +96,8 @@ export namespace ManagedPricing {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), TIMEOUT)
     try {
-      const endpoint = snapshot.organization_id
-        ? `${API_BASE}/api/organizations/${encodeURIComponent(snapshot.organization_id)}/ace`
-        : `${API_BASE}/api/cli/model-catalog?provider=openrouter`
+      // Device keys deliberately cannot read the browser administration API.
+      const endpoint = `${API_BASE}/api/cli/model-catalog?provider=openrouter`
       const response = await fetch(endpoint, {
         headers: { Authorization: `Bearer ${snapshot.api_key}`, ...OpenScience.fundingHeaders(snapshot) },
         signal: controller.signal,
