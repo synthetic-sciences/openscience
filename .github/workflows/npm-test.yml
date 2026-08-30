@@ -1,5 +1,5 @@
-name: test publish
-run-name: "test publish ${{ inputs.version || github.run_number }}"
+name: Deep release rehearsal
+run-name: "deep release rehearsal ${{ inputs.version || github.run_number }}"
 
 on:
   workflow_dispatch:
@@ -12,12 +12,17 @@ on:
         description: "Install the exact candidate version and run packaged browser e2e"
         required: false
         type: boolean
-        default: true
+        default: false
       run_os_smoke:
         description: "Install the exact candidate on Linux, macOS, Windows, and musl"
         required: false
         type: boolean
-        default: true
+        default: false
+      run_scientific_canary:
+        description: "Run the packaged scientific capability matrix"
+        required: false
+        type: boolean
+        default: false
 
 concurrency: npm-test-publish
 
@@ -539,6 +544,7 @@ jobs:
 
   scientific-capability-canary:
     needs: publish-test
+    if: inputs.run_scientific_canary
     strategy:
       fail-fast: false
       matrix:
@@ -648,7 +654,7 @@ jobs:
       - os-smoke
       - musl-baseline-smoke
       - scientific-capability-canary
-    if: inputs.run_packaged_e2e && inputs.run_os_smoke
+    if: inputs.run_packaged_e2e && inputs.run_os_smoke && inputs.run_scientific_canary
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

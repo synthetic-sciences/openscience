@@ -43,8 +43,13 @@ if (Script.preview) {
 
   if (!promotionOnly) {
     console.log(`\n=== publishing ${artifacts.length} packages under ${stagingTag} ===\n`)
-    for (const artifact of ordered) {
-      await publishPackage({ ...artifact, deferVerification: true, tag: stagingTag })
+    const batches = Array.from({ length: Math.ceil(ordered.length / 5) }, (_, index) =>
+      ordered.slice(index * 5, index * 5 + 5),
+    )
+    for (const batch of batches) {
+      await Promise.all(
+        batch.map((artifact) => publishPackage({ ...artifact, deferVerification: true, tag: stagingTag })),
+      )
     }
   } else {
     console.log(`\n=== promotion-only resume from ${source}; no npm package writes are allowed ===\n`)
@@ -56,7 +61,7 @@ if (Script.preview) {
   await ensureReleaseStagingTags(ordered, stagingTag)
 
   let releaseSha = source
-  if (Script.release) {
+  if (Script.release && !promotionOnly) {
     await setWorkspaceVersion(Script.version)
     const changed = await $`git diff --quiet HEAD --`.cwd(releaseRoot).nothrow()
     if (changed.exitCode === 1) await $`git commit -am ${`release: v${Script.version}`}`.cwd(releaseRoot)
@@ -112,6 +117,26 @@ if (Script.preview) {
       if (!url) throw new Error(`Failed to create or resolve the release PR for ${branch}`)
       console.log(`release PR: ${url}`)
     }
+  } else if (Script.release) {
+    const tag = `v${Script.version}`
+    const tagged = await $`git rev-parse --verify refs/tags/${tag}^{commit}`
+      .cwd(releaseRoot)
+      .text()
+      .then((value) => value.trim())
+    if (tagged !== source) {
+      throw new Error(`Promotion-only resume expected ${tag} at ${source}, received ${tagged}`)
+    }
+    const release = (await $`gh release view ${tag} --json isDraft,targetCommitish`.cwd(releaseRoot).json()) as {
+      isDraft: boolean
+      targetCommitish: string
+    }
+    if (!release.isDraft) throw new Error(`${tag} is already public; refusing to resume a completed release`)
+    if (![source, artifactSource].includes(release.targetCommitish)) {
+      throw new Error(
+        `Draft release target changed unexpectedly: ${release.targetCommitish} is not ${source} or ${artifactSource}`,
+      )
+    }
+    await $`gh release edit ${tag} --target ${source}`.cwd(releaseRoot)
   }
 
   console.log("\n=== promoting npm latest tags (launcher last) ===\n")

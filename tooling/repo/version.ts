@@ -23,6 +23,7 @@ if (!Script.preview) {
   if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== checkout) {
     throw new Error(`Release checkout mismatch: GITHUB_SHA is ${process.env.GITHUB_SHA}, but HEAD is ${checkout}`)
   }
+  output.push(`workflow_source=${checkout}`)
   await Bun.write(file, `${body}\n\n<!-- openscience-release-source:${checkout} -->\n`)
 
   const lookup = await $`gh release view ${tag} --json id,tagName,isDraft,targetCommitish,body`.quiet().nothrow()
@@ -66,18 +67,27 @@ if (!Script.preview) {
   if (artifactSourceExists.exitCode !== 0) {
     throw new Error(`Draft release artifact source ${artifactSource} is not present in the checkout`)
   }
+  if (source !== artifactSource) {
+    const subject = await $`git show -s --format=%s ${source}`.text().then((value) => value.trim())
+    const parent = await $`git rev-parse ${source}^`.text().then((value) => value.trim())
+    if (subject !== `release: ${tag}` || parent !== artifactSource) {
+      throw new Error(`${source} is not the guarded ${tag} release commit derived from ${artifactSource}`)
+    }
+  }
   if (source !== checkout) {
     const exactVersion = process.env.OPENSCIENCE_VERSION?.trim()
-    if (!exactVersion || process.env.GITHUB_REF !== "refs/heads/main" || source !== artifactSource) {
+    if (!exactVersion || process.env.GITHUB_REF !== "refs/heads/main") {
       throw new Error(
-        `Release ${tag} is pinned to ${source}, but this workflow runs at ${checkout}. Only an exact-version main-branch resume from the unchanged artifact source is allowed.`,
+        `Release ${tag} is pinned to ${source}, but this workflow runs at ${checkout}. Only an exact-version main-branch resume is allowed.`,
       )
     }
-    const ancestor = await $`git merge-base --is-ancestor ${source} ${checkout}`.quiet().nothrow()
-    if (ancestor.exitCode !== 0) {
-      throw new Error(`Release workflow checkout ${checkout} is not descended from immutable source ${source}`)
+    const artifactAncestor = await $`git merge-base --is-ancestor ${artifactSource} ${checkout}`.quiet().nothrow()
+    if (artifactAncestor.exitCode !== 0) {
+      throw new Error(`Release workflow checkout ${checkout} is not descended from artifact source ${artifactSource}`)
     }
-    const changed = await $`git diff --name-only ${source}..${checkout}`
+    const sourceAncestor = await $`git merge-base --is-ancestor ${source} ${checkout}`.quiet().nothrow()
+    const repairBase = sourceAncestor.exitCode === 0 ? source : artifactSource
+    const changed = await $`git diff --name-only ${repairBase}..${checkout}`
       .text()
       .then((value) => value.trim().split("\n").filter(Boolean))
     const allowed = new Set([
@@ -85,6 +95,9 @@ if (!Script.preview) {
       "backend/cli/test/installation/desktop-updater.test.ts",
       "backend/cli/test/installation/release-order.test.ts",
       "frontend/desktop/script/update-lifecycle-canary.mjs",
+      "tooling/repo/npm-release.ts",
+      "tooling/repo/prepare-npm.ts",
+      "tooling/repo/publish.ts",
       "tooling/repo/version.ts",
     ])
     const unexpected = changed.filter((file) => !allowed.has(file))
@@ -93,14 +106,7 @@ if (!Script.preview) {
         `Exact-version resume checkout changes files outside guarded release infrastructure: ${unexpected.join(", ")}`,
       )
     }
-    console.log(`Using repaired release workflow ${checkout} to resume immutable artifact source ${source}`)
-  }
-  if (source !== artifactSource) {
-    const subject = await $`git show -s --format=%s ${source}`.text().then((value) => value.trim())
-    const parent = await $`git rev-parse ${source}^`.text().then((value) => value.trim())
-    if (subject !== `release: ${tag}` || parent !== artifactSource) {
-      throw new Error(`${source} is not the guarded ${tag} release commit derived from ${artifactSource}`)
-    }
+    console.log(`Using repaired release workflow ${checkout} to resume release source ${source}`)
   }
   if (tagged && targetIsSha && target !== tagged && target !== artifactSource) {
     throw new Error(

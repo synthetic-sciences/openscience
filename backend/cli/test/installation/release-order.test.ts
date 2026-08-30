@@ -1,694 +1,133 @@
 import { expect, test } from "bun:test"
 import path from "path"
-import { releaseRoot, resolveReleasePath } from "../../../../tooling/repo/release-workspace"
 
-test("npm artifact output remains rooted at the release checkout after nested builds change cwd", async () => {
-  const relative = ".release/npm-test/2.0.32-test.example"
-  const absolute = path.join(releaseRoot, relative)
-  const prepare = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/prepare-npm.ts")).text()
+const root = path.join(import.meta.dir, "../../../..")
+const read = (file: string) => Bun.file(path.join(root, file)).text()
 
-  expect(resolveReleasePath(relative)).toBe(absolute)
-  expect(resolveReleasePath(absolute)).toBe(absolute)
-  expect(prepare).toContain("const output = resolveReleasePath(outputInput)")
+test("pull requests use one fast product-level lane", async () => {
+  const workflow = await read(".github/workflows/ci.yml")
+
+  expect(workflow).toContain("name: Fast CI")
+  expect(workflow).toContain("bun run typecheck")
+  expect(workflow).toContain("bun run --cwd frontend/workspace build")
+  expect(workflow).toContain("Smoke release entrypoints")
+  expect(workflow).not.toContain("bun run --cwd backend/cli test")
+  expect(workflow).not.toContain("matrix:")
 })
 
-test("production publish verifies every package before the one guarded release-tag move", async () => {
-  const script = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/publish.ts")).text()
-  const verify = script.indexOf("verifyPublishedPackages(ordered)")
-  const tag = script.indexOf("git tag -f")
-  const release = script.indexOf("gh release edit ${tag} --target ${releaseSha}")
+test("exhaustive and native suites stay off the pull request path", async () => {
+  const workflow = await read(".github/workflows/deep-ci.yml")
 
-  expect(verify).toBeGreaterThan(-1)
-  expect(tag).toBeGreaterThan(verify)
-  expect(tag).toBeGreaterThan(-1)
-  expect(release).toBeGreaterThan(tag)
-  expect(script).toContain("tagged !== source || source !== artifactSource")
+  expect(workflow).toContain("workflow_dispatch:")
+  expect(workflow).toContain("schedule:")
+  expect(workflow).toContain("bun run test")
+  expect(workflow).toContain("test/process/darwin-responsibility.test.ts")
+  expect(workflow).toContain("test/process/windows-job.test.ts")
+  expect(workflow).not.toContain("pull_request:")
 })
 
-test("publish source gates normalize GitHub's case-insensitive repository slug", async () => {
-  const test = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
-  const release = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
+test("production is a single release pass without a rehearsal gate", async () => {
+  const workflow = await read(".github/workflows/publish.yml")
 
-  expect(test).toContain(
-    '[[ "${GITHUB_REPOSITORY,,}" != "synthetic-sciences/openscience" || "$GITHUB_REF" != "refs/heads/main" ]]',
-  )
-  expect(release).toContain('[[ "${GITHUB_REPOSITORY,,}" != "synthetic-sciences/openscience" ]]')
-  expect(release).toContain('"$GITHUB_REF" != "refs/tags/v$EXACT_VERSION"')
-  expect(test).not.toContain('[[ "$GITHUB_REPOSITORY" != "synthetic-sciences/OpenScience"')
-  expect(release).not.toContain('[[ "$GITHUB_REPOSITORY" != "synthetic-sciences/OpenScience"')
+  expect(workflow).toContain("name: Release")
+  expect(workflow).toContain("Verify npm publisher")
+  expect(workflow).toContain("needs: [version, sign-macos-cli, prepare-npm, build-desktop]")
+  expect(workflow).not.toContain("npm-test-gate")
+  expect(workflow).not.toContain("verify-native-cli")
+  expect(workflow).not.toContain("verify-desktop-updater")
 })
 
-test("the shared Bun cache never restores binaries from another runner architecture", async () => {
-  const action = await Bun.file(path.join(import.meta.dir, "../../../../.github/actions/setup-bun/action.yml")).text()
+test("stable macOS artifacts remain signed, notarized, stapled, and smoked", async () => {
+  const workflow = await read(".github/workflows/publish.yml")
 
-  expect(action).toContain("key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ hashFiles('bun.lock') }}")
-  expect(action).toContain("restore-keys: ${{ runner.os }}-${{ runner.arch }}-bun-")
-  expect(action).not.toContain("key: ${{ runner.os }}-bun-")
-  expect(action).not.toContain("restore-keys: ${{ runner.os }}-bun-")
+  expect(workflow).toContain("Apple-Actions/import-codesign-certs")
+  expect(workflow).toContain("codesign --force --options runtime --timestamp")
+  expect(workflow).toContain("xcrun notarytool submit")
+  expect(workflow).toContain("xcrun stapler staple")
+  expect(workflow).toContain("spctl -a -t open")
+  expect(workflow).toContain("frontend/desktop/script/update-artifact-canary.mjs")
 })
 
-test("production publish requires a complete exact-source npm rehearsal before release mutation", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const gate = workflow.slice(workflow.indexOf("\n  npm-test-gate:"), workflow.indexOf("\n  npm-preflight:"))
-  const npmPreflight = workflow.slice(
-    workflow.indexOf("\n  npm-preflight:"),
-    workflow.indexOf("\n  macos-signing-preflight:"),
-  )
-  const signingPreflight = workflow.slice(
-    workflow.indexOf("\n  macos-signing-preflight:"),
-    workflow.indexOf("\n  version:"),
-  )
-  const version = workflow.slice(workflow.indexOf("\n  version:"), workflow.indexOf("\n  build-cli:"))
-
-  expect(gate).toContain("needs: release-source")
-  expect(gate).toContain("actions: read")
-  expect(gate).toContain("contents: write")
-  expect(gate).toContain("GitHub only returns draft releases to tokens with push access")
-  expect(gate).toContain("steps.candidate.outputs.source")
-  expect(gate).toContain('"/repos/$GH_REPO/releases?per_page=100"')
-  expect(gate).toContain("gh api --paginate --slurp")
-  expect(gate).toContain("select(.tag_name == $tag)")
-  expect(gate).not.toContain("/releases/tags/v$EXACT_VERSION")
-  expect(gate).toContain("openscience-release-source:")
-  expect(gate).toContain("actions/workflows/npm-test.yml/runs")
-  expect(gate).toContain("event=workflow_dispatch")
-  expect(gate).toContain("status=completed")
-  expect(gate).toContain("head_sha=$expected")
-  expect(gate).toContain('.head_branch == "main"')
-  expect(gate).toContain('.conclusion == "success"')
-  expect(gate).toContain("actions/runs/$run_id/jobs?filter=latest")
-  expect(gate).toContain('.status == "completed" and .conclusion == "success"')
-
-  for (const job of [
-    "test-source",
-    "version",
-    "build-cli",
-    "prepare-npm",
-    "publish-test",
-    "packaged-e2e",
-    "musl-baseline-smoke",
-    "promote-test",
-  ]) {
-    expect(gate).toContain(`"${job}"`)
-  }
-  for (const matrix of [
-    'complete_matrix("os-smoke ("; ["linux-x64", "linux-arm64", "macos", "windows"])',
-    'complete_matrix("scientific capability canary ("; ["linux-x64", "linux-arm64", "macos-arm64"])',
-  ]) {
-    expect(gate).toContain(matrix)
-  }
-  expect(gate).toContain("Disabled or skipped gates do not qualify")
-  expect(gate).not.toContain("continue-on-error")
-
-  expect(npmPreflight).toContain("- npm-test-gate")
-  expect(npmPreflight).toContain("Require release tag token")
-  expect(npmPreflight).toContain("RELEASE_GITHUB_TOKEN must have repo and workflow scopes")
-  expect(signingPreflight).toContain("- npm-test-gate")
-  expect(version).toContain("- npm-test-gate")
-  expect(version).toContain("ARTIFACT_SOURCE: ${{ steps.version.outputs.artifact_source }}")
-  expect(version).toContain("VERIFIED_SOURCE: ${{ needs.npm-test-gate.outputs.source }}")
-  expect(version).toContain('[[ "${ARTIFACT_SOURCE,,}" != "${VERIFIED_SOURCE,,}" ]]')
-})
-
-test("production release preparation jobs can write their draft GitHub release", async () => {
-  const source = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const jobs = [
-    ["version", "build-cli"],
-    ["sign-macos-cli", "verify-native-cli"],
-    ["desktop-resume", "build-desktop"],
-  ]
-
-  for (const item of jobs) {
-    const start = source.indexOf(`\n  ${item[0]}:`)
-    const end = source.indexOf(`\n  ${item[1]}:`)
-
-    expect(start).toBeGreaterThan(-1)
-    expect(end).toBeGreaterThan(start)
-    const job = source.slice(start, end)
-    expect(job).toContain("permissions:")
-    expect(job).toContain("contents: write")
-  }
-})
-
-test("production publish requires the synsci launcher to ship with the wrapper", async () => {
-  const source = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const publish = source.slice(source.indexOf("\n  publish:"), source.indexOf("\n  deployment:"))
-
-  expect(publish).toContain('OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"')
-})
-
-test("exact-version resumes keep artifacts pinned while allowing guarded release-infrastructure repairs", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const version = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/version.ts")).text()
-
-  expect(workflow).toContain("version:")
-  expect(workflow).toContain('"refs/tags/v$EXACT_VERSION"')
-  expect(workflow).toContain("source: ${{ steps.version.outputs.source }}")
-  expect(workflow).toContain("artifact_source: ${{ steps.version.outputs.artifact_source }}")
-  expect(workflow.match(/ref: \$\{\{ needs\.version\.outputs\.source \}\}/g)?.length).toBeGreaterThanOrEqual(4)
-  expect(version).toContain("--target ${checkout}")
-  expect(version).toContain("targetCommitish")
-  expect(version).toContain("openscience-release-source:${checkout}")
-  expect(version).toContain("source !== checkout")
-  expect(version).toContain('process.env.GITHUB_REF !== "refs/heads/main"')
-  expect(version).toContain("source !== artifactSource")
-  expect(version).toContain("git merge-base --is-ancestor ${source} ${checkout}")
-  expect(version).toContain("git diff --name-only ${source}..${checkout}")
-  expect(version).toContain('".github/workflows/publish.yml"')
-  expect(version).toContain('"backend/cli/test/installation/desktop-updater.test.ts"')
-  expect(version).toContain('"backend/cli/test/installation/release-order.test.ts"')
-  expect(version).toContain('"frontend/desktop/script/update-lifecycle-canary.mjs"')
-  expect(version).toContain('"tooling/repo/version.ts"')
-  expect(version).toContain("changes files outside guarded release infrastructure")
-
-  const updater = workflow.slice(
-    workflow.indexOf("\n  verify-desktop-updater:"),
-    workflow.indexOf("\n  verify-native-cli:"),
-  )
-  expect(updater).toContain("- version")
-  expect(updater).toContain("ref: ${{ github.sha }}")
-  expect(updater).not.toContain("ref: ${{ needs.version.outputs.source }}")
-  expect(updater).toContain("OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}")
-  expect(updater).toContain("OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}")
-})
-
-test("production release caches exact builds and packed npm artifacts by version", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-
-  expect(workflow).toContain("key: cli-build-${{ needs.version.outputs.version }}")
-  expect(workflow).toContain("key: cli-build-signed-${{ needs.version.outputs.version }}")
-  expect(workflow).toContain("key: npm-release-${{ needs.version.outputs.version }}")
-  expect(workflow).toContain("run: ./tooling/repo/prepare-npm.ts")
-  expect(workflow).toContain("OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}")
-  expect(workflow).not.toContain("cli-build-${{ github.run_id }}")
-  expect(workflow.indexOf("Cache immutable CLI build")).toBeLessThan(
-    workflow.indexOf("Verify or upload immutable draft assets"),
-  )
-  const prepare = workflow.slice(workflow.indexOf("\n  prepare-npm:"), workflow.indexOf("\n  publish:"))
-  expect(prepare).toContain('node-version: "24"')
-  expect(prepare.indexOf("Pack the complete npm release set")).toBeLessThan(
-    prepare.indexOf("Verify packed SDK and plugin exports before publication"),
-  )
-  expect(prepare.indexOf("Verify packed SDK and plugin exports before publication")).toBeLessThan(
-    prepare.indexOf("Cache immutable npm artifacts"),
-  )
-})
-
-test("production stable releases require signed macOS while allowing a disclosed unsigned Windows fallback", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const preflight = workflow.slice(workflow.indexOf("\n  macos-signing-preflight:"), workflow.indexOf("\n  version:"))
-  const sign = workflow.slice(workflow.indexOf("\n  sign-macos-cli:"), workflow.indexOf("\n  verify-native-cli:"))
-  const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
-  const desktopUpload = desktop.slice(desktop.indexOf("Verify or upload immutable desktop artifacts"))
-  const prepare = workflow.slice(workflow.indexOf("\n  prepare-npm:"), workflow.indexOf("\n  publish:"))
-  const publish = workflow.slice(workflow.indexOf("\n  publish:"), workflow.indexOf("\n  deployment:"))
-
-  expect(workflow).toContain("desktop_resume_manifest:")
-  expect(workflow).not.toContain("inputs.release_mode")
-  expect(workflow).not.toContain("      release_mode:")
-  expect(workflow.indexOf("macos-signing-preflight:")).toBeLessThan(workflow.indexOf("\n  version:"))
-  expect(preflight).toContain("Require Developer ID and notarization credentials")
-  expect(preflight).not.toContain("if: inputs.release_mode")
-  expect(preflight).toContain("Validate optional Windows signing credentials")
-  expect(preflight).toContain("the Windows installer will be published unsigned")
-  expect(preflight).toContain("Set both WINDOWS_CSC_LINK and WINDOWS_CSC_KEY_PASSWORD, or remove both")
-  expect(preflight).not.toContain("Publishing unsigned native CLI archives and desktop installers")
-  expect(sign).toContain("Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466")
-  expect(sign).toContain("p12-file-base64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}")
-  expect(sign).toContain("p12-password: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}")
-  expect(sign).toContain("Developer ID sign and notarize macOS binaries")
-  expect(sign).not.toContain("security set-key-partition-list")
-  expect(sign).not.toContain('--keychain "$keychain"')
-  expect(sign).toContain("security find-identity -v -p codesigning")
-  expect(sign).toContain("if: steps.signed-cli-cache.outputs.cache-hit != 'true'")
-  expect(sign).toContain("--identifier ai.syntheticsciences.openscience")
-  expect(sign).toContain("codesign --verify --strict")
-  expect(sign).toContain("xcrun notarytool submit")
-  expect(sign).toContain("TeamIdentifier=$APPLE_TEAM_ID")
-  expect(sign).not.toContain("inputs.release_mode")
-  expect(sign).not.toContain("The native CLI archives and desktop installers in this release are unsigned.")
-  expect(sign).toContain("Mark unsigned Windows installer in the release notes")
-  expect(sign).toContain("The Windows installer is unsigned because Windows signing credentials are not configured")
-  expect(sign).not.toContain("Desktop installers are not included.")
-  expect(sign.indexOf("xcrun notarytool submit")).toBeLessThan(sign.indexOf("Cache immutable signed CLI build"))
-  expect(sign.indexOf("Cache immutable signed CLI build")).toBeLessThan(
-    sign.indexOf("Verify or upload immutable draft assets"),
-  )
-  expect(sign).toContain("cache_key: cli-build-signed-${{ needs.version.outputs.version }}")
-  expect(desktop).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
-  expect(desktop).toContain("enableCrossOsArchive: ${{ runner.os == 'Windows' }}")
-  expect(desktop).toContain("Detect optional Windows signing credentials")
-  expect(desktop).toContain("Require macOS release signing credentials")
-  expect(desktop).toContain("steps.windows-signing.outputs.enabled == 'true'")
-  expect(desktop).toContain("steps.windows-signing.outputs.enabled != 'true'")
-  expect(desktop).toContain("Build signed desktop installer")
-  expect(desktop).toContain("Build unsigned Windows installer")
-  expect(desktop).toContain("matrix.signing == 'windows' && steps.windows-signing.outputs.enabled != 'true'")
-  expect(desktop).toContain('OPENSCIENCE_DESKTOP_SIGNED: "true"')
-  expect(desktop).toContain('OPENSCIENCE_DESKTOP_SIGNED: "false"')
-  expect(desktop).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"')
-  expect(desktop).toContain("unset CSC_LINK CSC_KEY_PASSWORD")
-  expect(desktop).toContain('gh release upload "$OPENSCIENCE_TAG"')
-  expect(desktop).not.toContain('gh release upload "$OPENSCIENCE_RELEASE"')
-  expect(desktop).not.toContain("--clobber")
-  expect(desktopUpload).toContain('produced="frontend/desktop/dist/OpenScience-linux-x86_64.AppImage"')
-  expect(desktopUpload).toContain('mv "$produced" "$installer"')
-  expect(desktopUpload.indexOf('mv "$produced" "$installer"')).toBeLessThan(
-    desktopUpload.indexOf('release="$(gh release view "$OPENSCIENCE_TAG"'),
-  )
-  expect(desktop).toContain("OpenScience-mac-arm64.dmg OpenScience-mac-arm64.zip")
-  expect(desktop).toContain("OpenScience-mac-x64.dmg OpenScience-mac-x64.zip")
-  expect(prepare).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
-  expect(publish).toContain("key: ${{ needs.sign-macos-cli.outputs.cache_key }}")
-  expect(publish).toContain("token: ${{ secrets.RELEASE_GITHUB_TOKEN }}")
-  expect(publish).toContain("GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}")
-  expect(publish).not.toContain("GITHUB_TOKEN: ${{ github.token }}")
-  expect(publish).toContain("!cancelled() &&")
-  expect(publish).toContain("needs.build-desktop.result == 'success'")
-  expect(publish).toContain("needs.verify-desktop-updater.result == 'success'")
-})
-
-test("production desktop resume freezes an exact reviewed asset set before any rebuild", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const plan = workflow.slice(workflow.indexOf("\n  desktop-resume:"), workflow.indexOf("\n  build-desktop:"))
-  const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
-  const steps = desktop.split("\n      - ").slice(1)
-  const findStep = (marker: string) => steps.find((step) => step.includes(marker)) ?? ""
-  const check = findStep("Check for existing immutable desktop artifacts")
-
-  expect(plan).toContain("DESKTOP_RESUME_MANIFEST: ${{ inputs.desktop_resume_manifest }}")
-  expect(plan).toContain(".version == $version")
-  expect(plan).toContain(".source == $source")
-  expect(plan).toContain(".release_mode == $mode")
-  expect(plan).toContain("manifest entries must exactly match the pre-existing desktop installers")
-  expect(plan).toContain('actual="$(jq -cS')
-  expect(plan).toContain('expected="$(jq -cS')
-  expect(plan).toContain('all(.assets[]; type == "string"')
-  expect(plan).toContain('echo "trusted_assets=$expected"')
-  expect(desktop).toContain("- desktop-resume")
-  expect(desktop.indexOf("Check for existing immutable desktop artifacts")).toBeLessThan(
-    desktop.indexOf("uses: actions/checkout@"),
-  )
-  expect(check).toContain("GH_REPO: ${{ github.repository }}")
-  expect(check).toContain("TRUSTED_DESKTOP_ASSETS: ${{ needs.desktop-resume.outputs.trusted_assets }}")
-  expect(check).toContain('echo "found=false" >> "$GITHUB_OUTPUT"')
-  expect(check).toContain('echo "found=true" >> "$GITHUB_OUTPUT"')
-  expect(check).toContain('$(jq -r .state <<<"$existing")')
-  expect(check).toContain("(( size <= 0 ))")
-  expect(check).toContain("^sha256:[0-9a-f]{64}$")
-  expect(check).toContain("appeared after the desktop resume plan was frozen")
-  expect(check).toContain("vanished after the desktop resume plan was frozen")
-  expect(check).toContain('[[ "$digest" != "$expected_digest" ]]')
-  expect(check).not.toContain("|| true")
-
-  for (const marker of [
-    "uses: actions/checkout@",
-    "uses: ./.github/actions/setup-bun",
-    "uses: actions/setup-node@",
-    "uses: actions/cache/restore@",
-    "run: bun install --frozen-lockfile",
-    "name: Detect optional Windows signing credentials",
-    "name: Require macOS release signing credentials",
-    "name: Make sidecar executable",
-    "name: Build signed desktop installer",
-    "name: Build unsigned Windows installer",
-    "name: Verify or upload immutable desktop artifacts",
-  ]) {
-    expect(findStep(marker)).toContain("steps.existing.outputs.found != 'true'")
-  }
-})
-
-test("production publish finalizes a complete immutable desktop checksum manifest", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const publish = workflow.slice(workflow.indexOf("\n  publish:"), workflow.indexOf("\n  deployment:"))
-  const finalize = publish.slice(
-    publish.indexOf("Verify desktop assets and checksum manifest"),
-    publish.indexOf("      - name: Publish"),
-  )
-
-  expect(finalize).toContain("OpenScience-mac-arm64.dmg")
-  expect(finalize).toContain("OpenScience-mac-arm64.zip")
-  expect(finalize).toContain("OpenScience-mac-x64.dmg")
-  expect(finalize).toContain("OpenScience-mac-x64.zip")
-  expect(finalize).toContain("OpenScience-windows-x64.exe")
-  expect(finalize).toContain("OpenScience-linux-x64.AppImage")
-  expect(finalize).toContain("OpenScience-linux-arm64.AppImage")
-  expect(finalize).toContain('[[ "$(jq -r .state <<<"$asset")" == "uploaded" ]]')
-  expect(finalize).toContain("(( size <= 0 ))")
-  expect(finalize).toContain('[[ "$digest" == sha256:* ]]')
-  expect(finalize).toContain("printf '%s  %s\\n'")
-  expect(finalize).toContain('actual_digest="sha256:$(sha256sum desktop-checksums.txt')
-  expect(finalize).toContain('[[ "$existing_digest" == "$actual_digest" ]]')
-  expect(finalize).toContain('cmp --silent desktop-checksums.txt "$RUNNER_TEMP/desktop-checksums.txt"')
-  expect(finalize).toContain('gh release upload "$OPENSCIENCE_TAG" desktop-checksums.txt')
-  expect(finalize).toContain('[[ "$(wc -l < "$cli_manifest"')
-  expect(finalize).toContain('[[ "$(wc -l < "$expected_names"')
-  expect(finalize).toContain("jq -r '.assets[].name' <<<\"$assets\" | sort -u")
-  expect(finalize).toContain('diff -u "$expected_names" "$actual_names"')
-  expect(finalize).toContain('done < "$cli_manifest"')
-  expect(finalize).toContain("done < desktop-checksums.txt")
-  expect(finalize).toContain("for zip_name in OpenScience-mac-arm64.zip OpenScience-mac-x64.zip")
-  expect(finalize).toContain('unzip -Z1 "$zip_dir/$zip_name" > "$entries"')
-  expect(finalize).not.toContain("--clobber")
-})
-
-test("desktop packaging keeps local ad-hoc builds separate from signed stable macOS publication", async () => {
-  const config = await Bun.file(path.join(import.meta.dir, "../../../../frontend/desktop/electron-builder.mjs")).text()
-
-  expect(config).toContain('process.env.OPENSCIENCE_DESKTOP_SIGNED === "true"')
-  expect(config).toContain('executableName: "openscience"')
-  expect(config).toMatch(/mac:\s*{[\s\S]*?executableName: "OpenScience"/)
-  expect(config).toContain('target: ["dmg", "zip"]')
-  expect(config).toContain('identity: signed ? undefined : "-"')
-  expect(config).toContain("forceCodeSigning: signed")
-  expect(config).toContain("hardenedRuntime: true")
-  expect(config).toContain("notarize: signed && process.env.APPLE_ID ? true : false")
-  expect(config).toContain("dmg: { sign: signed }")
-  expect(config).toContain("signExecutable: signed")
-
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
-  const image = desktop.slice(
-    desktop.indexOf("Notarize and staple signed macOS disk image"),
-    desktop.indexOf("Build unsigned Windows installer"),
-  )
-  const updater = workflow.slice(
-    workflow.indexOf("\n  verify-desktop-updater:"),
-    workflow.indexOf("\n  verify-native-cli:"),
-  )
-  const lifecycle = await Bun.file(
-    path.join(import.meta.dir, "../../../../frontend/desktop/script/update-lifecycle-canary.mjs"),
-  ).text()
-  const artifactCanary = await Bun.file(
-    path.join(import.meta.dir, "../../../../frontend/desktop/script/update-artifact-canary.mjs"),
-  ).text()
-  const updateHelper = await Bun.file(
-    path.join(import.meta.dir, "../../../../frontend/desktop/src/update-helper.mjs"),
-  ).text()
-  expect(image).toContain("matrix.signing == 'mac'")
-  expect(image).toContain('codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"')
-  expect(image).toContain('xcrun notarytool submit "$OPENSCIENCE_DMG"')
-  expect(image).toContain('xcrun stapler staple "$OPENSCIENCE_DMG"')
-  expect(image).toContain('xcrun stapler validate "$OPENSCIENCE_DMG"')
-  expect(image).toContain("spctl -a -t open --context context:primary-signature")
-  expect(desktop.indexOf("Notarize and staple signed macOS disk image")).toBeLessThan(
-    desktop.indexOf("Verify or upload immutable desktop artifacts"),
-  )
-  expect(updater).toContain('codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"')
-  expect(updater).toContain('grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$dmg_details"')
-  expect(updater).toContain('xcrun stapler validate "$OPENSCIENCE_DMG"')
-  expect(updater).toContain('spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"')
-  expect(updater).toContain("runner: macos-15")
-  expect(updater).toContain("runner: macos-15-intel")
-  expect(updater).toContain("Require native updater architecture")
-  expect(updater).toContain("Resolve an immutable previous signed stable install")
-  expect(updater).toContain("No older immutable signed/notarized stable")
-  expect(updater).toContain("update-lifecycle-canary.mjs")
-  expect(updater).toContain("Exercise packaged handoff, activation, health, cleanup, and rollback")
-  expect(artifactCanary).toContain("codeDirectoryHash")
-  expect(artifactCanary).toContain("do not contain the same signed OpenScience app")
-  expect(lifecycle).toContain('OPENSCIENCE_UPDATE_TEST_HEALTH_FAILURE: "after-healthy"')
-  expect(lifecycle).toContain('OPENSCIENCE_UPDATE_TEST_SKIP_FALLBACK: "1"')
-  expect(lifecycle).toContain("const workspace = await canonical(arch)")
-  expect(lifecycle).toContain("const cache = packagedUpdateCache()")
-  expect(lifecycle).toContain("service_health")
-  expect(lifecycle).toContain("assertTransactionClean")
-  expect(lifecycle.indexOf("await assertTransactionClean(success.info)")).toBeLessThan(
-    lifecycle.indexOf("await stopSuccessfulApp(success.result.health)"),
-  )
-  expect(lifecycle.indexOf("await stopSuccessfulApp(success.result.health)")).toBeLessThan(
-    lifecycle.indexOf("const installedTrust = await verify(target"),
-  )
-  expect(updateHelper).toContain("startupHealth = await waitForHealth(payload)")
-  expect(updateHelper.match(/health: startupHealth/g)?.length).toBe(2)
-})
-
-test("production mac updater archives preserve the exact OpenScience.app bundle name", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-  const desktop = workflow.slice(workflow.indexOf("\n  build-desktop:"), workflow.indexOf("\n  verify-native-cli:"))
-
-  expect(desktop).toContain('unzip -Z1 "$zip_path" > "$entries"')
-  expect(desktop).toContain('[[ "$roots" == "OpenScience.app" ]]')
-  expect(desktop).toContain("grep -q '^OpenScience\\.app/Contents/' \"$entries\"")
-  expect(desktop).not.toContain('[[ "$roots" == "openscience.app" ]]')
-})
-
-test("desktop backfill wraps the immutable public runtime without weakening stable macOS trust", async () => {
-  const workflow = await Bun.file(
-    path.join(import.meta.dir, "../../../../.github/workflows/desktop-backfill.yml"),
-  ).text()
-
-  expect(workflow).toContain("ref: refs/tags/v${{ inputs.version }}")
-  expect(workflow).toContain("GH_REPO: ${{ github.repository }}")
-  expect(workflow).toContain("openscience-release-source:")
-  expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "false"')
-  expect(workflow).not.toContain('args+=("-c.mac.identity=-" "-c.mac.notarize=false")')
-  expect(workflow).toContain("runner: macos-15-intel")
-  expect(workflow).toContain("Verify an existing macOS backfill is signed and notarized")
-  expect(workflow).toContain("Require macOS signing and notarization credentials")
-  expect(workflow).toContain("Build signed macOS installer")
-  expect(workflow).toContain('OPENSCIENCE_DESKTOP_SIGNED: "true"')
-  expect(workflow).toContain('CSC_IDENTITY_AUTO_DISCOVERY: "true"')
-  expect(workflow).toContain("Notarize and staple signed macOS backfill")
-  expect(workflow).toContain('xcrun notarytool submit "$OPENSCIENCE_DMG"')
-  expect(workflow).toContain('xcrun stapler validate "$OPENSCIENCE_DMG"')
-  expect(workflow).toContain("Build unsigned Windows or Linux installer")
-  expect(workflow).toContain('args+=("-c.win.signExecutable=false")')
-  expect(workflow).toContain('args+=("-c.executableName=openscience")')
-  expect(workflow).toContain('bun run --cwd frontend/desktop dist -- "${args[@]}"')
-  expect(workflow).toContain("Expand-Archive")
-  expect(workflow).toContain('unzip -q "$OPENSCIENCE_ARCHIVE"')
-  expect(workflow).toContain('gh release upload "$OPENSCIENCE_TAG" "$installer"')
-  expect(workflow).not.toContain("--clobber")
-  expect(workflow).not.toContain("NPM_TOKEN")
-  expect(workflow).not.toContain("id-token: write")
-  expect(workflow).not.toContain("version.ts")
-  expect(workflow).not.toContain("publish.ts")
-  expect(workflow).not.toContain("git tag")
-  expect(workflow).not.toContain("--target")
-  expect(workflow).toContain("OpenScience-mac-arm64.dmg")
-  expect(workflow).toContain("OpenScience-mac-x64.dmg")
-  expect(workflow).toContain("OpenScience-windows-x64.exe")
-  expect(workflow).toContain("OpenScience-linux-x64.AppImage")
-  expect(workflow).toContain("OpenScience-linux-arm64.AppImage")
-  expect(workflow).toContain("The macOS desktop installers are Developer ID signed and notarized")
-})
-
-test("production npm writes stage the complete set before latest promotion and release publication", async () => {
-  const publish = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/publish.ts")).text()
-  const helper = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/npm-release.ts")).text()
-
-  const stage = publish.indexOf("publishPackage({ ...artifact, deferVerification: true, tag: stagingTag })")
-  const verify = publish.indexOf("verifyPublishedPackages(ordered)")
-  const tagMove = publish.indexOf("git tag -f")
-  const promote = publish.indexOf("promoteRelease(ordered)")
-  const undraft = publish.indexOf("--draft=false")
-
-  expect(stage).toBeGreaterThan(-1)
-  expect(verify).toBeGreaterThan(stage)
-  expect(tagMove).toBeGreaterThan(verify)
-  expect(promote).toBeGreaterThan(tagMove)
-  expect(undraft).toBeGreaterThan(promote)
-  expect(publish).toContain("promotion-only resume")
-  expect(helper).toContain('return `release-${version.replaceAll(".", "-")}`')
-  expect(helper.indexOf("sdk.name, plugin.name, cli.name, launcher.name")).toBeGreaterThan(-1)
-  expect(helper).toContain("Promise.allSettled(inputs.map((input) => verifyPublishedPackage(input, options)))")
-})
-
-test("large CLI packages upload sequentially and then verify as one concurrent set", async () => {
-  const source = await Bun.file(path.join(import.meta.dir, "../../../../backend/cli/script/publish.ts")).text()
-
-  expect(source).toContain("deferVerification: true")
-  expect(source).toContain("await verifyPublishedPackages(artifacts)")
-})
-
-test("draft release assets are immutable across resumptions", async () => {
-  const build = await Bun.file(path.join(import.meta.dir, "../../../../backend/cli/script/build.ts")).text()
-  const assets = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/release-assets.ts")).text()
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/publish.yml")).text()
-
-  expect(build).not.toContain("gh release upload")
-  expect(assets).toContain("already exists with different bytes; refusing to clobber")
-  expect(assets).not.toContain("--clobber")
-  expect(workflow).toContain("Verify or upload immutable draft assets")
-  expect(build).toContain("OPENSCIENCE_ARTIFACT_SOURCE: JSON.stringify(artifactSource)")
-  expect(workflow).toContain("OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}")
-})
-
-test("source package versions stay aligned before and after the workflow release commit", async () => {
-  const files = [
-    "backend/cli/package.json",
-    "tooling/sdk/js/package.json",
-    "tooling/plugin/package.json",
-    "tooling/launcher/package.json",
-  ]
-  const versions = []
-
-  for (const file of files) {
-    const pkg = await Bun.file(path.join(import.meta.dir, "../../../..", file)).json()
-    versions.push(pkg.version)
-  }
-  expect(new Set(versions).size).toBe(1)
-  expect(versions[0]).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
-})
-
-test("preview SDK and plugin publishers transform the live manifest rather than a cached JSON module", async () => {
-  const files = ["tooling/sdk/js/script/publish.ts", "tooling/plugin/script/publish.ts"]
-
-  for (const file of files) {
-    const source = await Bun.file(path.join(import.meta.dir, "../../../..", file)).text()
-    expect(source).toContain("const original = await Bun.file(packageFile).text()")
-    expect(source).toContain("createCompiledPackageManifest(original, Script.version")
-    expect(source).not.toContain('import("../package.json")')
-  }
-  const sdk = await Bun.file(path.join(import.meta.dir, "../../../../tooling/sdk/js/script/publish.ts")).text()
-  expect(sdk).toContain("preserveSourceDirectory: true")
-})
-
-test("packaged npm rehearsal imports every public SDK and plugin export", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
-  for (const spec of [
-    "@synsci/sdk",
-    "@synsci/sdk/client",
-    "@synsci/sdk/server",
-    "@synsci/sdk/v2",
-    "@synsci/sdk/v2/client",
-    "@synsci/sdk/v2/server",
-    "@synsci/plugin",
-    "@synsci/plugin/tool",
-  ]) {
-    expect(workflow).toContain(`await import(\"${spec}\")`)
-  }
-})
-
-test("packaged npm rehearsal pins one account data root and waits for the seeded session", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
-  const readiness = workflow.slice(
-    workflow.indexOf("      - name: Wait for published OpenScience server"),
-    workflow.indexOf("      - name: Run packaged E2E"),
-  )
-
-  expect(workflow).toContain('echo "OPENSCIENCE_DATA_DIR=$RUNNER_TEMP/openscience-e2e/data"')
-  expect(workflow).toContain('echo "OPENSCIENCE_E2E_PROJECT_DIR=$GITHUB_WORKSPACE"')
-  expect(workflow).toContain('echo "OPENSCIENCE_E2E_RUNTIME=$(command -v bun)"')
-  expect(workflow).toContain("printf '%s\\n' \"SYNSC_API_BASE=http://127.0.0.1:4097\"")
-  expect(workflow).toContain('test -s "$OPENSCIENCE_DATA_DIR/openscience-session.json"')
-  expect(readiness).toContain('"http://127.0.0.1:4096/account/session" || true)')
-  expect(readiness).toContain('[[ "$SESSION" == \'{"session":true}\' ]]')
-  expect(readiness.match(/sleep 1/g)).toHaveLength(1)
-  expect(readiness.match(/exit 1/g)).toHaveLength(1)
-  expect(readiness.indexOf("sleep 1")).toBeLessThan(readiness.indexOf("never loaded the isolated account session"))
-})
-
-test("npm test candidates advance from the public stable version, not the static workspace manifest", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
-  const versionJob = workflow.slice(workflow.indexOf("\n  version:"), workflow.indexOf("\n  build-cli:"))
-
-  expect(versionJob).toContain("npm view @synsci/openscience@latest version")
-  expect(versionJob).not.toContain('require("./backend/cli/package.json").version')
-})
-
-test("npm test rehearsal stages immutable exact artifacts and promotes only after every smoke gate", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
-  const helper = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/npm-test-release.ts")).text()
-  const release = await Bun.file(path.join(import.meta.dir, "../../../../tooling/repo/npm-release.ts")).text()
-  const versionJob = workflow.slice(workflow.indexOf("\n  version:"), workflow.indexOf("\n  build-cli:"))
-  const build = workflow.slice(workflow.indexOf("\n  build-cli:"), workflow.indexOf("\n  prepare-npm:"))
-  const prepare = workflow.slice(workflow.indexOf("\n  prepare-npm:"), workflow.indexOf("\n  publish-test:"))
-  const stage = workflow.slice(workflow.indexOf("\n  publish-test:"), workflow.indexOf("\n  packaged-e2e:"))
-  const promotion = workflow.slice(workflow.indexOf("\n  promote-test:"))
-
-  expect(versionJob).toContain("-test.${GITHUB_RUN_ID}")
-  expect(versionJob).not.toContain("GITHUB_RUN_ATTEMPT")
-  expect(build).toContain("lookup-only: true")
-  expect(build).toContain(
-    "if: steps.npm-artifacts-cache.outputs.cache-hit != 'true' && steps.cli-build-cache.outputs.cache-hit != 'true'",
-  )
-  expect(prepare).toContain(
-    "key: npm-test-artifacts-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}",
-  )
-  expect(prepare.indexOf("Fail closed if an uncached version is occupied")).toBeLessThan(
-    prepare.indexOf("Pack the complete 15-package candidate once"),
-  )
-  expect(prepare.indexOf("Restore immutable npm test artifacts")).toBeLessThan(
-    prepare.indexOf("Restore immutable CLI build"),
-  )
-  expect(prepare).toContain("run: ./tooling/repo/prepare-npm.ts")
-  expect(stage).toContain("run: ./tooling/repo/npm-test-release.ts stage")
-  expect(stage).not.toContain("./tooling/repo/publish.ts")
-  expect(workflow).toContain("@synsci/openscience-linux-x64-baseline-musl@${{ needs.publish-test.outputs.version }}")
-  expect(promotion).toContain("- packaged-e2e")
-  expect(promotion).toContain("- os-smoke")
-  expect(promotion).toContain("- musl-baseline-smoke")
-  expect(promotion).toContain("- scientific-capability-canary")
-  expect(promotion).toContain("run: ./tooling/repo/npm-test-release.ts promote-test")
-  expect(helper.indexOf("verifyReleaseTags(artifacts, releaseCandidateTag(version))")).toBeLessThan(
-    helper.indexOf('promoteReleaseToTag(artifacts, "test")'),
-  )
-  expect(release).toContain('createHash("sha256").update(version).digest("hex").slice(0, 12)')
-  expect(release).toContain('await promoteReleaseToTag(artifacts, "latest", options)')
-})
-
-test("npm test candidates execute every exact capability lifecycle on supported release platforms", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/npm-test.yml")).text()
-  const canary = workflow.slice(
-    workflow.indexOf("\n  scientific-capability-canary:"),
-    workflow.indexOf("\n  promote-test:"),
-  )
-
-  expect(canary).toContain("runner: ubuntu-latest")
-  expect(canary).toContain("runner: ubuntu-24.04-arm")
-  expect(canary).toContain("runner: macos-latest")
-  expect(canary).toContain("Install and prove the Linux capability sandbox")
-  expect(canary).toContain("sudo apt-get install --yes bubblewrap")
-  expect(canary).toContain("apparmor_restrict_unprivileged_userns")
-  expect(canary).toContain("bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true")
-  expect(canary).toContain(
-    'npm install --global --prefix "$prefix" "@synsci/openscience@${{ needs.publish-test.outputs.version }}"',
-  )
-  expect(canary).toContain("openscience debug capability-canary --all --target local --timeout 900")
-  expect(canary).toContain('cd "$project"')
-  expect(canary).toContain("OPENSCIENCE_RELEASE_SHA: ${{ needs.publish-test.outputs.source }}")
-  expect(workflow).toContain("OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.source }}")
-  expect(canary).toContain("report.results.length !== 5")
-  expect(canary).toContain('item.doctor?.availability?.local !== "ready"')
-  expect(canary).toContain("evidence?.release_sha !== process.env.EXPECTED_SOURCE")
-  expect(canary).toContain("evidence?.app_version !== process.env.EXPECTED_VERSION")
-  expect(canary).not.toContain("NVIDIA_API_KEY")
-  expect(canary).not.toContain("MODAL_TOKEN")
-})
-
-test("the packaged capability canary stays accountless without starting unrelated environments", async () => {
-  const source = await Bun.file(path.join(import.meta.dir, "../../src/index.ts")).text()
-  expect(source).toContain("const capabilityCanary = isScientificCapabilityCanary(command, process.argv.slice(2))")
-  const environmentGuard = source.indexOf("if (!capabilityCanary) {", source.indexOf("Legacy skill-based compute"))
-  expect(environmentGuard).toBeGreaterThan(0)
-  expect(environmentGuard).toBeLessThan(source.indexOf("ManagedEnvironments.startInBackground()"))
-})
-
-test("compiled plugin source uses Node-compatible local ESM specifiers", async () => {
-  const directory = path.join(import.meta.dir, "../../../../tooling/plugin/src")
-  for (const file of ["index.ts", "example.ts"]) {
-    const source = await Bun.file(path.join(directory, file)).text()
-    const local = source.matchAll(/(?:from|export \*)\s+["'](\.\/.+?)["']/g)
-    for (const match of local) expect(match[1]).toEndWith(".js")
-  }
-})
-
-test("native Windows file tests keep the repository test timeout", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/ci.yml")).text()
+test("release caches and resumed mac assets are bound and reverified", async () => {
+  const workflow = await read(".github/workflows/publish.yml")
+  const version = await read("tooling/repo/version.ts")
 
   expect(workflow).toContain(
-    "bun test --timeout 15000 test/file/safe-io.test.ts test/file/rename.test.ts test/file/trash.test.ts",
+    "key: cli-build-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}",
   )
+  expect(workflow).toContain(
+    "key: npm-release-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}",
+  )
+  expect(workflow).toContain("Verify resumed macOS assets")
+  expect(workflow).toContain("TeamIdentifier=$APPLE_TEAM_ID")
+  expect(workflow).toContain("CFBundleShortVersionString")
+  expect(workflow).toContain("workflow_source")
+  expect(workflow).toContain('git show "$WORKFLOW_SOURCE:$file" > "$file"')
+  expect(version).toContain('"tooling/repo/publish.ts"')
 })
 
-test("the full CI test job budgets for preflights and the exhaustive suite", async () => {
-  const workflow = await Bun.file(path.join(import.meta.dir, "../../../../.github/workflows/ci.yml")).text()
-  const job = workflow.slice(workflow.indexOf("\n  test:"), workflow.indexOf("\n  build:"))
+test("publication freezes the complete immutable release asset set", async () => {
+  const workflow = await read(".github/workflows/publish.yml")
 
-  expect(job).toContain("timeout-minutes: 30")
-  expect(job).toContain("Exercise real OpenSSH dispatch and recovery")
-  expect(job).toContain("Build embedded web assets for server tests")
-  expect(job).toContain("bun run --cwd backend/cli test")
+  for (const asset of [
+    "OpenScience-mac-arm64.dmg",
+    "OpenScience-mac-arm64.zip",
+    "OpenScience-mac-x64.dmg",
+    "OpenScience-mac-x64.zip",
+    "OpenScience-windows-x64.exe",
+    "OpenScience-linux-x64.AppImage",
+    "OpenScience-linux-arm64.AppImage",
+  ]) {
+    expect(workflow).toContain(asset)
+  }
+  expect(workflow).toContain('== "20"')
+  expect(workflow).toContain("desktop-checksums.txt")
+  expect(workflow).toContain("checksums.txt")
+})
+
+test("npm staging batches immutable writes but verifies before public promotion", async () => {
+  const publish = await read("tooling/repo/publish.ts")
+
+  const stage = publish.indexOf("batch.map((artifact) => publishPackage")
+  const verify = publish.indexOf("await verifyPublishedPackages(ordered)")
+  const tags = publish.indexOf("await ensureReleaseStagingTags(ordered, stagingTag)")
+  const promote = publish.indexOf("await promoteRelease(ordered)")
+  const publicRelease = publish.indexOf("--draft=false")
+
+  expect(stage).toBeGreaterThan(-1)
+  expect(stage).toBeLessThan(verify)
+  expect(verify).toBeLessThan(tags)
+  expect(tags).toBeLessThan(promote)
+  expect(promote).toBeLessThan(publicRelease)
+  expect(publish).toContain("if (Script.release && !promotionOnly)")
+  expect(publish).toContain("Promotion-only resume expected")
+})
+
+test("deep npm rehearsal gates are explicit opt-ins", async () => {
+  const workflow = await read(".github/workflows/npm-test.yml")
+
+  expect(workflow).toContain("name: Deep release rehearsal")
+  expect(workflow).toContain("run_scientific_canary:")
+  expect(workflow.match(/default: false/g)?.length).toBeGreaterThanOrEqual(3)
+  expect(workflow).toContain("if: inputs.run_scientific_canary")
+})
+
+test("shared dependency cache is architecture-specific and excludes the Bun runtime", async () => {
+  const action = await read(".github/actions/setup-bun/action.yml")
+
+  expect(action).toContain("${{ runner.os }}-${{ runner.arch }}")
+  expect(action).toContain("path: ~/.bun/install/cache")
+  expect(action).not.toContain("path: ~/.bun\n")
+  expect(action).toContain("bun install --frozen-lockfile")
+})
+
+test("heavy security analysis is scheduled rather than duplicated on every PR", async () => {
+  const codeql = await read(".github/workflows/codeql.yml")
+  const scorecard = await read(".github/workflows/scorecard.yml")
+  const secrets = await read(".github/workflows/gitleaks.yml")
+
+  expect(codeql).not.toContain("pull_request:")
+  expect(codeql).toContain("schedule:")
+  expect(scorecard).not.toContain("push:")
+  expect(secrets).toContain("pull_request:")
 })

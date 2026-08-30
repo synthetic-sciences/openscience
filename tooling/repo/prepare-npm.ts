@@ -49,11 +49,16 @@ assertPublicPackageSurface({
   "bin/openscience": await Bun.file(path.join(wrapperDir, "bin/openscience")).text(),
 })
 
-for (const name of Object.keys(binaries).sort()) {
-  const cwd = path.join(cliDir, "dist", name)
-  if (!name.includes("windows")) await $`chmod 755 ./bin/openscience`.cwd(cwd)
-  artifacts.push(await packPackage({ cwd, name, version }))
-}
+const native = await Promise.all(
+  Object.keys(binaries)
+    .sort()
+    .map(async (name) => {
+      const cwd = path.join(cliDir, "dist", name)
+      if (!name.includes("windows")) await $`chmod 755 ./bin/openscience`.cwd(cwd)
+      return packPackage({ cwd, name, version })
+    }),
+)
+artifacts.push(...native)
 artifacts.push(await packPackage({ cwd: wrapperDir, name: cliPackage.name, version }))
 
 async function packCompiledPackage(directory: string, options: { preserveSourceDirectory?: boolean } = {}) {

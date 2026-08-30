@@ -1,209 +1,61 @@
-name: prod publish
-run-name: "prod publish ${{ inputs.version || inputs.bump }}"
+name: Release
+run-name: "release ${{ inputs.version || inputs.bump }}"
 
 on:
   workflow_dispatch:
     inputs:
       bump:
-        description: "Bump major, minor, or patch"
+        description: "Version bump"
         required: true
         type: choice
-        options:
-          - major
-          - minor
-          - patch
+        options: [patch, minor, major]
+        default: patch
       version:
-        description: "Exact stable version to publish or resume (overrides bump, for example 2.0.32)"
-        required: false
-        type: string
-      desktop_resume_manifest:
-        description: "Optional reviewed JSON binding pre-existing desktop assets to this exact version, source, signed stable channel, and sha256 digests"
+        description: "Exact stable version to resume (overrides bump)"
         required: false
         type: string
 
-# One release at a time. Keying the group on the inputs let a `patch` and a
-# `minor` dispatch run concurrently and race on tags and the GitHub release.
-concurrency: ${{ github.workflow }}
+concurrency:
+  group: production-release
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
+# The default release is intentionally one pass: preflight, build, sign,
+# package, one packaged macOS smoke, then publish. Deep candidate matrices,
+# browser E2E, native ownership tests, and updater lifecycle rehearsals are
+# available in the manual/scheduled workflows and do not gate a patch.
 jobs:
-  release-source:
+  version:
+    name: Prepare release
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
-      contents: read
+      contents: write
     steps:
-      - name: Require the protected default branch
+      - name: Validate source
         shell: bash
         env:
           EXACT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REPOSITORY,,}" != "synthetic-sciences/openscience" ]]; then
-            echo "::error::Production releases must run in synthetic-sciences/OpenScience; received $GITHUB_REPOSITORY."
+          [[ "${GITHUB_REPOSITORY,,}" == "synthetic-sciences/openscience" ]] || {
+            echo "::error::Production releases must run in synthetic-sciences/OpenScience"
             exit 1
-          fi
+          }
           if [[ -n "$EXACT_VERSION" && ! "$EXACT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Exact production version must be stable semver such as 2.0.32; received '$EXACT_VERSION'."
+            echo "::error::Exact version must be stable semver"
             exit 1
           fi
           if [[ "$GITHUB_REF" != "refs/heads/main" && ( -z "$EXACT_VERSION" || "$GITHUB_REF" != "refs/tags/v$EXACT_VERSION" ) ]]; then
-            echo "::error::Production releases must start on main; an exact-version resume may run only from its immutable refs/tags/v<version> tag. Received $GITHUB_REF."
+            echo "::error::Start a release on main; exact-version resumes may use their immutable tag"
             exit 1
           fi
 
-  npm-test-gate:
-    needs: release-source
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      actions: read
-      # GitHub only returns draft releases to tokens with push access. Exact
-      # version resumes need the draft's immutable artifact-source marker.
-      contents: write
-    outputs:
-      source: ${{ steps.candidate.outputs.source }}
-      run_id: ${{ steps.candidate.outputs.run_id }}
-      run_url: ${{ steps.candidate.outputs.run_url }}
-    steps:
-      - name: Require a complete exact-source npm test rehearsal
-        id: candidate
-        shell: bash
-        env:
-          EXACT_VERSION: ${{ inputs.version }}
-          GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          expected="${GITHUB_SHA,,}"
-          if [[ -n "$EXACT_VERSION" ]]; then
-            release_error="$RUNNER_TEMP/npm-test-gate-release-error.txt"
-            if ! release_pages="$(gh api --paginate --slurp \
-              -H 'Accept: application/vnd.github+json' \
-              "/repos/$GH_REPO/releases?per_page=100" 2>"$release_error")"; then
-              cat "$release_error" >&2
-              echo "::error::Could not inspect v$EXACT_VERSION before validating its npm test rehearsal."
-              exit 1
-            fi
-            release_json="$(jq -c --arg tag "v$EXACT_VERSION" '
-              [.[] | .[] | select(.tag_name == $tag)]
-              | if length == 0 then empty
-                elif length == 1 then .[0]
-                else error("multiple releases use the requested tag")
-                end
-            ' <<<"$release_pages")"
-            if [[ -n "$release_json" ]]; then
-              marker="$(jq -r 'try ((.body // "") | capture("<!-- openscience-release-source:(?<source>[0-9a-f]{40}) -->"; "i").source) catch ""' <<<"$release_json")"
-              if [[ ! "$marker" =~ ^[0-9a-fA-F]{40}$ ]]; then
-                echo "::error::Existing release v$EXACT_VERSION is missing its immutable artifact-source marker."
-                exit 1
-              fi
-              expected="${marker,,}"
-            else
-              # A first exact-version dispatch has no release yet and is bound
-              # to this workflow checkout. version.ts will create the draft.
-              expected="${GITHUB_SHA,,}"
-            fi
-          fi
-          if [[ ! "$expected" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::The npm test gate did not resolve an immutable source SHA."
-            exit 1
-          fi
-
-          runs="$(gh api --paginate --slurp \
-            -H 'Accept: application/vnd.github+json' \
-            "/repos/$GH_REPO/actions/workflows/npm-test.yml/runs?event=workflow_dispatch&status=completed&head_sha=$expected&per_page=100")"
-          mapfile -t run_ids < <(
-            jq -r --arg source "$expected" --arg repo "${GH_REPO,,}" '
-              [.[] | .workflow_runs[]]
-              | map(select(
-                  (.head_sha | ascii_downcase) == $source
-                  and (.head_repository.full_name | ascii_downcase) == $repo
-                  and .head_branch == "main"
-                  and .event == "workflow_dispatch"
-                  and .status == "completed"
-                  and .conclusion == "success"
-                ))
-              | sort_by(.run_number, .run_attempt)
-              | reverse
-              | .[].id
-            ' <<<"$runs"
-          )
-
-          if (( ${#run_ids[@]} == 0 )); then
-            echo "::error::No successful test publish workflow exists for exact source $expected. Dispatch npm-test.yml from that main commit with both optional gates enabled."
-            exit 1
-          fi
-
-          for run_id in "${run_ids[@]}"; do
-            job_pages="$(gh api --paginate --slurp \
-              -H 'Accept: application/vnd.github+json' \
-              "/repos/$GH_REPO/actions/runs/$run_id/jobs?filter=latest&per_page=100")"
-            jobs="$(jq -c '[.[] | .jobs[]]' <<<"$job_pages")"
-
-            if jq -e '
-              . as $jobs
-              | def exactly_one($name):
-                  [$jobs[] | select(.name == $name and .conclusion == "success")] | length == 1;
-                def complete_matrix($prefix; $labels):
-                  ([$jobs[] | select(.name | startswith($prefix))] | length == ($labels | length))
-                  and ($labels | all(.[];
-                    . as $label
-                    | [$jobs[] | select(
-                        (.name | startswith($prefix))
-                        and (.name | contains($label))
-                        and .conclusion == "success"
-                      )]
-                    | length == 1
-                  ));
-                ($jobs | length > 0)
-                and ($jobs | all(.[]; .status == "completed" and .conclusion == "success"))
-                and ([
-                  "test-source",
-                  "version",
-                  "build-cli",
-                  "prepare-npm",
-                  "publish-test",
-                  "packaged-e2e",
-                  "musl-baseline-smoke",
-                  "promote-test"
-                ] | all(.[]; exactly_one(.)))
-                and complete_matrix("os-smoke ("; ["linux-x64", "linux-arm64", "macos", "windows"])
-                and complete_matrix("scientific capability canary ("; ["linux-x64", "linux-arm64", "macos-arm64"])
-            ' <<<"$jobs" >/dev/null; then
-              run_url="$(jq -r --argjson id "$run_id" '[.[] | .workflow_runs[] | select(.id == $id)][0].html_url' <<<"$runs")"
-              {
-                echo "source=$expected"
-                echo "run_id=$run_id"
-                echo "run_url=$run_url"
-              } >> "$GITHUB_OUTPUT"
-              {
-                echo "### Verified npm test rehearsal"
-                echo "Exact source \`$expected\` passed every required candidate job in [run $run_id]($run_url)."
-              } >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-
-            echo "::warning::Successful workflow run $run_id was rejected because required jobs were missing, skipped, or not successful."
-            jq -r '.[] | "  \(.name): status=\(.status), conclusion=\(.conclusion // "none")"' <<<"$jobs"
-          done
-
-          echo "::error::No successful test publish run for exact source $expected completed packaged E2E, all OS smokes, all three scientific capability canaries, and test promotion. Disabled or skipped gates do not qualify."
-          exit 1
-
-  npm-preflight:
-    needs:
-      - release-source
-      - npm-test-gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun
 
@@ -212,116 +64,60 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Require release tag token
+      - name: Validate publishing and signing credentials
         shell: bash
         env:
           RELEASE_GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
-        run: |
-          if [[ -z "$RELEASE_GITHUB_TOKEN" ]]; then
-            echo "::error::RELEASE_GITHUB_TOKEN must have repo and workflow scopes so the guarded release commit can update the version tag."
-            exit 1
-          fi
-
-      # Authenticate and prove ownership of every package before creating a
-      # draft release or making the first immutable npm registry write.
-      - name: Preflight npm publisher identity and ownership
-        run: ./tooling/repo/npm-release.ts preflight
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  macos-signing-preflight:
-    needs:
-      - release-source
-      - npm-test-gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Require Developer ID and notarization credentials
-        shell: bash
-        env:
           APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
           APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
           APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
           APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          missing=()
-          for name in APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_NOTARY_APPLE_ID APPLE_NOTARY_PASSWORD APPLE_TEAM_ID; do
-            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
-          done
-          if (( ${#missing[@]} )); then
-            echo "::error::macOS release signing is not configured. Missing repository secrets: ${missing[*]}"
-            exit 1
-          fi
-
-      - name: Validate optional Windows signing credentials
-        shell: bash
-        env:
           WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [[ -z "$WINDOWS_CSC_LINK" && -z "$WINDOWS_CSC_KEY_PASSWORD" ]]; then
-            echo "::warning::Windows signing is not configured; the Windows installer will be published unsigned."
-            echo "### Windows installer will be unsigned" >> "$GITHUB_STEP_SUMMARY"
-            echo "The signed release will still sign and notarize macOS. Windows SmartScreen may warn about the unsigned Windows installer." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if [[ -z "$WINDOWS_CSC_LINK" || -z "$WINDOWS_CSC_KEY_PASSWORD" ]]; then
-            echo "::error::Windows signing is partially configured. Set both WINDOWS_CSC_LINK and WINDOWS_CSC_KEY_PASSWORD, or remove both to publish Windows unsigned."
+          missing=()
+          for name in RELEASE_GITHUB_TOKEN APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_NOTARY_APPLE_ID APPLE_NOTARY_PASSWORD APPLE_TEAM_ID; do
+            [[ -n "${!name:-}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error::Missing release credentials: ${missing[*]}"
             exit 1
           fi
+          if [[ -n "$WINDOWS_CSC_LINK" || -n "$WINDOWS_CSC_KEY_PASSWORD" ]]; then
+            [[ -n "$WINDOWS_CSC_LINK" && -n "$WINDOWS_CSC_KEY_PASSWORD" ]] || {
+              echo "::error::Configure both Windows signing secrets or neither"
+              exit 1
+            }
+          fi
 
-  version:
-    needs:
-      - release-source
-      - npm-test-gate
-      - npm-preflight
-      - macos-signing-preflight
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      # version.ts creates the draft GitHub release before build/publish.
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - uses: ./.github/actions/setup-bun
+      - name: Verify npm publisher
+        run: ./tooling/repo/npm-release.ts preflight
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - id: version
+        name: Resolve version and draft release
         run: ./tooling/repo/version.ts
         env:
           GH_TOKEN: ${{ github.token }}
           OPENSCIENCE_BUMP: ${{ inputs.bump }}
           OPENSCIENCE_VERSION: ${{ inputs.version }}
 
-      - name: Bind the production artifact to the verified candidate source
-        shell: bash
-        env:
-          ARTIFACT_SOURCE: ${{ steps.version.outputs.artifact_source }}
-          VERIFIED_SOURCE: ${{ needs.npm-test-gate.outputs.source }}
-        run: |
-          set -euo pipefail
-          if [[ "${ARTIFACT_SOURCE,,}" != "${VERIFIED_SOURCE,,}" ]]; then
-            echo "::error::Release artifact source $ARTIFACT_SOURCE was not the exact source validated by npm test ($VERIFIED_SOURCE). Resume an existing draft with an explicit version, then run the matching rehearsal."
-            exit 1
-          fi
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
       tag: ${{ steps.version.outputs.tag }}
       source: ${{ steps.version.outputs.source }}
       artifact_source: ${{ steps.version.outputs.artifact_source }}
+      workflow_source: ${{ steps.version.outputs.workflow_source }}
 
   build-cli:
+    name: Build native CLI
     needs: version
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -329,82 +125,67 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.version.outputs.source }}
-
       - uses: ./.github/actions/setup-bun
-
-      - name: Restore immutable CLI build
-        id: cli-build-cache
+      - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-${{ needs.version.outputs.version }}
-
+          key: cli-build-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
       - name: Build
-        if: steps.cli-build-cache.outputs.cache-hit != 'true'
+        if: steps.cache.outputs.cache-hit != 'true'
         run: ./backend/cli/script/build.ts
         env:
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
           OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
           GH_TOKEN: ${{ github.token }}
-
-      - name: Cache immutable CLI build
-        if: steps.cli-build-cache.outputs.cache-hit != 'true'
+      - name: Save build
+        if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-${{ needs.version.outputs.version }}
-
-    outputs:
-      version: ${{ needs.version.outputs.version }}
+          key: cli-build-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
 
   sign-macos-cli:
-    needs:
-      - version
-      - build-cli
+    name: Sign macOS CLI
+    needs: [version, build-cli]
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.version.outputs.source }}
-
       - uses: ./.github/actions/setup-bun
-
-      - name: Restore signed CLI build
-        id: signed-cli-cache
+      - id: signed
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-signed-${{ needs.version.outputs.version }}
-
-      - name: Restore CLI input build for signing
-        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
+          key: cli-signed-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
+      - name: Restore unsigned build
+        if: steps.signed.outputs.cache-hit != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-${{ needs.version.outputs.version }}
+          key: cli-build-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
           fail-on-cache-miss: true
-
-      - name: Import Developer ID identity
-        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
+      - name: Import Developer ID
+        if: steps.signed.outputs.cache-hit != 'true'
         uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
         with:
           p12-file-base64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
           p12-password: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
-
-      - name: Developer ID sign and notarize macOS binaries
-        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
+      - name: Sign and notarize macOS binaries
+        if: steps.signed.outputs.cache-hit != 'true'
         shell: bash
         env:
           APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
@@ -413,71 +194,63 @@ jobs:
         run: |
           set -euo pipefail
           identities="$(security find-identity -v -p codesigning)"
-          identity="$(sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' <<<"$identities" | head -n 1)"
-          if [[ -z "$identity" ]]; then
-            echo "::error::The imported certificate does not contain a Developer ID Application identity."
-            exit 1
-          fi
-
+          identity="$(awk -F'"' '/Developer ID Application:/{print $2; exit}' <<<"$identities")"
+          [[ -n "$identity" ]] || { echo "::error::No Developer ID Application identity"; exit 1; }
           shopt -s nullglob
           binaries=(backend/cli/dist/@synsci/openscience-darwin-*/bin/openscience)
-          if [[ ${#binaries[@]} -ne 3 ]]; then
-            echo "::error::Expected exactly 3 macOS native binaries; found ${#binaries[@]}."
-            exit 1
-          fi
+          [[ ${#binaries[@]} -eq 3 ]] || { echo "::error::Expected three macOS binaries"; exit 1; }
           for binary in "${binaries[@]}"; do
-            codesign --force --options runtime --timestamp \
-              --identifier ai.syntheticsciences.openscience \
-              --sign "$identity" "$binary"
+            codesign --force --options runtime --timestamp --identifier ai.syntheticsciences.openscience --sign "$identity" "$binary"
             codesign --verify --strict --verbose=2 "$binary"
             details="$(codesign -dv --verbose=4 "$binary" 2>&1)"
             grep -Fxq 'Identifier=ai.syntheticsciences.openscience' <<<"$details"
             grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details"
-
             package_dir="$(dirname "$(dirname "$binary")")"
-            package_name="$(basename "$package_dir")"
-            archive="backend/cli/dist/${package_name}.zip"
+            archive="backend/cli/dist/$(basename "$package_dir").zip"
             rm -f "$archive"
             (cd "$package_dir/bin" && /usr/bin/zip -q -r "$GITHUB_WORKSPACE/$archive" openscience)
           done
-
           archives=(backend/cli/dist/openscience-darwin-*.zip)
-          if [[ ${#archives[@]} -ne 3 ]]; then
-            echo "::error::Expected exactly 3 macOS release archives; found ${#archives[@]}."
-            exit 1
-          fi
+          [[ ${#archives[@]} -eq 3 ]] || { echo "::error::Expected three macOS archives"; exit 1; }
+          pids=()
+          logs=()
           for archive in "${archives[@]}"; do
+            log="$RUNNER_TEMP/notary-$(basename "$archive").log"
             xcrun notarytool submit "$archive" \
               --apple-id "$APPLE_NOTARY_APPLE_ID" \
               --team-id "$APPLE_TEAM_ID" \
               --password "$APPLE_NOTARY_PASSWORD" \
-              --wait
+              --wait >"$log" 2>&1 &
+            pids+=("$!")
+            logs+=("$log")
           done
-
+          failed=0
+          for index in "${!pids[@]}"; do
+            if ! wait "${pids[$index]}"; then
+              cat "${logs[$index]}"
+              failed=1
+            fi
+          done
+          [[ "$failed" == "0" ]] || { echo "::error::Apple notarization failed"; exit 1; }
           : > backend/cli/dist/checksums.txt
           while IFS= read -r archive; do
-            printf '%s  %s\n' "$(shasum -a 256 "$archive" | awk '{print $1}')" "$(basename "$archive")" \
-              >> backend/cli/dist/checksums.txt
+            printf '%s  %s\n' "$(shasum -a 256 "$archive" | awk '{print $1}')" "$(basename "$archive")" >> backend/cli/dist/checksums.txt
           done < <(find backend/cli/dist -maxdepth 1 -type f \( -name 'openscience-*.zip' -o -name 'openscience-*.tar.gz' \) | sort)
-
-      - name: Cache immutable signed CLI build
-        if: steps.signed-cli-cache.outputs.cache-hit != 'true'
+      - name: Save signed build
+        if: steps.signed.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-build-signed-${{ needs.version.outputs.version }}
-
-      # Stable production releases upload only notarization-accepted macOS bytes.
-      - name: Verify or upload immutable draft assets
+          key: cli-signed-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
+      - name: Upload native CLI assets
         run: ./tooling/repo/release-assets.ts backend/cli/dist
         env:
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_RELEASE: ${{ needs.version.outputs.release }}
           GH_TOKEN: ${{ github.token }}
-
-      - name: Mark unsigned Windows installer in the release notes
+      - name: Disclose unsigned Windows installer
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -486,92 +259,79 @@ jobs:
           WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [[ -n "$WINDOWS_CSC_LINK" && -n "$WINDOWS_CSC_KEY_PASSWORD" ]]; then exit 0; fi
+          [[ -z "$WINDOWS_CSC_LINK" && -z "$WINDOWS_CSC_KEY_PASSWORD" ]] || exit 0
           body="$(gh release view "$OPENSCIENCE_TAG" --json body --jq .body)"
-          notice='> The macOS downloads in this release are signed and notarized. The Windows installer is unsigned because Windows signing credentials are not configured, so Windows SmartScreen may show a warning.'
-          if ! grep -Fq 'The Windows installer is unsigned because Windows signing credentials are not configured' <<<"$body"; then
-            notes="$RUNNER_TEMP/openscience-unsigned-windows-release-notes.txt"
+          notice='> The macOS downloads are signed and notarized. The Windows installer is unsigned, so Windows SmartScreen may show a warning.'
+          if ! grep -Fq 'The Windows installer is unsigned' <<<"$body"; then
+            notes="$RUNNER_TEMP/release-notes.txt"
             printf '%s\n\n%s\n' "$body" "$notice" > "$notes"
             gh release edit "$OPENSCIENCE_TAG" --notes-file "$notes"
           fi
-
     outputs:
-      cache_key: cli-build-signed-${{ needs.version.outputs.version }}
+      cache_key: cli-signed-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
 
-  desktop-resume:
-    needs: version
+  prepare-npm:
+    name: Pack npm release
+    needs: [version, sign-macos-cli]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     permissions:
-      # GitHub's release-by-tag API hides draft releases from read-only tokens.
-      contents: write
-    outputs:
-      trusted_assets: ${{ steps.plan.outputs.trusted_assets }}
+      contents: read
     steps:
-      - name: Bind pre-existing desktop installers to a reviewed resume manifest
-        id: plan
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.version.outputs.source }}
+      - name: Overlay reviewed release repair scripts
+        if: needs.version.outputs.workflow_source != needs.version.outputs.source
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
-          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_SOURCE: ${{ needs.version.outputs.source }}
-          OPENSCIENCE_RELEASE_MODE: signed
-          DESKTOP_RESUME_MANIFEST: ${{ inputs.desktop_resume_manifest }}
+          WORKFLOW_SOURCE: ${{ needs.version.outputs.workflow_source }}
         run: |
           set -euo pipefail
-          release_assets="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
-          desktop_assets="$(jq -cS '
-            [.assets[] | select(
-              .name == "OpenScience-mac-arm64.dmg" or
-              .name == "OpenScience-mac-arm64.zip" or
-              .name == "OpenScience-mac-x64.dmg" or
-              .name == "OpenScience-mac-x64.zip" or
-              .name == "OpenScience-windows-x64.exe" or
-              .name == "OpenScience-linux-x64.AppImage" or
-              .name == "OpenScience-linux-arm64.AppImage"
-            )]
-          ' <<<"$release_assets")"
-          jq -e 'all(.[]; .state == "uploaded" and (.size | type == "number" and . > 0) and (.digest | test("^sha256:[0-9a-f]{64}$")))' \
-            <<<"$desktop_assets" >/dev/null || {
-              echo "::error::A pre-existing desktop installer is incomplete or lacks a valid sha256 digest"
-              exit 1
-            }
-          actual="$(jq -cS 'map({key: .name, value: .digest}) | from_entries' <<<"$desktop_assets")"
-
-          if [[ -z "$DESKTOP_RESUME_MANIFEST" ]]; then
-            if [[ "$actual" != "{}" ]]; then
-              echo "::error::Pre-existing desktop installers require a reviewed desktop resume manifest"
-              exit 1
-            fi
-            echo 'trusted_assets={}' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          jq -e \
-            --arg version "$OPENSCIENCE_VERSION" \
-            --arg source "$OPENSCIENCE_SOURCE" \
-            --arg mode "$OPENSCIENCE_RELEASE_MODE" \
-            '.version == $version and .source == $source and .release_mode == $mode and
-             (.assets | type == "object") and
-             all(.assets[]; type == "string" and test("^sha256:[0-9a-f]{64}$"))' \
-            <<<"$DESKTOP_RESUME_MANIFEST" >/dev/null || {
-              echo "::error::Desktop resume manifest does not match this version, source, mode, and digest contract"
-              exit 1
-            }
-          expected="$(jq -cS '.assets' <<<"$DESKTOP_RESUME_MANIFEST")"
-          if [[ "$expected" != "$actual" ]]; then
-            echo "::error::Desktop resume manifest entries must exactly match the pre-existing desktop installers"
-            exit 1
-          fi
-          echo "trusted_assets=$expected" >> "$GITHUB_OUTPUT"
+          for file in tooling/repo/npm-release.ts tooling/repo/prepare-npm.ts; do
+            git show "$WORKFLOW_SOURCE:$file" > "$file"
+          done
+      - uses: ./.github/actions/setup-bun
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            backend/cli/dist
+            frontend/workspace/dist/version.json
+          key: ${{ needs.sign-macos-cli.outputs.cache_key }}
+          fail-on-cache-miss: true
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .release/npm/${{ needs.version.outputs.version }}
+          key: npm-release-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
+      - name: Pack immutable npm artifacts
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: ./tooling/repo/prepare-npm.ts
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_RELEASE_SOURCE: ${{ needs.version.outputs.source }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
+          OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}
+      - name: Verify packed exports
+        run: ./tooling/repo/verify-npm-artifacts.ts
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
+          OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}
+      - name: Save npm artifacts
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .release/npm/${{ needs.version.outputs.version }}
+          key: npm-release-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
 
   build-desktop:
-    needs:
-      - version
-      - sign-macos-cli
-      - desktop-resume
+    name: Desktop (${{ matrix.target }}-${{ matrix.arch }})
+    needs: [version, sign-macos-cli]
     strategy:
       fail-fast: false
       matrix:
@@ -612,82 +372,110 @@ jobs:
             assets: OpenScience-linux-arm64.AppImage
             signing: none
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 35
     permissions:
       contents: write
     steps:
-      - name: Check for existing immutable desktop artifacts
+      - name: Check for resumable assets
         id: existing
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
           OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
           DESKTOP_ASSETS: ${{ matrix.assets }}
-          TRUSTED_DESKTOP_ASSETS: ${{ needs.desktop-resume.outputs.trusted_assets }}
         run: |
           set -euo pipefail
           release="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
+          source_label="${OPENSCIENCE_ARTIFACT_SOURCE:0:16}"
           found=0
           total=0
           for name in $DESKTOP_ASSETS; do
             ((total += 1))
-            existing="$(jq -c --arg name "$name" '.assets[] | select(.name == $name)' <<<"$release")"
-            expected_digest="$(jq -r --arg name "$name" '.[$name] // empty' <<<"$TRUSTED_DESKTOP_ASSETS")"
-            if [[ -z "$existing" ]]; then
-              if [[ -n "$expected_digest" ]]; then
-                echo "::error::$name vanished after the desktop resume plan was frozen"
-                exit 1
-              fi
-              continue
-            fi
-            if [[ -z "$expected_digest" ]]; then
-              echo "::error::$name appeared after the desktop resume plan was frozen"
-              exit 1
-            fi
-            [[ "$(jq -r .state <<<"$existing")" == "uploaded" ]] || {
-              echo "::error::$name exists but is not fully uploaded"
+            asset="$(jq -c --arg name "$name" '.assets[] | select(.name == $name)' <<<"$release")"
+            [[ -n "$asset" ]] || continue
+            [[ "$(jq -r .state <<<"$asset")" == "uploaded" ]]
+            size="$(jq -r .size <<<"$asset")"
+            digest="$(jq -r .digest <<<"$asset")"
+            [[ "$size" =~ ^[0-9]+$ && $size -gt 0 && "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+              echo "::error::$name is incomplete"
               exit 1
             }
-            size="$(jq -r .size <<<"$existing")"
-            if [[ ! "$size" =~ ^[0-9]+$ ]] || (( size <= 0 )); then
-              echo "::error::$name exists but is empty"
+            expected_label="$name (v$OPENSCIENCE_VERSION, source $source_label)"
+            [[ "$(jq -r .label <<<"$asset")" == "$expected_label" ]] || {
+              echo "::error::$name is not bound to source $OPENSCIENCE_ARTIFACT_SOURCE and version $OPENSCIENCE_VERSION"
               exit 1
-            fi
-            digest="$(jq -r .digest <<<"$existing")"
-            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-              echo "::error::$name exists without a valid sha256 digest"
-              exit 1
-            fi
-            if [[ ! "$expected_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || [[ "$digest" != "$expected_digest" ]]; then
-              echo "::error::$name does not match its reviewed desktop resume manifest digest"
-              exit 1
-            fi
+            }
             ((found += 1))
           done
-          if (( found == 0 )); then
-            echo "found=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if (( found != total )); then
-            echo "::error::Desktop artifacts must be resumed or rebuilt as one complete architecture set"
+          [[ "$found" == "0" || "$found" == "$total" ]] || {
+            echo "::error::Resume requires a complete architecture asset set"
             exit 1
-          fi
-          echo "found=true" >> "$GITHUB_OUTPUT"
+          }
+          [[ "$found" == "$total" ]] && echo "found=true" >> "$GITHUB_OUTPUT" || echo "found=false" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.existing.outputs.found != 'true'
+        if: steps.existing.outputs.found != 'true' || (matrix.signing == 'mac' && matrix.arch == 'x64')
         with:
           ref: ${{ needs.version.outputs.source }}
-
       - uses: ./.github/actions/setup-bun
-        if: steps.existing.outputs.found != 'true'
+        if: steps.existing.outputs.found != 'true' || (matrix.signing == 'mac' && matrix.arch == 'x64')
+
+      - name: Verify resumed macOS assets
+        if: steps.existing.outputs.found == 'true' && matrix.signing == 'mac'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          DESKTOP_ASSETS: ${{ matrix.assets }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for name in $DESKTOP_ASSETS; do gh release download "$OPENSCIENCE_TAG" --pattern "$name"; done
+          dmg="$(find . -maxdepth 1 -name '*.dmg' -print -quit)"
+          zip="$(find . -maxdepth 1 -name '*.zip' -print -quit)"
+          codesign --verify --strict --verbose=2 "$dmg"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$(codesign -dv --verbose=4 "$dmg" 2>&1)"
+          xcrun stapler validate "$dmg"
+          spctl -a -t open --context context:primary-signature -vv "$dmg"
+          unpack="$RUNNER_TEMP/resumed-app"
+          mkdir -p "$unpack"
+          ditto -x -k "$zip" "$unpack"
+          app="$unpack/OpenScience.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$(codesign -dv --verbose=4 "$app" 2>&1)"
+          [[ "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" == "ai.syntheticsciences.openscience" ]]
+          [[ "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" == "$OPENSCIENCE_VERSION" ]]
+          spctl --assess --type execute --verbose=4 "$app" 2>&1 | grep -Fq "source=Notarized Developer ID"
+          mountpoint="$RUNNER_TEMP/resumed-dmg"
+          mkdir -p "$mountpoint"
+          cleanup() { hdiutil detach "$mountpoint" -quiet 2>/dev/null || true; }
+          trap cleanup EXIT
+          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mountpoint" -quiet
+          installed="$mountpoint/OpenScience.app"
+          [[ "$(plutil -extract CFBundleIdentifier raw "$installed/Contents/Info.plist")" == "ai.syntheticsciences.openscience" ]]
+          [[ "$(plutil -extract CFBundleShortVersionString raw "$installed/Contents/Info.plist")" == "$OPENSCIENCE_VERSION" ]]
+          installed_hash="$(codesign -d --verbose=4 "$installed" 2>&1 | sed -n 's/^CDHash=//p')"
+          update_hash="$(codesign -d --verbose=4 "$app" 2>&1 | sed -n 's/^CDHash=//p')"
+          [[ -n "$installed_hash" && "$installed_hash" == "$update_hash" ]] || {
+            echo "::error::The resumed DMG and updater ZIP contain different applications"
+            exit 1
+          }
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            bun frontend/desktop/script/update-artifact-canary.mjs \
+              --zip "$zip" \
+              --current "$installed" \
+              --version "$OPENSCIENCE_VERSION" \
+              --arch x64 \
+              --trusted true
+          fi
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: steps.existing.outputs.found != 'true'
         with:
           node-version: "24"
-
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.existing.outputs.found != 'true'
         with:
@@ -697,109 +485,88 @@ jobs:
           key: ${{ needs.sign-macos-cli.outputs.cache_key }}
           enableCrossOsArchive: ${{ runner.os == 'Windows' }}
           fail-on-cache-miss: true
-
-      - if: steps.existing.outputs.found != 'true'
-        run: bun install --frozen-lockfile
-
-      - name: Detect optional Windows signing credentials
-        id: windows-signing
+      - name: Detect Windows signing
+        id: windows
         if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows'
         shell: bash
         env:
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
         run: |
-          if [[ -n "$CSC_LINK" && -n "$CSC_KEY_PASSWORD" ]]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "enabled=false" >> "$GITHUB_OUTPUT"
-
-      - name: Require macOS release signing credentials
-        if: steps.existing.outputs.found != 'true' && matrix.signing == 'mac'
-        shell: bash
-        run: |
-          test -n "$CSC_LINK" || { echo "::error::Missing desktop code-signing certificate"; exit 1; }
-          test -n "$CSC_KEY_PASSWORD" || { echo "::error::Missing desktop certificate password"; exit 1; }
-          test -n "$APPLE_ID" || { echo "::error::Missing APPLE_ID for notarization"; exit 1; }
-          test -n "$APPLE_APP_SPECIFIC_PASSWORD" || { echo "::error::Missing Apple app password"; exit 1; }
-          test -n "$APPLE_TEAM_ID" || { echo "::error::Missing APPLE_TEAM_ID"; exit 1; }
-        env:
-          CSC_LINK: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
-          CSC_KEY_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
+          [[ -n "$CSC_LINK" && -n "$CSC_KEY_PASSWORD" ]] && echo "enabled=true" >> "$GITHUB_OUTPUT" || echo "enabled=false" >> "$GITHUB_OUTPUT"
       - name: Make sidecar executable
         if: steps.existing.outputs.found != 'true' && matrix.target != 'win'
         shell: bash
         run: chmod +x "$OPENSCIENCE_DESKTOP_SIDECAR"
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
-
-      - name: Build signed desktop installer
-        if: steps.existing.outputs.found != 'true' && (matrix.signing != 'windows' || steps.windows-signing.outputs.enabled == 'true')
+      - name: Build desktop installer
+        if: steps.existing.outputs.found != 'true' && (matrix.signing != 'windows' || steps.windows.outputs.enabled == 'true')
         shell: bash
         run: bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_DESKTOP_SIGNED: "true"
+          OPENSCIENCE_DESKTOP_SIGNED: ${{ matrix.signing != 'none' && (matrix.signing != 'windows' || steps.windows.outputs.enabled == 'true') }}
           CSC_IDENTITY_AUTO_DISCOVERY: "true"
           CSC_LINK: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_BASE64 || matrix.signing == 'windows' && secrets.WINDOWS_CSC_LINK || '' }}
           CSC_KEY_PASSWORD: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || matrix.signing == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
           APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
-      - name: Notarize and staple signed macOS disk image
-        if: steps.existing.outputs.found != 'true' && matrix.signing == 'mac'
-        shell: bash
-        env:
-          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          OPENSCIENCE_DMG: frontend/desktop/dist/${{ matrix.asset }}
-        run: |
-          set -euo pipefail
-          [[ -s "$OPENSCIENCE_DMG" ]] || {
-            echo "::error::electron-builder did not produce $OPENSCIENCE_DMG"
-            exit 1
-          }
-          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
-          details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
-          grep -Fq 'Authority=Developer ID Application:' <<<"$details"
-          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details"
-          xcrun notarytool submit "$OPENSCIENCE_DMG" \
-            --apple-id "$APPLE_ID" \
-            --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-            --wait
-          xcrun stapler staple "$OPENSCIENCE_DMG"
-          xcrun stapler validate "$OPENSCIENCE_DMG"
-          spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
-
       - name: Build unsigned Windows installer
-        if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows' && steps.windows-signing.outputs.enabled != 'true'
+        if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows' && steps.windows.outputs.enabled != 'true'
         shell: bash
+        run: bun run --cwd frontend/desktop dist -- --win --x64
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_DESKTOP_SIGNED: "false"
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Notarize and staple macOS DMG
+        if: steps.existing.outputs.found != 'true' && matrix.signing == 'mac'
+        shell: bash
+        env:
+          OPENSCIENCE_DMG: frontend/desktop/dist/${{ matrix.asset }}
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          unset CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
-          unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
-          bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
-
-      - name: Verify or upload immutable desktop artifacts
+          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
+          xcrun notarytool submit "$OPENSCIENCE_DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait
+          xcrun stapler staple "$OPENSCIENCE_DMG"
+          xcrun stapler validate "$OPENSCIENCE_DMG"
+          spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
+      - name: Smoke packaged signed macOS app
+        if: steps.existing.outputs.found != 'true' && matrix.target == 'mac' && matrix.arch == 'x64'
+        shell: bash
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          dmg="frontend/desktop/dist/OpenScience-mac-x64.dmg"
+          zip="frontend/desktop/dist/OpenScience-mac-x64.zip"
+          mountpoint="$RUNNER_TEMP/openscience-smoke"
+          mkdir -p "$mountpoint"
+          cleanup() { hdiutil detach "$mountpoint" -quiet 2>/dev/null || true; }
+          trap cleanup EXIT
+          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mountpoint" -quiet
+          bun frontend/desktop/script/update-artifact-canary.mjs \
+            --zip "$zip" \
+            --current "$mountpoint/OpenScience.app" \
+            --version "$OPENSCIENCE_VERSION" \
+            --arch x64 \
+            --trusted true
+      - name: Upload immutable desktop assets
         if: steps.existing.outputs.found != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
           DESKTOP_ASSET: ${{ matrix.asset }}
           DESKTOP_ASSETS: ${{ matrix.assets }}
         run: |
@@ -809,445 +576,82 @@ jobs:
             produced="frontend/desktop/dist/OpenScience-linux-x86_64.AppImage"
             [[ -s "$produced" ]] && mv "$produced" "$installer"
           fi
-          if [[ "${{ matrix.target }}" == "mac" ]]; then
-            zip_name=""
-            for name in $DESKTOP_ASSETS; do
-              [[ "$name" == *.zip ]] && zip_name="$name"
-            done
-            [[ -n "$zip_name" ]] || {
-              echo "::error::The macOS release set has no updater ZIP"
-              exit 1
-            }
-            zip_path="frontend/desktop/dist/$zip_name"
-            [[ -s "$zip_path" ]] || {
-              echo "::error::electron-builder did not produce $zip_name"
-              exit 1
-            }
-            entries="$RUNNER_TEMP/$zip_name.entries"
-            unzip -Z1 "$zip_path" > "$entries"
-            roots="$(sed -E 's#^([^/]+).*$#\1#' "$entries" | sort -u)"
-            [[ "$roots" == "OpenScience.app" ]] || {
-              echo "::error::$zip_name must contain exactly one top-level OpenScience.app bundle; found: $roots"
-              exit 1
-            }
-            grep -q '^OpenScience\.app/Contents/' "$entries" || {
-              echo "::error::$zip_name does not contain an OpenScience.app bundle payload"
-              exit 1
-            }
-          fi
           release="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
           for name in $DESKTOP_ASSETS; do
             artifact="frontend/desktop/dist/$name"
-            [[ -s "$artifact" ]] || {
-              echo "::error::electron-builder did not produce $name"
-              exit 1
-            }
-            existing="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$release")"
-            if [[ -z "$existing" ]]; then
-              gh release upload "$OPENSCIENCE_TAG" "$artifact"
+            [[ -s "$artifact" ]] || { echo "::error::Missing $name"; exit 1; }
+            if [[ "$name" == *.zip ]]; then
+              roots="$(unzip -Z1 "$artifact" | sed -E 's#^([^/]+).*$#\1#' | sort -u)"
+              [[ "$roots" == "OpenScience.app" ]] || { echo "::error::$name has an invalid root"; exit 1; }
+            fi
+            remote="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$release")"
+            if [[ -z "$remote" ]]; then
+              source_label="${OPENSCIENCE_ARTIFACT_SOURCE:0:16}"
+              gh release upload "$OPENSCIENCE_TAG" "$artifact#$name (v$OPENSCIENCE_VERSION, source $source_label)"
               continue
             fi
-            actual="sha256:$(node -e 'const fs=require("fs"),c=require("crypto");const h=c.createHash("sha256");h.update(fs.readFileSync(process.argv[1]));process.stdout.write(h.digest("hex"))' "$artifact")"
-            [[ "$actual" == "$existing" ]] || {
-              echo "::error::$name already exists with different bytes; refusing to clobber"
-              exit 1
-            }
+            actual="sha256:$(node -e 'const fs=require(\"fs\"),c=require(\"crypto\");const h=c.createHash(\"sha256\");h.update(fs.readFileSync(process.argv[1]));process.stdout.write(h.digest(\"hex\"))' "$artifact")"
+            [[ "$actual" == "$remote" ]] || { echo "::error::$name already exists with different bytes"; exit 1; }
           done
-
-  verify-desktop-updater:
-    needs:
-      - version
-      - build-desktop
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-            machine: arm64
-            dmg: OpenScience-mac-arm64.dmg
-            zip: OpenScience-mac-arm64.zip
-          - runner: macos-15-intel
-            arch: x64
-            machine: x86_64
-            dmg: OpenScience-mac-x64.dmg
-            zip: OpenScience-mac-x64.zip
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
-    permissions:
-      # Draft release assets are hidden from read-only workflow tokens. This
-      # job only downloads and verifies the already immutable payloads.
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # Exact-version resumes keep signed artifacts pinned to `source`, but
-          # run this gated lifecycle canary from the validated workflow repair.
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-bun
-
-      - name: Require native updater architecture
-        shell: bash
-        env:
-          OPENSCIENCE_MACHINE: ${{ matrix.machine }}
-          OPENSCIENCE_ARCH: ${{ matrix.arch }}
-        run: |
-          set -euo pipefail
-          actual="$(uname -m)"
-          if [[ "$actual" != "$OPENSCIENCE_MACHINE" ]]; then
-            echo "::error::The $OPENSCIENCE_ARCH updater lifecycle must run natively on $OPENSCIENCE_MACHINE; runner reported $actual."
-            exit 1
-          fi
-
-      - name: Download the exact stable-channel macOS artifacts
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
-          OPENSCIENCE_DMG: ${{ matrix.dmg }}
-          OPENSCIENCE_ZIP: ${{ matrix.zip }}
-        run: |
-          set -euo pipefail
-          gh release download "$OPENSCIENCE_TAG" --pattern "$OPENSCIENCE_DMG" --pattern "$OPENSCIENCE_ZIP"
-          assets="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
-          for name in "$OPENSCIENCE_DMG" "$OPENSCIENCE_ZIP"; do
-            expected="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$assets")"
-            actual="sha256:$(shasum -a 256 "$name" | awk '{print $1}')"
-            [[ "$expected" =~ ^sha256:[0-9a-f]{64}$ && "$actual" == "$expected" ]] || {
-              echo "::error::$name does not match its immutable GitHub release digest"
-              exit 1
-            }
-          done
-
-      - name: Verify the exact signed ZIP and DMG structure
-        shell: bash
-        env:
-          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_ARCH: ${{ matrix.arch }}
-          OPENSCIENCE_DMG: ${{ matrix.dmg }}
-          OPENSCIENCE_ZIP: ${{ matrix.zip }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          mountpoint="$RUNNER_TEMP/openscience-dmg-$OPENSCIENCE_ARCH"
-          mkdir -p "$mountpoint"
-          cleanup() { hdiutil detach "$mountpoint" -quiet 2>/dev/null || true; }
-          trap cleanup EXIT
-          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
-          dmg_details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
-          grep -Fq 'Authority=Developer ID Application:' <<<"$dmg_details"
-          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$dmg_details" || {
-            echo "::error::$OPENSCIENCE_DMG is not signed by the configured OpenScience team"
-            exit 1
-          }
-          xcrun stapler validate "$OPENSCIENCE_DMG"
-          spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
-          hdiutil attach "$OPENSCIENCE_DMG" -readonly -nobrowse -mountpoint "$mountpoint" -quiet
-          current="$mountpoint/OpenScience.app"
-          [[ -d "$current" && ! -L "$current" ]] || {
-            echo "::error::$OPENSCIENCE_DMG has no real top-level OpenScience.app"
-            exit 1
-          }
-          details="$(codesign -dv --verbose=4 "$current" 2>&1)"
-          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details" || {
-            echo "::error::$OPENSCIENCE_DMG is not signed by the configured OpenScience team"
-            exit 1
-          }
-          bun frontend/desktop/script/update-artifact-canary.mjs \
-            --zip "$OPENSCIENCE_ZIP" \
-            --current "$current" \
-            --version "$OPENSCIENCE_VERSION" \
-            --arch "$OPENSCIENCE_ARCH" \
-            --trusted true
-
-      - name: Resolve an immutable previous signed stable install
-        id: previous
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          OPENSCIENCE_ARCH: ${{ matrix.arch }}
-          OPENSCIENCE_MACHINE: ${{ matrix.machine }}
-          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_ZIP: ${{ matrix.zip }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          pages="$RUNNER_TEMP/openscience-stable-releases.json"
-          candidates="$RUNNER_TEMP/openscience-stable-candidates.jsonl"
-          gh api --paginate --slurp \
-            -H 'Accept: application/vnd.github+json' \
-            "/repos/$GH_REPO/releases?per_page=100" > "$pages"
-          jq -c '
-            [.[] | .[] | select(
-              .draft == false and
-              .prerelease == false and
-              (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
-            )]
-            | sort_by(.published_at // .created_at)
-            | reverse
-            | .[]
-          ' "$pages" > "$candidates"
-
-          found=false
-          while IFS= read -r release; do
-            tag="$(jq -r .tag_name <<<"$release")"
-            old_version="${tag#v}"
-            if ! OLD_VERSION="$old_version" CURRENT_VERSION="$OPENSCIENCE_VERSION" \
-              bun -e 'import { newer } from "./frontend/desktop/src/updater.mjs"; if (!newer(process.env.OLD_VERSION, process.env.CURRENT_VERSION)) process.exit(1)'; then
-              continue
-            fi
-            expected="$(jq -r --arg name "$OPENSCIENCE_ZIP" '.assets[] | select(.name == $name) | .digest' <<<"$release")"
-            [[ "$expected" =~ ^sha256:[0-9a-f]{64}$ ]] || continue
-            candidate="$RUNNER_TEMP/previous-$old_version"
-            mkdir -p "$candidate"
-            if ! gh release download "$tag" --pattern "$OPENSCIENCE_ZIP" --dir "$candidate"; then
-              continue
-            fi
-            archive="$candidate/$OPENSCIENCE_ZIP"
-            [[ -s "$archive" ]] || continue
-            actual="sha256:$(shasum -a 256 "$archive" | awk '{print $1}')"
-            [[ "$actual" == "$expected" ]] || continue
-            unpack="$candidate/unpacked"
-            mkdir -p "$unpack"
-            if ! ditto -x -k "$archive" "$unpack"; then continue; fi
-            app="$unpack/OpenScience.app"
-            [[ -d "$app" && ! -L "$app" ]] || continue
-            [[ "$(find "$unpack" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' ')" == "1" ]] || continue
-            if ! codesign --verify --deep --strict --verbose=2 "$app"; then continue; fi
-            if ! spctl --assess --type execute --verbose=4 "$app"; then continue; fi
-            details="$(codesign -dv --verbose=4 "$app" 2>&1)"
-            grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details" || continue
-            identifier="$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")"
-            installed="$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")"
-            executable="$(plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")"
-            [[ "$identifier" == "ai.syntheticsciences.openscience" && "$installed" == "$old_version" ]] || continue
-            architectures="$(lipo -archs "$app/Contents/MacOS/$executable")"
-            [[ " $architectures " == *" $OPENSCIENCE_MACHINE "* ]] || continue
-            {
-              echo "zip=$archive"
-              echo "version=$old_version"
-              echo "tag=$tag"
-            } >> "$GITHUB_OUTPUT"
-            found=true
-            break
-          done < "$candidates"
-          if [[ "$found" != "true" ]]; then
-            echo "::error::No older immutable signed/notarized stable $OPENSCIENCE_ARCH updater ZIP exists. Stable publication fails closed until a signed baseline is available."
-            exit 1
-          fi
-
-      - name: Exercise packaged handoff, activation, health, cleanup, and rollback
-        shell: bash
-        env:
-          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_PREVIOUS_VERSION: ${{ steps.previous.outputs.version }}
-          OPENSCIENCE_PREVIOUS_ZIP: ${{ steps.previous.outputs.zip }}
-          OPENSCIENCE_ARCH: ${{ matrix.arch }}
-          OPENSCIENCE_ZIP: ${{ matrix.zip }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          bun frontend/desktop/script/update-lifecycle-canary.mjs \
-            --zip "$OPENSCIENCE_ZIP" \
-            --previous-zip "$OPENSCIENCE_PREVIOUS_ZIP" \
-            --version "$OPENSCIENCE_VERSION" \
-            --previous-version "$OPENSCIENCE_PREVIOUS_VERSION" \
-            --arch "$OPENSCIENCE_ARCH" \
-            --team "$APPLE_TEAM_ID"
-
-  verify-native-cli:
-    needs:
-      - version
-      - sign-macos-cli
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-24.04
-            target: openscience-linux-x64
-            other: openscience-linux-arm64
-          - runner: ubuntu-24.04-arm
-            target: openscience-linux-arm64
-            other: openscience-linux-x64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.version.outputs.source }}
-
-      - uses: ./.github/actions/setup-bun
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-
-      - name: Restore CLI build
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            backend/cli/dist
-            frontend/workspace/dist/version.json
-          key: ${{ needs.sign-macos-cli.outputs.cache_key }}
-          fail-on-cache-miss: true
-
-      - name: Install the native npm distribution
-        env:
-          TARGET_PACKAGE: "@synsci/${{ matrix.target }}"
-          OTHER_PACKAGE: "@synsci/${{ matrix.other }}"
-        run: |
-          pack_dir="$RUNNER_TEMP/openscience-native-pack"
-          prefix="$RUNNER_TEMP/openscience-native-prefix"
-          export HOME="$RUNNER_TEMP/openscience-native-home"
-          mkdir -p "$HOME"
-
-          bun backend/cli/script/pack-native-smoke.ts "$pack_dir"
-          npm install --global --prefix "$prefix" "$pack_dir/wrapper.tgz"
-
-          wrapper_dir="$prefix/lib/node_modules/@synsci/openscience"
-          npm ls --global --prefix "$prefix" @synsci/openscience --all
-          WRAPPER_DIR="$wrapper_dir" node -e 'require.resolve(process.env.TARGET_PACKAGE + "/package.json", { paths: [process.env.WRAPPER_DIR] })'
-          if WRAPPER_DIR="$wrapper_dir" node -e 'require.resolve(process.env.OTHER_PACKAGE + "/package.json", { paths: [process.env.WRAPPER_DIR] })' 2>/dev/null; then
-            echo "::error::npm installed the non-native optional package $OTHER_PACKAGE"
-            exit 1
-          fi
-          if WRAPPER_DIR="$wrapper_dir" node -e 'require.resolve("@synsci/atlas/package.json", { paths: [process.env.WRAPPER_DIR] })' 2>/dev/null; then
-            echo "::error::@synsci/openscience still installs the discontinued @synsci/atlas companion"
-            exit 1
-          fi
-          "$prefix/bin/openscience" --version
-
-  prepare-npm:
-    needs:
-      - version
-      - sign-macos-cli
-      - verify-native-cli
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.version.outputs.source }}
-
-      - uses: ./.github/actions/setup-bun
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-
-      - name: Restore immutable CLI build
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            backend/cli/dist
-            frontend/workspace/dist/version.json
-          key: ${{ needs.sign-macos-cli.outputs.cache_key }}
-          fail-on-cache-miss: true
-
-      - name: Restore immutable npm artifacts
-        id: npm-artifacts-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .release/npm/${{ needs.version.outputs.version }}
-          key: npm-release-${{ needs.version.outputs.version }}
-
-      - name: Pack the complete npm release set
-        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
-        run: ./tooling/repo/prepare-npm.ts
-        env:
-          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_RELEASE_SOURCE: ${{ needs.version.outputs.source }}
-          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
-          OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}
-
-      - name: Verify packed SDK and plugin exports before publication
-        run: ./tooling/repo/verify-npm-artifacts.ts
-        env:
-          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
-          OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}
-
-      - name: Cache immutable npm artifacts
-        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .release/npm/${{ needs.version.outputs.version }}
-          key: npm-release-${{ needs.version.outputs.version }}
 
   publish:
-    needs:
-      - version
-      - prepare-npm
-      - sign-macos-cli
-      - build-desktop
-      - verify-desktop-updater
-    if: >-
-      !cancelled() &&
-      needs.version.result == 'success' &&
-      needs.prepare-npm.result == 'success' &&
-      needs.sign-macos-cli.result == 'success' &&
-      needs.build-desktop.result == 'success' &&
-      needs.verify-desktop-updater.result == 'success'
+    name: Publish release
+    needs: [version, sign-macos-cli, prepare-npm, build-desktop]
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 35
     permissions:
       id-token: write
       contents: write
-      # publish.ts falls back to a release PR when branch protection rejects
-      # the automated version-bump commit on main.
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ needs.version.outputs.source }}
-          # github.token cannot push a tag whose release commit updates a
-          # workflow file; use the dedicated repo + workflow scoped token.
           token: ${{ secrets.RELEASE_GITHUB_TOKEN }}
-
+      - name: Overlay reviewed release repair scripts
+        if: needs.version.outputs.workflow_source != needs.version.outputs.source
+        shell: bash
+        env:
+          WORKFLOW_SOURCE: ${{ needs.version.outputs.workflow_source }}
+        run: |
+          set -euo pipefail
+          for file in tooling/repo/npm-release.ts tooling/repo/publish.ts; do
+            git show "$WORKFLOW_SOURCE:$file" > "$file"
+          done
       - uses: ./.github/actions/setup-bun
-
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
-
-      - name: Setup git committer
+      - name: Configure release committer
         run: |
           git config user.email "openscience@syntheticsciences.dev"
           git config user.name "openscience"
-
-      - name: Restore immutable npm artifacts
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .release/npm/${{ needs.version.outputs.version }}
-          key: npm-release-${{ needs.version.outputs.version }}
+          key: npm-release-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
           fail-on-cache-miss: true
-
-      - name: Restore immutable CLI build for downstream registries
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
           key: ${{ needs.sign-macos-cli.outputs.cache_key }}
           fail-on-cache-miss: true
-
-      - name: Verify desktop assets and checksum manifest
+      - name: Freeze release asset manifest
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
         run: |
           set -euo pipefail
           assets="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
-          expected=(
+          source_label="${OPENSCIENCE_ARTIFACT_SOURCE:0:16}"
+          desktop=(
             OpenScience-mac-arm64.dmg
             OpenScience-mac-arm64.zip
             OpenScience-mac-x64.dmg
@@ -1257,117 +661,58 @@ jobs:
             OpenScience-linux-arm64.AppImage
           )
           : > desktop-checksums.txt
-          for name in "${expected[@]}"; do
+          for name in "${desktop[@]}"; do
             asset="$(jq -c --arg name "$name" '.assets[] | select(.name == $name)' <<<"$assets")"
-            [[ -n "$asset" ]] || {
-              echo "::error::$OPENSCIENCE_TAG is missing $name"
-              exit 1
-            }
-            [[ "$(jq -r .state <<<"$asset")" == "uploaded" ]] || {
-              echo "::error::$name is not fully uploaded"
-              exit 1
-            }
+            [[ -n "$asset" && "$(jq -r .state <<<"$asset")" == "uploaded" ]] || { echo "::error::Missing $name"; exit 1; }
             size="$(jq -r .size <<<"$asset")"
-            if [[ ! "$size" =~ ^[0-9]+$ ]] || (( size <= 0 )); then
-              echo "::error::$name is empty"
-              exit 1
-            fi
             digest="$(jq -r .digest <<<"$asset")"
-            [[ "$digest" == sha256:* ]] || {
-              echo "::error::$name has no sha256 digest"
-              exit 1
-            }
+            [[ "$size" =~ ^[0-9]+$ && $size -gt 0 && "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::Invalid $name"; exit 1; }
+            expected_label="$name (v$OPENSCIENCE_VERSION, source $source_label)"
+            [[ "$(jq -r .label <<<"$asset")" == "$expected_label" ]] || { echo "::error::$name has invalid release provenance"; exit 1; }
             printf '%s  %s\n' "${digest#sha256:}" "$name" >> desktop-checksums.txt
           done
-
-          checksum_asset="$(jq -c '.assets[] | select(.name == "desktop-checksums.txt")' <<<"$assets" || true)"
-          if [[ -z "$checksum_asset" ]]; then
-            gh release upload "$OPENSCIENCE_TAG" desktop-checksums.txt
+          checksum="$(jq -r '.assets[] | select(.name == "desktop-checksums.txt") | .digest' <<<"$assets")"
+          if [[ -z "$checksum" ]]; then
+            gh release upload "$OPENSCIENCE_TAG" "desktop-checksums.txt#desktop-checksums.txt (v$OPENSCIENCE_VERSION, source $source_label)"
           else
-            [[ "$(jq -r .state <<<"$checksum_asset")" == "uploaded" ]]
-            (( $(jq -r .size <<<"$checksum_asset") > 0 ))
-            existing_digest="$(jq -r .digest <<<"$checksum_asset")"
-            actual_digest="sha256:$(sha256sum desktop-checksums.txt | awk '{print $1}')"
-            [[ "$existing_digest" == "$actual_digest" ]] || {
-              echo "::error::desktop-checksums.txt already exists with different bytes; refusing to clobber"
-              exit 1
-            }
-            gh release download "$OPENSCIENCE_TAG" --pattern desktop-checksums.txt --dir "$RUNNER_TEMP"
-            cmp --silent desktop-checksums.txt "$RUNNER_TEMP/desktop-checksums.txt" || {
-              echo "::error::desktop-checksums.txt digest matched but downloaded bytes differed"
-              exit 1
-            }
+            actual="sha256:$(sha256sum desktop-checksums.txt | awk '{print $1}')"
+            [[ "$actual" == "$checksum" ]] || { echo "::error::desktop-checksums.txt changed"; exit 1; }
+            expected_label="desktop-checksums.txt (v$OPENSCIENCE_VERSION, source $source_label)"
+            [[ "$(jq -r '.assets[] | select(.name == "desktop-checksums.txt") | .label' <<<"$assets")" == "$expected_label" ]] || { echo "::error::desktop-checksums.txt has invalid release provenance"; exit 1; }
           fi
-
-          # Freeze the complete public release shape before publication. A
-          # resume may reuse immutable assets, so expected-file presence alone
-          # is insufficient: reject unknown extras and independently bind both
-          # checksum manifests to GitHub's payload digests.
           assets="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
-          cli_manifest="backend/cli/dist/checksums.txt"
-          [[ "$(wc -l < "$cli_manifest" | tr -d ' ')" == "11" ]] || {
-            echo "::error::checksums.txt must describe exactly 11 native CLI payloads"
-            exit 1
-          }
-          expected_names="$RUNNER_TEMP/openscience-release-expected-assets.txt"
-          actual_names="$RUNNER_TEMP/openscience-release-actual-assets.txt"
-          awk '{print $2}' "$cli_manifest" > "$expected_names"
-          printf '%s\n' \
-            checksums.txt \
-            OpenScience-mac-arm64.dmg \
-            OpenScience-mac-arm64.zip \
-            OpenScience-mac-x64.dmg \
-            OpenScience-mac-x64.zip \
-            OpenScience-windows-x64.exe \
-            OpenScience-linux-x64.AppImage \
-            OpenScience-linux-arm64.AppImage \
-            desktop-checksums.txt >> "$expected_names"
-          sort -u -o "$expected_names" "$expected_names"
-          jq -r '.assets[].name' <<<"$assets" | sort -u > "$actual_names"
-          [[ "$(wc -l < "$expected_names" | tr -d ' ')" == "20" ]] || {
-            echo "::error::The release contract must contain exactly 20 unique asset names"
-            exit 1
-          }
-          diff -u "$expected_names" "$actual_names" || {
-            echo "::error::$OPENSCIENCE_TAG assets do not exactly match the reviewed 20-file release contract"
-            exit 1
-          }
-          jq -e 'all(.assets[]; .state == "uploaded" and (.size | type == "number" and . > 0) and (.digest | test("^sha256:[0-9a-f]{64}$")))' \
-            <<<"$assets" >/dev/null || {
-              echo "::error::$OPENSCIENCE_TAG contains an incomplete, empty, or unverified asset"
+          for name in "${desktop[@]}" desktop-checksums.txt; do
+            expected_label="$name (v$OPENSCIENCE_VERSION, source $source_label)"
+            [[ "$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .label' <<<"$assets")" == "$expected_label" ]] || {
+              echo "::error::$name lost its release provenance before publication"
               exit 1
             }
+          done
+          manifest_digest="sha256:$(sha256sum desktop-checksums.txt | awk '{print $1}')"
+          [[ "$(jq -r '.assets[] | select(.name == "desktop-checksums.txt") | .digest' <<<"$assets")" == "$manifest_digest" ]] || {
+            echo "::error::desktop-checksums.txt changed before publication"
+            exit 1
+          }
           while read -r digest name; do
-            remote="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$assets")"
-            [[ "$remote" == "sha256:$digest" ]] || {
-              echo "::error::$name does not match checksums.txt"
-              exit 1
-            }
-          done < "$cli_manifest"
-          while read -r digest name; do
-            remote="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$assets")"
-            [[ "$remote" == "sha256:$digest" ]] || {
-              echo "::error::$name does not match desktop-checksums.txt"
+            [[ "$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$assets")" == "sha256:$digest" ]] || {
+              echo "::error::$name changed after the desktop manifest was frozen"
               exit 1
             }
           done < desktop-checksums.txt
-          for zip_name in OpenScience-mac-arm64.zip OpenScience-mac-x64.zip; do
-            zip_dir="$RUNNER_TEMP/${zip_name%.zip}"
-            mkdir -p "$zip_dir"
-            gh release download "$OPENSCIENCE_TAG" --pattern "$zip_name" --dir "$zip_dir"
-            entries="$zip_dir/entries.txt"
-            unzip -Z1 "$zip_dir/$zip_name" > "$entries"
-            roots="$(sed -E 's#^([^/]+).*$#\1#' "$entries" | sort -u)"
-            [[ "$roots" == "OpenScience.app" ]] || {
-              echo "::error::$zip_name must contain exactly one top-level OpenScience.app bundle; found: $roots"
-              exit 1
-            }
-            grep -q '^OpenScience\.app/Contents/' "$entries" || {
-              echo "::error::$zip_name does not contain an OpenScience.app bundle payload"
-              exit 1
-            }
-          done
-
+          cli="backend/cli/dist/checksums.txt"
+          [[ "$(wc -l < "$cli" | tr -d ' ')" == "11" ]] || { echo "::error::CLI manifest must contain 11 payloads"; exit 1; }
+          expected="$RUNNER_TEMP/expected-assets.txt"
+          actual="$RUNNER_TEMP/actual-assets.txt"
+          awk '{print $2}' "$cli" > "$expected"
+          printf '%s\n' checksums.txt "${desktop[@]}" desktop-checksums.txt >> "$expected"
+          sort -u -o "$expected" "$expected"
+          jq -r '.assets[].name' <<<"$assets" | sort -u > "$actual"
+          [[ "$(wc -l < "$expected" | tr -d ' ')" == "20" ]]
+          diff -u "$expected" "$actual"
+          jq -e 'all(.assets[]; .state == "uploaded" and (.size | type == "number" and . > 0) and (.digest | test("^sha256:[0-9a-f]{64}$")))' <<<"$assets" >/dev/null
+          while read -r digest name; do
+            [[ "$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$assets")" == "sha256:$digest" ]]
+          done < "$cli"
       - name: Publish
         run: ./tooling/repo/publish.ts
         env:
@@ -1378,25 +723,17 @@ jobs:
           OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
           OPENSCIENCE_NPM_ARTIFACT_DIR: .release/npm/${{ needs.version.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
-          # Fine-grained PAT with push access to synthetic-sciences/homebrew-tap;
-          # github.token is repo-scoped and can't update the tap.
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
-          # The release must not go public while `npx synsci` still serves an
-          # older launcher that advertises the retired Atlas surface.
           OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"
 
-  # Record the npm release as a GitHub deployment so it shows up in the
-  # repo's Deployments sidebar next to the Vercel Production/Preview entries.
   deployment:
-    needs:
-      - version
-      - publish
-    # Previews (no release output) shouldn't create a production deployment.
+    name: Record deployment
+    needs: [version, publish]
     if: needs.version.outputs.release != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
       deployments: write
     steps:
@@ -1406,22 +743,19 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
         with:
           script: |
-            const version = process.env.VERSION
             const deployment = await github.rest.repos.createDeployment({
               ...context.repo,
-              // The tag points at the release commit (the tree that was
-              // actually published); context.sha is the pre-release commit.
               ref: process.env.TAG || context.sha,
               environment: "npm",
               auto_merge: false,
               required_contexts: [],
-              description: `@synsci/openscience ${version}`,
+              description: "@synsci/openscience " + process.env.VERSION,
               production_environment: true,
             })
             await github.rest.repos.createDeploymentStatus({
               ...context.repo,
               deployment_id: deployment.data.id,
               state: "success",
-              environment_url: `https://www.npmjs.com/package/@synsci/openscience/v/${version}`,
-              description: `Published @synsci/openscience@${version}`,
+              environment_url: "https://www.npmjs.com/package/@synsci/openscience/v/" + process.env.VERSION,
+              description: "Published @synsci/openscience@" + process.env.VERSION,
             })

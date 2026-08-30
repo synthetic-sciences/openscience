@@ -1,0 +1,104 @@
+name: Deep CI
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "11 2 * * *"
+
+concurrency:
+  group: deep-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Expensive and platform-specific coverage lives here rather than delaying
+# every small pull request. One Linux job shares a single checkout/install;
+# native ownership tests share a two-entry platform matrix.
+jobs:
+  linux:
+    name: Full Linux + web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - name: Configure fixtures
+        shell: bash
+        run: |
+          git config --global user.email "ci@openscience.dev"
+          git config --global user.name "OpenScience CI"
+          git config --global init.defaultBranch main
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap openssh-server
+          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
+          sudo install -d -m 0755 /run/sshd
+      - name: Static checks
+        run: |
+          bun run format:check
+          bun run typecheck
+      - name: Build product surfaces
+        shell: bash
+        run: |
+          bun run --cwd frontend/workspace build
+          bun run --cwd backend/cli script/generate-web-assets.ts
+          bun run --cwd frontend/docs build
+      - name: Build landing
+        working-directory: frontend/landing
+        run: |
+          bun install --frozen-lockfile
+          bunx tsc -b
+          bun run build
+      - name: Full backend suite
+        working-directory: backend/cli
+        run: bun run test
+      - name: Release script syntax
+        shell: bash
+        run: |
+          for file in tooling/repo/*.ts; do
+            bun -e "new Bun.Transpiler({ loader: 'ts' }).transformSync(await Bun.file('$file').text())"
+          done
+      - uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2
+
+  native:
+    name: Native ownership (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            runner: macos-latest
+            command: >-
+              bun test --timeout 15000
+              test/global/data-dir.test.ts
+              test/process/darwin-responsibility.test.ts
+              test/credentials/process-ledger.test.ts
+              test/project/authority-process-ledger.test.ts
+          - name: Windows
+            runner: windows-latest
+            command: >-
+              bun test --timeout 15000
+              test/global/data-dir.test.ts
+              test/process/windows-job.test.ts
+              test/global/data-root.test.ts
+              test/file/safe-io.test.ts
+              test/file/rename.test.ts
+              test/file/trash.test.ts
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - name: Configure git fixtures
+        shell: bash
+        run: |
+          git config --global user.email "ci@openscience.dev"
+          git config --global user.name "OpenScience CI"
+          git config --global init.defaultBranch main
+      - name: Run native slice
+        shell: bash
+        working-directory: backend/cli
+        run: ${{ matrix.command }}
