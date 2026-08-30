@@ -1,3 +1,6 @@
+import { projectContains } from "@/utils/project-file"
+import { resolveArtifactPath } from "@/artifacts/context"
+
 export type FileKind =
   | "markdown"
   | "html"
@@ -45,8 +48,42 @@ export type ResolvedFileScope = Exclude<FileOpenScope, "auto">
  * durable project file. Try the active session first, then fall back only for
  * a genuine missing-file response. Permission and transport failures must
  * remain visible rather than silently changing authority. */
-export function initialFileScope(scope: FileOpenScope = "project"): ResolvedFileScope {
-  return scope === "project" ? "project" : "session"
+export function initialFileScope(
+  scope: FileOpenScope = "project",
+  location?: { directory: string; path: string; sessionID?: string },
+): ResolvedFileScope {
+  if (scope !== "auto") return scope
+  if (!location) return "session"
+  // This chooses path resolution, not permission authority. Auto reads retain
+  // the originating session even when the absolute path is inside the project.
+  const absolute = /^(?:\/|[A-Za-z]:[\\/])/.test(location.path)
+  if (!location.sessionID || (absolute && projectContains(location.directory, location.path))) return "project"
+  return "session"
+}
+
+export function fileReadSession(input: {
+  scope?: FileOpenScope
+  resolved: ResolvedFileScope
+  directory: string
+  path: string
+  sessionID?: string
+}) {
+  if (input.scope === "auto" || input.resolved === "session" || !projectContains(input.directory, input.path))
+    return input.sessionID
+}
+
+export function linkedFileTarget(input: {
+  scope?: FileOpenScope
+  resolved: ResolvedFileScope
+  directory: string
+  path: string
+  sessionID?: string
+}) {
+  return {
+    path: input.resolved === "project" ? resolveArtifactPath(input.directory, input.path) : input.path,
+    scope: input.scope === "auto" ? ("auto" as const) : input.resolved,
+    sessionID: input.sessionID,
+  }
 }
 
 export function isMissingFileError(error: unknown) {
@@ -79,7 +116,7 @@ export function isFileRequestCancellation(error: unknown) {
   const value = error as { name?: unknown; message?: unknown } | undefined
   const name = typeof value?.name === "string" ? value.name : ""
   if (name === "AbortError" || name === "TimeoutError") return true
-  const message = String(value?.message ?? error ?? "")
+  const message = fileErrorMessage(error)
   return /\bab(?:ort|orted)\b|cancell?ed|the user aborted|signal is aborted/i.test(message)
 }
 

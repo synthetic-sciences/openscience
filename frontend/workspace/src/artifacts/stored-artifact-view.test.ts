@@ -17,7 +17,9 @@ test("refreshes an open artifact record after a new immutable version is saved",
 
 test("keeps the saved artifact surface focused on preview while provenance UI is deferred", () => {
   expect(source).toContain("<Preview")
-  expect(source).toContain("loadStoredArtifactPreview(sdk.request, artifactID, version, controller.signal)")
+  expect(source).toContain("createStoredArtifactPreview(sdk.request")
+  expect(source).toContain("current.versionID !== selected()?.id")
+  expect(source).toContain("current?.scope !== previewScope()")
   expect(source).toContain("requestStoredArtifact(sdk.request, props.artifact.id, version.id, true)")
   expect(source).not.toContain("Versions")
   expect(source).not.toContain("How made")
@@ -36,15 +38,23 @@ test("renders saved PDFs with the same first-party viewer used by project files"
   expect(source).not.toContain("<iframe")
   expect(source).toContain('return "PDF"')
   expect(source).toContain("STORED_PDF_PREVIEW_LIMIT")
-  expect(source).toContain("previewAbort.current?.abort()")
+  expect(source).toContain("onRetry={() => void previewActions.refetch()}")
 })
 
 test("never hands protected artifact URLs to browser-native readers", () => {
-  expect(source).not.toContain("sdk.request.url")
+  expect(source).not.toMatch(/sdk\.request\.url\(\s*[^,]*artifact-store/)
   expect(source).not.toMatch(/\bfetch\s*\(/)
   expect(source).not.toMatch(/<a(?:\s|>)/)
   expect(source).toContain("downloadBlob(version.filename, blob)")
   expect(source).toContain('role="alert"')
+})
+
+test("keeps links and figures in saved documents bound to their captured session", () => {
+  expect(source).toContain("localAssetPath(href, props.version.sourcePath)")
+  expect(source).toContain("sessionID: props.version.sessionID")
+  expect(source).toContain("<MarkdownImages resolve={imageUrl} resolveFile={file} openFile={openFile}>")
+  expect(source).toContain("() => ({ scope: previewScope(), id: props.artifact.id })")
+  expect(source).toContain("current.record.id !== props.artifact.id")
 })
 
 test("keeps rename and recoverable deletion in the stored artifact lifecycle", () => {
@@ -88,8 +98,8 @@ test("uses the shared quiet boundary and control language", () => {
 })
 
 test("keeps saved Markdown and source previews readable in the narrow inspector", () => {
-  expect(source).toContain('"font-size": "15px"')
-  expect(source).toContain('padding: "clamp(24px, 5cqi, 44px) clamp(20px, 5cqi, 40px) 56px"')
+  expect(source).toContain('class="atlas-file-view atlas-stored-artifact"')
+  expect(source).toContain('viewer().kind === "markdown" || viewer().kind === "notebook" ? undefined : pre()')
   expect(source).toContain('"font-size": "12px"')
   expect(source).not.toContain('"font-size": "11px",\n  "line-height": 1.55')
 })

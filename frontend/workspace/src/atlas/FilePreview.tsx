@@ -1,4 +1,15 @@
-import { createSignal, createEffect, createMemo, onMount, onCleanup, type JSX, Show, Switch, Match } from "solid-js"
+import {
+  createSignal,
+  createEffect,
+  createMemo,
+  onMount,
+  onCleanup,
+  untrack,
+  type JSX,
+  Show,
+  Switch,
+  Match,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -31,6 +42,8 @@ import {
   fileRequestKey,
   fileReadRetryDelay,
   initialFileScope,
+  fileReadSession,
+  linkedFileTarget,
   isMissingFileError,
   missingFileFallback,
   PDF_PREVIEW_LIMIT,
@@ -47,7 +60,7 @@ import { resolveViewer } from "@/atlas/files/viewer-registry"
 import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import { recoverFileDraft, rememberFileDraft } from "@/atlas/file-drafts"
 import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"
-import { projectContains, rawFileQuery } from "@/utils/project-file"
+import { rawFileQuery } from "@/utils/project-file"
 import { CodeEditor } from "@/atlas/CodeEditor"
 import { HTML_STYLESHEET_BYTES, htmlStylesheets, loadHtmlStylesheets, rewriteHtmlAssets } from "@/utils/html-assets"
 import "./FilePreview.css"
@@ -122,7 +135,9 @@ export function FileView(props: {
   const params = useParams()
   const directory = () => props.directory || sdk.directory || sync.data.path.directory || sync.project?.worktree || ""
   const activeSessionID = () => props.sessionID ?? (params.id && params.id !== "new" ? params.id : undefined)
-  const [resolvedScope, setResolvedScope] = createSignal<ResolvedFileScope>(initialFileScope(props.scope))
+  const initialScope = () =>
+    initialFileScope(props.scope, { directory: directory(), path: props.path, sessionID: activeSessionID() })
+  const [resolvedScope, setResolvedScope] = createSignal<ResolvedFileScope>(initialScope())
   const [resolvedPath, setResolvedPath] = createSignal(props.path)
   const [resolvedWritable, setResolvedWritable] = createSignal<boolean>()
   let scopeIdentity = ""
@@ -130,18 +145,20 @@ export function FileView(props: {
     const next = [props.scope ?? "project", directory(), props.path, activeSessionID() ?? ""].join("\n")
     if (next === scopeIdentity) return
     scopeIdentity = next
-    setResolvedScope(initialFileScope(props.scope))
+    setResolvedScope(initialScope())
     setResolvedPath(props.path)
     setResolvedWritable(undefined)
   })
   const requestPath = () =>
     resolvedScope() === "session" ? resolvedPath() : resolveArtifactPath(directory(), resolvedPath())
   const fileSessionID = () =>
-    resolvedScope() === "session"
-      ? activeSessionID()
-      : projectContains(directory(), requestPath())
-        ? undefined
-        : activeSessionID()
+    fileReadSession({
+      scope: props.scope,
+      resolved: resolvedScope(),
+      directory: directory(),
+      path: requestPath(),
+      sessionID: activeSessionID(),
+    })
   const name = () => resolvedPath().split("/").pop() || resolvedPath()
   const e = () => ext(name())
 
@@ -179,7 +196,9 @@ export function FileView(props: {
       readRetry.count = 0
     }
     const ticket = request.begin(key)
-    const retained = readyKey === key && view.status === "ready" && view.data
+    // Read completion and editor state are outputs, not request dependencies:
+    // tracking them would launch another read when a refresh replaces data.
+    const retained = untrack(() => readyKey === key && view.status === "ready" && view.data)
     if (retained) {
       // A reconnect or explicit refresh must not blank a valid preview. Keep
       // the rendered bytes and any unsaved draft while the replacement read
@@ -283,7 +302,7 @@ export function FileView(props: {
         status: "ready",
         data,
         error: undefined,
-        draft: recoverFileDraft(dir, path, text, resolvedScope() === "session" ? "session" : undefined),
+        draft: recoverFileDraft(dir, props.path, text, props.scope, activeSessionID()),
         saved: text,
       })
     })
@@ -305,13 +324,7 @@ export function FileView(props: {
   createEffect(() => props.onDirtyChange?.(dirty()))
   createEffect(() => {
     if (view.status !== "ready") return
-    rememberFileDraft(
-      directory(),
-      resolvedPath(),
-      view.draft,
-      view.saved,
-      resolvedScope() === "session" ? "session" : undefined,
-    )
+    rememberFileDraft(directory(), props.path, view.draft, view.saved, props.scope, activeSessionID())
   })
   const scientific = createMemo(() => (isBinary() ? undefined : detectScientificFile(e(), view.draft)))
   const biological = createMemo(() => (isBinary() ? undefined : detectBiologicalFormat(e())))
@@ -356,7 +369,16 @@ export function FileView(props: {
       url: (path) => rawUrl(path),
     })
   const file = (href: string) => localAssetPath(href, resolvedPath())
-  const openFile = (path: string) => uiStore.openFile(directory(), path, { scope: resolvedScope() })
+  const openFile = (path: string) => {
+    const target = linkedFileTarget({
+      directory: directory(),
+      path,
+      scope: props.scope,
+      resolved: resolvedScope(),
+      sessionID: activeSessionID(),
+    })
+    uiStore.openFile(directory(), target.path, target)
+  }
   const html = () => htmlView.value
 
   createEffect(() => {
@@ -763,6 +785,7 @@ export function FileView(props: {
                     path={requestPath()}
                     sessionID={fileSessionID()}
                     scope={resolvedScope()}
+                    openScope={props.scope}
                     text={view.draft}
                     dirty={dirty()}
                     saving={view.saving}

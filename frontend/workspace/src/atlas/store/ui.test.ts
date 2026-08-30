@@ -147,7 +147,30 @@ describe("context pane state", () => {
       path: "results/curve.csv",
       name: "curve.csv",
       scope: "auto",
+      sessionID: "session-a",
     })
+  })
+
+  test("pins scratch links to their originating session across navigation and restore", () => {
+    const storage = memoryStorage()
+    const state = createContextState({ storage })
+    state.activateScope("project-a", "session-a")
+    state.openFile("/work/alpha", "result.md", { scope: "auto" })
+    const first = state.activeWorkTab()
+    state.activateScope("project-a", "session-b")
+    expect(state.file()?.sessionID).toBe("session-a")
+    state.openFile("/work/alpha", "result.md", { scope: "auto" })
+    expect(state.activeWorkTab()).not.toBe(first)
+    expect(state.files().map((file) => file.sessionID)).toEqual(["session-a", "session-b"])
+
+    // Relative links inside an already-open preview retain that preview's
+    // session, not whichever conversation is now selected behind the pane.
+    state.openFile("/work/alpha", "figure.svg", { scope: "session", sessionID: "session-a" })
+    expect(state.file()?.sessionID).toBe("session-a")
+    const restored = createContextState({ storage })
+    restored.activateScope("project-a", "session-c")
+    expect(restored.file()?.sessionID).toBe("session-a")
+    expect(restored.files().map((file) => file.sessionID)).toEqual(["session-a", "session-b", "session-a"])
   })
 
   test("active context remains selected and a different context switches directly", () => {

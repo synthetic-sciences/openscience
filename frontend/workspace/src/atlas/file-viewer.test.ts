@@ -7,6 +7,8 @@ import {
   fileReadRetryDelay,
   fileErrorMessage,
   initialFileScope,
+  fileReadSession,
+  linkedFileTarget,
   isMissingFileError,
   missingFileFallback,
   PDF_PREVIEW_LIMIT,
@@ -159,6 +161,36 @@ describe("file viewer reads", () => {
     expect(await readFile(async () => data)).toEqual({ data })
   })
 
+  test("uses explicit project locations directly while keeping scratch and external links session-authorized", () => {
+    const location = { directory: "/projects/one", sessionID: "ses_one" }
+    expect(initialFileScope("auto", { ...location, path: "/projects/one/report.md" })).toBe("project")
+    expect(initialFileScope("auto", { ...location, path: "report.md" })).toBe("session")
+    expect(initialFileScope("auto", { ...location, path: "/projects/one-old/report.md" })).toBe("session")
+    expect(initialFileScope("auto", { ...location, path: "/private/tmp/report.md" })).toBe("session")
+    expect(initialFileScope("auto", { ...location, path: "/projects/one/../secret.md" })).toBe("session")
+    expect(initialFileScope("session", { ...location, path: "/projects/one/report.md" })).toBe("session")
+    expect(initialFileScope("auto", { directory: location.directory, path: "report.md" })).toBe("project")
+  })
+
+  test("retains origin authority for auto reads inside even a broad project root and nested links", () => {
+    const input = {
+      directory: "/home/user",
+      path: "/home/user/.openscience/sessions/sibling/result.md",
+      scope: "auto" as const,
+      resolved: "project" as const,
+      sessionID: "ses_origin",
+    }
+    expect(fileReadSession(input)).toBe("ses_origin")
+    const nested = linkedFileTarget({ ...input, path: "reports/figure.svg" })
+    expect(nested).toEqual({ path: "/home/user/reports/figure.svg", scope: "auto", sessionID: "ses_origin" })
+    expect(fileReadSession({ ...input, ...nested })).toBe("ses_origin")
+    expect(fileReadSession({ ...input, scope: "project" })).toBeUndefined()
+    expect(fileReadSession({ ...input, scope: "session", resolved: "session" })).toBe("ses_origin")
+    expect(
+      missingFileFallback({ requested: "auto", resolved: "session", error: new Error("Access denied") }),
+    ).toBeUndefined()
+  })
+
   test("turns a rejected read into local error state instead of throwing", async () => {
     const result = await readFile(async () => {
       throw "file access denied"
@@ -199,6 +231,11 @@ describe("file viewer reads", () => {
 
     expect(named).toEqual({ cancelled: true })
     expect(browser).toEqual({ cancelled: true })
+    expect(
+      await readFile(async () => {
+        throw { name: "UnknownError", data: { message: "signal is aborted without reason" } }
+      }),
+    ).toEqual({ cancelled: true })
   })
 
   test("uses bounded backoff for an active interrupted file read", () => {

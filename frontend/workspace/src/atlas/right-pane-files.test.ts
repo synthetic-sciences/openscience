@@ -38,7 +38,7 @@ test("keeps the explorer and selected file preview inside the contextual pane", 
   expect(pane).toContain('scope={tab.file.scope ?? "project"}')
   expect(pane).toContain('tab.file.scope === "auto"')
   expect(pane).toContain('tab.file.scope === "session" || tab.file.external')
-  expect(pane).toContain('sessionID={session() === "new" ? undefined : session()}')
+  expect(pane).toContain('sessionID={tab.file.sessionID ?? (session() === "new" ? undefined : session())}')
   expect(pane).toContain("<RightPaneGate>")
   expect(directory).toContain('uiStore.openFile(dir, path, { scope: "auto" })')
   expect(session).not.toContain('import { FileExplorer } from "@/atlas/FileExplorer"')

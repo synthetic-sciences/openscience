@@ -123,6 +123,7 @@ describe("file preview sandboxed html", () => {
     const preview = await read("./FilePreview.tsx")
 
     expect(preview).toContain('readyKey === key && view.status === "ready" && view.data')
+    expect(preview).toContain('untrack(() => readyKey === key && view.status === "ready" && view.data)')
     expect(preview).toContain("fileReadRetryDelay(readRetry.count)")
     expect(preview).toContain("File preview transport remained interrupted after bounded retries")
     expect(preview).not.toContain("queueMicrotask(() =>")

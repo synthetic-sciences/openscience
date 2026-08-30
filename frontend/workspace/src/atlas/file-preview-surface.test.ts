@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 const css = await Bun.file(new URL("./FilePreview.css", import.meta.url)).text()
+const textView = await Bun.file(new URL("./files/TextContentView.tsx", import.meta.url)).text()
 
 describe("file preview surface", () => {
   test("uses one compact operational toolbar", () => {
@@ -13,10 +14,20 @@ describe("file preview surface", () => {
   })
 
   test("keeps documents readable without presentation-scale spacing", () => {
-    expect(css).toContain("width: min(100%, 820px)")
-    expect(css).toContain("font-size: 15px")
+    expect(css).toContain("width: min(100%, calc(72ch + 48px))")
+    expect(css).toContain("font-family: var(--font-family-sans)")
     expect(css).toContain("font-size: 13px")
-    expect(css).toContain("padding: clamp(30px, 5cqi, 52px)")
+    expect(css).toContain("padding: 24px 24px 48px")
+    expect(css).toContain("padding-inline: 16px")
+  })
+
+  test("shares document typography with stored artifacts and notebook Markdown", () => {
+    expect(textView).toContain('import "../FilePreview.css"')
+    expect(textView).toContain('class="atlas-file-document"')
+    expect(textView).toContain('class="atlas-file-document atlas-file-notebook"')
+    expect(textView).toContain('<Markdown class="atlas-md" text={props.text}')
+    expect(textView).toContain('<Markdown class="atlas-md" text={cell.source}')
+    expect(textView).not.toContain('class="markdown-body"')
   })
 
   test("keeps loading and segmented controls calm across host surfaces", () => {
@@ -36,6 +47,8 @@ describe("file preview surface", () => {
   test("responds to the resizable pane and gives complex previews their own scroller", () => {
     expect(css).toContain("container: atlas-file-view / inline-size")
     expect(css).toContain("@container atlas-file-view (max-width: 760px)")
+    expect(css).toContain('grid-template-areas: "identity close" "controls controls"')
+    expect(css).toMatch(/\.atlas-file-controls\s*\{[^}]*flex-wrap: wrap/s)
     expect(css).toMatch(/\.atlas-file-scroll\.is-managed-scroll,[\s\S]*overflow: hidden/s)
     expect(css).toMatch(/\.atlas-file-pdf\s*\{[^}]*flex: 1/s)
     expect(css).toMatch(/\.atlas-file-pdf \.pdf-viewer\s*\{[^}]*height: 100%/s)

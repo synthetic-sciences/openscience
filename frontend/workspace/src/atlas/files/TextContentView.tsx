@@ -2,6 +2,7 @@ import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { Markdown } from "@synsci/ui/markdown"
 import { DataTableView } from "@/data/DataTableView"
 import type { ViewerResolution } from "./viewer-registry"
+import "../FilePreview.css"
 
 type NotebookCell = {
   type: "markdown" | "code"
@@ -48,47 +49,29 @@ export function TextContentView(props: { name: string; text: string; viewer: Vie
   return (
     <Switch fallback={<pre class="remote-view__text">{props.text}</pre>}>
       <Match when={props.viewer.kind === "markdown"}>
-        <article class="markdown-body" style={{ padding: "24px", margin: "0 auto", width: "min(100%, 760px)" }}>
-          <Markdown text={props.text} />
+        <article class="atlas-file-document">
+          <Markdown class="atlas-md" text={props.text} />
         </article>
       </Match>
       <Match when={props.viewer.kind === "table" && props.viewer.table}>
         <DataTableView text={props.text} format={props.viewer.table!} name={props.name} />
       </Match>
       <Match when={props.viewer.kind === "notebook" && cells()}>
-        <article
-          aria-label={`${props.name} notebook`}
-          style={{ width: "min(100%, 840px)", margin: "0 auto", padding: "20px", display: "grid", gap: "12px" }}
-        >
+        <article aria-label={`${props.name} notebook`} class="atlas-file-document atlas-file-notebook">
           <For each={cells()}>
             {(cell, index) => (
-              <section style={{ border: "1px solid var(--border-weak-base)", "border-radius": "var(--radius-md)" }}>
-                <header style={{ padding: "7px 10px", color: "var(--text-weak)", "font-size": "11px" }}>
-                  {cell.type === "markdown" ? "Markdown" : `In [${index() + 1}]`}
-                </header>
+              <section class="atlas-file-notebook-cell" data-cell-type={cell.type}>
+                <Show when={cell.type === "code"}>
+                  <header class="atlas-file-notebook-label">In [{index() + 1}]</header>
+                </Show>
                 <Show
                   when={cell.type === "markdown"}
-                  fallback={
-                    <pre style={{ margin: 0, padding: "10px 12px", "white-space": "pre-wrap" }}>{cell.source}</pre>
-                  }
+                  fallback={<pre class="atlas-file-notebook-code">{cell.source}</pre>}
                 >
-                  <div style={{ padding: "2px 12px 12px" }}>
-                    <Markdown text={cell.source} />
-                  </div>
+                  <Markdown class="atlas-md" text={cell.source} />
                 </Show>
                 <For each={cell.outputs}>
-                  {(output) => (
-                    <pre
-                      style={{
-                        margin: 0,
-                        padding: "10px 12px",
-                        "border-top": "1px solid var(--border-weak-base)",
-                        "white-space": "pre-wrap",
-                      }}
-                    >
-                      {output}
-                    </pre>
-                  )}
+                  {(output) => <pre class="atlas-file-notebook-code atlas-file-notebook-output">{output}</pre>}
                 </For>
               </section>
             )}

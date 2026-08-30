@@ -29,6 +29,8 @@ export interface ContextFile {
   path: string
   name: string
   scope?: "session" | "auto"
+  /** Scratch and conversation links keep the session that authorized them. */
+  sessionID?: string
   external?: boolean
 }
 
@@ -117,7 +119,7 @@ function normalize(value: string) {
 export function resolveContextFile(
   directory: string,
   path: string,
-  options?: { scope?: "project" | "session" | "auto" },
+  options?: { scope?: "project" | "session" | "auto"; sessionID?: string },
 ): ContextFile {
   const root = normalize(directory).replace(/\/+$/, "") || "/"
   const input = slash(path)
@@ -128,6 +130,7 @@ export function resolveContextFile(
       path: sessionPath,
       name: sessionPath.split("/").pop() || sessionPath,
       scope: options.scope,
+      ...(options.sessionID ? { sessionID: options.sessionID } : {}),
     }
   }
   const absolute = input.startsWith("/") || /^[A-Za-z]:\//.test(input)
@@ -148,6 +151,7 @@ export function resolveContextFile(
     path: full,
     name: full.split("/").pop() || full,
     external: true,
+    ...(options?.sessionID ? { sessionID: options.sessionID } : {}),
   }
 }
 
@@ -161,13 +165,14 @@ function restoreFile(value: unknown) {
   if (!row || typeof row.directory !== "string" || typeof row.path !== "string") return
   const file = resolveContextFile(row.directory, row.path, {
     scope: row.scope === "session" || row.scope === "auto" ? row.scope : "project",
+    sessionID: typeof row.sessionID === "string" && row.sessionID !== "new" ? row.sessionID : undefined,
   })
   if (row.external === true) return { ...file, external: true }
   return file
 }
 
 function fileKey(file: ContextFile) {
-  return `${file.scope ?? "project"}\n${file.directory}\n${file.path}`
+  return `${file.scope ?? "project"}\n${file.directory}\n${file.path}${file.sessionID ? `\n${file.sessionID}` : ""}`
 }
 
 function viewTab(context: ContextTab): WorkTab {
@@ -180,7 +185,7 @@ function viewTab(context: ContextTab): WorkTab {
 
 function fileTab(file: ContextFile): WorkTab {
   return {
-    id: `file:${file.scope ? `${file.scope}:` : ""}${encodeURIComponent(file.directory)}:${encodeURIComponent(file.path)}`,
+    id: `file:${file.scope ? `${file.scope}:` : ""}${file.sessionID ? `${encodeURIComponent(file.sessionID)}:` : ""}${encodeURIComponent(file.directory)}:${encodeURIComponent(file.path)}`,
     kind: "file",
     file,
   }
@@ -317,6 +322,7 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
   const [store, setStore] = createStore({
     scope: defaultWorkspaceScope(),
     transientScope: workspaceScope("__workspace__", "new"),
+    sessionID: "new",
     scopes: restore(storage) as Record<string, ContextState>,
     transient: {} as Record<string, TransientState>,
   })
@@ -420,9 +426,17 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
     if (state.open && state.activeWorkTab === id) return
     update(select(state, tabs, id))
   }
-  const openFile = (directory: string, path: string, options?: { scope?: "project" | "session" | "auto" }) => {
+  const openFile = (
+    directory: string,
+    path: string,
+    options?: { scope?: "project" | "session" | "auto"; sessionID?: string },
+  ) => {
     const state = current()
-    const file = resolveContextFile(directory, path, options)
+    const session = options?.sessionID ?? store.sessionID
+    const file = resolveContextFile(directory, path, {
+      ...options,
+      sessionID: session === "new" ? undefined : session,
+    })
     const existing = state.files ?? []
     const known = existing.some((item) => fileKey(item) === fileKey(file))
     const files = known ? existing : [...existing, file]
@@ -498,7 +512,7 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
         setStore("scopes", scope, store.scopes[legacy])
         persist()
       }
-      setStore({ scope, transientScope: legacy })
+      setStore({ scope, transientScope: legacy, sessionID: session })
     },
     context,
     open: () => current().open,

@@ -30,6 +30,36 @@ describe("file draft retention", () => {
     expect(hasUnsavedFileDrafts()).toBe(false)
   })
 
+  test("isolates same-named scratch drafts by originating session", () => {
+    rememberFileDraft(directory, path, "session A edit", "saved A", "session", "ses_a")
+    rememberFileDraft(directory, path, "session B edit", "saved B", "session", "ses_b")
+    expect(recoverFileDraft(directory, path, "saved A", "session", "ses_a")).toBe("session A edit")
+    expect(recoverFileDraft(directory, path, "saved B", "session", "ses_b")).toBe("session B edit")
+    expect(recoverFileDraft(directory, path, "saved C", "session", "ses_c")).toBe("saved C")
+    discardFileDraft(directory, path, "session", "ses_a")
+    expect(recoverFileDraft(directory, path, "saved A", "session", "ses_a")).toBe("saved A")
+    expect(recoverFileDraft(directory, path, "saved B", "session", "ses_b")).toBe("session B edit")
+  })
+
+  test("discards an auto-resolved basename by its tab identity without touching another session or project draft", () => {
+    // The read may resolve report.md to /connected/reports/report.md; draft
+    // ownership stays with the clicked basename, exactly as the tab records it.
+    rememberFileDraft(directory, "report.md", "connected edit", "disk", "auto", "ses_a")
+    rememberFileDraft(directory, "report.md", "other session edit", "disk", "auto", "ses_b")
+    rememberFileDraft(directory, "report.md", "project edit", "disk")
+    discardFileDraft(directory, "report.md", "auto", "ses_a")
+    expect(recoverFileDraft(directory, "report.md", "disk", "auto", "ses_a")).toBe("disk")
+    expect(recoverFileDraft(directory, "report.md", "disk", "auto", "ses_b")).toBe("other session edit")
+    expect(recoverFileDraft(directory, "report.md", "disk")).toBe("project edit")
+  })
+
+  test("uses the same project draft for relative links and absolute read paths", () => {
+    rememberFileDraft(directory, path, "project edit", "saved")
+    expect(recoverFileDraft(directory, `${directory}/${path}`, "saved")).toBe("project edit")
+    discardFileDraft(directory, `${directory}/${path}`)
+    expect(recoverFileDraft(directory, path, "saved")).toBe("saved")
+  })
+
   test("blocks a browser unload while an unsaved draft exists", () => {
     rememberFileDraft(directory, path, "edited", "saved")
     const event = new Event("beforeunload", { cancelable: true }) as BeforeUnloadEvent

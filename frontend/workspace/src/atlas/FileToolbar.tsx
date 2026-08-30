@@ -138,6 +138,7 @@ export function FileToolbar(props: FileToolbarProps): JSX.Element {
             type="button"
             class="atlas-file-action"
             aria-label="Copy contents"
+            title="Copy contents"
             disabled={props.disabled}
             onClick={props.onCopy}
           >
@@ -150,6 +151,7 @@ export function FileToolbar(props: FileToolbarProps): JSX.Element {
             type="button"
             class="atlas-file-action"
             aria-label="Download file"
+            title="Download file"
             disabled={props.disabled}
             onClick={props.onDownload}
           >
@@ -157,12 +159,18 @@ export function FileToolbar(props: FileToolbarProps): JSX.Element {
             <span>Download</span>
           </button>
         </Show>
-        <Show when={props.onClose}>
-          <button type="button" class="atlas-file-close" aria-label="Close file" onClick={() => props.onClose?.()}>
-            <IconX size={16} strokeWidth={1.55} />
-          </button>
-        </Show>
       </div>
+      <Show when={props.onClose}>
+        <button
+          type="button"
+          class="atlas-file-close"
+          aria-label="Close file"
+          title="Close file"
+          onClick={() => props.onClose?.()}
+        >
+          <IconX size={16} strokeWidth={1.55} />
+        </button>
+      </Show>
     </header>
   )
 }

@@ -10,7 +10,8 @@ describe("session-scoped file requests", () => {
     const pane = read("./FilesPane.tsx")
     const preview = read("./FilePreview.tsx")
 
-    expect(explorer).toContain('const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)')
+    expect(explorer).toContain("props.file.sessionID")
+    expect(explorer).toContain("sessionID={sessionID()}")
     expect(explorer).toContain("readAccess(sdk.request, current)")
     expect(explorer).toContain("grantAccess(sdk.request, current, {")
     // The Files pane owns the listing now: without this the server lists the
@@ -51,8 +52,9 @@ describe("session-scoped file requests", () => {
     expect(manuscript).toContain('sdk.request.url("/file/raw", raw(path))')
     expect(manuscript).toContain('sdk.request.url("/file/raw", raw(figure.path))')
     expect(manuscript).toMatch(/"\/file\/publication",[\s\S]*?\n\s+query\(\),\n\s+\)/)
-    expect(manuscript).toContain("uiStore.openFile(props.directory, path, { scope: props.scope })")
-    expect(manuscript).toContain("uiStore.openFile(props.directory, result.path, { scope: props.scope })")
+    expect(manuscript).toContain("scope: props.openScope ?? props.scope")
+    expect(manuscript).toContain("uiStore.openFile(props.directory, target.path, target)")
+    expect(manuscript).toContain("openFile(result.path)")
   })
 
   test("keeps project-scoped drafts stable across session navigation and blocks stale artifact saves", () => {
@@ -61,7 +63,10 @@ describe("session-scoped file requests", () => {
     expect(preview).not.toContain("untrack(sessionID)")
     expect(preview).toContain("const activeSession = fileSessionID()")
     expect(preview).toContain("recoverFileDraft(")
-    expect(preview).toContain('resolvedScope() === "session" ? "session" : undefined')
+    expect(preview).toContain("fileReadSession({")
+    expect(preview).toContain("openScope={props.scope}")
+    expect(preview).toMatch(/recoverFileDraft\(\s*dir,\s*props.path,\s*text,\s*props.scope,/)
+    expect(preview).toMatch(/rememberFileDraft\(\s*directory\(\),\s*props.path,/)
     expect(preview).toContain("rememberFileDraft(")
     expect(preview).toContain("reconcileSavedDraft(view.draft, content, next)")
     expect(preview).toMatch(/const artifact = async \(\) => \{[\s\S]*if \(dirty\(\)\)[\s\S]*save file first/)

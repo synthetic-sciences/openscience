@@ -282,7 +282,7 @@ export namespace File {
       throw new HTTPException(403, { message: "Recovery data is protected" })
     }
     if (canonical && (await Instance.containsCanonicalPath(canonical))) return canonical
-    throw new Error(`Access denied: path escapes project directory`)
+    throw new HTTPException(403, { message: "Access denied: path escapes project directory" })
   }
 
   async function operate<T>(
@@ -1073,7 +1073,13 @@ export namespace File {
     const requested = relativeReference(reference)
     if (!requested) return
 
-    const rawRoots = [Instance.directory, ...(await SessionFilesystem.processReadRoots(options.sessionID))]
+    // Preview is brokered I/O, not a native process. Exact session-owned tool
+    // output grants are intentionally absent from processReadRoots(), but their
+    // owner must still be able to open a trajectory's output-file link.
+    const grants = await SessionFilesystem.list(options.sessionID)
+    const rawRoots = grants
+      .filter((grant) => grant.scope !== "once" && !grant.time.consumed && !grant.time.revoked)
+      .map((grant) => grant.path)
     const roots: Array<{ path: string; type: "file" | "directory" }> = []
     for (const raw of rawRoots) {
       const canonical = await Filesystem.canonical(raw)
@@ -1094,7 +1100,9 @@ export namespace File {
         (stat) => stat.isFile(),
         () => false,
       )
-      if (regular) matches.add(canonical)
+      if (!regular) return
+      if (!(await SessionFilesystem.allows({ sessionID: options.sessionID, path: canonical, access: "read" }))) return
+      matches.add(canonical)
     }
 
     const nested = requested.includes("/")
@@ -1111,7 +1119,7 @@ export namespace File {
     let complete = true
     for (const root of roots) {
       if (root.type === "file") {
-        if (path.basename(root.path) === requested) matches.add(root.path)
+        if (path.basename(root.path) === requested) await add(root.path, root.path)
         if (matches.size > 1) return
         continue
       }

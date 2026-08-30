@@ -7,6 +7,24 @@ import { Session } from "../../src/session"
 import { tmpdir } from "../fixture/fixture"
 
 describe("file content routes", () => {
+  test("reports project-boundary denial as 403 without exposing an external file", async () => {
+    await using external = await tmpdir({
+      init: (directory) => Bun.write(path.join(directory, "private.txt"), "external secret"),
+    })
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const query = new URLSearchParams({ path: path.join(external.path, "private.txt") })
+        for (const endpoint of ["content", "raw", "inspect", "provenance"]) {
+          const response = await FileRoutes().request(`/file/${endpoint}?${query}`)
+          expect(response.status).toBe(403)
+          expect(await response.text()).not.toContain("external secret")
+        }
+      },
+    })
+  })
+
   test("reports missing reads as 404 while explicit writes still create files", async () => {
     await using tmp = await tmpdir()
 

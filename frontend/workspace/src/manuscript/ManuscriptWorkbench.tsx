@@ -2,6 +2,7 @@ import { For, Show, createMemo, createResource, createSignal, type JSX } from "s
 import { Markdown } from "@synsci/ui/markdown"
 import { useSDK } from "@/context/sdk"
 import { uiStore } from "@/atlas/store/ui"
+import { linkedFileTarget, type FileOpenScope } from "@/atlas/file-viewer"
 import { toast } from "@/atlas/Toast"
 import { IconBookOpen, IconCheckCircle, IconDownload, IconFile, IconSearch } from "@/atlas/shared/Icon"
 import { FONT_CODE, FONT_MONO, FONT_SANS } from "@/styles/tokens"
@@ -49,6 +50,7 @@ export function ManuscriptWorkbench(props: {
   path: string
   sessionID?: string
   scope: FileScope
+  openScope?: FileOpenScope
   text: string
   dirty: boolean
   saving: boolean
@@ -159,7 +161,16 @@ export function ManuscriptWorkbench(props: {
     rewritePreviewImages(manuscript().body, props.path, (path) => sdk.request.url("/file/raw", raw(path))),
   )
   const file = (href: string) => localAssetPath(href, props.path)
-  const openFile = (path: string) => uiStore.openFile(props.directory, path, { scope: props.scope })
+  const openFile = (path: string) => {
+    const target = linkedFileTarget({
+      directory: props.directory,
+      path,
+      scope: props.openScope ?? props.scope,
+      resolved: props.scope,
+      sessionID: props.sessionID,
+    })
+    uiStore.openFile(props.directory, target.path, target)
+  }
 
   const toggle = (next: Panel) => setPanel((current) => (current === next ? undefined : next))
   const openPublish = () => {
@@ -301,7 +312,7 @@ export function ManuscriptWorkbench(props: {
     const result = (await response.json()) as PublicationResult
     toast.success(`${format.toUpperCase()} ready`, result.path)
     if (!["docx", "pptx"].includes(result.format)) {
-      uiStore.openFile(props.directory, result.path, { scope: props.scope })
+      openFile(result.path)
       return
     }
     const download = await sdk.request("/file/raw", undefined, raw(result.path, false))

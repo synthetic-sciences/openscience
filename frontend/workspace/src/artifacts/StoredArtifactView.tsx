@@ -12,6 +12,7 @@ import {
 } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { TextField } from "@synsci/ui/text-field"
+import { MarkdownImages } from "@synsci/ui/markdown"
 import { useSDK } from "@/context/sdk"
 import { FONT_MONO, FONT_SANS } from "@/styles/tokens"
 import { IconDownload, IconEdit, IconFile, IconMoreH, IconTrash } from "@/atlas/shared/Icon"
@@ -21,9 +22,12 @@ import { PdfViewer } from "@/science/renderers/documents/PdfViewer"
 import { moveStoredArtifactMenuFocus } from "@/artifacts/stored-artifact-menu"
 import { TextContentView } from "@/atlas/files/TextContentView"
 import { resolveViewer } from "@/atlas/files/viewer-registry"
+import { fileErrorMessage, isFileRequestCancellation } from "@/atlas/file-viewer"
+import { createStoredArtifactPreview } from "@/artifacts/preview"
+import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
+import { rawFileQuery } from "@/utils/project-file"
 import {
   downloadBlob,
-  loadStoredArtifactPreview,
   requestStoredArtifact,
   STORED_ARTIFACT_PREVIEW_LIMIT,
   STORED_PDF_PREVIEW_LIMIT,
@@ -56,6 +60,7 @@ function label(version: StoredArtifactVersion | undefined, fallback: string) {
 
 export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Element {
   const sdk = useSDK()
+  const previewScope = () => `${sdk.url}\n${sdk.scope}`
   const [action, setAction] = createSignal<Action>()
   const [name, setName] = createSignal(props.artifact.title)
   const [busy, setBusy] = createSignal(false)
@@ -63,23 +68,30 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
   let actionTrigger: HTMLButtonElement | undefined
   let actionPanelElement: HTMLElement | undefined
   const [detail, detailActions] = createResource(
-    () => props.artifact.id,
-    async (id) => {
+    () => ({ scope: previewScope(), id: props.artifact.id }),
+    async ({ scope, id }) => {
       const response = await sdk.request(`/file/artifact-store/${encodeURIComponent(id)}`)
       if (!response.ok) throw new Error(`Artifact record unavailable (${response.status})`)
       const value = normalizeStoredArtifactDetail(await response.json())
-      if (!value) throw new Error("Artifact record is malformed")
-      return value
+      if (!value || value.id !== id) throw new Error("Artifact record is malformed")
+      return { scope, record: value }
     },
   )
+  const record = () => {
+    if (detail.error) return
+    const current = detail.latest
+    if (current?.scope !== previewScope() || current.record.id !== props.artifact.id) return
+    return current.record
+  }
   createEffect(() => {
     props.artifact.id
     setAction()
     setName(props.artifact.title)
   })
   createEffect(() => {
-    if (action() === "rename" || !detail.latest?.title) return
-    setName(detail.latest.title)
+    const current = record()
+    if (action() === "rename" || !current?.title) return
+    setName(current.title)
   })
   createEffect(() => {
     if (!action()) return
@@ -93,29 +105,26 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
     onCleanup(() => window.removeEventListener("openscience:artifacts-changed", refresh))
   })
   const selected = createMemo(() => {
-    const current = detail.latest
+    const current = record()
     if (!current || current.id !== props.artifact.id) return
     return current.current
   })
-  const previewAbort = { current: undefined as AbortController | undefined }
-  createEffect(() => {
-    props.artifact.id
-    previewAbort.current?.abort()
-  })
-  const [preview] = createResource(
-    () => {
-      const version = selected()
-      if (!version) return
-      return [props.artifact.id, version] as const
-    },
-    ([artifactID, version]) => {
-      previewAbort.current?.abort()
-      const controller = new AbortController()
-      previewAbort.current = controller
-      return loadStoredArtifactPreview(sdk.request, artifactID, version, controller.signal)
-    },
-  )
-  onCleanup(() => previewAbort.current?.abort())
+  const [preview, previewActions] = createStoredArtifactPreview(sdk.request, () => ({
+    scope: previewScope(),
+    artifactID: props.artifact.id,
+    version: selected(),
+  }))
+  const previewData = () => {
+    if (preview.error) return
+    const current = preview.latest
+    if (
+      current?.scope !== previewScope() ||
+      current.artifactID !== props.artifact.id ||
+      current.versionID !== selected()?.id
+    )
+      return
+    return current.data
+  }
   const download = async (version: StoredArtifactVersion) => {
     if (downloading()) return
     setDownloading(true)
@@ -171,6 +180,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
 
   return (
     <div
+      class="atlas-file-view atlas-stored-artifact"
       role="region"
       aria-label={`Saved Result ${props.artifact.title}`}
       style={{
@@ -178,7 +188,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
         "min-height": 0,
         display: "flex",
         "flex-direction": "column",
-        background: "var(--background-weak)",
+        background: "var(--color-surface-solid)",
         "font-family": FONT_SANS,
       }}
     >
@@ -187,9 +197,9 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
           <IconFile size={18} strokeWidth={1.5} />
         </span>
         <span style={{ flex: 1, "min-width": 0 }}>
-          <strong style={title()}>{detail.latest?.title ?? props.artifact.title}</strong>
+          <strong style={title()}>{record()?.title ?? props.artifact.title}</strong>
           <span style={meta()}>
-            {label(selected(), detail.latest?.kind ?? props.artifact.kind)} ·{" "}
+            {label(selected(), record()?.kind ?? props.artifact.kind)} ·{" "}
             {size(selected()?.size ?? props.artifact.current.size)}
           </span>
         </span>
@@ -349,13 +359,23 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
           <Show
             when={!detail.error && selected()}
             fallback={
-              <p role="alert" style={empty()}>
-                {detail.error instanceof Error ? detail.error.message : "Artifact record unavailable."}
-              </p>
+              <section class="atlas-file-error" role="alert">
+                <h2>Couldn’t open this file</h2>
+                <p>{detail.error instanceof Error ? detail.error.message : "Artifact record unavailable."}</p>
+                <Button type="button" size="small" variant="secondary" onClick={() => void detailActions.refetch()}>
+                  Retry
+                </Button>
+              </section>
             }
           >
             {(version) => (
-              <Preview version={version()} data={preview.latest} loading={preview.loading} error={preview.error} />
+              <Preview
+                version={version()}
+                data={previewData()}
+                loading={preview.loading}
+                error={preview.error}
+                onRetry={() => void previewActions.refetch()}
+              />
             )}
           </Show>
         </Show>
@@ -369,7 +389,27 @@ function Preview(props: {
   data?: StoredArtifactPreview
   loading: boolean
   error?: unknown
+  onRetry: () => void
 }): JSX.Element {
+  const sdk = useSDK()
+  const file = (href: string) => localAssetPath(href, props.version.sourcePath)
+  const imageUrl = (src: string) =>
+    assetUrl(src, {
+      base: props.version.sourcePath,
+      url: (path) =>
+        sdk.request.url(
+          "/file/raw",
+          rawFileQuery({
+            directory: sdk.directory,
+            path,
+            sessionID: props.version.sessionID,
+            scope: "session",
+            inline: true,
+          }),
+        ),
+    })
+  const openFile = (path: string) =>
+    uiStore.openFile(sdk.directory, path, { scope: "auto", sessionID: props.version.sessionID })
   const kind = () => storedArtifactPreviewKind(props.version)
   const viewer = () =>
     resolveViewer({
@@ -379,7 +419,9 @@ function Preview(props: {
     })
   const limit = () => (kind() === "pdf" ? STORED_PDF_PREVIEW_LIMIT : STORED_ARTIFACT_PREVIEW_LIMIT)
   const error = () =>
-    props.error instanceof Error ? props.error.message : String(props.error || "Preview unavailable.")
+    isFileRequestCancellation(props.error)
+      ? "The connection was interrupted. Try opening this preview again."
+      : fileErrorMessage(props.error)
   return (
     <Switch
       fallback={
@@ -399,13 +441,17 @@ function Preview(props: {
           This Result is larger than the {size(limit())} browser preview limit. Download preserves exact bytes.
         </p>
       </Match>
-      <Match when={props.error !== undefined}>
-        <p role="alert" style={empty()}>
-          {error()}
-        </p>
-      </Match>
       <Match when={props.loading}>
         <p style={empty()}>Loading preview…</p>
+      </Match>
+      <Match when={props.error !== undefined}>
+        <section class="atlas-file-error" role="alert">
+          <h2>Couldn’t open this preview</h2>
+          <p>{error()}</p>
+          <Button type="button" size="small" variant="secondary" onClick={props.onRetry}>
+            Retry
+          </Button>
+        </section>
       </Match>
       <Match when={props.data?.kind === "image" ? props.data : undefined}>
         {(data) => <img src={data().data} alt={props.version.filename} style={image()} />}
@@ -415,8 +461,10 @@ function Preview(props: {
       </Match>
       <Match when={props.data?.kind === "text" ? props.data : undefined}>
         {(data) => (
-          <div style={viewer().kind === "markdown" ? document() : pre()}>
-            <TextContentView name={props.version.filename} text={data().data} viewer={viewer()} />
+          <div style={viewer().kind === "markdown" || viewer().kind === "notebook" ? undefined : pre()}>
+            <MarkdownImages resolve={imageUrl} resolveFile={file} openFile={openFile}>
+              <TextContentView name={props.version.filename} text={data().data} viewer={viewer()} />
+            </MarkdownImages>
           </div>
         )}
       </Match>
@@ -536,14 +584,6 @@ const image = (): JSX.CSSProperties => ({
   "max-height": "calc(100vh - 220px)",
   margin: "16px auto",
   "object-fit": "contain",
-})
-const document = (): JSX.CSSProperties => ({
-  margin: "0 auto",
-  padding: "clamp(24px, 5cqi, 44px) clamp(20px, 5cqi, 40px) 56px",
-  width: "min(100%, 760px)",
-  color: "var(--text-strong)",
-  "font-size": "15px",
-  "line-height": 1.65,
 })
 const pre = (): JSX.CSSProperties => ({
   margin: 0,

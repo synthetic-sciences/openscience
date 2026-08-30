@@ -7,32 +7,31 @@
   overflow: hidden;
   background: var(--color-surface-solid);
   color: var(--color-text);
-  font-family: var(--font-sans);
-  /* The narrow-layout rules below were written as viewport media queries, back
-     when this view only ever filled the window. The Files pane now mounts it in
-     a ~390px column of a wide window, where those queries never fire and the
-     toolbar overflows a container that clips it — putting Download out of
-     reach. Naming a container lets the same rules key on the width that
-     actually applies. */
+  font-family: var(--font-family-sans);
+  font-optical-sizing: auto;
+  font-synthesis: none;
+  /* Measure the preview pane, not the window that contains it. */
   container: atlas-file-view / inline-size;
 }
 
 .atlas-file-toolbar {
   position: relative;
   z-index: 2;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "identity controls close";
   min-width: 0;
   min-height: 48px;
   flex: none;
   align-items: center;
-  justify-content: space-between;
-  gap: 9px;
-  padding: 7px 10px;
+  gap: 8px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--color-border-weak-base);
   background: var(--color-surface-solid);
 }
 
 .atlas-file-identity {
+  grid-area: identity;
   display: flex;
   min-width: 0;
   flex: 1;
@@ -42,12 +41,12 @@
 
 .atlas-file-kind-icon {
   display: inline-grid;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex: none;
   place-items: center;
   border-radius: var(--atlas-radius-xs);
-  background: var(--color-bg-subtle);
+  background: transparent;
 }
 
 .atlas-file-kind-icon > svg {
@@ -67,7 +66,7 @@
   overflow: hidden;
   color: var(--color-text);
   font-size: 14px;
-  font-weight: var(--font-weight-emphasis);
+  font-weight: var(--font-weight-medium);
   letter-spacing: -0.006em;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -78,8 +77,8 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 6px;
-  margin-top: 1px;
+  gap: 4px;
+  margin-top: 4px;
   color: var(--color-text-faint);
   font-size: 11px;
   line-height: 1.3;
@@ -105,7 +104,11 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+}
+
+.atlas-file-controls {
+  grid-area: controls;
 }
 
 .atlas-file-modes {
@@ -136,8 +139,8 @@
 }
 
 .atlas-file-mode {
-  min-height: 30px;
-  padding: 0 9px;
+  min-height: 32px;
+  padding: 0 8px;
   background: transparent;
   color: var(--color-text-faint);
   font-size: 12px;
@@ -176,8 +179,22 @@
 .atlas-file-action {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 9px;
+  width: 32px;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+}
+
+.atlas-file-action span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .atlas-file-button:hover:not(:disabled),
@@ -193,6 +210,7 @@
 }
 
 .atlas-file-close {
+  grid-area: close;
   display: inline-grid;
   width: 32px;
   height: 32px;
@@ -201,6 +219,14 @@
   border: 1px solid transparent;
   background: transparent;
   color: var(--color-text-faint);
+}
+
+.atlas-file-mode:focus-visible,
+.atlas-file-button:focus-visible,
+.atlas-file-action:focus-visible,
+.atlas-file-close:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .atlas-file-mode:disabled,
@@ -228,7 +254,7 @@
   min-height: 0;
   flex: 1;
   overflow: hidden;
-  background: var(--color-bg);
+  background: var(--color-surface-solid);
 }
 
 .atlas-file-scroll {
@@ -247,8 +273,8 @@
 }
 
 .atlas-file-loading {
-  width: min(100%, 820px);
-  padding: clamp(24px, 5vw, 48px) clamp(18px, 5vw, 48px);
+  width: min(100%, calc(72ch + 48px));
+  padding: 24px;
   margin: 0 auto;
   color: var(--color-text-faint);
   font-size: 13px;
@@ -258,7 +284,7 @@
 .atlas-file-loading-line {
   overflow: hidden;
   height: 12px;
-  margin-bottom: 13px;
+  margin-bottom: 16px;
   border-radius: var(--atlas-radius-md);
   background: var(--color-bg-elevated);
   animation: atlas-file-loading 1.1s ease-in-out infinite alternate;
@@ -267,7 +293,7 @@
 .atlas-file-loading-heading {
   width: 42%;
   height: 24px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .atlas-file-loading-line {
@@ -276,7 +302,7 @@
 
 .atlas-file-loading-line.is-short {
   width: 68%;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 @keyframes atlas-file-loading {
@@ -328,103 +354,163 @@
 
 .atlas-file-document {
   box-sizing: border-box;
-  width: min(100%, 820px);
+  width: min(100%, calc(72ch + 48px));
   min-height: 100%;
-  padding: clamp(30px, 5cqi, 52px) clamp(20px, 5cqi, 48px) 64px;
+  padding: 24px 24px 48px;
   margin: 0 auto;
-  background: var(--color-surface-solid);
+  background: transparent;
+  font-family: var(--font-family-sans);
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .atlas-file-document .atlas-md {
   color: var(--color-text);
-  font-size: 15px;
-  line-height: 1.65;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.7;
 }
 
 .atlas-file-document .atlas-md h1,
 .atlas-file-document .atlas-md h2,
 .atlas-file-document .atlas-md h3,
-.atlas-file-document .atlas-md h4 {
+.atlas-file-document .atlas-md h4,
+.atlas-file-document .atlas-md h5,
+.atlas-file-document .atlas-md h6 {
   scroll-margin-top: 24px;
   color: var(--color-text);
   font-weight: var(--font-weight-emphasis);
-  letter-spacing: -0.022em;
+  font-family: inherit;
+  letter-spacing: -0.015em;
   text-wrap: balance;
 }
 
 .atlas-file-document .atlas-md h1 {
-  margin: 0 0 22px;
-  font-size: clamp(24px, 3cqi, 30px);
-  line-height: 1.18;
-}
-
-.atlas-file-document .atlas-md h2 {
-  margin: 32px 0 11px;
-  font-size: 19px;
-  line-height: 1.25;
-}
-
-.atlas-file-document .atlas-md h3 {
-  margin: 26px 0 9px;
-  font-size: 16px;
+  margin: 32px 0 16px;
+  font-size: 24px;
   line-height: 1.3;
 }
 
+.atlas-file-document .atlas-md h2 {
+  margin: 32px 0 12px;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.atlas-file-document .atlas-md h3 {
+  margin: 24px 0 8px;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
 .atlas-file-document .atlas-md h4 {
-  margin: 22px 0 7px;
+  margin: 24px 0 8px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.atlas-file-document .atlas-md h5,
+.atlas-file-document .atlas-md h6 {
+  margin: 24px 0 8px;
   font-size: 14px;
-  line-height: 1.35;
+  line-height: 1.5;
+}
+
+.atlas-file-document .atlas-md > :first-child {
+  margin-top: 0;
+}
+
+.atlas-file-document .atlas-md > :last-child {
+  margin-bottom: 0;
 }
 
 .atlas-file-document .atlas-md p {
-  margin: 0 0 13px;
+  margin: 0 0 16px;
   text-wrap: pretty;
 }
 
 .atlas-file-document .atlas-md ul,
 .atlas-file-document .atlas-md ol {
-  margin: 0 0 14px;
-  padding-left: 22px;
+  margin: 0 0 16px;
+  padding-left: 24px;
 }
 
 .atlas-file-document .atlas-md li {
-  margin: 3px 0;
-  line-height: 1.6;
+  margin: 4px 0;
+  line-height: inherit;
+}
+
+.atlas-file-document .atlas-md li > ul,
+.atlas-file-document .atlas-md li > ol {
+  margin: 4px 0;
+}
+
+.atlas-file-document .atlas-md li::marker {
+  font: inherit;
+  color: var(--color-text-muted);
 }
 
 .atlas-file-document .atlas-md blockquote {
-  margin: 18px 0;
-  padding: 2px 0 2px 14px;
+  margin: 16px 0;
+  padding: 4px 0 4px 16px;
+  border-left: 2px solid var(--color-border-strong);
+  font-style: normal;
+}
+
+.atlas-file-document .atlas-md blockquote > :last-child {
+  margin-bottom: 0;
 }
 
 .atlas-file-document .atlas-md hr {
-  margin: 26px 0;
+  margin: 24px 0;
 }
 
 .atlas-file-document .atlas-md pre,
 .atlas-file-document .atlas-md pre.atlas-code-block {
-  margin: 17px 0;
-  padding: 12px 14px;
+  max-width: 100%;
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-mono);
   font-size: 13px;
   line-height: 1.6;
+  overflow-x: auto;
+  overflow-wrap: normal;
+  scrollbar-width: thin;
+  white-space: pre;
 }
 
 .atlas-file-document .atlas-md code {
   font-size: 13px;
+  font-family: var(--font-family-mono);
+}
+
+.atlas-file-document .atlas-md :not(pre) > code {
+  border-radius: var(--radius-xs);
+  padding: 1px 4px;
+}
+
+.atlas-file-document .atlas-md [data-component="markdown-code"]:focus-within [data-slot="markdown-copy-button"] {
+  opacity: 1;
+}
+
+.atlas-file-document .atlas-md a {
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: auto;
 }
 
 .atlas-file-document .atlas-md img {
   display: block;
   max-width: 100%;
   height: auto;
-  margin: 22px auto;
+  margin: 16px auto;
   border: 0;
   border-radius: var(--atlas-radius-sm);
   background: transparent;
 }
 
 .atlas-file-document-lead {
-  margin-bottom: 30px;
+  margin-bottom: 24px;
 }
 
 .atlas-file-document-lead[data-align="center"] {
@@ -452,7 +538,7 @@
   display: flex;
   align-items: center;
   justify-content: inherit;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -475,15 +561,69 @@
 .atlas-file-document .atlas-md table {
   display: block;
   max-width: 100%;
-  margin: 17px 0;
+  margin: 16px 0;
   overflow-x: auto;
   font-size: 13px;
-  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  scrollbar-width: thin;
 }
 
 .atlas-file-document .atlas-md th,
 .atlas-file-document .atlas-md td {
-  padding: 8px 10px;
+  min-width: 112px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+  white-space: normal;
+}
+
+.atlas-file-document .atlas-md th {
+  color: var(--color-text);
+  font-size: inherit;
+  font-weight: var(--font-weight-medium);
+  background: transparent;
+}
+
+.atlas-file-notebook {
+  display: grid;
+  align-content: start;
+  gap: 24px;
+}
+
+.atlas-file-notebook-cell {
+  min-width: 0;
+}
+
+.atlas-file-notebook-cell[data-cell-type="code"] {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+}
+
+.atlas-file-notebook-label {
+  padding: 8px 16px 0;
+  color: var(--color-text-faint);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-file-notebook-code {
+  margin: 0;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  scrollbar-width: thin;
+}
+
+.atlas-file-notebook-output {
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-solid);
 }
 
 .atlas-file-pdf,
@@ -636,157 +776,36 @@
   margin: 0;
 }
 
-@media (max-width: 760px) {
-  .atlas-file-toolbar {
-    align-items: center;
-    flex-direction: row;
-    gap: 5px;
-    padding: 6px 8px;
-  }
-
-  .atlas-file-identity {
-    width: auto;
-    min-width: 72px;
-    padding-right: 0;
-  }
-
-  .atlas-file-controls {
-    width: auto;
-    min-width: 0;
-    overflow-x: auto;
-    gap: 3px;
-    scrollbar-width: none;
-  }
-
-  .atlas-file-controls::-webkit-scrollbar {
-    display: none;
-  }
-
-  .atlas-file-meta-separator,
-  .atlas-file-location {
-    display: none;
-  }
-
-  .atlas-file-action span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  .atlas-file-action {
-    width: 32px;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .atlas-file-document {
-    padding: 28px 20px 52px;
-  }
-}
-
-@media (max-width: 520px) {
-  .atlas-file-meta {
-    display: none;
-  }
-
-  .atlas-file-mode,
-  .atlas-file-button,
-  .atlas-file-action {
-    min-height: 34px;
-  }
-
-  .atlas-file-action {
-    width: 34px;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .atlas-file-document {
-    padding-inline: 18px;
-  }
-}
-
-/* Same two breakpoints, measured against the view's own width so they hold
-   inside the Files pane as well as in a narrow window. */
 @container atlas-file-view (max-width: 760px) {
-  .atlas-file-toolbar {
-    align-items: center;
-    flex-direction: row;
-    gap: 5px;
-    padding: 6px 8px;
-  }
-
-  .atlas-file-identity {
-    width: auto;
-    min-width: 72px;
-    padding-right: 0;
-  }
-
-  .atlas-file-controls {
-    width: auto;
-    min-width: 0;
-    overflow-x: auto;
-    gap: 3px;
-    scrollbar-width: none;
-  }
-
-  .atlas-file-controls::-webkit-scrollbar {
-    display: none;
-  }
-
   .atlas-file-meta-separator,
   .atlas-file-location {
     display: none;
-  }
-
-  .atlas-file-action span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  .atlas-file-action {
-    width: 32px;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .atlas-file-document {
-    padding: 28px 20px 52px;
   }
 }
 
 @container atlas-file-view (max-width: 520px) {
+  .atlas-file-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "identity close" "controls controls";
+    gap: 8px;
+  }
+
   .atlas-file-meta {
     display: none;
   }
 
-  .atlas-file-mode,
-  .atlas-file-button,
-  .atlas-file-action {
-    min-height: 34px;
+  .atlas-file-controls {
+    min-width: 0;
+    flex-wrap: wrap;
   }
 
-  .atlas-file-action {
-    width: 34px;
-    justify-content: center;
-    padding: 0;
+  .atlas-file-modes {
+    margin-right: auto;
   }
 
+  .atlas-file-loading,
   .atlas-file-document {
-    padding-inline: 18px;
+    padding-inline: 16px;
   }
 }
 

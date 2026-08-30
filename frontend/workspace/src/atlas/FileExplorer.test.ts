@@ -40,4 +40,13 @@ describe("file explorer surface", () => {
     expect(value).toContain('class="external-file-access"')
     expect(value).not.toContain('"font-weight": 600')
   })
+
+  test("keeps connected file permissions and reads pinned to the originating session", () => {
+    const value = source()
+
+    expect(value).toContain("props.file.directory || sdk.directory")
+    expect(value).toContain("props.file.sessionID ??")
+    expect(value).toContain("parseFilesystemSnapshot(snapshot.latest, current)")
+    expect(value).toContain("sessionID={sessionID()}")
+  })
 })

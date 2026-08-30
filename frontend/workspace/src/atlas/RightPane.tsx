@@ -267,7 +267,10 @@ export function RightPane(
   const selectedFile = (tab: Extract<WorkTab, { kind: "file" }>) => {
     const current = uiStore.file()
     return (
-      current?.directory === tab.file.directory && current.path === tab.file.path && current.scope === tab.file.scope
+      current?.directory === tab.file.directory &&
+      current.path === tab.file.path &&
+      current.scope === tab.file.scope &&
+      current.sessionID === tab.file.sessionID
     )
   }
   const visibleFile = (tab: Extract<WorkTab, { kind: "file" }>) =>
@@ -287,7 +290,8 @@ export function RightPane(
       if (!confirmed) return
       markDirty(target.id, false)
     }
-    if (target?.kind === "file") discardFileDraft(target.file.directory, target.file.path, target.file.scope)
+    if (target?.kind === "file")
+      discardFileDraft(target.file.directory, target.file.path, target.file.scope, target.file.sessionID)
     uiStore.closeWorkTab(id)
   }
   const closePane = async () => {
@@ -304,7 +308,7 @@ export function RightPane(
     }
     for (const id of pending) {
       const tab = fileTabs().find((item) => item.id === id)
-      if (tab) discardFileDraft(tab.file.directory, tab.file.path, tab.file.scope)
+      if (tab) discardFileDraft(tab.file.directory, tab.file.path, tab.file.scope, tab.file.sessionID)
       uiStore.closeWorkTab(id)
     }
     uiStore.closeContext()
@@ -521,7 +525,7 @@ export function RightPane(
                       directory={tab.file.directory}
                       path={tab.file.path}
                       scope={tab.file.scope ?? "project"}
-                      sessionID={session() === "new" ? undefined : session()}
+                      sessionID={tab.file.sessionID ?? (session() === "new" ? undefined : session())}
                       subtitle={
                         tab.file.scope === "auto"
                           ? undefined

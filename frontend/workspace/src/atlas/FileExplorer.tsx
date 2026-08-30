@@ -69,15 +69,22 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
     busy: false,
     error: undefined as string | undefined,
   })
-  const projectRoot = () => sdk.directory || sync.data.path.directory || sync.project?.worktree || ""
-  const sessionID = () => (params.id && params.id !== "new" ? params.id : undefined)
+  const projectRoot = () =>
+    props.file.directory || sdk.directory || sync.data.path.directory || sync.project?.worktree || ""
+  const sessionID = () => props.file.sessionID ?? (params.id && params.id !== "new" ? params.id : undefined)
   const identity = (): FilesystemIdentity | undefined => {
     const session = sessionID()
     if (!session || !projectRoot()) return
     return { sessionID: session, projectID: sdk.projectID, directory: projectRoot() }
   }
   const [snapshot, { refetch }] = createResource(identity, (current) => readAccess(sdk.request, current))
-  const grant = createMemo(() => findFilesystemGrant(snapshot.latest, props.file.path, "read"))
+  const grant = createMemo(() => {
+    const current = identity()
+    if (!current) return
+    // Resources retain their previous value during navigation. That value is
+    // usable only for the exact project and originating session of this tab.
+    return findFilesystemGrant(parseFilesystemSnapshot(snapshot.latest, current), props.file.path, "read")
+  })
   const request = () => {
     const current = identity()
     if (!current || state.busy) return
@@ -99,6 +106,7 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
           <FileView
             directory={projectRoot()}
             path={props.file.path}
+            sessionID={sessionID()}
             subtitle={`Connected folder · ${fileSourceName(current().path)}`}
             active={props.active}
             writable={current().access === "write"}

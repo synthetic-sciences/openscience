@@ -1088,6 +1088,42 @@ describe("session filesystem grants", () => {
 })
 
 describe("file access uses session grants", () => {
+  test("resolves session-owned tool output links without granting sibling or process access", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const sibling = await Session.create({})
+      await using cleanup = { [Symbol.asyncDispose]: () => Session.remove(sibling.id) }
+      const output = await Truncate.output("trajectory evidence\n".repeat(20), {
+        maxLines: 2,
+        sessionID: session.id,
+      })
+      if (!output.truncated) throw new Error("expected a managed tool output")
+      const target = await fs.realpath(output.outputPath)
+      const name = path.basename(target)
+      expect(await SessionFilesystem.processReadRoots(session.id)).not.toContain(target)
+      expect(await File.resolveReference(name, { sessionID: session.id })).toBe(target)
+      expect((await File.read(target, { sessionID: session.id })).content).toContain("trajectory evidence")
+      expect(await File.resolveReference(name, { sessionID: sibling.id })).toBeUndefined()
+      await expect(File.read(target, { sessionID: sibling.id })).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+      const grant = (await SessionFilesystem.list(session.id)).find((item) => item.path === target && item.source === "tool")
+      if (!grant) throw new Error("missing tool output grant")
+      await SessionFilesystem.revoke(session.id, grant.id)
+      expect(await File.resolveReference(name, { sessionID: session.id })).toBeUndefined()
+    })
+  })
+
+  test("does not resolve a project file after the session's project read grant is revoked", async () => {
+    await using tmp = await tmpdir({
+      init: (directory) => Bun.write(path.join(directory, "revoked.csv"), "value\nprivate\n"),
+    })
+    await withSession(tmp.path, async (session) => {
+      expect(await File.resolveReference("revoked.csv", { sessionID: session.id })).toBe(path.join(tmp.path, "revoked.csv"))
+      const grants = (await SessionFilesystem.list(session.id)).filter((grant) => grant.path === tmp.path)
+      for (const grant of grants) await SessionFilesystem.revoke(session.id, grant.id)
+      expect(await File.resolveReference("revoked.csv", { sessionID: session.id })).toBeUndefined()
+    })
+  })
+
   test("resolves chat file references across connected project roots without guessing ambiguous files", async () => {
     await using source = await tmpdir({
       init: async (directory) => {
