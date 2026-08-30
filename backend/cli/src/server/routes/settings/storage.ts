@@ -11,7 +11,7 @@ import { Lock } from "@/util/lock"
 
 const pointerPath = path.join(Global.Path.config, "data-location")
 
-function allocatedBytes(stat: Awaited<ReturnType<typeof fs.stat>>) {
+function allocatedBytes(stat: NonNullable<Awaited<ReturnType<typeof fs.stat>>>) {
   const blocks = Number(stat.blocks)
   const allocated = blocks * 512
   // A sparse file can legitimately occupy zero blocks while exposing a large

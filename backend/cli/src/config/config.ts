@@ -225,6 +225,9 @@ export namespace Config {
       }
     }
 
+    result.billing = { ...result.billing, llm: "byok" as const }
+    execution.billing = { ...execution.billing, llm: "byok" as const }
+
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode ?? {})) {
       result.agent = mergeDeep(result.agent ?? {}, {
@@ -1431,7 +1434,7 @@ export namespace Config {
         .catch(() => {})
     }
 
-    return result
+    return { ...result, billing: { ...result.billing, llm: "byok" as const } }
   })
 
   async function loadFile(filepath: string): Promise<Info> {

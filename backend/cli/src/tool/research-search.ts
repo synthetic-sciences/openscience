@@ -56,7 +56,10 @@ export type ResearchSearchMetadata = {
 
 const completed = (value: unknown) => JSON.stringify(value, null, 2)
 
-const unavailable = (input: Params, message: string) => ({
+const unavailable = (
+  input: Params,
+  message: string,
+): { output: string; title: string; metadata: ResearchSearchMetadata } => ({
   output: completed({
     status: "partial",
     type: "search_unavailable",

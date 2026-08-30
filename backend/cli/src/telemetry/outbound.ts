@@ -64,7 +64,7 @@ export type Status = {
   analyticsEnabled: boolean
   researchContentEnabled: boolean
   userOwnedContentEnabled: boolean
-  source: "default"
+  source: "default" | "account" | "local"
   signedIn: boolean
   consentVersion: string
   pending: boolean
@@ -140,46 +140,142 @@ export function telemetryIdentifier(value: string): string {
   return `local:sha256:${createHash("sha256").update(value).digest("hex")}`
 }
 
-const done = async (..._args: unknown[]): Promise<void> => undefined
+type SessionStartedInput = { sessionID: string; session: unknown }
+type SessionCompletedInput = { sessionID: string; reason: string; session?: unknown; messageID?: string }
+type UserMessageInput = {
+  sessionID: string
+  messageID?: string
+  route?: string
+  provider?: string
+  model?: string
+  message: unknown
+  parts: unknown
+}
+type ModelRequestInput = {
+  sessionID: string
+  messageID: string
+  attempt: number
+  route: string
+  provider: string
+  model: string
+  system: unknown
+  messages: unknown
+  tools: unknown
+  parameters: unknown
+}
+type ModelResponseInput = {
+  sessionID: string
+  messageID: string
+  attempt: number
+  route: string
+  provider: string
+  model: string
+  message: unknown
+  parts: unknown
+  tokens?: unknown
+  finish?: unknown
+}
+type ModelUsageInput = {
+  sessionID: string
+  messageID: string
+  operationID: string
+  attempt: number
+  route: string
+  provider: string
+  model: string
+  tokens: unknown
+  cost: number
+}
+type AssistantMessageInput = {
+  sessionID: string
+  messageID: string
+  attempt: number
+  route: string
+  provider: string
+  model: string
+  message: unknown
+  parts: unknown
+}
+type ErrorInput = {
+  sessionID: string
+  messageID?: string
+  attempt?: number
+  parentSpanID?: string
+  route?: string
+  provider?: string
+  model?: string
+  error: unknown
+  context?: unknown
+}
+type RetryInput = {
+  sessionID: string
+  messageID: string
+  attempt: number
+  delay?: number
+  route?: string
+  provider?: string
+  model?: string
+  error?: unknown
+}
+
+const done = async (..._args: unknown[]): Promise<boolean> => false
 
 export namespace OutboundTelemetry {
   export const resetAccountSession = done
   export const initializeAccount = done
-  export async function preserveConsentForSession(): Promise<boolean> {
+  export async function preserveConsentForSession(_session?: unknown): Promise<boolean> {
     return true
   }
   export async function retryPendingConsent(): Promise<boolean> {
     return true
   }
-  export async function status(): Promise<Status> {
+  export async function status(_refresh = false): Promise<Status> {
     return disabledStatus()
   }
   export async function enabled(): Promise<boolean> {
     return false
   }
-  export async function setAnalytics(): Promise<Status> {
+  export async function setAnalytics(_enabled?: boolean): Promise<Status> {
     return disabledStatus()
   }
-  export async function setUserOwned(): Promise<Status> {
+  export async function setUserOwned(_enabled?: boolean): Promise<Status> {
     return disabledStatus()
   }
   export async function requestDeletion(): Promise<{ ok: boolean; message?: string }> {
     return { ok: true }
   }
   export const flush = done
-  export async function drain(): Promise<DrainResult> {
+  export async function drain(_options?: { timeoutMs?: number }): Promise<DrainResult> {
     return { captured: true, flushed: true, timedOut: false, pendingEvents: 0 }
   }
-  export const sessionStarted = done
-  export const sessionCompleted = done
-  export const userMessage = done
-  export const modelRequest = done
-  export const modelResponse = done
-  export const modelUsage = done
-  export const assistantMessage = done
+  export async function sessionStarted(_input: SessionStartedInput): Promise<boolean> {
+    return false
+  }
+  export async function sessionCompleted(_input: SessionCompletedInput): Promise<boolean> {
+    return false
+  }
+  export async function userMessage(_input: UserMessageInput): Promise<boolean> {
+    return false
+  }
+  export async function modelRequest(_input: ModelRequestInput): Promise<boolean> {
+    return false
+  }
+  export async function modelResponse(_input: ModelResponseInput): Promise<boolean> {
+    return false
+  }
+  export async function modelUsage(_input: ModelUsageInput): Promise<boolean> {
+    return false
+  }
+  export async function assistantMessage(_input: AssistantMessageInput): Promise<boolean> {
+    return false
+  }
   export const assistant = done
   export const tool = done
   export const artifact = done
-  export const error = done
-  export const retry = done
+  export async function error(_input: ErrorInput): Promise<boolean> {
+    return false
+  }
+  export async function retry(_input: RetryInput): Promise<boolean> {
+    return false
+  }
 }

@@ -430,7 +430,7 @@ export namespace ComputeSettings {
   async function update(fn: (stored: Stored) => void | Promise<void>): Promise<Stored> {
     const result: { value?: Stored } = {}
     await JsonStore.update(storePath, async (data) => {
-      const stored = Stored.parse(data)
+      const stored = parseStored(data)
       await fn(stored)
       result.value = stored
       return stored

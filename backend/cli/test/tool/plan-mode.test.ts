@@ -7,8 +7,6 @@ import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { ArtifactTool } from "../../src/tool/artifact"
-import { AtlasTool } from "../../src/tool/atlas"
-import { AtlasRecordTool } from "../../src/tool/atlas-record"
 import { BashTool } from "../../src/tool/bash"
 import { BatchTool } from "../../src/tool/batch"
 import { PythonTool } from "../../src/tool/notebook"
@@ -112,16 +110,6 @@ describe("tool.plan-mode", () => {
               context("plan"),
             ),
           async () =>
-            (await AtlasTool.init()).execute(
-              { operation: "search", query: "This request must not reach a paid service." },
-              context("plan"),
-            ),
-          async () =>
-            (await AtlasRecordTool.init()).execute(
-              { project: "project", provenance_id: "provenance" },
-              context("plan"),
-            ),
-          async () =>
             (await ArtifactTool.init()).execute({ action: "save_file", path: "must-not-persist.txt" }, context("plan")),
           async () => (await PlanExitTool.init()).execute({}, context("plan")),
         ]
@@ -137,8 +125,6 @@ describe("tool.plan-mode", () => {
           "r",
           "batch",
           "task",
-          "atlas",
-          "atlas_record",
           "artifact",
           "plan_exit",
         ])

@@ -285,7 +285,7 @@ export namespace Server {
             readCredential: (providerID) => Auth.get(providerID),
             saveCredential: (providerID, auth) => Auth.set(providerID, auth),
             removeCredential: (providerID) => Auth.remove(providerID),
-            readBillingMode: async () => (await Config.getGlobal()).billing?.llm ?? null,
+            readBillingMode: async () => "byok" as const,
             selectByok: async () => {
               await Config.updateGlobal({ billing: { llm: "byok" } }, { preserveInstances: true })
             },

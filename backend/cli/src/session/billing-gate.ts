@@ -16,9 +16,7 @@
  */
 
 import { Auth } from "@/auth"
-import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
-import { OpenScience } from "@/openscience"
 
 export type CredentialSource = "byok" | "managed" | "oauth-free"
 export type BillingMode = "managed" | "byok"
@@ -28,7 +26,7 @@ export type TelemetryRoute = "managed" | "byok" | "chatgpt" | "subscription" | "
  *  from the resolved credential (legacy behaviour; `null` in the config file —
  *  the toggle set back to auto — normalizes to the same thing). */
 export async function llmBillingMode(): Promise<BillingMode | undefined> {
-  return (await Config.get()).billing?.llm ?? undefined
+  return "byok"
 }
 
 /** First-party providers whose OAuth path runs on the user's own subscription
@@ -57,41 +55,9 @@ export function isCodexOAuthProvider(providerID: string): boolean {
  * synced proxy token can be attached to any provider id.
  */
 export async function resolveCredentialSource(providerID: string, _modelID: string): Promise<CredentialSource> {
-  // Explicit BYOK toggle: the user opted out of managed billing for LLM calls, so
-  // classify as the user's own account (byok / oauth-free) and never fire the wallet
-  // gate. The Atlas proxy still meters any managed key server-side, so this cannot
-  // create a free-managed-inference loophole — it only governs the client pre-flight.
-  if ((await llmBillingMode()) === "byok") {
-    const auth = await Auth.get(providerID).catch(() => undefined)
-    return auth?.type === "oauth" ? "oauth-free" : "byok"
-  }
-
   const auth = await Auth.get(providerID).catch(() => undefined)
-  // The synthesized Codex provider exists only for Sign in with ChatGPT. Its
-  // OAuth record is the billing authority even if stale managed-shaped config
-  // happens to coexist with it; ChatGPT-plan calls must never touch Credits.
-  if (isCodexOAuthProvider(providerID) && auth?.type === "oauth") return "oauth-free"
-
-  const provider = await Provider.getProvider(providerID).catch(() => undefined)
-
-  // 1) Managed: an osk_* or legacy thk_* proxy token. Classified by VALUE, not by how the
-  //    credential arrived: the dashboard sync also delivers the user's own
-  //    keys (OPENROUTER_API_KEY etc.), and treating "arrived via sync" as
-  //    "managed" wallet-gated and billed BYOK keys — exactly what this
-  //    module's contract forbids. It was also boot-order dependent (the
-  //    synced-secret set is empty until an in-process sync runs).
-  // Classify the one credential the provider will actually send. Raw losing
-  // env values must not influence billing: auth.json intentionally overrides
-  // environment credentials, and a stale managed key next to a winning BYOK key is
-  // not a managed request.
-  const effective = provider ? Provider.effectiveKey(provider) : undefined
-  if (OpenScience.isManagedKeyValue(effective)) return "managed"
-
-  // 2) OAuth-free: a first-party OAuth subscription (user's own account).
   if (auth?.type === "oauth") return "oauth-free"
-  if (OAUTH_FREE_PROVIDERS.has(providerID) && !effective && !auth) return "oauth-free"
-
-  // 3) BYOK: the user's own key (or the zero-cost public demo). Never billable.
+  if (OAUTH_FREE_PROVIDERS.has(providerID) && !auth) return "oauth-free"
   return "byok"
 }
 
@@ -120,8 +86,8 @@ export async function resolveTelemetryRoute(providerID: string, modelID: string)
  * Only managed-proxy credentials draw down the wallet, so BYOK and OAuth-free
  * calls must skip the check entirely — an empty wallet never blocks them.
  */
-export function requiresWalletBalance(source: CredentialSource): boolean {
-  return source === "managed"
+export function requiresWalletBalance(_source: CredentialSource): boolean {
+  return false
 }
 
 /**
@@ -129,6 +95,6 @@ export function requiresWalletBalance(source: CredentialSource): boolean {
  * Only managed-proxy credentials are billed; BYOK and OAuth-free calls run on
  * the user's own account and are never reported.
  */
-export function shouldReportUsage(source: CredentialSource): boolean {
-  return source === "managed"
+export function shouldReportUsage(_source: CredentialSource): boolean {
+  return false
 }

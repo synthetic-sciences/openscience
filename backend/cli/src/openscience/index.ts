@@ -3167,7 +3167,7 @@ export namespace OpenScience {
     const balanceCents = credits?.balanceCents ?? fallback?.balance_cents ?? 0
     const managedSupported = access.access?.managed_supported ?? fallback?.managed_supported ?? true
     return {
-      mode: configured === "managed" ? "managed" : configured === "byok" ? "byok" : (fallback?.mode ?? "byok"),
+      mode: "byok",
       balance_cents: balanceCents,
       balance_usd: balanceCents / 100,
       // Current Atlas publishes this on /access. A temporary capability-read

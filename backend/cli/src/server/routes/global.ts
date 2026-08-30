@@ -11,8 +11,6 @@ import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config/config"
 import { errors } from "../error"
-import { OpenScience } from "@/openscience"
-import { Provider } from "@/provider/provider"
 import { Project } from "@/project/project"
 import { ManagedProject } from "@/project/managed"
 import { SessionFilesystem } from "@/session/filesystem"
@@ -355,49 +353,6 @@ export const GlobalRoutes = lazy(() =>
           },
         })
         return c.json(true)
-      },
-    )
-    .post(
-      "/sync",
-      describeRoute({
-        summary: "Sync account services",
-        description: "Refresh OpenScience account services and reload local provider/config state.",
-        operationId: "global.sync",
-        responses: {
-          200: {
-            description: "Services synced",
-            content: {
-              "application/json": {
-                schema: resolver(
-                  z.object({
-                    user: z.unknown().optional(),
-                    credentials: z.number(),
-                    last_synced: z.number(),
-                  }),
-                ),
-              },
-            },
-          },
-        },
-      }),
-      async (c) => {
-        const result = await OpenScience.syncServices()
-        if (result) {
-          Provider.invalidate()
-          await Instance.disposeAll()
-          GlobalBus.emit("event", {
-            directory: "global",
-            payload: {
-              type: GlobalDisposedEvent.type,
-              properties: {},
-            },
-          })
-        }
-        return c.json({
-          user: result?.user,
-          credentials: result?.credentials ?? 0,
-          last_synced: Date.now(),
-        })
       },
     ),
 )

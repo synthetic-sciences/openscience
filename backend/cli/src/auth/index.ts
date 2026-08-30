@@ -2,14 +2,10 @@ import path from "path"
 import { Global } from "../global"
 import { JsonStore } from "../util/jsonstore"
 import z from "zod"
-import { Config } from "../config/config"
-import { Log } from "../util/log"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { isAtlasManagedKey } from "../credentials/managed-key"
 
 export const OAUTH_DUMMY_KEY = "synsc-oauth-dummy-key"
-
-const log = Log.create({ service: "auth" })
 
 export namespace Auth {
   /** A managed Atlas wallet credential (`osk_*` or legacy `thk_*`), as opposed to a user-owned
@@ -65,6 +61,7 @@ export namespace Auth {
       (acc, [key, value]) => {
         const parsed = Info.safeParse(value)
         if (!parsed.success) return acc
+        if (parsed.data.type === "api" && isAtlasApiKey(parsed.data.key)) return acc
         acc[key] = parsed.data
         return acc
       },
@@ -73,47 +70,12 @@ export namespace Auth {
   }
 
   export async function set(key: string, info: Info) {
+    if (info.type === "api" && isAtlasApiKey(info.key)) {
+      throw new Error("Managed workspace credentials are not supported. Connect a provider account you control.")
+    }
     await CredentialLifecycle.mutate(`provider-auth.set:${key}`, () =>
       JsonStore.update(filepath, (data) => ({ ...data, [key]: info })),
     )
-
-    // Adding a real (non-Atlas) OpenRouter key while Managed spend is on
-    // means the user is bringing their own key - flip the toggle to Own
-    // keys so the added key actually wins routing immediately, instead of
-    // sitting unused behind the managed route until the user finds the
-    // Settings toggle. This is the ONE choke point both `openscience auth
-    // login` (CLI - calls Auth.set directly, see cli/cmd/auth.ts) and the
-    // Settings UI (PUT /auth/:providerID -> Auth.set) go through, so it
-    // belongs here rather than in the HTTP route. An Atlas workspace token is
-    // never "own key" material and must not flip the mode; other providers
-    // and OAuth credentials are untouched.
-    if (key === "openrouter" && info.type === "api" && !isAtlasApiKey(info.key)) {
-      try {
-        // Reads the GLOBAL config specifically (not the merged project+global
-        // Config.get(), which requires an active Instance/project context that
-        // most Auth.set callers - including every CLI auth command - don't
-        // have). billing.llm can also be set at project scope; a project-level
-        // override is invisible to this check, same asymmetry the byok guard
-        // in provider.ts lives with when read outside a project context.
-        const cfg = await Config.getGlobal()
-        if (cfg.billing?.llm === "managed") {
-          await Config.updateGlobal({ billing: { llm: "byok" } })
-        }
-      } catch (e) {
-        // A malformed global config (a hand-edited openscience.jsonc with a
-        // trailing comma, say) makes Config.getGlobal()/updateGlobal() throw.
-        // That must not take down Auth.set - the credential above is already
-        // persisted, and Auth.set has 11 call sites, at least one with no
-        // try/catch of its own (the CLI's "paste the code" OAuth branch,
-        // cli/cmd/auth.ts:143-170). Degrade to "key saved, mode not flipped"
-        // rather than losing the key the user just added - but log it at
-        // warn: silently swallowing would leave the user's mode silently
-        // disagreeing with the key they just added, with no signal at all.
-        log.warn("failed to flip billing.llm to byok after adding an OpenRouter key", {
-          error: e instanceof Error ? e.message : String(e),
-        })
-      }
-    }
   }
 
   export async function remove(key: string) {
