@@ -1,4 +1,4 @@
-import type { ScientificToolsResponse } from "./scientific-tools-state"
+import type { ScientificToolSetupResult, ScientificToolsResponse } from "./scientific-tools-state"
 import { settingsApi } from "./api"
 
 const TTL = 30_000
@@ -31,4 +31,15 @@ export function loadScientificTools(url: string, fetcher: typeof fetch, refresh 
       throw error
     },
   )
+}
+
+export async function setupScientificTool(url: string, fetcher: typeof fetch, id: string) {
+  const result = await settingsApi<ScientificToolSetupResult>(
+    url,
+    fetcher,
+    `/settings/scientific-tools/${encodeURIComponent(id)}/setup`,
+    { method: "POST" },
+  )
+  cache.delete(url)
+  return result
 }

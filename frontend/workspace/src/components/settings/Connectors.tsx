@@ -32,7 +32,6 @@ import {
   connectorFormFromConfig,
   connectorConflictsWithCatalogPreset,
   connectorIdentity,
-  connectorMatchesCatalogSetup,
   maskConnectorConfig,
   type ConfiguredMcp,
   type ConnectorFormState,
@@ -81,13 +80,28 @@ export default function Connectors() {
       return next
     })
 
-  const entries = createMemo(() =>
-    Object.entries(sync.data.config.mcp ?? {})
-      .filter((e): e is [string, ConfiguredMcp] => isConfigured(e[1]))
-      .filter((e) => !search().trim() || e[0].toLowerCase().includes(search().trim().toLowerCase()))
-      .sort((a, b) => a[0].localeCompare(b[0])),
+  const configuredEntries = createMemo(() =>
+    Object.entries(sync.data.config.mcp ?? {}).filter((e): e is [string, ConfiguredMcp] => isConfigured(e[1])),
   )
-  const catalogEntries = createMemo(() => {
+  const entries = createMemo(() => {
+    const needle = search().trim().toLowerCase()
+    return configuredEntries()
+      .filter(([name, config]) => {
+        if (!needle) return true
+        const identity = connectorIdentity(name, config)
+        const target = config.type === "local" ? config.command.join(" ") : config.url
+        return [name, identity.label, target].some((value) => value.toLowerCase().includes(needle))
+      })
+      .sort((a, b) => {
+        const rank = ([name, config]: [string, ConfiguredMcp]) => {
+          if (status()[name]?.status === "connected") return 0
+          if (config.enabled !== false) return 1
+          return 2
+        }
+        return rank(a) - rank(b) || a[0].localeCompare(b[0])
+      })
+  })
+  const matchingCatalogEntries = createMemo(() => {
     const needle = search().trim().toLowerCase()
     return catalog().filter(
       (entry) =>
@@ -97,6 +111,23 @@ export default function Connectors() {
         ),
     )
   })
+  const isCatalogConfigured = (entry: ConnectorCatalogRecord) => {
+    const providerLogo = entry.id === "s3" ? "aws" : entry.id
+    return configuredEntries().some(([name, config]) => {
+      if (entry.setup?.name === name) return true
+      return connectorIdentity(name, config).providerLogo === providerLogo
+    })
+  }
+  const catalogEntries = createMemo(() =>
+    matchingCatalogEntries()
+      .filter((entry) => entry.status === "official_setup" && !isCatalogConfigured(entry))
+      .sort((a, b) => Number(b.recommended) - Number(a.recommended) || a.name.localeCompare(b.name)),
+  )
+  const manualCatalogEntries = createMemo(() =>
+    matchingCatalogEntries()
+      .filter((entry) => entry.status === "manual_review" && !isCatalogConfigured(entry))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  )
 
   async function loadCatalog(refresh = false) {
     setCatalogLoading(true)
@@ -567,112 +598,22 @@ export default function Connectors() {
               </div>
             </Show>
 
-            <Show when={catalogEntries().length > 0}>
-              <section class="settings-section connectors-catalog" aria-label="Connector catalog">
-                <SectionLabel label="Connector catalog" count={catalogEntries().length} />
-                <p class="connectors-catalog__lead">
-                  Choose a connector, check its details, then connect your own account or endpoint.
-                </p>
-                <div class="settings-card connectors-catalog__list" role="list">
-                  <For each={catalogEntries()}>
-                    {(entry) => {
-                      const configured = () => {
-                        if (!entry.setup) return false
-                        const current = sync.data.config.mcp?.[entry.setup.name]
-                        return connectorMatchesCatalogSetup(isConfigured(current) ? current : undefined, entry.setup)
-                      }
-                      return (
-                        <article
-                          class="connectors-catalog__row"
-                          role="listitem"
-                          data-state={entry.status}
-                          data-expanded={catalogExpanded() === entry.id ? "true" : undefined}
-                        >
-                          <div class="connectors-catalog__main">
-                            <ProviderLogo id={entry.id === "s3" ? "aws" : entry.id} label={entry.name} size="small" />
-                            <div class="connectors-catalog__copy">
-                              <div class="connectors-catalog__title">
-                                <strong>{entry.name}</strong>
-                                <span>{entry.recommended ? "Recommended" : catalogStatusText(entry.status)}</span>
-                              </div>
-                              <p>{entry.summary}</p>
-                            </div>
-                            <div class="connectors-catalog__actions">
-                              <Show when={entry.setup}>
-                                <button
-                                  type="button"
-                                  class="connectors-action"
-                                  disabled={
-                                    entry.setup?.one_click_connect
-                                      ? busy(`catalog:${entry.id}`) ||
-                                        status()[entry.setup!.name]?.status === "connected"
-                                      : entry.setup?.one_click_disabled
-                                        ? busy(`catalog:${entry.id}`) || configured()
-                                        : configured()
-                                  }
-                                  onClick={() => void addCatalogPreset(entry)}
-                                >
-                                  {entry.setup?.one_click_connect
-                                    ? busy(`catalog:${entry.id}`)
-                                      ? "Connecting…"
-                                      : status()[entry.setup!.name]?.status === "connected"
-                                        ? "Connected"
-                                        : "Connect"
-                                    : entry.setup?.one_click_disabled
-                                      ? busy(`catalog:${entry.id}`)
-                                        ? "Adding…"
-                                        : configured()
-                                          ? "Saved off"
-                                          : "Add off"
-                                      : configured()
-                                        ? "Configured"
-                                        : "Review"}
-                                </button>
-                              </Show>
-                              <IconButton
-                                icon={catalogExpanded() === entry.id ? "chevron-down" : "chevron-right"}
-                                variant="ghost"
-                                aria-expanded={catalogExpanded() === entry.id}
-                                aria-label={`${catalogExpanded() === entry.id ? "Hide" : "Show"} ${entry.name} details`}
-                                onClick={() =>
-                                  setCatalogExpanded(catalogExpanded() === entry.id ? undefined : entry.id)
-                                }
-                              />
-                            </div>
-                          </div>
-                          <Show when={catalogExpanded() === entry.id}>
-                            <div class="connectors-catalog__details">
-                              <p>{entry.safety}</p>
-                              <dl>
-                                <div>
-                                  <dt>Requirements</dt>
-                                  <dd>{entry.requirements.join(" · ") || "None"}</dd>
-                                </div>
-                                <div>
-                                  <dt>Write access</dt>
-                                  <dd>{entry.upstream_write_operations.join(" · ") || "None declared"}</dd>
-                                </div>
-                              </dl>
-                              <button
-                                type="button"
-                                class="connectors-detail-action"
-                                onClick={() => platform.openLink(entry.source_url)}
-                              >
-                                Open source
-                              </button>
-                            </div>
-                          </Show>
-                        </article>
-                      )
-                    }}
-                  </For>
+            <Show when={catalogLoading() && !catalogProblem() && configuredEntries().length === 0}>
+              <section class="settings-section connectors-loading" aria-label="Loading connectors">
+                <SectionLabel label="Available connectors" />
+                <div class="settings-card">
+                  <div class="connectors-loading__row" role="status">
+                    <Icon name="mcp" size="small" />
+                    <span>Loading reviewed setups…</span>
+                  </div>
                 </div>
               </section>
             </Show>
 
             <Show when={entries().length > 0}>
               <section class="settings-section connectors-section" aria-label="Configured connectors">
-                <SectionLabel label="Connectors" count={entries().length} />
+                <SectionLabel label="Your connectors" count={entries().length} />
+                <p class="connectors-section__lead">Connected and saved servers appear here first.</p>
                 <div class="settings-card connectors-list" role="list">
                   <For each={entries()}>
                     {(entry) => {
@@ -716,7 +657,14 @@ export default function Connectors() {
                               {statusText(s())}
                             </span>
                             <div class="connectors-row__actions">
-                              <Show when={config.type === "remote" && config.oauth !== false}>
+                              <Show
+                                when={
+                                  config.type === "remote" &&
+                                  config.oauth !== false &&
+                                  s()?.status !== "connected" &&
+                                  detail()?.auth !== "authenticated"
+                                }
+                              >
                                 <button
                                   type="button"
                                   class="connectors-action"
@@ -725,11 +673,7 @@ export default function Connectors() {
                                   }
                                   onClick={() => void authenticate(name)}
                                 >
-                                  {pendingAuthorizations()[name]
-                                    ? "Waiting…"
-                                    : detail()?.auth === "authenticated" || s()?.status === "connected"
-                                      ? "Reconnect"
-                                      : "Connect"}
+                                  {pendingAuthorizations()[name] ? "Waiting…" : "Connect"}
                                 </button>
                               </Show>
                               <IconButton
@@ -808,6 +752,20 @@ export default function Connectors() {
                                 </Show>
                               </Show>
                               <div class="connectors-details__actions">
+                                <Show when={config.type === "remote" && config.oauth !== false}>
+                                  <button
+                                    type="button"
+                                    class="connectors-detail-action"
+                                    disabled={
+                                      busy(`row:${name}`) ||
+                                      busy(`auth-start:${name}`) ||
+                                      !!pendingAuthorizations()[name]
+                                    }
+                                    onClick={() => void authenticate(name)}
+                                  >
+                                    Reconnect account
+                                  </button>
+                                </Show>
                                 <Show when={detail()?.auth === "authenticated" || detail()?.auth === "expired"}>
                                   <button
                                     type="button"
@@ -858,8 +816,138 @@ export default function Connectors() {
               </section>
             </Show>
 
+            <Show when={catalogEntries().length > 0}>
+              <section class="settings-section connectors-catalog" aria-label="Available connectors">
+                <SectionLabel label="Available connectors" count={catalogEntries().length} />
+                <p class="connectors-catalog__lead">
+                  Start from a reviewed official setup. OpenScience uses your account and keeps each server under MCP
+                  permissions.
+                </p>
+                <div class="settings-card connectors-catalog__list" role="list">
+                  <For each={catalogEntries()}>
+                    {(entry) => (
+                      <article
+                        class="connectors-catalog__row"
+                        role="listitem"
+                        data-state={entry.status}
+                        data-expanded={catalogExpanded() === entry.id ? "true" : undefined}
+                      >
+                        <div class="connectors-catalog__main">
+                          <ProviderLogo id={entry.id === "s3" ? "aws" : entry.id} label={entry.name} size="small" />
+                          <div class="connectors-catalog__copy">
+                            <div class="connectors-catalog__title">
+                              <strong>{entry.name}</strong>
+                              <span>{entry.recommended ? "Recommended" : "Official"}</span>
+                            </div>
+                            <p>{entry.summary}</p>
+                          </div>
+                          <div class="connectors-catalog__actions">
+                            <button
+                              type="button"
+                              class="connectors-action connectors-action--primary"
+                              disabled={busy(`catalog:${entry.id}`)}
+                              onClick={() => void addCatalogPreset(entry)}
+                            >
+                              {entry.setup?.one_click_connect
+                                ? busy(`catalog:${entry.id}`)
+                                  ? "Connecting…"
+                                  : "Connect"
+                                : "Set up"}
+                            </button>
+                            <IconButton
+                              icon={catalogExpanded() === entry.id ? "chevron-down" : "chevron-right"}
+                              variant="ghost"
+                              aria-expanded={catalogExpanded() === entry.id}
+                              aria-label={`${catalogExpanded() === entry.id ? "Hide" : "Show"} ${entry.name} details`}
+                              onClick={() => setCatalogExpanded(catalogExpanded() === entry.id ? undefined : entry.id)}
+                            />
+                          </div>
+                        </div>
+                        <Show when={catalogExpanded() === entry.id}>
+                          <div class="connectors-catalog__details">
+                            <p>{entry.safety}</p>
+                            <dl>
+                              <div>
+                                <dt>Needs</dt>
+                                <dd>{entry.requirements.join(" · ") || "Nothing else"}</dd>
+                              </div>
+                              <div>
+                                <dt>Can write</dt>
+                                <dd>{entry.upstream_write_operations.join(" · ") || "No write operations declared"}</dd>
+                              </div>
+                            </dl>
+                            <button
+                              type="button"
+                              class="connectors-detail-action"
+                              onClick={() => platform.openLink(entry.source_url)}
+                            >
+                              Official documentation
+                            </button>
+                          </div>
+                        </Show>
+                      </article>
+                    )}
+                  </For>
+                </div>
+              </section>
+            </Show>
+
+            <Show when={manualCatalogEntries().length > 0}>
+              <details class="connectors-manual">
+                <summary>
+                  <span>
+                    <strong>Manual integrations</strong>
+                    <small>
+                      {manualCatalogEntries()
+                        .map((entry) => entry.name)
+                        .join(" · ")}
+                    </small>
+                  </span>
+                  <Icon name="chevron-right" size="small" />
+                </summary>
+                <div class="settings-card connectors-manual__list" role="list">
+                  <For each={manualCatalogEntries()}>
+                    {(entry) => (
+                      <article class="connectors-manual__row" role="listitem">
+                        <ProviderLogo id={entry.id} label={entry.name} size="small" />
+                        <div class="connectors-catalog__copy">
+                          <div class="connectors-catalog__title">
+                            <strong>{entry.name}</strong>
+                            <span>Manual setup</span>
+                          </div>
+                          <p>{entry.summary}</p>
+                        </div>
+                        <div class="connectors-catalog__actions">
+                          <button
+                            type="button"
+                            class="connectors-detail-action"
+                            onClick={() => platform.openLink(entry.source_url)}
+                          >
+                            Guide
+                          </button>
+                          <button
+                            type="button"
+                            class="connectors-action"
+                            onClick={() => openForm(entry.id === "dropbox" ? "local" : "remote")}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </article>
+                    )}
+                  </For>
+                </div>
+              </details>
+            </Show>
+
             <Show
-              when={!catalogLoading() && !catalogProblem() && entries().length === 0 && catalogEntries().length === 0}
+              when={
+                !catalogLoading() &&
+                !catalogProblem() &&
+                entries().length === 0 &&
+                catalogEntries().length === 0 &&
+                manualCatalogEntries().length === 0
+              }
             >
               <Show
                 when={!search()}
@@ -891,12 +979,6 @@ export default function Connectors() {
       </div>
     </PanelScroll>
   )
-}
-
-function catalogStatusText(status: ConnectorCatalogRecord["status"]) {
-  if (status === "official_setup") return "Official setup"
-  if (status === "manual_review") return "Manual review"
-  return "Unavailable"
 }
 
 function ConnectorForm(props: {

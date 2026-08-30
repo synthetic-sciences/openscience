@@ -8,7 +8,6 @@ const modules: Record<(typeof SETTINGS_PANEL_IDS)[number], string> = {
   skills: "Skills",
   "scientific-tools": "ScientificTools",
   connectors: "Connectors",
-  "research-tools": "ResearchTools",
   compute: "Compute",
   network: "Network",
   permissions: "Permissions",
@@ -38,7 +37,6 @@ describe("settings registry source contract", () => {
       "Skills",
       "Tools",
       "Connectors",
-      "Research tools",
       "Compute",
       "Security & access",
       "Network",
@@ -86,5 +84,10 @@ describe("settings registry source contract", () => {
     expect(SETTINGS_PANEL_IDS).not.toContain("memory" as never)
     expect(SETTINGS_PANELS.map((panel) => panel.title)).not.toContain("Specialists")
     expect(SETTINGS_PANELS.map((panel) => panel.title)).not.toContain("Memory")
+  })
+
+  test("keeps research controls in the composer instead of duplicating a settings destination", () => {
+    expect(SETTINGS_PANEL_IDS).not.toContain("research-tools" as never)
+    expect(SETTINGS_PANELS.map((panel) => panel.title)).not.toContain("Research tools")
   })
 })

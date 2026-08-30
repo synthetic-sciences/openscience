@@ -18,7 +18,7 @@ if (process.argv[2] === updateSwap) {
 // never strand a half-initialized runtime that blocks update rollback.
 if (process.env.OPENSCIENCE_DESKTOP_PARENT_PID || process.env.OPENSCIENCE_DESKTOP_PARENT_TOKEN) {
   const { DesktopParent } = await import("./process/desktop-parent")
-  DesktopParent.bootstrap()
+  DesktopParent.launch()
 }
 
 await import("./index")

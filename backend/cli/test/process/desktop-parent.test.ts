@@ -11,6 +11,36 @@ afterEach(async () => {
 })
 
 describe("desktop parent binding", () => {
+  test("limits inherited desktop authority to the Electron-owned serve process", () => {
+    const env: NodeJS.ProcessEnv = {
+      OPENSCIENCE_DESKTOP_PARENT_PID: "42",
+      OPENSCIENCE_DESKTOP_PARENT_TOKEN: "a".repeat(48),
+      OPENSCIENCE_DESKTOP_PARENT_RUNTIME_RECEIPT: "/tmp/runtime.json",
+      OPENSCIENCE_DESKTOP_UPDATE_TOKEN: "update-capability",
+      OPENSCIENCE_DESKTOP_UPDATE_URL: "http://127.0.0.1:4096/update",
+      SAFE_VALUE: "kept",
+    }
+    expect(
+      DesktopParent.launch({
+        env,
+        argv: ["/path/to/openscience", "/path/to/openscience", "__openscience_darwin_responsibility_launcher__"],
+        parent: () => 41,
+      }),
+    ).toBeUndefined()
+    expect(env).toEqual({ SAFE_VALUE: "kept" })
+
+    expect(() =>
+      DesktopParent.launch({
+        env: {
+          OPENSCIENCE_DESKTOP_PARENT_PID: "42",
+          OPENSCIENCE_DESKTOP_PARENT_TOKEN: "b".repeat(48),
+        },
+        argv: ["/path/to/openscience", "/path/to/openscience", "serve"],
+        parent: () => 41,
+      }),
+    ).toThrow("not launched by its bound parent")
+  })
+
   test("signals exact parent loss and rejects forged launch bindings", async () => {
     let parent = 42
     using watcher = DesktopParent.watch({

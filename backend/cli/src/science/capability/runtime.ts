@@ -39,7 +39,7 @@ const localSupported = (runtime: Runtime) => {
 async function modal(runtime: Runtime) {
   if (!runtime.targets.includes("modal")) return { state: "not_applicable" as const, configured: false, enabled: false }
   const { ComputeSettings } = await import("@/server/routes/settings/compute")
-  const provider = (await ComputeSettings.get()).providers.find((item) => item.id === "modal")
+  const provider = await ComputeSettings.providerStatus("modal")
   // Stored, enabled credentials establish configuration only. They do not
   // prove token validity, account access, transport, or runtime execution.
   return {

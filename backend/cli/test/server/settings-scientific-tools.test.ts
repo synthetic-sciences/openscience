@@ -52,8 +52,37 @@ describe("scientific tools settings catalog", () => {
         ),
       ),
     ).toBe(true)
-    expect(doctor).toHaveBeenCalledTimes(5)
+    expect(doctor).toHaveBeenCalledTimes(1)
     expect(doctor.mock.calls.every(([, options]) => options?.verification === "status")).toBe(true)
     doctor.mockRestore()
+  })
+
+  test("installs only a real packaged local capability", async () => {
+    const setup = spyOn(CapabilityRuntime, "setup").mockImplementation(async (manifest) => ({
+      capability: manifest.id,
+      state: "ready" as const,
+      environment: manifest.runtime!.pack_id,
+      python: manifest.runtime!.python,
+      packages: { scipy: "1.18.1" },
+      lock_digest: manifest.runtime!.lock_digest,
+      conda_lock_sha256: "fixture-lock",
+    }))
+    try {
+      const installed = await ScientificToolsSettingsRoutes().request("/scipy/setup", { method: "POST" })
+      expect(installed.status).toBe(200)
+      expect(await installed.json()).toMatchObject({ capability: "scipy", state: "ready" })
+      expect(setup).toHaveBeenCalledTimes(1)
+
+      const inventoryOnly = await ScientificToolsSettingsRoutes().request("/open-babel/setup", { method: "POST" })
+      expect(inventoryOnly.status).toBe(409)
+      expect(await inventoryOnly.json()).toMatchObject({ error: "not_installable" })
+      expect(setup).toHaveBeenCalledTimes(1)
+
+      const missing = await ScientificToolsSettingsRoutes().request("/does-not-exist/setup", { method: "POST" })
+      expect(missing.status).toBe(404)
+      expect(await missing.json()).toMatchObject({ error: "not_found" })
+    } finally {
+      setup.mockRestore()
+    }
   })
 })

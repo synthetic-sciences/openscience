@@ -168,8 +168,10 @@ const ResearchSlider: Component<{
   }
 
   return (
-    <div class="workspace-composer__research-slider">
-      <span class="workspace-composer__research-slider-label">{props.label}</span>
+    <div class="workspace-composer__research-setting workspace-composer__research-slider">
+      <span class="workspace-composer__research-setting-label workspace-composer__research-slider-label">
+        {props.label}
+      </span>
       <div role="radiogroup" aria-label={props.label} onKeyDown={move}>
         <For each={props.options}>
           {(option) => (
@@ -251,6 +253,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
   }
   const delegation = createMemo(() => delegationSettings(capabilities()))
+  const configuredConnectorCount = createMemo(
+    () =>
+      Object.values(globalSync.data.config.mcp ?? {}).filter(
+        (value) => !!value && typeof value === "object" && "type" in value,
+      ).length,
+  )
   const saveDelegation = (patch: { level?: DelegationLevel; autonomy?: DelegationAutonomy }) => {
     const current = delegation()
     const next = {
@@ -2867,7 +2875,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           onSelect={(value) => saveDelegation({ autonomy: value as DelegationAutonomy })}
                         />
                       </Show>
-                      <div class="workspace-composer__research-divider" />
                       <Show
                         when={!researchAccess.error}
                         fallback={
@@ -2880,10 +2887,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </button>
                         }
                       >
-                        <details class="workspace-composer__research-choice" onToggle={toggleResearchChoice}>
+                        <details
+                          class="workspace-composer__research-setting workspace-composer__research-choice"
+                          onToggle={toggleResearchChoice}
+                        >
                           <summary aria-label={`Action approval, ${researchAccessLabel()}`}>
-                            <span>Action approval</span>
-                            <strong aria-live="polite">
+                            <span class="workspace-composer__research-setting-label">Action approval</span>
+                            <strong class="workspace-composer__research-setting-value" aria-live="polite">
                               {researchAccessSaving() ? "Saving…" : researchAccessLabel()}
                             </strong>
                             <Icon name="chevron-right" size="small" />
@@ -2927,22 +2937,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           </div>
                         </details>
                       </Show>
-                      <div class="workspace-composer__research-divider" />
                       <button
                         type="button"
-                        class="workspace-composer__research-control workspace-composer__research-connectors"
+                        class="workspace-composer__research-setting workspace-composer__research-control workspace-composer__research-connectors"
                         onClick={() => {
                           closeResearchTools()
                           dialog.show(() => <DialogSettings initial="connectors" />)
                         }}
                       >
-                        <span>
-                          <Icon name="mcp" size="small" />
-                          <span>
-                            <strong>MCP servers</strong>
-                            <small>Connected tools and data</small>
-                          </span>
-                        </span>
+                        <span class="workspace-composer__research-setting-label">MCP servers</span>
+                        <strong class="workspace-composer__research-setting-value">
+                          {configuredConnectorCount() === 0
+                            ? "None configured"
+                            : `${configuredConnectorCount()} configured`}
+                        </strong>
                         <Icon name="chevron-right" size="small" />
                       </button>
                     </section>

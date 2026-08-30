@@ -1,37 +1,35 @@
 import { Button } from "@synsci/ui/button"
-import { Icon } from "@synsci/ui/icon"
-import { For, Show, createEffect, createMemo, createSignal, onMount } from "solid-js"
+import { IconButton } from "@synsci/ui/icon-button"
+import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
-import { EmptyState, FilterMenu, PanelBody, PanelHeader, PanelScroll, SearchInput, Section } from "./_shared"
+import { EmptyState, PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
+import { useSettingsNav } from "./nav"
 import {
+  actionableScientificCapabilities,
   capabilityState,
-  filterScientificCapabilities,
+  scientificCapabilityTarget,
   type ScientificCapabilityRecord,
-  type ScientificToolFilter,
   type ScientificToolsResponse,
 } from "./scientific-tools-state"
-import { loadScientificTools } from "./scientific-tools-loader"
-import { ProviderLogo } from "./ProviderLogo"
+import { loadScientificTools, setupScientificTool } from "./scientific-tools-loader"
+import { ScientificToolLogo } from "./ScientificToolLogo"
 import "./scientific-tools.css"
-
-const PAGE_SIZE = 24
 
 export default function ScientificTools() {
   const server = useServer()
   const platform = usePlatform()
+  const navigate = useSettingsNav()
   const [state, setState] = createSignal<ScientificToolsResponse>()
   const [problem, setProblem] = createSignal("")
+  const [notice, setNotice] = createSignal("")
   const [loading, setLoading] = createSignal(true)
-  const [query, setQuery] = createSignal("")
-  const [filter, setFilter] = createSignal<ScientificToolFilter>("all")
-  const [expanded, setExpanded] = createSignal<string>()
+  const [installing, setInstalling] = createSignal<string>()
   const fetchFn = () => platform.fetch ?? fetch
 
   async function load(refresh = false) {
-    if (loading() && state()) return
     setLoading(true)
-    setProblem("")
+    if (!refresh) setProblem("")
     try {
       setState(await loadScientificTools(server.url, fetchFn(), refresh))
       setProblem("")
@@ -42,112 +40,123 @@ export default function ScientificTools() {
     }
   }
 
+  async function install(record: ScientificCapabilityRecord) {
+    setInstalling(record.id)
+    setProblem("")
+    setNotice("")
+    try {
+      await setupScientificTool(server.url, fetchFn(), record.id)
+      await load(true)
+      setNotice(`${record.name} is ready. The packaged environment is shared by all five local tools.`)
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : String(error))
+    } finally {
+      setInstalling(undefined)
+    }
+  }
+
   onMount(() => void load())
 
-  const records = createMemo(() => state()?.capabilities ?? [])
-  const visible = createMemo(() => filterScientificCapabilities(records(), query(), filter()))
-  const [limit, setLimit] = createSignal(PAGE_SIZE)
-  const shown = createMemo(() => visible().slice(0, limit()))
-  createEffect(() => {
-    query()
-    filter()
-    setLimit(PAGE_SIZE)
-  })
-  const filterOptions = createMemo(() => [
-    { id: "all", label: "All", count: records().length },
-    { id: "packaged", label: "Available", count: records().filter((item) => item.runtime).length },
-    {
-      id: "setup",
-      label: "Setup needed",
-      count: records().filter((item) => item.current_availability.local === "setup_needed").length,
-    },
-    {
-      id: "blocked",
-      label: "Unavailable",
-      count: records().filter(
-        (item) => item.maturity === "blocked" || item.current_availability.local === "unavailable",
-      ).length,
-    },
-  ])
+  const records = createMemo(() => actionableScientificCapabilities(state()?.capabilities ?? []))
+  const local = createMemo(() => records().filter((record) => scientificCapabilityTarget(record) === "local"))
+  const hosted = createMemo(() =>
+    records().filter((record) => {
+      const target = scientificCapabilityTarget(record)
+      return target === "nvidia" || target === "modal"
+    }),
+  )
 
   return (
     <PanelScroll>
       <div class="scientific-tools-panel">
-        <PanelHeader title="Tools" description="Scientific runtimes available through this OpenScience installation." />
+        <PanelHeader title="Tools" description="Scientific tools you can run here or connect with your own account." />
         <PanelBody>
           <Show when={problem()}>
             <div class="settings-alert" data-tone="critical" role="alert">
-              <span>
-                {state() ? "Refresh failed; showing the last loaded catalog." : "Scientific tools are unavailable."}{" "}
-                {problem()}
-              </span>
-              <Button size="small" variant="secondary" disabled={loading()} onClick={() => void load(true)}>
-                Retry
-              </Button>
+              <span>{problem()}</span>
+              <Show when={!state()}>
+                <Button size="small" variant="secondary" disabled={loading()} onClick={() => void load(true)}>
+                  Retry
+                </Button>
+              </Show>
+            </div>
+          </Show>
+
+          <Show when={notice()}>
+            <div class="scientific-tools-notice" role="status" aria-live="polite">
+              {notice()}
             </div>
           </Show>
 
           <Show when={loading() && !state()}>
             <div class="scientific-tools-loading" role="status" aria-live="polite">
-              Loading capability evidence…
+              Loading tools…
             </div>
           </Show>
 
           <Show when={state()}>
-            <Section
-              id="scientific-tools-inventory"
-              title="Tool catalog"
-              count={visible().length}
-              description="Search the local catalog, then open a row only when you need setup or source details."
-            >
-              <div class="scientific-tools-toolbar">
-                <SearchInput value={query()} onInput={setQuery} placeholder="Search tools" ariaLabel="Search tools" />
-                <FilterMenu
-                  options={filterOptions()}
-                  value={filter()}
-                  onSelect={(value) => setFilter(value as ScientificToolFilter)}
-                  ariaLabel="Filter scientific tools"
+            <Show
+              when={records().length > 0}
+              fallback={
+                <EmptyState
+                  icon="flask"
+                  title="No runnable tools for this device"
+                  hint="OpenScience only lists tools with a real packaged runtime or a supported connection path."
                 />
-              </div>
-              <Show when={!loading() || visible().length > 0}>
-                <Show
-                  when={visible().length > 0}
-                  fallback={
-                    <EmptyState icon="flask" title="No matching capabilities" hint="Change the search or filter." />
-                  }
+              }
+            >
+              <Show when={local().length > 0}>
+                <Section
+                  id="scientific-tools-local"
+                  title="Local science"
+                  count={local().length}
+                  description="One exact Python environment powers these tools on this device. Install it once."
                 >
                   <div class="settings-card scientific-tools-list" role="list">
-                    <For each={shown()}>
+                    <For each={local()}>
                       {(record) => (
                         <CapabilityRow
                           record={record}
-                          expanded={expanded() === record.id}
-                          onToggle={() => setExpanded(expanded() === record.id ? undefined : record.id)}
+                          busy={Boolean(installing())}
+                          active={installing() === record.id}
+                          onAction={() => void install(record)}
                           onOpenSource={() => platform.openLink(record.source.reference)}
                         />
                       )}
                     </For>
                   </div>
-                </Show>
+                </Section>
               </Show>
-              <Show when={limit() < visible().length}>
-                <div class="scientific-tools-more">
-                  <span>
-                    Showing {shown().length} of {visible().length}
-                  </span>
-                  <Button
-                    size="small"
-                    variant="secondary"
-                    onClick={() => setLimit((current) => Math.min(visible().length, current + PAGE_SIZE))}
-                  >
-                    Show more
-                  </Button>
-                </div>
+
+              <Show when={hosted().length > 0}>
+                <Section
+                  id="scientific-tools-connected"
+                  title="Connected science"
+                  count={hosted().length}
+                  description="Run supported scientific adapters with credentials stored on this device."
+                >
+                  <div class="settings-card scientific-tools-list" role="list">
+                    <For each={hosted()}>
+                      {(record) => {
+                        const target = () => scientificCapabilityTarget(record)
+                        return (
+                          <CapabilityRow
+                            record={record}
+                            busy={false}
+                            active={false}
+                            onAction={() => navigate(target() === "modal" ? "compute" : "credentials")}
+                            onOpenSource={() => platform.openLink(record.source.reference)}
+                          />
+                        )
+                      }}
+                    </For>
+                  </div>
+                </Section>
               </Show>
-            </Section>
+            </Show>
 
             <p class="scientific-tools-footnote">
-              Setup and execution use this device and any provider credentials you configure.
+              Only executable adapters are listed. Runs use this device or a service you connect directly.
             </p>
           </Show>
         </PanelBody>
@@ -158,70 +167,59 @@ export default function ScientificTools() {
 
 function CapabilityRow(props: {
   record: ScientificCapabilityRecord
-  expanded: boolean
-  onToggle: () => void
+  busy: boolean
+  active: boolean
+  onAction: () => void
   onOpenSource: () => void
 }) {
   const status = () => capabilityState(props.record)
-  const logo = () => (props.record.source.kind === "github" ? "github" : props.record.id)
+  const target = () => scientificCapabilityTarget(props.record)
+  const actionLabel = () => {
+    if (props.active) return "Installing…"
+    if (status().action === "setup") return status().tone === "warning" ? "Repair" : "Install"
+    if (status().action === "credentials") return status().tone === "warning" ? "Review" : "Connect"
+    if (status().action === "compute") return "Configure"
+    return undefined
+  }
   return (
-    <article class="scientific-tool-row" data-expanded={props.expanded ? "true" : undefined} role="listitem">
-      <button type="button" class="scientific-tool-row__toggle" aria-expanded={props.expanded} onClick={props.onToggle}>
-        <ProviderLogo id={logo()} label={props.record.name} size="small" />
-        <span class="scientific-tool-row__copy">
-          <span class="scientific-tool-row__title">
-            <strong>{props.record.name}</strong>
-            <small>{categoryLabel(props.record.category)}</small>
-          </span>
-          <span>{props.record.summary}</span>
+    <article class="settings-row scientific-tool-row" data-target={target()} role="listitem">
+      <ScientificToolLogo id={props.record.id} name={props.record.name} hosted={target() === "nvidia"} />
+      <span class="scientific-tool-row__copy">
+        <span class="scientific-tool-row__title">
+          <strong>{props.record.name}</strong>
+          <small>{categoryLabel(props.record.category)}</small>
         </span>
+        <span>{props.record.summary}</span>
+      </span>
+      <span class="scientific-tool-row__actions">
         <span class="scientific-tool-status" data-tone={status().tone}>
+          <Show when={status().tone === "success"}>
+            <span class="scientific-tool-status__dot" aria-hidden="true" />
+          </Show>
           {status().label}
         </span>
-        <span class="scientific-tool-row__disclosure" aria-hidden="true">
-          <Icon name={props.expanded ? "chevron-down" : "chevron-right"} size="small" />
-        </span>
-      </button>
-      <Show when={props.expanded}>
-        <div class="scientific-tool-row__details">
-          <p>{props.record.basis}</p>
-          <dl>
-            <div>
-              <dt>Upstream</dt>
-              <dd>
-                {props.record.source.name} {props.record.source.version}
-              </dd>
-            </div>
-            <Show when={props.record.source.license}>
-              <div>
-                <dt>License</dt>
-                <dd>{props.record.source.license}</dd>
-              </div>
-            </Show>
-            <Show when={props.record.runtime}>
-              <div>
-                <dt>Runtime</dt>
-                <dd>
-                  Python {props.record.runtime?.python} · exact {props.record.runtime?.packages.length}-package graph
-                </dd>
-              </div>
-            </Show>
-          </dl>
-          <Show when={props.record.blocker}>
-            <p class="scientific-tool-row__blocker">{props.record.blocker}</p>
-          </Show>
-          <Show when={props.record.setup?.requirements.length}>
-            <ul>
-              <For each={props.record.setup?.requirements ?? []}>{(requirement) => <li>{requirement}</li>}</For>
-            </ul>
-          </Show>
-          <div class="scientific-tool-row__actions">
-            <Button size="small" variant="secondary" onClick={props.onOpenSource}>
-              Open upstream source
+        <Show when={actionLabel()}>
+          {(label) => (
+            <Button
+              class="scientific-tool-action"
+              size="small"
+              variant="secondary"
+              disabled={props.busy}
+              onClick={props.onAction}
+            >
+              {label()}
             </Button>
-          </div>
-        </div>
-      </Show>
+          )}
+        </Show>
+        <IconButton
+          class="scientific-tool-source"
+          icon="link"
+          variant="ghost"
+          aria-label={`Open ${props.record.name} source`}
+          title={`Open ${props.record.name} source`}
+          onClick={props.onOpenSource}
+        />
+      </span>
     </article>
   )
 }

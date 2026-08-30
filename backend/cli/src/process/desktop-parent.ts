@@ -4,6 +4,7 @@ import path from "node:path"
 
 type Options = {
   env?: NodeJS.ProcessEnv
+  argv?: string[]
   parent?: () => number
   intervalMs?: number
   identity?: () => { pid: number; started: string; executable: string; command: string }
@@ -20,6 +21,8 @@ type Binding = {
 }
 
 let bootstrapped: Binding | undefined
+
+const control = ["OPENSCIENCE_DESKTOP_PARENT_", "OPENSCIENCE_DESKTOP_UPDATE_"]
 
 function configured(options: Options) {
   const env = options.env ?? process.env
@@ -129,6 +132,21 @@ function binding(options: Options): Binding | undefined {
  * `process.ppid` avoids PID-reuse ambiguity without polling an unrelated path
  * or trusting model-visible environment state. */
 export namespace DesktopParent {
+  /** Consume desktop authority only for the Electron-owned server. Internal
+   * Darwin launchers re-enter the compiled executable to supervise terminals
+   * and kernels, and native PTY implementations may retain variables omitted
+   * from their requested child environment. Those descendants are not desktop
+   * sidecars: remove inherited control-plane authority before loading the CLI
+   * graph instead of comparing their immediate parent with Electron. */
+  export function launch(options: Options = {}) {
+    const env = options.env ?? process.env
+    const argv = options.argv ?? process.argv
+    if (argv[2] === "serve") return bootstrap(options)
+    for (const key of Object.keys(env)) {
+      if (control.some((prefix) => key.startsWith(prefix))) delete env[key]
+    }
+  }
+
   /** Start the parent-death guard before importing the full CLI graph. A
    * parent that disappears during configuration/provider initialization must
    * not leave an unowned sidecar behind. */

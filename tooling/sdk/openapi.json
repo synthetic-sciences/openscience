@@ -23017,6 +23017,136 @@
         ]
       }
     },
+    "/settings/scientific-tools/{id}/setup": {
+      "post": {
+        "operationId": "settings.scientificTool.setup",
+        "summary": "Install a packaged scientific tool runtime",
+        "description": "Installs and verifies the exact device-local environment declared by a packaged capability manifest. The user initiates this operation explicitly from Settings.",
+        "responses": {
+          "200": {
+            "description": "Scientific tool runtime installed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "capability": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "const": "ready"
+                    },
+                    "environment": {
+                      "type": "string"
+                    },
+                    "python": {
+                      "type": "string"
+                    },
+                    "packages": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "lock_digest": {
+                      "type": "string"
+                    },
+                    "conda_lock_sha256": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "capability",
+                    "state",
+                    "environment",
+                    "python",
+                    "packages",
+                    "lock_digest",
+                    "conda_lock_sha256"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "not_found",
+                        "not_installable"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Capability has no packaged local runtime",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "not_found",
+                        "not_installable"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.scientificTool.setup({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/billing": {
       "get": {
         "operationId": "settings.billing.get",

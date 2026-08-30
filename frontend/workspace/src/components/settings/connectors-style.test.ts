@@ -19,6 +19,17 @@ describe("Connectors settings visual contract", () => {
     expect(source).toContain("const identity = connectorIdentity(name, config)")
   })
 
+  test("puts saved connectors before deduplicated official setups", () => {
+    expect(source.indexOf('class="settings-section connectors-section"')).toBeLessThan(
+      source.indexOf('class="settings-section connectors-catalog"'),
+    )
+    expect(source).toContain('entry.status === "official_setup" && !isCatalogConfigured(entry)')
+    expect(source).toContain('entry.status === "manual_review" && !isCatalogConfigured(entry)')
+    expect(source).toContain('class="connectors-manual"')
+    expect(source).toContain('class="connectors-action connectors-action--primary"')
+    expect(source).not.toContain('label="Connector catalog"')
+  })
+
   test("preserves every connector operation with advanced actions disclosed in details", () => {
     expect(source).toContain("void authenticate(name)")
     expect(source).toContain("void disconnectAuth(name)")

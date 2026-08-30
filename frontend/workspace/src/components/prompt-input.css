@@ -709,7 +709,7 @@ form.workspace-composer .workspace-composer__research-tools-menu {
   bottom: calc(100% + var(--space-2));
   left: 0;
   z-index: 40;
-  width: min(360px, calc(100vw - 24px));
+  width: min(380px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -731,11 +731,11 @@ form.workspace-composer .workspace-composer__research-controls {
 form.workspace-composer .workspace-composer__research-slider {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: stretch;
-  gap: 5px;
-  min-height: 56px;
-  padding: 5px 4px;
+  grid-template-columns: 100px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 4px 5px;
   border-radius: var(--radius-md);
 }
 
@@ -747,7 +747,7 @@ form.workspace-composer .workspace-composer__research-slider-label {
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding-inline: 2px;
+  padding-inline: 3px;
 }
 
 form.workspace-composer .workspace-composer__research-slider > [role="radiogroup"] {
@@ -812,12 +812,12 @@ form.workspace-composer .workspace-composer__research-slider button:disabled {
 
 form.workspace-composer .workspace-composer__research-control,
 form.workspace-composer .workspace-composer__research-choice > summary {
-  min-height: 38px;
+  min-height: 42px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 100px minmax(0, 1fr) 12px;
   align-items: center;
   gap: 8px;
-  padding: 3px 5px;
+  padding: 4px 8px;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-base);
@@ -848,40 +848,31 @@ form.workspace-composer button.workspace-composer__research-control:active {
   transform: scale(0.985);
 }
 
-form.workspace-composer .workspace-composer__research-connectors > span {
+form.workspace-composer .workspace-composer__research-setting-label {
   min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-form.workspace-composer .workspace-composer__research-connectors > span > [data-component="icon"] {
-  flex: 0 0 auto;
-  color: var(--text-weak);
-}
-
-form.workspace-composer .workspace-composer__research-connectors > span > span {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-form.workspace-composer .workspace-composer__research-connectors small {
   overflow: hidden;
-  color: var(--text-weak);
-  font-size: 11px;
-  line-height: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-form.workspace-composer .workspace-composer__research-control strong,
-form.workspace-composer .workspace-composer__research-choice > summary > span {
   color: var(--text-strong);
   font-size: 12px;
   font-weight: var(--font-weight-medium);
   line-height: 16px;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+form.workspace-composer .workspace-composer__research-setting-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-weak);
+  font-size: 12px;
+  font-weight: var(--font-weight-regular);
+  line-height: 16px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+form.workspace-composer .workspace-composer__research-connectors > [data-component="icon"] {
+  color: var(--text-weaker);
 }
 
 form.workspace-composer .workspace-composer__research-choice {
@@ -889,7 +880,6 @@ form.workspace-composer .workspace-composer__research-choice {
 }
 
 form.workspace-composer .workspace-composer__research-choice > summary {
-  grid-template-columns: 100px minmax(0, 1fr) 12px;
   list-style: none;
   cursor: pointer;
   transition:
@@ -917,24 +907,11 @@ form.workspace-composer .workspace-composer__research-choice > summary:active {
 }
 
 form.workspace-composer .workspace-composer__research-choice > summary > strong {
-  overflow: hidden;
-  color: var(--text-weak);
-  font-size: 13px;
-  font-weight: var(--font-weight-regular);
-  line-height: 16px;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  justify-self: stretch;
 }
 
 form.workspace-composer .workspace-composer__research-choice > summary > [data-component="icon"] {
   color: var(--text-weaker);
-}
-
-form.workspace-composer .workspace-composer__research-divider {
-  height: 1px;
-  margin: 4px;
-  background: var(--color-border);
 }
 
 form.workspace-composer .workspace-composer__research-choice-menu {
@@ -1117,13 +1094,12 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
   }
 
   form.workspace-composer .workspace-composer__research-slider {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 4px;
-    padding-block: 4px;
+    grid-template-columns: 88px minmax(0, 1fr);
   }
 
+  form.workspace-composer .workspace-composer__research-control,
   form.workspace-composer .workspace-composer__research-choice > summary {
-    grid-template-columns: minmax(0, 1fr) auto 12px;
+    grid-template-columns: 88px minmax(0, 1fr) 12px;
   }
 }
 
@@ -1157,13 +1133,12 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
   }
 
   form.workspace-composer .workspace-composer__research-slider {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 4px;
-    padding-block: 4px;
+    grid-template-columns: 88px minmax(0, 1fr);
   }
 
+  form.workspace-composer .workspace-composer__research-control,
   form.workspace-composer .workspace-composer__research-choice > summary {
-    grid-template-columns: minmax(0, 1fr) auto 12px;
+    grid-template-columns: 88px minmax(0, 1fr) 12px;
   }
 
   form.workspace-composer .workspace-composer__research-choice-menu {

@@ -887,6 +887,16 @@ export namespace ComputeSettings {
     return view(await read())
   }
 
+  /** Read one provider's persisted connection state without probing SSH,
+   * managed environments, or provider files. Lightweight callers such as the
+   * Tools catalog should not pay the full Compute panel hydration cost. */
+  export async function providerStatus(target: string) {
+    target = canonicalProvider(target)
+    const entry = (await read()).providers[target]
+    const connected = Boolean(entry && !entry.removal)
+    return { connected, enabled: connected && (entry?.enabled ?? false) }
+  }
+
   export function isProvider(target: string): boolean {
     return CATALOG.some((s) => s.id === canonicalProvider(target))
   }

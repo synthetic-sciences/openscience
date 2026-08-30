@@ -15,10 +15,24 @@ export interface ScientificCapabilityRecord {
   category: string
   summary: string
   maturity: CapabilityMaturity
-  current_availability: { local: CapabilityAvailability }
+  current_availability: { local: CapabilityAvailability; hosted: CapabilityAvailability }
   basis: string
   source: { kind: string; name: string; version: string; reference: string; license?: string }
-  runtime?: { pack_id: string; python: string; image: string; lock_digest: string; packages: string[] }
+  runtime?: {
+    pack_id: string
+    python: string
+    image: string
+    lock_digest: string
+    packages: string[]
+    targets?: Array<"local" | "modal">
+  }
+  hosted?: {
+    kind: "nvidia_nim"
+    adapter_id: string
+    credential: "nvidia_nim"
+    docs_url: string
+    terms_url: string
+  }
   setup?: { instructions: string; requirements: string[] }
   blocker?: string
 }
@@ -56,35 +70,54 @@ export interface ScientificToolsResponse {
   connectors: ConnectorCatalogRecord[]
 }
 
-export type ScientificToolFilter = "all" | "packaged" | "setup" | "blocked"
+export interface ScientificToolSetupResult {
+  capability: string
+  state: "ready"
+  environment: string
+  python: string
+  packages: Record<string, string>
+  lock_digest: string
+  conda_lock_sha256: string
+}
 
-export function filterScientificCapabilities(
-  records: ScientificCapabilityRecord[],
-  query: string,
-  filter: ScientificToolFilter,
-) {
-  const needle = query.trim().toLowerCase()
-  return records.filter((record) => {
-    const matches =
-      !needle ||
-      [record.id, record.name, record.category, record.summary, record.source.name].some((value) =>
-        value.toLowerCase().includes(needle),
-      )
-    if (!matches) return false
-    if (filter === "packaged") return Boolean(record.runtime)
-    if (filter === "setup") return record.current_availability.local === "setup_needed"
-    if (filter === "blocked")
-      return record.maturity === "blocked" || record.current_availability.local === "unavailable"
-    return true
-  })
+export type ScientificCapabilityTarget = "local" | "nvidia" | "modal"
+
+const usable = (availability: CapabilityAvailability) =>
+  availability !== "unavailable" && availability !== "not_applicable"
+
+/**
+ * Resolve only real execution paths. Inventory-only entries deliberately have
+ * neither a runtime nor a hosted adapter and must never leak into the product
+ * catalog merely because their manifest contains setup prose.
+ */
+export function scientificCapabilityTarget(record: ScientificCapabilityRecord): ScientificCapabilityTarget | undefined {
+  if (record.maturity === "blocked") return
+  if (record.runtime && usable(record.current_availability.local)) return "local"
+  if (record.hosted && usable(record.current_availability.hosted)) return "nvidia"
+  if (record.runtime?.targets?.includes("modal") && usable(record.current_availability.hosted)) return "modal"
+}
+
+export function actionableScientificCapabilities(records: ScientificCapabilityRecord[]) {
+  return records.filter((record) => scientificCapabilityTarget(record) !== undefined)
 }
 
 export function capabilityState(record: ScientificCapabilityRecord) {
-  if (record.maturity === "blocked" || record.current_availability.local === "unavailable")
-    return { label: "Unavailable", tone: "danger" as const }
-  if (record.current_availability.local === "degraded") return { label: "Needs attention", tone: "warning" as const }
-  if (record.current_availability.local === "ready" || record.current_availability.local === "configured")
-    return { label: "Ready", tone: "success" as const }
-  if (record.runtime) return { label: "Available", tone: "neutral" as const }
-  return { label: "Setup needed", tone: "neutral" as const }
+  const target = scientificCapabilityTarget(record)
+  if (!target) return { label: "Unavailable", tone: "danger" as const, action: undefined }
+  const availability = target === "local" ? record.current_availability.local : record.current_availability.hosted
+  if (availability === "degraded")
+    return {
+      label: "Needs attention",
+      tone: "warning" as const,
+      action:
+        target === "local" ? ("setup" as const) : target === "nvidia" ? ("credentials" as const) : ("compute" as const),
+    }
+  if (availability === "ready" || availability === "configured")
+    return { label: "Ready", tone: "success" as const, action: undefined }
+  return {
+    label: target === "local" ? "Not installed" : "Setup needed",
+    tone: "neutral" as const,
+    action:
+      target === "local" ? ("setup" as const) : target === "nvidia" ? ("credentials" as const) : ("compute" as const),
+  }
 }

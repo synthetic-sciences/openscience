@@ -34,7 +34,6 @@ export const SETTINGS_PANEL_IDS = [
   "skills",
   "scientific-tools",
   "connectors",
-  "research-tools",
   "compute",
   "permissions",
   "network",
@@ -96,13 +95,6 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "mcp",
     section: "capabilities",
     component: lazy(() => import("./Connectors")),
-  },
-  {
-    id: "research-tools",
-    title: "Research tools",
-    icon: "magnifying-glass",
-    section: "capabilities",
-    component: lazy(() => import("./ResearchTools")),
   },
   // ── Runtime ──
   {

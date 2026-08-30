@@ -9227,6 +9227,55 @@ export type SettingsScientificToolsResponses = {
 
 export type SettingsScientificToolsResponse = SettingsScientificToolsResponses[keyof SettingsScientificToolsResponses]
 
+export type SettingsScientificToolSetupData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/settings/scientific-tools/{id}/setup"
+}
+
+export type SettingsScientificToolSetupErrors = {
+  /**
+   * Unknown capability
+   */
+  404: {
+    error: "not_found" | "not_installable"
+    message: string
+  }
+  /**
+   * Capability has no packaged local runtime
+   */
+  409: {
+    error: "not_found" | "not_installable"
+    message: string
+  }
+}
+
+export type SettingsScientificToolSetupError =
+  SettingsScientificToolSetupErrors[keyof SettingsScientificToolSetupErrors]
+
+export type SettingsScientificToolSetupResponses = {
+  /**
+   * Scientific tool runtime installed
+   */
+  200: {
+    capability: string
+    state: "ready"
+    environment: string
+    python: string
+    packages: {
+      [key: string]: string
+    }
+    lock_digest: string
+    conda_lock_sha256: string
+  }
+}
+
+export type SettingsScientificToolSetupResponse =
+  SettingsScientificToolSetupResponses[keyof SettingsScientificToolSetupResponses]
+
 export type SettingsBillingGetData = {
   body?: never
   path?: never

@@ -348,6 +348,8 @@ import type {
   SettingsPreferencesGetResponses,
   SettingsPreferencesOnboardingOperationResponses,
   SettingsPreferencesUpdateResponses,
+  SettingsScientificToolSetupErrors,
+  SettingsScientificToolSetupResponses,
   SettingsScientificToolsResponses,
   SettingsSkillsInstallErrors,
   SettingsSkillsInstallResponses,
@@ -1998,6 +2000,31 @@ export class Updates extends HeyApiClient {
   }
 }
 
+export class ScientificTool extends HeyApiClient {
+  /**
+   * Install a packaged scientific tool runtime
+   *
+   * Installs and verifies the exact device-local environment declared by a packaged capability manifest. The user initiates this operation explicitly from Settings.
+   */
+  public setup<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).post<
+      SettingsScientificToolSetupResponses,
+      SettingsScientificToolSetupErrors,
+      ThrowOnError
+    >({
+      url: "/settings/scientific-tools/{id}/setup",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Billing extends HeyApiClient {
   /**
    * Get Ace/model billing state
@@ -2192,6 +2219,11 @@ export class Settings extends HeyApiClient {
   private _updates?: Updates
   get updates(): Updates {
     return (this._updates ??= new Updates({ client: this.client }))
+  }
+
+  private _scientificTool?: ScientificTool
+  get scientificTool(): ScientificTool {
+    return (this._scientificTool ??= new ScientificTool({ client: this.client }))
   }
 
   private _billing?: Billing

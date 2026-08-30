@@ -10,7 +10,6 @@ const publicSources = [
   "../i18n/zh.ts",
   "./settings/General.tsx",
   "./settings/ProviderKeys.tsx",
-  "./settings/ResearchTools.tsx",
 ] as const
 
 function renderedSource(value: string) {

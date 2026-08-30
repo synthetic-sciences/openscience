@@ -1,6 +1,6 @@
-/* Connectors follows the workspace's compact neutral language. Semantic color
-   is reserved for live status; transport, controls, and form chrome stay
-   monochrome so this page reads like the rest of the workbench. */
+/* Connectors uses the same flat hierarchy as Models: one quiet surface for
+   saved connections, one for reviewed setups, and advanced/manual setup behind
+   disclosure. Semantic color is reserved for live status. */
 .connectors-panel {
   --connectors-control-height: 32px;
   --connectors-radius: var(--radius-sm);
@@ -11,6 +11,15 @@
 
 .connectors-panel .settings-page-header {
   gap: 12px;
+}
+
+.settings-dialog .connectors-panel .settings-card {
+  gap: 0;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--settings-radius-card);
+  background: var(--settings-surface);
+  box-shadow: none;
 }
 
 .connectors-panel .settings-toolbar {
@@ -69,11 +78,22 @@
   flex-direction: column;
 }
 
-.connectors-catalog {
-  margin-bottom: 20px;
+.connectors-loading__row {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  color: var(--text-weak);
+  font-size: 12px;
 }
 
-.connectors-catalog__lead {
+.connectors-loading__row [data-component="icon"] {
+  color: var(--text-weaker);
+}
+
+.connectors-catalog__lead,
+.connectors-section__lead {
   max-width: 720px;
   margin: 0;
   color: var(--text-weak);
@@ -88,6 +108,10 @@
 .connectors-catalog__row {
   min-width: 0;
   border-radius: var(--settings-radius-control);
+}
+
+.connectors-catalog__row:hover {
+  background: var(--settings-surface-hover);
 }
 
 .connectors-catalog__row[data-expanded="true"] {
@@ -194,9 +218,115 @@
   outline-offset: 2px;
 }
 
+.connectors-action--primary {
+  background: var(--settings-primary);
+  color: var(--settings-on-primary);
+}
+
+.connectors-action--primary:hover:not(:disabled) {
+  background: var(--settings-primary-hover);
+}
+
+.connectors-manual {
+  min-width: 0;
+  border-radius: var(--settings-radius-card);
+}
+
+.connectors-manual > summary {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--settings-radius-control);
+  background: transparent;
+  color: var(--text-base);
+  list-style: none;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 120ms ease;
+}
+
+.connectors-manual > summary::-webkit-details-marker {
+  display: none;
+}
+
+.connectors-manual > summary:hover,
+.connectors-manual > summary:focus-visible,
+.connectors-manual[open] > summary {
+  background: var(--settings-surface-hover);
+  color: var(--text-strong);
+}
+
+.connectors-manual > summary:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+.connectors-manual > summary:active {
+  transform: scale(0.99);
+}
+
+.connectors-manual > summary > span {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.connectors-manual > summary strong {
+  color: inherit;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+}
+
+.connectors-manual > summary small {
+  overflow: hidden;
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connectors-manual > summary [data-component="icon"] {
+  color: var(--text-weaker);
+  transition: transform 150ms ease;
+}
+
+.connectors-manual[open] > summary [data-component="icon"] {
+  transform: rotate(90deg);
+}
+
+.connectors-manual__list {
+  margin-top: 8px;
+}
+
+.connectors-manual__row {
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--settings-radius-control);
+}
+
+.connectors-manual__row:hover {
+  background: var(--settings-surface-hover);
+}
+
 .connectors-item {
   min-width: 0;
   border-radius: var(--settings-radius-control);
+}
+
+.connectors-item:hover {
+  background: var(--settings-surface-hover);
 }
 
 .connectors-item[data-expanded="true"] {
@@ -691,6 +821,14 @@
     justify-content: flex-start;
   }
 
+  .connectors-manual__row {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .connectors-manual__row .connectors-catalog__actions {
+    grid-column: 2;
+  }
+
   .connectors-catalog__details {
     padding-right: 12px;
   }
@@ -715,7 +853,8 @@
   .connectors-panel [data-component="switch"],
   .connectors-action,
   .connectors-refresh,
-  .connectors-detail-action {
+  .connectors-detail-action,
+  .connectors-manual > summary {
     min-width: 44px;
     min-height: 44px;
   }
@@ -725,7 +864,9 @@
   .connectors-panel [data-component="icon-button"],
   .connectors-action,
   .connectors-refresh,
-  .connectors-detail-action {
+  .connectors-detail-action,
+  .connectors-manual > summary,
+  .connectors-manual > summary [data-component="icon"] {
     transition: none;
   }
 
