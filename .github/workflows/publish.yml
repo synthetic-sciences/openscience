@@ -433,7 +433,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          for name in $DESKTOP_ASSETS; do gh release download "$OPENSCIENCE_TAG" --pattern "$name"; done
+          for name in $DESKTOP_ASSETS; do
+            gh release download "$OPENSCIENCE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name"
+          done
           dmg="$(find . -maxdepth 1 -name '*.dmg' -print -quit)"
           zip="$(find . -maxdepth 1 -name '*.zip' -print -quit)"
           codesign --verify --strict --verbose=2 "$dmg"

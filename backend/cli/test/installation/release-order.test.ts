@@ -55,6 +55,7 @@ test("release caches and resumed mac assets are bound and reverified", async () 
   const version = await read("tooling/repo/version.ts")
 
   expect(workflow).toContain('gh release view "$OPENSCIENCE_TAG" --repo "$GITHUB_REPOSITORY" --json assets')
+  expect(workflow).toContain('gh release download "$OPENSCIENCE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name"')
 
   expect(workflow).toContain(
     "key: cli-build-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}",
