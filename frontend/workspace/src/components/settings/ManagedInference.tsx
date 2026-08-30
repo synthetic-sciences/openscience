@@ -8,6 +8,7 @@ import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
 import { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
+import { createAccountRecovery } from "./account-recovery"
 
 export { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
 
@@ -17,6 +18,8 @@ type LoginResult = { ok: boolean; error?: string }
 type Wallet = {
   signedIn: boolean
   balanceUsd: number | null
+  balanceRedacted?: boolean
+  accessVerified?: boolean
   billingMode: Mode | null
   managedSupported: boolean
   managedUnlocked: boolean
@@ -32,10 +35,14 @@ type Wallet = {
 }
 type AccountStatus = "idle" | "loading" | "ready" | "error"
 
-const ACCOUNT_TIMEOUT_MS = 3_000
+const ACCOUNT_TIMEOUT_MS = 6_000
 
 export const canSelectManaged = (wallet: Wallet | undefined) =>
-  Boolean(wallet?.signedIn && wallet.managedSupported && wallet.managedUnlocked)
+  Boolean(wallet?.signedIn && wallet.accessVerified === true && wallet.managedSupported && wallet.managedUnlocked)
+
+export const accountUnavailable = (wallet: Wallet) =>
+  wallet.signedIn &&
+  (wallet.accessVerified !== true || (wallet.balanceUsd === null && !wallet.balanceRedacted && wallet.managedSupported))
 
 export function aceContractLabel(contract: NonNullable<Wallet["aceContract"]>) {
   return `Ace is a $${contract.activationAuthorizationUsd} authorization, not a purchase or subscription. While Ace is on, a purchased Wallet balance below $${contract.reloadThresholdUsd} triggers one fixed $${contract.reloadAmountUsd} reload; the processing fee is disclosed separately before payment.`
@@ -62,7 +69,6 @@ export async function commitBilling<T>(write: () => Promise<T>, apply: (data: T)
   apply(result)
 }
 
-import { withAccountDeadline } from "./account-deadline"
 export { withAccountDeadline } from "./account-deadline"
 
 const accountWallet = (signedIn: boolean): Wallet => ({
@@ -93,44 +99,45 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     refreshing: false,
     account: "idle",
   })
-  const pending: { wallet?: Promise<void>; refresh?: boolean } = {}
+  const lifecycle = { epoch: 0, disposed: false }
   const selected = createMemo(() => MODES.find((item) => item.value === state.mode) ?? MODES[0])
 
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
   const fail = (error: unknown) => props.onError?.(reason(error))
-  const loadWallet = () => {
-    if (pending.wallet) return pending.wallet
-    setState("account", "loading")
-    const request = withAccountDeadline(
-      (signal) => settingsApi<Wallet>(sdk.url, fetchFn, "/settings/wallet?summary=true", { signal }),
-      ACCOUNT_TIMEOUT_MS,
-    )
+  const recovery = createAccountRecovery<Wallet>({
+    read: (signal) => settingsApi<Wallet>(sdk.url, fetchFn, "/settings/wallet?summary=true", { signal }),
+    timeoutMs: ACCOUNT_TIMEOUT_MS,
+    active: () => document.visibilityState !== "hidden",
+    loading: () => setState("account", "loading"),
+    apply: (next) => {
+      setState("wallet", next)
+      setState("account", accountUnavailable(next) ? "error" : "ready")
+      if (!state.saving && next.billingMode) setState("mode", normalizeMode(next.billingMode))
+      props.onError?.(
+        accountUnavailable(next) ? "Account refresh temporarily unavailable. Retrying automatically." : undefined,
+      )
+    },
+    failed: (error) => {
+      setState("account", "error")
+      // Do not present a stale balance or stale eligibility as current proof.
+      setState("wallet", undefined)
+      fail(error)
+    },
+    retry: accountUnavailable,
+  })
+  const loadWallet = recovery.load
+  const loadBilling = () => {
+    const epoch = lifecycle.epoch
+    return settingsApi<BillingState>(sdk.url, fetchFn, "/settings/billing")
       .then((next) => {
-        setState("wallet", next)
-        setState("account", "ready")
-        if (!state.saving && next.billingMode) setState("mode", normalizeMode(next.billingMode))
-      })
-      .catch((error) => {
-        setState("account", "error")
-        fail(error)
-      })
-      .finally(() => {
-        if (pending.wallet !== request) return
-        pending.wallet = undefined
-        if (!pending.refresh) return
-        pending.refresh = false
-        void loadWallet()
-      })
-    pending.wallet = request
-    return request
-  }
-  const loadBilling = () =>
-    settingsApi<BillingState>(sdk.url, fetchFn, "/settings/billing")
-      .then((next) => {
+        if (lifecycle.disposed || epoch !== lifecycle.epoch) return
         if (!state.saving) setState("mode", normalizeMode(next.llm))
         if (!state.wallet && next.wallet) setState("wallet", accountWallet(next.wallet.signedIn))
       })
-      .catch(fail)
+      .catch((error) => {
+        if (!lifecycle.disposed && epoch === lifecycle.epoch) fail(error)
+      })
+  }
   const refresh = () => {
     props.onError?.(undefined)
     void loadBilling()
@@ -148,14 +155,20 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
       .finally(() => setState("refreshing", false))
   }
   const accountChanged = () => {
+    lifecycle.epoch++
+    recovery.invalidate()
+    setState("wallet", undefined)
     props.onError?.(undefined)
-    if (pending.wallet) pending.refresh = true
     void loadBilling()
     void loadWallet()
   }
 
+  const resumed = () => {
+    if (document.visibilityState !== "hidden") refresh()
+  }
+
   const update = (value: Mode) => {
-    if (state.saving || (value === "managed" && !canSelectManaged(state.wallet))) return
+    if (state.saving || (value === "managed" && (state.account !== "ready" || !canSelectManaged(state.wallet)))) return
     const previous = state.mode
     setState("mode", value)
     setState("saving", true)
@@ -199,10 +212,16 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   onMount(() => {
     refresh()
     window.addEventListener("focus", refresh)
+    window.addEventListener("online", refresh)
+    document.addEventListener("visibilitychange", resumed)
     window.addEventListener("openscience:account-changed", accountChanged)
   })
   onCleanup(() => {
+    lifecycle.disposed = true
+    recovery.dispose()
     window.removeEventListener("focus", refresh)
+    window.removeEventListener("online", refresh)
+    document.removeEventListener("visibilitychange", resumed)
     window.removeEventListener("openscience:account-changed", accountChanged)
     unsubscribe()
   })
@@ -220,6 +239,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   const balanceLabel = () => {
     if (state.wallet && !state.wallet.signedIn) return walletBalanceLabel(state.wallet)
     if (!state.wallet || (state.account === "loading" && state.wallet.balanceUsd === null)) return "Purchased Wallet"
+    if (state.wallet.balanceRedacted) return "Balance private to workspace admins"
     return walletBalanceLabel(state.wallet)
   }
   const accountAction = () => {
@@ -273,7 +293,10 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
                 type="button"
                 aria-pressed={state.mode === option.value}
                 aria-busy={state.saving}
-                disabled={state.saving || (option.value === "managed" && !canSelectManaged(state.wallet))}
+                disabled={
+                  state.saving ||
+                  (option.value === "managed" && (state.account !== "ready" || !canSelectManaged(state.wallet)))
+                }
                 class="models-routing__option"
                 title={
                   option.value === "managed" && managedUnavailable()

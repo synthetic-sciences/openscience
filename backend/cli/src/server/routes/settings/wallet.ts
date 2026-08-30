@@ -6,11 +6,13 @@ import { ACE_CONTRACT } from "../../../openscience/ace-contract"
 import { lazy } from "../../../util/lazy"
 import { withTimeout } from "../../../util/timeout"
 
-const WALLET_BUDGET_MS = 2_500
+export const WALLET_BUDGET_MS = 5_000
 
 export const WalletState = z.object({
   signedIn: z.boolean(),
   balanceUsd: z.number().nullable(),
+  balanceRedacted: z.boolean().optional(),
+  accessVerified: z.boolean().optional(),
   billingMode: z.enum(["managed", "byok"]).nullable(),
   managedSupported: z.boolean(),
   managedUnlocked: z.boolean(),
@@ -48,36 +50,52 @@ const SIGNED_OUT: WalletState = {
   transactions: [],
 }
 
-async function readWallet(summary: boolean): Promise<WalletState> {
+export async function readWallet(
+  summary: boolean,
+  account: Pick<
+    typeof OpenScience,
+    "getFundingSnapshot" | "getCredits" | "getBillingMode" | "getTransactions"
+  > = OpenScience,
+): Promise<WalletState> {
   // The local immutable funding snapshot plus gateway response proof is the
   // authorization boundary. Avoid a separate auth-status round trip before
   // the Wallet reads so the default Models panel can load them together. The
   // summary skips history and has a short budget; full ledger reads retain the
   // existing contract for callers that need transaction history.
-  const snapshot = await OpenScience.getFundingSnapshot().catch(() => null)
+  const snapshot = await account.getFundingSnapshot().catch(() => null)
   if (!snapshot) return SIGNED_OUT
   const creditsRequest = summary
     ? withTimeout(
-        OpenScience.getCredits(snapshot, { timeoutMs: WALLET_BUDGET_MS, lifetimeSpent: false }),
+        account.getCredits(snapshot, { timeoutMs: WALLET_BUDGET_MS, lifetimeSpent: false }),
         WALLET_BUDGET_MS,
       ).catch(() => null)
-    : OpenScience.getCredits(snapshot).catch(() => null)
+    : account.getCredits(snapshot).catch(() => null)
   const [credits, mode, transactions] = await Promise.all([
     creditsRequest,
     summary
-      ? withTimeout(OpenScience.getBillingMode(snapshot, creditsRequest, WALLET_BUDGET_MS), WALLET_BUDGET_MS).catch(
+      ? withTimeout(account.getBillingMode(snapshot, creditsRequest, WALLET_BUDGET_MS), WALLET_BUDGET_MS).catch(
           () => null,
         )
-      : OpenScience.getBillingMode(snapshot, creditsRequest).catch(() => null),
-    summary ? Promise.resolve([]) : OpenScience.getTransactions(20, snapshot).catch(() => null),
+      : account.getBillingMode(snapshot, creditsRequest).catch(() => null),
+    summary ? Promise.resolve([]) : account.getTransactions(20, snapshot).catch(() => null),
   ])
-  const balance = credits?.balanceUsd ?? null
+  const current = await account.getFundingSnapshot()
+  if (!current) return SIGNED_OUT
+  if (current.api_key !== snapshot.api_key || current.organization_id !== snapshot.organization_id) {
+    throw new Error("The selected account changed while refreshing the Wallet. Retry.")
+  }
+  const redacted = Boolean(credits?.balanceRedacted || mode?.balance_redacted)
+  const balance = redacted ? null : (credits?.balanceUsd ?? (mode?.balance_verified ? mode.balance_usd : null))
   return {
     signedIn: true,
     balanceUsd: balance,
+    balanceRedacted: redacted,
+    accessVerified: mode?.access_verified === true,
     billingMode: mode?.mode ?? null,
     managedSupported: mode?.managed_supported ?? summary,
-    managedUnlocked: Boolean(mode?.managed_unlocked || mode?.ace_enabled || (balance !== null && balance > 0)),
+    // Explicit access denials outrank cash or reload consent. Neither implies
+    // permission to spend from a workspace with a revoked role or usage limit.
+    managedUnlocked: mode?.access_verified === true && mode.managed_supported && mode.managed_unlocked,
     aceEnabled: mode?.ace_enabled ?? false,
     aceContract: { ...ACE_CONTRACT },
     lifetimeSpentUsd: credits?.lifetimeSpentCents == null ? null : credits.lifetimeSpentCents / 100,

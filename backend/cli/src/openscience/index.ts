@@ -1178,6 +1178,7 @@ export namespace OpenScience {
 
   export interface Credits {
     balanceUsd: number
+    balanceRedacted?: boolean
     balanceCents: number
     cliBalanceCents: number
     spendableBalanceCents: number
@@ -1218,6 +1219,7 @@ export namespace OpenScience {
         promotional_cents?: number
         cycle_credits_remaining_cents?: number
         lifetime_spent_cents?: number
+        redacted?: boolean
       }
       let lifetimeSpent = body.lifetime_spent_cents ?? null
       if (currentWallet && lifetimeSpent === null && options.lifetimeSpent !== false) {
@@ -1234,6 +1236,7 @@ export namespace OpenScience {
       const purchased = body.purchased_cents ?? body.purchased_credits_cents ?? spendable - promotional
       return {
         balanceUsd: purchased / 100,
+        balanceRedacted: body.redacted === true,
         balanceCents: purchased,
         cliBalanceCents: purchased,
         spendableBalanceCents: spendable,
@@ -1284,6 +1287,9 @@ export namespace OpenScience {
     managed_supported: boolean
     managed_unlocked: boolean
     ace_enabled?: boolean
+    balance_redacted?: boolean
+    balance_verified?: boolean
+    access_verified?: boolean
   }
 
   export async function getBillingMode(
@@ -1304,6 +1310,7 @@ export namespace OpenScience {
           managed_supported?: boolean
           managed_unlocked?: boolean
           ace_enabled?: boolean
+          balance_redacted?: boolean
         })
       : undefined
     const configured = (await configModule.Config.getGlobal()).billing?.llm
@@ -1312,15 +1319,24 @@ export namespace OpenScience {
     const envOpenRouterKey = process.env.OPENROUTER_API_KEY
     const envOwnKey = !!envOpenRouterKey && !isAtlasManagedKey(envOpenRouterKey)
     const balance = credits?.balanceCents ?? access?.cli_balance_cents ?? 0
-    const supported = access?.managed_supported ?? true
+    const denied = accessResponse?.status === 401 || accessResponse?.status === 403
+    const verified = denied || (
+      accessResponse?.ok === true &&
+      typeof access?.managed_unlocked === "boolean" &&
+      typeof access.managed_supported === "boolean"
+    )
+    const supported = !denied && access?.managed_supported === true
     return {
       mode:
         configured === "managed" ? "managed" : configured === "byok" || storedOwnKey || envOwnKey ? "byok" : "managed",
       balance_cents: balance,
       balance_usd: balance / 100,
       managed_supported: supported,
-      managed_unlocked: access?.managed_unlocked ?? (supported && balance > 0),
+      managed_unlocked: verified && supported && access?.managed_unlocked === true,
+      access_verified: verified,
       ace_enabled: access?.ace_enabled ?? false,
+      balance_redacted: access?.balance_redacted ?? credits?.balanceRedacted ?? false,
+      balance_verified: typeof access?.cli_balance_cents === "number" && access.balance_redacted !== true,
     }
   }
 

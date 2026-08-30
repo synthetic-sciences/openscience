@@ -112,6 +112,7 @@ type ModelOptionListProps = {
   title: string
   current: string
   options: Array<{ id: string; label: string }>
+  compact?: boolean
   onSelect: (id: string) => void
   onDone?: () => void
 }
@@ -139,8 +140,19 @@ export const ModelOptionList: Component<ModelOptionListProps> = (props) => {
   }
 
   return (
-    <div data-model-option-group={props.kind} class="flex flex-col">
-      <div id={props.id} role="radiogroup" aria-label={props.title} class="flex flex-col" onKeyDown={onKeyDown}>
+    <div data-model-option-group={props.kind} data-model-options-compact={props.compact ? "" : undefined}>
+      <div
+        id={props.id}
+        role="radiogroup"
+        aria-label={props.title}
+        class="flex flex-col"
+        style={
+          props.compact
+            ? { "--model-option-columns": props.options.length === 4 ? 2 : Math.min(3, props.options.length) }
+            : undefined
+        }
+        onKeyDown={onKeyDown}
+      >
         <For each={props.options}>
           {(option) => (
             <button
@@ -159,7 +171,7 @@ export const ModelOptionList: Component<ModelOptionListProps> = (props) => {
               <span class="model-settings-setting">
                 <span data-model-menu-label>{option.label}</span>
               </span>
-              <Show when={selected() === option.id}>
+              <Show when={!props.compact && selected() === option.id}>
                 <Icon name="check" size="small" class="model-settings-check" aria-hidden="true" />
               </Show>
             </button>
@@ -269,6 +281,7 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => (
           title="Reasoning effort"
           current={props.current}
           options={props.options}
+          compact
           onSelect={props.onEffortSelect}
         />
       </section>
@@ -294,6 +307,7 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => (
             title="Context window"
             current={context().current}
             options={context().options}
+            compact
             onSelect={(id) => props.onContextSelect?.(id)}
           />
         </section>
@@ -334,10 +348,12 @@ export const ModelEffortPopover: Component<ModelEffortPopoverProps> = (props) =>
         aria-label={
           props.options.length > 0
             ? `Reasoning effort: ${props.value}.${props.fast?.active ? " Fast mode on." : ""} Reasoning options`
-            : `Fast mode: ${props.fast?.active ? "on" : "off"}. Model options`
+            : props.fast
+              ? `Fast mode: ${props.fast.active ? "on" : "off"}. Model options`
+              : `Context window: ${props.context?.options.find((option) => option.id === props.context?.current)?.label ?? "Default"}. Model options`
         }
       >
-        <strong>{props.options.length > 0 ? props.value : "Fast"}</strong>
+        <strong>{props.options.length > 0 ? props.value : props.fast ? "Fast" : "Context"}</strong>
         <Show when={props.fast?.active && props.options.length > 0}>
           <span data-model-fast-indicator aria-hidden="true">
             Fast

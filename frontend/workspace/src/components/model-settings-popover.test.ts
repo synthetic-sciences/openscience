@@ -226,6 +226,50 @@ describe("model option keyboard navigation", () => {
 })
 
 describe("reasoning effort and Fast mode", () => {
+  test("balances four effort options into two equal rows", () => {
+    const host = mount(() =>
+      web.createComponent(subject.ModelEffortPanel, {
+        current: "high",
+        options: ["medium", "high", "xhigh", "max"].map((id) => ({ id, label: id })),
+        onEffortSelect: () => undefined,
+        onTierSelect: () => undefined,
+      }),
+    )
+    const group = host.querySelector<HTMLElement>('[data-model-options-compact] [role="radiogroup"]')!
+    expect(group.style.getPropertyValue("--model-option-columns")).toBe("2")
+    expect(group.querySelectorAll('[role="radio"]')).toHaveLength(4)
+  })
+
+  test("keeps every effort and context option in separate compact keyboard groups", async () => {
+    const selected = { effort: "medium", context: "1050000" }
+    const efforts = ["standard", "low", "medium", "high", "xhigh", "max"]
+    const contexts = ["64000", "128000", "272000", "1050000"]
+    const host = mount(() =>
+      web.createComponent(subject.ModelEffortPanel, {
+        current: selected.effort,
+        options: efforts.map((id) => ({ id, label: id })),
+        context: {
+          current: selected.context,
+          options: contexts.map((id) => ({ id, label: id })),
+        },
+        onEffortSelect: (value) => (selected.effort = value),
+        onTierSelect: () => undefined,
+        onContextSelect: (value) => (selected.context = value),
+      }),
+    )
+    const groups = host.querySelectorAll('[data-model-options-compact] [role="radiogroup"]')
+    expect(groups).toHaveLength(2)
+    expect(groups[0]?.querySelectorAll('[role="radio"]')).toHaveLength(efforts.length)
+    expect(groups[1]?.querySelectorAll('[role="radio"]')).toHaveLength(contexts.length)
+    const current = host.querySelector<HTMLButtonElement>('[data-model-option="effort"][aria-checked="true"]')!
+    current.focus()
+    await press(current, "End")
+    expect(selected).toEqual({ effort: "max", context: "1050000" })
+    expect(document.activeElement?.getAttribute("data-model-option-id")).toBe("max")
+    host.querySelector<HTMLButtonElement>('[data-model-option="context"][data-model-option-id="64000"]')?.click()
+    expect(selected).toEqual({ effort: "max", context: "64000" })
+  })
+
   test("renders one Fast toggle only when the exact route advertises it", () => {
     const unsupported = mount(() =>
       web.createComponent(subject.ModelEffortPanel, {
@@ -389,5 +433,28 @@ describe("reasoning effort and Fast mode", () => {
     expect(trigger.getAttribute("aria-label")).toBe("Reasoning effort: High. Fast mode on. Reasoning options")
     expect(trigger.querySelector("[data-model-fast-indicator]")).not.toBeNull()
     expect(trigger.querySelector('[data-icon="bolt"]')).toBeNull()
+  })
+
+  test("labels context-only model options without advertising unsupported Fast mode", () => {
+    const host = mount(() =>
+      web.createComponent(subject.ModelEffortPopover, {
+        value: "Fast",
+        current: "standard",
+        options: [],
+        context: {
+          current: "1050000",
+          options: [
+            { id: "272000", label: "272K cap" },
+            { id: "1050000", label: "Full · 1.05M" },
+          ],
+        },
+        onEffortSelect: () => undefined,
+        onTierSelect: () => undefined,
+      }),
+    )
+    const trigger = host.querySelector<HTMLButtonElement>("[data-model-effort-chip]")!
+    expect(trigger.textContent).toContain("Context")
+    expect(trigger.textContent).not.toContain("Fast")
+    expect(trigger.getAttribute("aria-label")).toBe("Context window: Full · 1.05M. Model options")
   })
 })

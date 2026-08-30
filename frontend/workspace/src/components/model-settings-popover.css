@@ -507,64 +507,77 @@
 }
 
 [data-model-effort-panel] {
-  padding: 2px;
+  display: grid;
+  gap: 12px;
+  padding: 8px 4px 4px;
+}
+
+[data-model-effort-panel] .model-settings-option-section {
+  display: grid;
+  gap: 8px;
+}
+
+[data-model-effort-panel] .model-settings-option-section + .model-settings-option-section {
+  padding-top: 12px;
+  border-top: 1px solid var(--model-control-border);
+}
+
+[data-model-effort-panel] .model-settings-heading {
+  padding: 0 4px;
+  color: var(--model-control-muted);
 }
 
 [data-model-popover-kind="effort"] {
-  width: min(252px, calc(100vw - 24px));
+  width: min(304px, calc(100vw - 24px));
   max-height: min(72dvh, 390px);
 }
 
 [data-model-popover-kind="effort"] .model-settings-popover__body {
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 5px;
+  padding: 4px;
 }
 
-[data-model-popover-kind="effort"] [data-model-option-group="effort"] [role="radiogroup"] {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+[data-model-options-compact] [role="radiogroup"] {
+  display: grid;
+  grid-template-columns: repeat(var(--model-option-columns, 3), minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--model-control-border);
+  border-radius: var(--radius-md);
+  background: var(--model-control-raised);
 }
 
-[data-model-settings-popover][data-model-popover-kind="effort"] [data-model-option="effort"].model-settings-row {
-  min-height: 40px;
-  padding: 4px 9px;
+[data-model-settings-popover] [data-model-options-compact] .model-settings-row {
+  min-height: 36px;
+  justify-content: center;
+  padding: 4px;
   border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   background: transparent;
+  text-align: center;
 }
 
-[data-model-settings-popover][data-model-popover-kind="effort"] [data-model-option="effort"].model-settings-row:hover,
-[data-model-settings-popover][data-model-popover-kind="effort"]
-  [data-model-option="effort"].model-settings-row:focus-visible {
+[data-model-settings-popover] [data-model-options-compact] .model-settings-row:hover,
+[data-model-settings-popover] [data-model-options-compact] .model-settings-row:focus-visible {
   background: var(--model-control-hover);
 }
 
-[data-model-popover-kind="effort"] [data-model-option="effort"][aria-checked="true"] {
-  border-color: var(--model-control-border);
-  background: var(--model-control-selected);
+[data-model-settings-popover] [data-model-options-compact] .model-settings-row[aria-checked="true"] {
+  border-color: var(--model-control-border-strong);
+  background: var(--model-control-surface);
 }
 
-[data-model-popover-kind="effort"] [data-model-option="effort"][aria-checked="true"] [data-model-menu-label] {
+[data-model-options-compact] [aria-checked="true"] [data-model-menu-label] {
   font-weight: var(--font-weight-medium);
 }
 
-[data-model-popover-kind="effort"] [data-model-menu-label] {
+[data-model-options-compact] [data-model-menu-label] {
   display: block;
   overflow: visible;
+  font-size: 12px;
   line-height: 18px;
-}
-
-.model-settings-speed-section {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--model-control-border);
-}
-
-.model-settings-speed-section:first-child {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
+  text-wrap: balance;
 }
 
 [data-model-fast-toggle] {
@@ -582,9 +595,9 @@
 
 [data-model-fast-toggle] [data-component="switch"] {
   width: 100%;
-  min-height: 36px;
+  min-height: 32px;
   justify-content: space-between;
-  padding: 2px 8px;
+  padding: 0 4px;
   cursor: pointer;
 }
 
@@ -607,7 +620,7 @@
   }
 
   [data-model-settings-popover][data-model-popover-kind="effort"] {
-    width: min(252px, calc(100vw - 24px));
+    width: min(304px, calc(100vw - 24px));
   }
 
   [data-model-settings-popover]:not([data-model-settings-view="root"]) [data-model-settings-layout] {
@@ -749,16 +762,9 @@
     padding: 8px 14px calc(10px + env(safe-area-inset-bottom));
   }
 
-  [data-model-popover-kind="effort"] [data-model-option="effort"] {
+  [data-model-settings-popover] [data-model-options-compact] .model-settings-row {
     min-height: 44px;
-    padding-inline: 12px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-  }
-
-  [data-model-popover-kind="effort"] [data-model-menu-label] {
-    font-size: 13px;
-    line-height: 18px;
+    padding-inline: 4px;
   }
 
   [data-model-fast-toggle] [data-component="switch"] {
@@ -781,5 +787,12 @@
   .model-settings-heading {
     padding: 10px 20px 5px;
     font-size: 12px;
+  }
+}
+
+@media (pointer: coarse) {
+  [data-model-settings-popover] [data-model-options-compact] .model-settings-row,
+  [data-model-fast-toggle] [data-component="switch"] {
+    min-height: 44px;
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   aceContractLabel,
+  accountUnavailable,
   canSelectManaged,
   commitBilling,
   formatCreditBalance,
@@ -50,6 +51,7 @@ describe("Ace model access", () => {
     expect(
       canSelectManaged({
         signedIn: true,
+        accessVerified: true,
         managedSupported: true,
         managedUnlocked: true,
         aceEnabled: false,
@@ -67,6 +69,53 @@ describe("Ace model access", () => {
         billingMode: null,
       }),
     ).toBe(false)
+  })
+
+  test("retries incomplete account reads without treating redacted balances or denials as transient", () => {
+    const wallet = {
+      signedIn: true,
+      accessVerified: true,
+      balanceUsd: null,
+      billingMode: null,
+      managedSupported: true,
+      managedUnlocked: false,
+      aceEnabled: false,
+    } as const
+    expect(accountUnavailable(wallet)).toBe(true)
+    expect(accountUnavailable({ ...wallet, balanceRedacted: true })).toBe(false)
+    expect(accountUnavailable({ ...wallet, managedSupported: false })).toBe(false)
+    expect(accountUnavailable({ ...wallet, signedIn: false })).toBe(false)
+    expect(source).toContain('state.account !== "ready" || !canSelectManaged(state.wallet)')
+  })
+
+  test("a successful balance cannot enable Ace when the access check is unavailable", () => {
+    const wallet = {
+      signedIn: true,
+      balanceUsd: 20,
+      billingMode: null,
+      managedSupported: true,
+      managedUnlocked: true,
+      aceEnabled: true,
+      accessVerified: false,
+    } as const
+    expect(canSelectManaged(wallet)).toBe(false)
+    expect(accountUnavailable(wallet)).toBe(true)
+    expect(accountUnavailable({ ...wallet, balanceRedacted: true })).toBe(true)
+    expect(canSelectManaged({ ...wallet, accessVerified: undefined })).toBe(false)
+  })
+
+  test("a confirmed access denial stays disabled without an automatic retry loop", () => {
+    const wallet = {
+      signedIn: true,
+      balanceUsd: null,
+      billingMode: null,
+      managedSupported: false,
+      managedUnlocked: false,
+      aceEnabled: false,
+      accessVerified: true,
+    } as const
+    expect(canSelectManaged(wallet)).toBe(false)
+    expect(accountUnavailable(wallet)).toBe(false)
   })
 
   test("acknowledges the billing write before catalog refresh", async () => {
