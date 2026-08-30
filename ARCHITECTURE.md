@@ -16,9 +16,7 @@ When you run `openscience`, the CLI starts a local server and opens a workspace 
         +--  Tool layer         shell, edit, LSP, MCP, science connectors
         +--  Skills             bundled and user-installed skill packs
         +--  Providers          Anthropic, OpenAI, Google, and 75+ more
-        +--  Compute jobs       local, SSH, scheduler, and governed Modal runs
-        |
-        +--  Gateway client     optional: managed models, wallet, search, graphs
+        +--  Compute jobs       local, SSH, scheduler, and user-owned Modal runs
 ```
 
 The server binds to `127.0.0.1` and enforces a Host and Origin allowlist. There is no remote mode.
@@ -29,7 +27,7 @@ The server binds to `127.0.0.1` and enforces a Host and Origin allowlist. There 
 backend/cli          The CLI, server, agent runtime, tools, and skills
 frontend/workspace   The workspace UI (SolidJS), served by the CLI
 frontend/ui          Shared UI components, themes, and fonts
-frontend/docs        The documentation and session-share site (Astro)
+frontend/docs        The documentation site (Astro)
 frontend/landing     The marketing site (openscience.sh)
 tooling/sdk/js       The TypeScript SDK, generated from the server contract
 tooling/plugin       The plugin runtime (@synsci/plugin)
@@ -51,7 +49,7 @@ The backend is a Bun and TypeScript application compiled to a single native bina
 - `src/provider` routes each request to a model. Model definitions come from [models.dev](https://models.dev), cached locally with a bundled snapshot as a fallback. Native direct-key routes stay distinct from relays: DeepSeek direct BYOK uses the official adapter, while selecting an explicit OpenRouter model keeps that request on OpenRouter.
 - `src/tool` and `src/science` implement the tools the agent can call, including the shell, editor, LSP bridge, MCP client, and the scientific database connectors. The versioned scientific capability registry contains a truthful 54-entry inventory. Five experimental Python capabilities own a complete doctor/setup/plan/start/status/wait/logs/artifacts/verify/cancel/retry/release lifecycle over exact local or Modal runtime locks; ten experimental BioNeMo capabilities use strict in-process BYOK NVIDIA NIM adapters. Two entries are explicitly blocked and none is called verified without matching release evidence. The single `scientific_capability` tool owns those lifecycles so a model never needs a second, separately selected compute tool to finish an approved run.
 - `src/compute` owns durable local and remote job lifecycles. Modal dispatch is bound to an approved digest, explicit files and secrets, durable ownership, and recoverable output delivery. Its concurrency setting is an admission limit: starts beyond the limit fail visibly rather than entering an autonomous waiting queue.
-- `src/openscience` is the Gateway client. It is optional; the base install and every bring-your-own-key flow work without it.
+- `src/openscience` contains local credential redaction and subprocess-environment boundaries.
 
 ### Prompt architecture
 
@@ -65,7 +63,7 @@ Skills are instruction bundles the agent loads on demand (`src/skill`). The cano
 
 - `frontend/workspace` is the workspace UI. It talks to the local server over the same API the SDK exposes, and renders sessions, files, a terminal, and inline scientific views (molecules, structures, genomes, plots). The CLI build embeds the compiled UI into the binary.
 - `frontend/ui` is the shared component and theme library used by the app and the docs site.
-- `frontend/docs` is the Astro documentation and share site.
+- `frontend/docs` is the Astro documentation site.
 
 ## SDK and plugins
 
@@ -75,10 +73,6 @@ Skills are instruction bundles the agent loads on demand (`src/skill`). The cano
 ## Configuration and state
 
 Global config lives in `~/.config/openscience/openscience.json`; project config in `openscience.json` or a `.openscience/` directory at the repo root. Persistent application data (sessions, auth, credentials, binaries, and logs) defaults to the stable `~/.openscience` data root and can be relocated; config, cache, and state use their resolved XDG directories. `src/global/index.ts` owns those paths. Installs made before the OpenScience rename import or migrate the legacy `synsc` directories on first run.
-
-## Synthetic Sciences integration
-
-Synthetic Sciences is a separate managed service; only its client lives here. Normal OpenScience use requires a free Synthetic Sciences account, while Ace credits remain optional. A saved account session keeps local and own-key work available offline; managed models, wallet and credential synchronization, private research graphs, and enhanced search require the service. The legacy `@synsci/atlas` package, `atlas` binary, resolver, and bundled Atlas skills are retired. Only managed `/api/cli/*` compatibility routes and internal wire identifiers remain. The wire contract uses the `synsci` model provider id, `thk_` wallet keys, and `app.syntheticsciences.ai` as the default managed base URL (`src/endpoints.ts`).
 
 ## Build and release
 

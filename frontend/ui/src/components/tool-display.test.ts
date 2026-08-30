@@ -41,7 +41,7 @@ describe("sentenceCaseLabel", () => {
 })
 
 describe("sessionErrorText", () => {
-  test("explains a managed-credit reservation failure with exact amounts", () => {
+  test("explains a provider balance failure with exact amounts", () => {
     expect(
       sessionErrorText({
         data: {
@@ -50,7 +50,7 @@ describe("sessionErrorText", () => {
         },
       }),
     ).toBe(
-      "Managed Credits: this step needs $3.74; $2.58 is currently available. Pending requests may still be settling.",
+      "The connected provider account needs $3.74 for this step; $2.58 is available.",
     )
   })
 
@@ -58,12 +58,12 @@ describe("sessionErrorText", () => {
     expect(sessionErrorText({ data: { message: "Provider is overloaded" } })).toBe("Provider is overloaded")
   })
 
-  test("presents a recoverable managed-access interruption as paused", () => {
+  test("presents a recoverable provider interruption as paused", () => {
     expect(
       sessionErrorDisplay({
         name: "APIError",
         data: {
-          message: "OpenScience could not verify your Ace balance. Retry when connectivity returns.",
+          message: "The provider connection was interrupted. Retry when connectivity returns.",
           metadata: {
             openscience_state: "paused",
             action: "retry",
@@ -73,7 +73,7 @@ describe("sessionErrorText", () => {
     ).toEqual({
       state: "paused",
       title: "Paused",
-      message: "OpenScience could not verify your Ace balance. Retry when connectivity returns.",
+      message: "The provider connection was interrupted. Retry when connectivity returns.",
       action: "retry",
     })
     expect(sessionErrorDisplay({ data: { message: "Provider is overloaded" } })).toEqual({

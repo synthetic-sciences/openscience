@@ -10,7 +10,7 @@ export const RESEARCH_ACCESS_OPTIONS = [
   {
     value: "ask",
     label: "Ask always",
-    description: "Ask before actions that change files, use the network, run compute, or spend credits",
+    description: "Ask before actions that change files, use the network, run compute, or incur provider costs",
   },
   {
     value: "approve",
@@ -20,7 +20,7 @@ export const RESEARCH_ACCESS_OPTIONS = [
   {
     value: "full",
     label: "Full access",
-    description: "Run without routine prompts; paid and managed safety boundaries still apply",
+    description: "Run without routine prompts; provider and system safety boundaries still apply",
   },
 ] as const satisfies ReadonlyArray<{
   value: ResearchAccessMode
@@ -43,7 +43,7 @@ export function researchAccessContract(mode: ResearchAccessMode) {
     return { sandbox: "workspace-write", approval: "risky actions", boundary: "contained work proceeds" } as const
   return {
     sandbox: "danger-full-access",
-    approval: "managed boundaries",
+    approval: "provider boundaries",
     boundary: "routine prompts off",
   } as const
 }

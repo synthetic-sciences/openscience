@@ -8,9 +8,6 @@ import { ProjectTrust } from "../../src/project/trust"
 import { Config } from "../../src/config/config"
 import { Provider } from "../../src/provider/provider"
 import { Auth } from "../../src/auth"
-import { OutboundTelemetry } from "../../src/telemetry/outbound"
-import * as BillingGate from "../../src/session/billing-gate"
-import { OpenScience } from "../../src/openscience"
 
 const restores: Array<{ mockRestore(): void }> = []
 
@@ -46,18 +43,6 @@ function generatedModel() {
     headers: {},
     release_date: "2026-01-01",
   } as Provider.Model
-}
-
-function generationTelemetrySpies() {
-  const sessionStarted = spyOn(OutboundTelemetry, "sessionStarted").mockResolvedValue(true)
-  const userMessage = spyOn(OutboundTelemetry, "userMessage").mockResolvedValue(true)
-  const modelRequest = spyOn(OutboundTelemetry, "modelRequest").mockResolvedValue(true)
-  const modelResponse = spyOn(OutboundTelemetry, "modelResponse").mockResolvedValue(true)
-  const modelUsage = spyOn(OutboundTelemetry, "modelUsage").mockResolvedValue(true)
-  const error = spyOn(OutboundTelemetry, "error").mockResolvedValue(true)
-  const sessionCompleted = spyOn(OutboundTelemetry, "sessionCompleted").mockResolvedValue(true)
-  restores.push(sessionStarted, userMessage, modelRequest, modelResponse, modelUsage, error, sessionCompleted)
-  return { sessionStarted, userMessage, modelRequest, modelResponse, modelUsage, error, sessionCompleted }
 }
 
 test("returns default native agents when no config", async () => {
@@ -906,23 +891,21 @@ test("defaultAgent throws when all primary visible agents are disabled", async (
   })
 })
 
-test("agent configuration generation emits one canonical ephemeral model trace and disables AI SDK telemetry", async () => {
+test("agent configuration generation disables AI SDK telemetry", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const model = generatedModel()
-      const telemetry = generationTelemetrySpies()
       const getModel = spyOn(Provider, "getModel").mockResolvedValue(model)
       const getLanguage = spyOn(Provider, "getLanguage").mockResolvedValue({} as never)
-      const credential = spyOn(BillingGate, "resolveCredentialSource").mockResolvedValue("byok")
       const auth = spyOn(Auth, "get").mockImplementation(async () => undefined as never)
       const generate = spyOn(AI, "generateObject").mockResolvedValue({
         object: { identifier: "reviewer", whenToUse: "Review a result", systemPrompt: "Check every claim." },
         usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
         finishReason: "stop",
       } as never)
-      restores.push(getModel, getLanguage, credential, auth, generate)
+      restores.push(getModel, getLanguage, auth, generate)
 
       const output = await Agent.generate({
         description: "Create a careful reviewer",
@@ -939,67 +922,19 @@ test("agent configuration generation emits one canonical ephemeral model trace a
         experimental_telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
         temperature: 0.3,
       })
-      const started = telemetry.sessionStarted.mock.calls[0]?.[0]
-      const user = telemetry.userMessage.mock.calls[0]?.[0]
-      const request = telemetry.modelRequest.mock.calls[0]?.[0]
-      const response = telemetry.modelResponse.mock.calls[0]?.[0]
-      expect(started?.sessionID).toMatch(/^agent-config:/)
-      expect(started?.session).toMatchObject({ purpose: "agent_config_generation", ephemeral: true })
-      expect(user).toMatchObject({
-        sessionID: started?.sessionID,
-        message: { role: "user", purpose: "agent_config_generation" },
-        parts: [{ type: "text", text: "Create a careful reviewer" }],
-      })
-      expect(request).toMatchObject({
-        sessionID: started?.sessionID,
-        messageID: user?.messageID,
-        attempt: 1,
-        route: "byok",
-        provider: "openrouter",
-        model: "anthropic/claude-test",
-        parameters: { purpose: "agent_config_generation", structuredOutput: true, streaming: false },
-      })
-      expect(response).toMatchObject({
-        sessionID: started?.sessionID,
-        messageID: user?.messageID,
-        route: "byok",
-        provider: "openrouter",
-        model: "anthropic/claude-test",
-        parts: [{ type: "json", value: output }],
-      })
-      expect(telemetry.modelUsage).toHaveBeenCalledWith({
-        sessionID: started?.sessionID,
-        messageID: user?.messageID,
-        operationID: "agent-config-generation",
-        attempt: 1,
-        route: "byok",
-        provider: "openrouter",
-        model: "anthropic/claude-test",
-        tokens: { input: 20, output: 10, reasoning: 0, cache: { read: 0, write: 0 } },
-        cost: 0,
-      })
-      expect(telemetry.error).not.toHaveBeenCalled()
-      expect(telemetry.sessionCompleted).toHaveBeenCalledWith({
-        sessionID: started?.sessionID,
-        messageID: user?.messageID,
-        reason: "completed",
-        session: { purpose: "agent_config_generation", source: "cli", ephemeral: true },
-      })
     },
   })
 })
 
-test("OAuth configuration generation traces the streamObject response without provider telemetry", async () => {
+test("OAuth configuration generation streams without provider telemetry", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const output = { identifier: "planner", whenToUse: "Plan work", systemPrompt: "Plan carefully." }
       const model = { ...generatedModel(), id: "gpt-test", providerID: "openai" }
-      const telemetry = generationTelemetrySpies()
       const getModel = spyOn(Provider, "getModel").mockResolvedValue(model)
       const getLanguage = spyOn(Provider, "getLanguage").mockResolvedValue({} as never)
-      const credential = spyOn(BillingGate, "resolveCredentialSource").mockResolvedValue("oauth-free")
       const auth = spyOn(Auth, "get").mockResolvedValue({
         type: "oauth",
         refresh: "refresh",
@@ -1015,7 +950,7 @@ test("OAuth configuration generation traces the streamObject response without pr
           yield { type: "finish" }
         })(),
       } as never)
-      restores.push(getModel, getLanguage, credential, auth, generate, stream)
+      restores.push(getModel, getLanguage, auth, generate, stream)
 
       expect(
         await Agent.generate({
@@ -1028,79 +963,6 @@ test("OAuth configuration generation traces the streamObject response without pr
       expect(stream).toHaveBeenCalledTimes(1)
       expect(stream.mock.calls[0]?.[0]).toMatchObject({
         experimental_telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
-      })
-      expect(telemetry.modelRequest.mock.calls[0]?.[0]).toMatchObject({
-        route: "subscription",
-        provider: "openai",
-        model: "gpt-test",
-        parameters: { purpose: "agent_config_generation", streaming: true },
-      })
-      expect(telemetry.modelResponse.mock.calls[0]?.[0]).toMatchObject({
-        route: "subscription",
-        provider: "openai",
-        model: "gpt-test",
-        parts: [{ type: "json", value: output }],
-      })
-      expect(telemetry.modelUsage.mock.calls[0]?.[0]).toMatchObject({
-        route: "subscription",
-        provider: "openai",
-        model: "gpt-test",
-        tokens: { input: 20, output: 10, reasoning: 0, cache: { read: 0, write: 0 } },
-      })
-      expect(telemetry.error).not.toHaveBeenCalled()
-    },
-  })
-})
-
-test("agent configuration generation records provider errors under the model request span", async () => {
-  await using tmp = await tmpdir()
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const model = generatedModel()
-      const telemetry = generationTelemetrySpies()
-      const getModel = spyOn(Provider, "getModel").mockResolvedValue(model)
-      const getLanguage = spyOn(Provider, "getLanguage").mockResolvedValue({} as never)
-      const credential = spyOn(BillingGate, "resolveCredentialSource").mockResolvedValue("managed")
-      const snapshot = Object.freeze({
-        api_key: "thk_agent.secret",
-        user_id: "user-agent",
-        account: "user-agent",
-        organization_id: "org-agent",
-      })
-      const funding = spyOn(OpenScience, "getFundingSnapshot").mockResolvedValue(snapshot)
-      const context = spyOn(Provider, "withRequestContext")
-      const auth = spyOn(Auth, "get").mockImplementation(async () => undefined as never)
-      const failure = new Error("provider failed")
-      const generate = spyOn(AI, "generateObject").mockRejectedValue(failure)
-      restores.push(getModel, getLanguage, credential, funding, context, auth, generate)
-
-      await expect(
-        Agent.generate({
-          description: "Create a careful reviewer",
-          model: { providerID: "requested-provider", modelID: "requested-model" },
-        }),
-      ).rejects.toThrow("provider failed")
-
-      const request = telemetry.modelRequest.mock.calls[0]?.[0]
-      expect(context.mock.calls[0]?.[0].funding).toBe(snapshot)
-      expect(telemetry.modelResponse).not.toHaveBeenCalled()
-      expect(telemetry.modelUsage).not.toHaveBeenCalled()
-      expect(telemetry.error).toHaveBeenCalledTimes(1)
-      expect(telemetry.error.mock.calls[0]?.[0]).toMatchObject({
-        sessionID: request?.sessionID,
-        messageID: request?.messageID,
-        attempt: 1,
-        parentSpanID: `${request?.messageID}:model:1:request`,
-        route: "managed",
-        provider: "openrouter",
-        model: "anthropic/claude-test",
-        error: failure,
-        context: { purpose: "agent_config_generation", phase: "model_generation" },
-      })
-      expect(telemetry.sessionCompleted.mock.calls[0]?.[0]).toMatchObject({
-        sessionID: request?.sessionID,
-        reason: "error",
       })
     },
   })

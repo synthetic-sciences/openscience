@@ -20,6 +20,7 @@ export type Project = {
      */
     start?: string
   }
+  origin?: "openscience"
   time: {
     created: number
     updated: number
@@ -264,7 +265,7 @@ export type UserMessage = {
   tier?: string
   context?: number
   inference?: {
-    source: "managed" | "byok" | "chatgpt" | "local" | "oauth" | "unknown"
+    source: "byok" | "chatgpt" | "local" | "oauth" | "unknown"
     effort: string
   }
 }
@@ -913,9 +914,6 @@ export type Session = {
     deletions: number
     files: number
     diffs?: Array<FileDiff>
-  }
-  share?: {
-    url: string
   }
   title: string
   version: string
@@ -1870,7 +1868,7 @@ export type Config = {
   logLevel?: LogLevel
   server?: ServerConfig
   /**
-   * Command configuration, see https://syntheticsciences.ai/docs/commands
+   * Command configuration
    */
   command?: {
     [key: string]: {
@@ -1920,17 +1918,17 @@ export type Config = {
    */
   default_agent?: string
   /**
-   * How LLM inference is paid for when using Ace or user-owned credentials. Legacy compute is ignored.
+   * Provider access configuration. OpenScience uses only user-owned credentials.
    */
   billing?: {
     /**
-     * How LLM inference is paid for. 'managed' uses Credits; 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset or null = auto-detect from the resolved credential.
+     * Provider access uses your own API keys, first-party OAuth subscriptions, or local models. Legacy values are migrated to 'byok'.
      */
-    llm?: "managed" | "byok" | null
+    llm?: "byok" | null
     /**
-     * @deprecated Retained only so existing 2.x config files keep parsing. Managed compute is retired; all compute uses user-owned routes regardless of this value.
+     * @deprecated Retained so existing 2.x config files keep parsing. Compute always uses user-owned routes.
      */
-    compute?: "managed" | "byok"
+    compute?: "byok"
   }
   /**
    * Custom username to display in conversations instead of system username
@@ -1945,7 +1943,7 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
-   * Agent configuration, see https://syntheticsciences.ai/docs/agents
+   * Agent configuration
    */
   agent?: {
     plan?: AgentConfig
@@ -2072,10 +2070,6 @@ export type Config = {
      * Enable the batch tool
      */
     batch_tool?: boolean
-    /**
-     * Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)
-     */
-    openTelemetry?: boolean
     /**
      * Tools that should only be available to primary agents.
      */
@@ -2231,7 +2225,7 @@ export type Model = {
 export type Provider = {
   id: string
   name: string
-  source: "env" | "synced" | "config" | "custom" | "api" | "managed"
+  source: "env" | "config" | "custom" | "api"
   env: Array<string>
   key?: string
   options: {
@@ -2766,332 +2760,6 @@ export type GlobalDisposeResponses = {
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
 
-export type GlobalSyncData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/global/sync"
-}
-
-export type GlobalSyncResponses = {
-  /**
-   * Services synced
-   */
-  200: {
-    user?: unknown
-    credentials: number
-    last_synced: number
-  }
-}
-
-export type GlobalSyncResponse = GlobalSyncResponses[keyof GlobalSyncResponses]
-
-export type AccountSessionData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/account/session"
-}
-
-export type AccountSessionResponses = {
-  /**
-   * Local session status
-   */
-  200: {
-    session: boolean
-  }
-}
-
-export type AccountSessionResponse = AccountSessionResponses[keyof AccountSessionResponses]
-
-export type AccountGetData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/account"
-}
-
-export type AccountGetResponses = {
-  /**
-   * Account summary
-   */
-  200: {
-    session: boolean
-    user?: unknown
-    balance_usd: number | null
-    billing_mode: {
-      mode: "byok" | "managed"
-      balance_cents: number
-      balance_usd: number
-      managed_supported: boolean
-      managed_unlocked: boolean
-    } | null
-    funding_context: {
-      type: "personal" | "organization"
-      organization_id?: string
-      available: boolean
-      locked: boolean
-      organizations: Array<{
-        organization_id: string
-        name: string
-        slug: string
-        is_personal: boolean
-        status: string
-        role: string
-        membership_status: string
-        funding_available: boolean
-        effective_permissions: Array<string>
-      }>
-    }
-    credential: {
-      type: "personal" | "organization"
-      legacy: boolean
-    } | null
-  }
-}
-
-export type AccountGetResponse = AccountGetResponses[keyof AccountGetResponses]
-
-export type AccountFundingContextGetData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/account/funding-context"
-}
-
-export type AccountFundingContextGetResponses = {
-  /**
-   * Funding context
-   */
-  200: {
-    type: "personal" | "organization"
-    organization_id?: string
-    available: boolean
-    locked: boolean
-    organizations: Array<{
-      organization_id: string
-      name: string
-      slug: string
-      is_personal: boolean
-      status: string
-      role: string
-      membership_status: string
-      funding_available: boolean
-      effective_permissions: Array<string>
-    }>
-  }
-}
-
-export type AccountFundingContextGetResponse =
-  AccountFundingContextGetResponses[keyof AccountFundingContextGetResponses]
-
-export type AccountFundingContextSetData = {
-  body?: {
-    organization_id: string | null
-  }
-  path?: never
-  query?: never
-  url: "/account/funding-context"
-}
-
-export type AccountFundingContextSetErrors = {
-  /**
-   * Unavailable organization
-   */
-  400: {
-    error: string
-  }
-}
-
-export type AccountFundingContextSetError = AccountFundingContextSetErrors[keyof AccountFundingContextSetErrors]
-
-export type AccountFundingContextSetResponses = {
-  /**
-   * Updated funding context
-   */
-  200: {
-    type: "personal" | "organization"
-    organization_id?: string
-    available: boolean
-    locked: boolean
-    organizations: Array<{
-      organization_id: string
-      name: string
-      slug: string
-      is_personal: boolean
-      status: string
-      role: string
-      membership_status: string
-      funding_available: boolean
-      effective_permissions: Array<string>
-    }>
-  }
-}
-
-export type AccountFundingContextSetResponse =
-  AccountFundingContextSetResponses[keyof AccountFundingContextSetResponses]
-
-export type AccountBalanceData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/account/balance"
-}
-
-export type AccountBalanceResponses = {
-  /**
-   * Balance
-   */
-  200: {
-    balance_usd: number | null
-  }
-}
-
-export type AccountBalanceResponse = AccountBalanceResponses[keyof AccountBalanceResponses]
-
-export type AccountDevicesData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/account/devices"
-}
-
-export type AccountDevicesResponses = {
-  /**
-   * Devices
-   */
-  200: Array<{
-    key_id: string
-    name: string
-    key_prefix: string
-    created_at: string
-    last_used_at: string | null
-    expires_at: string | null
-  }>
-}
-
-export type AccountDevicesResponse = AccountDevicesResponses[keyof AccountDevicesResponses]
-
-export type AccountDeviceRevokeData = {
-  body?: never
-  path: {
-    keyID: string
-  }
-  query?: never
-  url: "/account/devices/{keyID}"
-}
-
-export type AccountDeviceRevokeResponses = {
-  /**
-   * Device revoked
-   */
-  200: boolean
-}
-
-export type AccountDeviceRevokeResponse = AccountDeviceRevokeResponses[keyof AccountDeviceRevokeResponses]
-
-export type AccountBillingModeGetData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/account/billing-mode"
-}
-
-export type AccountBillingModeGetResponses = {
-  /**
-   * Billing mode
-   */
-  200: {
-    mode: "byok" | "managed"
-    balance_cents: number
-    balance_usd: number
-    managed_supported: boolean
-    managed_unlocked: boolean
-  } | null
-}
-
-export type AccountBillingModeGetResponse = AccountBillingModeGetResponses[keyof AccountBillingModeGetResponses]
-
-export type AccountBillingModeSetData = {
-  body?: {
-    mode: "byok" | "managed"
-  }
-  path?: never
-  query?: never
-  url: "/account/billing-mode"
-}
-
-export type AccountBillingModeSetResponses = {
-  /**
-   * Billing mode
-   */
-  200: {
-    mode: "byok" | "managed"
-    balance_cents: number
-    balance_usd: number
-    managed_supported: boolean
-    managed_unlocked: boolean
-  } | null
-}
-
-export type AccountBillingModeSetResponse = AccountBillingModeSetResponses[keyof AccountBillingModeSetResponses]
-
-export type AccountLoginBrowserData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/account/login-browser"
-}
-
-export type AccountLoginBrowserResponses = {
-  /**
-   * Login result
-   */
-  200: {
-    ok: boolean
-    error?: string
-  }
-}
-
-export type AccountLoginBrowserResponse = AccountLoginBrowserResponses[keyof AccountLoginBrowserResponses]
-
-export type AccountLoginKeyData = {
-  body?: {
-    key: string
-  }
-  path?: never
-  query?: never
-  url: "/account/login-key"
-}
-
-export type AccountLoginKeyResponses = {
-  /**
-   * Login result
-   */
-  200: {
-    ok: boolean
-    error?: string
-  }
-}
-
-export type AccountLoginKeyResponse = AccountLoginKeyResponses[keyof AccountLoginKeyResponses]
-
-export type AccountLogoutData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/account/logout"
-}
-
-export type AccountLogoutResponses = {
-  /**
-   * Logged out
-   */
-  200: boolean
-}
-
-export type AccountLogoutResponse = AccountLogoutResponses[keyof AccountLogoutResponses]
-
 export type SettingsCredentialsListData = {
   body?: never
   path?: never
@@ -3120,7 +2788,7 @@ export type SettingsCredentialsListResponses = {
       connected: boolean
       set_fields: Array<string>
       updated_at: string | null
-      source: "local" | "account" | null
+      source: "local" | null
     }>
   }
 }
@@ -3157,7 +2825,7 @@ export type SettingsCredentialsRemoveResponses = {
       connected: boolean
       set_fields: Array<string>
       updated_at: string | null
-      source: "local" | "account" | null
+      source: "local" | null
     }>
   }
 }
@@ -3200,7 +2868,7 @@ export type SettingsCredentialsSetResponses = {
       connected: boolean
       set_fields: Array<string>
       updated_at: string | null
-      source: "local" | "account" | null
+      source: "local" | null
     }>
   }
 }
@@ -3228,6 +2896,7 @@ export type SettingsStorageUsageResponses = {
     state_dir: string
     pointer: string | null
     total_bytes: number
+    cache_bytes: number
     scanning: boolean
     updated_at: string | null
     scan_error: string | null
@@ -3251,6 +2920,26 @@ export type SettingsStorageUsageResponses = {
 }
 
 export type SettingsStorageUsageResponse = SettingsStorageUsageResponses[keyof SettingsStorageUsageResponses]
+
+export type SettingsStorageClearCacheData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/storage/cache"
+}
+
+export type SettingsStorageClearCacheResponses = {
+  /**
+   * Cache cleared
+   */
+  200: {
+    ok: true
+    entries: number
+  }
+}
+
+export type SettingsStorageClearCacheResponse =
+  SettingsStorageClearCacheResponses[keyof SettingsStorageClearCacheResponses]
 
 export type SettingsStorageResetLocationData = {
   body?: never
@@ -3343,7 +3032,7 @@ export type SettingsComputeGetResponses = {
       }
       connected: boolean
       enabled: boolean
-      source: "stored" | "account" | "modal_toml" | null
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3431,7 +3120,7 @@ export type SettingsComputeEnvironmentsRepairResponses = {
       }
       connected: boolean
       enabled: boolean
-      source: "stored" | "account" | "modal_toml" | null
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3522,7 +3211,7 @@ export type SettingsComputeProviderDisconnectResponses = {
       }
       connected: boolean
       enabled: boolean
-      source: "stored" | "account" | "modal_toml" | null
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3625,7 +3314,7 @@ export type SettingsComputeProviderConnectResponses = {
       }
       connected: boolean
       enabled: boolean
-      source: "stored" | "account" | "modal_toml" | null
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3728,7 +3417,7 @@ export type SettingsComputeProviderEnabledResponses = {
       }
       connected: boolean
       enabled: boolean
-      source: "stored" | "account" | "modal_toml" | null
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -3868,7 +3557,7 @@ export type SettingsComputeModalUpdateResponses = {
       }
       connected: boolean
       enabled: boolean
-      source: "stored" | "account" | "modal_toml" | null
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -4064,7 +3753,7 @@ export type SettingsComputeModalConfigureResponses = {
       }
       connected: boolean
       enabled: boolean
-      source: "stored" | "account" | "modal_toml" | null
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -4205,7 +3894,7 @@ export type SettingsComputeSshAddResponses = {
       }
       connected: boolean
       enabled: boolean
-      source: "stored" | "account" | "modal_toml" | null
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -4335,7 +4024,7 @@ export type SettingsComputeSshRemoveResponses = {
       }
       connected: boolean
       enabled: boolean
-      source: "stored" | "account" | "modal_toml" | null
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -4441,7 +4130,7 @@ export type SettingsComputeSshUpdateResponses = {
       }
       connected: boolean
       enabled: boolean
-      source: "stored" | "account" | "modal_toml" | null
+      source: "stored" | "modal_toml" | null
       connected_at: string | null
       last_used: string | null
     }>
@@ -8815,118 +8504,6 @@ export type PutSettingsSandboxResponses = {
   200: unknown
 }
 
-export type SettingsBillingGetData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/settings/billing"
-}
-
-export type SettingsBillingGetResponses = {
-  /**
-   * Billing state
-   */
-  200: {
-    llm: "managed" | "byok" | null
-    /**
-     * @deprecated Compatibility field. Compute always uses user-owned infrastructure.
-     */
-    compute: "managed" | "byok"
-    wallet: {
-      /**
-       * Whether a Synthetic Sciences session is available
-       */
-      signedIn: boolean
-      /**
-       * Purchased Wallet balance in USD; null when signed out or unavailable
-       */
-      balanceUsd: number | null
-    }
-  }
-}
-
-export type SettingsBillingGetResponse = SettingsBillingGetResponses[keyof SettingsBillingGetResponses]
-
-export type SettingsBillingUpdateData = {
-  body?: {
-    llm?: "managed" | "byok" | null
-    /**
-     * @deprecated Accepted for 2.x clients and ignored. Compute always uses user-owned infrastructure.
-     */
-    compute?: "managed" | "byok"
-  }
-  path?: never
-  query?: never
-  url: "/settings/billing"
-}
-
-export type SettingsBillingUpdateResponses = {
-  /**
-   * Updated billing state
-   */
-  200: {
-    llm: "managed" | "byok" | null
-    /**
-     * @deprecated Compatibility field. Compute always uses user-owned infrastructure.
-     */
-    compute: "managed" | "byok"
-    wallet: {
-      /**
-       * Whether a Synthetic Sciences session is available
-       */
-      signedIn: boolean
-      /**
-       * Purchased Wallet balance in USD; null when signed out or unavailable
-       */
-      balanceUsd: number | null
-    }
-  }
-}
-
-export type SettingsBillingUpdateResponse = SettingsBillingUpdateResponses[keyof SettingsBillingUpdateResponses]
-
-export type SettingsWalletGetData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/settings/wallet"
-}
-
-export type SettingsWalletGetResponses = {
-  /**
-   * Wallet state
-   */
-  200: {
-    signedIn: boolean
-    /**
-     * Purchased Wallet balance in USD; null when signed out or unavailable
-     */
-    balanceUsd: number | null
-    billingMode: "managed" | "byok" | null
-    managedSupported: boolean
-    managedUnlocked: boolean
-    aceEnabled: boolean
-    aceContract: {
-      activationAuthorizationUsd: number
-      reloadThresholdUsd: number
-      reloadAmountUsd: number
-      serviceMarginPercent: number
-      processingFeeDisclosedSeparately: boolean
-      reloadControlledByAce: boolean
-    }
-    lifetimeSpentUsd: number | null
-    transactions: Array<{
-      id: string
-      amountCents: number
-      source: string
-      description: string
-      createdAt: string
-    }>
-  }
-}
-
-export type SettingsWalletGetResponse = SettingsWalletGetResponses[keyof SettingsWalletGetResponses]
-
 export type SettingsUpdatesCheckData = {
   body?: never
   path?: never
@@ -9167,154 +8744,6 @@ export type SettingsUpdatesDisposeResponses = {
 
 export type SettingsUpdatesDisposeResponse = SettingsUpdatesDisposeResponses[keyof SettingsUpdatesDisposeResponses]
 
-export type SettingsResearchToolsGetData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/settings/research-tools"
-}
-
-export type SettingsResearchToolsGetResponses = {
-  /**
-   * Research tools status
-   */
-  200: {
-    signedIn: boolean
-    /**
-     * @deprecated Compatibility summary. Billing is wallet-based and has no search quota.
-     */
-    plan: {
-      id: string
-      label: string
-      status: string | null
-    }
-    search: {
-      route: "credits" | "managed" | "community"
-      state: "available" | "basic" | "conditional" | "near_limit" | "critical" | "exhausted" | "unavailable"
-      enabled: boolean
-      balanceUsd: number | null
-      /**
-       * @deprecated Always null; enhanced search draws from the shared wallet.
-       */
-      limit: number | null
-      /**
-       * @deprecated Always null; enhanced search draws from the shared wallet.
-       */
-      used: number | null
-      /**
-       * @deprecated Always null; use balanceUsd.
-       */
-      remaining: number | null
-      /**
-       * @deprecated Always null; wallet credits do not reset.
-       */
-      resetAt: string | null
-      communityFlagEnabled: boolean
-    }
-    telemetry: {
-      analyticsEnabled: boolean
-      researchContentEnabled: boolean
-      userOwnedContentEnabled: boolean
-      source: "default" | "local" | "account"
-      signedIn: boolean
-      consentVersion: string
-      pending: boolean
-      corrupt: boolean
-      deletionAvailable: boolean
-      queuedEvents: number
-      quarantinedEvents: number
-    }
-  }
-}
-
-export type SettingsResearchToolsGetResponse =
-  SettingsResearchToolsGetResponses[keyof SettingsResearchToolsGetResponses]
-
-export type SettingsResearchToolsTelemetryUpdateData = {
-  body?: {
-    userOwnedContentEnabled: boolean
-  }
-  path?: never
-  query?: never
-  url: "/settings/research-tools/telemetry"
-}
-
-export type SettingsResearchToolsTelemetryUpdateResponses = {
-  /**
-   * Updated research tools status
-   */
-  200: {
-    signedIn: boolean
-    /**
-     * @deprecated Compatibility summary. Billing is wallet-based and has no search quota.
-     */
-    plan: {
-      id: string
-      label: string
-      status: string | null
-    }
-    search: {
-      route: "credits" | "managed" | "community"
-      state: "available" | "basic" | "conditional" | "near_limit" | "critical" | "exhausted" | "unavailable"
-      enabled: boolean
-      balanceUsd: number | null
-      /**
-       * @deprecated Always null; enhanced search draws from the shared wallet.
-       */
-      limit: number | null
-      /**
-       * @deprecated Always null; enhanced search draws from the shared wallet.
-       */
-      used: number | null
-      /**
-       * @deprecated Always null; use balanceUsd.
-       */
-      remaining: number | null
-      /**
-       * @deprecated Always null; wallet credits do not reset.
-       */
-      resetAt: string | null
-      communityFlagEnabled: boolean
-    }
-    telemetry: {
-      analyticsEnabled: boolean
-      researchContentEnabled: boolean
-      userOwnedContentEnabled: boolean
-      source: "default" | "local" | "account"
-      signedIn: boolean
-      consentVersion: string
-      pending: boolean
-      corrupt: boolean
-      deletionAvailable: boolean
-      queuedEvents: number
-      quarantinedEvents: number
-    }
-  }
-}
-
-export type SettingsResearchToolsTelemetryUpdateResponse =
-  SettingsResearchToolsTelemetryUpdateResponses[keyof SettingsResearchToolsTelemetryUpdateResponses]
-
-export type SettingsResearchToolsTelemetryDeleteData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/settings/research-tools/telemetry/account-data"
-}
-
-export type SettingsResearchToolsTelemetryDeleteResponses = {
-  /**
-   * Deletion status
-   */
-  200: {
-    ok: boolean
-    message?: string
-  }
-}
-
-export type SettingsResearchToolsTelemetryDeleteResponse =
-  SettingsResearchToolsTelemetryDeleteResponses[keyof SettingsResearchToolsTelemetryDeleteResponses]
-
 export type SettingsScientificToolsData = {
   body?: never
   path?: never
@@ -9500,7 +8929,7 @@ export type AuthOnboardingData = {
 
 export type AuthOnboardingErrors = {
   /**
-   * Configuration failed and compensation was attempted
+   * Configuration failed
    */
   500: {
     error: string
@@ -9511,7 +8940,7 @@ export type AuthOnboardingError = AuthOnboardingErrors[keyof AuthOnboardingError
 
 export type AuthOnboardingResponses = {
   /**
-   * Provider credential and BYOK mode configured
+   * Provider credential configured
    */
   200: {
     configured: true
@@ -17444,60 +16873,6 @@ export type SettingsNetworkSetResponses = {
 }
 
 export type SettingsNetworkSetResponse = SettingsNetworkSetResponses[keyof SettingsNetworkSetResponses]
-
-export type SettingsUsageGetData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/settings/usage"
-}
-
-export type SettingsUsageGetResponses = {
-  /**
-   * Usage summary
-   */
-  200: {
-    sessions: number
-    total: {
-      cost: number
-      tokens: {
-        input: number
-        output: number
-        reasoning: number
-        cache_read: number
-        cache_write: number
-      }
-    }
-    latest: {
-      id: string
-      title: string
-      cost: number
-      tokens: {
-        input: number
-        output: number
-        reasoning: number
-        cache_read: number
-        cache_write: number
-      }
-    } | null
-    weekly: Array<{
-      date: string
-      cost: number
-      tokens: number
-    }>
-    by_model: Array<{
-      key: string
-      provider: string
-      model: string
-      cost: number
-      tokens: number
-    }>
-  }
-}
-
-export type SettingsUsageGetResponse = SettingsUsageGetResponses[keyof SettingsUsageGetResponses]
 
 export type InstanceDisposeData = {
   body?: never

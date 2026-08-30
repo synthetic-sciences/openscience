@@ -72,8 +72,7 @@ type WorkerOption = {
   model?: DelegationModel
 }
 
-const isUserOwnedRoute = (model: AvailableModel) =>
-  model.provider.source !== "managed" && !model.provider.id.startsWith("synsci")
+const isUserOwnedRoute = (model: AvailableModel) => !model.provider.id.startsWith("synsci")
 
 export function takeModelGroups<T>(groups: OptionGroup<T>[], limit: number): OptionGroup<T>[] {
   let remaining = Math.max(0, limit)
@@ -189,7 +188,7 @@ export default function Models() {
       .map(([id, items]) => ({ id, label: modelGroupLabel(id), models: items }))
       .sort((a, b) => modelGroupRank(a.id) - modelGroupRank(b.id) || a.label.localeCompare(b.label))
   })
-  const [renderLimit, setRenderLimit] = createSignal(48)
+  const [renderLimit, setRenderLimit] = createSignal(24)
   const visibleGroups = createMemo(() => takeModelGroups(groups(), renderLimit()))
 
   // Keep the catalog intentionally bounded. Search and filters still cover the
@@ -199,7 +198,7 @@ export default function Models() {
     query()
     scope()
     const total = filtered().length
-    setRenderLimit(Math.min(48, total))
+    setRenderLimit(Math.min(24, total))
   })
   const [notice, setNotice] = createSignal("Pinned models appear first. Hidden models stay out of the picker.")
   const pinnedCount = createMemo(() => options().filter((model) => model.pinned).length)
@@ -483,7 +482,7 @@ export default function Models() {
                         class="settings-panel-action models-secondary-action"
                         size="small"
                         variant="secondary"
-                        onClick={() => setRenderLimit((current) => Math.min(filtered().length, current + 48))}
+                        onClick={() => setRenderLimit((current) => Math.min(filtered().length, current + 24))}
                       >
                         Show more
                       </Button>

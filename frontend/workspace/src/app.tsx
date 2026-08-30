@@ -21,7 +21,6 @@ import { HighlightsProvider } from "@/context/highlights"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
-import { URLS } from "@/config/urls"
 import { resolveDefaultServerUrl } from "@/config/server-url"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
 import { DesktopOnboarding } from "@/atlas/DesktopOnboarding"
@@ -128,7 +127,6 @@ export function AppInterface(props: { defaultUrl?: string }) {
       configured,
       hostname: location.hostname,
       origin: window.location.origin,
-      hostedDomain: URLS.host,
       dev: import.meta.env.DEV,
     })
   }

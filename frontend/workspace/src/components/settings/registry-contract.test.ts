@@ -68,7 +68,7 @@ describe("settings registry source contract", () => {
     const models = await Bun.file(new URL("Models.tsx", root)).text()
     const general = await Bun.file(new URL("General.tsx", root)).text()
 
-    expect(models).toContain("<ManagedInference")
+    expect(models).not.toContain("ManagedInference")
     expect(models).toContain("<CodexConnection")
     expect(models).toContain("<ProviderKeys")
     expect(general).toContain("<AppearanceSections")

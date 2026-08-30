@@ -48,7 +48,6 @@ const server = () =>
     configured: configured(),
     hostname: location.hostname,
     origin: window.location.origin,
-    hostedDomain: URLS.host,
     dev: import.meta.env.DEV,
   })
 
@@ -102,10 +101,7 @@ const platform: Platform = {
     if (inView) return
     await Promise.resolve()
       .then(() => {
-        const notification = new Notification(title, {
-          body: description ?? "",
-          icon: URLS.favicon,
-        })
+        const notification = new Notification(title, { body: description ?? "" })
         notification.onclick = () => {
           window.focus()
           if (href) {

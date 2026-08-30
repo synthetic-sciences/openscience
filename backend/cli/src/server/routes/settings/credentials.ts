@@ -59,8 +59,6 @@ interface ServiceSpec {
   /** Trusted-only credentials are resolved by an in-process adapter and are
    * never copied into process.env or agent-controlled subprocesses. */
   trusted?: boolean
-  /** Compute credentials sync to the account unless explicitly device-only. */
-  portable?: boolean
 }
 
 // Known services and the shape of the secret each one needs. "Custom" entries
@@ -107,7 +105,7 @@ const CATALOG: ServiceSpec[] = [
   {
     id: "firecrawl",
     label: "Firecrawl",
-    description: "Optional own API key for enhanced web search when Ace managed search is unavailable.",
+    description: "Your Firecrawl API key for web and research search.",
     category: "integration",
     fields: [{ name: "api_key", label: "API key", type: "password", placeholder: "fc-…" }],
     trusted: true,
@@ -144,7 +142,6 @@ const CATALOG: ServiceSpec[] = [
     category: "compute",
     fields: [{ name: "api_key", label: "NGC API key", type: "password" }],
     trusted: true,
-    portable: false,
   },
   {
     id: "openalex",
@@ -528,45 +525,6 @@ export async function applyCredentialEnv(options: { strict?: boolean } = {}): Pr
   }
 }
 
-const PORTABLE_CREDENTIAL_IDS = new Set(["aws", "gcp", "azure", "nvidia"])
-
-export async function reconcileAccountCredentialFields(
-  portable: Record<string, { fields: Record<string, string>; updated_at?: string | null }>,
-): Promise<void> {
-  const incoming = Object.fromEntries(Object.entries(portable).filter(([id]) => PORTABLE_CREDENTIAL_IDS.has(id)))
-  await updateStore(async (current) => {
-    for (const [id, entry] of Object.entries(current)) {
-      if (entry.removal) continue
-      if (!PORTABLE_CREDENTIAL_IDS.has(id) || entry.source !== "account" || id in incoming) continue
-      delete current[id]
-    }
-    for (const [id, payload] of Object.entries(incoming)) {
-      const existing = current[id]
-      if (existing?.removal) continue
-      // A device-local override remains authoritative until its next save
-      // successfully reaches the account. Account-owned entries follow the
-      // dashboard across devices.
-      if (existing?.source === "local") continue
-      const spec = specFor(id)
-      if (!spec) continue
-      const allowed = new Set(spec.fields.map((field) => field.name))
-      const fields: Record<string, string> = {}
-      for (const [name, value] of Object.entries(payload.fields)) {
-        if (!allowed.has(name) || !value.trim() || !validField(id, name, value)) continue
-        fields[name] = await encrypt(value)
-      }
-      if (!Object.keys(fields).length) continue
-      current[id] = {
-        label: spec.label,
-        fields,
-        updated_at: payload.updated_at ?? new Date().toISOString(),
-        source: "account",
-      }
-    }
-  })
-  await applyCredentialEnv({ strict: true })
-}
-
 const ServiceView = z.object({
   id: z.string(),
   label: z.string(),
@@ -585,7 +543,7 @@ const ServiceView = z.object({
   connected: z.boolean(),
   set_fields: z.array(z.string()),
   updated_at: z.string().nullable(),
-  source: z.enum(["local", "account"]).nullable(),
+  source: z.literal("local").nullable(),
 })
 
 async function view(store: Store) {
@@ -613,7 +571,7 @@ async function view(store: Store) {
         connected: required.length ? required.every((field) => set.includes(field)) : set.length > 0,
         set_fields: set,
         updated_at: active?.updated_at ?? null,
-        source: active?.source ?? null,
+        source: active ? ("local" as const) : null,
       }
     }),
   )
@@ -632,7 +590,7 @@ async function view(store: Store) {
           connected: names.length > 0,
           set_fields: names,
           updated_at: entry.updated_at,
-          source: entry.source,
+          source: "local" as const,
         }
       }),
   )

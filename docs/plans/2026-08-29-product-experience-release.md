@@ -19,7 +19,7 @@ ancestry immediately before landing. PR #440 still points at the older
 - Put one recommended action first and progressively disclose advanced setup.
 - Ask for authority at the real side-effect boundary. Independence never
   bypasses permissions.
-- Preserve sessions, drafts, files, credentials, and purchased Wallet state
+- Preserve sessions, drafts, files, credentials, and local settings
   through update, relocation, rollback, and restart.
 - Never call a provider or tool verified merely because a credential exists.
 - Keep secret-bearing provider operations behind reviewed brokers. Do not solve

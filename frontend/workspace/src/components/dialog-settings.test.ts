@@ -17,7 +17,6 @@ const registeredPanelSources = () => {
       (module) => [`settings/${module}.tsx`, new URL(`./settings/${module}.tsx`, import.meta.url)] as const,
     ),
     ["settings/_shared.tsx", new URL("./settings/_shared.tsx", import.meta.url)] as const,
-    ["settings/ManagedInference.tsx", new URL("./settings/ManagedInference.tsx", import.meta.url)] as const,
     ["settings/CodexConnection.tsx", new URL("./settings/CodexConnection.tsx", import.meta.url)] as const,
     ["settings/ProviderKeys.tsx", new URL("./settings/ProviderKeys.tsx", import.meta.url)] as const,
     ["settings/ProviderLogo.tsx", new URL("./settings/ProviderLogo.tsx", import.meta.url)] as const,

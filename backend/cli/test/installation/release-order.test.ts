@@ -661,9 +661,6 @@ test("npm test candidates execute every exact capability lifecycle on supported 
 test("the packaged capability canary stays accountless without starting unrelated environments", async () => {
   const source = await Bun.file(path.join(import.meta.dir, "../../src/index.ts")).text()
   expect(source).toContain("const capabilityCanary = isScientificCapabilityCanary(command, process.argv.slice(2))")
-  expect(source).toContain("if (!capabilityCanary) await OutboundTelemetry.initializeAccount()")
-  expect(source).toContain("if (!capabilityCanary) await OpenScience.refreshIfStale()")
-  expect(source).toContain("if (!capabilityCanary) OpenScience.flushPendingUsage()")
   const environmentGuard = source.indexOf("if (!capabilityCanary) {", source.indexOf("Legacy skill-based compute"))
   expect(environmentGuard).toBeGreaterThan(0)
   expect(environmentGuard).toBeLessThan(source.indexOf("ManagedEnvironments.startInBackground()"))

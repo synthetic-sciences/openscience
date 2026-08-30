@@ -286,7 +286,7 @@ describe("generate_image response parsing", () => {
     })
   })
 
-  test("rejects a managed wallet token pointed at a non-Atlas image host", async () => {
+  test("rejects a retired product token before contacting an image host", async () => {
     const requests = { value: 0 }
     const server = Bun.serve({
       port: 0,
@@ -332,7 +332,7 @@ describe("generate_image response parsing", () => {
                 async ask() {},
               },
             ),
-          ).rejects.toThrow("refused to send the wallet credential outside its managed image proxy")
+          ).rejects.toThrow("Connect your Gemini or OpenRouter account")
           expect(requests.value).toBe(0)
         },
       })

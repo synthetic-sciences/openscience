@@ -1233,7 +1233,7 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const dialog = useDialog()
-    const route = () => (props.metadata.route === "wallet" ? "OpenScience wallet" : "Connected OpenRouter key")
+    const route = () => (props.metadata.route === "gemini" ? "Connected Gemini account" : "Connected OpenRouter account")
     const filepath = () =>
       typeof props.metadata.filepath === "string"
         ? props.metadata.filepath

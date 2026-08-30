@@ -42,15 +42,6 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
     note: "set in openscience.json",
     title: "Custom provider supplied by openscience.json; edit that file to remove it",
   },
-  // Provider["source"] is exhaustive. Managed routes are filtered from this
-  // device-owned list, but keep a neutral description if the SDK widens the
-  // display source in the future.
-  managed: {
-    label: "external route",
-    removable: false,
-    note: "not stored on this device",
-    title: "Provider access is supplied outside this installation",
-  },
 }
 
 export function ProviderKeys(props: { onError?: (error: string | undefined) => void }) {
@@ -66,8 +57,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
   const connected = createMemo(() =>
     providers
       .connected()
-      .filter((item) => MODEL_PROVIDERS.some((provider) => provider.id === item.id))
-      .filter((item) => item.source !== "managed"),
+      .filter((item) => MODEL_PROVIDERS.some((provider) => provider.id === item.id)),
   )
   const source = (item: { id: string }) => SOURCES[(item as { source?: Provider["source"] }).source ?? "api"]
   const refreshAfterSave = (done: string) => {

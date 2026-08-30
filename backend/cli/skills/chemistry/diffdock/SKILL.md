@@ -55,7 +55,7 @@ Use Modal for on-demand GPU access without local GPU setup.
 [ -n "$MODAL_TOKEN_SECRET" ] && echo "MODAL_TOKEN_SECRET set" || echo "NOT SET"
 ```
 
-If not set: connect Modal at https://app.syntheticsciences.ai -> Services, then restart openscience.
+If not set: authenticate the user-owned Modal CLI locally with `modal token set`.
 
 ### Modal DiffDock Wrapper
 
@@ -582,4 +582,3 @@ ICLR 2023, arXiv:2210.01776
 - **Online Demo**: https://huggingface.co/spaces/reginabarzilaygroup/DiffDock-Web
 - **DiffDock-L Paper**: https://arxiv.org/abs/2402.18396
 - **Original Paper**: https://arxiv.org/abs/2210.01776
-

@@ -267,23 +267,11 @@ describe("frontier model canonicalization", () => {
     expect(isChatModel({ id: "nomic-embed-text", provider: { id: "openrouter" } })).toBe(false)
   })
 
-  test("only saved or dashboard-synced credentials are presented as connections", () => {
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "config", billing: "managed" })).toBe(false)
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "env", billing: null })).toBe(false)
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "api", billing: "managed" })).toBe(true)
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "synced", billing: "byok" })).toBe(true)
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "config", billing: "byok" })).toBe(false)
-    expect(isUserProviderConnection({ providerID: "anthropic", source: "env", billing: "managed" })).toBe(false)
-  })
-
-  // The backend now reports the Atlas-proxied route as source "managed", which
-  // the old four-value union could not express. It is still not the reader's own
-  // connection, so it stays out of the panel — including on auto-detect, where a
-  // wallet route resolves without the toggle ever being set to "managed".
-  test("a route the Atlas proxy carries is not the reader's own connection", () => {
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: "managed" })).toBe(false)
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: null })).toBe(false)
-    expect(isUserProviderConnection({ providerID: "openrouter", source: "managed", billing: "byok" })).toBe(false)
+  test("only credentials saved in the app are presented as connections", () => {
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "config" })).toBe(false)
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "env" })).toBe(false)
+    expect(isUserProviderConnection({ providerID: "openrouter", source: "api" })).toBe(true)
+    expect(isUserProviderConnection({ providerID: "anthropic", source: "env" })).toBe(false)
   })
 
   test("stable Anthropic aliases win over dated duplicates", () => {

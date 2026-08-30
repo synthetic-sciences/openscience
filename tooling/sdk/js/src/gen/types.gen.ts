@@ -1144,7 +1144,7 @@ export type Config = {
    */
   logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR"
   /**
-   * Command configuration, see https://syntheticsciences.ai/docs/commands
+   * Command configuration
    */
   command?: {
     [key: string]: {
@@ -1201,7 +1201,7 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
-   * Agent configuration, see https://syntheticsciences.ai/docs/agent
+   * Agent configuration
    */
   agent?: {
     plan?: AgentConfig

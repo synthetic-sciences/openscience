@@ -1,107 +1,76 @@
 ---
 title: "Models & providers"
-description: "Bring your own keys, use eligible ChatGPT/Codex access, run local models, or optionally route managed calls through Synthetic Sciences."
+description: "Use your provider accounts, API keys, or local models."
 icon: "package-check"
 ---
 
-OpenScience is model-agnostic. A **model** is one inference endpoint the agent routes through; a **provider** is a vendor that exposes models. Routing happens on your machine: with your own keys, each call goes straight from your machine to the provider, with no managed model service in the middle. A free Synthetic Sciences account is still required for OpenScience identity and trace ownership.
+OpenScience is model-agnostic. Routing happens on your machine and model calls go directly to the provider or local endpoint you select.
 
-## Bring your own keys
+## Connect a provider
 
-Set a key from any provider and start working:
+Use **Customize → Models** or the CLI:
+
+```bash
+openscience keys add
+openscience keys list
+openscience models
+```
+
+You can sign in where a provider supports OAuth or save an API key locally. Environment variables work too:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ...
 openscience
 ```
 
-Keys stay on your machine. Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, Meta Model API, DeepSeek, and dozens more work the same way — the catalogue is models.dev-backed, so any `provider/model` id a provider currently exposes is addressable. You can also paste keys into the Credentials panel in the [workspace](/openscience/workspace) instead of exporting them, and OpenAI Codex signs in via OAuth.
-
-The current frontier families are available on both paths:
-
-| Family | BYOK model | Synthetic Sciences model |
-| --- | --- | --- |
-| GPT-5.6 Sol / Terra / Luna | `openai/gpt-5.6-*` | `openrouter/openai/gpt-5.6-*` |
-| Grok 4.5 | `xai/grok-4.5` | `openrouter/x-ai/grok-4.5` |
-| Muse Spark 1.1 | `meta/muse-spark-1.1` | `openrouter/meta/muse-spark-1.1` |
-
-For BYOK, use `OPENAI_API_KEY`, `XAI_API_KEY`, or `META_MODEL_API_KEY`. Managed LLM routes use OpenRouter and send only your Synthetic Sciences session token to the managed endpoint; provider credentials remain server-side.
-
-Current frontier families include:
-
-| Provider | Model IDs |
-| --- | --- |
-| Anthropic | `claude-opus-5`, `claude-sonnet-5` |
-| OpenAI | `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` |
-| xAI | `grok-4.5`, `grok-4.3`, `grok-build-0.1`, and Grok 4.20 reasoning, non-reasoning, and multi-agent models |
-| Moonshot AI | `kimi-k3` |
-| Vercel AI Gateway | `meta/muse-spark-1.1` |
-
-This is not a hardcoded allowlist for your own provider keys. OpenScience refreshes models.dev at startup and hourly, so newly published models appear without waiting for an OpenScience release. The OpenAI Codex OAuth provider is the exception: it only shows models verified to work through a ChatGPT subscription, currently including the full GPT-5.6 family.
+Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, Meta, DeepSeek, and many other providers use the same local flow. The catalog is backed by models.dev and refreshed periodically.
 
 ## Local models
 
-Prefer to run offline? OpenScience talks to any OpenAI-compatible endpoint on your machine — Ollama, LM Studio, llama.cpp, vLLM, and more:
+OpenScience talks to OpenAI-compatible endpoints on your machine, including Ollama, LM Studio, llama.cpp, and vLLM:
 
 ```bash
-openscience local add        # detects Ollama / LM Studio, lists + adds their models
+openscience local add
 openscience run --model ollama/llama3.1 "hello"
 ```
 
-Local models are free and never metered. See **[Local models](/openscience/local-models)** for the full guide.
+See **[Local models](/openscience/local-models)** for setup details.
 
-## List what is configured
-
-```bash
-openscience models             # grouped by provider, with a routing label per provider
-openscience models anthropic   # one provider
-```
-
-Each provider is labeled `your key`, `credits`, `local`, `Signed in with Codex`, or `unconfigured`, so you always know which route a model takes. `--verbose` adds per-model metadata like costs, `--refresh` refetches the catalogue, and `--flat` prints one `provider/model` id per line for scripting.
-
-## Pick a model per run
+## Choose a model per run
 
 ```bash
 openscience run --model anthropic/claude-opus-5 --variant xhigh "Design the ablation study"
-openscience run --model anthropic/claude-sonnet-5 "Clean up the plotting code"
 openscience run --model openai/gpt-5.6-terra --variant max "Review the analysis"
 openscience run --model moonshotai/kimi-k3 "Implement the pipeline"
 ```
 
-`--model <provider>/<model>` overrides the default for one run; in the workspace, use the model selector per session. `--variant` picks a reasoning-effort tier — `minimal`, `high`, `max`, and so on. Available tiers depend on the model: Claude Opus 5 and GPT-5.6 extend through `xhigh` and `max`, Kimi K3 supports `low`, `high`, and `max`, and current Grok models expose their provider-supported ladders.
+`--model <provider>/<model>` overrides the default for one run. `--variant` selects a provider-supported reasoning tier such as `minimal`, `high`, `xhigh`, or `max`.
 
-## Ace credits (optional)
+## Route ownership
 
-[Synthetic Sciences](/openscience/gateway) provides the required free account. Ace is the optional credit-backed service: supported models route through OpenRouter and bill a pay-as-you-go wallet, so you can skip per-provider keys when you choose:
-
-```bash
-openscience login   # defaults to app.syntheticsciences.ai
-```
-
-Settings → Credits offers Automatic, Credits, and Accounts routing. Ace credits never disable BYOK, local, or eligible ChatGPT/Codex routes; only calls served through Synthetic Sciences debit the wallet.
-
-| Path | What runs where | Billing |
+| Route | Where requests go | Account used |
 | --- | --- | --- |
-| BYOK (default) | Your machine calls the provider directly. | Your provider account. |
-| Synthetic Sciences | Your machine calls Synthetic Sciences, which routes supported models through OpenRouter. | Shared pay-as-you-go wallet. See [Connect Synthetic Sciences](/openscience/gateway). |
+| Provider key | Directly to that provider | Your provider account |
+| Provider OAuth | Directly through that provider's supported sign-in | Your subscription or provider account |
+| Local model | Your local endpoint | None |
 
 ## Key hygiene
 
-Provider keys and synced credentials are filtered out of the environment of every subprocess the agent spawns and redacted from output. The agent talks to providers itself; the code it runs never needs your keys. Credentials are stored per user in your home directory, never in the project's `.openscience/` directory, so they cannot end up in a commit. See [Security](/openscience/security).
+Credentials are stored per user in the local data root, never in a project's `.openscience/` directory. General kernels receive a minimal environment, provider-shaped secrets are redacted from output, and retired proxy routes are rejected before a request can carry a user key.
 
 ## What's next
 
 <Columns cols={2}>
   <Card title="Quickstart" icon="rocket" href="/openscience/quickstart">
-    First key to first result.
+    First provider to first result.
   </Card>
-  <Card title="Sessions" icon="layers" href="/openscience/sessions">
-    Per-run model and variant flags in context.
+  <Card title="Connect providers" icon="link" href="/openscience/gateway">
+    Configure model and scientific-service access.
   </Card>
-  <Card title="Synthetic Sciences" icon="globe" href="/openscience/gateway">
-    Managed credits, research search, and private graphs.
+  <Card title="Local models" icon="cpu" href="/openscience/local-models">
+    Run an OpenAI-compatible model on your machine.
   </Card>
   <Card title="Security" icon="shield-check" href="/openscience/security">
-    The env allow-list and trust boundary.
+    Review local storage and process boundaries.
   </Card>
 </Columns>

@@ -895,7 +895,7 @@ export namespace ProviderTransform {
       // and OR drops the trace, so every reasoning part lands empty. Request it
       // by default for every reasoning-capable model (a selected effort variant
       // overrides this via mergeDeep in llm.ts). This is the single normalized
-      // reasoning path that all managed wallet inference now flows through.
+      // reasoning path used for user-owned OpenRouter requests.
       //
       if (input.model.capabilities.reasoning) {
         const id = input.model.api.id.toLowerCase()
@@ -979,8 +979,8 @@ export namespace ProviderTransform {
       }
 
       // Request summaries + encrypted content on every OpenAI-Responses path that
-      // can carry them: direct OpenAI API and ChatGPT/Codex. Managed inference
-      // uses OpenRouter's normalized reasoning path above. This mirrors the
+      // can carry them: direct OpenAI API and ChatGPT/Codex. OpenRouter uses
+      // the normalized reasoning path above. This mirrors the
       // per-effort variant options above (the
       // @ai-sdk/openai, azure, and github-copilot cases already ship these exact
       // keys for openai models) — this block just applies the same defaults when no

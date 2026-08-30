@@ -97,8 +97,6 @@ export namespace Config {
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const wellknown = (await response.json()) as any
           const remoteConfig = wellknown.config ?? {}
-          // Add $schema to prevent load() from trying to write back to a non-existent file
-          if (!remoteConfig.$schema) remoteConfig.$schema = "https://syntheticsciences.ai/config.json"
           const remote = await load(JSON.stringify(remoteConfig), `${key}/.well-known/openscience`)
           result = mergeConfigConcatArrays(result, remote)
           execution = mergeConfigConcatArrays(execution, remote)
@@ -1145,10 +1143,7 @@ export namespace Config {
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       logLevel: Log.Level.optional().describe("Log level"),
       server: Server.optional().describe("Server configuration for openscience serve and web commands"),
-      command: z
-        .record(z.string(), Command)
-        .optional()
-        .describe("Command configuration, see https://syntheticsciences.ai/docs/commands"),
+      command: z.record(z.string(), Command).optional().describe("Command configuration"),
       skills: Skills.optional().describe("Additional skill folder paths"),
       watcher: z
         .object({
@@ -1182,21 +1177,23 @@ export namespace Config {
       billing: z
         .object({
           llm: z
-            .enum(["managed", "byok"])
+            .literal("byok")
             .nullable()
             .optional()
+            .catch("byok")
             .describe(
-              "How LLM inference is paid for. 'managed' uses Credits; 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset or null = auto-detect from the resolved credential.",
+              "Provider access uses your own API keys, first-party OAuth subscriptions, or local models. Legacy values are migrated to 'byok'.",
             ),
           compute: z
-            .enum(["managed", "byok"])
+            .literal("byok")
             .optional()
+            .catch("byok")
             .describe(
-              "@deprecated Retained only so existing 2.x config files keep parsing. Managed compute is retired; all compute uses user-owned routes regardless of this value.",
+              "@deprecated Retained so existing 2.x config files keep parsing. Compute always uses user-owned routes.",
             ),
         })
         .optional()
-        .describe("How LLM inference is paid for when using Ace or user-owned credentials. Legacy compute is ignored."),
+        .describe("Provider access configuration. OpenScience uses only user-owned credentials."),
       username: z
         .string()
         .optional()
@@ -1223,7 +1220,7 @@ export namespace Config {
         })
         .catchall(Agent)
         .optional()
-        .describe("Agent configuration, see https://syntheticsciences.ai/docs/agents"),
+        .describe("Agent configuration"),
       provider: z
         .record(z.string(), Provider)
         .optional()
@@ -1361,10 +1358,6 @@ export namespace Config {
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
-          openTelemetry: z
-            .boolean()
-            .optional()
-            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
           primary_tools: z
             .array(z.string())
             .optional()
@@ -1423,7 +1416,6 @@ export namespace Config {
               current = mergeDeep(current, await McpSecretStorage.reveal(parseConfig(protectedText, file)))
             }
             if (provider && model) current.model = `${provider}/${model}`
-            current["$schema"] = "https://syntheticsciences.ai/config.json"
             result = mergeDeep(current, rest)
             const target = path.join(Global.Path.config, "config.json")
             const protectedText = await sealedConfigText(JSON.stringify(result, null, 2), target)
@@ -1543,25 +1535,6 @@ export namespace Config {
     })
   }
 
-  async function ensureConfigSchema(filepath: string): Promise<void> {
-    await CredentialLifecycle.serialized(async () => {
-      const current = await fs.readFile(filepath, "utf8").catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return undefined
-        throw error
-      })
-      if (!current) return
-      const parsed = parseJsonc(current, [], { allowTrailingComma: true }) as Record<string, unknown> | undefined
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.$schema) return
-      const updated = applyEdits(
-        current,
-        modify(current, ["$schema"], "https://syntheticsciences.ai/config.json", {
-          formattingOptions: { insertSpaces: true, tabSize: 2 },
-        }),
-      )
-      await durableConfigWrite(filepath, await sealedConfigText(updated, filepath))
-    })
-  }
-
   async function resolveReferences(value: unknown, configFilepath: string): Promise<unknown> {
     if (typeof value === "string") {
       let resolved = value.replace(/\{env:([^}]+)\}/g, (_, varName: string) => process.env[varName] || "")
@@ -1628,12 +1601,6 @@ export namespace Config {
     const revealed = await McpSecretStorage.reveal(raw)
     const parsed = Info.safeParse(await resolveReferences(revealed, configFilepath))
     if (parsed.success) {
-      if (!parsed.data.$schema) {
-        parsed.data.$schema = "https://syntheticsciences.ai/config.json"
-        // Patch the latest bytes under the same cross-process lease as every
-        // config mutation. A read must never resurrect stale MCP authority.
-        await ensureConfigSchema(configFilepath).catch(() => undefined)
-      }
       const data = parsed.data
       if (data.plugin) {
         for (let i = 0; i < data.plugin.length; i++) {

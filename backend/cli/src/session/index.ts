@@ -29,7 +29,6 @@ import { SessionTraceStore } from "./trace-store"
 import { SessionResearch } from "./research"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { FileLease } from "@/util/file-lease"
-import { OutboundTelemetry } from "@/telemetry/outbound"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -72,11 +71,6 @@ export namespace Session {
           deletions: z.number(),
           files: z.number(),
           diffs: Snapshot.FileDiff.array().optional(),
-        })
-        .optional(),
-      share: z
-        .object({
-          url: z.string(),
         })
         .optional(),
       title: z.string(),
@@ -182,16 +176,6 @@ export namespace Session {
     if (validated().has(id)) return
     bind(await load(id))
   }
-
-  export const ShareInfo = z
-    .object({
-      secret: z.string(),
-      url: z.string(),
-    })
-    .meta({
-      ref: "SessionShare",
-    })
-  export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
     Created: BusEvent.define(
@@ -358,7 +342,6 @@ export namespace Session {
     Bus.publish(Event.Updated, {
       info: result,
     })
-    void OutboundTelemetry.sessionStarted({ sessionID: result.id, session: result }).catch(() => undefined)
     return result
   }
 
@@ -372,16 +355,6 @@ export namespace Session {
   export const get = fn(Identifier.schema("session"), async (id) => {
     return bind(await load(id))
   })
-
-  export const getShare = fn(Identifier.schema("session"), async (id) => {
-    return Storage.read<ShareInfo>(["share", id])
-  })
-
-  export const share = fn(Identifier.schema("session"), async (_id) => {
-    return { id: "", url: "", secret: "" }
-  })
-
-  export const unshare = fn(Identifier.schema("session"), async (_id) => {})
 
   export async function update(id: string, editor: (session: Info) => void, options?: { touch?: boolean }) {
     const project = Instance.project
@@ -477,13 +450,11 @@ export namespace Session {
           // Publish the recovery record before any destructive mutation. A
           // failed reaper or killed deleter can therefore retry by session id.
           await Storage.write(deletionKey(project.id, sessionID), pending)
-          await OutboundTelemetry.sessionCompleted({ sessionID, reason: "deleted", session }).catch(() => undefined)
         }
         // Cancellation must be visible before deletion waits for the authority
         // lease held by a booting kernel. Otherwise that boot can become ready,
         // run its first cell, and only then be reaped by filesystem teardown.
         KernelRuntime.cancelSession(sessionID)
-        await unshare(sessionID).catch(() => {})
         // Remove the routable session record before filesystem authority. A
         // process start that wins the authority lease first is subsequently
         // revoked; one that runs after filesystem removal cannot lazily recreate

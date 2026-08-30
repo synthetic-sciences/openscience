@@ -105,24 +105,21 @@ export function displayProviderForModel(provider: ModelProviderDisplay, modelID:
   return OPENROUTER_VENDOR_DISPLAY[vendor?.toLowerCase() ?? ""] ?? provider
 }
 
-export type InferenceSource = "managed" | "byok" | "chatgpt"
+export type InferenceSource = "byok" | "chatgpt"
 
 /** Factual access route for a connected provider; ambiguous routes stay unlabeled. */
 export function inferenceSource(input: {
   providerID: string
-  credential: "env" | "synced" | "config" | "custom" | "api" | "managed"
-  billing?: "managed" | "byok" | null
+  credential: "env" | "config" | "custom" | "api"
 }): InferenceSource | undefined {
   if (input.providerID === "openai-codex") return "chatgpt"
-  if (input.providerID === "openrouter" && input.credential === "managed") return "managed"
   if (input.credential === "api") return "byok"
-  if (input.providerID === "openrouter") return input.billing === "byok" ? "byok" : undefined
-  if (input.credential === "env" || input.credential === "synced" || input.credential === "config") return "byok"
+  if (input.providerID === "openrouter") return "byok"
+  if (input.credential === "env" || input.credential === "config") return "byok"
   return undefined
 }
 
 export function inferenceSourceLabel(source: InferenceSource | undefined, fallback = "Provider") {
-  if (source === "managed") return "Managed"
   if (source === "byok") return "BYOK"
   if (source === "chatgpt") return "ChatGPT"
   return fallback
@@ -307,14 +304,13 @@ export function isChatModel(model: CatalogModel): boolean {
 
 export function isUserProviderConnection(input: {
   providerID: string
-  source?: "env" | "synced" | "config" | "custom" | "api" | "managed"
-  billing?: "managed" | "byok" | null
+  source?: "env" | "config" | "custom" | "api"
 }): boolean {
   // Connected rows are account-backed credentials or keys explicitly saved in
   // this UI. Ambient shell variables and project/config providers can still be
   // used for inference, but they are not integrations and must not masquerade
   // as account state here.
-  return input.source === "api" || input.source === "synced"
+  return input.source === "api"
 }
 
 export function foldedRouteMode(model: ModelKey, target: CatalogModel): string | undefined {

@@ -44,7 +44,7 @@ Credentials are auto-injected by openscience when connected via the dashboard.
 [ -n "$GROQ_API_KEY" ] && echo "GROQ_API_KEY set" || echo "NOT SET"
 ```
 
-If not set: connect Groq at https://app.syntheticsciences.ai -> Services, then restart openscience.
+If not set: add your Groq key in Customize → Models or export `GROQ_API_KEY` locally.
 
 ## Quick Start
 

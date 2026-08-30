@@ -93,7 +93,7 @@ Credentials are auto-injected by openscience when connected via the dashboard.
 [ -n "$LANGSMITH_API_KEY" ] && echo "LANGSMITH_API_KEY set" || echo "NOT SET"
 ```
 
-If not set: connect LangSmith at https://app.syntheticsciences.ai -> Services, then restart openscience.
+If not set: add your LangSmith key in Customize → Tools or export `LANGSMITH_API_KEY` locally.
 
 ## Core concepts
 

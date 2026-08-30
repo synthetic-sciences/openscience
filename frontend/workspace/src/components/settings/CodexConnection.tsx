@@ -34,7 +34,6 @@ export const CodexConnection: Component<{
         const result = await sdk.client.provider.oauth.authorize({ providerID: "openai-codex", method: 0 })
         if (result.data?.url) platform.openLink(result.data.url)
         await sdk.client.provider.oauth.callback({ providerID: "openai-codex", method: 0 })
-        await sdk.client.global.sync()
       },
       refresh: () => globalSync.refreshProviders(),
       done: "Signed in with ChatGPT",

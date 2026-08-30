@@ -11,15 +11,15 @@ Generate or edit a high-quality image with OpenScience's native `generate_image`
 
 ## Required route
 
-Inside OpenScience, always call the native `generate_image` tool. Do not invoke `scripts/generate_image.py` through Bash: that standalone helper can use a shell-provided BYOK key, but arbitrary subprocesses intentionally cannot receive the managed wallet token.
+Inside OpenScience, always call the native `generate_image` tool. Do not invoke `scripts/generate_image.py` through Bash: the native tool uses a connected Gemini or OpenRouter account and saves the result into the workspace.
 
 Credential routing is automatic:
 
-1. A connected user-owned OpenRouter key is used when BYOK routing is active.
-2. Otherwise, when managed LLM spend is enabled, a signed-in user's funded OpenScience wallet is used.
-3. Only stop when neither route is available or the selected route reports insufficient credit.
+1. A connected Gemini account is used when available.
+2. Otherwise, a connected user-owned OpenRouter key is used.
+3. Stop when neither account is connected or the selected provider rejects the request.
 
-Never ask the user to paste a secret into chat. Do not claim that wallet Credits are unavailable until the native tool has attempted the resolved route.
+Never ask the user to paste a secret into chat. Direct them to Customize → Models to connect an account.
 
 ## Tool contract
 
@@ -74,4 +74,4 @@ For a technical architecture, method flow, pathway, or experimental diagram, loa
 
 ## Standalone script
 
-`scripts/generate_image.py` remains a BYOK-only helper for use outside OpenScience. It reads `--api-key`, `OPENROUTER_API_KEY`, or `.env` and calls public OpenRouter. It is not the in-product wallet route.
+`scripts/generate_image.py` remains a user-key helper for use outside OpenScience. It reads `--api-key`, `OPENROUTER_API_KEY`, or `.env` and calls public OpenRouter directly.

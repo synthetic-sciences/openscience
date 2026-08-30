@@ -15,14 +15,11 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
-import { OpenScience, type FundingSnapshot } from "@/openscience"
-import { requiresWalletBalance, shouldReportUsage, resolveCredentialSource, telemetryRoute } from "./billing-gate"
+import { accessRoute, resolveCredentialSource } from "./access-route"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
-import { TokenUsage } from "@synsci/util/token-usage"
 import { ToolRetryGuard } from "./tool-retry-guard"
 import { SessionResearch } from "./research"
-import { OutboundTelemetry } from "@/telemetry/outbound"
 import { SearchDedupe } from "./search-dedupe"
 import { SessionLoopState } from "./loop-state"
 import { InvalidCall } from "@/tool/invalid-call"
@@ -38,73 +35,6 @@ export namespace SessionProcessor {
   // provider (or a permanent error arriving as JSON) looped forever.
   const MAX_RETRY_ATTEMPTS = 10
   const log = Log.create({ service: "session.processor" })
-
-  export function managedPauseError(message: string) {
-    return new MessageV2.APIError({
-      message,
-      statusCode: 503,
-      isRetryable: true,
-      metadata: {
-        openscience_state: "paused",
-        action: "retry",
-      },
-    })
-  }
-
-  type CreditDecision = "allow" | "finalize" | "block"
-
-  /**
-   * Keep the wallet decision and the provider-dispatch seam in one helper so
-   * every managed call is fail-closed. The callback is never entered when the
-   * balance is unavailable, zero/negative, or the durable research reservation
-   * is exhausted. BYOK and first-party subscription calls bypass wallet reads.
-   */
-  export async function withManagedCallAuthorization<T>(
-    input: {
-      credentialSource: Parameters<typeof requiresWalletBalance>[0]
-      sessionID: string
-      creditDecision?: CreditDecision
-      funding?: FundingSnapshot | null
-    },
-    dispatch: (creditDecision: CreditDecision | undefined) => T | Promise<T>,
-  ): Promise<{ creditDecision: CreditDecision | undefined; value: T }> {
-    if (!requiresWalletBalance(input.credentialSource)) {
-      return { creditDecision: input.creditDecision, value: await dispatch(input.creditDecision) }
-    }
-
-    if (!input.funding) {
-      throw managedPauseError(
-        "Managed access is paused because OpenScience could not snapshot the connected funding account. Retry after signing in again, or switch to a direct BYOK, ChatGPT, or local model.",
-      )
-    }
-    const balance = await OpenScience.getBalance(input.funding)
-    if (balance === null) {
-      throw managedPauseError(
-        "Managed access is paused because OpenScience could not verify your Ace balance. Existing responses, Results, checkpoints, and remote jobs are preserved. Retry when the connection returns, or switch to a direct BYOK, ChatGPT, or local model.",
-      )
-    }
-
-    // An unaffordable call must not consume the one durable finalization
-    // reservation: no provider dispatch can follow at a zero/negative balance.
-    if (balance <= 0) {
-      OpenScience.invalidateBalance()
-      throw new Error(
-        "Your Ace balance cannot safely fund another research step and its final response. Existing Results and checkpoints are preserved. Add credits at app.syntheticsciences.ai/billing, or switch model access to Accounts in Settings → Models.",
-      )
-    }
-
-    const creditDecision = input.creditDecision ?? (await SessionResearch.preflight(input.sessionID, balance))
-    if (creditDecision === "block") {
-      // Drop the 30s cache so a top-up is visible on the next attempt instead
-      // of blocking until the TTL expires.
-      OpenScience.invalidateBalance()
-      throw new Error(
-        "Your Ace balance cannot safely fund another research step and its final response. Existing Results and checkpoints are preserved. Add credits at app.syntheticsciences.ai/billing, or switch model access to Accounts in Settings → Models.",
-      )
-    }
-
-    return { creditDecision, value: await dispatch(creditDecision) }
-  }
 
   /** True when the last `threshold` TOOL calls are the same tool with the same
    *  input, ignoring reasoning/text/step parts interleaved between them. A naive
@@ -382,7 +312,6 @@ export namespace SessionProcessor {
           }
         }
         await input.updatePart(terminal)
-        void OutboundTelemetry.tool(terminal).catch(() => undefined)
         terminalParts.set(callID, terminal)
         if (outcome.status === "error") {
           input.onRejected?.(outcome.error)
@@ -570,7 +499,6 @@ export namespace SessionProcessor {
     let idleRetryUsed = false
     let needsCompaction = false
     let overflow = false
-    let creditDecision: "allow" | "finalize" | "block" | undefined
 
     const toolOutcomes = createToolOutcomeCoordinator({
       abort: input.abort,
@@ -607,10 +535,6 @@ export namespace SessionProcessor {
       },
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
-        // One immutable account/funding choice spans balance preflight, every
-        // retry of this provider operation, and its compatibility usage report.
-        // A Settings change therefore applies to the next operation only.
-        const funding = await OpenScience.getFundingSnapshot()
         const tracking = tracks({ tools: streamInput.tools, toolcall: input.model.capabilities.toolcall })
         needsCompaction = false
         overflow = false
@@ -619,87 +543,61 @@ export namespace SessionProcessor {
         let traceRoute = "custom"
         while (true) {
           try {
-            // Probe dashboard-side BYOK/managed changes for the next request,
-            // without making this provider call wait on the control plane.
-            void OpenScience.scheduleRefresh()
-
-            // Classify the credential backing this call. The wallet pre-flight
-            // fires ONLY for managed-proxy credentials (a thk_* token / synced
-            // secret). BYOK keys and first-party OAuth subscriptions (Claude
-            // Pro/Max, Sign in with ChatGPT, Copilot) run on the user's own
-            // account — an empty wallet must never block or gate them.
+            // Classify the user-owned credential backing this call for local
+            // trace labels only. It never triggers an account or billing read.
             const credentialSource = await resolveCredentialSource(input.model.providerID, input.model.id)
-            traceRoute = telemetryRoute(credentialSource, input.model)
+            traceRoute = accessRoute(credentialSource, input.model)
 
             const requestContext = {
               sessionID: input.sessionID,
               messageID: input.assistantMessage.id,
               attempt: attempt + 1,
-              ...(credentialSource === "managed" && funding ? { funding } : {}),
             }
-            const authorized = await withManagedCallAuthorization(
-              {
-                credentialSource,
-                sessionID: input.sessionID,
-                creditDecision,
-                funding,
-              },
-              async (nextCreditDecision) => {
-                creditDecision = nextCreditDecision
+            // The conversation-first Research agent does not create or require
+            // legacy research contracts, so an old persisted contract must not
+            // silently reintroduce bounded-run finalization or block a turn.
+            // Keep the gate for specialist/legacy agents that still opt into
+            // that contract explicitly.
+            const runtime: SessionResearch.RuntimeDecision = ToolSelection.minimalResearchAgent(streamInput.agent.name)
+              ? ({ decision: "allow" } as const)
+              : await SessionResearch.runtimePreflight(input.sessionID)
+            if (runtime.decision === "block") {
+              throw new Error(SessionResearch.exhaustionMessage(runtime))
+            }
 
-                // The conversation-first Research agent does not create or require
-                // legacy research contracts, so an old persisted contract must not
-                // silently reintroduce bounded-run finalization or block a turn.
-                // Keep the gate for specialist/legacy agents that still opt into
-                // that contract explicitly. Ace balance safety above is separate.
-                const runtime: SessionResearch.RuntimeDecision = ToolSelection.minimalResearchAgent(
-                  streamInput.agent.name,
-                )
-                  ? ({ decision: "allow" } as const)
-                  : await SessionResearch.runtimePreflight(input.sessionID)
-                if (runtime.decision === "block") {
-                  throw new Error(SessionResearch.exhaustionMessage(runtime))
+            const finalizing = runtime.decision === "finalize"
+            const finalTurn = runtime.decision === "finalize" && runtime.finalizationCall === 2
+            const textOnly = runtime.textOnly === true || finalTurn
+            const request = finalizing
+              ? {
+                  ...streamInput,
+                  // The first reserved turn may save/checkpoint work. The last
+                  // one is deliberately text-only so an agent cannot consume
+                  // the entire reserve on another tool loop and strand the user
+                  // without a usable partial result.
+                  tools: textOnly ? {} : streamInput.tools,
+                  system: [
+                    ...streamInput.system,
+                    runtime.textOnly
+                      ? `Cumulative research-runtime usage jumped directly past its hard limit (${runtime.reason ?? "configured limit reached"}). This is the single emergency finalization response. No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
+                      : finalTurn
+                        ? `This is the last reserved finalization turn for the research runtime budget (${runtime.reason ?? "configured limit reached"}). No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
+                        : `The research contract runtime budget is at its finalization boundary (${runtime.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
+                  ],
                 }
-
-                const finalizing = creditDecision === "finalize" || runtime.decision === "finalize"
-                const finalTurn = runtime.decision === "finalize" && runtime.finalizationCall === 2
-                const textOnly = runtime.textOnly === true || finalTurn
-                const request = finalizing
-                  ? {
-                      ...streamInput,
-                      // The first reserved turn may save/checkpoint work. The last
-                      // one is deliberately text-only so an agent cannot consume
-                      // the entire reserve on another tool loop and strand the user
-                      // without a usable partial result.
-                      tools: textOnly ? {} : streamInput.tools,
-                      system: [
-                        ...streamInput.system,
-                        runtime.textOnly
-                          ? `Cumulative research-runtime usage jumped directly past its hard limit (${runtime.reason ?? "configured limit reached"}). This is the single emergency finalization response. No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
-                          : creditDecision === "finalize"
-                            ? "Managed-credit reserve is active. Do not begin new analysis. Save current machine outputs and checkpoints, update the research contract truthfully, and return the best verified result now."
-                            : finalTurn
-                              ? `This is the last reserved finalization turn for the research runtime budget (${runtime.reason ?? "configured limit reached"}). No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
-                              : `The research contract runtime budget is at its finalization boundary (${runtime.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
-                      ],
-                    }
-                  : streamInput
-                return Provider.withRequestContext(requestContext, () =>
-                  LLM.stream({
-                    ...request,
-                    route: traceRoute,
-                    trace: { messageID: input.assistantMessage.id, attempt: attempt + 1 },
-                    onReasoningEffortResolved: async (effort) => {
-                      if (input.assistantMessage.reasoningEffort === effort) return
-                      input.assistantMessage.reasoningEffort = effort
-                      await Session.updateMessage(input.assistantMessage)
-                    },
-                  }),
-                )
-              },
+              : streamInput
+            const stream = await Provider.withRequestContext(requestContext, () =>
+              LLM.stream({
+                ...request,
+                route: traceRoute,
+                trace: { messageID: input.assistantMessage.id, attempt: attempt + 1 },
+                onReasoningEffortResolved: async (effort) => {
+                  if (input.assistantMessage.reasoningEffort === effort) return
+                  input.assistantMessage.reasoningEffort = effort
+                  await Session.updateMessage(input.assistantMessage)
+                },
+              }),
             )
-            creditDecision = authorized.creditDecision
-            const stream = authorized.value
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
 
@@ -791,7 +689,6 @@ export namespace SessionProcessor {
                       },
                       metadata: value.providerMetadata,
                     })
-                    void OutboundTelemetry.tool(part as MessageV2.ToolPart).catch(() => undefined)
                     // Some providers omit the terminal tool-result event even
                     // though the execute promise has already settled. The
                     // execute wrapper records that authoritative outcome, so
@@ -881,75 +778,7 @@ export namespace SessionProcessor {
                     tokens: usage.tokens,
                     cost: usage.cost,
                   })
-                  await OutboundTelemetry.modelUsage({
-                    sessionID: input.sessionID,
-                    messageID: input.assistantMessage.id,
-                    operationID: stepPartID,
-                    attempt: attempt + 1,
-                    route: traceRoute,
-                    provider: input.model.providerID,
-                    model: input.model.id,
-                    tokens: usage.tokens,
-                    cost: usage.cost,
-                  }).catch(() => undefined)
                   await Session.updateMessage(input.assistantMessage)
-                  // Report usage ONLY for managed-proxy credentials. BYOK keys
-                  // and first-party OAuth subscriptions are billed to the user's
-                  // own account, not Credits, so they are never
-                  // reported (regardless of the model's nominal models.dev price).
-                  const usageResult = !shouldReportUsage(credentialSource)
-                    ? null
-                    : await OpenScience.reportUsage(
-                        {
-                          service: "llm",
-                          event_type: "chat",
-                          model: input.model.id,
-                          tokens_used: TokenUsage.uncached(usage.tokens),
-                          metadata: {
-                            provider: input.model.providerID,
-                            input_tokens: usage.tokens.input,
-                            output_tokens: usage.tokens.output,
-                            reasoning_tokens: usage.tokens.reasoning,
-                            cache_read: usage.tokens.cache.read,
-                            cache_write: usage.tokens.cache.write,
-                            cost_usd: usage.cost,
-                            session_id: input.sessionID,
-                            message_id: input.assistantMessage.id,
-                            idempotency_key: stepPartID,
-                          },
-                        },
-                        funding ?? undefined,
-                      )
-                  if (usageResult && "modelBlocked" in usageResult) {
-                    const balance = await OpenScience.getBalance(funding ?? undefined).catch(() => null)
-                    if (balance !== null && balance > 0) {
-                      // The managed proxy has already authorized, executed, and
-                      // settled this step. A legacy /api/cli/usage response can
-                      // still report model_blocked when the account-side toggle
-                      // is stale; it is telemetry, not a second billing authority.
-                      log.warn("ignoring stale usage model block after settled provider step", {
-                        model: input.model.id,
-                        balance,
-                      })
-                    } else {
-                      log.warn("model blocked by server — halting session", { model: input.model.id })
-                      // The provider step is already complete and may contain the
-                      // only copy of a terminal research result. Preserve it and
-                      // stop the outer loop instead of replacing it with a 402.
-                      await SessionResearch.exhaust(input.sessionID)
-                      blocked = true
-                      await Session.updatePart({
-                        id: Identifier.ascending("part"),
-                        messageID: input.assistantMessage.id,
-                        sessionID: input.sessionID,
-                        type: "text",
-                        synthetic: true,
-                        text: "Managed billing stopped this run after the provider step. The response, Results, and checkpoints above are preserved. Resume after topping up Credits or switching LLM spend to BYOK; the research trace shows any remaining completion gates.",
-                        time: { start: Date.now(), end: Date.now() },
-                      } satisfies MessageV2.TextPart)
-                    }
-                  }
-
                   if (snapshot) {
                     const patch = await Snapshot.patch(snapshot)
                     if (patch.files.length) {
@@ -1066,16 +895,6 @@ export namespace SessionProcessor {
             if (filtered) {
               const error = MessageV2.fromError(filtered, { providerID: input.model.providerID })
               input.assistantMessage.error = error
-              void OutboundTelemetry.error({
-                sessionID: input.sessionID,
-                messageID: input.assistantMessage.id,
-                attempt: attempt + 1,
-                route: traceRoute,
-                provider: input.model.providerID,
-                model: input.model.id,
-                error: filtered,
-                context: { normalized: error },
-              }).catch(() => undefined)
               Bus.publish(Session.Event.Error, {
                 sessionID: input.assistantMessage.sessionID,
                 error,
@@ -1087,16 +906,6 @@ export namespace SessionProcessor {
               stack: JSON.stringify(e.stack),
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
-            void OutboundTelemetry.error({
-              sessionID: input.sessionID,
-              messageID: input.assistantMessage.id,
-              attempt: attempt + 1,
-              route: traceRoute,
-              provider: input.model.providerID,
-              model: input.model.id,
-              error: e,
-              context: { normalized: error },
-            }).catch(() => undefined)
             // A context-window overflow is deterministic — retrying the same
             // oversized input can only fail again. Signal the outer loop (via the
             // "overflow" return below) to compact + resume instead of burning
@@ -1138,7 +947,7 @@ export namespace SessionProcessor {
                       if (part.type !== "tool" || part.state.status === "completed" || part.state.status === "error") {
                         continue
                       }
-                      const failed = await Session.updatePart({
+                      await Session.updatePart({
                         ...part,
                         state: {
                           ...part.state,
@@ -1147,7 +956,6 @@ export namespace SessionProcessor {
                           time: finishTime("time" in part.state ? part.state.time : undefined),
                         },
                       })
-                      void OutboundTelemetry.tool(failed as MessageV2.ToolPart).catch(() => undefined)
                       toolOutcomes.abandon(part.callID)
                     }
                     await Session.updatePart({
@@ -1168,16 +976,6 @@ export namespace SessionProcessor {
                     message: action.message,
                     delayMs: delay,
                   })
-                  await OutboundTelemetry.retry({
-                    sessionID: input.sessionID,
-                    messageID: input.assistantMessage.id,
-                    attempt: attempt + 1,
-                    delay,
-                    route: traceRoute,
-                    provider: input.model.providerID,
-                    model: input.model.id,
-                    error,
-                  }).catch(() => undefined)
                   SessionStatus.set(input.sessionID, {
                     type: "retry",
                     attempt,
@@ -1227,7 +1025,7 @@ export namespace SessionProcessor {
           for (const part of p) {
             if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
               if (await toolOutcomes.reconcile(part)) continue
-              const failed = await Session.updatePart({
+              await Session.updatePart({
                 ...part,
                 state: {
                   ...part.state,
@@ -1241,23 +1039,11 @@ export namespace SessionProcessor {
                   },
                 },
               })
-              void OutboundTelemetry.tool(failed as MessageV2.ToolPart).catch(() => undefined)
               toolOutcomes.abandon(part.callID)
             }
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
-          const completedParts = await MessageV2.parts(input.assistantMessage.id)
-          await OutboundTelemetry.assistantMessage({
-            sessionID: input.sessionID,
-            messageID: input.assistantMessage.id,
-            attempt: attempt + 1,
-            route: traceRoute,
-            provider: input.model.providerID,
-            model: input.model.id,
-            message: input.assistantMessage,
-            parts: completedParts,
-          }).catch(() => undefined)
           if (overflow) return "overflow"
           if (needsCompaction) return "compact"
           if (blocked) return "stop"

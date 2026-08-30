@@ -45,7 +45,7 @@ Credentials are auto-injected by openscience when connected via the dashboard.
 [ -n "$TOGETHER_API_KEY" ] && echo "TOGETHER_API_KEY set" || echo "NOT SET"
 ```
 
-If not set: connect Together AI at https://app.syntheticsciences.ai -> Services, then restart openscience.
+If not set: add your Together AI key in Customize → Models or export `TOGETHER_API_KEY` locally.
 
 ## Quick Start
 

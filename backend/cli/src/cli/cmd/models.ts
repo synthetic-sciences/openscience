@@ -27,13 +27,11 @@ const PROVIDER_LABELS: Record<string, string> = {
   perplexity: "Perplexity",
 }
 
-/** Classify a provider as BYOK, openscience-managed, OAuth, or unknown.
+/** Classify the user-owned route behind a provider.
  *
  *  Detection rules:
  *  - openai-codex routes via OAuth (Sign in with ChatGPT), neither.
- *  - Auth.isAtlasApiKey(key) → managed (the proxy thumbprint Atlas hands
- *    out on /api/cli/sync when the user has no BYOK key set).
- *  - options.baseURL points at Atlas (/api/llm/proxy/) → managed.
+ *  - Retired product keys and proxy URLs are rejected by the provider layer.
  *  - anything else with a key → BYOK.
  */
 function routingLabel(providerID: string, provider: Provider.Info): string {
@@ -46,10 +44,7 @@ function routingLabel(providerID: string, provider: Provider.Info): string {
   // demo sentinel is not a real credential.
   const effective = Provider.effectiveKey(provider)
   const baseURL = (provider.options?.baseURL as string | undefined) ?? ""
-  if (Auth.isAtlasApiKey(effective)) return "managed"
-  // Kept as a separate signal: a stale synced ANTHROPIC_BASE_URL can point at
-  // the Atlas proxy while the key itself is not a thk_ token.
-  if (baseURL.includes("/api/llm/proxy/")) return "managed"
+  if (Auth.isAtlasApiKey(effective) || baseURL.includes("/api/llm/proxy/")) return "retired credential"
   // A config-registered local endpoint stores its key under options.apiKey (not
   // provider.key), so it would otherwise read as "unconfigured".
   if (Provider.isLocalBaseURL(baseURL)) return "local"

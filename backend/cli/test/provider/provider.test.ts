@@ -27,7 +27,6 @@ import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
 import { Auth } from "../../src/auth"
-import { API_BASE } from "../../src/openscience"
 import { ModelsDev } from "../../src/provider/models"
 
 /* Keep this list aligned with live-catalog.test.ts. The committed fixture makes
@@ -1558,42 +1557,6 @@ test("multiple providers can be configured simultaneously", async () => {
       expect(providers["openai"]).toBeDefined()
       expect(providers["anthropic"].options.timeout).toBe(30000)
       expect(providers["openai"].options.timeout).toBe(60000)
-    },
-  })
-})
-
-test("legacy managed proxy routes retain only OpenRouter", async () => {
-  const proxy = `${API_BASE}/api/llm/proxy`
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "openscience.json"),
-        JSON.stringify({
-          $schema: "https://syntheticsciences.ai/config.json",
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    init: async () => {
-      clearManagedLLMEnv()
-      Env.set("ANTHROPIC_API_KEY", "thk_anthropic")
-      Env.set("ANTHROPIC_BASE_URL", `${proxy}/anthropic/v1`)
-      Env.set("OPENAI_API_KEY", "thk_openai")
-      Env.set("OPENAI_BASE_URL", `${proxy}/openai/v1`)
-      Env.set("GOOGLE_GENERATIVE_AI_API_KEY", "thk_google")
-      Env.set("GOOGLE_GENERATIVE_AI_BASE_URL", `${proxy}/gemini/v1beta`)
-      Env.set("OPENROUTER_API_KEY", "thk_openrouter")
-      Env.set("OPENROUTER_BASE_URL", `${proxy}/openrouter/v1`)
-      Provider.invalidate()
-    },
-    fn: async () => {
-      const providers = await Provider.list()
-      expect(providers["anthropic"]).toBeUndefined()
-      expect(providers["openai"]).toBeUndefined()
-      expect(providers["google"]).toBeUndefined()
-      expect(providers["openrouter"].options.baseURL).toBe(`${proxy}/openrouter/v1`)
     },
   })
 })

@@ -64,15 +64,13 @@ describe("local provider availability", () => {
     })
   })
 
-  test("a local provider stays available even in managed-wallet mode (it's free)", async () => {
-    await using tmp = await tmpdir({ config: { billing: { llm: "managed" }, provider: { ollama: ollamaBlock } } })
+  test("a local provider stays available with explicit user-owned routing", async () => {
+    await using tmp = await tmpdir({ config: { billing: { llm: "byok" }, provider: { ollama: ollamaBlock } } })
     await Instance.provide({
       directory: tmp.path,
       init: async () => Provider.invalidate(),
       fn: async () => {
         const providers = await Provider.list()
-        // Managed routing never hides a user-owned local endpoint. Direct BYOK
-        // providers may also remain visible because they bypass Ace entirely.
         expect(providers["ollama"]).toBeDefined()
         expect(providers["ollama"].options.baseURL).toBe("http://localhost:11434/v1")
       },

@@ -1487,7 +1487,7 @@ export namespace SessionResearch {
       // One model/tool step can legitimately jump from below the 90% reserve
       // straight past a token, tool, or elapsed-time ceiling. Claim one
       // text-only emergency response atomically so the user is not stranded
-      // without a result. Cost, model-call, wallet, and provider denials never
+      // without a result. Cost, model-call, and provider denials never
       // qualify: none of them may authorize another paid provider request.
       const emergency =
         hard &&

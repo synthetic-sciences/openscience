@@ -1,55 +1,53 @@
 ---
 title: "Security"
-description: "The trust boundary, credential storage, execution sandbox, and subprocess environment hygiene — in an open-source agent you can audit end to end."
+description: "Local storage, execution containment, credential handling, and network boundaries."
 icon: "shield-check"
 ---
 
-OpenScience is open source under Apache-2.0, so the whole security model below is auditable in the [repository](https://github.com/synthetic-sciences/openscience). The agent runs locally. New local installs default to **Approve for me**: the project is trusted while execution remains contained. Two principles anchor the design: keep credentials out of subprocesses that do not need them, and make each trust boundary explicit instead of treating permissions, sandboxing, and project trust as the same control.
+OpenScience is open source under Apache-2.0, and the agent runs locally. Projects, sessions, settings, results, and saved credentials stay in the selected data root.
 
-## Permissions are not the sandbox
+## Permissions and containment
 
-The permission system decides whether an agent may take an action. It is not, on its own, an isolation boundary.
+The permission system decides whether the agent may take an action. It is not an isolation boundary by itself.
 
-OpenScience ships a real [execution sandbox](/openscience/sandbox), and **Approve for me** is the default. It trusts the project inside macOS Seatbelt or Linux bubblewrap. Open **Research tools → Action approval** to select **Ask for approval** and revoke project trust while retaining containment, or deliberately choose **Full access** to disable containment after a warning. Containment limits commands to the workspace and approved paths and denies network egress; if the selected boundary is unavailable, the default policy refuses to run rather than silently falling back to the host. Verify it with `openscience sandbox test`. It is OS containment, not a full VM — for actively hostile code, still run OpenScience inside a container or VM.
+New installs default to **Ask risky**: contained reversible work proceeds, while external, costly, or hard-to-reverse actions require approval. macOS uses Seatbelt and Linux uses bubblewrap when available. Use **Research tools → Action approval** to choose a stricter or broader mode, and verify the boundary with:
+
+```bash
+openscience sandbox
+openscience sandbox test
+```
+
+The sandbox is not a full VM. Run actively hostile code inside a dedicated container or VM.
 
 ## Credential storage
 
 | Surface | Where | Notes |
 | --- | --- | --- |
-| BYOK provider keys | Environment variables or `<data-root>/auth.json` | Model requests go straight to the provider and are not billed by Ace. A Synthetic Sciences account is still required for installation identity and trace ownership. Approved skill subprocesses can receive supported user-owned keys; arbitrary Python/R kernels receive a minimal environment without provider keys. |
-| Synthetic Sciences session | `<data-root>/openscience-session.json` | `thk_*` key created by `openscience login`; revocable from the dashboard. |
-| Synced service credentials | `<data-root>/credentials.json` | Present only when [connected to Synthetic Sciences](/openscience/gateway); encrypted at rest and refreshed with `openscience sync`. |
-| Native binary (curl install) | `~/.openscience/bin/openscience` | Added to PATH through your shell rc. |
+| Provider keys and OAuth | `<data-root>/auth.json` | Encrypted local provider access; requests go directly to the provider. |
+| Connector credentials | `<data-root>/credentials.json` | Encrypted local service access. |
+| Compute credentials | Local compute store | Injected only by the selected compute adapter. |
+| Native binary | `~/.openscience/bin/openscience` | Used by the curl installer. |
 
-The data root defaults to `~/.openscience` and can be relocated from Storage settings or with `OPENSCIENCE_DATA_DIR`. Override the config directory with `OPENSCIENCE_CONFIG_DIR` (or its XDG parent with `XDG_CONFIG_HOME`). Run `openscience debug paths` to print the resolved data, config, cache, and state directories on your machine.
+The data root defaults to `~/.openscience` and can be moved from **Customize → Storage** or with `OPENSCIENCE_DATA_DIR`. Global configuration uses `OPENSCIENCE_CONFIG_DIR` or its XDG default. Run `openscience debug paths` to inspect the resolved locations.
 
-## Subprocess environment boundaries
+## Subprocess boundaries
 
-Shell tools receive a sanitized environment: Synthetic Sciences tokens and control-plane variables are stripped, while ordinary user environment values and supported user-owned provider or service credentials may be available to approved commands. Credential files, SSH/cloud config, and other sensitive paths are denied to OS-sandboxed Python/R kernels; kernels also receive a minimal runtime and locale environment without provider, Synthetic Sciences, or cloud keys.
+Approved shell tools receive a sanitized environment. Supported user-owned model and service credentials may be injected for the task, while compute control-plane keys are added only by the selected adapter. Python and R kernels receive a minimal runtime and locale environment. Known credential patterns are redacted before tool output is written into a session.
 
-Your Modal credentials are narrower still: they resolve only inside the trusted compute adapter after approval and are not injected into general shell or kernel environments.
-
-The browser's interactive system terminal is a user-owned shell rather than an agent tool. It inherits the user's environment (minus terminal-session bookkeeping), so treat it like any terminal you launch yourself.
-
-## Output redaction
-
-Known credential patterns are redacted from agent output before it lands in a transcript. If you spot an unredacted secret, report it (see below).
+The interactive terminal is a user-owned shell, not an agent subprocess, so treat it like any terminal you launch yourself.
 
 ## Server mode
 
-Server mode is opt-in. The server binds to localhost (127.0.0.1) only and enforces a Host and Origin allowlist to block DNS-rebinding and cross-origin requests. It is not built for remote exposure — if you tunnel or reverse-proxy it, securing that exposure is on you.
+The local server binds to `127.0.0.1` and enforces Host and Origin allowlists. If you deliberately expose it through a tunnel or reverse proxy, securing that exposure is your responsibility. Set `OPENSCIENCE_AUTH_TOKEN` to require a bearer token for network requests.
 
-For defense in depth on a shared host or behind a reverse proxy, set `OPENSCIENCE_AUTH_TOKEN`. Every network request must then include `Authorization: Bearer <token>`, except `/global/health` and browser CORS preflights. In-process calls keep working without the token. Make sure the proxy forwards or injects the credential for HTTP, streaming, and WebSocket traffic.
+## What can leave your machine
 
-## What leaves your machine
+- Prompts and responses sent to the model provider you selected.
+- Requests made to scientific services, MCP servers, publishing targets, or compute providers you connect or approve.
+- Files explicitly uploaded by one of those approved tools.
 
-- Prompts and responses sent to your model provider, governed by that provider's policy.
-- Full research traces when **Use my data** is enabled. A trace links prompts, model and assistant responses, tool calls and results, searches, artifacts, retries, errors, and session lifecycle events. The client removes known credentials and secret values before upload, and the Synthetic Sciences service applies a second redaction pass before retention.
-- Enhanced-search queries when you use Synthetic Sciences research search. They are sent to the Synthetic Sciences service and its configured search provider. Search content is retained with the trace only while **Use my data** is enabled; billing and idempotency records remain content-free.
-- Synced credentials and authoritative credit-backed usage when you [connect Synthetic Sciences](/openscience/gateway).
-
-**Use my data** is the single account setting for cloud trace collection. It is on by default for a newly connected account. Turning it off stops new trace uploads and clears pending events without disabling local sessions, BYOK, ChatGPT/Codex, Ace, search, or user-owned compute. Source files stay local unless their contents appear in a traced tool result or the agent explicitly uploads them through a tool you approve. Approved shell commands and user-owned terminals can still access credentials in their environment, while Python/R kernels stay on the minimal environment described above. Trace upload failure never blocks research and can never debit your wallet.
+OpenScience does not upload session traces to a product control plane.
 
 ## Reporting a vulnerability
 
-Report security issues through the GitHub Security Advisory ["Report a Vulnerability"](https://github.com/synthetic-sciences/openscience/security/advisories/new) form — not on public issue trackers. If you do not hear back within six business days, email security@syntheticsciences.ai.
+Use the GitHub Security Advisory [Report a Vulnerability](https://github.com/synthetic-sciences/openscience/security/advisories/new) form rather than a public issue.

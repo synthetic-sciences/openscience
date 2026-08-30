@@ -337,13 +337,11 @@ async function preflight(
   expected?: { sourceSha: string; sourceWorktreeHash: string; runId?: string },
 ) {
   const root = createOpenScienceClient({ baseUrl })
-  const [healthResponse, accountResponse, providers] = await Promise.all([
+  const [healthResponse, providers] = await Promise.all([
     fetch(new URL("/global/health", baseUrl)),
-    fetch(new URL("/account/session", baseUrl)),
     unwrap<any>(root.provider.list()),
   ])
   if (!healthResponse.ok) throw new Error(`Backend health failed: ${healthResponse.status}`)
-  if (!accountResponse.ok) throw new Error(`Account preflight failed: ${accountResponse.status}`)
   const { providerID, modelID } = parseModelKey(model)
   if (!providers.connected?.includes(providerID)) throw new Error(`Provider ${providerID} is not connected`)
   const provider = providers.all?.find((item: Json) => item.id === providerID)
@@ -352,7 +350,6 @@ async function preflight(
   if (expected) assertServerIdentity(health, expected)
   return {
     health,
-    account: await accountResponse.json(),
     providerID,
     modelID,
     model: safeValue(provider.models[modelID]),
@@ -1219,7 +1216,6 @@ async function runOne(input: {
             error: "Root session workspace was unavailable",
           }
     const treeMetrics = aggregateCapturedSessionTree(capturedSessions, sessionID)
-    const usage = await unwrap<any>(client.settings.usage.get()).catch((error) => ({ error: String(error) }))
     const [artifacts, discovered, trustAfter] = await Promise.all([
       copyArtifacts(client, runRoot, input.baseUrl, project.id),
       unwrap<any>(client.file.artifacts({ sessionID: session.id })).catch(() => []),
@@ -1229,7 +1225,6 @@ async function runOne(input: {
       writeAtomic(path.join(runRoot, "trace.json"), safeValue(rootTrace)),
       writeAtomic(path.join(runRoot, "trajectory.json"), trajectory(rootTrace, events)),
       writeAtomic(path.join(runRoot, "executions.json"), safeValue(executions)),
-      writeAtomic(path.join(runRoot, "usage.json"), safeValue(usage)),
       writeAtomic(path.join(runRoot, "artifacts.json"), { store: artifacts, discovered: safeValue(discovered) }),
       writeAtomic(path.join(runRoot, "workspace-snapshot.json"), safeValue(workspaceSnapshot)),
     ])
@@ -1312,11 +1307,11 @@ async function runOne(input: {
         childAgents: rootTrace.summary?.childCount,
         retries: rootTrace.summary?.retryCount,
         failures: Math.max(mergedFailures.length, Number(rootTrace.summary?.failureCount ?? 0)),
-        cost: usage.total?.cost ?? rootTrace.summary?.cost,
+        cost: treeMetrics?.cost ?? rootTrace.summary?.cost,
       },
       usage: {
-        cost: usage.total?.cost ?? rootTrace.summary?.cost,
-        tokens: usage.total?.tokens ?? rootTrace.summary?.tokens,
+        cost: treeMetrics?.cost ?? rootTrace.summary?.cost,
+        tokens: treeMetrics?.tokens ?? rootTrace.summary?.tokens,
       },
       treeMetrics,
       artifacts: [

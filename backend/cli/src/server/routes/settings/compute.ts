@@ -260,7 +260,7 @@ export namespace ComputeSettings {
     }),
     connected: z.boolean(),
     enabled: z.boolean(),
-    source: z.enum(["stored", "account", "modal_toml"]).nullable(),
+    source: z.enum(["stored", "modal_toml"]).nullable(),
     connected_at: z.string().nullable(),
     last_used: z.string().nullable(),
   })
@@ -856,7 +856,7 @@ export namespace ComputeSettings {
 
   // Build the client-facing view — never includes the encrypted key.
   async function view(stored: Stored, file = modalFile(), configHosts = sshConfigHosts()): Promise<Info> {
-    const providers = CATALOG.map((spec) => {
+    const providers: Info["providers"] = CATALOG.map((spec) => {
       const entry = stored.providers[spec.id]
       const connected = !!entry && !entry.removal
       return {
@@ -868,7 +868,7 @@ export namespace ComputeSettings {
         credential: spec.credential,
         connected,
         enabled: connected ? (entry?.enabled ?? false) : false,
-        source: connected ? (entry?.source ?? null) : null,
+        source: connected ? (entry?.source === "modal_toml" ? ("modal_toml" as const) : ("stored" as const)) : null,
         connected_at: connected ? (entry?.connected_at ?? null) : null,
         last_used: connected ? (entry?.last_used ?? null) : null,
       }
@@ -987,60 +987,6 @@ export namespace ComputeSettings {
       }),
     )
     return view(stored)
-  }
-
-  async function reconcileAccountProvidersUnlocked(
-    portable: Record<string, { fields: Record<string, string>; updated_at?: string | null }>,
-  ): Promise<void> {
-    const incoming = Object.fromEntries(Object.entries(portable).filter(([id]) => isProvider(id)))
-    await update(async (current) => {
-      for (const [id, entry] of Object.entries(current.providers)) {
-        if (entry.removal) continue
-        if (entry.source !== "account" || id in incoming) continue
-        delete current.providers[id]
-      }
-      for (const [id, payload] of Object.entries(incoming)) {
-        const existing = current.providers[id]
-        if (existing?.removal) continue
-        if (existing?.source === "stored" || existing?.source === "modal_toml") continue
-        const key =
-          id === "modal"
-            ? payload.fields.token_id && payload.fields.token_secret
-              ? `${payload.fields.token_id}:${payload.fields.token_secret}`
-              : undefined
-            : payload.fields.api_key
-        if (!key) continue
-        const sameCredential = existing?.key
-          ? await decrypt(existing.key)
-              .then((value) => value === key)
-              .catch(() => false)
-          : false
-        current.providers[id] = {
-          key: await encrypt(key),
-          source: "account",
-          enabled: existing?.enabled ?? true,
-          connected_at: payload.updated_at ?? existing?.connected_at ?? new Date().toISOString(),
-          last_used: sameCredential ? (existing?.last_used ?? null) : null,
-          executable: existing?.executable,
-          executable_approval: existing?.executable_approval,
-        }
-      }
-    })
-  }
-
-  /** Reconcile portable provider records when no credential mutation is
-   * already active. Dashboard sync uses the explicitly named held-mutation
-   * variant below to avoid recursively acquiring the same cross-process lease. */
-  export async function reconcileAccountProviders(
-    portable: Record<string, { fields: Record<string, string>; updated_at?: string | null }>,
-  ): Promise<void> {
-    await CredentialLifecycle.mutate("compute-providers.reconcile", () => reconcileAccountProvidersUnlocked(portable))
-  }
-
-  export async function reconcileAccountProvidersDuringCredentialMutation(
-    portable: Record<string, { fields: Record<string, string>; updated_at?: string | null }>,
-  ): Promise<void> {
-    await reconcileAccountProvidersUnlocked(portable)
   }
 
   export async function updateModal(input: ModalPatch): Promise<Info> {

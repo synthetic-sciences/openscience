@@ -4,7 +4,7 @@ description: "Install OpenScience, set a provider key, and run your first resear
 icon: "rocket"
 ---
 
-Five minutes from zero to a running research session. Sign in once with a free Synthetic Sciences account, then use your own providers, eligible ChatGPT access, local models, or Ace.
+Five minutes from zero to a running research session. Use your own provider account, API key, or local model.
 
 <Steps>
   <Step title="Install">
@@ -24,12 +24,12 @@ Five minutes from zero to a running research session. Sign in once with a free S
 
     Linux requires kernel 5.1 or newer. Glibc builds require glibc 2.17 or newer, and musl builds are selected separately. CentOS 7's stock 3.10 kernel is not supported; use a newer host kernel or VM.
   </Step>
-  <Step title="Connect your free account">
+  <Step title="Connect a model">
     ```bash
-    openscience login
+    openscience keys add
     ```
 
-    OpenScience requires a free [Synthetic Sciences account](/openscience/gateway) for installation identity, trace ownership, and settings continuity. No paid plan is required. **Use my data** is on by default and shares a redacted complete research trajectory; turn it off anytime in Settings.
+    Choose a provider sign-in or save your API key locally. You can also skip this step and use a local model.
   </Step>
   <Step title="Choose model access">
     ```bash

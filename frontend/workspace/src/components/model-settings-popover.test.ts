@@ -48,33 +48,22 @@ const press = async (target: HTMLElement, key: string) => {
 describe("inference source classification", () => {
   test("labels provider routes by the access the user controls", () => {
     expect(subject.inferenceSource({ providerID: "synsci", credential: "custom" })).toBeUndefined()
-    expect(subject.inferenceSource({ providerID: "anthropic", credential: "managed" })).toBeUndefined()
     expect(subject.inferenceSource({ providerID: "openai-codex", credential: "custom" })).toBe("chatgpt")
     expect(subject.inferenceSource({ providerID: "anthropic", credential: "api" })).toBe("byok")
     expect(subject.inferenceSource({ providerID: "anthropic", credential: "env" })).toBe("byok")
     expect(subject.inferenceSource({ providerID: "xai", credential: "config" })).toBe("byok")
     // Own gateway key in the local auth store is decisive: own key wins server-side.
     expect(subject.inferenceSource({ providerID: "openrouter", credential: "api" })).toBe("byok")
-    // A gateway env credential can be an own key or the synced managed token.
-    expect(subject.inferenceSource({ providerID: "openrouter", credential: "env" })).toBeUndefined()
-    expect(subject.inferenceSource({ providerID: "openrouter", credential: "env", billing: "managed" })).toBeUndefined()
-    // Explicit byok billing drops managed credentials server-side, so a surviving gateway is the user's own.
-    expect(subject.inferenceSource({ providerID: "openrouter", credential: "env", billing: "byok" })).toBe("byok")
+    // Environment credentials are user-owned; retired managed credentials are not surfaced.
+    expect(subject.inferenceSource({ providerID: "openrouter", credential: "env" })).toBe("byok")
+    expect(subject.inferenceSource({ providerID: "openrouter", credential: "env" })).toBe("byok")
     // OAuth subscriptions outside ChatGPT and config-defined custom providers stay unlabeled.
     expect(subject.inferenceSource({ providerID: "github-copilot", credential: "custom" })).toBeUndefined()
-    // provider.source itself now says "managed" once a route is genuinely wallet-billed
-    // (the gateway's managed-proxy branch, or a synced token with no own key under
-    // auto-detect) — trust it outright, regardless of the billing toggle's value.
-    expect(subject.inferenceSource({ providerID: "openrouter", credential: "managed" })).toBe("managed")
-    expect(subject.inferenceSource({ providerID: "openrouter", credential: "managed", billing: "managed" })).toBe(
-      "managed",
-    )
   })
 
   test("labels model access without changing provider routing ids", () => {
     expect(subject.inferenceSourceLabel("chatgpt")).toBe("ChatGPT")
     expect(subject.inferenceSourceLabel("byok")).toBe("BYOK")
-    expect(subject.inferenceSourceLabel("managed")).toBe("Managed")
     expect(subject.inferenceSourceLabel(undefined, "Local runtime")).toBe("Local runtime")
   })
 })

@@ -3,19 +3,6 @@
 import { client } from "./client.gen.js"
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from "./client/index.js"
 import type {
-  AccountBalanceResponses,
-  AccountBillingModeGetResponses,
-  AccountBillingModeSetResponses,
-  AccountDeviceRevokeResponses,
-  AccountDevicesResponses,
-  AccountFundingContextGetResponses,
-  AccountFundingContextSetErrors,
-  AccountFundingContextSetResponses,
-  AccountGetResponses,
-  AccountLoginBrowserResponses,
-  AccountLoginKeyResponses,
-  AccountLogoutResponses,
-  AccountSessionResponses,
   AgentPartInput,
   ApiAuth,
   AppAgentsResponses,
@@ -116,7 +103,6 @@ import type {
   GlobalHealthResponses,
   GlobalProjectCreateErrors,
   GlobalProjectCreateResponses,
-  GlobalSyncResponses,
   InstanceDisposeResponses,
   KernelsCommandsResponses,
   KernelsCommandStopErrors,
@@ -294,8 +280,6 @@ import type {
   SessionUnrevertResponses,
   SessionUpdateErrors,
   SessionUpdateResponses,
-  SettingsBillingGetResponses,
-  SettingsBillingUpdateResponses,
   SettingsComputeEnvironmentsRepairResponses,
   SettingsComputeGetResponses,
   SettingsComputeJobsCancelErrors,
@@ -349,12 +333,10 @@ import type {
   SettingsPreferencesGetResponses,
   SettingsPreferencesOnboardingOperationResponses,
   SettingsPreferencesUpdateResponses,
-  SettingsResearchToolsGetResponses,
-  SettingsResearchToolsTelemetryDeleteResponses,
-  SettingsResearchToolsTelemetryUpdateResponses,
   SettingsScientificToolsResponses,
   SettingsSkillsInstallErrors,
   SettingsSkillsInstallResponses,
+  SettingsStorageClearCacheResponses,
   SettingsStorageRelocateErrors,
   SettingsStorageRelocateResponses,
   SettingsStorageResetLocationErrors,
@@ -370,8 +352,6 @@ import type {
   SettingsUpdatesInstallResponses,
   SettingsUpdatesStageResponses,
   SettingsUpdatesStateResponses,
-  SettingsUsageGetResponses,
-  SettingsWalletGetResponses,
   SubtaskPartInput,
   TextPartInput,
   ToolIdsErrors,
@@ -614,18 +594,6 @@ export class Global extends HeyApiClient {
     })
   }
 
-  /**
-   * Sync account services
-   *
-   * Refresh OpenScience account services and reload local provider/config state.
-   */
-  public sync<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).post<GlobalSyncResponses, unknown, ThrowOnError>({
-      url: "/global/sync",
-      ...options,
-    })
-  }
-
   private _project?: Project
   get project(): Project {
     return (this._project ??= new Project({ client: this.client }))
@@ -634,202 +602,6 @@ export class Global extends HeyApiClient {
   private _config?: Config
   get config(): Config {
     return (this._config ??= new Config({ client: this.client }))
-  }
-}
-
-export class FundingContext extends HeyApiClient {
-  /**
-   * Get the local funding account selection
-   *
-   * List available Synthetic Sciences workspaces and the workspace used by managed operations.
-   */
-  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<AccountFundingContextGetResponses, unknown, ThrowOnError>({
-      url: "/account/funding-context",
-      ...options,
-    })
-  }
-
-  /**
-   * Choose the funding account for managed operations
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters: {
-      organization_id: string | null
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "organization_id" }] }])
-    return (options?.client ?? this.client).put<
-      AccountFundingContextSetResponses,
-      AccountFundingContextSetErrors,
-      ThrowOnError
-    >({
-      url: "/account/funding-context",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Device extends HeyApiClient {
-  /**
-   * Revoke device
-   */
-  public revoke<ThrowOnError extends boolean = false>(
-    parameters: {
-      keyID: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "keyID" }] }])
-    return (options?.client ?? this.client).delete<AccountDeviceRevokeResponses, unknown, ThrowOnError>({
-      url: "/account/devices/{keyID}",
-      ...options,
-      ...params,
-    })
-  }
-}
-
-export class BillingMode extends HeyApiClient {
-  /**
-   * Get billing mode
-   */
-  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<AccountBillingModeGetResponses, unknown, ThrowOnError>({
-      url: "/account/billing-mode",
-      ...options,
-    })
-  }
-
-  /**
-   * Set billing mode
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters: {
-      mode: "byok" | "managed"
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "mode" }] }])
-    return (options?.client ?? this.client).post<AccountBillingModeSetResponses, unknown, ThrowOnError>({
-      url: "/account/billing-mode",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Account extends HeyApiClient {
-  /**
-   * Get local session status
-   *
-   * Check whether this OpenScience server has a local Synthetic Sciences session without a network request.
-   */
-  public session<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<AccountSessionResponses, unknown, ThrowOnError>({
-      url: "/account/session",
-      ...options,
-    })
-  }
-
-  /**
-   * Get account
-   *
-   * Get synced OpenScience account and billing summary.
-   */
-  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<AccountGetResponses, unknown, ThrowOnError>({
-      url: "/account",
-      ...options,
-    })
-  }
-
-  /**
-   * Get balance
-   */
-  public balance<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<AccountBalanceResponses, unknown, ThrowOnError>({
-      url: "/account/balance",
-      ...options,
-    })
-  }
-
-  /**
-   * List devices
-   */
-  public devices<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<AccountDevicesResponses, unknown, ThrowOnError>({
-      url: "/account/devices",
-      ...options,
-    })
-  }
-
-  /**
-   * Sign in through the system browser
-   */
-  public loginBrowser<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).post<AccountLoginBrowserResponses, unknown, ThrowOnError>({
-      url: "/account/login-browser",
-      ...options,
-    })
-  }
-
-  /**
-   * Sign in with a Synthetic Sciences API key
-   */
-  public loginKey<ThrowOnError extends boolean = false>(
-    parameters: {
-      key: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "key" }] }])
-    return (options?.client ?? this.client).post<AccountLoginKeyResponses, unknown, ThrowOnError>({
-      url: "/account/login-key",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Logout account
-   */
-  public logout<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).post<AccountLogoutResponses, unknown, ThrowOnError>({
-      url: "/account/logout",
-      ...options,
-    })
-  }
-
-  private _fundingContext?: FundingContext
-  get fundingContext(): FundingContext {
-    return (this._fundingContext ??= new FundingContext({ client: this.client }))
-  }
-
-  private _device?: Device
-  get device(): Device {
-    return (this._device ??= new Device({ client: this.client }))
-  }
-
-  private _billingMode?: BillingMode
-  get billingMode(): BillingMode {
-    return (this._billingMode ??= new BillingMode({ client: this.client }))
   }
 }
 
@@ -922,6 +694,18 @@ export class Storage extends HeyApiClient {
       url: "/settings/storage",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Clear local cache
+   *
+   * Remove regenerable OpenScience package, model-catalog, and bundled-skill cache entries. User projects, sessions, credentials, and artifacts are never touched.
+   */
+  public clearCache<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).delete<SettingsStorageClearCacheResponses, unknown, ThrowOnError>({
+      url: "/settings/storage/cache",
+      ...options,
     })
   }
 
@@ -1933,63 +1717,6 @@ export class Preferences extends HeyApiClient {
   }
 }
 
-export class Billing extends HeyApiClient {
-  /**
-   * Get LLM billing mode and wallet status
-   */
-  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<SettingsBillingGetResponses, unknown, ThrowOnError>({
-      url: "/settings/billing",
-      ...options,
-    })
-  }
-
-  /**
-   * Update the LLM billing mode (managed vs BYOK)
-   */
-  public update<ThrowOnError extends boolean = false>(
-    parameters?: {
-      llm?: "managed" | "byok" | null
-      compute?: "managed" | "byok"
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "body", key: "llm" },
-            { in: "body", key: "compute" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<SettingsBillingUpdateResponses, unknown, ThrowOnError>({
-      url: "/settings/billing",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Wallet extends HeyApiClient {
-  /**
-   * Get purchased Wallet balance, routing mode, and recent transactions
-   */
-  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<SettingsWalletGetResponses, unknown, ThrowOnError>({
-      url: "/settings/wallet",
-      ...options,
-    })
-  }
-}
-
 export class Updates extends HeyApiClient {
   /**
    * Check for an OpenScience update
@@ -2062,58 +1789,6 @@ export class Updates extends HeyApiClient {
       SettingsUpdatesDisposeErrors,
       ThrowOnError
     >({ url: "/settings/updates/dispose", ...options })
-  }
-}
-
-export class Telemetry extends HeyApiClient {
-  /**
-   * Update OpenScience data-use consent
-   */
-  public update<ThrowOnError extends boolean = false>(
-    parameters: {
-      userOwnedContentEnabled: boolean
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "userOwnedContentEnabled" }] }])
-    return (options?.client ?? this.client).put<SettingsResearchToolsTelemetryUpdateResponses, unknown, ThrowOnError>({
-      url: "/settings/research-tools/telemetry",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Delete account-linked OpenScience trace data
-   */
-  public delete<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).delete<
-      SettingsResearchToolsTelemetryDeleteResponses,
-      unknown,
-      ThrowOnError
-    >({ url: "/settings/research-tools/telemetry/account-data", ...options })
-  }
-}
-
-export class ResearchTools extends HeyApiClient {
-  /**
-   * Get credit-backed search and data-sharing status
-   */
-  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<SettingsResearchToolsGetResponses, unknown, ThrowOnError>({
-      url: "/settings/research-tools",
-      ...options,
-    })
-  }
-
-  private _telemetry?: Telemetry
-  get telemetry(): Telemetry {
-    return (this._telemetry ??= new Telemetry({ client: this.client }))
   }
 }
 
@@ -2218,25 +1893,6 @@ export class Network extends HeyApiClient {
   }
 }
 
-export class Usage extends HeyApiClient {
-  /**
-   * Local usage summary
-   */
-  public get<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
-    return (options?.client ?? this.client).get<SettingsUsageGetResponses, unknown, ThrowOnError>({
-      url: "/settings/usage",
-      ...options,
-      ...params,
-    })
-  }
-}
-
 export class Settings extends HeyApiClient {
   /**
    * Get scientific capability and connector catalogs
@@ -2270,24 +1926,9 @@ export class Settings extends HeyApiClient {
     return (this._preferences ??= new Preferences({ client: this.client }))
   }
 
-  private _billing?: Billing
-  get billing(): Billing {
-    return (this._billing ??= new Billing({ client: this.client }))
-  }
-
-  private _wallet?: Wallet
-  get wallet(): Wallet {
-    return (this._wallet ??= new Wallet({ client: this.client }))
-  }
-
   private _updates?: Updates
   get updates(): Updates {
     return (this._updates ??= new Updates({ client: this.client }))
-  }
-
-  private _researchTools?: ResearchTools
-  get researchTools(): ResearchTools {
-    return (this._researchTools ??= new ResearchTools({ client: this.client }))
   }
 
   private _skills?: Skills
@@ -2299,18 +1940,13 @@ export class Settings extends HeyApiClient {
   get network(): Network {
     return (this._network ??= new Network({ client: this.client }))
   }
-
-  private _usage?: Usage
-  get usage(): Usage {
-    return (this._usage ??= new Usage({ client: this.client }))
-  }
 }
 
 export class Auth extends HeyApiClient {
   /**
    * Configure an onboarding provider credential
    *
-   * Atomically save one local provider key and select BYOK model access.
+   * Save one local provider key.
    */
   public onboarding<ThrowOnError extends boolean = false>(
     parameters: {
@@ -2549,9 +2185,9 @@ export class Access extends HeyApiClient {
 
 export class Project2 extends HeyApiClient {
   /**
-   * List all projects
+   * List OpenScience projects
    *
-   * Get a list of projects that have been opened with OpenScience.
+   * Get the app-created OpenScience projects owned by this server.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -8153,11 +7789,6 @@ export class OpenScienceClient extends HeyApiClient {
   private _global?: Global
   get global(): Global {
     return (this._global ??= new Global({ client: this.client }))
-  }
-
-  private _account?: Account
-  get account(): Account {
-    return (this._account ??= new Account({ client: this.client }))
   }
 
   private _settings?: Settings

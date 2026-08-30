@@ -1,5 +1,3 @@
-import fs from "node:fs/promises"
-import path from "node:path"
 import z from "zod"
 
 const dir = process.env.OPENSCIENCE_E2E_PROJECT_DIR ?? process.cwd()
@@ -32,7 +30,6 @@ const seed = async () => {
   const { MessageV2 } = await import("../src/session/message-v2")
   const { Identifier } = await import("../src/id/id")
   const { Project } = await import("../src/project/project")
-  const { Global } = await import("../src/global")
 
   const fixture = process.env.OPENSCIENCE_E2E_ARTIFACT
     ? Artifact.parse(JSON.parse(process.env.OPENSCIENCE_E2E_ARTIFACT))
@@ -72,11 +69,6 @@ const seed = async () => {
         return
       }
 
-      await fs.mkdir(Global.Path.data, { recursive: true })
-      await Bun.write(
-        path.join(Global.Path.data, "openscience-session.json"),
-        JSON.stringify({ api_key: "thk_e2e.local", user_id: "openscience-e2e" }),
-      )
       const session = await Session.create({ title })
       const messageID = Identifier.descending("message")
       const partID = Identifier.descending("part")

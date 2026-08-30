@@ -153,7 +153,7 @@ export namespace SystemPrompt {
             "<skill-routing>",
             "When a request clearly matches one of these routes, load the listed skill or skills before the first substantive edit, build, search, or generation step. Do not merely mention the skill in prose.",
             ...route.map((item) => `- ${item.when}: ${item.skills.join(", ")}`),
-            "For an existing manuscript, preserve its scientific content and existing figures unless the user asks for content or figure changes. When creating or replacing a technical figure, use scientific-schematics and the native generate_image tool so Nano Banana Pro runs through connected BYOK or a funded OpenScience wallet without exposing credentials to shell scripts.",
+            "For an existing manuscript, preserve its scientific content and existing figures unless the user asks for content or figure changes. When creating or replacing a technical figure, use scientific-schematics and the native generate_image tool with the user's connected Gemini or OpenRouter account; never expose credentials to shell scripts.",
             "</skill-routing>",
           ]
         : []

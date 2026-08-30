@@ -9,15 +9,15 @@ import { fromInverted, raw, snippet } from "./shared"
  * reconstructed to plain text. `mailto` uses OpenAlex's polite pool (faster,
  * higher limits); an optional key enables the premium pool. Both come from
  * settings ▸ Credentials → "OpenAlex" (OPENALEX_MAILTO / OPENALEX_API_KEY) and
- * fall back to the project contact so unauthenticated installs still work.
+ * remain optional so unauthenticated installs still work.
  */
 
 const BASE = "https://api.openalex.org/works"
 
 // Read at call time so credentials saved mid-session apply without a restart.
 function politeParams(): string {
-  const email = process.env.OPENALEX_MAILTO?.trim() || "support@syntheticsciences.ai"
-  const parts = [`mailto=${encodeURIComponent(email)}`]
+  const email = process.env.OPENALEX_MAILTO?.trim()
+  const parts = email ? [`mailto=${encodeURIComponent(email)}`] : []
   const key = process.env.OPENALEX_API_KEY?.trim()
   if (key) parts.push(`api_key=${encodeURIComponent(key)}`)
   return parts.join("&")

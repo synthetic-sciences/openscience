@@ -414,17 +414,7 @@ function createGlobalSync() {
     return { changed, removed }
   }
 
-  /**
-   * Fired after every `refreshProviders`. That call is the shared choke point
-   * for "a credential just changed" — a key added or removed, an OAuth sign-in
-   * finished, the spend toggle switched — and some of those change server state
-   * that is NOT in the provider catalog. Adding an own OpenRouter key makes
-   * Auth.set flip `billing.llm` from managed to byok, which the Settings mode
-   * toggle has no other way to learn about while the page stays open: it reads
-   * billing into its own signal and only re-read on mount and on `window
-   * focus`, and no focus event fires when the key was pasted into the same
-   * window. Subscribers re-read what they own.
-   */
+  /** Notify settings surfaces after any local provider credential changes. */
   const providerRefresh = createListeners()
 
   /**

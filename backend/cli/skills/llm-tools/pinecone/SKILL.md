@@ -87,7 +87,7 @@ Credentials are auto-injected by openscience when connected via the dashboard.
 [ -n "$PINECONE_API_KEY" ] && echo "PINECONE_API_KEY set" || echo "NOT SET"
 ```
 
-If not set: connect Pinecone at https://app.syntheticsciences.ai -> Services, then restart openscience.
+If not set: add your Pinecone key in Customize → Tools or export `PINECONE_API_KEY` locally.
 
 ## Core operations
 
@@ -367,5 +367,4 @@ index.delete(delete_all=True)
 - **Docs**: https://docs.pinecone.io
 - **Console**: https://app.pinecone.io
 - **Pricing**: https://www.pinecone.io/pricing
-
 

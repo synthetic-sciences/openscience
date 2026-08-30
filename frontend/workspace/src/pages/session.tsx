@@ -726,9 +726,9 @@ export default function Page(): JSX.Element {
       {
         id: "documentation.open",
         title: "Open documentation",
-        description: "Read the Synthetic Sciences documentation",
+        description: "Read the OpenScience documentation",
         category: "Help",
-        onSelect: () => platform.openLink(URLS.site),
+        onSelect: () => platform.openLink(URLS.docs),
       },
       {
         id: "terminal.toggle",

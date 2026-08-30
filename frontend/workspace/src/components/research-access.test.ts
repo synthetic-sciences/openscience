@@ -39,7 +39,7 @@ describe("research access modes", () => {
     })
     expect(researchAccessContract("full")).toEqual({
       sandbox: "danger-full-access",
-      approval: "managed boundaries",
+      approval: "provider boundaries",
       boundary: "routine prompts off",
     })
   })

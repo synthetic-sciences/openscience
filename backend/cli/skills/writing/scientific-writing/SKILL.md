@@ -39,7 +39,7 @@ is materially clearer as a visual.
 When creating or replacing a technical figure, first load the `scientific-schematics` skill and call
 the native `generate_image` tool for its Nano Banana Pro generation. Do not claim AI figure generation
 after drawing a substitute with a generic plotting or shell tool. Use the `generate-image` skill for
-non-technical illustrations; it uses the same native BYOK-or-wallet route.
+non-technical illustrations; it uses the same native user-owned provider route.
 
 **Use scientific-schematics for technical diagrams:**
 Call `generate_image` with a technical prompt and `output_path: "figures/output.png"`.

@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test"
 import path from "path"
-import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 
 const python = Bun.which("python3") ?? Bun.which("python")
@@ -10,15 +9,6 @@ const slides = path.join(root, "skills/writing/scientific-slides/scripts")
 const image = path.join(root, "skills/llm-tools/generate-image/scripts/generate_image.py")
 
 async function environment(dir: string, byok = "") {
-  const config = path.join(dir, "openscience")
-  await fs.mkdir(config, { recursive: true })
-  await Bun.write(
-    path.join(config, "synced-env.json"),
-    JSON.stringify({
-      OPENROUTER_API_KEY: "thk_test_managed",
-      OPENROUTER_BASE_URL: "https://managed.example.test/v1",
-    }),
-  )
   return {
     ...process.env,
     XDG_CONFIG_HOME: dir,
@@ -64,7 +54,7 @@ print(json.dumps({
   })
 })
 
-test("standalone Nano Banana helpers never expose an Atlas managed token", async () => {
+test("standalone Nano Banana helpers never expose a retired product token", async () => {
   if (!python) return
   await using tmp = await tmpdir()
   const env = await environment(tmp.path, "thk_test_managed")
@@ -96,11 +86,11 @@ print(json.dumps(errors))
   const errors = JSON.parse(output) as string[]
   expect(errors).toHaveLength(2)
   expect(errors.every((error) => error.includes("OpenRouter BYOK is not connected"))).toBe(true)
-  expect(errors.every((error) => error.includes("Synthetic Sciences credits are not required"))).toBe(true)
+  expect(errors.every((error) => error.includes("connect Gemini or OpenRouter"))).toBe(true)
   expect(errors.every((error) => error.includes("native generate_image tool"))).toBe(true)
 })
 
-test("standalone wrappers direct OpenScience sessions to the wallet-capable native tool", async () => {
+test("standalone wrappers direct OpenScience sessions to the native user-provider tool", async () => {
   if (!python) return
   await using tmp = await tmpdir()
   const env = await environment(tmp.path, "thk_test_managed")
@@ -122,20 +112,19 @@ test("standalone wrappers direct OpenScience sessions to the wallet-capable nati
     const text = `${output}\n${error}`
     expect(await proc.exited).toBe(1)
     expect(text).toContain("OpenRouter BYOK is not connected")
-    expect(text).toContain("Synthetic Sciences credits are not required")
-    expect(text).toContain("native generate_image tool")
+    expect(text).toContain("connect Gemini or OpenRouter")
+    expect(text).toContain("generate_image")
     expect(text).not.toContain("OPENROUTER_API_KEY environment variable not set")
   }
 })
 
-test("the image skill requires the native BYOK-or-wallet route", async () => {
+test("the image skill requires the native user-provider route", async () => {
   const skill = await Bun.file(path.join(root, "skills/llm-tools/generate-image/SKILL.md")).text()
   const core = await Bun.file(path.join(root, "src/session/prompt/core.txt")).text()
   const registry = await Bun.file(path.join(root, "src/tool/registry.ts")).text()
 
   expect(skill).toContain("always call the native `generate_image` tool")
-  expect(skill).toContain("funded OpenScience wallet")
-  expect(core).toContain("connected OpenRouter key when available")
-  expect(core).toContain("funded OpenScience wallet")
+  expect(skill).toContain("connected Gemini or OpenRouter account")
+  expect(core).toContain("connected Gemini or OpenRouter account")
   expect(registry).toContain("GenerateImageTool")
 })

@@ -8,8 +8,8 @@ import { isAtlasManagedKey } from "../credentials/managed-key"
 export const OAUTH_DUMMY_KEY = "synsc-oauth-dummy-key"
 
 export namespace Auth {
-  /** A managed Atlas wallet credential (`osk_*` or legacy `thk_*`), as opposed to a user-owned
-   *  (BYOK) key. Canonical home: `auth/index.ts` is a near-leaf module (only
+  /** Detect retired product credentials so they cannot escape into provider calls.
+   *  Canonical home: `auth/index.ts` is a near-leaf module (only
    *  path/global/jsonstore/zod besides this file's own Config import), so
    *  `provider.ts` - which already imports Auth - depends on this instead of
    *  Auth duplicating or importing from Provider (a much heavier module: all

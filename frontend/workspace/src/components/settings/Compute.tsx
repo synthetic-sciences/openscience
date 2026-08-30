@@ -44,7 +44,7 @@ type Provider = {
   }
   connected: boolean
   enabled: boolean
-  source: "stored" | "account" | "modal_toml" | null
+  source: "stored" | "modal_toml" | null
   connected_at: string | null
   last_used: string | null
 }
@@ -738,9 +738,7 @@ const Compute: Component = () => {
                         {modal()?.connected
                           ? modal()?.source === "modal_toml"
                             ? "Active profile from ~/.modal.toml"
-                            : modal()?.source === "account"
-                              ? "Synced from your Synthetic Sciences account."
-                              : "Token stored locally and encrypted."
+                            : "Token stored locally and encrypted."
                           : data()?.modal_file.ready
                             ? "Modal CLI configuration found at ~/.modal.toml."
                             : data()?.modal_file.found

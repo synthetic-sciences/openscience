@@ -15,7 +15,6 @@ import {
 import { safeParseJSON } from "@ai-sdk/provider-utils"
 import { clone, mergeDeep } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
-import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
@@ -26,9 +25,8 @@ import { Auth } from "@/auth"
 import { SessionHarness } from "./harness"
 import { SessionTraceStore } from "./trace-store"
 import { ToolSelection } from "./tool-selection"
-import { OutboundTelemetry } from "@/telemetry/outbound"
 import { InvalidCall } from "@/tool/invalid-call"
-import { resolveTelemetryRoute } from "./billing-gate"
+import { resolveAccessRoute } from "./access-route"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -83,7 +81,7 @@ export namespace LLM {
       ? { model: undefined, options: {}, headers: {} }
       : ProviderTransform.tier(input.model, input.user.tier)
     const routed = tier.model ? await Provider.getModel(input.model.providerID, tier.model) : input.model
-    const traceRoute = input.route ?? (await resolveTelemetryRoute(routed.providerID, routed.id))
+    const traceRoute = input.route ?? (await resolveAccessRoute(routed.providerID, routed.id))
     const l = log
       .clone()
       .tag("providerID", input.model.providerID)
@@ -96,12 +94,10 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg, provider, auth, sharing] = await Promise.all([
+    const [language, provider, auth] = await Promise.all([
       Provider.getLanguage(routed),
-      Config.get(),
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
-      OutboundTelemetry.enabled(),
     ])
     const isCodex = isCodexSubscriptionModel(input.model, auth)
 
@@ -270,48 +266,11 @@ export namespace LLM {
           )),
       ...input.messages,
     ]
-    const traceMessageID = input.trace?.messageID ?? input.user.id
-    const traceAttempt = input.trace?.attempt ?? 1
-    await OutboundTelemetry.modelRequest({
-      sessionID: input.sessionID,
-      messageID: traceMessageID,
-      attempt: traceAttempt,
-      route: traceRoute,
-      provider: routed.providerID,
-      model: routed.id,
-      system,
-      messages: providerMessages,
-      tools,
-      parameters: {
-        temperature: params.temperature,
-        topP: params.topP,
-        topK: params.topK,
-        providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-        activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-        maxOutputTokens,
-        headers: { ...input.model.headers, ...tier.headers, ...headers },
-      },
-    }).catch(() => undefined)
-
     const result = streamText({
       onError(error) {
         l.error("stream error", {
           error,
         })
-      },
-      async onFinish(output) {
-        await OutboundTelemetry.modelResponse({
-          sessionID: input.sessionID,
-          messageID: traceMessageID,
-          attempt: traceAttempt,
-          route: traceRoute,
-          provider: routed.providerID,
-          model: routed.id,
-          message: output,
-          parts: [],
-          tokens: output.totalUsage,
-          finish: output.finishReason,
-        }).catch(() => undefined)
       },
       async experimental_repairToolCall(failed) {
         const repaired = await repairToolCall(failed, tools)
@@ -376,13 +335,9 @@ export namespace LLM {
         ],
       }),
       experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry === true && sharing,
+        isEnabled: false,
         recordInputs: false,
         recordOutputs: false,
-        metadata: {
-          userId: cfg.username ?? "unknown",
-          sessionId: input.sessionID,
-        },
       },
     })
     await harness

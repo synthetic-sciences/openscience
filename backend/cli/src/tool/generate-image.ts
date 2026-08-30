@@ -268,7 +268,7 @@ export function generatedImageAttachments(input: {
   ]
 }
 
-function requestError(status: number, body: OpenRouterImage | undefined, raw: string, managed: boolean) {
+function requestError(status: number, body: OpenRouterImage | undefined, raw: string) {
   const reported =
     typeof body?.error === "string"
       ? body.error
@@ -276,27 +276,18 @@ function requestError(status: number, body: OpenRouterImage | undefined, raw: st
         ? body.error.message
         : body?.message
   const detail = (reported?.trim() || raw.trim()).replace(/\s+/g, " ").slice(0, 500)
-  if (status === 402 && managed) {
-    return new Error(
-      "Your Ace balance does not have enough credits for this Nano Banana request. Add credits at app.syntheticsciences.ai/billing, or connect OpenRouter in Settings → Models.",
-    )
-  }
   if (status === 402) {
     return new Error("Your connected OpenRouter account does not have enough credit for this image request.")
   }
   if (status === 401 || status === 403) {
-    return new Error(
-      managed
-        ? "OpenScience could not authorize the wallet-backed image request. Reconnect your OpenScience account and retry."
-        : "OpenRouter rejected the connected key. Reconnect it in Settings → Models and retry.",
-    )
+    return new Error("OpenRouter rejected the connected key. Reconnect it in Customize → Models and retry.")
   }
   return new Error(`Nano Banana request failed (${status})${detail ? `: ${detail}` : "."}`)
 }
 
 export const GenerateImageTool = Tool.define("generate_image", {
   description:
-    "Generate or edit an image with the pinned Gemini 3 Pro Image model. Uses the user's Gemini key first, then OpenRouter, then a funded workspace Wallet fallback. Saves the image directly in the connected workspace.",
+    "Generate or edit an image with Gemini 3 Pro Image using the user's connected Gemini or OpenRouter account. Saves the image directly in the connected workspace.",
   parameters: z.object({
     prompt: z.string().trim().min(1).max(20_000).describe("Detailed description or editing instruction"),
     output_path: z
@@ -432,12 +423,6 @@ export const GenerateImageTool = Tool.define("generate_image", {
       throw new Error("Gemini image generation returns PNG. Use an output_path ending in .png.")
     }
 
-    if (Provider.isAtlasProxyBaseURL(route.base)) {
-      throw new Error(
-        "OpenScience refused to send your provider key to a legacy managed proxy. Reconnect the credential and retry.",
-      )
-    }
-
     await ctx.ask({
       permission: "generate_image",
       patterns: [DEFAULT_MODEL],
@@ -463,7 +448,7 @@ export const GenerateImageTool = Tool.define("generate_image", {
         : {
             Authorization: `Bearer ${route.key}`,
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://syntheticsciences.ai",
+            "HTTP-Referer": "https://github.com/synthetic-sciences/OpenScience",
             "X-Title": "OpenScience",
           }
     const request = async (url: string, payload: Record<string, unknown>) => {
@@ -526,7 +511,7 @@ export const GenerateImageTool = Tool.define("generate_image", {
                 }
               : {}),
           })
-    if (!direct.response.ok) throw requestError(direct.response.status, direct.body, direct.raw, false)
+    if (!direct.response.ok) throw requestError(direct.response.status, direct.body, direct.raw)
     if (!direct.body) throw new Error("Nano Banana returned an unreadable response.")
     const approvedHosts = new Set<string>()
     const image = await materializeImage(direct.body, ctx.abort, async (input) => {

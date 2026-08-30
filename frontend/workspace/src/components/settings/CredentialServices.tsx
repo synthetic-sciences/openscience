@@ -27,7 +27,7 @@ type Service = {
   connected: boolean
   set_fields: string[]
   updated_at: string | null
-  source: "local" | "account" | null
+  source: "local" | null
 }
 
 export const CredentialServices: Component<{
@@ -217,9 +217,7 @@ export const CredentialServices: Component<{
                       <span>{service.description}</span>
                       <Show when={service.connected}>
                         <span>
-                          {service.source === "account"
-                            ? "Encrypted and synced through your Synthetic Sciences account"
-                            : "Encrypted on this machine"}
+                          Encrypted on this machine
                           {service.set_fields.length
                             ? ` · ${service.set_fields.length} field${service.set_fields.length === 1 ? "" : "s"} saved`
                             : ""}

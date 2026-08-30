@@ -10,8 +10,6 @@ import { raw, snippet } from "./shared"
  */
 
 const BASE = "https://api.crossref.org/works"
-const MAILTO = "mailto=support@syntheticsciences.ai"
-
 interface Author {
   given?: string
   family?: string
@@ -73,7 +71,7 @@ export const crossref: Connector = {
   async search(query, opts) {
     const rows = Math.min(opts?.limit ?? 10, 50)
     const data = await getJSON<SearchResponse>(
-      `${BASE}?query=${encodeURIComponent(query)}&rows=${rows}&select=DOI,title,subtitle,abstract,author,container-title,publisher,type,URL,score,is-referenced-by-count,issued&${MAILTO}`,
+      `${BASE}?query=${encodeURIComponent(query)}&rows=${rows}&select=DOI,title,subtitle,abstract,author,container-title,publisher,type,URL,score,is-referenced-by-count,issued`,
       { signal: opts?.signal },
     )
     return (data.message?.items ?? []).map(toHit)
@@ -81,7 +79,7 @@ export const crossref: Connector = {
 
   async fetch(id, opts) {
     const doi = id.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim()
-    const data = await getJSON<WorkResponse>(`${BASE}/${encodeURIComponent(doi)}?${MAILTO}`, {
+    const data = await getJSON<WorkResponse>(`${BASE}/${encodeURIComponent(doi)}`, {
       signal: opts?.signal,
     })
     return data.message ?? null

@@ -269,22 +269,15 @@ PALETTE_PRESETS = {
 }
 
 
-def _synced_env() -> dict:
-    """Read OpenScience's managed synced env (written by `openscience sync`).
+def _byok_key(value: Optional[str]) -> Optional[str]:
+    """Return only a user-owned OpenRouter key, never a retired product token."""
+    return value if value and not value.startswith(("thk_", "osk_")) else None
 
-    In managed mode this holds OPENROUTER_API_KEY (the managed thk_ token) and
-    OPENROUTER_BASE_URL (the Synthetic Sciences proxy), so generation can route through the
-    managed key — billed to the user's wallet — without a user-provided key. The
-    managed token is stripped from the subprocess env on purpose, so we read the
-    file the CLI already persisted (same data, no broad env leak).
-    """
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    try:
-        with open(os.path.join(base, "openscience", "synced-env.json"), encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+
+def _byok_base_url() -> str:
+    """Keep a user key off any retired product proxy URL."""
+    value = (os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1").rstrip("/")
+    return "https://openrouter.ai/api/v1" if "/api/llm/proxy/" in value else value
 
 
 class InfographicGenerator:
@@ -356,33 +349,22 @@ IMPORTANT - NO META CONTENT:
 
     def __init__(self, api_key: Optional[str] = None, verbose: bool = False):
         """Initialize the generator."""
-        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
+        self.api_key = _byok_key(api_key) or _byok_key(os.getenv("OPENROUTER_API_KEY"))
         
         if not self.api_key:
             _load_env_file()
-            self.api_key = os.getenv("OPENROUTER_API_KEY")
-        
-        # Fall back to the OpenScience managed credential (routes through the Synthetic Sciences
-        # proxy, billed to the user's wallet) so generation works without a
-        # user-provided key.
-        synced = _synced_env()
-        if not self.api_key:
-            self.api_key = synced.get("OPENROUTER_API_KEY")
+            self.api_key = _byok_key(os.getenv("OPENROUTER_API_KEY"))
 
         if not self.api_key:
             raise ValueError(
-                "OPENROUTER_API_KEY not found. Connect OpenRouter via `openscience login` or at\n"
-                "https://app.syntheticsciences.ai → Services, or set OPENROUTER_API_KEY for this run.\n"
+                "OPENROUTER_API_KEY not found. Connect OpenRouter in Customize → Models, or set "
+                "OPENROUTER_API_KEY for this run.\n"
                 "Get your own key from: https://openrouter.ai/keys"
             )
         
         self.verbose = verbose
         self._last_error = None
-        # Honor OPENROUTER_BASE_URL (managed/proxied routes); default to public OpenRouter.
-        # Use the managed proxy base only when the key itself came from the managed
-        # synced env — a BYOK key must hit public OpenRouter, not the proxy.
-        managed_base = synced.get("OPENROUTER_BASE_URL") if self.api_key == synced.get("OPENROUTER_API_KEY") else None
-        self.base_url = (os.getenv("OPENROUTER_BASE_URL") or managed_base or "https://openrouter.ai/api/v1").rstrip("/")
+        self.base_url = _byok_base_url()
         # Nano Banana Pro (Gemini 3 Pro Image) — GA slug; the preview slug retires 2026-06-25.
         self.image_model = os.getenv("OPENROUTER_IMAGE_MODEL") or "google/gemini-3-pro-image"
         # Gemini 3 Pro for quality review

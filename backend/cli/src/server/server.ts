@@ -57,7 +57,6 @@ import { SettingsPreferencesRoutes } from "./routes/settings/preferences"
 import { LocalModelsRoutes } from "./routes/settings/local"
 import { SandboxSettingsRoutes } from "./routes/settings/sandbox"
 import { UpdatesSettingsRoutes, desktopUpdateShutdownAuthorized } from "./routes/settings/updates"
-import { ResearchToolsSettingsRoutes } from "./routes/settings/research-tools"
 import { ScientificToolsSettingsRoutes } from "./routes/settings/scientific-tools"
 import { projectSelection } from "./project-selection"
 import { CredentialLifecycle } from "../credentials/lifecycle"
@@ -277,21 +276,11 @@ export namespace Server {
         .route("/settings/local", LocalModelsRoutes())
         .route("/settings/sandbox", SandboxSettingsRoutes())
         .route("/settings/updates", UpdatesSettingsRoutes())
-        .route("/settings/research-tools", ResearchToolsSettingsRoutes())
         .route("/settings/scientific-tools", ScientificToolsSettingsRoutes())
         .route(
           "/auth",
           OnboardingAuthRoutes({
-            readCredential: (providerID) => Auth.get(providerID),
             saveCredential: (providerID, auth) => Auth.set(providerID, auth),
-            removeCredential: (providerID) => Auth.remove(providerID),
-            readBillingMode: async () => "byok" as const,
-            selectByok: async () => {
-              await Config.updateGlobal({ billing: { llm: "byok" } }, { preserveInstances: true })
-            },
-            restoreBillingMode: async (mode) => {
-              await Config.updateGlobal({ billing: { llm: mode } }, { preserveInstances: true })
-            },
             // Defer this call because Provider imports Server for local fetches;
             // the route module itself intentionally has no Provider dependency.
             invalidate: () => Provider.invalidate(),
@@ -329,12 +318,8 @@ export namespace Server {
             await Auth.set(providerID, info)
             // Don't depend on the client remembering to call global.sync —
             // stale provider state would keep serving the old credential.
-            // Auth.set writes the auth FILE, which no config write covers, so
-            // this call is still the one that makes the new key visible. (When
-            // it also flips billing.llm managed -> byok, Config's global write
-            // has already invalidated before announcing the disposal — see
-            // disposeGlobalInstances — so the SPA refetch that event triggers
-            // cannot beat us to a stale re-memoisation.)
+            // Auth.set writes the auth file directly, so invalidate the provider
+            // memo before the SPA re-reads the catalog.
             Provider.invalidate()
             return c.json(true)
           },

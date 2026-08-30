@@ -34,8 +34,7 @@ const P_BIG = "text-[16px] sm:text-[17px] leading-[1.7] text-foreground/75"
 const LABEL = "text-[14px] text-muted-foreground"
 
 const GITHUB = "https://github.com/synthetic-sciences/openscience"
-const DOCS = "https://openscience.sh/docs"
-const APP = "https://app.syntheticsciences.ai"
+const DOCS = "https://github.com/synthetic-sciences/OpenScience#readme"
 
 const MODELS = [
   ["5.6 Sol", "OpenAI", "Reasoning"],
@@ -747,11 +746,11 @@ export default function Landing() {
       <section id="models" className="relative w-full overflow-hidden border-t border-border/40">
         <div className="relative z-10 mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
           <div className="grid gap-8 lg:grid-cols-2 lg:items-stretch lg:gap-12">
-            <Reveal className="dither-ace flex min-h-[470px] items-center border border-border/40 p-8 sm:min-h-[520px] sm:p-12 lg:p-14">
+            <Reveal className="dither-models flex min-h-[470px] items-center border border-border/40 p-8 sm:min-h-[520px] sm:p-12 lg:p-14">
               <div className="dither-content max-w-[520px]">
                 <h2 className={`text-balance ${H_HUGE} text-foreground`}>Model agnostic.</h2>
                 <p className={`mt-7 max-w-[38ch] ${P_BIG} text-foreground/85`}>
-                  Use Ace, an eligible ChatGPT account, your own keys, or a local model. Switch per session.
+                  Use a connected provider, your own API key, or a local model. Switch per session.
                 </p>
               </div>
             </Reveal>
@@ -864,18 +863,19 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ------------------------------ ACE --------------------------- */}
-      <section id="ace" className="relative w-full overflow-hidden border-t border-border/40">
+      {/* -------------------------- LOCAL FIRST ------------------------ */}
+      <section id="local-first" className="relative w-full overflow-hidden border-t border-border/40">
         <div className="mx-auto w-full max-w-[1400px] px-6 py-24 sm:px-10 sm:py-32">
           <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-stretch lg:gap-12">
             <Reveal className="dither-purple relative flex min-h-[430px] items-center overflow-hidden border border-border/40 p-8 sm:p-12 lg:p-14">
               <div className="dither-content max-w-[580px]">
-                <h2 className={`text-balance ${H_HUGE} text-foreground`}>OpenScience Ace.</h2>
+                <h2 className={`text-balance ${H_HUGE} text-foreground`}>Your machine. Your accounts.</h2>
                 <p className={`mt-7 max-w-[42ch] ${P_BIG} text-foreground/85`}>
-                  Add funds for Ace models and research search. You pay only when you use it. OpenScience remains free.
+                  OpenScience has no hosted control plane. Projects, settings, credentials, and results stay on your
+                  device. Requests go directly to services you choose.
                 </p>
                 <div className="mt-9">
-                  <Cta href={`${APP}/billing?checkout=ace`}>Get Ace</Cta>
+                  <Cta href="/download">Download OpenScience</Cta>
                 </div>
               </div>
             </Reveal>
@@ -884,14 +884,16 @@ export default function Landing() {
               delay={140}
               className="flex min-h-[430px] flex-col justify-center border border-border/55 bg-[hsl(28,14%,5%)] p-7 sm:p-10 lg:p-12"
             >
-              <div className="text-[12px] text-foreground/50">Start with</div>
-              <div className="mt-3 font-display text-[clamp(54px,7vw,86px)] leading-none tracking-[-0.035em]">$20</div>
-              <div className="mt-4 text-[13px] text-foreground/70">No monthly charge.</div>
+              <div className="text-[12px] text-foreground/50">Local by default</div>
+              <div className="mt-3 font-display text-[clamp(46px,6vw,76px)] leading-none tracking-[-0.035em]">
+                Yours.
+              </div>
+              <div className="mt-4 text-[13px] text-foreground/70">No product account required.</div>
               <div className="mt-8 divide-y divide-border/50 border-y border-border/50 text-[12px] sm:text-[13px]">
                 {[
-                  ["Models", "Pay per use"],
-                  ["Search", "Pay per request"],
-                  ["Billing", "Every charge listed"],
+                  ["Projects", "On your device"],
+                  ["Credentials", "Encrypted locally"],
+                  ["Providers", "Direct connections"],
                 ].map((item) => (
                   <div key={item[0]} className="flex items-center justify-between gap-6 py-3.5">
                     <span className="text-foreground/55">{item[0]}</span>
@@ -928,15 +930,15 @@ export default function Landing() {
                 },
                 {
                   q: "Which models can it use?",
-                  a: "Use Ace, eligible ChatGPT access, your own provider keys, or local models. Only Ace uses your Ace balance.",
+                  a: "Use connected provider accounts, your own API keys, or local models. OpenScience does not proxy model traffic.",
                 },
                 {
                   q: "Where does my work live?",
-                  a: "Sessions and results stay on your machine. Calls made with your own keys go straight to that provider. If Use my data is on, credential-redacted session traces are also sent to Synthetic Sciences.",
+                  a: "Sessions, projects, results, settings, and credentials stay on your machine. Provider calls go directly from the app to that provider.",
                 },
                 {
-                  q: "Do I need Ace to use OpenScience?",
-                  a: "No. A free Synthetic Sciences account is required to connect the installation. Local models, your keys, and eligible ChatGPT access remain separate from Ace.",
+                  q: "Do I need an OpenScience account?",
+                  a: "No. Install the app, connect only the providers and tools you want, and work locally.",
                 },
                 {
                   q: "Can it work with my tools?",
@@ -967,7 +969,7 @@ export default function Landing() {
               <div className="col-span-12 lg:col-span-5">
                 <Reveal delay={200}>
                   <p className={`${P_BIG} text-foreground/85 max-w-[38ch]`}>
-                    Free and open source. Use Ace, eligible ChatGPT access, your own keys, or local models.
+                    Free and open source. Use your provider accounts, your API keys, or local models.
                   </p>
                   <div className="mt-8 flex flex-wrap items-center gap-3">
                     <Cta href="/download">Download OpenScience</Cta>

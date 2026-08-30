@@ -12,7 +12,7 @@
  * the CLI/onboarding can offer a zero-typing "we found Ollama" flow.
  *
  * Local providers carry a non-`thk_` key, so the billing gate always classifies
- * them as BYOK — never wallet-gated, never metered, always free.
+ * them as user-owned — never metered by OpenScience.
  */
 
 export namespace LocalProvider {

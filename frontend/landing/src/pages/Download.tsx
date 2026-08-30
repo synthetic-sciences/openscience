@@ -2,11 +2,11 @@ import { useEffect, useState } from "react"
 import Nav from "@/Nav"
 
 const GITHUB = "https://github.com/synthetic-sciences/openscience"
-const DOCS = "https://openscience.sh/docs"
+const DOCS = `${GITHUB}#readme`
 const RELEASE = `${GITHUB}/releases/latest/download`
 const NPM = "npm i -g @synsci/openscience"
-const CURL = "curl -fsSL https://openscience.sh/install | bash"
-const MAC = "curl -fsSL https://openscience.sh/install-desktop | bash"
+const CURL = `curl -fsSL ${GITHUB}/raw/main/frontend/landing/public/install | bash`
+const MAC = `curl -fsSL ${GITHUB}/raw/main/frontend/landing/public/install-desktop | bash`
 
 const DOWNLOADS = {
   "mac-arm64": {
@@ -119,33 +119,8 @@ function PlatformMark({ platform }: { platform: Platform }) {
   )
 }
 
-function Copy({ command, primary = false }: { command: string; primary?: boolean }) {
+function Copy({ command }: { command: string }) {
   const [copied, setCopied] = useState(false)
-
-  if (primary) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          if (!navigator.clipboard) return
-          void navigator.clipboard.writeText(command).then(
-            () => {
-              setCopied(true)
-              window.setTimeout(() => setCopied(false), 3000)
-            },
-            () => setCopied(false),
-          )
-        }}
-        className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-7 text-[15px] sm:text-[16px]"
-        aria-label={`Copy installer command: ${command}`}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-          <path d="M5.5 4V2.5h7v9H11M3.5 5.5h7v8h-7v-8Z" stroke="currentColor" strokeWidth="1.2" />
-        </svg>
-        <span aria-live="polite">{copied ? "Copied. Open Terminal" : "Copy macOS installer"}</span>
-      </button>
-    )
-  }
 
   return (
     <button
@@ -299,44 +274,28 @@ export default function Download() {
             <div className="rise mx-auto mt-9 max-w-[560px] [animation-delay:270ms]">
               {download.platform === "mac" ? (
                 <>
-                  <Copy command={MAC} primary />
+                  <a
+                    href={`${RELEASE}/${download.file}`}
+                    className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-7 text-[15px] sm:text-[16px]"
+                    aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
+                  >
+                    <svg width="15" height="16" viewBox="0 0 15 16" fill="none" aria-hidden>
+                      <path d="M7.5 1v9m0 0L11 6.5M7.5 10 4 6.5M1 14.5h13" stroke="currentColor" strokeWidth="1.3" />
+                    </svg>
+                    Download for macOS ({download.detail})
+                  </a>
                   <div className="mt-3 text-[12.5px] leading-5 text-foreground/55">
-                    Checksum-verified before install. The app is ad-hoc signed and not Apple-notarized.
-                  </div>
-                  <div className="mt-7 border border-border/60 bg-background/60 p-4 text-left sm:p-5">
-                    <div className="text-[13px] text-foreground">Finish in Terminal</div>
-                    <ol className="mb-4 mt-3 grid gap-2 text-[12.5px] leading-5 text-foreground/55">
-                      <li>
-                        <span className="mr-2 text-[hsl(var(--accent-coral))]">1.</span>Open Terminal from Spotlight.
-                      </li>
-                      <li>
-                        <span className="mr-2 text-[hsl(var(--accent-coral))]">2.</span>Paste the copied command and
-                        press Return.
-                      </li>
-                      <li>
-                        <span className="mr-2 text-[hsl(var(--accent-coral))]">3.</span>OpenScience verifies, installs,
-                        and launches automatically.
-                      </li>
-                    </ol>
-                    <Copy command={MAC} />
+                    Developer ID signed, notarized, and stapled.
                   </div>
                   <details className="group mt-5 border-t border-border/50 pt-4 text-left">
                     <summary className="min-h-11 cursor-pointer list-none py-3 text-center text-[12.5px] text-foreground/55 hover:text-foreground/80">
-                      Manual disk image
+                      Install from Terminal
                     </summary>
                     <div className="border border-border/50 bg-background/40 p-4 text-[12.5px] leading-5 text-foreground/55">
-                      <p>
-                        The app is ad-hoc signed and not Apple-notarized because this release does not use an Apple
-                        Developer ID. macOS will require approval in Privacy &amp; Security. Use the installer above to
-                        avoid that screen.
+                      <p className="mb-3">
+                        The installer verifies the release checksum and app identity before launch.
                       </p>
-                      <a
-                        href={`${RELEASE}/${download.file}`}
-                        className="mt-3 inline-flex min-h-11 items-center text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground/60"
-                        aria-label={`Download the manual disk image for ${download.label}, ${download.detail}`}
-                      >
-                        Download for {download.detail}
-                      </a>
+                      <Copy command={MAC} />
                     </div>
                   </details>
                 </>
@@ -431,7 +390,7 @@ export default function Download() {
                     ? "Copy the installer command, paste it in Terminal, and OpenScience verifies the download before launching."
                     : "Open the download and follow your operating system's install prompt.",
                 ],
-                ["02", "Connect", "Sign in or choose your own model provider during onboarding."],
+                ["02", "Connect", "Choose a provider account, your own API key, or a local model."],
                 ["03", "Research", "Open a project and start your first research session."],
               ].map((step) => (
                 <div key={step[0]} className="min-h-[150px] bg-background px-6 py-7 sm:px-7">

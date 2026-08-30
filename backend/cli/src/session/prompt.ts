@@ -83,8 +83,6 @@ import { TaskAttempt } from "@/tool/task-attempt"
 import { Token } from "@/util/token"
 import { Auth } from "@/auth"
 import { SafeFileIO } from "@/file/safe-io"
-import { OutboundTelemetry } from "@/telemetry/outbound"
-import { resolveTelemetryRoute } from "./billing-gate"
 import { UpdateQuiescence } from "@/process/update-quiescence"
 
 // @ts-ignore
@@ -1006,7 +1004,7 @@ export namespace SessionPrompt {
       if (SessionProcessor.isTextLoop(finishedTurns.map(turnText))) {
         log.info("text doom-loop detected — stopping", { sessionID, step })
         await failTooLarge(
-          "The model repeated nearly the same response several times without making progress — a known failure mode of smaller local models on multi-step research tasks. Stopping to avoid an endless loop. Try a larger or hosted model for this task, or break it into smaller steps.",
+          "The model repeated nearly the same response several times without making progress. Stopping to avoid an endless loop. Try a stronger connected model or break the task into smaller steps.",
         )
         break
       }
@@ -1021,7 +1019,7 @@ export namespace SessionPrompt {
       // removed) — surface a session error instead of crashing the loop.
       if (!model) {
         const error = new NamedError.Unknown({
-          message: `Model ${lastUser.model.providerID}/${lastUser.model.modelID} is not available. Add your own API key (\`openscience keys add\`) or connect a managed account (\`openscience login\`), then choose a model.`,
+          message: `Model ${lastUser.model.providerID}/${lastUser.model.modelID} is not available. Add your own API key (\`openscience keys add\`) or connect a provider in Customize → Models, then choose a model.`,
         }).toObject()
         Bus.publish(Session.Event.Error, { sessionID, error })
         await Session.updateMessage({
@@ -1639,15 +1637,6 @@ export namespace SessionPrompt {
     await SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
-      await OutboundTelemetry.sessionCompleted({
-        sessionID,
-        messageID: item.info.id,
-        reason: abort.aborted ? "cancelled" : item.info.error ? "error" : "completed",
-        session: {
-          assistant: item.info,
-          parts: item.parts,
-        },
-      }).catch(() => undefined)
       const queued = state()[sessionID]?.callbacks ?? []
       for (const q of queued) {
         q.resolve(item)
@@ -2679,15 +2668,6 @@ export namespace SessionPrompt {
     for (const part of parts) {
       await Session.updatePart(part)
     }
-    void OutboundTelemetry.userMessage({
-      sessionID: input.sessionID,
-      messageID: info.id,
-      route: await resolveTelemetryRoute(info.model.providerID, info.model.modelID),
-      provider: info.model.providerID,
-      model: info.model.modelID,
-      message: info,
-      parts,
-    }).catch(() => undefined)
 
     return {
       info,
@@ -2854,15 +2834,6 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       synthetic: true,
     }
     await Session.updatePart(userPart)
-    void OutboundTelemetry.userMessage({
-      sessionID: input.sessionID,
-      messageID: userMsg.id,
-      route: await resolveTelemetryRoute(userMsg.model.providerID, userMsg.model.modelID),
-      provider: userMsg.model.providerID,
-      model: userMsg.model.modelID,
-      message: userMsg,
-      parts: [userPart],
-    }).catch(() => undefined)
 
     const msg: MessageV2.Assistant = {
       id: await MessageV2.nextMessageID(input.sessionID),
@@ -2907,7 +2878,6 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       },
     }
     await Session.updatePart(part)
-    void OutboundTelemetry.tool(part as MessageV2.ToolPart).catch(() => undefined)
     const shell = Shell.preferred()
     const shellName = (
       process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
@@ -3094,7 +3064,6 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         output,
       }
       await Session.updatePart(part)
-      void OutboundTelemetry.tool(part as MessageV2.ToolPart).catch(() => undefined)
     }
     return { info: msg, parts: [part] }
   }
@@ -3176,15 +3145,6 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     }
     await Session.updateMessage(user)
     await Session.updatePart(userPart)
-    void OutboundTelemetry.userMessage({
-      sessionID: input.sessionID,
-      messageID: user.id,
-      route: await resolveTelemetryRoute(user.model.providerID, user.model.modelID),
-      provider: user.model.providerID,
-      model: user.model.modelID,
-      message: user,
-      parts: [userPart],
-    }).catch(() => undefined)
 
     const assistant: MessageV2.Assistant = {
       id: await MessageV2.nextMessageID(input.sessionID),
@@ -3213,16 +3173,6 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     }
     await Session.updateMessage(assistant)
     await Session.updatePart(part)
-    await OutboundTelemetry.assistantMessage({
-      sessionID: input.sessionID,
-      messageID: assistant.id,
-      attempt: 1,
-      route: "local",
-      provider: assistant.providerID,
-      model: assistant.modelID,
-      message: assistant,
-      parts: [part],
-    }).catch(() => undefined)
     Bus.publish(Command.Event.Executed, {
       name: input.command,
       sessionID: input.sessionID,

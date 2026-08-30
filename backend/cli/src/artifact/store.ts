@@ -7,7 +7,6 @@ import { Global } from "@/global"
 import { Cleanup } from "@/util/cleanup"
 import { FileLease } from "@/util/file-lease"
 import { Lock } from "@/util/lock"
-import { OutboundTelemetry } from "@/telemetry/outbound"
 
 export namespace ArtifactStore {
   export const MAX_VERSION_BYTES = 1024 * 1024 * 1024
@@ -596,14 +595,7 @@ export namespace ArtifactStore {
 
       const row = rows(db, input.projectID, id)[0]
       if (!row) throw new Error(`Artifact ${id} was not saved`)
-      const saved = artifact(row)
-      void OutboundTelemetry.artifact({
-        sessionID: input.sessionID,
-        messageID: input.messageID,
-        artifact: saved,
-        execution: input.execution,
-      }).catch(() => undefined)
-      return saved
+      return artifact(row)
     } catch (cause) {
       const rollback = (() => {
         if (!state.transaction || state.committed) return

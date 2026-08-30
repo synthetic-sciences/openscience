@@ -1,6 +1,6 @@
 # @synsci/openscience
 
-OpenScience is a model-agnostic, open-source AI research agent for scientific and ML engineering work. It runs a workspace in your browser where the agent plans tasks, writes and runs code, drives experiments, queries scientific databases, and writes up results. Bring your own API key, use eligible ChatGPT/Codex access, or connect a Synthetic Sciences account for managed credits.
+OpenScience is a model-agnostic, open-source AI research agent for scientific and ML engineering work. It runs a workspace in your browser where the agent plans tasks, writes and runs code, drives experiments, queries scientific databases, and writes up results. Bring your own API key, use eligible ChatGPT/Codex access, or run a local model.
 
 Part of the [OpenScience](https://github.com/synthetic-sciences/OpenScience) repository.
 
@@ -20,11 +20,10 @@ On Linux, the bundled runtime requires kernel 5.1 or newer. Glibc binaries requi
 openscience                     # open the workspace in your browser
 openscience ~/code/project      # open it in a specific directory
 openscience connect             # connect a ChatGPT / Codex subscription locally
-openscience login               # connect Synthetic Sciences (optional; BYOK works without an account)
 openscience run "..."           # run a one-shot task
 ```
 
-Configuration lives in `~/.config/openscience/openscience.json`. Provider keys can be set in the workspace (bring your own key) or synced from your Synthetic Sciences account. Default, learned, installed, and project skills are local and work without an account.
+Configuration lives in `~/.config/openscience/openscience.json`. Provider keys can be set in the workspace and remain on this device. Default, learned, installed, and project skills are local.
 
 ## Docs
 

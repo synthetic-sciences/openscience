@@ -390,7 +390,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const [notice, setNotice] = createSignal("")
   const refs = { content: undefined as HTMLElement | undefined }
   const owned = (model: NonNullable<ReturnType<typeof local.model.current>>) =>
-    model.provider.source !== "managed" && !model.provider.id.startsWith("synsci")
+    !model.provider.id.startsWith("synsci")
   const current = createMemo(() => {
     const model = local.model.current()
     return model && owned(model) ? model : undefined

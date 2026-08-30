@@ -426,892 +426,6 @@
         ]
       }
     },
-    "/global/sync": {
-      "post": {
-        "operationId": "global.sync",
-        "summary": "Sync account services",
-        "description": "Refresh OpenScience account services and reload local provider/config state.",
-        "responses": {
-          "200": {
-            "description": "Services synced",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "user": {},
-                    "credentials": {
-                      "type": "number"
-                    },
-                    "last_synced": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "credentials",
-                    "last_synced"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.global.sync({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/account/session": {
-      "get": {
-        "operationId": "account.session",
-        "summary": "Get local session status",
-        "description": "Check whether this OpenScience server has a local Synthetic Sciences session without a network request.",
-        "responses": {
-          "200": {
-            "description": "Local session status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "session": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "session"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.session({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/account": {
-      "get": {
-        "operationId": "account.get",
-        "summary": "Get account",
-        "description": "Get synced OpenScience account and billing summary.",
-        "responses": {
-          "200": {
-            "description": "Account summary",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "session": {
-                      "type": "boolean"
-                    },
-                    "user": {},
-                    "balance_usd": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "billing_mode": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "mode": {
-                              "type": "string",
-                              "enum": [
-                                "byok",
-                                "managed"
-                              ]
-                            },
-                            "balance_cents": {
-                              "type": "number"
-                            },
-                            "balance_usd": {
-                              "type": "number"
-                            },
-                            "managed_supported": {
-                              "type": "boolean"
-                            },
-                            "managed_unlocked": {
-                              "type": "boolean"
-                            }
-                          },
-                          "required": [
-                            "mode",
-                            "balance_cents",
-                            "balance_usd",
-                            "managed_supported",
-                            "managed_unlocked"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "funding_context": {
-                      "type": "object",
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "personal",
-                            "organization"
-                          ]
-                        },
-                        "organization_id": {
-                          "type": "string"
-                        },
-                        "available": {
-                          "type": "boolean"
-                        },
-                        "locked": {
-                          "type": "boolean"
-                        },
-                        "organizations": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "organization_id": {
-                                "type": "string"
-                              },
-                              "name": {
-                                "type": "string"
-                              },
-                              "slug": {
-                                "type": "string"
-                              },
-                              "is_personal": {
-                                "type": "boolean"
-                              },
-                              "status": {
-                                "type": "string"
-                              },
-                              "role": {
-                                "type": "string"
-                              },
-                              "membership_status": {
-                                "type": "string"
-                              },
-                              "funding_available": {
-                                "type": "boolean"
-                              },
-                              "effective_permissions": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                }
-                              }
-                            },
-                            "required": [
-                              "organization_id",
-                              "name",
-                              "slug",
-                              "is_personal",
-                              "status",
-                              "role",
-                              "membership_status",
-                              "funding_available",
-                              "effective_permissions"
-                            ]
-                          }
-                        }
-                      },
-                      "required": [
-                        "type",
-                        "available",
-                        "locked",
-                        "organizations"
-                      ]
-                    },
-                    "credential": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "type": {
-                              "type": "string",
-                              "enum": [
-                                "personal",
-                                "organization"
-                              ]
-                            },
-                            "legacy": {
-                              "type": "boolean"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "legacy"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "session",
-                    "balance_usd",
-                    "billing_mode",
-                    "funding_context",
-                    "credential"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.get({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/account/funding-context": {
-      "get": {
-        "operationId": "account.fundingContext.get",
-        "summary": "Get the local funding account selection",
-        "description": "List available Synthetic Sciences workspaces and the workspace used by managed operations.",
-        "responses": {
-          "200": {
-            "description": "Funding context",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "organization"
-                      ]
-                    },
-                    "organization_id": {
-                      "type": "string"
-                    },
-                    "available": {
-                      "type": "boolean"
-                    },
-                    "locked": {
-                      "type": "boolean"
-                    },
-                    "organizations": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "organization_id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "slug": {
-                            "type": "string"
-                          },
-                          "is_personal": {
-                            "type": "boolean"
-                          },
-                          "status": {
-                            "type": "string"
-                          },
-                          "role": {
-                            "type": "string"
-                          },
-                          "membership_status": {
-                            "type": "string"
-                          },
-                          "funding_available": {
-                            "type": "boolean"
-                          },
-                          "effective_permissions": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": [
-                          "organization_id",
-                          "name",
-                          "slug",
-                          "is_personal",
-                          "status",
-                          "role",
-                          "membership_status",
-                          "funding_available",
-                          "effective_permissions"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "available",
-                    "locked",
-                    "organizations"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.fundingContext.get({\n  ...\n})"
-          }
-        ]
-      },
-      "put": {
-        "operationId": "account.fundingContext.set",
-        "summary": "Choose the funding account for managed operations",
-        "responses": {
-          "200": {
-            "description": "Updated funding context",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "organization"
-                      ]
-                    },
-                    "organization_id": {
-                      "type": "string"
-                    },
-                    "available": {
-                      "type": "boolean"
-                    },
-                    "locked": {
-                      "type": "boolean"
-                    },
-                    "organizations": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "organization_id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "slug": {
-                            "type": "string"
-                          },
-                          "is_personal": {
-                            "type": "boolean"
-                          },
-                          "status": {
-                            "type": "string"
-                          },
-                          "role": {
-                            "type": "string"
-                          },
-                          "membership_status": {
-                            "type": "string"
-                          },
-                          "funding_available": {
-                            "type": "boolean"
-                          },
-                          "effective_permissions": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": [
-                          "organization_id",
-                          "name",
-                          "slug",
-                          "is_personal",
-                          "status",
-                          "role",
-                          "membership_status",
-                          "funding_available",
-                          "effective_permissions"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "available",
-                    "locked",
-                    "organizations"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Unavailable organization",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "organization_id": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 128
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "organization_id"
-                ]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.fundingContext.set({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/account/balance": {
-      "get": {
-        "operationId": "account.balance",
-        "summary": "Get balance",
-        "responses": {
-          "200": {
-            "description": "Balance",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "balance_usd": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "balance_usd"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.balance({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/account/devices": {
-      "get": {
-        "operationId": "account.devices",
-        "summary": "List devices",
-        "responses": {
-          "200": {
-            "description": "Devices",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "key_id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "key_prefix": {
-                        "type": "string"
-                      },
-                      "created_at": {
-                        "type": "string"
-                      },
-                      "last_used_at": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "expires_at": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "key_id",
-                      "name",
-                      "key_prefix",
-                      "created_at",
-                      "last_used_at",
-                      "expires_at"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.devices({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/account/devices/{keyID}": {
-      "delete": {
-        "operationId": "account.device.revoke",
-        "summary": "Revoke device",
-        "responses": {
-          "200": {
-            "description": "Device revoked",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "boolean"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "in": "path",
-            "name": "keyID",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          }
-        ],
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.device.revoke({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/account/billing-mode": {
-      "get": {
-        "operationId": "account.billingMode.get",
-        "summary": "Get billing mode",
-        "responses": {
-          "200": {
-            "description": "Billing mode",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "mode": {
-                          "type": "string",
-                          "enum": [
-                            "byok",
-                            "managed"
-                          ]
-                        },
-                        "balance_cents": {
-                          "type": "number"
-                        },
-                        "balance_usd": {
-                          "type": "number"
-                        },
-                        "managed_supported": {
-                          "type": "boolean"
-                        },
-                        "managed_unlocked": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "mode",
-                        "balance_cents",
-                        "balance_usd",
-                        "managed_supported",
-                        "managed_unlocked"
-                      ]
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.billingMode.get({\n  ...\n})"
-          }
-        ]
-      },
-      "post": {
-        "operationId": "account.billingMode.set",
-        "summary": "Set billing mode",
-        "responses": {
-          "200": {
-            "description": "Billing mode",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "mode": {
-                          "type": "string",
-                          "enum": [
-                            "byok",
-                            "managed"
-                          ]
-                        },
-                        "balance_cents": {
-                          "type": "number"
-                        },
-                        "balance_usd": {
-                          "type": "number"
-                        },
-                        "managed_supported": {
-                          "type": "boolean"
-                        },
-                        "managed_unlocked": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "mode",
-                        "balance_cents",
-                        "balance_usd",
-                        "managed_supported",
-                        "managed_unlocked"
-                      ]
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "mode": {
-                    "type": "string",
-                    "enum": [
-                      "byok",
-                      "managed"
-                    ]
-                  }
-                },
-                "required": [
-                  "mode"
-                ]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.billingMode.set({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/account/login-browser": {
-      "post": {
-        "operationId": "account.loginBrowser",
-        "summary": "Sign in through the system browser",
-        "responses": {
-          "200": {
-            "description": "Login result",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.loginBrowser({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/account/login-key": {
-      "post": {
-        "operationId": "account.loginKey",
-        "summary": "Sign in with a Synthetic Sciences API key",
-        "responses": {
-          "200": {
-            "description": "Login result",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "key": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "key"
-                ]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.loginKey({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/account/logout": {
-      "post": {
-        "operationId": "account.logout",
-        "summary": "Logout account",
-        "responses": {
-          "200": {
-            "description": "Logged out",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "boolean"
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.logout({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/settings/credentials": {
       "get": {
         "operationId": "settings.credentials.list",
@@ -1406,10 +520,7 @@
                             "anyOf": [
                               {
                                 "type": "string",
-                                "enum": [
-                                  "local",
-                                  "account"
-                                ]
+                                "const": "local"
                               },
                               {
                                 "type": "null"
@@ -1542,10 +653,7 @@
                             "anyOf": [
                               {
                                 "type": "string",
-                                "enum": [
-                                  "local",
-                                  "account"
-                                ]
+                                "const": "local"
                               },
                               {
                                 "type": "null"
@@ -1714,10 +822,7 @@
                             "anyOf": [
                               {
                                 "type": "string",
-                                "enum": [
-                                  "local",
-                                  "account"
-                                ]
+                                "const": "local"
                               },
                               {
                                 "type": "null"
@@ -1805,6 +910,9 @@
                       ]
                     },
                     "total_bytes": {
+                      "type": "number"
+                    },
+                    "cache_bytes": {
                       "type": "number"
                     },
                     "scanning": {
@@ -1916,6 +1024,7 @@
                     "state_dir",
                     "pointer",
                     "total_bytes",
+                    "cache_bytes",
                     "scanning",
                     "updated_at",
                     "scan_error",
@@ -1941,6 +1050,46 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.storage.usage({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/storage/cache": {
+      "delete": {
+        "operationId": "settings.storage.clearCache",
+        "summary": "Clear local cache",
+        "description": "Remove regenerable OpenScience package, model-catalog, and bundled-skill cache entries. User projects, sessions, credentials, and artifacts are never touched.",
+        "responses": {
+          "200": {
+            "description": "Cache cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "entries": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "entries"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.storage.clearCache({\n  ...\n})"
           }
         ]
       }
@@ -2163,7 +1312,6 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
-                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -2566,7 +1714,6 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
-                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -2969,7 +2116,6 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
-                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -3408,7 +2554,6 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
-                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -3821,7 +2966,6 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
-                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -4332,7 +3476,6 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
-                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -4965,7 +4108,6 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
-                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -5425,7 +4567,6 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
-                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -6005,7 +5146,6 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
-                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -6454,7 +5594,6 @@
                                 "type": "string",
                                 "enum": [
                                   "stored",
-                                  "account",
                                   "modal_toml"
                                 ]
                               },
@@ -21742,340 +20881,6 @@
         ]
       }
     },
-    "/settings/billing": {
-      "get": {
-        "operationId": "settings.billing.get",
-        "summary": "Get LLM billing mode and wallet status",
-        "responses": {
-          "200": {
-            "description": "Billing state",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "llm": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "managed",
-                            "byok"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "compute": {
-                      "description": "@deprecated Compatibility field. Compute always uses user-owned infrastructure.",
-                      "type": "string",
-                      "enum": [
-                        "managed",
-                        "byok"
-                      ]
-                    },
-                    "wallet": {
-                      "type": "object",
-                      "properties": {
-                        "signedIn": {
-                          "description": "Whether a Synthetic Sciences session is available",
-                          "type": "boolean"
-                        },
-                        "balanceUsd": {
-                          "description": "Purchased Wallet balance in USD; null when signed out or unavailable",
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "signedIn",
-                        "balanceUsd"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "llm",
-                    "compute",
-                    "wallet"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.billing.get({\n  ...\n})"
-          }
-        ]
-      },
-      "put": {
-        "operationId": "settings.billing.update",
-        "summary": "Update the LLM billing mode (managed vs BYOK)",
-        "responses": {
-          "200": {
-            "description": "Updated billing state",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "llm": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "managed",
-                            "byok"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "compute": {
-                      "description": "@deprecated Compatibility field. Compute always uses user-owned infrastructure.",
-                      "type": "string",
-                      "enum": [
-                        "managed",
-                        "byok"
-                      ]
-                    },
-                    "wallet": {
-                      "type": "object",
-                      "properties": {
-                        "signedIn": {
-                          "description": "Whether a Synthetic Sciences session is available",
-                          "type": "boolean"
-                        },
-                        "balanceUsd": {
-                          "description": "Purchased Wallet balance in USD; null when signed out or unavailable",
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "signedIn",
-                        "balanceUsd"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "llm",
-                    "compute",
-                    "wallet"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "llm": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "enum": [
-                          "managed",
-                          "byok"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "compute": {
-                    "description": "@deprecated Accepted for 2.x clients and ignored. Compute always uses user-owned infrastructure.",
-                    "type": "string",
-                    "enum": [
-                      "managed",
-                      "byok"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.billing.update({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/settings/wallet": {
-      "get": {
-        "operationId": "settings.wallet.get",
-        "summary": "Get purchased Wallet balance, routing mode, and recent transactions",
-        "responses": {
-          "200": {
-            "description": "Wallet state",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "signedIn": {
-                      "type": "boolean"
-                    },
-                    "balanceUsd": {
-                      "description": "Purchased Wallet balance in USD; null when signed out or unavailable",
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "billingMode": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "managed",
-                            "byok"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "managedSupported": {
-                      "type": "boolean"
-                    },
-                    "managedUnlocked": {
-                      "type": "boolean"
-                    },
-                    "aceEnabled": {
-                      "type": "boolean"
-                    },
-                    "aceContract": {
-                      "type": "object",
-                      "properties": {
-                        "activationAuthorizationUsd": {
-                          "type": "number",
-                          "minimum": 0
-                        },
-                        "reloadThresholdUsd": {
-                          "type": "number",
-                          "exclusiveMinimum": 0
-                        },
-                        "reloadAmountUsd": {
-                          "type": "number",
-                          "exclusiveMinimum": 0
-                        },
-                        "serviceMarginPercent": {
-                          "type": "number",
-                          "minimum": 0
-                        },
-                        "processingFeeDisclosedSeparately": {
-                          "type": "boolean"
-                        },
-                        "reloadControlledByAce": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "activationAuthorizationUsd",
-                        "reloadThresholdUsd",
-                        "reloadAmountUsd",
-                        "serviceMarginPercent",
-                        "processingFeeDisclosedSeparately",
-                        "reloadControlledByAce"
-                      ]
-                    },
-                    "lifetimeSpentUsd": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "transactions": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "amountCents": {
-                            "type": "number"
-                          },
-                          "source": {
-                            "type": "string"
-                          },
-                          "description": {
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "amountCents",
-                          "source",
-                          "description",
-                          "createdAt"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "signedIn",
-                    "balanceUsd",
-                    "billingMode",
-                    "managedSupported",
-                    "managedUnlocked",
-                    "aceEnabled",
-                    "aceContract",
-                    "lifetimeSpentUsd",
-                    "transactions"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.wallet.get({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/settings/updates": {
       "get": {
         "operationId": "settings.updates.check",
@@ -22547,506 +21352,6 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.updates.dispose({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/settings/research-tools": {
-      "get": {
-        "operationId": "settings.researchTools.get",
-        "summary": "Get credit-backed search and data-sharing status",
-        "responses": {
-          "200": {
-            "description": "Research tools status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "signedIn": {
-                      "type": "boolean"
-                    },
-                    "plan": {
-                      "description": "@deprecated Compatibility summary. Billing is wallet-based and has no search quota.",
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "label": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "label",
-                        "status"
-                      ]
-                    },
-                    "search": {
-                      "type": "object",
-                      "properties": {
-                        "route": {
-                          "type": "string",
-                          "enum": [
-                            "credits",
-                            "managed",
-                            "community"
-                          ]
-                        },
-                        "state": {
-                          "type": "string",
-                          "enum": [
-                            "available",
-                            "basic",
-                            "conditional",
-                            "near_limit",
-                            "critical",
-                            "exhausted",
-                            "unavailable"
-                          ]
-                        },
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "balanceUsd": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "limit": {
-                          "description": "@deprecated Always null; enhanced search draws from the shared wallet.",
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "used": {
-                          "description": "@deprecated Always null; enhanced search draws from the shared wallet.",
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "remaining": {
-                          "description": "@deprecated Always null; use balanceUsd.",
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "resetAt": {
-                          "description": "@deprecated Always null; wallet credits do not reset.",
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "communityFlagEnabled": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "route",
-                        "state",
-                        "enabled",
-                        "balanceUsd",
-                        "limit",
-                        "used",
-                        "remaining",
-                        "resetAt",
-                        "communityFlagEnabled"
-                      ]
-                    },
-                    "telemetry": {
-                      "type": "object",
-                      "properties": {
-                        "analyticsEnabled": {
-                          "type": "boolean"
-                        },
-                        "researchContentEnabled": {
-                          "type": "boolean"
-                        },
-                        "userOwnedContentEnabled": {
-                          "type": "boolean"
-                        },
-                        "source": {
-                          "type": "string",
-                          "enum": [
-                            "default",
-                            "local",
-                            "account"
-                          ]
-                        },
-                        "signedIn": {
-                          "type": "boolean"
-                        },
-                        "consentVersion": {
-                          "type": "string"
-                        },
-                        "pending": {
-                          "type": "boolean"
-                        },
-                        "corrupt": {
-                          "type": "boolean"
-                        },
-                        "deletionAvailable": {
-                          "type": "boolean"
-                        },
-                        "queuedEvents": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "quarantinedEvents": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        }
-                      },
-                      "required": [
-                        "analyticsEnabled",
-                        "researchContentEnabled",
-                        "userOwnedContentEnabled",
-                        "source",
-                        "signedIn",
-                        "consentVersion",
-                        "pending",
-                        "corrupt",
-                        "deletionAvailable",
-                        "queuedEvents",
-                        "quarantinedEvents"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "signedIn",
-                    "plan",
-                    "search",
-                    "telemetry"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.researchTools.get({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/settings/research-tools/telemetry": {
-      "put": {
-        "operationId": "settings.researchTools.telemetry.update",
-        "summary": "Update OpenScience data-use consent",
-        "responses": {
-          "200": {
-            "description": "Updated research tools status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "signedIn": {
-                      "type": "boolean"
-                    },
-                    "plan": {
-                      "description": "@deprecated Compatibility summary. Billing is wallet-based and has no search quota.",
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "label": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "label",
-                        "status"
-                      ]
-                    },
-                    "search": {
-                      "type": "object",
-                      "properties": {
-                        "route": {
-                          "type": "string",
-                          "enum": [
-                            "credits",
-                            "managed",
-                            "community"
-                          ]
-                        },
-                        "state": {
-                          "type": "string",
-                          "enum": [
-                            "available",
-                            "basic",
-                            "conditional",
-                            "near_limit",
-                            "critical",
-                            "exhausted",
-                            "unavailable"
-                          ]
-                        },
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "balanceUsd": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "limit": {
-                          "description": "@deprecated Always null; enhanced search draws from the shared wallet.",
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "used": {
-                          "description": "@deprecated Always null; enhanced search draws from the shared wallet.",
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "remaining": {
-                          "description": "@deprecated Always null; use balanceUsd.",
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": 0,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "resetAt": {
-                          "description": "@deprecated Always null; wallet credits do not reset.",
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "communityFlagEnabled": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "route",
-                        "state",
-                        "enabled",
-                        "balanceUsd",
-                        "limit",
-                        "used",
-                        "remaining",
-                        "resetAt",
-                        "communityFlagEnabled"
-                      ]
-                    },
-                    "telemetry": {
-                      "type": "object",
-                      "properties": {
-                        "analyticsEnabled": {
-                          "type": "boolean"
-                        },
-                        "researchContentEnabled": {
-                          "type": "boolean"
-                        },
-                        "userOwnedContentEnabled": {
-                          "type": "boolean"
-                        },
-                        "source": {
-                          "type": "string",
-                          "enum": [
-                            "default",
-                            "local",
-                            "account"
-                          ]
-                        },
-                        "signedIn": {
-                          "type": "boolean"
-                        },
-                        "consentVersion": {
-                          "type": "string"
-                        },
-                        "pending": {
-                          "type": "boolean"
-                        },
-                        "corrupt": {
-                          "type": "boolean"
-                        },
-                        "deletionAvailable": {
-                          "type": "boolean"
-                        },
-                        "queuedEvents": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "quarantinedEvents": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        }
-                      },
-                      "required": [
-                        "analyticsEnabled",
-                        "researchContentEnabled",
-                        "userOwnedContentEnabled",
-                        "source",
-                        "signedIn",
-                        "consentVersion",
-                        "pending",
-                        "corrupt",
-                        "deletionAvailable",
-                        "queuedEvents",
-                        "quarantinedEvents"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "signedIn",
-                    "plan",
-                    "search",
-                    "telemetry"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "userOwnedContentEnabled": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "userOwnedContentEnabled"
-                ]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.researchTools.telemetry.update({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/settings/research-tools/telemetry/account-data": {
-      "delete": {
-        "operationId": "settings.researchTools.telemetry.delete",
-        "summary": "Delete account-linked OpenScience trace data",
-        "responses": {
-          "200": {
-            "description": "Deletion status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "ok"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.researchTools.telemetry.delete({\n  ...\n})"
           }
         ]
       }
@@ -23862,10 +22167,10 @@
       "put": {
         "operationId": "auth.onboarding",
         "summary": "Configure an onboarding provider credential",
-        "description": "Atomically save one local provider key and select BYOK model access.",
+        "description": "Save one local provider key.",
         "responses": {
           "200": {
-            "description": "Provider credential and BYOK mode configured",
+            "description": "Provider credential configured",
             "content": {
               "application/json": {
                 "schema": {
@@ -23884,7 +22189,7 @@
             }
           },
           "500": {
-            "description": "Configuration failed and compensation was attempted",
+            "description": "Configuration failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -24039,8 +22344,8 @@
             }
           }
         ],
-        "summary": "List all projects",
-        "description": "Get a list of projects that have been opened with OpenScience.",
+        "summary": "List OpenScience projects",
+        "description": "Get the app-created OpenScience projects owned by this server.",
         "responses": {
           "200": {
             "description": "List of projects",
@@ -51473,196 +49778,6 @@
         ]
       }
     },
-    "/settings/usage": {
-      "get": {
-        "operationId": "settings.usage.get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "Local usage summary",
-        "responses": {
-          "200": {
-            "description": "Usage summary",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "sessions": {
-                      "type": "number"
-                    },
-                    "total": {
-                      "type": "object",
-                      "properties": {
-                        "cost": {
-                          "type": "number"
-                        },
-                        "tokens": {
-                          "type": "object",
-                          "properties": {
-                            "input": {
-                              "type": "number"
-                            },
-                            "output": {
-                              "type": "number"
-                            },
-                            "reasoning": {
-                              "type": "number"
-                            },
-                            "cache_read": {
-                              "type": "number"
-                            },
-                            "cache_write": {
-                              "type": "number"
-                            }
-                          },
-                          "required": [
-                            "input",
-                            "output",
-                            "reasoning",
-                            "cache_read",
-                            "cache_write"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "cost",
-                        "tokens"
-                      ]
-                    },
-                    "latest": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "title": {
-                              "type": "string"
-                            },
-                            "cost": {
-                              "type": "number"
-                            },
-                            "tokens": {
-                              "type": "object",
-                              "properties": {
-                                "input": {
-                                  "type": "number"
-                                },
-                                "output": {
-                                  "type": "number"
-                                },
-                                "reasoning": {
-                                  "type": "number"
-                                },
-                                "cache_read": {
-                                  "type": "number"
-                                },
-                                "cache_write": {
-                                  "type": "number"
-                                }
-                              },
-                              "required": [
-                                "input",
-                                "output",
-                                "reasoning",
-                                "cache_read",
-                                "cache_write"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "title",
-                            "cost",
-                            "tokens"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "weekly": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "date": {
-                            "type": "string"
-                          },
-                          "cost": {
-                            "type": "number"
-                          },
-                          "tokens": {
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "date",
-                          "cost",
-                          "tokens"
-                        ]
-                      }
-                    },
-                    "by_model": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "key": {
-                            "type": "string"
-                          },
-                          "provider": {
-                            "type": "string"
-                          },
-                          "model": {
-                            "type": "string"
-                          },
-                          "cost": {
-                            "type": "number"
-                          },
-                          "tokens": {
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "key",
-                          "provider",
-                          "model",
-                          "cost",
-                          "tokens"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "sessions",
-                    "total",
-                    "latest",
-                    "weekly",
-                    "by_model"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.usage.get({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/instance/dispose": {
       "post": {
         "operationId": "instance.dispose",
@@ -52436,6 +50551,10 @@
                 "type": "string"
               }
             }
+          },
+          "origin": {
+            "type": "string",
+            "const": "openscience"
           },
           "time": {
             "type": "object",
@@ -53399,7 +51518,6 @@
               "source": {
                 "type": "string",
                 "enum": [
-                  "managed",
                   "byok",
                   "chatgpt",
                   "local",
@@ -55629,17 +53747,6 @@
               "files"
             ]
           },
-          "share": {
-            "type": "object",
-            "properties": {
-              "url": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "url"
-            ]
-          },
           "title": {
             "type": "string"
           },
@@ -57773,7 +55880,7 @@
             "$ref": "#/components/schemas/ServerConfig"
           },
           "command": {
-            "description": "Command configuration, see https://syntheticsciences.ai/docs/commands",
+            "description": "Command configuration",
             "type": "object",
             "propertyNames": {
               "type": "string"
@@ -57874,18 +55981,16 @@
             "type": "string"
           },
           "billing": {
-            "description": "How LLM inference is paid for when using Ace or user-owned credentials. Legacy compute is ignored.",
+            "description": "Provider access configuration. OpenScience uses only user-owned credentials.",
             "type": "object",
             "properties": {
               "llm": {
-                "description": "How LLM inference is paid for. 'managed' uses Credits; 'byok' uses your own provider API keys or first-party OAuth (ChatGPT/Claude Pro/Copilot) and is never billed. Unset or null = auto-detect from the resolved credential.",
+                "description": "Provider access uses your own API keys, first-party OAuth subscriptions, or local models. Legacy values are migrated to 'byok'.",
+                "default": "byok",
                 "anyOf": [
                   {
                     "type": "string",
-                    "enum": [
-                      "managed",
-                      "byok"
-                    ]
+                    "const": "byok"
                   },
                   {
                     "type": "null"
@@ -57893,12 +55998,10 @@
                 ]
               },
               "compute": {
-                "description": "@deprecated Retained only so existing 2.x config files keep parsing. Managed compute is retired; all compute uses user-owned routes regardless of this value.",
+                "description": "@deprecated Retained so existing 2.x config files keep parsing. Compute always uses user-owned routes.",
+                "default": "byok",
                 "type": "string",
-                "enum": [
-                  "managed",
-                  "byok"
-                ]
+                "const": "byok"
               }
             }
           },
@@ -57922,7 +56025,7 @@
             }
           },
           "agent": {
-            "description": "Agent configuration, see https://syntheticsciences.ai/docs/agents",
+            "description": "Agent configuration",
             "type": "object",
             "properties": {
               "plan": {
@@ -58249,10 +56352,6 @@
               },
               "batch_tool": {
                 "description": "Enable the batch tool",
-                "type": "boolean"
-              },
-              "openTelemetry": {
-                "description": "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
                 "type": "boolean"
               },
               "primary_tools": {
@@ -58783,11 +56882,9 @@
             "type": "string",
             "enum": [
               "env",
-              "synced",
               "config",
               "custom",
-              "api",
-              "managed"
+              "api"
             ]
           },
           "env": {

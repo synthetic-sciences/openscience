@@ -1,22 +1,4 @@
-/**
- * Which Atlas-synced env vars the CLI is allowed to apply.
- *
- * OpenScience routes managed LLM calls through one explicit seam: OpenRouter
- * for the aggregated catalog. It receives only an Atlas `thk_*` token plus
- * the Atlas proxy URL. User-owned provider keys saved in Atlas are also synced
- * into the matching OpenScience provider env var. Explicit shell and project
- * env values retain precedence over the synced copy.
- *
- * Kept lightweight on purpose: imported by preload-env.ts, which runs its side
- * effect at module init before the rest of the app is loaded.
- */
-
-import { managedApiBase } from "../endpoints"
-import { isAtlasManagedKey } from "../credentials/managed-key"
-
-/** The model-provider LLM env vars whose values are the user's OWN (BYOK)
- *  credential. Single source of truth — openscience/index.ts imports this for
- *  its subprocess-redaction and passthrough sets so they cannot drift. */
+/** User-owned credentials that approved local subprocesses may receive. */
 export const BYOK_LLM_ENV_KEYS = [
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
@@ -35,10 +17,7 @@ export const BYOK_LLM_ENV_KEYS = [
   "PERPLEXITY_API_KEY",
 ]
 
-/** Atlas-synced non-model credentials that approved agent subprocesses may
- * consume. Retired cloud-provider credentials are intentionally absent. Modal
- * stays outside this generic subprocess list because its user-owned token
- * resolves only in the trusted compute adapter. */
+/** User-owned service credentials that approved local subprocesses may receive. */
 export const SYNCED_SERVICE_ENV_KEYS = [
   "NVIDIA_API_KEY",
   "GITHUB_TOKEN",
@@ -55,10 +34,7 @@ export const SYNCED_SERVICE_ENV_KEYS = [
   "PINECONE_API_KEY",
 ] as const
 
-/** Device-local CLI compute credentials are host capabilities, not ordinary
- * shell configuration. Generic Bash, Task, kernel, and local MCP processes
- * must never inherit them; the trusted compute provider broker adds back only
- * the selected provider's fields for one reviewed invocation. */
+/** Device-local compute credentials are injected only by the selected adapter. */
 export const LOCAL_COMPUTE_CLI_ENV_KEYS = [
   "TENSORPOOL_KEY",
   "TENSORPOOL_API_KEY",
@@ -69,102 +45,3 @@ export const LOCAL_COMPUTE_CLI_ENV_KEYS = [
   "VAST_API_KEY",
   "RUNPOD_API_KEY",
 ] as const
-
-/** Compute credentials accepted by older Atlas sync responses. Keep this
- * explicit denylist separate from local credential handling: a user may still
- * configure their own local/SSH/scheduler/Modal runtime, but Atlas must never
- * inject or persist these values. Aliases cover the names consumed by the
- * local compute settings adapter as well as the historical sync names. */
-export const RETIRED_SYNCED_COMPUTE_ENV_KEYS = new Set<string>([
-  "AWS_ACCESS_KEY_ID",
-  "AWS_SECRET_ACCESS_KEY",
-  "AWS_SESSION_TOKEN",
-  "AWS_PROFILE",
-  "AWS_DEFAULT_REGION",
-  "AWS_REGION",
-  "GOOGLE_CLOUD_PROJECT",
-  "GCLOUD_PROJECT",
-  "GOOGLE_APPLICATION_CREDENTIALS",
-  "GOOGLE_APPLICATION_CREDENTIALS_JSON",
-  "AZURE_TENANT_ID",
-  "AZURE_CLIENT_ID",
-  "AZURE_CLIENT_SECRET",
-  "AZURE_SUBSCRIPTION_ID",
-  "AZURE_OPENAI_API_KEY",
-  "AZURE_API_KEY",
-  "AZURE_OPENAI_ENDPOINT",
-  "TINKER_API_KEY",
-  "TINKER_BASE_URL",
-  ...LOCAL_COMPUTE_CLI_ENV_KEYS,
-])
-
-const MANAGED_SYNCED_LLM_KEYS = new Set(["OPENROUTER_API_KEY", "OPENSCIENCE_IMAGE_API_KEY"])
-const MANAGED_SYNCED_BASE_URLS: Record<string, string> = {
-  OPENROUTER_BASE_URL: "/api/llm/proxy/openrouter/",
-  OPENSCIENCE_IMAGE_BASE_URL: "/api/llm/proxy/openrouter/",
-}
-const ALLOWED_SYNCED_ENV_KEYS = new Set<string>([
-  ...BYOK_LLM_ENV_KEYS,
-  ...SYNCED_SERVICE_ENV_KEYS,
-  ...Object.keys(MANAGED_SYNCED_BASE_URLS),
-  "OPENSCIENCE_IMAGE_API_KEY",
-  "OPENSCIENCE_IMAGE_MODEL",
-])
-
-export function managedOpenRouterBaseURL(atlasBase = managedApiBase()): string {
-  return `${atlasBase.replace(/\/+$/, "")}/api/llm/proxy/openrouter/v1`
-}
-
-/** Match a proxy URL to the configured Atlas origin and an exact route prefix.
- * A path substring alone is not enough: an attacker-controlled origin could
- * otherwise place `/api/llm/proxy/` in its path and receive the scoped token. */
-export function isAtlasProxyURL(
-  value: unknown,
-  route = "/api/llm/proxy/",
-  atlasBase = managedApiBase(),
-): value is string {
-  if (typeof value !== "string") return false
-  try {
-    const candidate = new URL(value)
-    const atlas = new URL(atlasBase)
-    if (candidate.protocol !== "http:" && candidate.protocol !== "https:") return false
-    if (candidate.origin !== atlas.origin) return false
-    if (candidate.username || candidate.password || candidate.search || candidate.hash) return false
-    if (candidate.pathname.includes("%")) return false
-
-    const basePath = atlas.pathname.replace(/\/+$/, "")
-    const routePath = route.startsWith("/") ? route : `/${route}`
-    const expected = `${basePath}${routePath}`.replace(/\/{2,}/g, "/").replace(/\/+$/, "")
-    return candidate.pathname === expected || candidate.pathname.startsWith(`${expected}/`)
-  } catch {
-    return false
-  }
-}
-
-/** Provider base URLs are never imported from the dashboard. BYOK keys always
- *  target OpenScience's built-in public endpoints, while the one managed route
- *  is validated separately below. */
-export const BLOCKED_SYNCED_ENV = new Set<string>(
-  BYOK_LLM_ENV_KEYS.filter((key) => !MANAGED_SYNCED_LLM_KEYS.has(key)).map((key) =>
-    key.replace(/_API_KEY$/, "_BASE_URL"),
-  ),
-)
-
-/** True when an Atlas-synced env var may be applied to the CLI process.
- *  User-owned LLM BYOK keys, the validated OpenRouter managed route, and
- *  explicitly named non-compute integrations pass through. Everything else,
- *  including compute credentials and a scoped Atlas token under a direct
- *  provider's env var, is rejected. */
-export function isSyncedEnvAllowed(key: string, value?: string, atlasBase = managedApiBase()): boolean {
-  if (RETIRED_SYNCED_COMPUTE_ENV_KEYS.has(key)) return false
-  if (BLOCKED_SYNCED_ENV.has(key)) return false
-  if (!ALLOWED_SYNCED_ENV_KEYS.has(key)) return false
-  if (isAtlasManagedKey(value) && !MANAGED_SYNCED_LLM_KEYS.has(key)) return false
-  if (key === "OPENSCIENCE_IMAGE_API_KEY") return isAtlasManagedKey(value)
-  // Likewise, managed routing may only target the provider-specific Atlas
-  // proxy. A mismatched/public URL is dropped before it reaches process.env.
-  const route = MANAGED_SYNCED_BASE_URLS[key]
-  if (route) return isAtlasProxyURL(value, route, atlasBase)
-  if (key === "OPENSCIENCE_IMAGE_MODEL") return value === "google/gemini-3-pro-image"
-  return true
-}

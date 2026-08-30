@@ -45,7 +45,7 @@ Credentials are auto-injected by openscience when connected via the dashboard.
 [ -n "$FIREWORKS_API_KEY" ] && echo "FIREWORKS_API_KEY set" || echo "NOT SET"
 ```
 
-If not set: connect Fireworks AI at https://app.syntheticsciences.ai -> Services, then restart openscience.
+If not set: add your Fireworks AI key in Customize → Models or export `FIREWORKS_API_KEY` locally.
 
 ## Quick Start
 

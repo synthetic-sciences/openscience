@@ -116,14 +116,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const modelID = parts.join("/")
           const configured = { providerID, modelID }
           // Settings owns the exact default route. Never silently replace it
-          // with a managed/native route for the same logical model.
+          // with another provider route for the same logical model.
           return isExactModelValid(configured) ? configured : undefined
         }
 
         // Resolve one connected Sol route without treating provider identities
-        // as interchangeable. Automatic prefers ChatGPT (and therefore its
-        // advertised Fast tier), while explicit Credits and Accounts remain on
-        // the access surface the user selected.
+        // as interchangeable. Automatic prefers the user's ChatGPT connection.
         const connected = new Map(providers.connected().map((provider) => [provider.id, provider]))
         const candidates = [
           { providerID: "openai", modelID: "gpt-5.6-sol" },
@@ -132,12 +130,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         ].flatMap((route): ModelAccessRoute[] => {
           const provider = connected.get(route.providerID)
           if (!provider?.models[route.modelID]) return []
-          const access: ModelRouteAccess =
-            provider.id === "openai-codex"
-              ? "chatgpt"
-              : provider.source === "managed" || provider.id.startsWith("synsci")
-                ? "managed"
-                : "byok"
+          const access: ModelRouteAccess = provider.id === "openai-codex" ? "chatgpt" : "byok"
           return [{ ...route, access }]
         })
         const initial = resolveModelAccessRoute({

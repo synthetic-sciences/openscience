@@ -21,13 +21,10 @@ import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { State } from "@/project/state"
-import { OutboundTelemetry } from "@/telemetry/outbound"
 import { ProjectTrust } from "@/project/trust"
 import { ProjectAccess } from "@/project/access"
-import { resolveCredentialSource, telemetryRoute } from "@/session/billing-gate"
 import { randomUUID } from "node:crypto"
 import { Flag } from "@/flag/flag"
-import { OpenScience } from "@/openscience"
 
 export namespace Agent {
   export const Info = z
@@ -551,197 +548,73 @@ export namespace Agent {
     // short-lived lineage instead of attaching it to an unrelated session.
     const sessionID = `agent-config:${randomUUID()}`
     const messageID = `agent-config-request:${randomUUID()}`
-    const purpose = "agent_config_generation"
-    let model: Provider.Model | undefined
-    let route = "custom"
-    let requestStarted = false
-    let outcome = "error"
 
     const selected = input.model ?? (await Provider.defaultModel())
-    model = await Provider.getModel(selected.providerID, selected.modelID)
-    route = telemetryRoute(await resolveCredentialSource(model.providerID, model.id), model)
+    const model = await Provider.getModel(selected.providerID, selected.modelID)
 
-    await OutboundTelemetry.sessionStarted({
-      sessionID,
-      session: { purpose, source: "cli", ephemeral: true },
-    }).catch(() => false)
-    await OutboundTelemetry.userMessage({
-      sessionID,
-      messageID,
-      route,
-      provider: model.providerID,
-      model: model.id,
-      message: { role: "user", purpose },
-      parts: [{ type: "text", text: input.description }],
-    }).catch(() => false)
+    const defaultModel = selected
+    const language = await Provider.getLanguage(model)
 
-    try {
-      const defaultModel = selected
-      const funding = route === "managed" ? await OpenScience.getFundingSnapshot() : undefined
-      if (route === "managed" && !funding) {
-        throw new Error(
-          "Managed agent generation could not snapshot the connected funding account. Retry after signing in.",
-        )
-      }
-      const language = await Provider.getLanguage(model)
+    const system = [PROMPT_GENERATE]
+    await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
+    const existing = await list()
+    const schema = z.object({
+      identifier: z.string(),
+      whenToUse: z.string(),
+      systemPrompt: z.string(),
+    })
+    const messages: ModelMessage[] = [
+      ...system.map(
+        (item): ModelMessage => ({
+          role: "system",
+          content: item,
+        }),
+      ),
+      {
+        role: "user",
+        content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
+      },
+    ]
+    const params = {
+      // Provider-dependent SDK telemetry is disabled. Prompts and responses
+      // stay between this device and the provider selected by the user.
+      experimental_telemetry: {
+        isEnabled: false,
+        recordInputs: false,
+        recordOutputs: false,
+      },
+      temperature: 0.3,
+      messages,
+      model: language,
+      schema,
+    } satisfies Parameters<typeof generateObject>[0]
+    const oauthStream =
+      defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth"
+    const providerOptions = oauthStream
+      ? ProviderTransform.providerOptions(model, {
+          instructions: SystemPrompt.instructions(),
+          store: false,
+        })
+      : undefined
 
-      const system = [PROMPT_GENERATE]
-      await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
-      const existing = await list()
-      const schema = z.object({
-        identifier: z.string(),
-        whenToUse: z.string(),
-        systemPrompt: z.string(),
-      })
-      const messages: ModelMessage[] = [
-        ...system.map(
-          (item): ModelMessage => ({
-            role: "system",
-            content: item,
-          }),
-        ),
-        {
-          role: "user",
-          content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
-        },
-      ]
-      const params = {
-        // OpenScience owns content tracing, redaction, consent, and deletion.
-        // Never let provider-dependent AI SDK telemetry become a second path.
-        experimental_telemetry: {
-          isEnabled: false,
-          recordInputs: false,
-          recordOutputs: false,
-        },
-        temperature: 0.3,
-        messages,
-        model: language,
-        schema,
-      } satisfies Parameters<typeof generateObject>[0]
-      const oauthStream =
-        defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth"
-      const providerOptions = oauthStream
-        ? ProviderTransform.providerOptions(model, {
-            instructions: SystemPrompt.instructions(),
-            store: false,
-          })
-        : undefined
+    const requestContext = { sessionID, messageID, attempt: 1 }
 
-      await OutboundTelemetry.modelRequest({
-        sessionID,
-        messageID,
-        attempt: 1,
-        route,
-        provider: model.providerID,
-        model: model.id,
-        system,
-        messages,
-        tools: {},
-        parameters: {
-          purpose,
-          temperature: params.temperature,
-          schema: ["identifier", "whenToUse", "systemPrompt"],
-          structuredOutput: true,
-          streaming: oauthStream,
+    if (oauthStream) {
+      const result = Provider.withRequestContext(requestContext, () =>
+        streamObject({
+          ...params,
           providerOptions,
-        },
-      }).catch(() => false)
-      requestStarted = true
-      const requestContext = { sessionID, messageID, attempt: 1, ...(funding ? { funding } : {}) }
-
-      if (oauthStream) {
-        const result = Provider.withRequestContext(requestContext, () =>
-          streamObject({
-            ...params,
-            providerOptions,
-            onError: () => {},
-          }),
-        )
-        for await (const part of Provider.withRequestContextIterable(requestContext, result.fullStream)) {
-          if (part.type === "error") throw part.error
-        }
-        const object = await result.object
-        const [tokens, finish] = await Promise.all([
-          result.usage.catch(() => undefined),
-          result.finishReason.catch(() => undefined),
-        ])
-        await OutboundTelemetry.modelResponse({
-          sessionID,
-          messageID,
-          attempt: 1,
-          route,
-          provider: model.providerID,
-          model: model.id,
-          message: { role: "assistant", purpose },
-          parts: [{ type: "json", value: object }],
-          tokens,
-          finish,
-        }).catch(() => false)
-        if (tokens) {
-          const usage = await import("@/session").then((module) => module.Session.getUsage({ model, usage: tokens }))
-          await OutboundTelemetry.modelUsage({
-            sessionID,
-            messageID,
-            operationID: "agent-config-generation",
-            attempt: 1,
-            route,
-            provider: model.providerID,
-            model: model.id,
-            tokens: usage.tokens,
-            cost: usage.cost,
-          }).catch(() => false)
-        }
-        outcome = "completed"
-        return object
+          onError: () => {},
+        }),
+      )
+      for await (const part of Provider.withRequestContextIterable(requestContext, result.fullStream)) {
+        if (part.type === "error") throw part.error
       }
-
-      const result = await Provider.withRequestContext(requestContext, () => generateObject(params))
-      await OutboundTelemetry.modelResponse({
-        sessionID,
-        messageID,
-        attempt: 1,
-        route,
-        provider: model.providerID,
-        model: model.id,
-        message: { role: "assistant", purpose },
-        parts: [{ type: "json", value: result.object }],
-        tokens: result.usage,
-        finish: result.finishReason,
-      }).catch(() => false)
-      const usage = await import("@/session").then((module) => module.Session.getUsage({ model, usage: result.usage }))
-      await OutboundTelemetry.modelUsage({
-        sessionID,
-        messageID,
-        operationID: "agent-config-generation",
-        attempt: 1,
-        route,
-        provider: model.providerID,
-        model: model.id,
-        tokens: usage.tokens,
-        cost: usage.cost,
-      }).catch(() => false)
-      outcome = "completed"
-      return result.object
-    } catch (error) {
-      await OutboundTelemetry.error({
-        sessionID,
-        messageID,
-        attempt: 1,
-        parentSpanID: requestStarted ? `${messageID}:model:1:request` : messageID,
-        route,
-        provider: model?.providerID ?? input.model?.providerID,
-        model: model?.id ?? input.model?.modelID,
-        error,
-        context: { purpose, phase: requestStarted ? "model_generation" : "setup" },
-      }).catch(() => false)
-      throw error
-    } finally {
-      await OutboundTelemetry.sessionCompleted({
-        sessionID,
-        messageID,
-        reason: outcome,
-        session: { purpose, source: "cli", ephemeral: true },
-      }).catch(() => false)
+      const object = await result.object
+      return object
     }
+
+    const result = await Provider.withRequestContext(requestContext, () => generateObject(params))
+    return result.object
   }
 }

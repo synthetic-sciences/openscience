@@ -36,10 +36,10 @@ test("loads config with defaults when no files exist", async () => {
   })
 })
 
-test("legacy compute billing config keeps parsing without controlling compute", () => {
+test("legacy billing values migrate to user-owned routing", () => {
   const config = Config.Info.parse({ billing: { llm: "byok", compute: "managed" } })
 
-  expect(config.billing).toEqual({ llm: "byok", compute: "managed" })
+  expect(config.billing).toEqual({ llm: "byok", compute: "byok" })
 })
 
 test("trusted sandbox defaults to containment while preserving explicit and managed policy", async () => {
@@ -1742,17 +1742,17 @@ describe("global config writes are visible to the next Config.get()", () => {
       directory: tmp.path,
       fn: async () => {
         const before = await Config.get()
-        expect(before.billing?.llm).toBeUndefined()
+        expect(before.model).toBeUndefined()
 
         // No sleep, no retry, no intervening await besides the write itself
         // - this is the exact race: Instance.disposeAll() used to be fired
         // without being awaited inside Config.updateGlobal, so the very
         // next Config.get() for this SAME already-instantiated directory
         // could still return the pre-write value.
-        await Config.updateGlobal({ billing: { llm: "managed" } })
+        await Config.updateGlobal({ model: "openai/gpt-5" })
 
         const after = await Config.get()
-        expect(after.billing?.llm).toBe("managed")
+        expect(after.model).toBe("openai/gpt-5")
       },
     })
   })

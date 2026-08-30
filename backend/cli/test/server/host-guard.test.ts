@@ -63,9 +63,9 @@ describe("isAllowedOrigin", () => {
     expect(isAllowedOrigin("http://tauri.localhost")).toBe(true)
   })
 
-  test("allows the hosted web UI on a syntheticsciences.ai subdomain", () => {
-    expect(isAllowedOrigin("https://web.syntheticsciences.ai")).toBe(true)
-    expect(isAllowedOrigin("https://app.syntheticsciences.ai")).toBe(true)
+  test("does not trust a hosted product origin by default", () => {
+    expect(isAllowedOrigin("https://web.syntheticsciences.ai")).toBe(false)
+    expect(isAllowedOrigin("https://app.syntheticsciences.ai")).toBe(false)
   })
 
   test("rejects the bare syntheticsciences.ai apex (subdomain required)", () => {

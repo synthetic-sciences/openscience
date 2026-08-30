@@ -34,7 +34,7 @@ Credentials are auto-injected by openscience when connected via the dashboard.
 [ -n "$WANDB_API_KEY" ] && echo "WANDB_API_KEY set" || echo "NOT SET"
 ```
 
-If not set: connect Weights & Biases at https://app.syntheticsciences.ai -> Services, then restart openscience.
+If not set: add your Weights & Biases key in Customize → Tools or export `WANDB_API_KEY` locally.
 
 ## Installation
 
@@ -599,5 +599,4 @@ print(f"Share this URL: {run.url}")
 - `references/sweeps.md` - Comprehensive hyperparameter optimization guide
 - `references/artifacts.md` - Data and model versioning patterns
 - `references/integrations.md` - Framework-specific examples
-
 

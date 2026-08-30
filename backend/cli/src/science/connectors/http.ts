@@ -16,7 +16,7 @@ import type { RateLimit } from "./types"
 import { Network } from "@/settings/network"
 import { AsyncLocalStorage } from "node:async_hooks"
 
-const USER_AGENT = "openscience-science/1.0 (+https://syntheticsciences.ai)"
+const USER_AGENT = "openscience-science/1.0 (+https://github.com/synthetic-sciences/OpenScience)"
 const DEFAULT_TIMEOUT = 30_000
 const DEFAULT_RETRIES = 3
 const DEFAULT_CACHE_TTL = 5 * 60_000 // 5 minutes

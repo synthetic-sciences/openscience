@@ -45,7 +45,7 @@ HuggingFace token is auto-injected by openscience when connected via the dashboa
 [ -n "$HF_TOKEN" ] && echo "HF_TOKEN set" || echo "NOT SET"
 ```
 
-If not set: connect HuggingFace at https://app.syntheticsciences.ai -> Services, then restart openscience.
+If not set: add your Hugging Face token in Customize → Tools or export `HF_TOKEN` locally.
 
 ## Quick Start
 
@@ -159,4 +159,3 @@ For detailed information on specific components:
 - **Generation**: `references/generation.md` - Text generation strategies and parameters
 - **Training**: `references/training.md` - Fine-tuning with Trainer API
 - **Tokenizers**: `references/tokenizers.md` - Tokenization and preprocessing
-

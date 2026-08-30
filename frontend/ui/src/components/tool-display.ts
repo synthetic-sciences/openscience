@@ -117,8 +117,8 @@ export function sessionErrorText(value: unknown): string {
 
   const required = body.match(/"required_cents":\s*(\d+)/)?.[1]
   const available = body.match(/"available_cents":\s*(\d+)/)?.[1]
-  if (!required || !available) return "Managed Credits are temporarily unavailable for this step."
-  return `Managed Credits: this step needs $${(Number(required) / 100).toFixed(2)}; $${(Number(available) / 100).toFixed(2)} is currently available. Pending requests may still be settling.`
+  if (!required || !available) return "The connected provider account has insufficient balance for this step."
+  return `The connected provider account needs $${(Number(required) / 100).toFixed(2)} for this step; $${(Number(available) / 100).toFixed(2)} is available.`
 }
 
 export function sessionErrorDisplay(value: unknown): {

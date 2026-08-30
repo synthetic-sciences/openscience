@@ -1,5 +1,5 @@
 const APP_CONTENT_SECURITY_POLICY =
-  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: https://syntheticsciences.ai https://*.syntheticsciences.ai; object-src 'self' data: blob:; frame-src 'self' blob:; worker-src 'self'"
+  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:; object-src 'self' data: blob:; frame-src 'self' blob:; worker-src 'self'"
 
 // The upstream RDKit.js build uses Emscripten's Function constructor while
 // registering its bindings. Keep that capability out of the application page:
