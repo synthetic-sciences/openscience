@@ -51,6 +51,13 @@ export namespace WorkspaceCredentials {
     cerebras: ["cerebras", "CEREBRAS_API_KEY"],
     perplexity: ["perplexity", "PERPLEXITY_API_KEY"],
   }
+
+  export function providerEnv(id: string): string[] {
+    const name = Object.values(providers).find(([provider]) => provider === id)?.[1]
+    if (!name) return []
+    return id === "google" ? [name, "GOOGLE_API_KEY", "GEMINI_API_KEY"] : [name]
+  }
+
   const services: Record<string, Record<string, string>> = {
     github: { token: "GITHUB_TOKEN" },
     literature: { api_key: "SEMANTIC_SCHOLAR_API_KEY" },

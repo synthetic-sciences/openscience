@@ -181,6 +181,66 @@ describe("workspace credential sync", () => {
     expect(process.env.GITHUB_TOKEN).toBe("fixture-local-github")
   })
 
+  test("local provider env beats synced keys without changing saved-key priority or adopting cloud env", async () => {
+    const { Provider } = await import("../../src/provider/provider")
+    const { Instance } = await import("../../src/project/instance")
+    const { tmpdir } = await import("../fixture/fixture")
+    const names = ["OPENAI_API_KEY", "OPENROUTER_API_KEY", ...WorkspaceCredentials.providerEnv("google")]
+    const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]))
+    Object.assign(payload.services, {
+      gemini: {
+        connected: true,
+        env: { GOOGLE_GENERATIVE_AI_API_KEY: "fixture-cloud-google" },
+        metadata: { source: "workspace_byok" },
+      },
+    })
+    await OpenScience.syncCredentials({ force: true })
+    await using tmp = await tmpdir({ config: { billing: { llm: "byok" } } })
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          process.env.OPENAI_API_KEY = "fixture-shell-openai"
+          process.env.OPENROUTER_API_KEY = "fixture-shell-router"
+          Provider.invalidate()
+          const local = await Provider.list()
+          expect(Provider.effectiveKey(local.openai)).toBe("fixture-shell-openai")
+          expect(Provider.effectiveKey(local.openrouter)).toBe("fixture-shell-router")
+          expect(await Auth.get("openai")).toBeUndefined()
+          await Auth.set("openai", { type: "api", key: "fixture-saved-openai" })
+          expect(Provider.effectiveKey((await Provider.list()).openai)).toBe("fixture-saved-openai")
+          await Auth.remove("openai")
+          for (const name of WorkspaceCredentials.providerEnv("google")) {
+            process.env[name] = "fixture-local-google"
+            Provider.invalidate()
+            expect(await Auth.get("google")).toBeUndefined()
+            expect(Provider.effectiveKey((await Provider.list()).google)).toBe("fixture-local-google")
+            delete process.env[name]
+          }
+          // An equal-valued shell key is still local, while an Ace token is
+          // never a direct-provider credential and cannot suppress the overlay.
+          process.env.OPENAI_API_KEY = "fixture-cloud-openai"
+          expect(await Auth.get("openai")).toBeUndefined()
+          process.env.OPENAI_API_KEY = "osk_fixture_not_a_provider_key"
+          process.env.GOOGLE_GENERATIVE_AI_API_KEY = "thk_fixture_not_a_provider_key"
+          delete process.env.OPENROUTER_API_KEY
+          Provider.invalidate()
+          const cloud = await Provider.list()
+          expect(Provider.effectiveKey(cloud.openai)).toBe("fixture-cloud-openai")
+          expect(Provider.effectiveKey(cloud.google)).toBe("fixture-cloud-google")
+          expect(Provider.effectiveKey(cloud.openrouter)).toBe("fixture-cloud-router")
+          expect(process.env.GITHUB_TOKEN).toBe("fixture-cloud-github")
+        },
+      })
+    } finally {
+      for (const [name, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[name]
+        else process.env[name] = value
+      }
+      Provider.invalidate()
+    }
+  })
+
   test("permission revocation removes cloud credentials without logging out or deleting local keys", async () => {
     await Auth.set("openai", { type: "api", key: "fixture-local" })
     await OpenScience.syncCredentials({ force: true })

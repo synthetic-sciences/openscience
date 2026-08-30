@@ -61,6 +61,19 @@ export namespace Auth {
 
   export async function all(): Promise<Record<string, Info>> {
     const data = await JsonStore.read(filepath)
+    // Synced model keys stay in the encrypted overlay, never process.env.
+    // These reviewed provider env names therefore belong to the local user,
+    // not the separately allowlisted cloud service env. Compare provenance,
+    // not secret values: even an equal local key remains locally owned.
+    const synced = Object.fromEntries(
+      Object.entries((await WorkspaceCredentials.read())?.auth ?? {}).filter(
+        ([id]) =>
+          !WorkspaceCredentials.providerEnv(id).some((name) => {
+            const key = process.env[name]
+            return key && !isAtlasApiKey(key)
+          }),
+      ),
+    )
     return Object.entries(data).reduce(
       (acc, [key, value]) => {
         const parsed = Info.safeParse(value)
@@ -69,7 +82,7 @@ export namespace Auth {
         acc[key] = parsed.data
         return acc
       },
-      { ...(await WorkspaceCredentials.read())?.auth } as Record<string, Info>,
+      synced as Record<string, Info>,
     )
   }
 

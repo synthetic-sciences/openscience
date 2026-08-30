@@ -1217,7 +1217,9 @@ export namespace Provider {
       // GEMINI_API_KEY). Resolve the key from whichever alias is set and pass it
       // explicitly, otherwise a user who exported GOOGLE_API_KEY lists fine but
       // hits "API key is missing" at call time.
-      const apiKey = Env.get("GOOGLE_GENERATIVE_AI_API_KEY") ?? Env.get("GOOGLE_API_KEY") ?? Env.get("GEMINI_API_KEY")
+      const apiKey = [Env.get("GOOGLE_GENERATIVE_AI_API_KEY"), Env.get("GOOGLE_API_KEY"), Env.get("GEMINI_API_KEY")].find(
+        isByokKey,
+      )
       return {
         autoload: false,
         options: {

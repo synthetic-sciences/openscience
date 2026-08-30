@@ -12,6 +12,12 @@ Open **Customize → Models → Ace**, sign in, and choose your workspace. A fun
 
 Ace requests pass through the Synthetic Sciences gateway and use the selected workspace's funding context. The gateway checks access and balance on the server; switching workspaces does not silently charge another account. Ace's optional reload authorization is separate from the funds already in your Wallet.
 
+### Which Wallet pays?
+
+Check **Customize → General → Funding workspace**. Ace models and managed search use that workspace's Wallet; balances are not pooled across workspaces. If its funds or access are unavailable, OpenScience does not switch to another Wallet.
+
+Use **Switch workspace** to approve a different workspace in your browser. Workspace-scoped device keys stay bound to the workspace you approved. Browsing a different workspace on the website does not change the desktop's funding choice, and requests already running keep the workspace they started with.
+
 See [Pricing](/openscience/pricing) for provider costs, funding fees, and pending charges.
 
 ## Your own model providers
@@ -30,7 +36,9 @@ These connections use your provider account directly. A provider subscription on
 
 ## Workspace credentials
 
-After sign-in, OpenScience refreshes supported credentials from the selected workspace. A shared credential fills a missing local connection; your saved local key or provider sign-in takes precedence.
+After sign-in, OpenScience refreshes supported credentials from the selected workspace. A shared credential fills a missing local connection; your saved local key, explicit provider environment key, or provider sign-in takes precedence. Local keys are not automatically uploaded to the website.
+
+Refreshes run at sign-in, startup, app focus, and periodically in the background. **Customize → General → Sync now** requests an immediate refresh.
 
 This is a scoped credential overlay, not a configuration import. It cannot import arbitrary environment variables, executable commands, plugins, model-routing preferences, or compute-backend selections. Managed gateway credentials are not copied into provider-key slots.
 
