@@ -319,6 +319,31 @@ describe("reasoning effort and Fast mode", () => {
     })
   })
 
+  test("renders and selects an exact context cap independently", () => {
+    const selected = { value: "1050000" }
+    const host = mount(() =>
+      web.createComponent(subject.ModelEffortPanel, {
+        current: "standard",
+        options: [],
+        context: {
+          current: selected.value,
+          options: [
+            { id: "272000", label: "272K cap" },
+            { id: "1050000", label: "Full · 1.05M" },
+          ],
+        },
+        onEffortSelect: () => undefined,
+        onTierSelect: () => undefined,
+        onContextSelect: (context) => (selected.value = context),
+      }),
+    )
+
+    const choices = host.querySelectorAll('[data-model-option="context"]')
+    expect(choices).toHaveLength(2)
+    host.querySelector<HTMLButtonElement>('[data-model-option="context"][data-model-option-id="272000"]')?.click()
+    expect(selected.value).toBe("272000")
+  })
+
   test("uses a real dialog trigger and restores focus to its own effort chip", async () => {
     const host = mount(() =>
       web.createComponent(subject.ModelEffortPopover, {

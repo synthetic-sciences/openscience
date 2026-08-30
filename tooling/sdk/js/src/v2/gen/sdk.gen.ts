@@ -3818,6 +3818,7 @@ export class Session extends HeyApiClient {
       system?: string
       variant?: string
       tier?: string
+      context?: number
       parts: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -3840,6 +3841,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
+            { in: "body", key: "context" },
             { in: "body", key: "parts" },
           ],
         },
@@ -3921,6 +3923,7 @@ export class Session extends HeyApiClient {
       system?: string
       variant?: string
       tier?: string
+      context?: number
       parts: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -3943,6 +3946,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
+            { in: "body", key: "context" },
             { in: "body", key: "parts" },
           ],
         },
@@ -3986,6 +3990,7 @@ export class Session extends HeyApiClient {
       }
       variant?: string
       tier?: string
+      context?: number
       parts?: Array<{
         id?: string
         type: "file"
@@ -4014,6 +4019,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "delegationSettings" },
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
+            { in: "body", key: "context" },
             { in: "body", key: "parts" },
           ],
         },

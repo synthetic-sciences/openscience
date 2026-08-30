@@ -430,6 +430,7 @@ export namespace MessageV2 {
     delegationSettings: DelegationSettings.optional(),
     variant: z.string().optional(),
     tier: z.string().optional(),
+    context: z.number().int().positive().optional(),
     inference: Inference.Info.optional(),
   }).meta({
     ref: "UserMessage",

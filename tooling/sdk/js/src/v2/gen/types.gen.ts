@@ -262,6 +262,7 @@ export type UserMessage = {
   }
   variant?: string
   tier?: string
+  context?: number
   inference?: {
     source: "managed" | "byok" | "chatgpt" | "local" | "oauth" | "unknown"
     effort: string
@@ -1654,6 +1655,16 @@ export type ProviderConfig = {
         output: number
         cache_read?: number
         cache_write?: number
+        tiers?: Array<{
+          input: number
+          output: number
+          cache_read?: number
+          cache_write?: number
+          tier: {
+            type: "context"
+            size: number
+          }
+        }>
         context_over_200k?: {
           input: number
           output: number
@@ -2155,6 +2166,15 @@ export type Model = {
       read: number
       write: number
     }
+    tiers?: Array<{
+      input: number
+      output: number
+      cache: {
+        read: number
+        write: number
+      }
+      threshold: number
+    }>
     experimentalOver200K?: {
       input: number
       output: number
@@ -11542,6 +11562,7 @@ export type SessionPromptData = {
     system?: string
     variant?: string
     tier?: string
+    context?: number
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
   }
   path: {
@@ -11740,6 +11761,7 @@ export type SessionPromptAsyncData = {
     system?: string
     variant?: string
     tier?: string
+    context?: number
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
   }
   path: {
@@ -11795,6 +11817,7 @@ export type SessionCommandData = {
     }
     variant?: string
     tier?: string
+    context?: number
     parts?: Array<{
       id?: string
       type: "file"

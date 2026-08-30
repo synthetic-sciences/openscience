@@ -51,6 +51,11 @@ test("allows the OpenRouter managed route and non-compute integrations", () => {
     expect(isSyncedEnvAllowed(key)).toBe(true)
   }
   expect(isSyncedEnvAllowed("OPENROUTER_BASE_URL", managedOpenRouterBaseURL())).toBe(true)
+  expect(isSyncedEnvAllowed("OPENSCIENCE_IMAGE_API_KEY", "thk_workspace-image")).toBe(true)
+  expect(isSyncedEnvAllowed("OPENSCIENCE_IMAGE_API_KEY", "sk-user-owned")).toBe(false)
+  expect(isSyncedEnvAllowed("OPENSCIENCE_IMAGE_BASE_URL", managedOpenRouterBaseURL())).toBe(true)
+  expect(isSyncedEnvAllowed("OPENSCIENCE_IMAGE_MODEL", "google/gemini-3-pro-image")).toBe(true)
+  expect(isSyncedEnvAllowed("OPENSCIENCE_IMAGE_MODEL", "meta/llama-3.3-70b-instruct")).toBe(false)
   expect(SYNCED_SERVICE_ENV_KEYS).not.toContain("MODAL_TOKEN_SECRET")
 })
 

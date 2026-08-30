@@ -74,6 +74,17 @@ export namespace ModelsDev {
         output: z.number(),
         cache_read: z.number().optional(),
         cache_write: z.number().optional(),
+        tiers: z
+          .array(
+            z.object({
+              input: z.number(),
+              output: z.number(),
+              cache_read: z.number().optional(),
+              cache_write: z.number().optional(),
+              tier: z.object({ type: z.literal("context"), size: z.number().positive() }),
+            }),
+          )
+          .optional(),
         context_over_200k: z
           .object({
             input: z.number(),

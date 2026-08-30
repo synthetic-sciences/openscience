@@ -98,14 +98,17 @@ export const RETIRED_SYNCED_COMPUTE_ENV_KEYS = new Set<string>([
   ...LOCAL_COMPUTE_CLI_ENV_KEYS,
 ])
 
-const MANAGED_SYNCED_LLM_KEYS = new Set(["OPENROUTER_API_KEY"])
+const MANAGED_SYNCED_LLM_KEYS = new Set(["OPENROUTER_API_KEY", "OPENSCIENCE_IMAGE_API_KEY"])
 const MANAGED_SYNCED_BASE_URLS: Record<string, string> = {
   OPENROUTER_BASE_URL: "/api/llm/proxy/openrouter/",
+  OPENSCIENCE_IMAGE_BASE_URL: "/api/llm/proxy/openrouter/",
 }
 const ALLOWED_SYNCED_ENV_KEYS = new Set<string>([
   ...BYOK_LLM_ENV_KEYS,
   ...SYNCED_SERVICE_ENV_KEYS,
   ...Object.keys(MANAGED_SYNCED_BASE_URLS),
+  "OPENSCIENCE_IMAGE_API_KEY",
+  "OPENSCIENCE_IMAGE_MODEL",
 ])
 
 export function managedOpenRouterBaseURL(atlasBase = managedApiBase()): string {
@@ -157,9 +160,11 @@ export function isSyncedEnvAllowed(key: string, value?: string, atlasBase = mana
   if (BLOCKED_SYNCED_ENV.has(key)) return false
   if (!ALLOWED_SYNCED_ENV_KEYS.has(key)) return false
   if (isAtlasManagedKey(value) && !MANAGED_SYNCED_LLM_KEYS.has(key)) return false
+  if (key === "OPENSCIENCE_IMAGE_API_KEY") return isAtlasManagedKey(value)
   // Likewise, managed routing may only target the provider-specific Atlas
   // proxy. A mismatched/public URL is dropped before it reaches process.env.
   const route = MANAGED_SYNCED_BASE_URLS[key]
   if (route) return isAtlasProxyURL(value, route, atlasBase)
+  if (key === "OPENSCIENCE_IMAGE_MODEL") return value === "google/gemini-3-pro-image"
   return true
 }

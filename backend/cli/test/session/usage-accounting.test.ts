@@ -71,6 +71,23 @@ describe("Session.getUsage cost/token accounting", () => {
     expect(r.cost).toBeCloseTo((1_000 * 3 + 100 * 15) / 1_000_000, 6)
   })
 
+  test("uses the catalog's exact context threshold instead of the legacy 200k guess", () => {
+    const priced = model()
+    priced.cost.tiers = [{ input: 10, output: 45, cache: { read: 1, write: 0 }, threshold: 272_000 }]
+    const below = Session.getUsage({
+      model: priced,
+      usage: { inputTokens: 271_999, outputTokens: 100, cachedInputTokens: 0 } as any,
+      metadata: { anthropic: {} } as any,
+    })
+    const exact = Session.getUsage({
+      model: priced,
+      usage: { inputTokens: 272_000, outputTokens: 100, cachedInputTokens: 0 } as any,
+      metadata: { anthropic: {} } as any,
+    })
+    expect(below.cost).toBeCloseTo((271_999 * 3 + 100 * 15) / 1_000_000, 6)
+    expect(exact.cost).toBeCloseTo((272_000 * 10 + 100 * 45) / 1_000_000, 6)
+  })
+
   test("clamps a would-be-negative input token count to zero (non-excludes provider)", () => {
     // inputTokens already excludes cached, but provider isn't in the excludes set:
     // 100 - 500 cacheRead = -400 → must clamp to 0, never negative tokens/cost.

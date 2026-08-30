@@ -12,12 +12,23 @@ import { Bus } from "@/bus"
 import { File } from "@/file"
 import { FileWatcher } from "@/file/watcher"
 import { Network } from "@/settings/network"
+import { Env } from "@/env"
 
 const MAX_IMAGE_BYTES = 30 * 1024 * 1024
 const MAX_IMAGE_RESPONSE_BYTES = Math.ceil(MAX_IMAGE_BYTES / 3) * 4 + 1024 * 1024
 const MAX_IMAGE_ERROR_BYTES = 1024 * 1024
 const MAX_IMAGE_ATTACHMENT_BYTES = 8 * 1024 * 1024
 const DEFAULT_MODEL = "google/gemini-3-pro-image"
+const GEMINI_MODEL = "gemini-3-pro-image"
+const GEMINI_ASPECT_RATIO = {
+  "1:1": "ASPECT_RATIO_ONE_BY_ONE",
+  "2:3": "ASPECT_RATIO_TWO_BY_THREE",
+  "3:2": "ASPECT_RATIO_THREE_BY_TWO",
+  "3:4": "ASPECT_RATIO_THREE_BY_FOUR",
+  "4:3": "ASPECT_RATIO_FOUR_BY_THREE",
+  "9:16": "ASPECT_RATIO_NINE_BY_SIXTEEN",
+  "16:9": "ASPECT_RATIO_SIXTEEN_BY_NINE",
+} as const
 
 function normalizedInputPath(value: string | undefined) {
   if (!value) return
@@ -50,6 +61,14 @@ type OpenRouterImage = {
     message?: {
       images?: unknown[]
       content?: unknown
+    }
+  }>
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        inlineData?: { data?: string; mimeType?: string }
+        inline_data?: { data?: string; mime_type?: string }
+      }>
     }
   }>
   error?:
@@ -114,6 +133,23 @@ function decodeImage(value: string) {
 }
 
 export function extractGeneratedImage(value: OpenRouterImage) {
+  const part = value.candidates
+    ?.flatMap((candidate) => candidate.content?.parts ?? [])
+    .find((item) => {
+      const data = item.inlineData?.data ?? item.inline_data?.data
+      return typeof data === "string" && data.length > 0
+    })
+  const inline =
+    part?.inlineData ??
+    (part?.inline_data ? { data: part.inline_data.data, mimeType: part.inline_data.mime_type } : undefined)
+  if (inline?.data) {
+    const mime = inline.mimeType ?? "image/png"
+    if (!/^image\/(?:png|jpeg|webp|gif)$/.test(mime)) {
+      throw new Error(`The image model returned an unsupported image format (${mime}).`)
+    }
+    return { mime, bytes: decodeImage(inline.data) }
+  }
+
   const generated = value.data?.find((item) => typeof item.b64_json === "string" && item.b64_json.length > 0)
   if (generated?.b64_json) {
     const mime = generated.media_type ?? "image/png"
@@ -260,7 +296,7 @@ function requestError(status: number, body: OpenRouterImage | undefined, raw: st
 
 export const GenerateImageTool = Tool.define("generate_image", {
   description:
-    "Generate or edit an image with Nano Banana through the user's connected OpenRouter key, falling back to funded OpenScience wallet Credits when managed spend is enabled. Saves the image directly in the connected workspace.",
+    "Generate or edit an image with the pinned Gemini 3 Pro Image model. Uses the user's Gemini key first, then OpenRouter, then a funded workspace Wallet fallback. Saves the image directly in the connected workspace.",
   parameters: z.object({
     prompt: z.string().trim().min(1).max(20_000).describe("Detailed description or editing instruction"),
     output_path: z
@@ -279,7 +315,6 @@ export const GenerateImageTool = Tool.define("generate_image", {
       .describe(
         "Existing regular image file to edit. Omit this field entirely when generating a new image; never use a directory, '.', /dev/null, or a blank placeholder.",
       ),
-    model: z.string().trim().min(1).max(300).default(DEFAULT_MODEL).describe("OpenRouter image model ID"),
     aspect_ratio: z
       .enum(["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"])
       .optional()
@@ -353,33 +388,86 @@ export const GenerateImageTool = Tool.define("generate_image", {
             : "image/png"
       : undefined
 
-    const provider = await Provider.getProvider("openrouter").catch(() => undefined)
-    const key = typeof provider?.options?.apiKey === "string" ? provider.options.apiKey : provider?.key
-    const base =
-      typeof provider?.options?.baseURL === "string" ? provider.options.baseURL.replace(/\/+$/, "") : undefined
-    if (!provider || !key || !base) {
+    const google = await Provider.getProvider("google").catch(() => undefined)
+    const openrouter = await Provider.getProvider("openrouter").catch(() => undefined)
+    const googleKey = typeof google?.options?.apiKey === "string" ? google.options.apiKey : google?.key
+    const openrouterKey = typeof openrouter?.options?.apiKey === "string" ? openrouter.options.apiKey : openrouter?.key
+    const openrouterBase =
+      typeof openrouter?.options?.baseURL === "string"
+        ? openrouter.options.baseURL.replace(/\/+$/, "")
+        : "https://openrouter.ai/api/v1"
+    const ambient = (key: string, names: string[]) => names.some((name) => Env.get(name) === key)
+    const candidates = [
+      ...(googleKey && !OpenScience.isManagedKeyValue(googleKey)
+        ? [
+            {
+              kind: "gemini" as const,
+              key: googleKey,
+              base:
+                typeof google?.options?.baseURL === "string"
+                  ? google.options.baseURL.replace(/\/+$/, "")
+                  : "https://generativelanguage.googleapis.com/v1beta",
+              label: "the connected Gemini key",
+              rank: ambient(googleKey, ["GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"]) ? 1 : 2,
+            },
+          ]
+        : []),
+      ...(openrouterKey && !OpenScience.isManagedKeyValue(openrouterKey)
+        ? [
+            {
+              kind: "openrouter" as const,
+              key: openrouterKey,
+              base: openrouterBase,
+              label: "the connected OpenRouter key",
+              rank: ambient(openrouterKey, ["OPENROUTER_API_KEY"]) ? 1 : 2,
+            },
+          ]
+        : []),
+      ...(openrouterKey && OpenScience.isManagedKeyValue(openrouterKey)
+        ? [
+            {
+              kind: "managed" as const,
+              key: openrouterKey,
+              base: openrouterBase,
+              label: "OpenScience wallet Credits",
+              rank: ambient(openrouterKey, ["OPENROUTER_API_KEY"]) ? 1 : 2,
+            },
+          ]
+        : []),
+      ...(Env.get("OPENSCIENCE_IMAGE_API_KEY") && Env.get("OPENSCIENCE_IMAGE_BASE_URL")
+        ? [
+            {
+              kind: "managed" as const,
+              key: Env.get("OPENSCIENCE_IMAGE_API_KEY")!,
+              base: Env.get("OPENSCIENCE_IMAGE_BASE_URL")!.replace(/\/+$/, ""),
+              label: "OpenScience wallet Credits",
+              rank: 0,
+            },
+          ]
+        : []),
+    ]
+    const route = candidates.sort((a, b) => b.rank - a.rank)[0]
+    if (!route) {
       throw new Error(
-        "Nano Banana is unavailable. Connect OpenRouter in Settings → Models, or choose Credits there and sign in with a funded Ace balance.",
+        "Nano Banana is unavailable. Connect Gemini or OpenRouter in Settings → Credentials, or sign in to use a funded workspace Wallet.",
       )
     }
+    if (route.kind === "gemini" && extension !== ".png") {
+      throw new Error("Gemini image generation returns PNG. Use an output_path ending in .png.")
+    }
 
-    // This tool calls fetch directly instead of going through Provider.getSDK(),
-    // so enforce the same credential/host invariant here. The effective token,
-    // not the spend-toggle label, determines whether this is a wallet request.
-    // Otherwise a custom/stale base URL could receive the scoped thk_* token.
-    const managed = OpenScience.isManagedKeyValue(key)
-    const proxy = Provider.isAtlasProxyBaseURL(base)
-    if (managed && !proxy) {
+    const managed = route.kind === "managed"
+    if (managed && (!OpenScience.isManagedKeyValue(route.key) || !Provider.isAtlasProxyBaseURL(route.base))) {
       throw new Error(
         "OpenScience refused to send the wallet credential outside its managed image proxy. Run openscience sync and retry.",
       )
     }
-    if (!managed && proxy) {
+    if (!managed && Provider.isAtlasProxyBaseURL(route.base)) {
       throw new Error(
-        "OpenScience refused to send your connected OpenRouter key to the managed wallet proxy. Reconnect OpenRouter and retry.",
+        "OpenScience refused to send your connected provider key to the managed wallet proxy. Reconnect the credential and retry.",
       )
     }
-    const funding = managed ? await OpenScience.managedRequestSnapshot(key) : undefined
+    const funding = managed ? await OpenScience.managedRequestSnapshot(route.key) : undefined
     if (managed) {
       const balance = await OpenScience.getBalance(funding).catch(() => null)
       if (balance !== null && balance <= 0) {
@@ -392,13 +480,13 @@ export const GenerateImageTool = Tool.define("generate_image", {
 
     await ctx.ask({
       permission: "generate_image",
-      patterns: [params.model],
+      patterns: [DEFAULT_MODEL],
       always: ["*"],
       metadata: {
-        model: params.model,
+        model: DEFAULT_MODEL,
         output,
         input: source,
-        route: managed ? "wallet" : "byok",
+        route: route.kind,
       },
     })
     await ctx.ask({
@@ -409,28 +497,36 @@ export const GenerateImageTool = Tool.define("generate_image", {
     })
 
     const format = extension === ".jpg" ? "jpeg" : extension.slice(1)
-    const headers = {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://syntheticsciences.ai",
-      "X-Title": "OpenScience",
-      ...(funding ? OpenScience.fundingHeaders(funding) : {}),
-    }
-    const request = async (endpoint: string, payload: Record<string, unknown>) => {
+    const headers =
+      route.kind === "gemini"
+        ? { "x-goog-api-key": route.key, "Content-Type": "application/json" }
+        : {
+            Authorization: `Bearer ${route.key}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://syntheticsciences.ai",
+            "X-Title": "OpenScience",
+            ...(funding ? OpenScience.fundingHeaders(funding) : {}),
+          }
+    const request = async (url: string, payload: Record<string, unknown>) => {
       const text = JSON.stringify(payload)
       const idempotency = managed
         ? Provider.managedIdempotencyKey({
-            endpoint: `${base}/${endpoint}`,
+            endpoint: url,
             body: text,
             sessionID: ctx.sessionID,
             messageID: ctx.messageID,
             operation: "generate-image",
           })
         : undefined
-      const response = await fetch(`${base}/${endpoint}`, {
+      const requestHeaders = new Headers()
+      for (const [name, value] of Object.entries(headers)) {
+        if (value) requestHeaders.set(name, value)
+      }
+      if (idempotency) requestHeaders.set("Idempotency-Key", idempotency)
+      const response = await fetch(url, {
         method: "POST",
         signal: AbortSignal.any([ctx.abort, AbortSignal.timeout(120_000)]),
-        headers: { ...headers, ...(idempotency ? { "Idempotency-Key": idempotency } : {}) },
+        headers: requestHeaders,
         body: text,
       })
       if (funding) await OpenScience.validateFundingResponse(response, funding)
@@ -446,23 +542,42 @@ export const GenerateImageTool = Tool.define("generate_image", {
       })()
       return { response, raw, body }
     }
-    const direct = await request("images", {
-      model: params.model,
-      prompt: params.prompt,
-      n: 1,
-      output_format: format,
-      ...(params.aspect_ratio ? { aspect_ratio: params.aspect_ratio } : {}),
-      ...(input
-        ? {
-            input_references: [
+    const direct =
+      route.kind === "gemini"
+        ? await request(`${route.base}/models/${GEMINI_MODEL}:generateContent`, {
+            contents: [
               {
-                type: "image_url",
-                image_url: { url: `data:${inputMime};base64,${input.bytes.toString("base64")}` },
+                role: "user",
+                parts: [
+                  { text: params.prompt },
+                  ...(input ? [{ inlineData: { mimeType: inputMime, data: input.bytes.toString("base64") } }] : []),
+                ],
               },
             ],
-          }
-        : {}),
-    })
+            generationConfig: {
+              responseModalities: ["IMAGE"],
+              ...(params.aspect_ratio
+                ? { responseFormat: { image: { aspectRatio: GEMINI_ASPECT_RATIO[params.aspect_ratio] } } }
+                : {}),
+            },
+          })
+        : await request(`${route.base}/images`, {
+            model: DEFAULT_MODEL,
+            prompt: params.prompt,
+            n: 1,
+            output_format: format,
+            ...(params.aspect_ratio ? { aspect_ratio: params.aspect_ratio } : {}),
+            ...(input
+              ? {
+                  input_references: [
+                    {
+                      type: "image_url",
+                      image_url: { url: `data:${inputMime};base64,${input.bytes.toString("base64")}` },
+                    },
+                  ],
+                }
+              : {}),
+          })
     if (!direct.response.ok) throw requestError(direct.response.status, direct.body, direct.raw, managed)
     if (!direct.body) throw new Error("Nano Banana returned an unreadable response.")
     const approvedHosts = new Set<string>()
@@ -494,13 +609,13 @@ export const GenerateImageTool = Tool.define("generate_image", {
     })
     return {
       title: path.relative(directory, output),
-      output: `Generated ${path.basename(output)} with ${params.model} via ${managed ? "OpenScience wallet Credits" : "the connected OpenRouter key"}.`,
+      output: `Generated ${path.basename(output)} with ${DEFAULT_MODEL} via ${route.label}.`,
       metadata: {
         filepath: output,
         mime: image.mime,
         size: image.bytes.byteLength,
-        model: params.model,
-        route: managed ? "wallet" : "byok",
+        model: DEFAULT_MODEL,
+        route: route.kind,
         attachment: attachments.length ? "inline" : "artifact_only",
         artifact: {
           kind: "image",

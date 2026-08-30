@@ -1886,6 +1886,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const agent = currentAgent.name
     const variant = local.model.variant.prompt()
     const tier = local.model.tier.prompt()
+    const contextLimit = local.model.context.prompt()
 
     const restoreBootstrap = () => {
       setSubmitting(false)
@@ -2025,6 +2026,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         delegationSettings: delegationConfig,
         variant,
         tier,
+        context: contextLimit,
         parts: images.map((attachment) => ({
           id: Identifier.ascending("part"),
           type: "file" as const,
@@ -2065,6 +2067,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           delegationSettings: delegationConfig,
           variant,
           tier,
+          context: contextLimit,
           parts: images.map((attachment) => ({
             id: Identifier.ascending("part"),
             type: "file" as const,
@@ -2413,6 +2416,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         delegationSettings: delegationConfig,
         variant,
         tier,
+        context: contextLimit,
       }
       await client.session.prompt(request)
     }
@@ -2777,7 +2781,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onKeyDown={handleKeyDown}
             classList={{
               "select-text": true,
-              "focus:outline-none whitespace-pre-wrap": true,
+              "focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-border-strong focus-visible:outline-offset-2 whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
               "[&_[data-type=conversation]]:text-syntax-keyword": true,

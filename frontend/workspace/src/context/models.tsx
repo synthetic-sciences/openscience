@@ -31,6 +31,7 @@ type Store = {
   pinned?: ModelKey[]
   variant?: Record<string, string | undefined>
   tier?: Record<string, string | undefined>
+  context?: Record<string, number | undefined>
 }
 
 export const composerModelPreferenceKey = (model: ModelKey) => logicalModelKey(model.providerID, model.modelID)
@@ -69,6 +70,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
         pinned: [],
         variant: {},
         tier: {},
+        context: {},
       }),
     )
 
@@ -197,6 +199,17 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       setStore("tier", key, value)
     }
 
+    const getContext = (model: ModelKey) => store.context?.[variantKey(model)]
+
+    const setContext = (model: ModelKey, value: number | undefined) => {
+      const key = variantKey(model)
+      if (!store.context) {
+        setStore("context", { [key]: value })
+        return
+      }
+      setStore("context", key, value)
+    }
+
     return {
       ready,
       list,
@@ -219,6 +232,10 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       tier: {
         get: getTier,
         set: setTier,
+      },
+      context: {
+        get: getContext,
+        set: setContext,
       },
     }
   },

@@ -53,27 +53,26 @@ describe("generate_image response parsing", () => {
           const workspace = await SessionFilesystem.workspace(session.id)
           const asks: Parameters<Tool.Context["ask"]>[0][] = []
           const tool = await GenerateImageTool.init()
-          const result = await tool.execute(
-            {
-              prompt: "A precise monochrome benchmark schematic",
-              output_path: "figures/benchmark.png",
-              input_path: "/dev/null",
-              model: "google/gemini-3-pro-image",
-              aspect_ratio: "16:9",
+          const input = tool.parameters.parse({
+            prompt: "A precise monochrome benchmark schematic",
+            output_path: "figures/benchmark.png",
+            input_path: "/dev/null",
+            model: "meta-llama/llama-3.3-70b-instruct",
+            aspect_ratio: "16:9",
+          })
+          expect(input).not.toHaveProperty("model")
+          const result = await tool.execute(input, {
+            sessionID: session.id,
+            messageID: "msg_generate_image",
+            callID: "call_generate_image",
+            agent: "research",
+            abort: new AbortController().signal,
+            messages: [],
+            metadata() {},
+            async ask(input) {
+              asks.push(input)
             },
-            {
-              sessionID: session.id,
-              messageID: "msg_generate_image",
-              callID: "call_generate_image",
-              agent: "research",
-              abort: new AbortController().signal,
-              messages: [],
-              metadata() {},
-              async ask(input) {
-                asks.push(input)
-              },
-            },
-          )
+          })
 
           expect(requests).toHaveLength(1)
           expect(requests[0]).toMatchObject({
@@ -93,7 +92,7 @@ describe("generate_image response parsing", () => {
           )
           expect(result).toMatchObject({
             title: "figures/benchmark.png",
-            metadata: { route: "byok", mime: "image/png", size: image.byteLength, attachment: "inline" },
+            metadata: { route: "openrouter", mime: "image/png", size: image.byteLength, attachment: "inline" },
           })
           expect(result.attachments).toHaveLength(1)
 
@@ -102,7 +101,6 @@ describe("generate_image response parsing", () => {
               prompt: "A second precise monochrome benchmark schematic",
               output_path: "figures/benchmark-directory-placeholder.png",
               input_path: ".",
-              model: "google/gemini-3-pro-image",
             },
             {
               sessionID: session.id,
@@ -119,7 +117,7 @@ describe("generate_image response parsing", () => {
           )
           expect(requests).toHaveLength(2)
           expect(requests[1]?.body).not.toHaveProperty("input_references")
-          expect(directoryPlaceholder.metadata).toMatchObject({ mime: "image/png", route: "byok" })
+          expect(directoryPlaceholder.metadata).toMatchObject({ mime: "image/png", route: "openrouter" })
 
           await Bun.write(path.join(workspace, "input.png"), image)
           await tool.execute(
@@ -127,7 +125,6 @@ describe("generate_image response parsing", () => {
               prompt: "Preserve the source and improve its contrast",
               output_path: "figures/benchmark-edited.png",
               input_path: "input.png",
-              model: "google/gemini-3-pro-image",
             },
             {
               sessionID: session.id,
@@ -147,6 +144,100 @@ describe("generate_image response parsing", () => {
             input_references: [
               { type: "image_url", image_url: { url: expect.stringContaining("data:image/png;base64,") } },
             ],
+          })
+        },
+      })
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("prefers a connected Gemini key and pins the stable image-only model", async () => {
+    const image = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    )
+    const requests: Array<{ url: string; key: string | null; body: Record<string, unknown> }> = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        requests.push({
+          url: new URL(request.url).pathname,
+          key: request.headers.get("x-goog-api-key"),
+          body: (await request.json()) as Record<string, unknown>,
+        })
+        return Response.json({
+          candidates: [
+            { content: { parts: [{ inlineData: { mimeType: "image/png", data: image.toString("base64") } }] } },
+          ],
+        })
+      },
+    })
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: {
+          provider: {
+            google: {
+              options: {
+                apiKey: "gemini-local-image-route",
+                baseURL: `http://127.0.0.1:${server.port}/v1beta`,
+              },
+            },
+          },
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => Provider.invalidate(),
+        fn: async () => {
+          const session = await executionSession()
+          const tool = await GenerateImageTool.init()
+          const result = await tool.execute(
+            { prompt: "A precise benchmark diagram", output_path: "gemini.png" },
+            {
+              sessionID: session.id,
+              messageID: "msg_gemini_image",
+              callID: "call_gemini_image",
+              agent: "research",
+              abort: new AbortController().signal,
+              messages: [],
+              metadata() {},
+              async ask() {},
+            },
+          )
+          expect(requests).toHaveLength(1)
+          expect(requests[0]).toMatchObject({
+            url: "/v1beta/models/gemini-3-pro-image:generateContent",
+            key: "gemini-local-image-route",
+            body: {
+              contents: [{ role: "user", parts: [{ text: "A precise benchmark diagram" }] }],
+              generationConfig: { responseModalities: ["IMAGE"] },
+            },
+          })
+          expect(result.metadata).toMatchObject({
+            model: "google/gemini-3-pro-image",
+            route: "gemini",
+          })
+
+          await tool.execute(
+            { prompt: "A wide benchmark diagram", output_path: "gemini-wide.png", aspect_ratio: "16:9" },
+            {
+              sessionID: session.id,
+              messageID: "msg_gemini_wide_image",
+              callID: "call_gemini_wide_image",
+              agent: "research",
+              abort: new AbortController().signal,
+              messages: [],
+              metadata() {},
+              async ask() {},
+            },
+          )
+          expect(requests[1]?.body).toMatchObject({
+            generationConfig: {
+              responseModalities: ["IMAGE"],
+              responseFormat: { image: { aspectRatio: "ASPECT_RATIO_SIXTEEN_BY_NINE" } },
+            },
           })
         },
       })
@@ -177,19 +268,15 @@ describe("generate_image response parsing", () => {
           },
         }
 
-        await expect(
-          tool.execute(
-            { prompt: "figure", output_path: "/tmp/not-an-image.txt", model: "google/gemini-3-pro-image" },
-            ctx,
-          ),
-        ).rejects.toThrow("output_path must end in")
+        await expect(tool.execute({ prompt: "figure", output_path: "/tmp/not-an-image.txt" }, ctx)).rejects.toThrow(
+          "output_path must end in",
+        )
         await expect(
           tool.execute(
             {
               prompt: "figure",
               output_path: "figure.png",
               input_path: "/tmp/not-an-image",
-              model: "google/gemini-3-pro-image",
             },
             ctx,
           ),
@@ -233,7 +320,6 @@ describe("generate_image response parsing", () => {
               {
                 prompt: "A benchmark schematic",
                 output_path: "figure.png",
-                model: "google/gemini-3-pro-image",
               },
               {
                 sessionID: session.id,
@@ -268,7 +354,6 @@ describe("generate_image response parsing", () => {
             {
               prompt: "A benchmark schematic",
               output_path: "figure.gif",
-              model: "google/gemini-3-pro-image",
             },
             {
               sessionID: session.id,

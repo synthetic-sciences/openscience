@@ -296,6 +296,7 @@ export function groupModelRoutes<T extends CatalogModel>(input: {
 }
 
 export function isChatModel(model: CatalogModel): boolean {
+  if (/(^|\/)gemini-3-pro-image(?:-preview)?$/i.test(model.id)) return false
   if (/(^|[/._-])(?:text-)?embeddings?([/._-]|$)/i.test(model.id)) return false
   if (/(^|[/._-])embed([/._-]|$)/i.test(model.id)) return false
   const output = model.capabilities?.output

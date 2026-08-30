@@ -318,6 +318,35 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return promptTier(this.current(), Object.keys(m.modes ?? {}))
           },
         },
+        context: {
+          list() {
+            const m = current()
+            if (!m) return []
+            const thresholds = (m.cost.tiers ?? []).map((tier) => tier.threshold)
+            const defaults = m.limit.context > 272_000 ? [272_000] : []
+            return [...new Set([...thresholds, ...defaults, m.limit.context])]
+              .filter((value) => value > 0 && value <= m.limit.context)
+              .sort((a, b) => a - b)
+          },
+          current() {
+            const m = current()
+            if (!m) return 0
+            const value = models.context.get({ providerID: m.provider.id, modelID: m.id })
+            return value && this.list().includes(value) ? value : m.limit.context
+          },
+          set(value: number | undefined) {
+            const m = current()
+            if (!m) return
+            const selected = value && this.list().includes(value) && value < m.limit.context ? value : undefined
+            models.context.set({ providerID: m.provider.id, modelID: m.id }, selected)
+          },
+          prompt() {
+            const m = current()
+            if (!m) return undefined
+            const value = this.current()
+            return value < m.limit.context ? value : undefined
+          },
+        },
       }
     })()
 

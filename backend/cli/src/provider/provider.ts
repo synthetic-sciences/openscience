@@ -1395,6 +1395,16 @@ export namespace Provider {
           read: z.number(),
           write: z.number(),
         }),
+        tiers: z
+          .array(
+            z.object({
+              input: z.number(),
+              output: z.number(),
+              cache: z.object({ read: z.number(), write: z.number() }),
+              threshold: z.number().positive(),
+            }),
+          )
+          .optional(),
         experimentalOver200K: z
           .object({
             input: z.number(),
@@ -1512,6 +1522,9 @@ export namespace Provider {
       },
       release_date: "",
       variants: {},
+      modes: {
+        fast: { provider: { body: { provider: { sort: "throughput" } } } },
+      },
     }
     m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
     return m
@@ -1565,28 +1578,13 @@ export namespace Provider {
 
   function modelModes(provider: ModelsDev.Provider, model: ModelsDev.Model): Model["modes"] | undefined {
     const direct = directModes(provider.id, model.id, model.experimental) ?? {}
-    // OpenRouter Nitro is a broad throughput-routing preference, not a
-    // model-specific Fast capability. Only advertise Fast when the catalog
-    // contains a dedicated immutable sibling that the request can select.
-    const openrouter: NonNullable<Model["modes"]> = {}
-    if (provider.id === "openrouter" && !/-fast$/.test(model.id)) {
-      const route = provider.models[`${model.id}-fast`]
-      if (route && route.status !== "deprecated") {
-        openrouter.fast = {
-          model: route.id,
-          cost: route.cost
-            ? {
-                input: route.cost.input,
-                output: route.cost.output,
-                cache: {
-                  read: route.cost.cache_read ?? 0,
-                  write: route.cost.cache_write ?? 0,
-                },
-              }
-            : undefined,
-        }
-      }
-    }
+    // OpenRouter's Fast mode is a routing preference: sort eligible endpoints
+    // by observed throughput. The chosen endpoint can have a different rate,
+    // so managed settlement remains provider-reported usage.cost.
+    const openrouter: NonNullable<Model["modes"]> =
+      provider.id === "openrouter" && !/-fast$/.test(model.id)
+        ? { fast: { provider: { body: { provider: { sort: "throughput" } } } } }
+        : {}
     const result = { ...direct, ...openrouter }
     if (Object.keys(result).length === 0) return undefined
     return result
@@ -1632,6 +1630,15 @@ export namespace Provider {
           read: cacheRead,
           write: model.cost?.cache_write ?? 0,
         },
+        tiers: model.cost?.tiers?.map((tier) => ({
+          input: tier.input,
+          output: tier.output,
+          cache: {
+            read: tier.cache_read ?? 0,
+            write: tier.cache_write ?? 0,
+          },
+          threshold: tier.tier.size,
+        })),
         experimentalOver200K: model.cost?.context_over_200k
           ? {
               cache: {

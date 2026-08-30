@@ -30033,6 +30033,11 @@
                   "tier": {
                     "type": "string"
                   },
+                  "context": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -30468,6 +30473,11 @@
                   "tier": {
                     "type": "string"
                   },
+                  "context": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -30648,6 +30658,11 @@
                   },
                   "tier": {
                     "type": "string"
+                  },
+                  "context": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
                   },
                   "parts": {
                     "type": "array",
@@ -53373,6 +53388,11 @@
           "tier": {
             "type": "string"
           },
+          "context": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
           "inference": {
             "type": "object",
             "properties": {
@@ -57259,6 +57279,48 @@
                     "cache_write": {
                       "type": "number"
                     },
+                    "tiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "input": {
+                            "type": "number"
+                          },
+                          "output": {
+                            "type": "number"
+                          },
+                          "cache_read": {
+                            "type": "number"
+                          },
+                          "cache_write": {
+                            "type": "number"
+                          },
+                          "tier": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "context"
+                              },
+                              "size": {
+                                "type": "number",
+                                "exclusiveMinimum": 0
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "size"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "input",
+                          "output",
+                          "tier"
+                        ]
+                      }
+                    },
                     "context_over_200k": {
                       "type": "object",
                       "properties": {
@@ -58480,6 +58542,45 @@
                   "read",
                   "write"
                 ]
+              },
+              "tiers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "input": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "number"
+                    },
+                    "cache": {
+                      "type": "object",
+                      "properties": {
+                        "read": {
+                          "type": "number"
+                        },
+                        "write": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "read",
+                        "write"
+                      ]
+                    },
+                    "threshold": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "input",
+                    "output",
+                    "cache",
+                    "threshold"
+                  ]
+                }
               },
               "experimentalOver200K": {
                 "type": "object",

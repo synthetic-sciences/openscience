@@ -186,11 +186,15 @@ test("current frontier models are routable from the seeded catalog", async () =>
         service_tier: "priority",
       })
       expect(Object.keys(providers["openai"].models["gpt-5.6-sol"].modes ?? {})).toEqual(["fast"])
-      expect(providers["openrouter"].models["openai/gpt-5.6-sol"].modes?.fast).toBeUndefined()
-      expect(providers["openrouter"].models["x-ai/grok-4.5"].modes?.fast).toBeUndefined()
-      expect(providers["openrouter"].models["anthropic/claude-opus-5"].modes?.fast?.model).toBe(
-        "anthropic/claude-opus-5-fast",
-      )
+      expect(providers["openrouter"].models["openai/gpt-5.6-sol"].modes?.fast?.provider?.body).toEqual({
+        provider: { sort: "throughput" },
+      })
+      expect(providers["openrouter"].models["x-ai/grok-4.5"].modes?.fast?.provider?.body).toEqual({
+        provider: { sort: "throughput" },
+      })
+      expect(providers["openrouter"].models["anthropic/claude-opus-5"].modes?.fast?.provider?.body).toEqual({
+        provider: { sort: "throughput" },
+      })
       expect(providers["xai"].models["grok-4.5"].modes?.fast).toBeUndefined()
       expect(providers["openrouter"].models["openai/gpt-5.6-sol"].modes?.pro).toBeUndefined()
       expect(providers["openrouter"].models["openai/gpt-5.6-sol-pro"]).toBeDefined()

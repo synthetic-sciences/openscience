@@ -108,7 +108,7 @@ export { inferenceSource, inferenceSourceLabel, type InferenceSource } from "@/c
 
 type ModelOptionListProps = {
   id: string
-  kind: "effort" | "route"
+  kind: "effort" | "route" | "context"
   title: string
   current: string
   options: Array<{ id: string; label: string }>
@@ -199,7 +199,7 @@ const ModelPopoverSurface: Component<ModelPopoverSurfaceProps> = (props) => {
         data-model-settings-popover
         data-model-popover-kind={props.kind}
         data-model-settings-view={props.view}
-        class="z-50 outline-none"
+        class="z-50 outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-border-strong focus-visible:outline-offset-2"
         onKeyDown={props.onKeyDown}
         onOpenAutoFocus={(event) => {
           if (!props.initialFocus) return
@@ -252,8 +252,10 @@ type ModelEffortPanelProps = {
   current: string
   options: Array<{ id: string; label: string }>
   fast?: { active: boolean }
+  context?: { current: string; options: Array<{ id: string; label: string }> }
   onEffortSelect: (id: string) => void
   onTierSelect: (id: "standard" | "fast") => void
+  onContextSelect?: (id: string) => void
 }
 
 export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => (
@@ -279,6 +281,21 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => (
               <span class="model-settings-fast-label">Fast mode</span>
             </Switch>
           </div>
+        </section>
+      )}
+    </Show>
+    <Show when={props.context && props.context.options.length > 1 ? props.context : undefined}>
+      {(context) => (
+        <section class="model-settings-option-section" aria-label="Context window">
+          <div class="model-settings-heading">Context window</div>
+          <ModelOptionList
+            id="model-context-options"
+            kind="context"
+            title="Context window"
+            current={context().current}
+            options={context().options}
+            onSelect={(id) => props.onContextSelect?.(id)}
+          />
         </section>
       )}
     </Show>
@@ -336,7 +353,9 @@ export const ModelEffortPopover: Component<ModelEffortPopoverProps> = (props) =>
         initialFocus={
           props.options.length > 0
             ? '[data-model-option="effort"][aria-checked="true"]'
-            : '[data-model-fast-toggle] [data-slot="switch-input"]'
+            : props.fast
+              ? '[data-model-fast-toggle] [data-slot="switch-input"]'
+              : '[data-model-option="context"][aria-checked="true"]'
         }
         contentRef={(element) => (content = element)}
       >
@@ -344,8 +363,10 @@ export const ModelEffortPopover: Component<ModelEffortPopoverProps> = (props) =>
           current={props.current}
           options={props.options}
           fast={props.fast}
+          context={props.context}
           onEffortSelect={props.onEffortSelect}
           onTierSelect={props.onTierSelect}
+          onContextSelect={props.onContextSelect}
         />
       </ModelPopoverSurface>
     </Kobalte>
@@ -889,12 +910,20 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
           </Show>
         </ModelPopoverSurface>
       </Kobalte>
-      <Show when={props.trigger !== "icon" && (control().effort || fast())}>
+      <Show when={props.trigger !== "icon" && (control().effort || fast() || local.model.context.list().length > 1)}>
         <ModelEffortPopover
           value={control().effort?.value ?? "Fast"}
           current={control().effort?.current.id ?? "standard"}
           options={control().effort?.options ?? []}
           fast={fast()}
+          context={{
+            current: String(local.model.context.current()),
+            options: local.model.context.list().map((value) => ({
+              id: String(value),
+              label:
+                value === current()?.limit.context ? `Full · ${modelContext(value)}` : `${modelContext(value)} cap`,
+            })),
+          }}
           open={effortOpen()}
           onOpenChange={(next) => {
             setEffortOpen(next)
@@ -905,6 +934,7 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
           modal={mobile()}
           onEffortSelect={(id) => local.model.variant.set(id)}
           onTierSelect={(id) => local.model.tier.set(id)}
+          onContextSelect={(id) => local.model.context.set(Number(id))}
         />
       </Show>
     </div>

@@ -282,6 +282,7 @@ export namespace SessionPrompt {
     system: z.string().optional(),
     variant: z.string().optional(),
     tier: z.string().optional(),
+    context: z.number().int().positive().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -1483,7 +1484,19 @@ export namespace SessionPrompt {
         ...(codex && !minimal ? [SystemPrompt.instructions(route.direct, route.inspection)] : []),
       ]
       const tier = ProviderTransform.tier(model, lastUser.tier)
-      const window = tier.model ? await Provider.getModel(model.providerID, tier.model) : model
+      const routeModel = tier.model ? await Provider.getModel(model.providerID, tier.model) : model
+      const requestedContext = lastUser.context
+      const window =
+        requestedContext && requestedContext < routeModel.limit.context
+          ? {
+              ...routeModel,
+              limit: {
+                ...routeModel.limit,
+                context: requestedContext,
+                input: routeModel.limit.input ? Math.min(routeModel.limit.input, requestedContext) : requestedContext,
+              },
+            }
+          : routeModel
       const preflight = await contextPreflight({
         messages: sessionMessages,
         current: lastUser,
@@ -2237,6 +2250,7 @@ export namespace SessionPrompt {
       system: input.system,
       variant: input.variant,
       tier: input.tier,
+      context: input.context,
       inference: await Inference.resolve(model.providerID, input.variant),
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
@@ -3097,6 +3111,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     delegationSettings: MessageV2.DelegationSettings.optional(),
     variant: z.string().optional(),
     tier: z.string().optional(),
+    context: z.number().int().positive().optional(),
     parts: z
       .array(
         z.discriminatedUnion("type", [
@@ -3587,6 +3602,10 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       delegationSettings: input.delegationSettings ?? (await lastDelegationSettings(input.sessionID)),
       variant: input.variant,
       tier: modelTier(input.tier, selectedModel, userModel),
+      context:
+        selectedModel.providerID === userModel.providerID && selectedModel.modelID === userModel.modelID
+          ? input.context
+          : undefined,
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {
