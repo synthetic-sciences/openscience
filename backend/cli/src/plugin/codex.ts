@@ -3,45 +3,9 @@ import { Log } from "../util/log"
 import { escapeHtml, htmlResponse } from "../util/html"
 import { Installation } from "../installation"
 import { OAUTH_DUMMY_KEY } from "../auth"
-import { OpenScience } from "../openscience"
-import { managedApiBase } from "../endpoints"
 import os from "os"
 
 const log = Log.create({ service: "plugin.codex" })
-
-export async function pushTokensToBackend(
-  atlasBaseUrl: string,
-  thkToken: string,
-  payload: {
-    access_token: string
-    refresh_token: string
-    expires_in: number
-    account_id?: string
-    id_token_claims?: Record<string, unknown>
-  },
-): Promise<void> {
-  try {
-    const res = await fetch(`${atlasBaseUrl}/api/keys/openai-codex`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${thkToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      // Bound the push: the browser OAuth has already succeeded and the login
-      // callback awaits this, so a hung atlas backend would otherwise leave
-      // `keys signin` spinning on "Waiting for authorization…" indefinitely.
-      signal: AbortSignal.timeout(OAUTH_HTTP_TIMEOUT_MS),
-    })
-    if (!res.ok) {
-      log.warn("codex backend push failed", { status: res.status })
-      return
-    }
-    log.info("codex tokens pushed to atlas backend")
-  } catch (e) {
-    log.warn("codex backend push errored", { error: String(e) })
-  }
-}
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
@@ -701,11 +665,6 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
 
             const callbackPromise = waitForOAuthCallback(pkce, state)
 
-            // Fetch the Atlas session once at authorize time so the callback
-            // closure can reuse it without a second async call.
-            const session = await OpenScience.getSession?.()
-            const thkToken = session?.api_key
-
             return {
               url: authUrl,
               instructions: "Complete authorization in your browser. This window will close automatically.",
@@ -718,28 +677,6 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                 try {
                   const tokens = await callbackPromise
                   const accountId = extractAccountId(tokens)
-
-                  // Fire-and-forget: push tokens to atlas backend so the
-                  // dashboard + managed-mode proxy can use them. Local login
-                  // succeeds regardless of whether this call succeeds.
-                  const atlasBase = managedApiBase()
-                  if (thkToken) {
-                    await pushTokensToBackend(atlasBase, thkToken, {
-                      access_token: tokens.access_token,
-                      refresh_token: tokens.refresh_token,
-                      expires_in: tokens.expires_in ?? 3600,
-                      account_id: accountId,
-                      id_token_claims: tokens.id_token
-                        ? (parseJwtClaims(tokens.id_token) as Record<string, unknown> | undefined)
-                        : undefined,
-                    })
-                    // Re-sync after backend now knows about the new codex
-                    // credential, so `openai-codex` shows up in the local
-                    // provider list without a separate `openscience sync`.
-                    await OpenScience.syncServices?.().catch((e: unknown) => {
-                      log.warn("post-codex-login sync failed", { error: String(e) })
-                    })
-                  }
 
                   return {
                     type: "success" as const,
@@ -777,11 +714,6 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               interval: string
             }
             const interval = Math.max(parseInt(deviceData.interval) || 5, 1) * 1000
-
-            // Fetch the Atlas session once at authorize time so the polling
-            // callback closure can reuse it without a repeated async call.
-            const session = await OpenScience.getSession?.()
-            const thkToken = session?.api_key
 
             return {
               url: `${ISSUER}/codex/device`,
@@ -839,23 +771,6 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
 
                     const tokens: TokenResponse = await tokenResponse.json()
                     const accountId = extractAccountId(tokens)
-
-                    // Fire-and-forget: push tokens to atlas backend.
-                    const atlasBase = managedApiBase()
-                    if (thkToken) {
-                      await pushTokensToBackend(atlasBase, thkToken, {
-                        access_token: tokens.access_token,
-                        refresh_token: tokens.refresh_token,
-                        expires_in: tokens.expires_in ?? 3600,
-                        account_id: accountId,
-                        id_token_claims: tokens.id_token
-                          ? (parseJwtClaims(tokens.id_token) as Record<string, unknown> | undefined)
-                          : undefined,
-                      })
-                      await OpenScience.syncServices?.().catch((e: unknown) => {
-                        log.warn("post-codex-login sync failed", { error: String(e) })
-                      })
-                    }
 
                     return {
                       type: "success" as const,

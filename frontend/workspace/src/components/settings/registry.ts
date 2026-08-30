@@ -141,8 +141,6 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     component: lazy(() => import("./Credentials")),
   },
   // ── App ──
-  // Managed inference and its wallet live in Models. Usage stays hidden until
-  // the product can report it reliably; General links to account billing.
   { id: "storage", title: "Storage", icon: "folder", section: "app", component: lazy(() => import("./Storage")) },
   {
     id: "general",

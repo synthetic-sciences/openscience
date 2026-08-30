@@ -212,52 +212,11 @@ export namespace Config {
       }
     }
 
-    // Load synced config from dashboard (below the enterprise-managed layer).
-    // Written by OpenScience.syncServices() to the user's XDG config dir. Tolerate
-    // a corrupt file: it must never brick config load (and thus the whole CLI).
-    // Atomic writes prevent torn files going forward; this covers external
-    // corruption or a file written by an older, non-atomic version.
-    const syncedConfig = path.join(Global.Path.config, "openscience-synced.json")
-    try {
-      // Atlas writes model-lockdown config (enabled_providers, per-provider
-      // whitelists, default model) for the hosted web agents. On the CLI the
-      // managed route is OpenRouter. Honour that managed catalog and the
-      // recommended model; drop the rest
-      // UNCONDITIONALLY — the
-      // synced enabled_providers must never hide a locally-configured BYOK
-      // provider, regardless of the billing toggle. An open-source CLI shouldn't
-      // let a dashboard allowlist govern the user's own keys; enterprise lockdown
-      // stays available via admin-controlled managed config + disabled_providers.
-      // (A user's OWN enabled_providers in their config file still gates normally.)
-      const synced = await loadFile(syncedConfig)
-      const scoped: Partial<Config.Info> = {}
-      const managedProviders = {
-        ...(synced?.provider?.openrouter ? { openrouter: synced.provider.openrouter } : {}),
-      }
-      if (Object.keys(managedProviders).length) scoped.provider = managedProviders
-      if (typeof synced?.model === "string" && synced.model.startsWith("openrouter/")) scoped.model = synced.model
-      // Merge synced UNDERNEATH the user's own config, not on top: it is the
-      // server's *recommendation* (default model, OpenRouter managed catalog),
-      // not a lockdown, so the user's config must win — otherwise their chosen
-      // default model and custom OpenRouter models are reverted on every sync
-      // (#159). mergeConfigConcatArrays(base, override) lets `override` win, so
-      // pass the user config (result) as the override. Model records still union,
-      // so server-whitelisted models the user didn't declare stay available.
-      // Enterprise lockdown is unaffected: the managed /etc layer merges LAST
-      // below and still wins over both.
-      result = mergeConfigConcatArrays(scoped as Config.Info, result)
-      execution = mergeConfigConcatArrays(scoped as Config.Info, execution)
-    } catch {
-      // treat an unreadable synced config as absent
-    }
-
     // Load managed config files LAST (highest priority) - enterprise admin-controlled.
     // Kept separate from directories array to avoid write operations when installing plugins
     // which would fail on system directories requiring elevated permissions
     // This way it only loads config file and not skills/plugins/commands.
-    // Must merge AFTER the dashboard-synced config: an admin policy in
-    // /etc (or /Library/...) must win over a per-user dashboard value, otherwise
-    // the synced config silently overrode the admin's "overrides all" contract.
+    // System policy remains the final authority on managed installations.
     if (existsSync(managedConfigDir)) {
       for (const file of CONFIG_FILES) {
         const managed = await loadFile(path.join(managedConfigDir, file))

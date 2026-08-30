@@ -4,20 +4,16 @@ import fs from "fs/promises"
 import type { Argv } from "yargs"
 import { cmd } from "./cmd/cmd"
 import { UI } from "./ui"
-import { OpenScience } from "../openscience"
 import { Auth } from "../auth"
 import { Config } from "../config/config"
 import { Provider } from "../provider/provider"
 import { Sandbox } from "../sandbox/sandbox"
 import { Global } from "../global"
-import { openUrl } from "../util/open-url"
-import { runAtlasLogin } from "./cmd/connect"
 import { AuthLoginCommand } from "./cmd/auth"
 import { runLocalModelSetup } from "./cmd/local"
 import { Installation } from "../installation"
 import { webVersion } from "../web/assets"
 import { Instance } from "../project/instance"
-import { BILLING_URL } from "../endpoints"
 import { BYOK_LLM_ENV_KEYS } from "../openscience/synced-env-policy"
 
 const MARKER = path.join(Global.Path.state, "onboarded")
@@ -26,11 +22,14 @@ async function currentConfig() {
   return Instance.provide({ directory: process.cwd(), fn: () => Config.get() })
 }
 
-/** Authentication is the only first-run completion condition. Provider keys
- * and local models remain usable routes, but they do not replace the durable
- * Synthetic Sciences account that owns settings and trace consent. */
 export async function isConfigured(): Promise<boolean> {
-  return OpenScience.isAuthenticated()
+  const keys = await Auth.all().catch(() => ({}))
+  if (Object.keys(keys).length) return true
+  if (BYOK_LLM_ENV_KEYS.some((key) => !!process.env[key])) return true
+  const config = await currentConfig().catch(() => undefined)
+  return Object.values(config?.provider ?? {}).some((provider) =>
+    Provider.isLocalBaseURL(provider?.options?.baseURL ?? provider?.api),
+  )
 }
 
 async function isOnboarded(): Promise<boolean> {
@@ -55,45 +54,8 @@ export async function needsOnboarding(): Promise<boolean> {
   if (process.env.CI) return false
   if (!process.stdin.isTTY || !process.stdout.isTTY) return false
   if (await isConfigured()) return false
-  // Legacy releases could write this marker after choosing "Not now" while
-  // still signed out. It must not bypass the account-first flow.
-  if (await isOnboarded()) return true
+  if (await isOnboarded()) return false
   return true
-}
-
-async function onboardManaged(): Promise<void> {
-  const existing = await OpenScience.getSession()
-  if (existing) {
-    prompts.log.success("Already connected to your Synthetic Sciences account.")
-    await OpenScience.syncServices().catch(() => {})
-  } else {
-    const ok = await runAtlasLogin({})
-    if (!ok) {
-      prompts.log.warn("Sign-in did not finish. Run `openscience login` anytime to connect.")
-      return
-    }
-  }
-
-  const credits = await OpenScience.getCredits().catch(() => null)
-  const balance = credits?.balanceUsd ?? null
-  prompts.log.info(balance === null ? "Purchased Wallet: unavailable" : `Purchased Wallet: $${balance.toFixed(2)}`)
-
-  if (balance !== null && balance <= 0) {
-    const add = await prompts.confirm({
-      message: "Add wallet credits now for pay-as-you-go models and enhanced search?",
-      initialValue: true,
-    })
-    if (!prompts.isCancel(add) && add) {
-      prompts.log.info(`Opening ${BILLING_URL} …`)
-      prompts.log.message("Top up in Billing, then come back here — your balance updates automatically.")
-      openUrl(BILLING_URL)
-    } else {
-      prompts.log.info(`No problem — top up anytime with \`openscience wallet\` or at ${BILLING_URL}.`)
-    }
-  }
-  prompts.log.info(
-    "Usage is pay as you go from your wallet. Switch to your own keys anytime with `openscience keys add`.",
-  )
 }
 
 async function onboardByok(): Promise<void> {
@@ -118,48 +80,35 @@ function onboardSkip(): void {
   prompts.log.info("No problem — you can explore projects and files without a model.")
   prompts.log.message(
     "Connect a model before using chat:\n" +
-      "  openscience login       connect credit-backed models (pay as you go)\n" +
       "  openscience keys add    add a provider-billed account or key\n" +
       "  openscience local add   use a local model (Ollama / LM Studio / OpenAI-compatible)",
   )
 }
 
-/** The first-run setup wizard. Account connection comes first and persists as
- * a device credential; model billing and credential choices remain separate. */
+/** Local-first model setup. Every credential remains under the user's control. */
 export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
   prompts.intro(opts?.force ? "OpenScience setup" : "Welcome to OpenScience")
 
-  if (!(await OpenScience.isAuthenticated())) {
-    prompts.log.info("Connect a free Synthetic Sciences account once on this device.")
-    const ok = await runAtlasLogin({})
-    if (!ok) {
-      prompts.cancel("Sign-in is required. Run `openscience login` when you're ready.")
-      return
-    }
-  }
-
   const choice = await prompts.select({
     message: "How do you want to power the models?",
-    initialValue: "managed",
+    initialValue: "byok",
     options: [
-      { value: "managed", label: "Credits", hint: "★ recommended · pay as you go · zero setup" },
-      { value: "byok", label: "Provider accounts", hint: "Anthropic · OpenAI · Google · billed by provider" },
+      { value: "byok", label: "Provider accounts", hint: "Anthropic · OpenAI · Google · stored locally" },
       {
         value: "local",
         label: "Local models",
         hint: "Ollama · LM Studio · OpenAI-compatible endpoint · free, offline",
       },
-      { value: "skip", label: "Set up models later", hint: "your account is already connected" },
+      { value: "skip", label: "Set up models later", hint: "browse projects without a model" },
     ],
   })
   if (prompts.isCancel(choice)) {
-    prompts.cancel("Your account is connected. Run `openscience init` to finish model setup.")
+    prompts.cancel("Run `openscience init` whenever you want to connect a model.")
     await markOnboarded()
     return
   }
 
-  if (choice === "managed") await onboardManaged()
-  else if (choice === "byok") await onboardByok()
+  if (choice === "byok") await onboardByok()
   else if (choice === "local") await onboardLocal()
   else onboardSkip()
 
@@ -169,7 +118,7 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
 
 export const InitCommand = cmd({
   command: ["init", "onboard"],
-  describe: "set up OpenScience — models, accounts, and credits",
+  describe: "set up OpenScience models and local credentials",
   async handler() {
     UI.empty()
     UI.println(UI.logo("  "))
@@ -357,22 +306,6 @@ export const DoctorCommand = cmd({
 
     await reportLegacyRoot(args.pruneLegacy === true)
 
-    const session = await OpenScience.getSession()
-    if (session) {
-      prompts.log.success("Synthetic Sciences account: connected")
-      const [mode, credits] = await Promise.all([
-        OpenScience.getBillingMode().catch(() => null),
-        OpenScience.getCredits().catch(() => null),
-      ])
-      if (mode) {
-        const suffix = mode.managed_unlocked ? "" : " (Managed off)"
-        const amount = credits ? `$${credits.balanceUsd.toFixed(2)}` : "unavailable"
-        prompts.log.info(`Purchased Wallet: ${amount}${suffix}`)
-      }
-    } else {
-      prompts.log.info("Synthetic Sciences account: not connected  (run `openscience login`)")
-    }
-
     try {
       const keys = Object.keys(await Auth.all())
       if (keys.length) prompts.log.success(`Provider keys: ${keys.join(", ")}`)
@@ -407,16 +340,11 @@ export const DoctorCommand = cmd({
       prompts.log[sandboxLine.level](sandboxLine.msg)
     } catch {}
 
-    const accountConnected = await isConfigured()
     const modelSourceAvailable = await Instance.provide({
       directory: process.cwd(),
       fn: async () => Object.keys(await Provider.list()).length > 0,
     }).catch(() => false)
-    if (!accountConnected) {
-      prompts.log.warn(
-        "A Synthetic Sciences account is required before chat. Run `openscience login` once on this device.",
-      )
-    } else if (!modelSourceAvailable) {
+    if (!modelSourceAvailable) {
       prompts.log.warn("No model source configured — chat is unavailable. Run `openscience init` to connect one.")
     }
     prompts.outro("Done")

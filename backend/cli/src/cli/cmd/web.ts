@@ -1,5 +1,4 @@
 import { Server } from "../../server/server"
-import { OpenScience } from "../../openscience"
 import { Installation } from "../../installation"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
@@ -73,48 +72,6 @@ export const WebCommand = cmd({
       openUrl(target)
       await announceFdaIfNeeded()
       return
-    }
-
-    // Run the dashboard sync BEFORE starting the server — and without
-    // the 5s race timeout the global middleware uses. The model picker
-    // and provider whitelist live in ~/.config/openscience/openscience-synced.json;
-    // Config.state() reads that file once on first request and caches
-    // for the process lifetime. If we start the HTTP server first, the
-    // browser can race the sync and the picker shows the previous run's
-    // catalogue. Doing it here, await-ed, guarantees the next browser
-    // request sees the freshly-synced whitelist.
-    const authed = await OpenScience.isAuthenticated()
-    if (authed) {
-      // Sync managed config before binding so the browser's first request sees
-      // the fresh provider whitelist. But cap the wait: syncServices() has no
-      // internal timeout, so a slow/unresponsive backend would otherwise hang
-      // the launch forever (the server never binds). If the sync outlasts the
-      // cap, bind anyway and let it finish in the background — the global
-      // middleware also syncs per-request as a backstop.
-      const SYNC_BUDGET_MS = 6000
-      const synced = OpenScience.syncServices().catch(() => null)
-      const result = await Promise.race([
-        synced,
-        new Promise<"timeout">((r) => setTimeout(() => r("timeout"), SYNC_BUDGET_MS)),
-      ])
-      if (result === "timeout") {
-        UI.println(
-          UI.Style.TEXT_DIM,
-          "  (managed-config sync is slow — continuing; the model picker will refresh shortly)",
-        )
-        UI.empty()
-      } else if (result) {
-        const noun = result.credentials === 1 ? "credential" : "credentials"
-        UI.println(
-          UI.Style.TEXT_INFO_BOLD + "  ✓ Synced",
-          UI.Style.TEXT_NORMAL,
-          `${result.credentials} ${noun} from connected services`,
-        )
-        UI.empty()
-      } else {
-        UI.println(UI.Style.TEXT_DIM, "  (sync skipped — using cached config from previous run)")
-        UI.empty()
-      }
     }
 
     const server = Server.listen(opts)

@@ -1,30 +1,21 @@
-import { For, Show, createEffect, createMemo, createSignal, onMount, type ParentProps } from "solid-js"
+import { For, Show, createEffect, createSignal, onMount, type ParentProps } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { TextField } from "@synsci/ui/text-field"
 import { IconFolder, IconPlus } from "@/atlas/shared/Icon"
 import { Wordmark } from "@/atlas/Wordmark"
 import { settingsApi } from "@/components/settings/api"
 import type { ProjectCreateInput } from "@/components/dialog-create-project"
-import { URLS } from "@/config/urls"
 import { usePlatform } from "@/context/platform"
 import type { Platform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import type { ProjectRecord } from "@/pages/home-projects"
 import { projectHref } from "@/utils/project-route"
-import { canUseManaged, type ManagedWallet } from "./desktop-onboarding-access"
 import { AsciiSpinner } from "./shared/AsciiSpinner"
 import { projectPrefs } from "./store/projectPrefs"
 import "./DesktopOnboarding.css"
 
-type Account = {
-  session?: boolean
-  user?: { email?: string; name?: string }
-  balance_usd?: number | null
-}
-
-type AccountState = "loading" | "ready" | "error"
-type Configured = "ace" | "api"
-type Busy = "folder" | "blank" | "ace" | "api"
+type Configured = "api"
+type Busy = "folder" | "blank" | "api"
 type DesktopPreferences = {
   desktop_onboarding_version: number
 }
@@ -38,11 +29,6 @@ const providers = [
   { id: "openai", label: "OpenAI" },
   { id: "openrouter", label: "OpenRouter" },
 ]
-
-const formatBalance = (value: number | null | undefined) => {
-  if (value === null || value === undefined) return "Balance unavailable"
-  return `${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value)} balance`
-}
 
 export function folderProjectName(path: string) {
   const normalized = path.trim().replace(/[\\/]+$/u, "")
@@ -146,9 +132,6 @@ export function DesktopOnboardingController(
   const [ready, setReady] = createSignal(!desktop)
   const [provider, setProvider] = createSignal("anthropic")
   const [key, setKey] = createSignal("")
-  const [account, setAccount] = createSignal<Account>()
-  const [wallet, setWallet] = createSignal<ManagedWallet>()
-  const [accountState, setAccountState] = createSignal<AccountState>("loading")
   const [configured, setConfigured] = createSignal<Configured>()
   const [busy, setBusy] = createSignal<Busy>()
   const [error, setError] = createSignal<string>()
@@ -156,22 +139,6 @@ export function DesktopOnboardingController(
   const server = props.server
   const platform = props.platform
   const fetcher = () => platform.fetch ?? fetch
-
-  const loadAccount = async () => {
-    setAccountState("loading")
-    const [accountResult, walletResult] = await Promise.allSettled([
-      settingsApi<Account>(server.url, fetcher(), "/account"),
-      settingsApi<ManagedWallet>(server.url, fetcher(), "/settings/wallet"),
-    ])
-    if (accountResult.status !== "fulfilled" || walletResult.status !== "fulfilled") {
-      setAccountState("error")
-      return false
-    }
-    setAccount(accountResult.value)
-    setWallet(walletResult.value)
-    setAccountState("ready")
-    return true
-  }
 
   onMount(() => {
     if (!desktop) return
@@ -181,19 +148,12 @@ export function DesktopOnboardingController(
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
       .finally(() => setReady(true))
-    // Account and wallet data enrich optional model setup but never delay the
-    // primary route into a useful workspace.
-    void loadAccount()
   })
 
   createEffect(() => {
     if (!error()) return
     queueMicrotask(() => errorElement?.focus())
   })
-
-  const identity = createMemo(
-    () => account()?.user?.email ?? account()?.user?.name ?? "Synthetic Sciences account connected",
-  )
 
   const projectFlow = createOnboardingProjectFlow({
     create: (input) =>
@@ -272,22 +232,6 @@ export function DesktopOnboardingController(
     await run("blank", () => createProject({ name: "New research project", sources: [] }))
   }
 
-  const useAce = async () => {
-    await run("ace", async () => {
-      const known = accountState() === "ready" ? true : await loadAccount()
-      if (!known) throw new Error("Couldn't verify your Ace access. Check the connection and retry.")
-      if (!canUseManaged(wallet())) {
-        platform.openLink(URLS.dashboardBilling)
-        throw new Error("Set up Ace at app.syntheticsciences.ai, then return here and try again.")
-      }
-      await settingsApi(server.url, fetcher(), "/account/billing-mode", {
-        method: "POST",
-        body: JSON.stringify({ mode: "managed" }),
-      })
-      setConfigured("ace")
-    })
-  }
-
   const saveKey = async () => {
     const value = key().trim()
     if (!value) return
@@ -312,7 +256,7 @@ export function DesktopOnboardingController(
             <section class="desktop-onboarding__shell">
               <header class="desktop-onboarding__header">
                 <Wordmark size="sm" />
-                <span class="desktop-onboarding__account-state">Account connected</span>
+                <span class="desktop-onboarding__account-state">Local workspace</span>
               </header>
 
               <div class="desktop-onboarding__content">
@@ -321,7 +265,7 @@ export function DesktopOnboardingController(
                   <h1 id="desktop-onboarding-title">Start with your research</h1>
                   <span>
                     Open an existing folder to keep files, sessions, and results together. You can change model and
-                    compute access anytime in Customize.
+                    compute access anytime in Customize. Projects and credentials stay on this device.
                   </span>
                 </div>
 
@@ -365,56 +309,6 @@ export function DesktopOnboardingController(
                     <span aria-hidden="true">+</span>
                   </summary>
                   <div class="desktop-onboarding__model-options">
-                    <section class="desktop-onboarding__model-option">
-                      <div class="desktop-onboarding__model-copy">
-                        <span
-                          class="desktop-onboarding__status"
-                          data-ready={accountState() === "ready" && canUseManaged(wallet())}
-                        >
-                          <i aria-hidden="true" />
-                          {accountState() === "loading"
-                            ? "Checking Ace"
-                            : accountState() === "error"
-                              ? "Account check failed"
-                              : canUseManaged(wallet())
-                                ? "Ace available"
-                                : "Ace setup required"}
-                        </span>
-                        <strong>OpenScience Ace</strong>
-                        <small>
-                          {accountState() === "ready"
-                            ? `${identity()} · ${formatBalance(wallet()?.balanceUsd)}`
-                            : "Managed model access through your Synthetic Sciences account."}
-                        </small>
-                      </div>
-                      <Button
-                        variant="secondary"
-                        size="small"
-                        disabled={Boolean(busy())}
-                        onClick={() => {
-                          if (accountState() === "error") {
-                            void loadAccount()
-                            return
-                          }
-                          if (accountState() === "ready" && !canUseManaged(wallet())) {
-                            platform.openLink(URLS.dashboardBilling)
-                            return
-                          }
-                          void useAce()
-                        }}
-                      >
-                        {busy() === "ace"
-                          ? "Saving…"
-                          : accountState() === "error"
-                            ? "Retry"
-                            : accountState() === "ready" && !canUseManaged(wallet())
-                              ? "Set up Ace"
-                              : configured() === "ace"
-                                ? "Using Ace"
-                                : "Use Ace"}
-                      </Button>
-                    </section>
-
                     <section class="desktop-onboarding__model-option desktop-onboarding__model-option--key">
                       <div class="desktop-onboarding__model-copy">
                         <strong>Provider key</strong>
@@ -460,7 +354,7 @@ export function DesktopOnboardingController(
                     </section>
 
                     <p class="desktop-onboarding__note">
-                      Connect ChatGPT / Codex in Customize → Models. Set up local runtimes in Customize → Local models.
+                      You can also connect ChatGPT / Codex or a local runtime later in Customize → Models.
                     </p>
                   </div>
                 </details>
@@ -473,7 +367,7 @@ export function DesktopOnboardingController(
               </Show>
 
               <footer class="desktop-onboarding__footer">
-                <span>Model setup is optional. Your project is created before setup is marked complete.</span>
+                <span>Model setup is optional. OpenScience works with credentials and runtimes you control.</span>
               </footer>
             </section>
           </main>

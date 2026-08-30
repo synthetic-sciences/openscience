@@ -412,6 +412,12 @@ export namespace ComputeSettings {
         providers.prime_intellect = providers.prime
         delete providers.prime
       }
+      for (const provider of Object.values(providers ?? {})) {
+        if (!provider || typeof provider !== "object" || Array.isArray(provider)) continue
+        const entry = provider as { source?: unknown; removal?: { remote?: unknown } }
+        if (entry.source === "account") entry.source = "stored"
+        if (entry.removal) entry.removal.remote = false
+      }
     }
     const result = Stored.safeParse(value)
     return result.success ? result.data : structuredClone(EMPTY)
@@ -892,20 +898,6 @@ export namespace ComputeSettings {
       if (before?.removal) {
         throw new Error(`Compute provider ${target} removal is pending; retry disconnect before reconnecting`)
       }
-      const authenticated = await OpenScience.isAuthenticated()
-      const accountFields =
-        target === "modal"
-          ? (() => {
-              const [token_id, token_secret] = key.split(":").map((part) => part.trim())
-              return token_id && token_secret ? { token_id, token_secret } : undefined
-            })()
-          : { api_key: key }
-      if (
-        authenticated &&
-        (!accountFields || !(await OpenScience.savePortableCredential(target, accountFields, target)))
-      ) {
-        throw new Error(`Could not sync ${target} to your Synthetic Sciences account`)
-      }
       return update(async (current) => {
         const existing = current.providers[target]
         if (existing?.removal) {
@@ -918,7 +910,7 @@ export namespace ComputeSettings {
           : false
         current.providers[target] = {
           key: await encrypt(key),
-          source: authenticated ? "account" : "stored",
+          source: "stored",
           enabled: existing?.enabled ?? false,
           connected_at: existing?.connected_at ?? new Date().toISOString(),
           last_used: sameCredential ? (existing?.last_used ?? null) : null,
@@ -969,7 +961,7 @@ export namespace ComputeSettings {
           executable_approval: entry.executable_approval,
           removal: {
             token: crypto.randomUUID(),
-            remote: entry.source === "account",
+            remote: false,
             requested_at: new Date().toISOString(),
           },
         }
@@ -977,9 +969,6 @@ export namespace ComputeSettings {
     )
     const pending = tombstoned.providers[target]?.removal
     if (!pending) return view(tombstoned)
-    if (pending.remote && !(await OpenScience.deletePortableCredential(target))) {
-      throw new Error(`Could not remove ${target} from your Synthetic Sciences account`)
-    }
     const stored = await CredentialLifecycle.mutate(`compute-provider.remove:${target}:finalize`, () =>
       update((current) => {
         if (current.providers[target]?.removal?.token === pending.token) delete current.providers[target]

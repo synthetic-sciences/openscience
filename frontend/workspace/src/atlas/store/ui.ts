@@ -70,7 +70,7 @@ interface TransientState {
 // User-selectable agents. A previously-persisted agent that no longer exists (e.g. a
 // removed mode) falls back to the default rather than sending an invalid agent.
 const VALID_AGENTS = new Set(["research", "biology", "physics", "ml", "plan"])
-const TABS = new Set<RightPaneTab>(["files", "terminal", "canvas", "kernels", "trace"])
+const TABS = new Set<RightPaneTab>(["files", "terminal", "kernels", "trace"])
 const ARTIFACT_TABS = new Set<ArtifactPaneTab>([
   "details",
   "code",

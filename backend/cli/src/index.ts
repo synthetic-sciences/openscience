@@ -1,8 +1,5 @@
-// MUST be first import — side-effect-loads last-known synced env vars
-// from disk synchronously, so provider SDKs (Anthropic, OpenAI,
-// @ai-sdk/google) see ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY / etc. at
-// their own module-init time. Without this, the SDK constructs at
-// import time with empty env (sync only catches up later in middleware).
+// MUST be first: removes ambient project dotenv authority before provider
+// SDKs snapshot their process environment.
 import "./openscience/preload-env"
 
 import yargs from "yargs"
@@ -32,14 +29,10 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
-import { LoginCommand, LogoutCommand, StatusCommand, SyncCommand, DevicesCommand } from "./cli/cmd/connect"
-import { ProjectCommand } from "./cli/cmd/project"
-import { WalletCommand } from "./cli/cmd/billing"
 import { KeysCommand, ConnectCommand, DisconnectCommand } from "./cli/cmd/auth"
 import { LocalCommand } from "./cli/cmd/local"
 import { SandboxCommand } from "./cli/cmd/sandbox"
 import { InitCommand, DoctorCommand } from "./cli/onboard"
-import { OpenScience } from "./openscience"
 import { GROUP_LAUNCHER_ARG, run as runMcpGroupLauncher } from "./mcp/group-launcher"
 import { WINDOWS_JOB_LAUNCHER_ARG, WindowsJobLauncher } from "./process/windows-job-launcher"
 import {
@@ -48,8 +41,6 @@ import {
 } from "./process/darwin-responsibility-launcher"
 import { Global } from "./global"
 import { disposeDataRootOperation, runDataRootMiddleware } from "./cli/cmd/cmd"
-import { ACCOUNT_REQUIRED_MESSAGE, isScientificCapabilityCanary, requiresOpenScienceAccount } from "./cli/account-gate"
-import { OutboundTelemetry } from "./telemetry/outbound"
 import { purgeRetiredAtlasAgentInstall } from "./skill/retired-install"
 import { SELF_RESTART_ARG, SelfRestart } from "./process/self-restart"
 import { DARWIN_UPDATE_SWAP_ARG, DarwinUpdateSwap } from "./process/darwin-update-swap"
@@ -112,6 +103,10 @@ process.on("uncaughtException", (e) => {
   })
 })
 
+function isScientificCapabilityCanary(command: string | undefined, argv: string[]): boolean {
+  return command === "debug" && argv[1] === "capability-canary"
+}
+
 // Yargs handles --help/--version before middleware. Run the exact, fail-safe
 // retirement migration here so the first post-upgrade invocation cleans old
 // agent instructions even when it exits through those built-in paths. Internal
@@ -150,8 +145,6 @@ const cli = yargs(hideBin(process.argv))
           return "INFO"
         })(),
       })
-      OpenScience.reportApiBaseOverride()
-
       process.env.AGENT = "1"
       process.env.OPENSCIENCE = "1"
 
@@ -163,22 +156,6 @@ const cli = yargs(hideBin(process.argv))
       if (retiredAgentInstallCleanupError) {
         Log.Default.warn("failed to purge retired Atlas agent install", { error: retiredAgentInstallCleanupError })
       }
-
-      // A consent change may have been saved while offline. Retry it on every
-      // startup before the account gate can exit. Opt-out is prospective and
-      // never turns into an implicit deletion request.
-      if (!capabilityCanary) await OutboundTelemetry.initializeAccount().catch(() => undefined)
-
-      if (requiresOpenScienceAccount(command, process.argv.slice(2)) && !(await OpenScience.isAuthenticated())) {
-        throw new Error(ACCOUNT_REQUIRED_MESSAGE)
-      }
-
-      // Cheap /sync/version probe (10s TTL). When the server-side version
-      // has changed, a full /api/cli/sync runs in the background so the new
-      // env applies to the NEXT command — the current one uses whatever is
-      // already cached on disk. Replaces a blocking 5s Promise.race that
-      // ran on every invocation regardless of staleness.
-      if (!capabilityCanary) await OpenScience.refreshIfStale().catch(() => {})
 
       // Inject decrypted service credentials (settings ▸ Credentials) into the
       // process env so skills/tools/connectors actually use them. Dynamic import
@@ -196,9 +173,6 @@ const cli = yargs(hideBin(process.argv))
           .then((m) => m.ManagedEnvironments.startInBackground())
           .catch(() => {})
       }
-
-      // Retry any failed usage reports from previous sessions
-      if (!capabilityCanary) OpenScience.flushPendingUsage().catch(() => {})
     }
 
     const command = typeof opts._[0] === "string" ? opts._[0] : undefined
@@ -228,15 +202,8 @@ const cli = yargs(hideBin(process.argv))
   .command(PrCommand)
   .command(SessionCommand)
   .command(InitCommand)
-  .command(LoginCommand)
-  .command(LogoutCommand)
-  .command(StatusCommand)
-  .command(SyncCommand)
-  .command(DevicesCommand)
   .command(KeysCommand)
-  .command(WalletCommand)
   .command(DoctorCommand)
-  .command(ProjectCommand)
   .command(ConnectCommand)
   .command(DisconnectCommand)
   .fail((msg, err) => {
@@ -299,7 +266,6 @@ async function run() {
     // run using `docker run --init`.
     // Explicitly exit to avoid any hanging subprocesses.
     await GracefulShutdown.run({ timeoutMs: 8_000 }).catch(() => undefined)
-    await OutboundTelemetry.drain({ timeoutMs: 2_000 }).catch(() => undefined)
     await disposeDataRootOperation().catch(() => undefined)
     await Log.flush().catch(() => undefined)
     process.exit()

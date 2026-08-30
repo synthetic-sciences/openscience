@@ -10,7 +10,6 @@ import { webAssetContentSecurityPolicy } from "../web/csp"
 import { isAllowedHost, isAllowedOrigin, isCorsPreflight, isCrossOrigin, isDeploymentAuthorized } from "./host-guard"
 import { timingSafeEqual } from "../util/timing-safe"
 import { FolderResolveRoutes } from "./routes/folder-resolve"
-import { AtlasBridgeRoutes } from "./routes/atlas-bridge"
 import { RepoRoutes } from "./routes/repo"
 import z from "zod"
 import { Provider } from "../provider/provider"
@@ -49,7 +48,6 @@ import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { SearchRoutes } from "./routes/search"
 import { GlobalRoutes } from "./routes/global"
-import { AccountRoutes } from "./routes/account"
 import { SettingsSkillsRoutes } from "./routes/settings/skills"
 import { NetworkSettingsRoutes } from "./routes/settings/network"
 import { CredentialsRoutes } from "./routes/settings/credentials"
@@ -58,9 +56,6 @@ import { ComputeSettingsRoutes } from "./routes/settings/compute"
 import { SettingsPreferencesRoutes } from "./routes/settings/preferences"
 import { LocalModelsRoutes } from "./routes/settings/local"
 import { SandboxSettingsRoutes } from "./routes/settings/sandbox"
-import { BillingSettingsRoutes } from "./routes/settings/billing"
-import { WalletSettingsRoutes } from "./routes/settings/wallet"
-import { SettingsUsageRoutes } from "./routes/settings/usage"
 import { UpdatesSettingsRoutes, desktopUpdateShutdownAuthorized } from "./routes/settings/updates"
 import { ResearchToolsSettingsRoutes } from "./routes/settings/research-tools"
 import { ScientificToolsSettingsRoutes } from "./routes/settings/scientific-tools"
@@ -70,8 +65,6 @@ import { ComputeJobs } from "../compute/jobs"
 import { CommandRuntime } from "../science/command/registry"
 import { CredentialProcessLedger } from "../credentials/process-ledger"
 import { DataRootBarrier } from "../global/data-root-barrier"
-import { OpenScience } from "../openscience"
-import { accountRequiredResponse, requiresAccountForRequest } from "./account-gate"
 import { OnboardingAuthRoutes } from "./routes/onboarding-auth"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
@@ -234,23 +227,6 @@ export namespace Server {
           return next()
         })
         .use(async (c, next) => {
-          const internal = c.req.header(INTERNAL_HEADER)
-          if (internal !== undefined && timingSafeEqual(internal, INTERNAL_NONCE)) return next()
-          if (
-            requiresAccountForRequest({
-              method: c.req.method,
-              path: c.req.path,
-              accept: c.req.header("accept"),
-              upgrade: c.req.header("upgrade"),
-            }) &&
-            !(await OpenScience.isAuthenticated())
-          ) {
-            c.header("WWW-Authenticate", 'Bearer realm="openscience-account"')
-            return c.json(accountRequiredResponse, 401)
-          }
-          return next()
-        })
-        .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
           if (!skipLogging) {
             log.info("request", {
@@ -292,7 +268,6 @@ export namespace Server {
           await DataRootBarrier.during(Global.Path.data, next, 120_000)
         })
         .route("/global", GlobalRoutes())
-        .route("/account", AccountRoutes())
         // Settings panels backed by global (project-independent) stores, so
         // mounted before the Instance.provide wrapper below (no directory).
         .route("/settings/credentials", CredentialsRoutes())
@@ -301,8 +276,6 @@ export namespace Server {
         .route("/settings/preferences", SettingsPreferencesRoutes())
         .route("/settings/local", LocalModelsRoutes())
         .route("/settings/sandbox", SandboxSettingsRoutes())
-        .route("/settings/billing", BillingSettingsRoutes())
-        .route("/settings/wallet", WalletSettingsRoutes())
         .route("/settings/updates", UpdatesSettingsRoutes())
         .route("/settings/research-tools", ResearchToolsSettingsRoutes())
         .route("/settings/scientific-tools", ScientificToolsSettingsRoutes())
@@ -314,7 +287,7 @@ export namespace Server {
             removeCredential: (providerID) => Auth.remove(providerID),
             readBillingMode: async () => (await Config.getGlobal()).billing?.llm ?? null,
             selectByok: async () => {
-              await OpenScience.setBillingMode("byok")
+              await Config.updateGlobal({ billing: { llm: "byok" } }, { preserveInstances: true })
             },
             restoreBillingMode: async (mode) => {
               await Config.updateGlobal({ billing: { llm: mode } }, { preserveInstances: true })
@@ -400,9 +373,6 @@ export namespace Server {
         // Folder picker discovery remains filesystem-global; path validation
         // resolves project capabilities inside the route when one is supplied.
         .route("/api/resolve-folder", FolderResolveRoutes())
-        // Atlas graph bridge — proxies /api/atlas/* to the Atlas REST API
-        // using the user's stored workspace key (see routes/atlas-bridge.ts).
-        .route("/api/atlas", AtlasBridgeRoutes())
         // Repository tab (status/commit/push/remote) — shells out to git.
         .route("/api/repo", RepoRoutes())
         .use(async (c, next) => {
@@ -454,7 +424,6 @@ export namespace Server {
         .route("/mcp", McpRoutes())
         .route("/settings/skills", SettingsSkillsRoutes())
         .route("/settings/network", NetworkSettingsRoutes())
-        .route("/settings/usage", SettingsUsageRoutes())
         .post(
           "/instance/dispose",
           describeRoute({

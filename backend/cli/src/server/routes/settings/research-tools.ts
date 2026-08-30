@@ -2,7 +2,6 @@ import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { Flag } from "@/flag/flag"
-import { OpenScience } from "@/openscience"
 import { OutboundTelemetry } from "@/telemetry/outbound"
 import { lazy } from "@/util/lazy"
 
@@ -50,19 +49,15 @@ const State = z.object({
 })
 
 async function read() {
-  const session = await OpenScience.getSession().catch(() => null)
-  const [balance, telemetry] = await Promise.all([
-    session ? OpenScience.getBalance().catch(() => null) : null,
-    OutboundTelemetry.status(true),
-  ])
+  const telemetry = await OutboundTelemetry.status()
   return State.parse({
-    signedIn: !!session,
-    plan: { id: "credits", label: "Credits", status: session ? "active" : null },
+    signedIn: false,
+    plan: { id: "local", label: "Local", status: "active" },
     search: {
-      route: session ? "credits" : "community",
-      state: !session ? "conditional" : balance === null || balance <= 0 ? "basic" : "available",
-      enabled: !!session,
-      balanceUsd: balance,
+      route: "community",
+      state: Flag.OPENSCIENCE_ENABLE_EXA ? "available" : "unavailable",
+      enabled: Flag.OPENSCIENCE_ENABLE_EXA,
+      balanceUsd: null,
       limit: null,
       used: null,
       remaining: null,

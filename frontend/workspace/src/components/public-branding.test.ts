@@ -5,10 +5,7 @@ const publicSources = [
   "../pages/session.tsx",
   "../pages/home-workbench.tsx",
   "../pages/home.tsx",
-  "../atlas/SetupDialog.tsx",
-  "../atlas/AccountGate.tsx",
   "../atlas/RightPane.tsx",
-  "../atlas/AtlasCanvas.tsx",
   "../atlas/kernel-runtime.ts",
   "../atlas/SessionTraceSurface.tsx",
   "../i18n/zh.ts",
@@ -41,30 +38,5 @@ describe("public Synthetic Sciences branding", () => {
       if (/\bGateway\b/.test(source)) violations.push(file)
     }
     expect(violations).toEqual([])
-  })
-
-  test("uses Synthetic Sciences for managed login and account branding", async () => {
-    const sources = await Promise.all(
-      [
-        "../atlas/SetupDialog.tsx",
-        "../atlas/AccountGate.tsx",
-        "./settings/General.tsx",
-        "./settings/ManagedInference.tsx",
-        "./settings/ProviderKeys.tsx",
-        "./settings/ResearchTools.tsx",
-      ].map((file) => Bun.file(new URL(file, import.meta.url)).text()),
-    )
-    const combined = sources.join("\n")
-
-    expect(combined).toContain("Synthetic Sciences account")
-    expect(combined).toContain("Ace wallet")
-    expect(combined).toContain('title: "Managed"')
-    expect(combined).toContain("Use your Ace balance")
-    expect(combined).not.toContain("Add Ace credits")
-    expect(combined).toContain("Connected to Synthetic Sciences")
-    expect(combined).toContain("openscience login")
-    expect(combined).not.toMatch(/OpenScience (?:account|identity|credits|plan)/)
-    expect(combined).not.toMatch(/(?:Sign in to|Connected to) Gateway/)
-    expect(combined).not.toContain("openscience connect login")
   })
 })
