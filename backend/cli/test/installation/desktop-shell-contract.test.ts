@@ -6,6 +6,13 @@ test("lists existing macOS windows before the New Window Dock action", async () 
   expect(dock.indexOf("...entries")).toBeLessThan(dock.indexOf('label: "New Window"'))
 })
 
+test("declares UTF-8 for every inline desktop document", async () => {
+  const source = await Bun.file(new URL("../../../../frontend/desktop/src/main.mjs", import.meta.url)).text()
+
+  expect(source).not.toContain("data:text/html,")
+  expect(source.match(/data:text\/html;charset=utf-8,/g)).toHaveLength(3)
+})
+
 test("wires the packaged macOS shell to the authenticated desktop updater", async () => {
   const source = await Bun.file(new URL("../../../../frontend/desktop/src/main.mjs", import.meta.url)).text()
   const updater = await Bun.file(new URL("../../../../frontend/desktop/src/updater.mjs", import.meta.url)).text()

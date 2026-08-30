@@ -604,7 +604,7 @@ async function bootstrap(splash) {
   })
   if (prompt.response !== 0) return false
   await splash.loadURL(
-    `data:text/html,${encodeURIComponent('<main style="background:#11110f;color:#e8e5dc;display:grid;font:14px system-ui;height:100vh;margin:0;place-items:center"><div><h1 style="font-size:20px;margin:0 0 8px">OpenScience</h1><p style="color:#9d998f;margin:0">Installing in Applications…</p></div></main>')}`,
+    `data:text/html;charset=utf-8,${encodeURIComponent('<main style="background:#11110f;color:#e8e5dc;display:grid;font:14px system-ui;height:100vh;margin:0;place-items:center"><div><h1 style="font-size:20px;margin:0 0 8px">OpenScience</h1><p style="color:#9d998f;margin:0">Installing in Applications…</p></div></main>')}`,
   )
   let staged
   try {
@@ -912,7 +912,7 @@ app
         },
       })
       await splash.loadURL(
-        `data:text/html,${encodeURIComponent('<main style="background:#11110f;color:#e8e5dc;display:grid;font:14px system-ui;height:100vh;margin:0;place-items:center"><div><h1 style="font-size:20px;margin:0 0 8px">OpenScience</h1><p style="color:#9d998f;margin:0">Starting your local workspace…</p></div></main>')}`,
+        `data:text/html;charset=utf-8,${encodeURIComponent('<main style="background:#11110f;color:#e8e5dc;display:grid;font:14px system-ui;height:100vh;margin:0;place-items:center"><div><h1 style="font-size:20px;margin:0 0 8px">OpenScience</h1><p style="color:#9d998f;margin:0">Starting your local workspace…</p></div></main>')}`,
       )
       splash.show()
       if (await bootstrap(splash)) return
@@ -966,7 +966,7 @@ app
         return
       }
       await splash.loadURL(
-        `data:text/html,${encodeURIComponent(`<main style="font:16px system-ui;padding:48px"><h1>OpenScience could not start</h1><p>${html(message)}</p></main>`)}`,
+        `data:text/html;charset=utf-8,${encodeURIComponent(`<main style="font:16px system-ui;padding:48px"><h1>OpenScience could not start</h1><p>${html(message)}</p></main>`)}`,
       )
     }
   })
