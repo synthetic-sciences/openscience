@@ -69,14 +69,66 @@ export namespace Snapshot {
   // stale (or empty) index, and a later revert() against that tree deletes every
   // file the tree is missing. Retry once for transient failures (index.lock
   // contention), then report the failure to the caller.
+  async function privatePaths() {
+    const worktrees = [path.resolve(Instance.worktree), await Filesystem.canonical(Instance.worktree)].filter(
+      (value): value is string => !!value,
+    )
+    const owned = [
+      { path: Global.Path.data, projects: true },
+      { path: Global.Path.config },
+      { path: Global.Path.cache },
+      { path: Global.Path.state },
+      ...(Global.LegacyData ? [{ path: Global.LegacyData, projects: true }] : []),
+      ...Global.LegacyConflicts.map((entry) => ({ path: entry.legacy })),
+    ]
+    const roots = await Promise.all(
+      owned.map(async (entry) => ({ ...entry, canonical: await Filesystem.canonical(entry.path) })),
+    )
+    const paths = new Set<string>()
+    for (const root of roots) {
+      for (const target of [path.resolve(root.path), root.canonical]) {
+        if (!target) continue
+        for (const worktree of worktrees) {
+          if (Filesystem.contains(worktree, target)) {
+            paths.add(path.relative(worktree, target).split(path.sep).join("/"))
+            continue
+          }
+          if (!Filesystem.contains(target, worktree)) continue
+          // Managed project folders are user work, despite living below data/.
+          const projects = path.join(target, "projects")
+          if (root.projects && worktree !== projects && Filesystem.contains(projects, worktree)) continue
+          paths.add("")
+        }
+      }
+    }
+    return [...paths]
+  }
+
+  async function exclusions() {
+    return (await privatePaths()).map((value) => (value ? `:(top,exclude,literal)${value}` : ":(top,exclude)**"))
+  }
+
   async function stageAll(git: string) {
-    let result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} add -A -- .`
+    const paths = await privatePaths()
+    const excluded = paths.map((value) => (value ? `:(top,exclude,literal)${value}` : ":(top,exclude)**"))
+    if (paths.length) {
+      // Only prune our private undo index, never the project's real index or
+      // working files. Existing historical objects are left untouched.
+      const tracked = paths.map((value) => (value ? `:(top,literal)${value}` : ":(top)**"))
+      const removed =
+        await $`git --git-dir ${git} --work-tree ${Instance.worktree} rm -r -f --cached --ignore-unmatch -- ${tracked}`
+          .quiet()
+          .cwd(Instance.directory)
+          .nothrow()
+      if (removed.exitCode !== 0) return false
+    }
+    let result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} add -A -- . ${excluded}`
       .quiet()
       .cwd(Instance.directory)
       .nothrow()
     if (result.exitCode !== 0) {
       log.warn("add failed, retrying", { exitCode: result.exitCode, stderr: result.stderr.toString() })
-      result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} add -A -- .`
+      result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} add -A -- . ${excluded}`
         .quiet()
         .cwd(Instance.directory)
         .nothrow()
@@ -149,8 +201,9 @@ export namespace Snapshot {
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
     if (!(await stageAll(git))) throw new Error("Could not stage the project before computing its snapshot patch.")
+    const excluded = await exclusions()
     const result =
-      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --name-only -z ${hash} -- .`
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --name-only -z ${hash} -- . ${excluded}`
         .quiet()
         .cwd(Instance.directory)
         .nothrow()
@@ -213,8 +266,9 @@ export namespace Snapshot {
   }
 
   async function changedFiles(git: string, from: string, to: string) {
+    const excluded = await exclusions()
     const result =
-      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --name-only -z ${from} ${to} -- .`
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --name-only -z ${from} ${to} -- . ${excluded}`
         .quiet()
         .cwd(Instance.directory)
         .nothrow()
@@ -260,12 +314,18 @@ export namespace Snapshot {
       }
     }
 
+    const privateRoots = await privatePaths()
     const plans = new Map<string, PlannedEntry | undefined>()
     for (const file of files) {
       const relative = treePath(file)
       if (!relative) {
         skipped.push(file)
         errors.push({ file, message: "Path is outside the project worktree." })
+        continue
+      }
+      if (privateRoots.some((value) => !value || relative === value || relative.startsWith(`${value}/`))) {
+        skipped.push(relative)
+        errors.push({ file: relative, message: "OpenScience private state is excluded from project snapshots." })
         continue
       }
       if (plans.has(relative)) continue
@@ -391,8 +451,9 @@ export namespace Snapshot {
   export async function diff(hash: string) {
     const git = gitdir()
     if (!(await stageAll(git))) throw new Error("Could not stage the project before computing its snapshot diff.")
+    const excluded = await exclusions()
     const result =
-      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- . ${excluded}`
         .quiet()
         .cwd(Instance.worktree)
         .nothrow()
@@ -425,7 +486,8 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
-    for await (const line of $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
+    const excluded = await exclusions()
+    for await (const line of $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- . ${excluded}`
       .quiet()
       .cwd(Instance.directory)
       .nothrow()
