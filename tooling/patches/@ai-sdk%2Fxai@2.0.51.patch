@@ -1,4 +1,9 @@
-Make `usage` nullish in xAI's Responses stream schema.
+Accept current xAI reasoning efforts and nullish Responses stream usage.
+
+Grok 4.6 supports low/medium/high/xhigh in both Chat and Responses requests:
+https://docs.x.ai/developers/model-capabilities/text/reasoning
+The bundled SDK predates these efforts. Widen its wire schemas/types while
+OpenScience's model-specific variants retain the narrower older-model ladders.
 
 xAI's first SSE event (`response.created`) carries `"usage": null`. Upstream
 2.0.51 wrote `xaiResponsesResponseSchema.partial({ usage: true })`, which makes
@@ -17,6 +22,15 @@ diff --git a/dist/index.js b/dist/index.js
 index 0cc2af9842b698c0a29ae2bbebf9c72f17bf3253..cfccbdebee98cafea6cb13e5a91fc46494cecb6c 100644
 --- a/dist/index.js
 +++ b/dist/index.js
+@@ -217,7 +217,7 @@ var searchSourceSchema = import_v4.z.discriminatedUnion("type", [
+   rssSourceSchema
+ ]);
+ var xaiProviderOptions = import_v4.z.object({
+-  reasoningEffort: import_v4.z.enum(["low", "high"]).optional(),
++  reasoningEffort: import_v4.z.enum(["low", "medium", "high", "xhigh"]).optional(),
+   /**
+    * Whether to enable parallel function calling during tool use.
+    * When true, the model can call multiple functions in parallel.
 @@ -964,7 +964,7 @@ var xaiResponsesResponseSchema = import_v44.z.object({
    model: import_v44.z.string().nullish(),
    object: import_v44.z.literal("response"),
@@ -26,10 +40,28 @@ index 0cc2af9842b698c0a29ae2bbebf9c72f17bf3253..cfccbdebee98cafea6cb13e5a91fc464
    status: import_v44.z.string()
  });
  var xaiResponsesChunkSchema = import_v44.z.union([
+@@ -1176,7 +1176,7 @@ var xaiResponsesProviderOptions = import_v45.z.object({
+    * Constrains how hard a reasoning model thinks before responding.
+    * Possible values are `low` (uses fewer reasoning tokens), `medium` and `high` (uses more reasoning tokens).
+    */
+-  reasoningEffort: import_v45.z.enum(["low", "medium", "high"]).optional(),
++  reasoningEffort: import_v45.z.enum(["low", "medium", "high", "xhigh"]).optional(),
+   /**
+    * Whether to store the input message(s) and model response for later retrieval.
+    * @default true
 diff --git a/dist/index.mjs b/dist/index.mjs
 index 72ffc7ff8cb2c364e8967ae03d7c3d226cc8d2b0..66f90ce51b5c8eeb942806a59991d1eec2657be7 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
+@@ -204,7 +204,7 @@ var searchSourceSchema = z.discriminatedUnion("type", [
+   rssSourceSchema
+ ]);
+ var xaiProviderOptions = z.object({
+-  reasoningEffort: z.enum(["low", "high"]).optional(),
++  reasoningEffort: z.enum(["low", "medium", "high", "xhigh"]).optional(),
+   /**
+    * Whether to enable parallel function calling during tool use.
+    * When true, the model can call multiple functions in parallel.
 @@ -959,7 +959,7 @@ var xaiResponsesResponseSchema = z4.object({
    model: z4.string().nullish(),
    object: z4.literal("response"),
@@ -39,3 +71,52 @@ index 72ffc7ff8cb2c364e8967ae03d7c3d226cc8d2b0..66f90ce51b5c8eeb942806a59991d1ee
    status: z4.string()
  });
  var xaiResponsesChunkSchema = z4.union([
+@@ -1171,7 +1171,7 @@ var xaiResponsesProviderOptions = z5.object({
+    * Constrains how hard a reasoning model thinks before responding.
+    * Possible values are `low` (uses fewer reasoning tokens), `medium` and `high` (uses more reasoning tokens).
+    */
+-  reasoningEffort: z5.enum(["low", "medium", "high"]).optional(),
++  reasoningEffort: z5.enum(["low", "medium", "high", "xhigh"]).optional(),
+   /**
+    * Whether to store the input message(s) and model response for later retrieval.
+    * @default true
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -8,6 +8,8 @@ declare const xaiProviderOptions: z.ZodObject<{
+     reasoningEffort: z.ZodOptional<z.ZodEnum<{
+         low: "low";
++        medium: "medium";
+         high: "high";
++        xhigh: "xhigh";
+     }>>;
+     parallel_function_calling: z.ZodOptional<z.ZodBoolean>;
+     searchParameters: z.ZodOptional<z.ZodObject<{
+@@ -65,6 +67,7 @@ declare const xaiResponsesProviderOptions: z.ZodObject<{
+         low: "low";
+         high: "high";
+         medium: "medium";
++        xhigh: "xhigh";
+     }>>;
+     store: z.ZodOptional<z.ZodBoolean>;
+     previousResponseId: z.ZodOptional<z.ZodString>;
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -8,6 +8,8 @@ declare const xaiProviderOptions: z.ZodObject<{
+     reasoningEffort: z.ZodOptional<z.ZodEnum<{
+         low: "low";
++        medium: "medium";
+         high: "high";
++        xhigh: "xhigh";
+     }>>;
+     parallel_function_calling: z.ZodOptional<z.ZodBoolean>;
+     searchParameters: z.ZodOptional<z.ZodObject<{
+@@ -65,6 +67,7 @@ declare const xaiResponsesProviderOptions: z.ZodObject<{
+         low: "low";
+         high: "high";
+         medium: "medium";
++        xhigh: "xhigh";
+     }>>;
+     store: z.ZodOptional<z.ZodBoolean>;
+     previousResponseId: z.ZodOptional<z.ZodString>;

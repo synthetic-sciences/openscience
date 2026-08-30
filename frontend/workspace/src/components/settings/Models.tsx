@@ -18,6 +18,7 @@ import {
   modelSummary,
 } from "@/context/model-catalog"
 import { resolveModelAccessRoute, type ModelRouteAccess } from "@/context/model-route-resolution"
+import { modelPricing, pricingUpstream } from "@/context/model-pricing"
 import { CodexConnection } from "./CodexConnection"
 import { ManagedInference } from "./ManagedInference"
 import { ProviderKeys } from "./ProviderKeys"
@@ -446,6 +447,45 @@ export default function Models() {
                                           : `${model.provider} · ${model.routes[0]?.access ?? model.access}`,
                                     })}
                                   </span>
+                                  <details class="models-rate-details text-11-regular text-text-weak">
+                                    <summary>Rates and limits</summary>
+                                    <For each={model.routes}>
+                                      {(route) => {
+                                        const pricing = () =>
+                                          modelPricing({
+                                            access: route.routeAccess,
+                                            pricing: route.source.pricing,
+                                            cost: route.source.cost,
+                                          })
+                                        return (
+                                          <div class="models-rate-route">
+                                            <strong class="text-11-medium text-text-base">
+                                              {route.access} · {pricingUpstream(route.source.pricing) ?? route.provider}
+                                            </strong>
+                                            <dl>
+                                              <div>
+                                                <dt>Context</dt>
+                                                <dd>{route.source.limit.context.toLocaleString()} tokens</dd>
+                                              </div>
+                                              <div>
+                                                <dt>Max output</dt>
+                                                <dd>{route.source.limit.output.toLocaleString()} tokens</dd>
+                                              </div>
+                                              <For each={pricing().lines}>
+                                                {(line) => (
+                                                  <div>
+                                                    <dt>{line.label}</dt>
+                                                    <dd>{line.value}</dd>
+                                                  </div>
+                                                )}
+                                              </For>
+                                            </dl>
+                                            <p>{pricing().note}</p>
+                                          </div>
+                                        )
+                                      }}
+                                    </For>
+                                  </details>
                                 </div>
                               </div>
                               <div class="ml-auto flex max-w-full shrink-0 items-center gap-2">

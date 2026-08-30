@@ -14,9 +14,11 @@ export namespace FirecrawlSearch {
     data: z
       .object({
         web: Result.array().optional(),
+        news: Result.array().optional(),
       })
       .optional(),
     error: z.string().optional(),
+    creditsUsed: z.number().int().nonnegative().optional(),
   })
 
   export type Result = z.infer<typeof Result>
@@ -53,7 +55,13 @@ export namespace FirecrawlSearch {
   ) {
     const request = options.fetch ?? globalThis.fetch
     const url = `${(options.baseURL ?? "https://api.firecrawl.dev").replace(/\/+$/, "")}/v2/search`
-    const categories = input.source === "developer" ? [{ type: "github" }] : undefined
+    const categories =
+      input.source === "developer"
+        ? [{ type: "developer" }]
+        : input.source === "research"
+          ? [{ type: "research" }]
+          : undefined
+    const enrich = input.mode === "deep" || (input.content === "top" && input.mode !== "fast")
     const timeoutMs = Math.max(1, options.timeoutMs ?? (input.mode === "deep" ? 60_000 : 30_000))
     const timeoutController = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -75,14 +83,16 @@ export namespace FirecrawlSearch {
           },
           body: JSON.stringify({
             query: input.query,
-            limit: input.limit,
-            sources: ["web"],
+            limit: Math.min(input.limit, enrich ? 3 : 10),
+            sources: [input.source === "news" ? "news" : "web"],
             categories,
             includeDomains: input.include_domains,
             excludeDomains: input.exclude_domains,
             timeout: timeoutMs,
             ignoreInvalidURLs: true,
-            ...(input.content === "top" ? { scrapeOptions: { formats: ["markdown"], onlyMainContent: true } } : {}),
+            ...(enrich
+              ? { scrapeOptions: { formats: ["markdown"], onlyMainContent: true, parsers: [], proxy: "basic" } }
+              : {}),
           }),
           signal: AbortSignal.any([options.signal, timeoutController.signal]),
         }),
@@ -94,11 +104,11 @@ export namespace FirecrawlSearch {
       }
       const parsed = Response.parse(raw)
       if (!parsed.success) throw new Error(parsed.error || "Firecrawl search did not complete")
-      const results = project(parsed.data?.web ?? [], input.content)
+      const results = project(
+        input.source === "news" ? (parsed.data?.news ?? []) : (parsed.data?.web ?? []),
+        enrich ? "top" : "snippets",
+      )
       const warnings = [
-        ...(input.source === "web" || input.source === "developer"
-          ? []
-          : [`Firecrawl BYOK used general web results for the requested ${input.source} source.`]),
         ...(input.published_after || input.published_before
           ? ["Firecrawl BYOK did not enforce publication-date filters; verify dates in the cited sources."]
           : []),
@@ -107,6 +117,7 @@ export namespace FirecrawlSearch {
         status: "completed" as const,
         provider: "firecrawl_byok" as const,
         funding: "byok" as const,
+        ...(parsed.creditsUsed !== undefined ? { provider_credits_used: parsed.creditsUsed } : {}),
         results,
         ...(warnings.length ? { warnings } : {}),
       }

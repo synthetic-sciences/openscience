@@ -42,6 +42,10 @@ describe("provider logos", () => {
     expect(providerLogoSource("ollama")).toEqual({ kind: "vector", id: "ollama" })
   })
 
+  test("uses existing first-party provider marks for the current Ace catalog", () => {
+    for (const id of ["minimax", "nvidia"] as const) expect(providerLogoSource(id)).toEqual({ kind: "provider", id })
+  })
+
   test("keeps OpenScience separate from Synthetic Sciences and Ace", () => {
     expect(providerLogoSource("openscience")).toEqual({ kind: "vector", id: "openscience" })
     for (const id of ["synsci", "ace", "synthetic-sciences", "Synthetic Sciences"])

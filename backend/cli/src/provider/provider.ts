@@ -19,7 +19,9 @@ import { isAtlasProxyURL, managedOpenRouterBaseURL } from "../openscience/synced
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ProviderTokenCommand } from "./token-command"
 import { AsyncLocalStorage } from "node:async_hooks"
-import { MANAGED_OPENROUTER_MODEL_SET } from "./managed-catalog"
+import { MANAGED_OPENROUTER_MODEL_SET, managedModelDetails } from "./managed-catalog"
+import { managedModelRoute } from "./managed-routing"
+import { ManagedPricing } from "./managed-pricing"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -471,6 +473,11 @@ export namespace Provider {
     if (input.funding.api_key !== input.apiKey) {
       throw new Error("The connected account changed during managed inference. Retry the operation.")
     }
+    // Native SDKs use x-api-key or x-goog-api-key; the first-party account
+    // middleware always authenticates the same immutable Bearer credential.
+    headers.set("Authorization", `Bearer ${input.funding.api_key}`)
+    headers.delete("x-api-key")
+    headers.delete("x-goog-api-key")
     for (const [key, value] of Object.entries(OpenScience.fundingHeaders(input.funding))) headers.set(key, value)
     return headers
   }
@@ -625,7 +632,7 @@ export namespace Provider {
     if (!Auth.isAtlasApiKey(effective)) return
     if (provider.id === "openrouter" && isAtlasProxyBaseURL(options["baseURL"])) return
     throw new Error(
-      `${provider.id} is using an Ace credential outside the managed OpenRouter proxy. Sign in again or connect your own provider account.`,
+      `${provider.id} is using an Ace credential outside the managed gateway. Sign in again or connect your own provider account.`,
     )
   }
 
@@ -1306,6 +1313,11 @@ export namespace Provider {
           })
           .optional(),
       }),
+      pricing: z.object({
+        upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
+        audited_at: z.string().optional(),
+        source_url: z.string().optional(),
+      }).optional(),
       limit: z.object({
         context: z.number(),
         input: z.number().optional(),
@@ -1373,10 +1385,11 @@ export namespace Provider {
    *  the local registry doesn't know about, this synthesizer fills
    *  the gap instead of having the picker reject the model. */
   function _syntheticOpenRouterModel(modelID: string): Model {
+    const reviewed = managedModelDetails(modelID)
     const m: Model = {
       id: modelID,
       providerID: "openrouter",
-      name: modelID,
+      name: reviewed?.name ?? modelID,
       api: {
         id: modelID,
         url: "https://openrouter.ai/api/v1",
@@ -1393,18 +1406,24 @@ export namespace Provider {
       // Conservative defaults — OR aggregates many models with very
       // different real limits. Anything that needs more context will
       // hit the upstream's actual cap and the API surfaces the error.
-      limit: { context: 128_000, output: 8_192 },
+      limit: { context: reviewed?.context ?? 128_000, output: reviewed?.output ?? 8_192 },
       capabilities: {
-        temperature: true,
+        temperature: reviewed?.temperature ?? true,
         reasoning: true,
         // #192: this is a placeholder for a whitelisted model NOT in the
         // local catalog — guessing `false` here silently drops images/PDFs
         // for what may well be a vision-capable model. Guess permissive
         // instead: a genuinely-unsupported attachment surfaces a real
         // provider error rather than a fabricated "unsupported" one.
-        attachment: true,
+        attachment: reviewed ? reviewed.input.length > 1 : true,
         toolcall: true,
-        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        input: {
+          text: true,
+          audio: reviewed?.input.includes("audio") ?? false,
+          image: reviewed?.input.includes("image") ?? true,
+          video: reviewed?.input.includes("video") ?? false,
+          pdf: reviewed?.input.includes("pdf") ?? true,
+        },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
         interleaved: false,
       },
@@ -1970,8 +1989,31 @@ export namespace Provider {
       const configProvider = config.provider?.[providerID]
 
       if (managedRoute) {
+        const prices = await ManagedPricing.current()
         for (const modelID of MANAGED_OPENROUTER_MODEL_SET) {
           if (!(modelID in provider.models)) provider.models[modelID] = _syntheticOpenRouterModel(modelID)
+          const model = provider.models[modelID]
+          const reviewed = managedModelDetails(modelID)!
+          const configured = configProvider?.models?.[modelID]
+          model.name = configured?.name ?? reviewed.name
+          model.limit.context = configured?.limit?.context ?? reviewed.context
+          model.limit.output = configured?.limit?.output ?? reviewed.output
+          if (reviewed.temperature !== undefined) model.capabilities.temperature = reviewed.temperature
+          // Never present models.dev's unrelated upstream price as Ace pricing.
+          const price = prices[modelID]
+          model.api = { ...model.api, ...managedModelRoute(modelID, price?.pricing.upstream_provider) }
+          if (price?.pricing.upstream_provider === "gemini") {
+            model.capabilities.input.audio = false
+            model.capabilities.input.video = false
+          }
+          if (price) {
+            model.cost = price.cost
+            model.pricing = price.pricing
+            model.limit = { ...model.limit, ...price.limit }
+          } else {
+            model.cost = { input: 0, output: 0, cache: { read: 0, write: 0 } }
+            delete model.pricing
+          }
         }
       }
 
@@ -2004,7 +2046,7 @@ export namespace Provider {
 
       // OpenRouter is OpenAI-compatible across upstreams, so a user-whitelisted
       // model missing from the registry can still be represented locally.
-      if (providerID === "openrouter" && configProvider?.whitelist) {
+      if (providerID === "openrouter" && configProvider?.whitelist && !managedRoute) {
         for (const wlid of configProvider.whitelist) {
           if (isRemovedModel(wlid)) continue
           if (!(wlid in provider.models)) {
@@ -2187,6 +2229,15 @@ export namespace Provider {
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
 
+      if (provider.source === "managed" && Auth.isAtlasApiKey(effectiveKey(provider)) &&
+          model.providerID === "openrouter" && MANAGED_OPENROUTER_MODEL_SET.has(model.id)) {
+        const route = managedModelRoute(model.id, model.pricing?.upstream_provider)
+        if (model.api.npm !== route.npm || model.api.id !== route.id) {
+          throw new Error("The Ace model route changed. Refresh the model list and retry.")
+        }
+        options["baseURL"] = route.url
+      }
+
       if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
         options["includeUsage"] = true
       }
@@ -2261,7 +2312,12 @@ export namespace Provider {
         const apiKey = typeof options["apiKey"] === "string" ? options["apiKey"] : undefined
         const managed = isAtlasProxyBaseURL(options["baseURL"]) && Auth.isAtlasApiKey(apiKey)
         if ((Auth.isAtlasApiKey(apiKey) || hasManagedProxyPath(options["baseURL"])) && !managed) {
-          throw new Error("Ace credentials are valid only on the managed OpenRouter proxy.")
+          throw new Error("Ace credentials are valid only on the managed gateway.")
+        }
+        if (managed) {
+          const endpoint = input instanceof Request ? input.url : input instanceof URL ? input.href : String(input)
+          if (!isAtlasProxyBaseURL(endpoint)) throw new Error("Ace credentials cannot leave the managed gateway.")
+          opts.redirect = "error"
         }
         const context = requestContext.getStore()
         const funding = managed ? await OpenScience.managedRequestSnapshot(apiKey, context?.funding) : undefined

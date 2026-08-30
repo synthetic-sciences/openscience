@@ -38,6 +38,8 @@ export namespace ProviderTransform {
         return "openrouter"
       case "@ai-sdk/deepseek":
         return "deepseek"
+      case "@ai-sdk/xai":
+        return "xai"
     }
     return undefined
   }
@@ -404,6 +406,7 @@ export namespace ProviderTransform {
 
   export function temperature(model: Provider.Model) {
     const id = model.id.toLowerCase()
+    if (/gemini-3[.-][67]-flash/.test(model.api.id.toLowerCase())) return undefined
     if (id.includes("qwen")) return 0.55
     if (id.includes("claude")) return undefined
     if (id.includes("gemini")) return 1.0
@@ -422,6 +425,7 @@ export namespace ProviderTransform {
 
   export function topP(model: Provider.Model) {
     const id = model.id.toLowerCase()
+    if (/gemini-3[.-][67]-flash/.test(model.api.id.toLowerCase())) return undefined
     if (id.includes("qwen")) return 1
     if (id.includes("minimax-m2") || id.includes("kimi-k2.5") || id.includes("kimi-k2p5") || id.includes("gemini")) {
       return 0.95
@@ -431,6 +435,7 @@ export namespace ProviderTransform {
 
   export function topK(model: Provider.Model) {
     const id = model.id.toLowerCase()
+    if (/gemini-3[.-][67]-flash/.test(model.api.id.toLowerCase())) return undefined
     if (id.includes("minimax-m2")) {
       if (id.includes("m2.1")) return 40
       return 20
@@ -572,9 +577,9 @@ export namespace ProviderTransform {
     // separate from OpenAI's date-derived GPT ladder: `none` is rejected with
     // HTTP 400, while `minimal` is the lowest supported tier and there is no
     // `max` tier.
-    if (/muse-spark-1[.-]1\b/.test(id)) {
+    if (/muse-spark-1[.-][12]\b/.test(id)) {
       const values = exact ?? ["minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
-      return Object.fromEntries(values.map((effort) => [effort, { reasoningEffort: effort }]))
+      return efforts(values)
     }
 
     switch (model.api.npm) {
@@ -679,7 +684,9 @@ export namespace ProviderTransform {
       case "@ai-sdk/google-vertex/anthropic": {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
         const cap = model.limit.output
-        const usesEffort = /^claude-opus-4[.-][78]\b/.test(id) || /^claude-(opus|sonnet|mythos)-[5-9]\b/.test(id)
+        const nativeID = model.api.id.toLowerCase().split("/").pop()!
+        const usesEffort =
+          /^claude-opus-4[.-][78]\b/.test(nativeID) || /^claude-(opus|sonnet|mythos|fable)-[5-9]\b/.test(nativeID)
         if (exact) {
           return Object.fromEntries(
             exact.map((effort) => [effort, usesEffort ? { thinking: { type: "adaptive" }, effort } : { effort }]),
@@ -781,6 +788,16 @@ export namespace ProviderTransform {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
       case "@ai-sdk/google":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
+        if (/gemini-3[.-]7-flash/.test(model.api.id.toLowerCase())) {
+          return Object.fromEntries(
+            WIDELY_SUPPORTED_EFFORTS.map((effort) => [
+              effort,
+              {
+                thinkingConfig: { includeThoughts: true, thinkingLevel: effort },
+              },
+            ]),
+          )
+        }
         if (exact) {
           return Object.fromEntries(
             exact.map((effort) => [
@@ -899,15 +916,18 @@ export namespace ProviderTransform {
       //
       if (input.model.capabilities.reasoning) {
         const id = input.model.api.id.toLowerCase()
-        // Grok 4.5's documented default is high and reasoning is mandatory.
+        // Grok 4.5/4.6 default to high and reasoning is mandatory.
         // Preserve that default through OpenRouter instead of replacing it with
         // the generic medium default used by other reasoning models.
-        const effort = id.includes("gemini-3") || /grok-4[.-]5\b/.test(id) ? "high" : "medium"
+        const effort =
+          (id.includes("gemini-3") && !/gemini-3[.-]7-flash/.test(id)) || /grok-4[.-][56]\b/.test(id)
+            ? "high"
+            : "medium"
         result["reasoning"] = { effort }
       }
     }
 
-    if (/muse-spark-1[.-]1\b/.test(input.model.api.id.toLowerCase())) {
+    if (input.model.api.npm === "@ai-sdk/openai" && /muse-spark-1[.-][12]\b/.test(input.model.api.id.toLowerCase())) {
       // Meta selects the default depth when effort is omitted. Stateless
       // Responses calls must return the encrypted item so tool loops can replay
       // the model's reasoning state on the next turn.
@@ -942,8 +962,16 @@ export namespace ProviderTransform {
         includeThoughts: true,
       }
       if (input.model.api.id.includes("gemini-3")) {
-        result["thinkingConfig"]["thinkingLevel"] = "high"
+        result["thinkingConfig"]["thinkingLevel"] = input.model.api.id.includes("gemini-3.7-flash") ? "medium" : "high"
       }
+    }
+
+    if (
+      (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
+      /^claude-(?:opus|sonnet|fable|mythos)-[5-9]\b/.test(input.model.api.id)
+    ) {
+      result["thinking"] = { type: "adaptive" }
+      result["effort"] = "high"
     }
 
     // OpenRouter-routed gpt-5 (e.g. "openai/gpt-5") is handled by the unified
@@ -1025,20 +1053,25 @@ export namespace ProviderTransform {
 
   export function smallOptions(model: Provider.Model) {
     const apiID = model.api.id.toLowerCase()
-    // Grok 4.5 cannot disable reasoning. Use its lowest valid effort for titles,
+    // Grok 4.5/4.6 cannot disable reasoning. Use its lowest valid effort for titles,
     // summaries, and compaction instead of emitting an invalid/ignored off flag
     // or falling back to the expensive high default.
-    if (/grok-4[.-]5\b/.test(apiID)) {
-      if (model.api.npm === "@openrouter/ai-sdk-provider" || model.providerID === "openrouter") {
+    if (/grok-4[.-][56]\b/.test(apiID)) {
+      if (model.api.npm === "@openrouter/ai-sdk-provider") {
         return { reasoning: { effort: "low" } }
       }
       return { reasoningEffort: "low" }
+    }
+    if (/muse-spark-1[.-][12]\b/.test(apiID)) {
+      return model.api.npm === "@openrouter/ai-sdk-provider"
+        ? { reasoning: { effort: "minimal" } }
+        : { reasoningEffort: "minimal" }
     }
     // OpenRouter first: an OR-routed gpt-5 / gemini model must use OR's unified
     // `reasoning` shape, not the OpenAI/Google keys the branches below emit. OR
     // silently ignores `reasoningEffort`, so without this a small OR call (title
     // / summary / compaction) would still reason and bill. Small = skip it.
-    if (model.api.npm === "@openrouter/ai-sdk-provider" || model.providerID === "openrouter") {
+    if (model.api.npm === "@openrouter/ai-sdk-provider") {
       return { reasoning: { enabled: false } }
     }
     if (model.providerID === "openai" || apiID.includes("gpt-5")) {
@@ -1047,10 +1080,10 @@ export namespace ProviderTransform {
       }
       return { reasoningEffort: "minimal" }
     }
-    if (/muse-spark-1[.-]1\b/.test(model.api.id.toLowerCase())) {
-      return { reasoningEffort: "minimal" }
+    if (model.api.npm === "@ai-sdk/anthropic" && /^claude-(?:fable|opus|sonnet|mythos)-[5-9]\b/.test(apiID)) {
+      return { thinking: { type: "adaptive" }, effort: "low" }
     }
-    if (model.providerID === "google") {
+    if (model.providerID === "google" || model.api.npm === "@ai-sdk/google") {
       // gemini-3 uses thinkingLevel, gemini-2.5 uses thinkingBudget
       if (model.api.id.includes("gemini-3")) {
         return { thinkingConfig: { thinkingLevel: "low" } }

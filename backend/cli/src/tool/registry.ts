@@ -252,7 +252,7 @@ export namespace ToolRegistry {
           }
 
           // Community code search retains its existing provider/flag rule.
-          // `research_search` uses the user's configured Firecrawl account.
+          // `research_search` uses Firecrawl BYOK or the selected Ace Wallet.
           if (t.id === "codesearch") {
             return Flag.OPENSCIENCE_ENABLE_EXA
           }

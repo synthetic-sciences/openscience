@@ -1462,6 +1462,33 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
+  test("Ace Muse uses OpenRouter reasoning for ordinary and small requests", () => {
+    const model = createMockModel({
+      id: "meta/muse-spark-1.2",
+      providerID: "openrouter",
+      api: { id: "meta/muse-spark-1.2", npm: "@openrouter/ai-sdk-provider" },
+    })
+    expect(ProviderTransform.variants(model).xhigh).toEqual({ reasoning: { effort: "xhigh" } })
+    expect(ProviderTransform.smallOptions(model)).toEqual({ reasoning: { effort: "minimal" } })
+    expect(ProviderTransform.options({ model, sessionID: "fixture" })).not.toHaveProperty("include")
+  })
+
+  test("Ace Gemini 3.7 emits only supported native thinking and sampling controls", () => {
+    const model = createMockModel({
+      id: "google/gemini-3.7-flash",
+      providerID: "openrouter",
+      api: { id: "gemini-3.7-flash", npm: "@ai-sdk/google" },
+    })
+    expect(Object.keys(ProviderTransform.variants(model))).toEqual(["low", "medium", "high"])
+    expect(ProviderTransform.options({ model, sessionID: "fixture" })).toEqual({
+      thinkingConfig: { includeThoughts: true, thinkingLevel: "medium" },
+    })
+    expect(ProviderTransform.smallOptions(model)).toEqual({ thinkingConfig: { thinkingLevel: "low" } })
+    expect(ProviderTransform.temperature(model)).toBeUndefined()
+    expect(ProviderTransform.topP(model)).toBeUndefined()
+    expect(ProviderTransform.topK(model)).toBeUndefined()
+  })
+
   test("deepseek returns empty object", () => {
     const model = createMockModel({
       id: "deepseek/deepseek-chat",
@@ -2121,7 +2148,14 @@ describe("ProviderTransform.variants", () => {
         api: { id, url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
       })
 
-    const EFFORT_MODELS = ["claude-opus-4-7", "claude-opus-4-8", "claude-opus-5", "claude-sonnet-5", "claude-mythos-5"]
+    const EFFORT_MODELS = [
+      "claude-opus-4-7",
+      "claude-opus-4-8",
+      "claude-opus-5",
+      "claude-sonnet-5",
+      "claude-mythos-5",
+      "claude-fable-5",
+    ]
     for (const id of EFFORT_MODELS) {
       test(`${id} exposes the full low→max effort ladder including xhigh`, () => {
         const result = ProviderTransform.variants(anthropicModel(id))
@@ -2131,6 +2165,17 @@ describe("ProviderTransform.variants", () => {
         expect(result.max).toEqual({ thinking: { type: "adaptive" }, effort: "max" })
       })
     }
+
+    test("Ace canonical model IDs still use native adaptive thinking", () => {
+      const model = { ...anthropicModel("claude-fable-5"), id: "anthropic/claude-fable-5", providerID: "openrouter" }
+      expect(ProviderTransform.variants(model).low).toEqual({ thinking: { type: "adaptive" }, effort: "low" })
+      expect(ProviderTransform.options({ model, sessionID: "fixture" })).toEqual({
+        thinking: { type: "adaptive" },
+        effort: "high",
+      })
+      expect(ProviderTransform.smallOptions(model)).toEqual({ thinking: { type: "adaptive" }, effort: "low" })
+      expect(ProviderTransform.providerOptions(model, { effort: "max" })).toEqual({ anthropic: { effort: "max" } })
+    })
 
     // Regression guard: Mythos is NOT opus/sonnet/haiku, so a naive regex
     // drops them to the classic path where manual thinking 400s.

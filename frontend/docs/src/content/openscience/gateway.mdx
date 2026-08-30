@@ -1,12 +1,20 @@
 ---
-title: "Connect providers"
-description: "Connect model providers and scientific services directly from your device."
+title: "Ace & connections"
+description: "Choose Ace, your own provider access, or workspace-shared credentials."
 icon: "link"
 ---
 
-OpenScience has no product account or hosted inference gateway. Connect only the providers and tools you want; credentials are stored on this device and requests go directly to those services.
+OpenScience runs the research agent locally. You can connect your own providers, use local models, or sign in to Synthetic Sciences for Ace and workspace-shared credentials.
 
-## Model providers
+## Ace
+
+Open **Customize → Models → Ace**, sign in, and choose your workspace. A funded purchased Wallet lets you use the available managed models without adding individual provider keys. The Wallet control opens your balance and account details.
+
+Ace requests pass through the Synthetic Sciences gateway and use the selected workspace's funding context. The gateway checks access and balance on the server; switching workspaces does not silently charge another account. Ace's optional reload authorization is separate from the funds already in your Wallet.
+
+See [Pricing](/openscience/pricing) for provider costs, funding fees, and pending charges.
+
+## Your own model providers
 
 Use **Customize → Models** or the local CLI:
 
@@ -18,17 +26,27 @@ openscience models
 
 Supported routes include provider API keys, provider OAuth where available, ChatGPT/Codex access, and local OpenAI-compatible runtimes such as Ollama and LM Studio.
 
+These connections use your provider account directly. A provider subscription only supplies the access that provider makes available; it does not fund your Ace Wallet.
+
+## Workspace credentials
+
+After sign-in, OpenScience refreshes supported credentials from the selected workspace. A shared credential fills a missing local connection; your saved local key or provider sign-in takes precedence.
+
+This is a scoped credential overlay, not a configuration import. It cannot import arbitrary environment variables, executable commands, plugins, model-routing preferences, or compute-backend selections. Managed gateway credentials are not copied into provider-key slots.
+
+The encrypted local overlay is tied to the signed-in account and workspace. It expires after five minutes without a successful refresh. Sign-out, workspace changes, and revoked access remove the applicable shared access without deleting your own saved keys.
+
 ## Scientific services
 
 Use **Customize → Connectors** for literature, data, publishing, and lab integrations. Public connectors work without credentials. Services that require access use the account or key you provide.
 
-## Local storage
+Research search uses your Firecrawl key when one is connected. Otherwise, signed-in users with sufficient purchased Wallet funds use managed Firecrawl. A failed personal key is not silently replaced with a paid Ace request. If managed search cannot run, the response identifies any best-effort free fallback; it does not describe that fallback as Firecrawl.
 
-Provider credentials, connector credentials, settings, projects, sessions, and results stay in the selected local data root. Move or inspect that root from **Customize → Storage**.
+## Storage and disconnection
 
-## Remove access
+Local projects, sessions, settings, and saved credentials use the selected data root in **Customize → Storage**. Account, shared-credential, and Wallet records also exist in the hosted workspace. Prompts and tool requests leave your device when you select a remote provider or managed service.
 
-Disconnect a provider or connector from its Customize panel. This removes the saved local credential; it does not modify the external provider account.
+Disconnect your own provider or connector in Customize to remove the device's saved credential. To revoke a shared credential, change it in the workspace or sign out. Neither action deletes the external provider account.
 
 ## What's next
 
@@ -36,7 +54,7 @@ Disconnect a provider or connector from its Customize panel. This removes the sa
   <Card title="Models" icon="package-check" href="/openscience/models">
     Choose a provider, local runtime, and reasoning tier.
   </Card>
-  <Card title="Security" icon="shield-check" href="/openscience/security">
-    Review local storage, subprocess isolation, and network boundaries.
+  <Card title="Pricing" icon="receipt" href="/openscience/pricing">
+    Understand the Wallet charge for the route you selected.
   </Card>
 </Columns>

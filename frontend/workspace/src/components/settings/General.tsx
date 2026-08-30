@@ -148,15 +148,26 @@ export default function General() {
       .map((organization) => ({ value: organization.organization_id, label: organization.name }))
     return [personal, ...organizations]
   })
-  const workspaceValue = createMemo(() => account()?.funding_context.organization_id ?? "personal")
+  const workspaceValue = createMemo(() => {
+    const context = account()?.funding_context
+    const selected = context?.organizations.find((item) => item.organization_id === context.organization_id)
+    return selected?.is_personal ? "personal" : context?.organization_id ?? "personal"
+  })
   const workspace = createMemo(() => workspaceOptions().find((option) => option.value === workspaceValue()))
+  const workspaceLabel = createMemo(() => {
+    const context = account()?.funding_context
+    const selected = context?.organizations.find((item) => item.organization_id === context.organization_id)
+    return selected?.name ?? workspace()?.label ?? (context?.organization_id ? "Selected workspace" : "Personal")
+  })
   const canDirectlySwitchWorkspace = createMemo(
     () =>
       account()?.credential?.type === "organization" &&
       account()?.credential?.legacy === false &&
       account()?.funding_context.locked === false,
   )
-  const needsBrowserWorkspaceApproval = createMemo(() => workspaceOptions().length > 1 && !canDirectlySwitchWorkspace())
+  // A workspace-scoped key may only enumerate its own workspace. Browser
+  // approval discovers other memberships without widening that key's access.
+  const needsBrowserWorkspaceApproval = createMemo(() => Boolean(account()?.session) && !canDirectlySwitchWorkspace())
 
   const setWorkspace = async (option: WorkspaceOption | undefined) => {
     if (!option || busy() || option.value === workspaceValue()) return
@@ -287,15 +298,15 @@ export default function General() {
                   title="Funding workspace"
                   description={
                     needsBrowserWorkspaceApproval()
-                      ? "Switching this account requires browser approval."
-                      : "Used for Ace usage and purchased Wallet funds."
+                      ? "Ace uses this Wallet. Switching requires browser approval."
+                      : "Ace uses this Wallet, with no automatic fallback to another workspace."
                   }
                 >
                   <Show
                     when={canDirectlySwitchWorkspace() && workspaceOptions().length > 1}
                     fallback={
                       <span class="settings-account-value">
-                        {workspace()?.label ?? (account()!.funding_context.available ? "Personal" : "Unavailable")}
+                        {workspaceLabel()}{account()!.funding_context.available ? "" : " · Unavailable"}
                       </span>
                     }
                   >

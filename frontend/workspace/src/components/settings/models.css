@@ -84,6 +84,37 @@
   font-variant-numeric: tabular-nums;
 }
 
+.models-rate-details summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.models-rate-details summary:focus-visible {
+  outline: 2px solid var(--border-base);
+  outline-offset: 3px;
+}
+
+.models-rate-route {
+  max-width: 380px;
+  margin-top: 8px;
+}
+
+.models-rate-route dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.models-rate-route dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.models-rate-route p {
+  margin-top: 4px;
+}
+
 .settings-dialog .settings-models-panel [data-component="button"] {
   min-height: var(--models-control-height);
   height: var(--models-control-height);

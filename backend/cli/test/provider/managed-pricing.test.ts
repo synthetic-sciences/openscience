@@ -1,0 +1,115 @@
+import { expect, test } from "bun:test"
+import { GlobalBus } from "../../src/bus/global"
+
+const entry = {
+  id: "anthropic/claude-opus-5",
+  context_length: 1_000_000,
+  max_output_tokens: 128_000,
+  upstream_provider: "anthropic",
+  pricing: {
+    tiers: [{ input: 5, output: 25, cache_read: 0.5, cache_write: 6.25 }],
+    audited_at: "2026-08-30",
+    source_url: "https://platform.claude.com/docs/en/about-claude/pricing",
+  },
+}
+let requests = 0
+let release: (() => void) | undefined
+let received: (() => void) | undefined
+async function gateway(request: Request) {
+  requests++
+  const organization = request.headers.get("X-Organization-ID")
+  expect(request.headers.get("authorization")).toBe(`Bearer osk_fixture_${organization}`)
+  expect(new URL(request.url).pathname).toBe(`/api/organizations/${organization}/ace`)
+  if (organization === "org_a")
+    await new Promise<void>((resolve) => {
+      release = resolve
+      received?.()
+    })
+  return Response.json(
+    { models: [entry] },
+    {
+      headers: {
+        "OpenScience-Funding-Protocol": "1",
+        "OpenScience-Funding-Context": `organization:${organization}`,
+      },
+    },
+  )
+}
+const { ManagedPricing } = await import("../../src/provider/managed-pricing")
+const { OpenScience } = await import("../../src/openscience")
+
+test("pricing ingestion copies only reviewed non-executable metadata", () => {
+  const parsed = ManagedPricing.parse({
+    models: [
+      {
+        ...entry,
+        api: { url: "https://untrusted.example", npm: "untrusted-package" },
+        options: { apiKey: "never-import-this" },
+        headers: { Authorization: "never-import-this" },
+      },
+    ],
+  })
+  expect(parsed[entry.id]?.cost).toEqual({ input: 5, output: 25, cache: { read: 0.5, write: 6.25 }, tiers: [] })
+  expect(parsed[entry.id]?.limit).toEqual({ context: 1_000_000, output: 128_000 })
+  expect(JSON.stringify(parsed)).not.toContain("untrusted")
+  expect(JSON.stringify(parsed)).not.toContain("never-import")
+  expect(ManagedPricing.parse({ models: [{ ...entry, id: "unreviewed/model" }] })).toEqual({})
+  expect(ManagedPricing.parse({ models: [{ ...entry, available: false }] })).toEqual({})
+  expect(ManagedPricing.parse({ models: [{ ...entry, pricing: { tiers: [{ input: -1, output: 25 }] } }] })).toEqual({})
+})
+
+test("long-context prices retain inclusive provider thresholds", () => {
+  const parsed = ManagedPricing.parse({
+    models: [
+      {
+        ...entry,
+        pricing: {
+          tiers: [
+            { input: 2, output: 12, max_input_tokens: 200_000 },
+            { input: 4, output: 18, min_input_tokens: 200_001 },
+          ],
+        },
+      },
+    ],
+  })
+  expect(parsed[entry.id]?.cost.tiers?.[0]?.threshold).toBe(200_000)
+})
+
+test("pricing cache is nonblocking, deduplicated, and partitioned by immutable workspace", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = ((input, init) => gateway(new Request(input, init))) as typeof fetch
+  try {
+    const session = (organization_id: string) => ({
+      api_key: `osk_fixture_${organization_id}`,
+      user_id: "fixture",
+      organization_id,
+      workspace_locked: true,
+    })
+    await OpenScience.saveSession(session("org_a"))
+    const entered = new Promise<void>((resolve) => {
+      received = resolve
+    })
+    expect(await ManagedPricing.current()).toEqual({})
+    expect(await ManagedPricing.current()).toEqual({})
+    await entered
+    expect(requests).toBe(1)
+    const published = new Promise<void>((resolve) => {
+      const listener = (event: { directory?: string; payload: { type: string } }) => {
+        if (event.payload.type !== "global.disposed") return
+        GlobalBus.off("event", listener)
+        resolve()
+      }
+      GlobalBus.on("event", listener)
+    })
+    release?.()
+    await published
+    expect((await ManagedPricing.current())[entry.id]?.pricing.upstream_provider).toBe("anthropic")
+    expect(requests).toBe(1)
+    await OpenScience.saveSession(session("org_b"))
+    expect(await ManagedPricing.current()).toEqual({})
+  } finally {
+    release?.()
+    globalThis.fetch = originalFetch
+    await OpenScience.clearSession()
+  }
+})

@@ -1,10 +1,18 @@
 ---
 title: "Models & providers"
-description: "Use your provider accounts, API keys, or local models."
+description: "Choose Ace, your provider account, or a local model for each run."
 icon: "package-check"
 ---
 
-OpenScience is model-agnostic. Routing happens on your machine and model calls go directly to the provider or local endpoint you select.
+Choose **BYOK / Subscription** or **Ace** in **Customize → Models**. BYOK uses your own provider access; Ace uses the selected workspace's purchased Wallet through the Synthetic Sciences gateway. Local models use neither.
+
+## Use Ace
+
+Sign in from the Ace panel, select your workspace, and add Wallet funds or authorize Ace reloads. The model picker shows the available managed catalog and pricing for its actual upstream route.
+
+Supported Claude and Gemini models use native Anthropic and Google endpoints when their credentials and reviewed rates are configured. Other managed models use OpenRouter. Grok and Meta retain their OpenRouter routes until native access is ready; implementing a native adapter does not activate it. Direct Meta pricing still needs verification before that route can be enabled.
+
+The model's context capacity and its pricing thresholds are different numbers. Open a model's options for its context limit, input/output rates, cache rates, and supported reasoning tiers. See [Pricing](/openscience/pricing).
 
 ## Connect a provider
 
@@ -23,7 +31,7 @@ export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ...
 openscience
 ```
 
-Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, Meta, DeepSeek, and many other providers use the same local flow. The catalog is backed by models.dev and refreshed periodically.
+Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, Meta, DeepSeek, and other providers use this local flow. Access depends on your provider account. Shared workspace credentials can fill a missing connection without replacing a key or sign-in already saved on your device. See [Ace & connections](/openscience/gateway).
 
 ## Local models
 
@@ -52,11 +60,13 @@ openscience run --model moonshotai/kimi-k3 "Implement the pipeline"
 | --- | --- | --- |
 | Provider key | Directly to that provider | Your provider account |
 | Provider OAuth | Directly through that provider's supported sign-in | Your subscription or provider account |
+| Workspace-shared provider key | Directly to that provider | The workspace's connected provider account |
+| Ace | Synthetic Sciences gateway, then the catalog's declared upstream | The selected workspace's purchased Wallet |
 | Local model | Your local endpoint | None |
 
 ## Key hygiene
 
-Credentials are stored per user in the local data root, never in a project's `.openscience/` directory. General kernels receive a minimal environment, provider-shaped secrets are redacted from output, and retired proxy routes are rejected before a request can carry a user key.
+Saved local credentials live in the per-user data root, not a project's `.openscience/` directory. Shared credentials use a separate encrypted, expiring overlay. General kernels receive a minimal environment, and credential-shaped secrets are redacted from output. Your local provider keys are not uploaded merely by signing in to Ace.
 
 ## What's next
 
@@ -64,8 +74,8 @@ Credentials are stored per user in the local data root, never in a project's `.o
   <Card title="Quickstart" icon="rocket" href="/openscience/quickstart">
     First provider to first result.
   </Card>
-  <Card title="Connect providers" icon="link" href="/openscience/gateway">
-    Configure model and scientific-service access.
+  <Card title="Ace & connections" icon="link" href="/openscience/gateway">
+    Configure managed, personal, and workspace-shared access.
   </Card>
   <Card title="Local models" icon="cpu" href="/openscience/local-models">
     Run an OpenAI-compatible model on your machine.

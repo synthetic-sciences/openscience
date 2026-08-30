@@ -17,6 +17,8 @@ const OPENROUTER_VENDOR_DISPLAY: Record<string, ModelProviderDisplay> = {
   zai: { id: "zai", name: "Z.AI" },
   mistralai: { id: "mistral", name: "Mistral" },
   qwen: { id: "openrouter", name: "Qwen" },
+  minimax: { id: "minimax", name: "MiniMax" },
+  nvidia: { id: "nvidia", name: "NVIDIA" },
 }
 
 const OPENROUTER_PROVIDER_PREFIX: Record<string, string> = {
@@ -63,17 +65,25 @@ export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
   "xai/grok-4-6",
   "xai/grok-4-20-multi-agent",
   "meta/muse-spark-1-1",
+  "meta/muse-spark-1-2",
   "openai/gpt-5-5",
   "openai/gpt-5-5-pro",
   "openai/gpt-5-5-mini",
   "anthropic/claude-sonnet-5",
   "anthropic/claude-opus-5",
   "anthropic/claude-fable-5",
+  "anthropic/claude-haiku-4-5",
   "anthropic/claude-opus-4-8",
   "google/gemini-3-6-flash",
+  "google/gemini-3-7-flash",
   "google/gemini-3-1-pro-preview",
   "zai/glm-5-2",
   "zai/glm-5-3",
+  "zai/glm-5-3-flash",
+  "qwen/qwen3-8-max",
+  "qwen/qwen3-8-flash",
+  "minimax/minimax-m3",
+  "nvidia/nemotron-3-ultra-550b-a55b",
   "moonshotai/kimi-k2-7-code",
   "moonshotai/kimi-k3",
   "deepseek/deepseek-v4-pro",
@@ -131,7 +141,7 @@ export function inferenceSourceLabel(source: InferenceSource | undefined, fallba
 export function modelContext(limit: number): string {
   if (limit >= 1_000_000) {
     const value = limit / 1_000_000
-    const rounded = Math.abs(value - Math.round(value)) < 0.1 ? Math.round(value) : Number(value.toFixed(1))
+    const rounded = Number(value.toFixed(2))
     return `${rounded.toLocaleString()}m`
   }
   if (limit >= 1_000) return `${Math.round(limit / 1_000).toLocaleString()}k`

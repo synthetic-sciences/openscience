@@ -28,6 +28,8 @@ import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
 import { Auth } from "../../src/auth"
 import { ModelsDev } from "../../src/provider/models"
+import { MANAGED_OPENROUTER_MODELS, MANAGED_MODEL_DETAILS } from "../../src/provider/managed-catalog"
+import { OpenScience } from "../../src/openscience"
 
 /* Keep this list aligned with live-catalog.test.ts. The committed fixture makes
    PR CI deterministic; the scheduled live check catches upstream delistings. */
@@ -55,6 +57,40 @@ const FRONTIER_MODELS = {
 }
 const SONNET = "claude-sonnet-4-6"
 const OPUS = "claude-opus-4-5"
+
+test("Ace exposes the reviewed 21 models with exact names and context even when the bundled catalog lags", async () => {
+  await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
+  await OpenScience.saveSession({
+    api_key: "osk_fixture_managed_catalog",
+    user_id: "fixture",
+    organization_id: "fixture-org",
+    workspace_locked: true,
+  })
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const provider = (await Provider.list()).openrouter
+        expect(provider.source).toBe("managed")
+        expect(Object.keys(provider.models).sort()).toEqual([...MANAGED_OPENROUTER_MODELS].sort())
+        expect(Object.keys(provider.models)).toHaveLength(21)
+        for (const id of MANAGED_OPENROUTER_MODELS) {
+          const model = provider.models[id]
+          const reviewed = MANAGED_MODEL_DETAILS[id]
+          expect(model.api.id).toBe(id)
+          expect(model.name).toBe(reviewed.name)
+          expect(model.limit.context).toBe(reviewed.context)
+          expect(model.limit.output).toBe(reviewed.output)
+        }
+        expect(provider.models["qwen/qwen3.8-flash"].name).toBe("Qwen 3.8 Flash Next")
+        expect(provider.models["nvidia/nemotron-3-ultra-550b-a55b"].capabilities.input.image).toBe(false)
+        expect(provider.models["google/gemini-3.7-flash"].capabilities.input.video).toBe(true)
+      },
+    })
+  } finally {
+    await OpenScience.clearSession()
+  }
+})
 
 test("normalized catalog providers satisfy the public provider schema without an API URL", () => {
   const catalog = ModelsDev.Provider.parse({

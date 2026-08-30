@@ -2119,6 +2119,11 @@ export type WellKnownAuth = {
 export type Auth = OAuth | ApiAuth | WellKnownAuth
 
 export type Model = {
+  pricing?: {
+    upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
+    audited_at?: string
+    source_url?: string
+  }
   id: string
   providerID: string
   api: {

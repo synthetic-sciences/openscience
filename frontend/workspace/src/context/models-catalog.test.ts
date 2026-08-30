@@ -104,11 +104,34 @@ describe("frontier model canonicalization", () => {
   })
 
   test("model metadata stays factual and formats advertised windows calmly", () => {
-    expect(modelContext(1_050_000)).toBe("1m")
+    expect(modelContext(1_050_000)).toBe("1.05m")
+    expect(modelContext(1_310_720)).toBe("1.31m")
     expect(modelContext(400_000)).toBe("400k")
     expect(modelSummary({ reasoning: true, context: 1_050_000, provider: "OpenAI" })).toBe(
-      "Reasoning · 1m context · OpenAI",
+      "Reasoning · 1.05m context · OpenAI",
     )
+  })
+
+  test("the current Ace families have provider identities and visible frontier defaults", () => {
+    const ids = [
+      "google/gemini-3.7-flash",
+      "meta/muse-spark-1.2",
+      "qwen/qwen3.8-max",
+      "qwen/qwen3.8-flash",
+      "minimax/minimax-m3",
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "z-ai/glm-5.3-flash",
+      "anthropic/claude-haiku-4.5",
+    ]
+    for (const modelID of ids) expect(isFrontier({ providerID: "openrouter", modelID })).toBe(true)
+    expect(displayProviderForModel({ id: "openrouter", name: "OpenRouter" }, ids[4]!)).toEqual({
+      id: "minimax",
+      name: "MiniMax",
+    })
+    expect(displayProviderForModel({ id: "openrouter", name: "OpenRouter" }, ids[5]!)).toEqual({
+      id: "nvidia",
+      name: "NVIDIA",
+    })
   })
 
   test("exact access routes survive before logical presentation grouping", () => {

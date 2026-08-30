@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "bun run --cwd ../docs build && vite build",
     "preview": "vite preview",
-    "sync:docs": "bun run --cwd ../docs build && rm -rf public/docs && cp -r ../docs/dist public/docs"
+    "sync:docs": "bun run build"
   },
   "dependencies": {
     "react": "^18.3.1",
