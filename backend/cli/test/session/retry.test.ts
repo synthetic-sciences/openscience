@@ -89,6 +89,46 @@ describe("session.retry.delay", () => {
 })
 
 describe("session.retry.retryable", () => {
+  test("does not redispatch a managed request whose provider outcome is unknown", () => {
+    const error = new MessageV2.APIError({
+      message: "The provider outcome is unknown and this request cannot be dispatched twice",
+      statusCode: 409,
+      isRetryable: true,
+      responseBody: JSON.stringify({
+        detail: {
+          code: "managed_outcome_unknown",
+          message: "The provider outcome is unknown and this request cannot be dispatched twice",
+        },
+      }),
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("does not retry a streamed managed unknown-outcome error", () => {
+    const error = wrap(
+      JSON.stringify({
+        detail: {
+          code: "managed_outcome_unknown",
+          message: "The provider outcome is unknown and this request cannot be dispatched twice",
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("preserves retry behavior for unrelated retryable conflicts", () => {
+    const error = new MessageV2.APIError({
+      message: "Retryable conflict",
+      statusCode: 409,
+      isRetryable: true,
+      responseBody: JSON.stringify({ detail: { code: "temporary_conflict" } }),
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBe("Retryable conflict")
+  })
+
   test("maps too_many_requests json messages", () => {
     const error = wrap(JSON.stringify({ type: "error", error: { type: "too_many_requests" } }))
     expect(SessionRetry.retryable(error)).toBe("Too Many Requests")

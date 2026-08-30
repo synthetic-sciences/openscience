@@ -127,7 +127,12 @@ export namespace SessionRetry {
         }
       })
       if (!json || typeof json !== "object") continue
-      const err = json.error && typeof json.error === "object" ? json.error : json
+      const err =
+        json.error && typeof json.error === "object"
+          ? json.error
+          : json.detail && typeof json.detail === "object"
+            ? json.detail
+            : json
       const nestedStatus = Number(
         err.statusCode ??
           err.status_code ??
@@ -176,12 +181,16 @@ export namespace SessionRetry {
 
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
     if (isContextOverflow(error)) return undefined
+    const normalized = normalizeProviderError(error)
+    // The gateway cannot prove whether the provider accepted this request.
+    // Never redispatch it, even if the SDK's generic classification allows it.
+    if (normalized.code === "managed_outcome_unknown") return undefined
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
     }
 
-    const { statusCode, code, type, message } = normalizeProviderError(error)
+    const { statusCode, code, type, message } = normalized
     const signal = `${code} ${type} ${message}`.toLowerCase()
 
     // Status-less provider stream errors arrive wrapped as UnknownError. Retry
