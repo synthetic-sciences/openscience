@@ -3,6 +3,7 @@ import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
 import { Instance } from "../../project/instance"
 import { Project } from "../../project/project"
+import { ManagedProject } from "../../project/managed"
 import z from "zod"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -24,8 +25,8 @@ export const ProjectRoutes = lazy(() =>
     .get(
       "/",
       describeRoute({
-        summary: "List all projects",
-        description: "Get a list of projects that have been opened with OpenScience.",
+        summary: "List OpenScience projects",
+        description: "Get the app-created OpenScience projects owned by this server.",
         operationId: "project.list",
         responses: {
           200: {
@@ -39,7 +40,7 @@ export const ProjectRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const projects = await Project.list()
+        const projects = await ManagedProject.list()
         return c.json(projects)
       },
     )

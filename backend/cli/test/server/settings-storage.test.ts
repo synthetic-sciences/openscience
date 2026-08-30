@@ -107,6 +107,36 @@ describe("Storage Settings integration", () => {
     await script(workspace, source)
   })
 
+  test("reports and clears only regenerable local cache entries", async () => {
+    const workspace = await root()
+    const source = [
+      `import { StorageRoutes } from ${JSON.stringify(routes)}`,
+      `import { Global } from ${JSON.stringify(globalModule)}`,
+      'import fs from "node:fs/promises"',
+      'import path from "node:path"',
+      'const payload = path.join(Global.Path.cache, "packages", "payload.bin")',
+      "await fs.mkdir(path.dirname(payload), { recursive: true })",
+      "await fs.writeFile(payload, Buffer.alloc(8192, 1))",
+      'const settle = async (url = "/") => {',
+      "  let body = await (await StorageRoutes().request(url)).json()",
+      "  const deadline = Date.now() + 10_000",
+      '  while (body.scanning && Date.now() < deadline) { await Bun.sleep(10); body = await (await StorageRoutes().request("/")).json() }',
+      '  if (body.scanning) throw new Error("usage scan did not settle")',
+      "  return body",
+      "}",
+      "const before = await settle()",
+      "if (before.cache_bytes <= 0) throw new Error(`cache usage missing: ${before.cache_bytes}`)",
+      'const response = await StorageRoutes().request("/cache", { method: "DELETE" })',
+      "if (response.status !== 200) throw new Error(`cache clear failed: ${await response.text()}`)",
+      'if (await Bun.file(payload).exists()) throw new Error("cache payload survived clear")',
+      'if (!(await Bun.file(path.join(Global.Path.cache, "version")).exists())) throw new Error("cache version marker was removed")',
+      'const marker = await fs.stat(path.join(Global.Path.cache, "version"))',
+      'const after = await settle("/?refresh=1")',
+      "if (after.cache_bytes > marker.blocks * 512) throw new Error(`cache usage stayed stale: ${after.cache_bytes}`)",
+    ].join("\n")
+    await script(workspace, source)
+  })
+
   test("refresh=1 bypasses a fresh usage result without starting duplicate background scans", async () => {
     const workspace = await root()
     const source = [

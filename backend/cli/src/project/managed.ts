@@ -111,10 +111,11 @@ export namespace ManagedProject {
       .mkdir(directory)
       .then(async () => {
         const created = await Project.fromDirectory(directory)
-        const project = await Project.update({
+        const named = await Project.update({
           projectID: created.project.id,
           name,
         })
+        const project = await Project.markOpenScience(named.id)
         await checkpoint?.(project)
         await Storage.write<Info>(["managed_project", project.id], {
           version: 1,
@@ -135,6 +136,45 @@ export namespace ManagedProject {
 
   export async function create(name: string, checkpoint?: (project: Project.Info) => Promise<void>) {
     return createAt(name, path.join(Global.Path.data, "projects", crypto.randomUUID()), checkpoint)
+  }
+
+  function inside(root: string, target: string) {
+    const relative = path.relative(root, target)
+    return !!relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+  }
+
+  /**
+   * Home is an OpenScience project library, not a history of every directory
+   * the runtime has resolved. Durable markers are authoritative; app-created
+   * roots from older versions are promoted once so upgrades keep their work.
+   */
+  export async function list() {
+    const [projects, keys] = await Promise.all([Project.list(), Storage.list(["managed_project"]).catch(() => [])])
+    const markers = new Set(
+      (
+        await Promise.all(
+          keys.map(async (key) => {
+            const parsed = await Storage.read<unknown>(key)
+              .then(Info.safeParse)
+              .catch(() => undefined)
+            if (!parsed?.success) return
+            return parsed.data
+          }),
+        )
+      )
+        .filter((marker): marker is Info => !!marker)
+        .map((marker) => `${marker.projectID}\0${Project.canonicalize(marker.directory)}`),
+    )
+    const root = Project.canonicalize(path.join(Global.Path.data, "projects"))
+    const owned = projects.filter((project) => {
+      if (project.origin === "openscience") return true
+      const directory = Project.canonicalize(project.worktree)
+      return markers.has(`${project.id}\0${directory}`) || inside(root, directory)
+    })
+    const promoted = await Promise.all(
+      owned.map((project) => (project.origin === "openscience" ? project : Project.markOpenScience(project.id))),
+    )
+    return promoted.toSorted((a, b) => a.id.localeCompare(b.id))
   }
 
   /**

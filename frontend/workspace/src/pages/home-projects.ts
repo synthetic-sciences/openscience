@@ -2,6 +2,7 @@ export type ProjectRecord = {
   id: string
   worktree: string
   name?: string
+  origin?: "openscience"
   time: {
     created: number
     updated?: number
@@ -41,6 +42,7 @@ export function prepareProjects(
 ) {
   const indexed = projects.reduce((result, project) => {
     if (
+      project.origin !== "openscience" ||
       !project.id ||
       !project.worktree ||
       project.time.archived ||
@@ -62,12 +64,18 @@ export function prepareProjects(
         pinned: favorites.has(project.id) || favorites.has(project.worktree),
       }),
     )
-    .sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.updatedAt - left.updatedAt)
+    .sort(
+      (left, right) =>
+        Number(right.pinned) - Number(left.pinned) ||
+        right.updatedAt - left.updatedAt ||
+        projectName(left).localeCompare(projectName(right)) ||
+        left.id.localeCompare(right.id),
+    )
 }
 
 export function prepareArchivedProjects(projects: ProjectRecord[]) {
   const indexed = projects.reduce((result, project) => {
-    if (!project.id || !project.worktree || !project.time.archived) return result
+    if (project.origin !== "openscience" || !project.id || !project.worktree || !project.time.archived) return result
     const current = result.get(project.id)
     if (current && timestamp(current) >= timestamp(project)) return result
     result.set(project.id, project)
@@ -82,7 +90,12 @@ export function prepareArchivedProjects(projects: ProjectRecord[]) {
         pinned: false,
       }),
     )
-    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .sort(
+      (left, right) =>
+        right.updatedAt - left.updatedAt ||
+        projectName(left).localeCompare(projectName(right)) ||
+        left.id.localeCompare(right.id),
+    )
 }
 
 export function filterProjects(projects: PreparedProject[], query: string) {

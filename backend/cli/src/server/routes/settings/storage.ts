@@ -7,6 +7,7 @@ import z from "zod"
 import { Global } from "@/global"
 import { DataRelocation } from "@/global/data-relocation"
 import { lazy } from "@/util/lazy"
+import { Lock } from "@/util/lock"
 
 const pointerPath = path.join(Global.Path.config, "data-location")
 
@@ -79,6 +80,7 @@ const Usage = z.object({
   state_dir: z.string(),
   pointer: z.string().nullable(),
   total_bytes: z.number(),
+  cache_bytes: z.number(),
   scanning: z.boolean(),
   updated_at: z.string().nullable(),
   scan_error: z.string().nullable(),
@@ -87,16 +89,17 @@ const Usage = z.object({
 })
 
 type UsageEntry = z.infer<typeof Usage>["entries"][number]
-type ScanResult = { total_bytes: number; entries: UsageEntry[]; updated_at: string }
+type ScanResult = { total_bytes: number; cache_bytes: number; entries: UsageEntry[]; updated_at: string }
 const usageScan: {
-  dataDir?: string
+  root?: string
+  generation: number
   value?: ScanResult
   promise?: Promise<void>
   error?: string
   errorAt?: number
-} = {}
+} = { generation: 0 }
 
-async function scanUsage(dataDir: string): Promise<ScanResult> {
+async function scanUsage(dataDir: string, cacheDir: string): Promise<ScanResult> {
   const dirents = await fs.readdir(dataDir, { withFileTypes: true })
   const entries: UsageEntry[] = []
   const seen = new Set<string>()
@@ -120,21 +123,27 @@ async function scanUsage(dataDir: string): Promise<ScanResult> {
     })
   }
   entries.sort((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name))
+  const cacheBytes = await dirSize(cacheDir, new Set())
   return {
     total_bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
+    cache_bytes: cacheBytes,
     entries,
     updated_at: new Date().toISOString(),
   }
 }
 
-function refreshUsage(dataDir: string, refresh = false) {
-  if (usageScan.dataDir !== dataDir) {
-    usageScan.dataDir = dataDir
-    usageScan.value = undefined
-    usageScan.promise = undefined
-    usageScan.error = undefined
-    usageScan.errorAt = undefined
-  }
+function invalidateUsage(root: string) {
+  usageScan.root = root
+  usageScan.generation += 1
+  usageScan.value = undefined
+  usageScan.promise = undefined
+  usageScan.error = undefined
+  usageScan.errorAt = undefined
+}
+
+function refreshUsage(dataDir: string, cacheDir: string, refresh = false) {
+  const root = `${dataDir}\0${cacheDir}`
+  if (usageScan.root !== root) invalidateUsage(root)
   const fresh = usageScan.value && Date.now() - Date.parse(usageScan.value.updated_at) < 30_000
   const recentError = usageScan.errorAt !== undefined && Date.now() - usageScan.errorAt < 30_000
   if (usageScan.promise) return
@@ -143,21 +152,23 @@ function refreshUsage(dataDir: string, refresh = false) {
     usageScan.error = undefined
     usageScan.errorAt = undefined
   }
-  usageScan.promise = scanUsage(dataDir)
+  const generation = usageScan.generation
+  const request = scanUsage(dataDir, cacheDir)
     .then((value) => {
-      if (usageScan.dataDir !== dataDir) return
+      if (usageScan.root !== root || usageScan.generation !== generation) return
       usageScan.value = value
       usageScan.error = undefined
       usageScan.errorAt = undefined
     })
     .catch((error) => {
-      if (usageScan.dataDir !== dataDir) return
+      if (usageScan.root !== root || usageScan.generation !== generation) return
       usageScan.error = message(error)
       usageScan.errorAt = Date.now()
     })
     .finally(() => {
-      if (usageScan.dataDir === dataDir) usageScan.promise = undefined
+      if (usageScan.promise === request) usageScan.promise = undefined
     })
+  usageScan.promise = request
 }
 
 const Moved = z.object({
@@ -168,6 +179,11 @@ const Moved = z.object({
   bytes: z.number().int().nonnegative(),
   backup: z.string().optional(),
   warning: z.string().optional(),
+})
+
+const Cleared = z.object({
+  ok: z.literal(true),
+  entries: z.number().int().nonnegative(),
 })
 
 function message(error: unknown) {
@@ -188,7 +204,8 @@ export const StorageRoutes = lazy(() =>
       validator("query", z.object({ refresh: z.literal("1").optional() })),
       async (c) => {
         const dataDir = await fs.realpath(Global.Path.data)
-        refreshUsage(dataDir, c.req.valid("query").refresh === "1")
+        const cacheDir = await fs.realpath(Global.Path.cache).catch(() => path.resolve(Global.Path.cache))
+        refreshUsage(dataDir, cacheDir, c.req.valid("query").refresh === "1")
         const [pointer, relocation] = await Promise.all([
           Bun.file(pointerPath)
             .text()
@@ -204,12 +221,37 @@ export const StorageRoutes = lazy(() =>
           state_dir: Global.Path.state,
           pointer,
           total_bytes: usageScan.value?.total_bytes ?? 0,
+          cache_bytes: usageScan.value?.cache_bytes ?? 0,
           entries: usageScan.value?.entries ?? [],
           scanning: Boolean(usageScan.promise),
           updated_at: usageScan.value?.updated_at ?? null,
           scan_error: usageScan.error ?? null,
           relocation,
         })
+      },
+    )
+    .delete(
+      "/cache",
+      describeRoute({
+        summary: "Clear local cache",
+        description:
+          "Remove regenerable OpenScience package, model-catalog, and bundled-skill cache entries. User projects, sessions, credentials, and artifacts are never touched.",
+        operationId: "settings.storage.clearCache",
+        responses: {
+          200: { description: "Cache cleared", content: { "application/json": { schema: resolver(Cleared) } } },
+        },
+      }),
+      async (c) => {
+        using _lock = await Lock.write("settings-storage-cache")
+        const entries = (await optional(fs.readdir(Global.Path.cache))) ?? []
+        const removable = entries.filter((entry) => entry !== "version")
+        await Promise.all(
+          removable.map((entry) => fs.rm(path.join(Global.Path.cache, entry), { recursive: true, force: true })),
+        )
+        const dataDir = await fs.realpath(Global.Path.data)
+        const cacheDir = await fs.realpath(Global.Path.cache).catch(() => path.resolve(Global.Path.cache))
+        invalidateUsage(`${dataDir}\0${cacheDir}`)
+        return c.json({ ok: true as const, entries: removable.length })
       },
     )
     .post(

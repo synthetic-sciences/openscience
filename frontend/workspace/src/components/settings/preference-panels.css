@@ -709,6 +709,17 @@
   row-gap: var(--settings-space-2);
 }
 
+.settings-storage-cache {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: var(--settings-space-3);
+}
+
+.settings-storage-cache .settings-preference-action {
+  min-height: 32px;
+}
+
 .settings-storage-meter {
   grid-column: 2 / -1;
   height: 3px;
@@ -800,6 +811,15 @@
     width: 100%;
     padding-left: 42px;
     text-align: left;
+  }
+
+  .settings-storage-cache {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+  }
+
+  .settings-storage-cache .settings-preference-action {
+    grid-column: 2 / -1;
+    justify-self: start;
   }
 
   .settings-preferences-panel--network .settings-network-policy-row,

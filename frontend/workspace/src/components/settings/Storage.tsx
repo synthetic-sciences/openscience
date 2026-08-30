@@ -27,6 +27,7 @@ type Usage = {
   state_dir: string
   pointer: string | null
   total_bytes: number
+  cache_bytes: number
   entries: Entry[]
   scanning?: boolean
   updated_at?: string | null
@@ -120,24 +121,30 @@ export const Storage: Component = () => {
   const [error, setError] = createSignal<string>()
   const [loading, setLoading] = createSignal(true)
   const [busy, setBusy] = createSignal(false)
+  const [clearing, setClearing] = createSignal(false)
   const [editing, setEditing] = createSignal(false)
   const [target, setTarget] = createSignal("")
   const [status, setStatus] = createSignal<string>()
 
   let poll: ReturnType<typeof setTimeout> | undefined
+  let request = 0
+  let disposed = false
   const schedulePoll = (next: Usage) => {
     if (poll) clearTimeout(poll)
-    poll = next.scanning || busy() ? setTimeout(() => void load({ background: true }), 1_500) : undefined
+    poll = next.scanning || busy() || clearing() ? setTimeout(() => void load({ background: true }), 750) : undefined
   }
   const load = async (options: { background?: boolean; refresh?: boolean } = {}) => {
+    const id = ++request
     const background = options.background ?? false
     if (!background) setLoading(true)
     if (!background) setError(undefined)
     try {
       const next = await settingsApi<Usage>(base(), fetchFn(), storageUsagePath(options.refresh))
+      if (disposed || id !== request) return
       setUsage(next)
       schedulePoll(next)
     } catch (err) {
+      if (disposed || id !== request) return
       const message = err instanceof Error ? err.message : String(err)
       if (background && usage()) {
         setUsage((current) => (current ? { ...current, scanning: false, scan_error: message } : current))
@@ -145,12 +152,14 @@ export const Storage: Component = () => {
         setError(message)
       }
     } finally {
-      if (!background) setLoading(false)
+      if (!disposed && id === request && !background) setLoading(false)
     }
   }
   const retry = () => load({ background: Boolean(usage()), refresh: true })
   onMount(() => void load())
   onCleanup(() => {
+    disposed = true
+    request += 1
     if (poll) clearTimeout(poll)
   })
 
@@ -220,6 +229,24 @@ export const Storage: Component = () => {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  const clearCache = async () => {
+    if (clearing()) return
+    setClearing(true)
+    setError(undefined)
+    setStatus(undefined)
+    try {
+      const result = await settingsApi<{ ok: true; entries: number }>(base(), fetchFn(), "/settings/storage/cache", {
+        method: "DELETE",
+      })
+      setStatus(result.entries === 1 ? "Local cache cleared." : `Local cache cleared (${result.entries} entries).`)
+      await load({ refresh: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setClearing(false)
     }
   }
 
@@ -428,6 +455,35 @@ export const Storage: Component = () => {
                     <span>OPENSCIENCE_DATA_DIR owns this process, so change that environment setting to move it.</span>
                   </div>
                 </Show>
+              </div>
+            </Section>
+
+            <Section title="Local cache" description="Downloaded runtime packages and metadata. Recreated when needed.">
+              <div class="settings-card settings-preferences-card">
+                <div class="settings-storage-cache settings-row settings-preference-row">
+                  <span class="settings-preference-icon" aria-hidden="true">
+                    <Icon name="archive" size="small" />
+                  </span>
+                  <div class="settings-row-copy">
+                    <strong>OpenScience cache</strong>
+                    <code class="min-w-0 truncate text-11-regular text-text-weak" title={usage()?.cache_dir}>
+                      {usage()?.cache_dir}
+                    </code>
+                  </div>
+                  <span class="settings-storage-metric text-12-regular text-text-weak">
+                    {usage()?.scanning && !usage()?.updated_at ? "Calculating…" : fmt(usage()?.cache_bytes ?? 0)}
+                  </span>
+                  <button
+                    type="button"
+                    class="settings-preference-action"
+                    data-variant="quiet"
+                    disabled={clearing()}
+                    onClick={() => void clearCache()}
+                  >
+                    <Icon name="trash" size="small" />
+                    {clearing() ? "Clearing…" : "Clear cache"}
+                  </button>
+                </div>
               </div>
             </Section>
 

@@ -47,6 +47,7 @@ describe("global.project.create", () => {
 
     expect(project.id).toStartWith("prj_")
     expect(project.name).toBe("Protein folding")
+    expect(project.origin).toBe("openscience")
     expect(path.dirname(project.worktree)).toBe(await fs.realpath(path.join(Global.Path.data, "projects")))
     expect(path.basename(project.worktree)).not.toContain("Protein")
     expect((await fs.stat(project.worktree)).isDirectory()).toBe(true)

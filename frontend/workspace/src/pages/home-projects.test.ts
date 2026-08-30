@@ -17,18 +17,47 @@ describe("home project preparation", () => {
 
     const projects = subject.prepareProjects(
       [
-        { id: "prj_older", worktree: "/work/older", time: { created: 10 } },
-        { id: "prj_newer", worktree: "/work/newer", time: { created: 20, updated: 50 } },
-        { id: "prj_older", worktree: "/work/older", time: { created: 10, updated: 70 } },
-        { id: "prj_hidden", worktree: "/work/hidden", time: { created: 100 } },
-        { id: "prj_archived", worktree: "/work/archived", time: { created: 200, archived: 201 } },
+        { id: "prj_older", worktree: "/work/older", origin: "openscience" as const, time: { created: 10 } },
+        {
+          id: "prj_newer",
+          worktree: "/work/newer",
+          origin: "openscience" as const,
+          time: { created: 20, updated: 50 },
+        },
+        {
+          id: "prj_older",
+          worktree: "/work/older",
+          origin: "openscience" as const,
+          time: { created: 10, updated: 70 },
+        },
+        { id: "prj_hidden", worktree: "/work/hidden", origin: "openscience" as const, time: { created: 100 } },
+        {
+          id: "prj_archived",
+          worktree: "/work/archived",
+          origin: "openscience" as const,
+          time: { created: 200, archived: 201 },
+        },
       ],
       new Set(["/work/hidden"]),
     )
 
     expect(projects).toEqual([
-      { id: "prj_older", worktree: "/work/older", time: { created: 10, updated: 70 }, updatedAt: 70, pinned: false },
-      { id: "prj_newer", worktree: "/work/newer", time: { created: 20, updated: 50 }, updatedAt: 50, pinned: false },
+      {
+        id: "prj_older",
+        worktree: "/work/older",
+        origin: "openscience",
+        time: { created: 10, updated: 70 },
+        updatedAt: 70,
+        pinned: false,
+      },
+      {
+        id: "prj_newer",
+        worktree: "/work/newer",
+        origin: "openscience",
+        time: { created: 20, updated: 50 },
+        updatedAt: 50,
+        pinned: false,
+      },
     ])
   })
 
@@ -38,8 +67,8 @@ describe("home project preparation", () => {
 
     const projects = subject.prepareProjects(
       [
-        { id: "prj_pinned", worktree: "/work/pinned", time: { created: 10 } },
-        { id: "prj_recent", worktree: "/work/recent", time: { created: 100 } },
+        { id: "prj_pinned", worktree: "/work/pinned", origin: "openscience", time: { created: 10 } },
+        { id: "prj_recent", worktree: "/work/recent", origin: "openscience", time: { created: 100 } },
       ],
       new Set(),
       new Set(["prj_pinned"]),
@@ -51,14 +80,53 @@ describe("home project preparation", () => {
     ])
   })
 
+  test("keeps arbitrary resolved directories out and orders equal activity deterministically", async () => {
+    const subject = await load()
+    if (!subject) return
+
+    const projects = subject.prepareProjects(
+      [
+        { id: "prj_random", worktree: "/work/random-repo", time: { created: 100 } },
+        {
+          id: "prj_zeta",
+          name: "Zeta study",
+          worktree: "/data/projects/zeta",
+          origin: "openscience",
+          time: { created: 50, updated: 100 },
+        },
+        {
+          id: "prj_alpha",
+          name: "Alpha study",
+          worktree: "/data/projects/alpha",
+          origin: "openscience",
+          time: { created: 40, updated: 100 },
+        },
+      ],
+      new Set(),
+    )
+
+    expect(projects.map((project) => project.id)).toEqual(["prj_alpha", "prj_zeta"])
+  })
+
   test("keeps archived projects recoverable without mixing them into active projects", async () => {
     const subject = await load()
     if (!subject) return
 
     const projects = [
-      { id: "prj_active", worktree: "/work/active", time: { created: 30 } },
-      { id: "prj_old", worktree: "/work/old", time: { created: 10, archived: 40 } },
-      { id: "prj_new", name: "Archived study", worktree: "/work/new", time: { created: 20, archived: 60 } },
+      { id: "prj_active", worktree: "/work/active", origin: "openscience" as const, time: { created: 30 } },
+      {
+        id: "prj_old",
+        worktree: "/work/old",
+        origin: "openscience" as const,
+        time: { created: 10, archived: 40 },
+      },
+      {
+        id: "prj_new",
+        name: "Archived study",
+        worktree: "/work/new",
+        origin: "openscience" as const,
+        time: { created: 20, archived: 60 },
+      },
     ]
 
     expect(subject.prepareProjects(projects, new Set()).map((project) => project.id)).toEqual(["prj_active"])
@@ -75,9 +143,15 @@ describe("home project preparation", () => {
           id: "prj_protein",
           name: "Protein Folding",
           worktree: "/Users/aayam/Research/Protein-Folding",
+          origin: "openscience",
           time: { created: 30 },
         },
-        { id: "prj_weather", worktree: "/Users/aayam/Labs/Weather", time: { created: 20 } },
+        {
+          id: "prj_weather",
+          worktree: "/Users/aayam/Labs/Weather",
+          origin: "openscience",
+          time: { created: 20 },
+        },
       ],
       new Set(),
     )

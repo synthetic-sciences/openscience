@@ -80,6 +80,7 @@ export namespace Project {
           start: z.string().optional().describe("Startup script to run when creating a new workspace (worktree)"),
         })
         .optional(),
+      origin: z.literal("openscience").optional(),
       time: z.object({
         created: z.number(),
         updated: z.number(),
@@ -630,6 +631,21 @@ export namespace Project {
       ...project,
       sandboxes: project.sandboxes?.filter((x) => existsSync(x)),
     }))
+  }
+
+  /** Mark an app-created workspace without changing its user-visible activity
+   * timestamp. Generic project updates cannot set this ownership boundary. */
+  export async function markOpenScience(projectID: string) {
+    const result = await Storage.update<Info>(["project", projectID], (draft) => {
+      draft.origin = "openscience"
+    })
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: result,
+      },
+    })
+    return result
   }
 
   export const update = fn(
