@@ -62,8 +62,8 @@ Replace `<platform>` with your platform, for example `darwin-arm64` or `linux-x6
 - `backend/cli`: the CLI, server, and core logic.
 - `frontend/workspace`: the workspace UI, written in SolidJS.
 - `frontend/ui`: shared UI components and themes.
-- `frontend/docs`: the documentation and share site.
-- `frontend/landing`: the marketing site at openscience.sh.
+- `frontend/docs`: the documentation source.
+- `frontend/landing`: the marketing site for [openscience.sh](https://openscience.sh).
 - `tooling/plugin`: the source for `@synsci/plugin`.
 - `tooling/sdk/js`: the TypeScript SDK.
 - `tooling/launcher`: the `npx synsci` installer.

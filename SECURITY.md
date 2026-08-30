@@ -16,11 +16,11 @@ Server mode is opt-in. The server binds to localhost (127.0.0.1) only and enforc
 
 Self-hosted operators can set `OPENSCIENCE_AUTH_TOKEN` to require `Authorization: Bearer <token>` on network requests as an additional deployment boundary. The health endpoint and browser CORS preflights remain open, and trusted in-process calls are unaffected. A reverse proxy must inject or forward the header on ordinary HTTP, streaming, and WebSocket requests. Leaving the variable unset preserves the local default.
 
-### Telemetry and managed services
+### Local data and external services
 
-Content-free product telemetry is enabled by default and can be disabled in Settings. The telemetry contract accepts only allowlisted operational fields such as installation, session, tool category, model route, latency, status, and aggregate token counts. It rejects prompts, responses, file paths and contents, notebook cells, shell output, environment values, credentials, and arbitrary metadata. Telemetry failures never block research and telemetry can never debit the Gateway wallet.
+OpenScience sends no product telemetry and has no hosted product account, wallet, model proxy, research gateway, cloud sync, or managed compute service. Projects, settings, credentials, prompts, responses, files, notebook cells, shell output, and results remain on your machine unless you explicitly direct OpenScience to send data elsewhere.
 
-Research-content sharing is a separate explicit opt-in. Managed search queries necessarily leave the machine for the OpenScience Gateway and its configured search provider; the UI identifies that route before use. Local, BYOK, and eligible ChatGPT/Codex routes remain available when the Gateway is disconnected or unavailable.
+Requests to model providers, scientific data sources, MCP servers, and other connectors go directly from your machine to the services you configure or invoke. Those requests are part of the operation you requested, not OpenScience telemetry, and the receiving service's security and data-handling policies apply. OpenScience may also contact GitHub for release and update metadata.
 
 ### Out of scope
 
