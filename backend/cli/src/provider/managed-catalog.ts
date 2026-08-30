@@ -1,0 +1,30 @@
+/** Reviewed Ace roster shipped with the client. No dashboard sync is required. */
+export const MANAGED_OPENROUTER_MODELS = Object.freeze([
+  "openai/gpt-5.6-sol",
+  "openai/gpt-5.6-terra",
+  "openai/gpt-5.6-luna",
+  "openai/gpt-5.5",
+  "openai/gpt-5.4",
+  "openai/gpt-5.4-mini",
+  "anthropic/claude-opus-5",
+  "anthropic/claude-fable-5",
+  "anthropic/claude-sonnet-5",
+  "anthropic/claude-haiku-4.5",
+  "google/gemini-3.1-pro-preview",
+  "google/gemini-3.5-flash",
+  "google/gemini-3.1-flash-lite",
+  "x-ai/grok-4.6",
+  "z-ai/glm-5.3",
+  "z-ai/glm-5.3-flash",
+  "deepseek/deepseek-v4-pro",
+  "deepseek/deepseek-v4-flash",
+  "qwen/qwen3.7-max",
+  "moonshotai/kimi-k3",
+  "moonshotai/kimi-k2.7-code",
+  "minimax/minimax-m3",
+  "mistralai/mistral-large-2512",
+  "meta/muse-spark-1.1",
+  "qwen/qwen3.8-27b",
+] as const)
+
+export const MANAGED_OPENROUTER_MODEL_SET = new Set<string>(MANAGED_OPENROUTER_MODELS)

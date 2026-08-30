@@ -28,6 +28,8 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { DevicesCommand, LoginCommand, LogoutCommand, StatusCommand } from "./cli/cmd/connect"
+import { WalletCommand } from "./cli/cmd/billing"
 import { KeysCommand, ConnectCommand, DisconnectCommand } from "./cli/cmd/auth"
 import { LocalCommand } from "./cli/cmd/local"
 import { SandboxCommand } from "./cli/cmd/sandbox"
@@ -200,7 +202,12 @@ const cli = yargs(hideBin(process.argv))
   .command(PrCommand)
   .command(SessionCommand)
   .command(InitCommand)
+  .command(LoginCommand)
+  .command(LogoutCommand)
+  .command(StatusCommand)
+  .command(DevicesCommand)
   .command(KeysCommand)
+  .command(WalletCommand)
   .command(DoctorCommand)
   .command(ConnectCommand)
   .command(DisconnectCommand)

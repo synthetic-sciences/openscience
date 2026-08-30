@@ -1,7 +1,7 @@
 import type { ModelKey } from "./model-catalog"
 
 export type ModelBillingMode = "managed" | "byok" | null | undefined
-export type ModelRouteAccess = "byok" | "chatgpt"
+export type ModelRouteAccess = "managed" | "byok" | "chatgpt"
 export type ModelAccessRoute = ModelKey & { access: ModelRouteAccess }
 
 const exactRoute = (left: ModelKey, right: ModelKey) =>
@@ -9,8 +9,8 @@ const exactRoute = (left: ModelKey, right: ModelKey) =>
 
 /**
  * Pick one connected route for a logical model without folding provider
- * identities together. An attached ChatGPT subscription is preferred, then a
- * user API key.
+ * identities together. Automatic prefers an attached ChatGPT subscription;
+ * Ace stays on managed inference; BYOK prefers a direct user route.
  * An already selected exact route always wins so changing effort or speed can
  * never move a request onto another credential.
  */
@@ -24,7 +24,12 @@ export function resolveModelAccessRoute<T extends ModelAccessRoute>(input: {
     if (current) return current
   }
 
-  const priority: readonly ModelRouteAccess[] = input.billing === "byok" ? ["byok", "chatgpt"] : ["chatgpt", "byok"]
+  const priority: readonly ModelRouteAccess[] =
+    input.billing === "managed"
+      ? ["managed"]
+      : input.billing === "byok"
+        ? ["byok", "chatgpt"]
+        : ["chatgpt", "byok", "managed"]
 
   for (const access of priority) {
     const route = input.routes.find((candidate) => candidate.access === access)

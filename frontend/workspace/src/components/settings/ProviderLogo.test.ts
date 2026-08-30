@@ -42,6 +42,11 @@ describe("provider logos", () => {
     expect(providerLogoSource("ollama")).toEqual({ kind: "vector", id: "ollama" })
   })
 
+  test("uses the canonical Synthetic Sciences mark for Ace", () => {
+    expect(providerLogoSource("synsci")).toEqual({ kind: "provider", id: "synsci" })
+    expect(providerLogoSource("ace")).toEqual({ kind: "provider", id: "synsci" })
+  })
+
   test("covers every built-in compute and integration credential", () => {
     for (const id of CREDENTIALS) expect(providerLogoSource(id).kind).not.toBe("fallback")
   })

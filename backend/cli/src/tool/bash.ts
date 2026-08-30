@@ -435,7 +435,7 @@ export const BashTool = Tool.define("bash", async () => {
               cwd,
               // Re-sanitize at the final process boundary too: runtime/cache
               // overlays must never restore a managed token or re-pair a
-              // user's key with a retired product proxy after subprocessEnv ran.
+              // user's key with the Ace managed proxy after subprocessEnv ran.
               env: OpenScience.filterEnvForSubprocess({ ...env, ...(runtime.env ?? {}), ...cache }),
               stdio: ["ignore", "pipe", "pipe"],
               detached: process.platform !== "win32",

@@ -6,6 +6,7 @@ const panelNames = ["Network", "Permissions", "Storage", "Sandbox", "General"] a
 const source = (name: (typeof panelNames)[number]) =>
   readFileSync(fileURLToPath(new URL(`./${name}.tsx`, import.meta.url)), "utf8")
 const compute = readFileSync(fileURLToPath(new URL("./Compute.tsx", import.meta.url)), "utf8")
+const appearance = readFileSync(fileURLToPath(new URL("../settings-general.tsx", import.meta.url)), "utf8")
 const styles = readFileSync(fileURLToPath(new URL("./preference-panels.css", import.meta.url)), "utf8")
 
 describe("minimal grouped settings panels", () => {
@@ -28,8 +29,8 @@ describe("minimal grouped settings panels", () => {
   test("uses progressive disclosure and aligned numeric metrics", () => {
     expect(source("Permissions")).toContain("Show all tool defaults")
     expect(source("Permissions")).toContain("aria-expanded={showAllDefaults()}")
-    expect(source("General")).toContain("Show sound settings")
-    expect(source("General")).toContain("aria-expanded={showAdvanced()}")
+    expect(source("General")).toContain("<AppearanceSections />")
+    expect(appearance).toContain("settings.general.section.sounds")
     expect(styles).toContain('data-expanded="false"] > .settings-section:nth-child(n + 3):not(:last-child)')
     expect(styles).toContain("font-variant-numeric: tabular-nums")
   })
@@ -43,7 +44,7 @@ describe("minimal grouped settings panels", () => {
     expect(source("Storage")).toContain('role="progressbar"')
     expect(source("Sandbox")).toContain('call<SelfTest>("/test", { method: "POST" })')
     expect(source("Sandbox")).toContain('aria-live="polite"')
-    expect(source("General")).toContain("sdk.client.account.logout()")
+    expect(source("General")).toContain('"/account/logout", { method: "POST" }')
     expect(source("General")).not.toContain('settingsApi<Preferences>(base(), fetchFn(), "/settings/preferences"')
     expect(source("General")).not.toContain('title="Gateway"')
     expect(source("General")).not.toContain('title="Trace"')

@@ -426,6 +426,860 @@
         ]
       }
     },
+    "/account/session": {
+      "get": {
+        "operationId": "account.session",
+        "summary": "Get local account session status",
+        "responses": {
+          "200": {
+            "description": "Session status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "session"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.session({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account": {
+      "get": {
+        "operationId": "account.get",
+        "summary": "Get Ace account and funding summary",
+        "responses": {
+          "200": {
+            "description": "Account summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session": {
+                      "type": "boolean"
+                    },
+                    "user": {},
+                    "balance_usd": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "billing_mode": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "byok",
+                                "managed"
+                              ]
+                            },
+                            "balance_cents": {
+                              "type": "number"
+                            },
+                            "balance_usd": {
+                              "type": "number"
+                            },
+                            "managed_supported": {
+                              "type": "boolean"
+                            },
+                            "managed_unlocked": {
+                              "type": "boolean"
+                            },
+                            "ace_enabled": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "balance_cents",
+                            "balance_usd",
+                            "managed_supported",
+                            "managed_unlocked"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "funding_context": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "personal",
+                            "organization"
+                          ]
+                        },
+                        "organization_id": {
+                          "type": "string"
+                        },
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "locked": {
+                          "type": "boolean"
+                        },
+                        "organizations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "organization_id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "slug": {
+                                "type": "string"
+                              },
+                              "is_personal": {
+                                "type": "boolean"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "membership_status": {
+                                "type": "string"
+                              },
+                              "funding_available": {
+                                "type": "boolean"
+                              },
+                              "effective_permissions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "organization_id",
+                              "name",
+                              "slug",
+                              "is_personal",
+                              "status",
+                              "role",
+                              "membership_status",
+                              "funding_available",
+                              "effective_permissions"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "available",
+                        "locked",
+                        "organizations"
+                      ]
+                    },
+                    "credential": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "personal",
+                                "organization"
+                              ]
+                            },
+                            "legacy": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "legacy"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "session",
+                    "balance_usd",
+                    "billing_mode",
+                    "funding_context",
+                    "credential"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account/funding-context": {
+      "get": {
+        "operationId": "account.fundingContext.get",
+        "summary": "Get Ace funding workspace",
+        "responses": {
+          "200": {
+            "description": "Funding context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "organization"
+                      ]
+                    },
+                    "organization_id": {
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "organizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "organization_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "is_personal": {
+                            "type": "boolean"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "membership_status": {
+                            "type": "string"
+                          },
+                          "funding_available": {
+                            "type": "boolean"
+                          },
+                          "effective_permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "organization_id",
+                          "name",
+                          "slug",
+                          "is_personal",
+                          "status",
+                          "role",
+                          "membership_status",
+                          "funding_available",
+                          "effective_permissions"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "available",
+                    "locked",
+                    "organizations"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.fundingContext.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "account.fundingContext.set",
+        "summary": "Choose Ace funding workspace",
+        "responses": {
+          "200": {
+            "description": "Funding context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "organization"
+                      ]
+                    },
+                    "organization_id": {
+                      "type": "string"
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "organizations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "organization_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "is_personal": {
+                            "type": "boolean"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "membership_status": {
+                            "type": "string"
+                          },
+                          "funding_available": {
+                            "type": "boolean"
+                          },
+                          "effective_permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "organization_id",
+                          "name",
+                          "slug",
+                          "is_personal",
+                          "status",
+                          "role",
+                          "membership_status",
+                          "funding_available",
+                          "effective_permissions"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "available",
+                    "locked",
+                    "organizations"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid workspace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "organization_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "organization_id"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.fundingContext.set({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account/balance": {
+      "get": {
+        "operationId": "account.balance",
+        "summary": "Get purchased wallet balance",
+        "responses": {
+          "200": {
+            "description": "Balance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "balance_usd": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "balance_usd"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.balance({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account/devices": {
+      "get": {
+        "operationId": "account.devices",
+        "summary": "List account devices",
+        "responses": {
+          "200": {
+            "description": "Devices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key_id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "key_prefix": {
+                        "type": "string"
+                      },
+                      "created_at": {
+                        "type": "string"
+                      },
+                      "last_used_at": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "expires_at": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "key_id",
+                      "name",
+                      "key_prefix",
+                      "created_at",
+                      "last_used_at",
+                      "expires_at"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.devices({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account/devices/{keyID}": {
+      "delete": {
+        "operationId": "account.device.revoke",
+        "summary": "Revoke account device",
+        "responses": {
+          "200": {
+            "description": "Revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "keyID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.device.revoke({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account/billing-mode": {
+      "get": {
+        "operationId": "account.billingMode.get",
+        "summary": "Get model billing mode",
+        "responses": {
+          "200": {
+            "description": "Billing mode",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "byok",
+                            "managed"
+                          ]
+                        },
+                        "balance_cents": {
+                          "type": "number"
+                        },
+                        "balance_usd": {
+                          "type": "number"
+                        },
+                        "managed_supported": {
+                          "type": "boolean"
+                        },
+                        "managed_unlocked": {
+                          "type": "boolean"
+                        },
+                        "ace_enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "balance_cents",
+                        "balance_usd",
+                        "managed_supported",
+                        "managed_unlocked"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.billingMode.get({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "account.billingMode.set",
+        "summary": "Set model billing mode",
+        "responses": {
+          "200": {
+            "description": "Billing mode",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "byok",
+                            "managed"
+                          ]
+                        },
+                        "balance_cents": {
+                          "type": "number"
+                        },
+                        "balance_usd": {
+                          "type": "number"
+                        },
+                        "managed_supported": {
+                          "type": "boolean"
+                        },
+                        "managed_unlocked": {
+                          "type": "boolean"
+                        },
+                        "ace_enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "balance_cents",
+                        "balance_usd",
+                        "managed_supported",
+                        "managed_unlocked"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "byok",
+                      "managed"
+                    ]
+                  }
+                },
+                "required": [
+                  "mode"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.billingMode.set({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account/login-browser": {
+      "post": {
+        "operationId": "account.loginBrowser",
+        "summary": "Sign in through the system browser",
+        "responses": {
+          "200": {
+            "description": "Login result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.loginBrowser({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account/login-key": {
+      "post": {
+        "operationId": "account.loginKey",
+        "summary": "Sign in with an OpenScience workspace key",
+        "responses": {
+          "200": {
+            "description": "Login result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.loginKey({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/account/logout": {
+      "post": {
+        "operationId": "account.logout",
+        "summary": "Logout Ace account",
+        "responses": {
+          "200": {
+            "description": "Logged out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.account.logout({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/credentials": {
       "get": {
         "operationId": "settings.credentials.list",
@@ -22163,14 +23017,331 @@
         ]
       }
     },
+    "/settings/billing": {
+      "get": {
+        "operationId": "settings.billing.get",
+        "summary": "Get Ace/model billing state",
+        "responses": {
+          "200": {
+            "description": "Billing state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "llm": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "managed",
+                            "byok"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "compute": {
+                      "type": "string",
+                      "const": "byok"
+                    },
+                    "wallet": {
+                      "type": "object",
+                      "properties": {
+                        "signedIn": {
+                          "type": "boolean"
+                        },
+                        "balanceUsd": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "signedIn",
+                        "balanceUsd"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "llm",
+                    "compute",
+                    "wallet"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.billing.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "settings.billing.update",
+        "summary": "Update Ace/model billing state",
+        "responses": {
+          "200": {
+            "description": "Billing state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "llm": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "managed",
+                            "byok"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "compute": {
+                      "type": "string",
+                      "const": "byok"
+                    },
+                    "wallet": {
+                      "type": "object",
+                      "properties": {
+                        "signedIn": {
+                          "type": "boolean"
+                        },
+                        "balanceUsd": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "signedIn",
+                        "balanceUsd"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "llm",
+                    "compute",
+                    "wallet"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "llm": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "managed",
+                          "byok"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "compute": {
+                    "type": "string",
+                    "const": "byok"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.billing.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/wallet": {
+      "get": {
+        "operationId": "settings.wallet.get",
+        "summary": "Get purchased wallet and Ace ledger",
+        "responses": {
+          "200": {
+            "description": "Wallet state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "signedIn": {
+                      "type": "boolean"
+                    },
+                    "balanceUsd": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "billingMode": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "managed",
+                            "byok"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "managedSupported": {
+                      "type": "boolean"
+                    },
+                    "managedUnlocked": {
+                      "type": "boolean"
+                    },
+                    "aceEnabled": {
+                      "type": "boolean"
+                    },
+                    "aceContract": {
+                      "type": "object",
+                      "properties": {
+                        "activationAuthorizationUsd": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "reloadThresholdUsd": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "reloadAmountUsd": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "serviceMarginPercent": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "processingFeeDisclosedSeparately": {
+                          "type": "boolean"
+                        },
+                        "reloadControlledByAce": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "activationAuthorizationUsd",
+                        "reloadThresholdUsd",
+                        "reloadAmountUsd",
+                        "serviceMarginPercent",
+                        "processingFeeDisclosedSeparately",
+                        "reloadControlledByAce"
+                      ]
+                    },
+                    "lifetimeSpentUsd": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "transactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "amountCents": {
+                            "type": "number"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "amountCents",
+                          "source",
+                          "description",
+                          "createdAt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "signedIn",
+                    "balanceUsd",
+                    "billingMode",
+                    "managedSupported",
+                    "managedUnlocked",
+                    "aceEnabled",
+                    "aceContract",
+                    "lifetimeSpentUsd",
+                    "transactions"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.wallet.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/auth/{providerID}/onboarding": {
       "put": {
         "operationId": "auth.onboarding",
         "summary": "Configure an onboarding provider credential",
-        "description": "Save one local provider key.",
+        "description": "Atomically save one provider key and select BYOK model access.",
         "responses": {
           "200": {
-            "description": "Provider credential configured",
+            "description": "Provider credential and BYOK mode configured",
             "content": {
               "application/json": {
                 "schema": {
@@ -22189,7 +23360,7 @@
             }
           },
           "500": {
-            "description": "Configuration failed",
+            "description": "Configuration failed and compensation was attempted",
             "content": {
               "application/json": {
                 "schema": {
@@ -51518,6 +52689,7 @@
               "source": {
                 "type": "string",
                 "enum": [
+                  "managed",
                   "byok",
                   "chatgpt",
                   "local",
@@ -55981,16 +57153,18 @@
             "type": "string"
           },
           "billing": {
-            "description": "Provider access configuration. OpenScience uses only user-owned credentials.",
+            "description": "Provider access configuration for Ace or user-owned credentials.",
             "type": "object",
             "properties": {
               "llm": {
-                "description": "Provider access uses your own API keys, first-party OAuth subscriptions, or local models. Legacy values are migrated to 'byok'.",
-                "default": "byok",
+                "description": "How LLM inference is paid for. 'managed' uses Ace Credits; 'byok' uses only user-owned keys, subscriptions, or local models.",
                 "anyOf": [
                   {
                     "type": "string",
-                    "const": "byok"
+                    "enum": [
+                      "managed",
+                      "byok"
+                    ]
                   },
                   {
                     "type": "null"
@@ -56884,7 +58058,8 @@
               "env",
               "config",
               "custom",
-              "api"
+              "api",
+              "managed"
             ]
           },
           "env": {

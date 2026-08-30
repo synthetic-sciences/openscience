@@ -1,3 +1,5 @@
+import { managedApiBase } from "../endpoints"
+
 /** User-owned credentials that approved local subprocesses may receive. */
 export const BYOK_LLM_ENV_KEYS = [
   "ANTHROPIC_API_KEY",
@@ -45,3 +47,36 @@ export const LOCAL_COMPUTE_CLI_ENV_KEYS = [
   "VAST_API_KEY",
   "RUNPOD_API_KEY",
 ] as const
+
+export function managedOpenRouterBaseURL(atlasBase = managedApiBase()): string {
+  return `${atlasBase.replace(/\/+$/, "")}/api/llm/proxy/openrouter/v1`
+}
+
+/** Exact managed-proxy origin and path validation; lookalike origins fail. */
+export function isAtlasProxyURL(
+  value: unknown,
+  route = "/api/llm/proxy/",
+  atlasBase = managedApiBase(),
+): value is string {
+  if (typeof value !== "string") return false
+  try {
+    const candidate = new URL(value)
+    const atlas = new URL(atlasBase)
+    if ((candidate.protocol !== "http:" && candidate.protocol !== "https:") || candidate.origin !== atlas.origin)
+      return false
+    if (
+      candidate.username ||
+      candidate.password ||
+      candidate.search ||
+      candidate.hash ||
+      candidate.pathname.includes("%")
+    )
+      return false
+    const basePath = atlas.pathname.replace(/\/+$/, "")
+    const routePath = route.startsWith("/") ? route : `/${route}`
+    const expected = `${basePath}${routePath}`.replace(/\/{2,}/g, "/").replace(/\/+$/, "")
+    return candidate.pathname === expected || candidate.pathname.startsWith(`${expected}/`)
+  } catch {
+    return false
+  }
+}

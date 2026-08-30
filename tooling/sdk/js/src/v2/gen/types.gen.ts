@@ -265,7 +265,7 @@ export type UserMessage = {
   tier?: string
   context?: number
   inference?: {
-    source: "byok" | "chatgpt" | "local" | "oauth" | "unknown"
+    source: "managed" | "byok" | "chatgpt" | "local" | "oauth" | "unknown"
     effort: string
   }
 }
@@ -1918,13 +1918,13 @@ export type Config = {
    */
   default_agent?: string
   /**
-   * Provider access configuration. OpenScience uses only user-owned credentials.
+   * Provider access configuration for Ace or user-owned credentials.
    */
   billing?: {
     /**
-     * Provider access uses your own API keys, first-party OAuth subscriptions, or local models. Legacy values are migrated to 'byok'.
+     * How LLM inference is paid for. 'managed' uses Ace Credits; 'byok' uses only user-owned keys, subscriptions, or local models.
      */
-    llm?: "byok" | null
+    llm?: "managed" | "byok" | null
     /**
      * @deprecated Retained so existing 2.x config files keep parsing. Compute always uses user-owned routes.
      */
@@ -2225,7 +2225,7 @@ export type Model = {
 export type Provider = {
   id: string
   name: string
-  source: "env" | "config" | "custom" | "api"
+  source: "env" | "config" | "custom" | "api" | "managed"
   env: Array<string>
   key?: string
   options: {
@@ -2759,6 +2759,315 @@ export type GlobalDisposeResponses = {
 }
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
+
+export type AccountSessionData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/session"
+}
+
+export type AccountSessionResponses = {
+  /**
+   * Session status
+   */
+  200: {
+    session: boolean
+  }
+}
+
+export type AccountSessionResponse = AccountSessionResponses[keyof AccountSessionResponses]
+
+export type AccountGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account"
+}
+
+export type AccountGetResponses = {
+  /**
+   * Account summary
+   */
+  200: {
+    session: boolean
+    user?: unknown
+    balance_usd: number | null
+    billing_mode: {
+      mode: "byok" | "managed"
+      balance_cents: number
+      balance_usd: number
+      managed_supported: boolean
+      managed_unlocked: boolean
+      ace_enabled?: boolean
+    } | null
+    funding_context: {
+      type: "personal" | "organization"
+      organization_id?: string
+      available: boolean
+      locked: boolean
+      organizations: Array<{
+        organization_id: string
+        name: string
+        slug: string
+        is_personal: boolean
+        status: string
+        role: string
+        membership_status: string
+        funding_available: boolean
+        effective_permissions: Array<string>
+      }>
+    }
+    credential: {
+      type: "personal" | "organization"
+      legacy: boolean
+    } | null
+  }
+}
+
+export type AccountGetResponse = AccountGetResponses[keyof AccountGetResponses]
+
+export type AccountFundingContextGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/funding-context"
+}
+
+export type AccountFundingContextGetResponses = {
+  /**
+   * Funding context
+   */
+  200: {
+    type: "personal" | "organization"
+    organization_id?: string
+    available: boolean
+    locked: boolean
+    organizations: Array<{
+      organization_id: string
+      name: string
+      slug: string
+      is_personal: boolean
+      status: string
+      role: string
+      membership_status: string
+      funding_available: boolean
+      effective_permissions: Array<string>
+    }>
+  }
+}
+
+export type AccountFundingContextGetResponse =
+  AccountFundingContextGetResponses[keyof AccountFundingContextGetResponses]
+
+export type AccountFundingContextSetData = {
+  body?: {
+    organization_id: string | null
+  }
+  path?: never
+  query?: never
+  url: "/account/funding-context"
+}
+
+export type AccountFundingContextSetErrors = {
+  /**
+   * Invalid workspace
+   */
+  400: {
+    error: string
+  }
+}
+
+export type AccountFundingContextSetError = AccountFundingContextSetErrors[keyof AccountFundingContextSetErrors]
+
+export type AccountFundingContextSetResponses = {
+  /**
+   * Funding context
+   */
+  200: {
+    type: "personal" | "organization"
+    organization_id?: string
+    available: boolean
+    locked: boolean
+    organizations: Array<{
+      organization_id: string
+      name: string
+      slug: string
+      is_personal: boolean
+      status: string
+      role: string
+      membership_status: string
+      funding_available: boolean
+      effective_permissions: Array<string>
+    }>
+  }
+}
+
+export type AccountFundingContextSetResponse =
+  AccountFundingContextSetResponses[keyof AccountFundingContextSetResponses]
+
+export type AccountBalanceData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/balance"
+}
+
+export type AccountBalanceResponses = {
+  /**
+   * Balance
+   */
+  200: {
+    balance_usd: number | null
+  }
+}
+
+export type AccountBalanceResponse = AccountBalanceResponses[keyof AccountBalanceResponses]
+
+export type AccountDevicesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/devices"
+}
+
+export type AccountDevicesResponses = {
+  /**
+   * Devices
+   */
+  200: Array<{
+    key_id: string
+    name: string
+    key_prefix: string
+    created_at: string
+    last_used_at: string | null
+    expires_at: string | null
+  }>
+}
+
+export type AccountDevicesResponse = AccountDevicesResponses[keyof AccountDevicesResponses]
+
+export type AccountDeviceRevokeData = {
+  body?: never
+  path: {
+    keyID: string
+  }
+  query?: never
+  url: "/account/devices/{keyID}"
+}
+
+export type AccountDeviceRevokeResponses = {
+  /**
+   * Revoked
+   */
+  200: boolean
+}
+
+export type AccountDeviceRevokeResponse = AccountDeviceRevokeResponses[keyof AccountDeviceRevokeResponses]
+
+export type AccountBillingModeGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/billing-mode"
+}
+
+export type AccountBillingModeGetResponses = {
+  /**
+   * Billing mode
+   */
+  200: {
+    mode: "byok" | "managed"
+    balance_cents: number
+    balance_usd: number
+    managed_supported: boolean
+    managed_unlocked: boolean
+    ace_enabled?: boolean
+  } | null
+}
+
+export type AccountBillingModeGetResponse = AccountBillingModeGetResponses[keyof AccountBillingModeGetResponses]
+
+export type AccountBillingModeSetData = {
+  body?: {
+    mode: "byok" | "managed"
+  }
+  path?: never
+  query?: never
+  url: "/account/billing-mode"
+}
+
+export type AccountBillingModeSetResponses = {
+  /**
+   * Billing mode
+   */
+  200: {
+    mode: "byok" | "managed"
+    balance_cents: number
+    balance_usd: number
+    managed_supported: boolean
+    managed_unlocked: boolean
+    ace_enabled?: boolean
+  } | null
+}
+
+export type AccountBillingModeSetResponse = AccountBillingModeSetResponses[keyof AccountBillingModeSetResponses]
+
+export type AccountLoginBrowserData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/login-browser"
+}
+
+export type AccountLoginBrowserResponses = {
+  /**
+   * Login result
+   */
+  200: {
+    ok: boolean
+    error?: string
+  }
+}
+
+export type AccountLoginBrowserResponse = AccountLoginBrowserResponses[keyof AccountLoginBrowserResponses]
+
+export type AccountLoginKeyData = {
+  body?: {
+    key: string
+  }
+  path?: never
+  query?: never
+  url: "/account/login-key"
+}
+
+export type AccountLoginKeyResponses = {
+  /**
+   * Login result
+   */
+  200: {
+    ok: boolean
+    error?: string
+  }
+}
+
+export type AccountLoginKeyResponse = AccountLoginKeyResponses[keyof AccountLoginKeyResponses]
+
+export type AccountLogoutData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/account/logout"
+}
+
+export type AccountLogoutResponses = {
+  /**
+   * Logged out
+   */
+  200: boolean
+}
+
+export type AccountLogoutResponse = AccountLogoutResponses[keyof AccountLogoutResponses]
 
 export type SettingsCredentialsListData = {
   body?: never
@@ -8918,6 +9227,94 @@ export type SettingsScientificToolsResponses = {
 
 export type SettingsScientificToolsResponse = SettingsScientificToolsResponses[keyof SettingsScientificToolsResponses]
 
+export type SettingsBillingGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/billing"
+}
+
+export type SettingsBillingGetResponses = {
+  /**
+   * Billing state
+   */
+  200: {
+    llm: "managed" | "byok" | null
+    compute: "byok"
+    wallet: {
+      signedIn: boolean
+      balanceUsd: number | null
+    }
+  }
+}
+
+export type SettingsBillingGetResponse = SettingsBillingGetResponses[keyof SettingsBillingGetResponses]
+
+export type SettingsBillingUpdateData = {
+  body?: {
+    llm?: "managed" | "byok" | null
+    compute?: "byok"
+  }
+  path?: never
+  query?: never
+  url: "/settings/billing"
+}
+
+export type SettingsBillingUpdateResponses = {
+  /**
+   * Billing state
+   */
+  200: {
+    llm: "managed" | "byok" | null
+    compute: "byok"
+    wallet: {
+      signedIn: boolean
+      balanceUsd: number | null
+    }
+  }
+}
+
+export type SettingsBillingUpdateResponse = SettingsBillingUpdateResponses[keyof SettingsBillingUpdateResponses]
+
+export type SettingsWalletGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/wallet"
+}
+
+export type SettingsWalletGetResponses = {
+  /**
+   * Wallet state
+   */
+  200: {
+    signedIn: boolean
+    balanceUsd: number | null
+    billingMode: "managed" | "byok" | null
+    managedSupported: boolean
+    managedUnlocked: boolean
+    aceEnabled: boolean
+    aceContract: {
+      activationAuthorizationUsd: number
+      reloadThresholdUsd: number
+      reloadAmountUsd: number
+      serviceMarginPercent: number
+      processingFeeDisclosedSeparately: boolean
+      reloadControlledByAce: boolean
+    }
+    lifetimeSpentUsd: number | null
+    transactions: Array<{
+      id: string
+      amountCents: number
+      source: string
+      description: string
+      createdAt: string
+    }>
+  }
+}
+
+export type SettingsWalletGetResponse = SettingsWalletGetResponses[keyof SettingsWalletGetResponses]
+
 export type AuthOnboardingData = {
   body?: ApiAuth
   path: {
@@ -8929,7 +9326,7 @@ export type AuthOnboardingData = {
 
 export type AuthOnboardingErrors = {
   /**
-   * Configuration failed
+   * Configuration failed and compensation was attempted
    */
   500: {
     error: string
@@ -8940,7 +9337,7 @@ export type AuthOnboardingError = AuthOnboardingErrors[keyof AuthOnboardingError
 
 export type AuthOnboardingResponses = {
   /**
-   * Provider credential configured
+   * Provider credential and BYOK mode configured
    */
   200: {
     configured: true

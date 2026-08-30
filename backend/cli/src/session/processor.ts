@@ -16,6 +16,8 @@ import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
 import { accessRoute, resolveCredentialSource } from "./access-route"
+import { requiresWalletBalance } from "./access-route"
+import { OpenScience } from "@/openscience"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
 import { ToolRetryGuard } from "./tool-retry-guard"
@@ -35,6 +37,15 @@ export namespace SessionProcessor {
   // provider (or a permanent error arriving as JSON) looped forever.
   const MAX_RETRY_ATTEMPTS = 10
   const log = Log.create({ service: "session.processor" })
+
+  export function managedPauseError(message: string) {
+    return new MessageV2.APIError({
+      message,
+      statusCode: 503,
+      isRetryable: true,
+      metadata: { openscience_state: "paused", action: "retry" },
+    })
+  }
 
   /** True when the last `threshold` TOOL calls are the same tool with the same
    *  input, ignoring reasoning/text/step parts interleaved between them. A naive
@@ -535,6 +546,9 @@ export namespace SessionProcessor {
       },
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
+        // One immutable funding choice spans preflight and every retry/step in
+        // this provider operation. A settings change applies to the next turn.
+        const funding = await OpenScience.getFundingSnapshot()
         const tracking = tracks({ tools: streamInput.tools, toolcall: input.model.capabilities.toolcall })
         needsCompaction = false
         overflow = false
@@ -548,10 +562,31 @@ export namespace SessionProcessor {
             const credentialSource = await resolveCredentialSource(input.model.providerID, input.model.id)
             traceRoute = accessRoute(credentialSource, input.model)
 
+            if (requiresWalletBalance(credentialSource)) {
+              if (!funding) {
+                throw managedPauseError(
+                  "Ace is paused because OpenScience could not snapshot the connected funding account. Sign in again or switch to a direct provider or local model.",
+                )
+              }
+              const balance = await OpenScience.getBalance(funding)
+              if (balance === null) {
+                throw managedPauseError(
+                  "Ace is paused because OpenScience could not verify the current balance. Retry when the connection returns or switch to a direct provider or local model.",
+                )
+              }
+              if (balance <= 0) {
+                OpenScience.invalidateBalance()
+                throw new Error(
+                  "Your Ace balance is empty. Add credits at app.syntheticsciences.ai/billing or switch model access to BYOK / Subscription.",
+                )
+              }
+            }
+
             const requestContext = {
               sessionID: input.sessionID,
               messageID: input.assistantMessage.id,
               attempt: attempt + 1,
+              ...(credentialSource === "managed" && funding ? { funding } : {}),
             }
             // The conversation-first Research agent does not create or require
             // legacy research contracts, so an old persisted contract must not

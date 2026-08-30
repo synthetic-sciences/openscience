@@ -25,6 +25,8 @@ import { ProjectTrust } from "@/project/trust"
 import { ProjectAccess } from "@/project/access"
 import { randomUUID } from "node:crypto"
 import { Flag } from "@/flag/flag"
+import { OpenScience } from "@/openscience"
+import { requiresWalletBalance, resolveCredentialSource } from "@/session/access-route"
 
 export namespace Agent {
   export const Info = z
@@ -551,6 +553,17 @@ export namespace Agent {
 
     const selected = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(selected.providerID, selected.modelID)
+    const credentialSource = await resolveCredentialSource(model.providerID, model.id)
+    const funding = credentialSource === "managed" ? await OpenScience.getFundingSnapshot() : undefined
+    if (requiresWalletBalance(credentialSource)) {
+      if (!funding) throw new Error("Ace could not snapshot the connected funding account. Sign in again.")
+      const balance = await OpenScience.getBalance(funding)
+      if (balance === null)
+        throw new Error("Ace could not verify the current balance. Retry when the connection returns.")
+      if (balance <= 0) {
+        throw new Error("Your Ace balance is empty. Add credits or switch model access to BYOK / Subscription.")
+      }
+    }
 
     const defaultModel = selected
     const language = await Provider.getLanguage(model)
@@ -597,7 +610,7 @@ export namespace Agent {
         })
       : undefined
 
-    const requestContext = { sessionID, messageID, attempt: 1 }
+    const requestContext = { sessionID, messageID, attempt: 1, ...(funding ? { funding } : {}) }
 
     if (oauthStream) {
       const result = Provider.withRequestContext(requestContext, () =>

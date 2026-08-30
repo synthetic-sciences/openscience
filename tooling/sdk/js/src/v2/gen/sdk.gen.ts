@@ -3,6 +3,19 @@
 import { client } from "./client.gen.js"
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from "./client/index.js"
 import type {
+  AccountBalanceResponses,
+  AccountBillingModeGetResponses,
+  AccountBillingModeSetResponses,
+  AccountDeviceRevokeResponses,
+  AccountDevicesResponses,
+  AccountFundingContextGetResponses,
+  AccountFundingContextSetErrors,
+  AccountFundingContextSetResponses,
+  AccountGetResponses,
+  AccountLoginBrowserResponses,
+  AccountLoginKeyResponses,
+  AccountLogoutResponses,
+  AccountSessionResponses,
   AgentPartInput,
   ApiAuth,
   AppAgentsResponses,
@@ -280,6 +293,8 @@ import type {
   SessionUnrevertResponses,
   SessionUpdateErrors,
   SessionUpdateResponses,
+  SettingsBillingGetResponses,
+  SettingsBillingUpdateResponses,
   SettingsComputeEnvironmentsRepairResponses,
   SettingsComputeGetResponses,
   SettingsComputeJobsCancelErrors,
@@ -352,6 +367,7 @@ import type {
   SettingsUpdatesInstallResponses,
   SettingsUpdatesStageResponses,
   SettingsUpdatesStateResponses,
+  SettingsWalletGetResponses,
   SubtaskPartInput,
   TextPartInput,
   ToolIdsErrors,
@@ -602,6 +618,196 @@ export class Global extends HeyApiClient {
   private _config?: Config
   get config(): Config {
     return (this._config ??= new Config({ client: this.client }))
+  }
+}
+
+export class FundingContext extends HeyApiClient {
+  /**
+   * Get Ace funding workspace
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AccountFundingContextGetResponses, unknown, ThrowOnError>({
+      url: "/account/funding-context",
+      ...options,
+    })
+  }
+
+  /**
+   * Choose Ace funding workspace
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters: {
+      organization_id: string | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "organization_id" }] }])
+    return (options?.client ?? this.client).put<
+      AccountFundingContextSetResponses,
+      AccountFundingContextSetErrors,
+      ThrowOnError
+    >({
+      url: "/account/funding-context",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Device extends HeyApiClient {
+  /**
+   * Revoke account device
+   */
+  public revoke<ThrowOnError extends boolean = false>(
+    parameters: {
+      keyID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "keyID" }] }])
+    return (options?.client ?? this.client).delete<AccountDeviceRevokeResponses, unknown, ThrowOnError>({
+      url: "/account/devices/{keyID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class BillingMode extends HeyApiClient {
+  /**
+   * Get model billing mode
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AccountBillingModeGetResponses, unknown, ThrowOnError>({
+      url: "/account/billing-mode",
+      ...options,
+    })
+  }
+
+  /**
+   * Set model billing mode
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters: {
+      mode: "byok" | "managed"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "mode" }] }])
+    return (options?.client ?? this.client).post<AccountBillingModeSetResponses, unknown, ThrowOnError>({
+      url: "/account/billing-mode",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Account extends HeyApiClient {
+  /**
+   * Get local account session status
+   */
+  public session<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AccountSessionResponses, unknown, ThrowOnError>({
+      url: "/account/session",
+      ...options,
+    })
+  }
+
+  /**
+   * Get Ace account and funding summary
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AccountGetResponses, unknown, ThrowOnError>({
+      url: "/account",
+      ...options,
+    })
+  }
+
+  /**
+   * Get purchased wallet balance
+   */
+  public balance<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AccountBalanceResponses, unknown, ThrowOnError>({
+      url: "/account/balance",
+      ...options,
+    })
+  }
+
+  /**
+   * List account devices
+   */
+  public devices<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AccountDevicesResponses, unknown, ThrowOnError>({
+      url: "/account/devices",
+      ...options,
+    })
+  }
+
+  /**
+   * Sign in through the system browser
+   */
+  public loginBrowser<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<AccountLoginBrowserResponses, unknown, ThrowOnError>({
+      url: "/account/login-browser",
+      ...options,
+    })
+  }
+
+  /**
+   * Sign in with an OpenScience workspace key
+   */
+  public loginKey<ThrowOnError extends boolean = false>(
+    parameters: {
+      key: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "key" }] }])
+    return (options?.client ?? this.client).post<AccountLoginKeyResponses, unknown, ThrowOnError>({
+      url: "/account/login-key",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Logout Ace account
+   */
+  public logout<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<AccountLogoutResponses, unknown, ThrowOnError>({
+      url: "/account/logout",
+      ...options,
+    })
+  }
+
+  private _fundingContext?: FundingContext
+  get fundingContext(): FundingContext {
+    return (this._fundingContext ??= new FundingContext({ client: this.client }))
+  }
+
+  private _device?: Device
+  get device(): Device {
+    return (this._device ??= new Device({ client: this.client }))
+  }
+
+  private _billingMode?: BillingMode
+  get billingMode(): BillingMode {
+    return (this._billingMode ??= new BillingMode({ client: this.client }))
   }
 }
 
@@ -1792,6 +1998,63 @@ export class Updates extends HeyApiClient {
   }
 }
 
+export class Billing extends HeyApiClient {
+  /**
+   * Get Ace/model billing state
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsBillingGetResponses, unknown, ThrowOnError>({
+      url: "/settings/billing",
+      ...options,
+    })
+  }
+
+  /**
+   * Update Ace/model billing state
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters?: {
+      llm?: "managed" | "byok" | null
+      compute?: "byok"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "llm" },
+            { in: "body", key: "compute" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<SettingsBillingUpdateResponses, unknown, ThrowOnError>({
+      url: "/settings/billing",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Wallet extends HeyApiClient {
+  /**
+   * Get purchased wallet and Ace ledger
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsWalletGetResponses, unknown, ThrowOnError>({
+      url: "/settings/wallet",
+      ...options,
+    })
+  }
+}
+
 export class Skills extends HeyApiClient {
   /**
    * Install skill from git
@@ -1931,6 +2194,16 @@ export class Settings extends HeyApiClient {
     return (this._updates ??= new Updates({ client: this.client }))
   }
 
+  private _billing?: Billing
+  get billing(): Billing {
+    return (this._billing ??= new Billing({ client: this.client }))
+  }
+
+  private _wallet?: Wallet
+  get wallet(): Wallet {
+    return (this._wallet ??= new Wallet({ client: this.client }))
+  }
+
   private _skills?: Skills
   get skills(): Skills {
     return (this._skills ??= new Skills({ client: this.client }))
@@ -1946,7 +2219,7 @@ export class Auth extends HeyApiClient {
   /**
    * Configure an onboarding provider credential
    *
-   * Save one local provider key.
+   * Atomically save one provider key and select BYOK model access.
    */
   public onboarding<ThrowOnError extends boolean = false>(
     parameters: {
@@ -7789,6 +8062,11 @@ export class OpenScienceClient extends HeyApiClient {
   private _global?: Global
   get global(): Global {
     return (this._global ??= new Global({ client: this.client }))
+  }
+
+  private _account?: Account
+  get account(): Account {
+    return (this._account ??= new Account({ client: this.client }))
   }
 
   private _settings?: Settings

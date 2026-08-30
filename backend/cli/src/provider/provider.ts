@@ -14,10 +14,12 @@ import { Instance } from "../project/instance"
 import { ProjectTrust } from "../project/trust"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
-import type { FundingSnapshot } from "../openscience"
+import { OpenScience, type FundingSnapshot } from "../openscience"
+import { isAtlasProxyURL, managedOpenRouterBaseURL } from "../openscience/synced-env-policy"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { ProviderTokenCommand } from "./token-command"
 import { AsyncLocalStorage } from "node:async_hooks"
+import { MANAGED_OPENROUTER_MODEL_SET } from "./managed-catalog"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -451,6 +453,111 @@ export namespace Provider {
     return REMOVED_MODEL_IDS.has(normalized)
   }
 
+  export function isAtlasProxyBaseURL(baseURL: unknown): baseURL is string {
+    return isAtlasProxyURL(baseURL)
+  }
+
+  export function requestFundingHeaders(input: {
+    baseURL: unknown
+    apiKey: unknown
+    headers?: HeadersInit
+    funding?: FundingSnapshot
+  }): Headers {
+    const headers = new Headers(input.headers)
+    headers.delete("X-Organization-ID")
+    headers.delete("OpenScience-Funding-Protocol")
+    if (!isAtlasProxyBaseURL(input.baseURL) || !Auth.isAtlasApiKey(input.apiKey)) return headers
+    if (!input.funding) throw new Error("Managed inference has no funding-account snapshot. Retry the operation.")
+    if (input.funding.api_key !== input.apiKey) {
+      throw new Error("The connected account changed during managed inference. Retry the operation.")
+    }
+    for (const [key, value] of Object.entries(OpenScience.fundingHeaders(input.funding))) headers.set(key, value)
+    return headers
+  }
+
+  export function managedIdempotencyKey(input: {
+    endpoint: string
+    body: string
+    sessionID: string
+    messageID: string
+    operation: string
+  }): string {
+    const hash = new Bun.CryptoHasher("sha256")
+    for (const value of [
+      "openscience-managed-v1",
+      input.sessionID,
+      input.messageID,
+      input.operation,
+      input.endpoint,
+      input.body,
+    ]) {
+      hash.update(value)
+      hash.update("\0")
+    }
+    return `os_${hash.digest("hex")}`
+  }
+
+  const MANAGED_RELOAD_RETRY_MAX_SECONDS = 10
+  const MANAGED_RELOAD_RESPONSE_MAX_BYTES = 16_384
+  const ManagedReloadRetry = z.object({
+    error: z.literal("insufficient_balance"),
+    recovery: z.object({
+      kind: z.literal("ace_reload"),
+      retryable: z.literal(true),
+      retry_after_seconds: z.number().int().min(0).max(MANAGED_RELOAD_RETRY_MAX_SECONDS),
+      ace_reload: z.object({ state: z.literal("available"), pending: z.literal(true) }),
+    }),
+  })
+
+  /** Retry once only when Atlas proves a durable Ace reload is already pending. */
+  export async function retryManagedPaymentRequired(input: {
+    response: Response
+    managed: boolean
+    headers: Headers
+    signal?: AbortSignal | null
+    retry: () => Promise<Response>
+  }): Promise<Response> {
+    if (!input.managed || input.response.status !== 402 || !input.headers.get("Idempotency-Key")) return input.response
+    const declared = Number(input.response.headers.get("content-length"))
+    if (Number.isFinite(declared) && declared > MANAGED_RELOAD_RESPONSE_MAX_BYTES) return input.response
+    const text = await input.response
+      .clone()
+      .text()
+      .catch(() => "")
+    if (!text || text.length > MANAGED_RELOAD_RESPONSE_MAX_BYTES) return input.response
+    const parsed = iife(() => {
+      try {
+        return ManagedReloadRetry.safeParse(JSON.parse(text))
+      } catch {
+        return undefined
+      }
+    })
+    if (!parsed?.success) return input.response
+    const seconds = parsed.data.recovery.retry_after_seconds
+    const retryAfterHeader = input.response.headers.get("retry-after")
+    if (retryAfterHeader === null) return input.response
+    const retryAfter = Number(retryAfterHeader)
+    if (!Number.isFinite(retryAfter) || retryAfter !== seconds) return input.response
+    await input.response.body?.cancel().catch(() => undefined)
+    if (seconds > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const signal = input.signal
+        if (signal?.aborted) return reject(signal.reason ?? new DOMException("Aborted", "AbortError"))
+        const aborted = () => {
+          clearTimeout(timer)
+          signal?.removeEventListener("abort", aborted)
+          reject(signal?.reason ?? new DOMException("Aborted", "AbortError"))
+        }
+        const timer = setTimeout(() => {
+          signal?.removeEventListener("abort", aborted)
+          resolve()
+        }, seconds * 1000)
+        signal?.addEventListener("abort", aborted, { once: true })
+      })
+    }
+    return input.retry()
+  }
+
   const PUBLIC_PROVIDER_BASE_URLS: Record<string, string> = {
     anthropic: "https://api.anthropic.com/v1",
     openai: "https://api.openai.com/v1",
@@ -503,17 +610,36 @@ export namespace Provider {
     }
   }
 
-  function rejectRetiredProviderRoute(provider: Info, options: Record<string, any>) {
+  export function isManagedProxyBaseURL(baseURL: unknown): baseURL is string {
+    if (!hasManagedProxyPath(baseURL)) return false
+    try {
+      const url = new URL(baseURL)
+      return !url.search && !url.hash
+    } catch {
+      return false
+    }
+  }
+
+  function requireAtlasProxyForManagedKey(provider: Info, options: Record<string, any>) {
     const effective = effectiveKey(provider, options)
-    if (!Auth.isAtlasApiKey(effective) && !hasManagedProxyPath(options["baseURL"])) return
+    if (!Auth.isAtlasApiKey(effective)) return
+    if (provider.id === "openrouter" && isAtlasProxyBaseURL(options["baseURL"])) return
     throw new Error(
-      `${provider.id} is configured with a retired managed credential or proxy. Connect a provider account you control.`,
+      `${provider.id} is using an Ace credential outside the managed OpenRouter proxy. Sign in again or connect your own provider account.`,
     )
   }
 
-  /** A user-owned API key rather than a retired product token. */
+  /** A user-owned API key rather than an Ace account token. */
   function isByokKey(key: unknown): key is string {
     return typeof key === "string" && key.length > 0 && !Auth.isAtlasApiKey(key)
+  }
+
+  export function managedRoutesCuratedProvidersOnly(config: Config.Info): boolean {
+    return config.billing?.llm === "managed"
+  }
+
+  export function managedProviderAllowed(providerID: string): boolean {
+    return providerID === "openrouter"
   }
 
   /** The credential that actually authenticates a provider: an explicit apiKey
@@ -838,18 +964,28 @@ export namespace Provider {
         "HTTP-Referer": "https://github.com/synthetic-sciences/OpenScience",
         "X-Title": "OpenScience",
       }
-      // OpenRouter is always a user-owned route. Retired product tokens and
-      // proxy URLs are ignored rather than becoming a hidden fallback.
       const auth = await Auth.get("openrouter").catch(() => undefined)
       const authKey = auth?.type === "api" ? auth.key : undefined
       const envKey = Env.get("OPENROUTER_API_KEY")
-      const ownKey = isByokKey(authKey) ? authKey : isByokKey(envKey) ? envKey : undefined
+      const mode = (await Config.get().catch(() => undefined))?.billing?.llm
+      const ownKey =
+        mode === "managed" ? undefined : isByokKey(authKey) ? authKey : isByokKey(envKey) ? envKey : undefined
       if (ownKey) {
-        // Honour a user's own OpenRouter-compatible gateway (custom
-        // OPENROUTER_BASE_URL); retired proxy paths fall back to the public endpoint.
         const envBase = Env.get("OPENROUTER_BASE_URL")
         const baseURL = envBase && !hasManagedProxyPath(envBase) ? envBase : "https://openrouter.ai/api/v1"
         return { autoload: false, options: { apiKey: ownKey, baseURL, headers } }
+      }
+      if (mode !== "byok") {
+        const session = await OpenScience.getSession().catch(() => null)
+        if (session?.api_key && Auth.isAtlasApiKey(session.api_key)) {
+          return {
+            // Account sync used to pre-register this provider. Ace now has no
+            // sync dependency, so the saved session itself is the autoload seam.
+            autoload: true,
+            options: { apiKey: session.api_key, baseURL: managedOpenRouterBaseURL(), headers },
+            source: "managed",
+          }
+        }
       }
       return { autoload: false, options: { headers } }
     },
@@ -1192,7 +1328,7 @@ export namespace Provider {
     .object({
       id: z.string(),
       name: z.string(),
-      source: z.enum(["env", "config", "custom", "api"]),
+      source: z.enum(["env", "config", "custom", "api", "managed"]),
       env: z.string().array(),
       key: z.string().optional(),
       options: z.record(z.string(), z.any()),
@@ -1475,6 +1611,12 @@ export namespace Provider {
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
     const authEntries = await Auth.all()
+    const managedCuratedProvidersOnly = managedRoutesCuratedProvidersOnly(config)
+    const localProviderIDs = new Set(
+      Object.entries(config.provider ?? {})
+        .filter(([, provider]) => isLocalBaseURL(provider?.options?.baseURL ?? provider?.api))
+        .map(([id]) => id),
+    )
 
     function isProviderAllowed(providerID: string): boolean {
       // The former hosted/demo catalog is retired. Keep the package namespace
@@ -1482,6 +1624,16 @@ export namespace Provider {
       // models.dev, env, auth, or user config.
       if (providerID === "synsci" || providerID.startsWith("synsci-")) return false
       if (disabled.has(providerID)) return false
+      const credential = authEntries[providerID]
+      const baseURL = providers[providerID]?.options?.["baseURL"]
+      const direct =
+        providerID === "openai-codex" ||
+        localProviderIDs.has(providerID) ||
+        isLocalBaseURL(baseURL) ||
+        credential?.type === "oauth" ||
+        (credential?.type === "api" && isByokKey(credential.key)) ||
+        isByokKey(providers[providerID] ? effectiveKey(providers[providerID]) : undefined)
+      if (managedCuratedProvidersOnly && !managedProviderAllowed(providerID) && !direct) return false
       // A user- or administrator-authored enabled_providers list is an explicit local restriction.
       if (enabled && !enabled.has(providerID)) return false
       return true
@@ -1771,7 +1923,7 @@ export namespace Provider {
       // config.provider for its whitelist has always been, and must stay,
       // "config" here.
       const credentialSource = providers[providerID]?.source
-      const claimed = credentialSource === "env" || credentialSource === "api"
+      const claimed = credentialSource === "env" || credentialSource === "api" || credentialSource === "managed"
       const partial: Partial<Info> = claimed ? {} : { source: "config" }
       if (provider.env) partial.env = provider.env
       if (provider.name) partial.name = provider.name
@@ -1797,12 +1949,31 @@ export namespace Provider {
 
       const baseURL = provider.options?.["baseURL"] ?? config.provider?.[providerID]?.api
       const credential = effectiveKey(provider)
-      if (Auth.isAtlasApiKey(credential) || hasManagedProxyPath(baseURL)) {
+      const managedRoute =
+        providerID === "openrouter" &&
+        provider.source === "managed" &&
+        Auth.isAtlasApiKey(credential) &&
+        isAtlasProxyBaseURL(baseURL)
+      if (config.billing?.llm === "managed" && providerID === "openrouter" && !managedRoute) {
+        delete providers[providerID]
+        continue
+      }
+      if ((Auth.isAtlasApiKey(credential) || hasManagedProxyPath(baseURL)) && !managedRoute) {
+        delete providers[providerID]
+        continue
+      }
+      if (config.billing?.llm === "byok" && managedRoute) {
         delete providers[providerID]
         continue
       }
 
       const configProvider = config.provider?.[providerID]
+
+      if (managedRoute) {
+        for (const modelID of MANAGED_OPENROUTER_MODEL_SET) {
+          if (!(modelID in provider.models)) provider.models[modelID] = _syntheticOpenRouterModel(modelID)
+        }
+      }
 
       for (const [modelID, model] of Object.entries(provider.models)) {
         model.api.id = model.api.id ?? model.id ?? modelID
@@ -1811,6 +1982,7 @@ export namespace Provider {
           delete provider.models[modelID]
         if (model.status === "alpha" && !Flag.OPENSCIENCE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
         if (model.status === "deprecated") delete provider.models[modelID]
+        if (managedRoute && !MANAGED_OPENROUTER_MODEL_SET.has(modelID)) delete provider.models[modelID]
         if (
           (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
           (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
@@ -2026,7 +2198,7 @@ export namespace Provider {
       // throw at construction (the real Bearer header is overwritten on each call).
       if (options["tokenCommand"] && options["apiKey"] === undefined) options["apiKey"] = "token-command"
       pinByokToPublicEndpoint(provider, options, model.api.url)
-      rejectRetiredProviderRoute(provider, options)
+      requireAtlasProxyForManagedKey(provider, options)
       if (model.headers)
         options["headers"] = {
           ...options["headers"],
@@ -2087,20 +2259,45 @@ export namespace Provider {
         }
 
         const apiKey = typeof options["apiKey"] === "string" ? options["apiKey"] : undefined
-        if (Auth.isAtlasApiKey(apiKey) || hasManagedProxyPath(options["baseURL"])) {
-          throw new Error("Retired product routes are not supported. Connect a provider account you control.")
+        const managed = isAtlasProxyBaseURL(options["baseURL"]) && Auth.isAtlasApiKey(apiKey)
+        if ((Auth.isAtlasApiKey(apiKey) || hasManagedProxyPath(options["baseURL"])) && !managed) {
+          throw new Error("Ace credentials are valid only on the managed OpenRouter proxy.")
         }
-        const cleanHeaders = new Headers(opts.headers as HeadersInit | undefined)
-        cleanHeaders.delete("X-Organization-ID")
-        cleanHeaders.delete("OpenScience-Funding-Protocol")
-        opts.headers = cleanHeaders
-
-        return fetchWithIdleWatchdog(fetchFn, input, opts, {
-          providerID: model.providerID,
-          modelID: model.id,
-          idleTimeout,
-          totalTimeout: options["timeout"],
+        const context = requestContext.getStore()
+        const funding = managed ? await OpenScience.managedRequestSnapshot(apiKey, context?.funding) : undefined
+        opts.headers = requestFundingHeaders({
+          baseURL: options["baseURL"],
+          apiKey,
+          headers: opts.headers as HeadersInit | undefined,
+          funding,
         })
+        const sessionID = context?.sessionID ?? opts.headers.get("x-openscience-session")
+        const messageID = context?.messageID ?? opts.headers.get("x-openscience-request")
+        if (managed && sessionID && messageID && typeof opts.body === "string") {
+          const endpoint = input instanceof Request ? input.url : input instanceof URL ? input.href : String(input)
+          opts.headers.set(
+            "Idempotency-Key",
+            managedIdempotencyKey({ endpoint, body: opts.body, sessionID, messageID, operation: "model" }),
+          )
+        }
+
+        const request = () =>
+          fetchWithIdleWatchdog(fetchFn, input, opts, {
+            providerID: model.providerID,
+            modelID: model.id,
+            idleTimeout,
+            totalTimeout: options["timeout"],
+          })
+        const response = await request()
+        const settled = await retryManagedPaymentRequired({
+          response,
+          managed,
+          headers: opts.headers,
+          signal: opts.signal,
+          retry: request,
+        })
+        if (managed) OpenScience.invalidateBalance()
+        return funding ? OpenScience.validateFundingResponse(settled, funding) : settled
       }
 
       // Special case: google-vertex-anthropic uses a subpath import
@@ -2241,7 +2438,7 @@ export namespace Provider {
   }
 
   export const NO_PROVIDER_HINT =
-    "No model providers are available. Add your own API key (`openscience keys add`) or connect a provider in Customize → Models, then choose a model."
+    "No model providers are available. Sign in to Ace, add your own API key, or connect a local/subscription model in Customize → Models."
 
   const priority = ["claude-sonnet-4", "claude-opus-4", "gpt-5", "gemini-3-pro"]
   export function sort(models: Model[]) {

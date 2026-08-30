@@ -18,7 +18,9 @@ import { ProviderLogo } from "./ProviderLogo"
  * set themselves in a .env or a config file — nobody else manages it, and the
  * phrase suggests an administrator does.
  */
-const SOURCES: Record<Provider["source"], { label: string; removable: boolean; title: string; note?: string }> = {
+type ProviderSource = Provider["source"] | "managed"
+
+const SOURCES: Record<ProviderSource, { label: string; removable: boolean; title: string; note?: string }> = {
   api: {
     label: "local file",
     removable: true,
@@ -42,6 +44,12 @@ const SOURCES: Record<Provider["source"], { label: string; removable: boolean; t
     note: "set in openscience.json",
     title: "Custom provider supplied by openscience.json; edit that file to remove it",
   },
+  managed: {
+    label: "Ace",
+    removable: false,
+    note: "managed through your Ace account",
+    title: "Ace model access; manage it in the Ace section above",
+  },
 }
 
 export function ProviderKeys(props: { onError?: (error: string | undefined) => void }) {
@@ -57,9 +65,9 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
   const connected = createMemo(() =>
     providers
       .connected()
-      .filter((item) => MODEL_PROVIDERS.some((provider) => provider.id === item.id)),
+      .filter((item) => item.source !== "managed" && MODEL_PROVIDERS.some((provider) => provider.id === item.id)),
   )
-  const source = (item: { id: string }) => SOURCES[(item as { source?: Provider["source"] }).source ?? "api"]
+  const source = (item: { id: string; source?: ProviderSource }) => SOURCES[item.source ?? "api"]
   const refreshAfterSave = (done: string) => {
     void sync
       .refreshProviders()

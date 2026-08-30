@@ -223,9 +223,6 @@ export namespace Config {
       }
     }
 
-    result.billing = { ...result.billing, llm: "byok" as const }
-    execution.billing = { ...execution.billing, llm: "byok" as const }
-
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode ?? {})) {
       result.agent = mergeDeep(result.agent ?? {}, {
@@ -1177,12 +1174,11 @@ export namespace Config {
       billing: z
         .object({
           llm: z
-            .literal("byok")
+            .enum(["managed", "byok"])
             .nullable()
             .optional()
-            .catch("byok")
             .describe(
-              "Provider access uses your own API keys, first-party OAuth subscriptions, or local models. Legacy values are migrated to 'byok'.",
+              "How LLM inference is paid for. 'managed' uses Ace Credits; 'byok' uses only user-owned keys, subscriptions, or local models.",
             ),
           compute: z
             .literal("byok")
@@ -1193,7 +1189,7 @@ export namespace Config {
             ),
         })
         .optional()
-        .describe("Provider access configuration. OpenScience uses only user-owned credentials."),
+        .describe("Provider access configuration for Ace or user-owned credentials."),
       username: z
         .string()
         .optional()
@@ -1426,7 +1422,7 @@ export namespace Config {
         .catch(() => {})
     }
 
-    return { ...result, billing: { ...result.billing, llm: "byok" as const } }
+    return result
   })
 
   async function loadFile(filepath: string): Promise<Info> {

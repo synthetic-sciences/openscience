@@ -121,7 +121,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
 
         // Resolve one connected Sol route without treating provider identities
-        // as interchangeable. Automatic prefers the user's ChatGPT connection.
+        // as interchangeable. The active access contract decides which route
+        // is eligible; Automatic still prefers the user's ChatGPT connection.
         const connected = new Map(providers.connected().map((provider) => [provider.id, provider]))
         const candidates = [
           { providerID: "openai", modelID: "gpt-5.6-sol" },
@@ -130,7 +131,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         ].flatMap((route): ModelAccessRoute[] => {
           const provider = connected.get(route.providerID)
           if (!provider?.models[route.modelID]) return []
-          const access: ModelRouteAccess = provider.id === "openai-codex" ? "chatgpt" : "byok"
+          const access: ModelRouteAccess =
+            provider.id === "openai-codex"
+              ? "chatgpt"
+              : provider.source === "managed" || provider.id.startsWith("synsci")
+                ? "managed"
+                : "byok"
           return [{ ...route, access }]
         })
         const initial = resolveModelAccessRoute({

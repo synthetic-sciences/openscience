@@ -4,11 +4,14 @@ import { JsonStore } from "../util/jsonstore"
 import z from "zod"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { isAtlasManagedKey } from "../credentials/managed-key"
+import { Config } from "../config/config"
+import { Log } from "../util/log"
 
 export const OAUTH_DUMMY_KEY = "synsc-oauth-dummy-key"
+const log = Log.create({ service: "auth" })
 
 export namespace Auth {
-  /** Detect retired product credentials so they cannot escape into provider calls.
+  /** Detect Ace account credentials so they cannot escape into direct provider calls.
    *  Canonical home: `auth/index.ts` is a near-leaf module (only
    *  path/global/jsonstore/zod besides this file's own Config import), so
    *  `provider.ts` - which already imports Auth - depends on this instead of
@@ -71,11 +74,51 @@ export namespace Auth {
 
   export async function set(key: string, info: Info) {
     if (info.type === "api" && isAtlasApiKey(info.key)) {
-      throw new Error("Managed workspace credentials are not supported. Connect a provider account you control.")
+      throw new Error(
+        "Ace workspace credentials belong to OpenScience sign-in, not provider keys. Sign in to Ace or add a provider key you control.",
+      )
     }
-    await CredentialLifecycle.mutate(`provider-auth.set:${key}`, () =>
-      JsonStore.update(filepath, (data) => ({ ...data, [key]: info })),
-    )
+    const selectsByok = key === "openrouter" && info.type === "api" && !isAtlasApiKey(info.key)
+    await CredentialLifecycle.mutate(`provider-auth.set:${key}`, async () => {
+      if (!selectsByok) {
+        await JsonStore.update(filepath, (data) => ({ ...data, [key]: info }))
+        return
+      }
+      const previous = await JsonStore.read(filepath)
+      const previousMode = (await Config.getGlobal()).billing?.llm ?? null
+      try {
+        await JsonStore.update(filepath, (data) => ({ ...data, [key]: info }))
+        const config = await Config.getGlobal()
+        if (config.billing?.llm === "managed") {
+          await Config.updateGlobal({ billing: { llm: "byok" } }, { preserveInstances: true })
+        }
+      } catch (cause) {
+        let credentialRollback: unknown
+        let modeRollback: unknown
+        try {
+          await JsonStore.update(filepath, () => previous)
+        } catch (error) {
+          credentialRollback = error
+        }
+        try {
+          await Config.updateGlobal({ billing: { llm: previousMode } }, { preserveInstances: true })
+        } catch (error) {
+          modeRollback = error
+        }
+        log.warn("OpenRouter BYOK handoff failed; compensation attempted", {
+          error: cause instanceof Error ? cause.message : String(cause),
+          credentialRollback: credentialRollback instanceof Error ? credentialRollback.message : credentialRollback,
+          modeRollback: modeRollback instanceof Error ? modeRollback.message : modeRollback,
+        })
+        if (credentialRollback || modeRollback) {
+          throw new AggregateError(
+            [cause, ...(credentialRollback ? [credentialRollback] : []), ...(modeRollback ? [modeRollback] : [])],
+            "OpenRouter setup failed and could not be fully restored. Review Customize → Models before retrying.",
+          )
+        }
+        throw cause
+      }
+    })
   }
 
   export async function remove(key: string) {

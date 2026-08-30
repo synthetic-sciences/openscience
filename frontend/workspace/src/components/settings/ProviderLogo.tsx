@@ -79,6 +79,7 @@ const VECTORS = {
 } satisfies Record<string, Vector>
 
 const SOURCES: Record<string, Source> = {
+  synsci: { kind: "provider", id: "synsci" },
   anthropic: { kind: "provider", id: "anthropic" },
   openai: { kind: "provider", id: "openai" },
   "openai-codex": { kind: "provider", id: "openai" },
@@ -126,6 +127,8 @@ const SOURCES: Record<string, Source> = {
 // as the icon pack. Normalize the known spellings so a real provider never
 // falls back to a generic initial (notably DeepSeek, Kimi, and Z.AI).
 const ALIASES: Record<string, keyof typeof SOURCES> = {
+  ace: "synsci",
+  "synthetic-sciences": "synsci",
   "deep-seek": "deepseek",
   "deepseek-ai": "deepseek",
   together: "togetherai",

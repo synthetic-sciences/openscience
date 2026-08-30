@@ -389,25 +389,17 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const [catalogFocus, setCatalogFocus] = createSignal("")
   const [notice, setNotice] = createSignal("")
   const refs = { content: undefined as HTMLElement | undefined }
-  const owned = (model: NonNullable<ReturnType<typeof local.model.current>>) =>
-    !model.provider.id.startsWith("synsci")
-  const current = createMemo(() => {
-    const model = local.model.current()
-    return model && owned(model) ? model : undefined
-  })
+  const current = createMemo(() => local.model.current())
   const exact = (model: NonNullable<ReturnType<typeof current>>) => `${model.provider.id}/${model.id}`
   const recent = createMemo(() =>
-    local.model.recent().filter((model): model is NonNullable<typeof model> => (model ? owned(model) : false)),
+    local.model.recent().filter((model): model is NonNullable<typeof model> => Boolean(model)),
   )
   const available = createMemo(() =>
-    local.model
-      .list()
-      .filter(owned)
-      .filter((model) => local.model.visible({ providerID: model.provider.id, modelID: model.id })),
+    local.model.list().filter((model) => local.model.visible({ providerID: model.provider.id, modelID: model.id })),
   )
   const allChoices = createMemo(() =>
     groupModelRoutes({
-      models: local.model.list().filter(owned),
+      models: local.model.list(),
       current: current() ? { providerID: current()!.provider.id, modelID: current()!.id } : undefined,
       recent: recent().map((model) => ({ providerID: model.provider.id, modelID: model.id })),
     }),
@@ -598,12 +590,18 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const selectChoice = (choice: ReturnType<typeof choices>[number]) => {
     const selected = current()
     const configured = parseModelRoute(sync.data.config.model)
+    const billing = sync.data.config.billing?.llm
     const model =
       preservedModelRoute(
         choice.routes,
         selected ? { providerID: selected.provider.id, modelID: selected.id } : undefined,
       ) ??
       preservedModelRoute(choice.routes, configured) ??
+      (billing === "managed"
+        ? choice.routes.find((route) => route.provider.id === "openrouter" || route.provider.id.startsWith("synsci"))
+        : billing === "byok"
+          ? choice.routes.find((route) => route.provider.id !== "openrouter" && !route.provider.id.startsWith("synsci"))
+          : undefined) ??
       choice.routes.find((route) => route.provider.id === "openai-codex") ??
       choice.model
     local.model.set({ providerID: model.provider.id, modelID: model.id }, { recent: true })

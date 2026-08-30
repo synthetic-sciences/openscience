@@ -756,6 +756,50 @@
   text-wrap: pretty;
 }
 
+.settings-account-card {
+  overflow: hidden;
+  padding: var(--settings-space-1);
+}
+
+.settings-account-card > * + * {
+  border-top: 1px solid var(--border-weak-base);
+}
+
+.settings-account-logo .settings-provider-logo {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-preference-row__actions {
+  min-width: 0;
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--settings-space-2);
+  margin-left: auto;
+}
+
+.settings-account-value {
+  max-width: min(320px, 100%);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.settings-account-workspace {
+  width: min(220px, 100%);
+  min-width: 160px;
+}
+
+.settings-account-workspace [data-slot="select-select-trigger"] {
+  width: 100%;
+}
+
 @container settings-main (max-width: 680px) {
   .settings-compute-host-row {
     align-items: flex-start;
@@ -789,7 +833,13 @@
   .settings-preference-row__actions,
   .settings-storage-location__actions {
     width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
     padding-left: 42px;
+  }
+
+  .settings-account-workspace {
+    width: 100%;
   }
 
   .settings-inline-editor,

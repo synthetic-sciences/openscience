@@ -9,4 +9,5 @@ test("opening Models does not run a destructive dashboard sync", async () => {
   expect(source).toContain("refreshAfterSave")
   expect(source).toContain("disabled={saving()}")
   expect(source).toContain('if (adding()) setKey("")')
+  expect(source).toContain('item.source !== "managed"')
 })

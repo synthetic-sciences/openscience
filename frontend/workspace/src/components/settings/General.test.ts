@@ -30,39 +30,34 @@ describe("General preference writes", () => {
   })
 })
 
-describe("General workspace switching", () => {
-  test("requires browser reauthorization instead of relabeling the active credential locally", async () => {
+describe("General Ace account", () => {
+  test("keeps Ace optional while providing login, logout, Wallet, and billing controls", async () => {
     const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
-    expect(source).toContain('title="Workspace"')
+    expect(source).toContain('title="Ace account"')
+    expect(source).toContain('"/account/login-browser"')
+    expect(source).toContain('"/account/logout"')
+    expect(source).toContain("walletBalanceLabel")
+    expect(source).toContain("URLS.dashboardBilling")
+    expect(source).toContain("Sign in only if you want Ace")
+    expect(source).not.toMatch(/promotional|promo credit/i)
+    expect(source).not.toContain("AccountGate")
+    expect(source).not.toContain("DataUse")
+  })
+
+  test("switches unlocked funding context locally but reauthorizes locked workspace keys", async () => {
+    const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
+    const start = source.indexOf("const setWorkspace")
+    const flow = source.slice(start, source.indexOf("onMount", start))
+    expect(source).toContain('account()?.credential?.type === "organization"')
+    expect(source).toContain("account()?.credential?.legacy === false")
+    expect(flow).toContain("!canDirectlySwitchWorkspace()")
+    expect(flow).toContain('await login("workspace")')
+    expect(flow).toContain('"/account/funding-context"')
     expect(source).toContain("Switch workspace")
-    expect(source).toContain("sdk.client.account.loginBrowser()")
-    expect(source).not.toContain("sdk.client.account.fundingContext.set")
-    expect(source).not.toContain("<FilterMenu")
-    expect(source).toContain("approve any workspace, including Personal")
-    expect(source).toContain("Create workspace")
-    expect(source).toContain("URLS.dashboardWorkspaces")
-    expect(source).toContain("This legacy thk_ key remains valid and is mapped to Personal")
-  })
-
-  test("keeps the current workspace active while browser approval is pending or fails", async () => {
-    const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
-    const start = source.indexOf("const switchWorkspace")
-    const flow = source.slice(start, source.indexOf("return (", start))
-    const changed = 'window.dispatchEvent(new Event("openscience:account-changed"))'
-    const event = flow.indexOf(changed)
-    expect(flow.indexOf("sdk.client.account.loginBrowser()")).toBeGreaterThan(-1)
-    expect(event).toBeGreaterThan(-1)
-    expect(flow.indexOf("await loadAccount()")).toBeGreaterThan(event)
-    expect(source).toContain("Your current workspace stays active until approval completes.")
-    expect(source).toContain('title: "Workspace unchanged"')
-    expect(source).toContain("disabled={fundingBusy()}")
-  })
-
-  test("shows the resolved Personal and unavailable workspace labels", async () => {
-    const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
-    expect(source).toContain('return "Personal"')
-    expect(source).toContain('"Unavailable workspace"')
-    expect(source).toContain("description: `OpenScience is now connected to ${fundingLabel()}.`")
-    expect(source).toContain("Switch workspaces to choose another one.")
+    expect(source).toContain("Personal")
+    expect(source).toContain("Unavailable")
+    expect(source).toContain('organization.membership_status === "active"')
+    expect(source).toContain("organization.funding_available !== false")
+    expect(source).toContain("organization.use_shared_wallet !== false")
   })
 })

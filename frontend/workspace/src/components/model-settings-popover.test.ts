@@ -54,9 +54,10 @@ describe("inference source classification", () => {
     expect(subject.inferenceSource({ providerID: "xai", credential: "config" })).toBe("byok")
     // Own gateway key in the local auth store is decisive: own key wins server-side.
     expect(subject.inferenceSource({ providerID: "openrouter", credential: "api" })).toBe("byok")
-    // Environment credentials are user-owned; retired managed credentials are not surfaced.
-    expect(subject.inferenceSource({ providerID: "openrouter", credential: "env" })).toBe("byok")
-    expect(subject.inferenceSource({ providerID: "openrouter", credential: "env" })).toBe("byok")
+    expect(subject.inferenceSource({ providerID: "openrouter", credential: "managed" })).toBe("managed")
+    // An ambient gateway is ambiguous until the explicit access mode resolves it.
+    expect(subject.inferenceSource({ providerID: "openrouter", credential: "env" })).toBeUndefined()
+    expect(subject.inferenceSource({ providerID: "openrouter", credential: "env", billing: "byok" })).toBe("byok")
     // OAuth subscriptions outside ChatGPT and config-defined custom providers stay unlabeled.
     expect(subject.inferenceSource({ providerID: "github-copilot", credential: "custom" })).toBeUndefined()
   })
@@ -64,6 +65,7 @@ describe("inference source classification", () => {
   test("labels model access without changing provider routing ids", () => {
     expect(subject.inferenceSourceLabel("chatgpt")).toBe("ChatGPT")
     expect(subject.inferenceSourceLabel("byok")).toBe("BYOK")
+    expect(subject.inferenceSourceLabel("managed")).toBe("Ace")
     expect(subject.inferenceSourceLabel(undefined, "Local runtime")).toBe("Local runtime")
   })
 })

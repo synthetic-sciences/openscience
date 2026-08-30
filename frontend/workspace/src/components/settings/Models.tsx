@@ -1,9 +1,10 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal } from "solid-js"
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
 import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { useModels, type ModelKey } from "@/context/models"
 import { usePlatform } from "@/context/platform"
 import { productPreferences } from "@/context/product-preferences"
@@ -18,6 +19,7 @@ import {
 } from "@/context/model-catalog"
 import { resolveModelAccessRoute, type ModelRouteAccess } from "@/context/model-route-resolution"
 import { CodexConnection } from "./CodexConnection"
+import { ManagedInference } from "./ManagedInference"
 import { ProviderKeys } from "./ProviderKeys"
 import { ProviderLogo } from "./ProviderLogo"
 import { modelGroup, modelGroupLabel, modelGroupRank } from "../model-groups"
@@ -63,6 +65,7 @@ type Option = {
 }
 
 type Scope = "all" | "reasoning" | "latest" | "long"
+type BillingPreference = { llm: "managed" | "byok" | null }
 type OptionGroup<T> = { id: string; label: string; models: T[] }
 type WorkerOption = {
   value: string
@@ -71,8 +74,6 @@ type WorkerOption = {
   providerLogo?: string
   model?: DelegationModel
 }
-
-const isUserOwnedRoute = (model: AvailableModel) => !model.provider.id.startsWith("synsci")
 
 export function takeModelGroups<T>(groups: OptionGroup<T>[], limit: number): OptionGroup<T>[] {
   let remaining = Math.max(0, limit)
@@ -94,6 +95,7 @@ const scopes: Array<{ id: Scope; label: string }> = [
 ]
 
 export default function Models() {
+  const sync = useGlobalSync()
   const sdk = useGlobalSDK()
   const models = useModels()
   const platform = usePlatform()
@@ -105,6 +107,11 @@ export default function Models() {
   const [preferences, preferenceActions] = createResource(() =>
     settingsApi<CapabilityPreferences>(sdk.url, fetchFn, "/settings/preferences"),
   )
+  const [billing, billingActions] = createResource(() =>
+    settingsApi<BillingPreference>(sdk.url, fetchFn, "/settings/billing"),
+  )
+  const unsubscribeBilling = sync.onProvidersRefreshed(() => void billingActions.refetch())
+  onCleanup(unsubscribeBilling)
   const routeOption = (item: AvailableModel): RouteOption => {
     const display = displayProviderForModel(item.provider, item.id)
     const key = { providerID: item.provider.id, modelID: item.id }
@@ -112,7 +119,8 @@ export default function Models() {
       inferenceSource({
         providerID: item.provider.id,
         credential: item.provider.source,
-      }) ?? "byok"
+        billing: sync.data.config.billing?.llm,
+      }) ?? (item.provider.id.startsWith("synsci") ? "managed" : "byok")
     return {
       key,
       source: item,
@@ -127,7 +135,7 @@ export default function Models() {
   const options = createMemo<Option[]>(() => {
     models.pinned.list()
     return groupModelRoutes({
-      models: models.list().filter(isUserOwnedRoute),
+      models: models.list(),
       recent: models.recent.list(),
     })
       .map((choice) => {
@@ -205,6 +213,7 @@ export default function Models() {
   const visibleCount = createMemo(() => options().filter((model) => model.visible).length)
   const workerOptions = createMemo<WorkerOption[]>(() => {
     const selected = preferences()?.delegation_worker_model ?? undefined
+    const currentBilling = billing.latest?.llm ?? sync.data.config.billing?.llm
     const routes = options()
       .filter(
         (model) =>
@@ -216,7 +225,7 @@ export default function Models() {
       .flatMap((model): WorkerOption[] => {
         const resolved = resolveModelAccessRoute({
           routes: model.routes.map((route) => ({ ...route.key, access: route.routeAccess, route })),
-          billing: null,
+          billing: currentBilling,
           current: selected,
         })
         const route = resolved?.route
@@ -234,12 +243,6 @@ export default function Models() {
       .toSorted((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value))
     const saved =
       selected &&
-      models
-        .list()
-        .some(
-          (model) =>
-            model.provider.id === selected.providerID && model.id === selected.modelID && isUserOwnedRoute(model),
-        ) &&
       !routes.some(
         (option) => option.model?.providerID === selected.providerID && option.model.modelID === selected.modelID,
       )
@@ -317,6 +320,12 @@ export default function Models() {
               {error()}
             </div>
           </Show>
+          <Section id="model-access" title="Ace" description="Managed model access and your purchased Wallet balance.">
+            <div class="settings-card models-access-card">
+              <ManagedInference onError={setError} />
+            </div>
+          </Section>
+
           <Section
             id="model-connections"
             title="Connections"

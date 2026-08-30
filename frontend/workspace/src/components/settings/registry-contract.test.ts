@@ -36,8 +36,8 @@ describe("settings registry source contract", () => {
       "Models",
       "Local models",
       "Skills",
-      "Scientific tools",
-      "MCP & connectors",
+      "Tools",
+      "Connectors",
       "Research tools",
       "Compute",
       "Security & access",
@@ -68,10 +68,12 @@ describe("settings registry source contract", () => {
     const models = await Bun.file(new URL("Models.tsx", root)).text()
     const general = await Bun.file(new URL("General.tsx", root)).text()
 
-    expect(models).not.toContain("ManagedInference")
+    expect(models).toContain("ManagedInference")
     expect(models).toContain("<CodexConnection")
     expect(models).toContain("<ProviderKeys")
     expect(general).toContain("<AppearanceSections")
+    expect(general).toContain('title="Ace account"')
+    expect(general).toContain('"/account/login-browser"')
     expect(general).not.toContain('title="Navigation"')
     expect(general).not.toContain('title="Gateway"')
     expect(general).not.toContain('title="Trace"')
