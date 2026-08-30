@@ -7,7 +7,6 @@ const publicSources = [
   "../pages/home.tsx",
   "../atlas/RightPane.tsx",
   "../atlas/kernel-runtime.ts",
-  "../atlas/SessionTraceSurface.tsx",
   "../i18n/zh.ts",
   "./settings/General.tsx",
   "./settings/ProviderKeys.tsx",

@@ -78,10 +78,6 @@ export const dict = {
   "command.session.compact.description": "Resumir a sessão para reduzir o tamanho do contexto",
   "command.session.fork": "Bifurcar da mensagem",
   "command.session.fork.description": "Criar uma nova sessão a partir de uma mensagem anterior",
-  "command.session.share": "Compartilhar sessão",
-  "command.session.share.description": "Compartilhar esta sessão e copiar a URL para a área de transferência",
-  "command.session.unshare": "Parar de compartilhar sessão",
-  "command.session.unshare.description": "Parar de compartilhar esta sessão",
 
   "palette.search.placeholder": "Buscar arquivos e comandos",
   "palette.empty": "Nenhum resultado encontrado",
@@ -93,7 +89,6 @@ export const dict = {
   "dialog.provider.group.popular": "Popular",
   "dialog.provider.group.other": "Outro",
   "dialog.provider.tag.recommended": "Recomendado",
-  "dialog.provider.synsci.note": "curated models including Claude, GPT, Gemini and more",
   "dialog.provider.anthropic.note": "Conectar com Claude Pro/Max ou chave de API",
   "dialog.provider.openai.note": "Conectar com ChatGPT Pro/Plus ou chave de API",
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
@@ -106,10 +101,6 @@ export const dict = {
   "dialog.model.empty": "Nenhum resultado de modelo",
   "dialog.model.manage": "Gerenciar modelos",
   "dialog.model.manage.description": "Personalizar quais modelos aparecem no seletor de modelos.",
-
-  "dialog.model.unpaid.freeModels.title": "Modelos gratuitos dos seus provedores conectados",
-  "dialog.model.unpaid.empty": "no free models available yet — connect a provider to add models.",
-  "dialog.model.unpaid.addMore.title": "Adicionar mais modelos de provedores populares",
 
   "dialog.provider.viewAll": "Ver mais provedores",
 
@@ -330,16 +321,6 @@ export const dict = {
   "toast.file.listFailed.title": "Falha ao listar arquivos",
   "toast.context.noLineSelection.title": "Nenhuma seleção de linhas",
   "toast.context.noLineSelection.description": "Selecione primeiro um intervalo de linhas em uma aba de arquivo.",
-  "toast.session.share.copyFailed.title": "Falha ao copiar URL para a área de transferência",
-  "toast.session.share.success.title": "Sessão compartilhada",
-  "toast.session.share.success.description": "URL compartilhada copiada para a área de transferência!",
-  "toast.session.share.failed.title": "Falha ao compartilhar sessão",
-  "toast.session.share.failed.description": "Ocorreu um erro ao compartilhar a sessão",
-
-  "toast.session.unshare.success.title": "Sessão não compartilhada",
-  "toast.session.unshare.success.description": "Sessão deixou de ser compartilhada com sucesso!",
-  "toast.session.unshare.failed.title": "Falha ao parar de compartilhar sessão",
-  "toast.session.unshare.failed.description": "Ocorreu um erro ao parar de compartilhar a sessão",
 
   "toast.session.listFailed.title": "Falha ao carregar sessões para {{project}}",
 
@@ -435,20 +416,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Gerenciar servidores",
-
-  "session.share.popover.title": "Publicar na web",
-  "session.share.popover.description.shared":
-    "Esta sessão é pública na web. Está acessível para qualquer pessoa com o link.",
-  "session.share.popover.description.unshared":
-    "Compartilhar sessão publicamente na web. Estará acessível para qualquer pessoa com o link.",
-  "session.share.action.share": "Compartilhar",
-  "session.share.action.publish": "Publicar",
-  "session.share.action.publishing": "Publicando...",
-  "session.share.action.unpublish": "Cancelar publicação",
-  "session.share.action.unpublishing": "Cancelando publicação...",
-  "session.share.action.view": "Ver",
-  "session.share.copy.copied": "Copiado",
-  "session.share.copy.copyLink": "Copiar link",
 
   "lsp.tooltip.none": "Nenhum servidor LSP",
   "lsp.label.connected": "{{count}} LSP",

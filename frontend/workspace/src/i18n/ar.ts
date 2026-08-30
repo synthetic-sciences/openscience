@@ -78,10 +78,6 @@ export const dict = {
   "command.session.compact.description": "تلخيص الجلسة لتقليل حجم السياق",
   "command.session.fork": "تشعب من الرسالة",
   "command.session.fork.description": "إنشاء جلسة جديدة من رسالة سابقة",
-  "command.session.share": "مشاركة الجلسة",
-  "command.session.share.description": "مشاركة هذه الجلسة ونسخ الرابط إلى الحافظة",
-  "command.session.unshare": "إلغاء مشاركة الجلسة",
-  "command.session.unshare.description": "إيقاف مشاركة هذه الجلسة",
 
   "palette.search.placeholder": "البحث في الملفات والأوامر",
   "palette.empty": "لا توجد نتائج",
@@ -93,7 +89,6 @@ export const dict = {
   "dialog.provider.group.popular": "شائع",
   "dialog.provider.group.other": "آخر",
   "dialog.provider.tag.recommended": "موصى به",
-  "dialog.provider.synsci.note": "curated models including Claude, GPT, Gemini and more",
   "dialog.provider.anthropic.note": "اتصل باستخدام Claude Pro/Max أو مفتاح API",
   "dialog.provider.openai.note": "اتصل باستخدام ChatGPT Pro/Plus أو مفتاح API",
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
@@ -106,10 +101,6 @@ export const dict = {
   "dialog.model.empty": "لا توجد نتائج للنماذج",
   "dialog.model.manage": "إدارة النماذج",
   "dialog.model.manage.description": "تخصيص النماذج التي تظهر في محدد النماذج.",
-
-  "dialog.model.unpaid.freeModels.title": "نماذج مجانية من موفريك المتصلين",
-  "dialog.model.unpaid.empty": "no free models available yet — connect a provider to add models.",
-  "dialog.model.unpaid.addMore.title": "إضافة المزيد من النماذج من موفرين مشهورين",
 
   "dialog.provider.viewAll": "عرض المزيد من الموفرين",
 
@@ -331,16 +322,6 @@ export const dict = {
   "toast.file.listFailed.title": "فشل سرد الملفات",
   "toast.context.noLineSelection.title": "لا يوجد تحديد للأسطر",
   "toast.context.noLineSelection.description": "حدد نطاق أسطر في تبويب ملف أولاً.",
-  "toast.session.share.copyFailed.title": "فشل نسخ عنوان URL إلى الحافظة",
-  "toast.session.share.success.title": "تمت مشاركة الجلسة",
-  "toast.session.share.success.description": "تم نسخ عنوان URL للمشاركة إلى الحافظة!",
-  "toast.session.share.failed.title": "فشل مشاركة الجلسة",
-  "toast.session.share.failed.description": "حدث خطأ أثناء مشاركة الجلسة",
-
-  "toast.session.unshare.success.title": "تم إلغاء مشاركة الجلسة",
-  "toast.session.unshare.success.description": "تم إلغاء مشاركة الجلسة بنجاح!",
-  "toast.session.unshare.failed.title": "فشل إلغاء مشاركة الجلسة",
-  "toast.session.unshare.failed.description": "حدث خطأ أثناء إلغاء مشاركة الجلسة",
 
   "toast.session.listFailed.title": "فشل تحميل الجلسات لـ {{project}}",
 
@@ -434,18 +415,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "الإضافات",
   "status.popover.action.manageServers": "إدارة الخوادم",
-
-  "session.share.popover.title": "نشر على الويب",
-  "session.share.popover.description.shared": "هذه الجلسة عامة على الويب. يمكن لأي شخص لديه الرابط الوصول إليها.",
-  "session.share.popover.description.unshared": "شارك الجلسة علنًا على الويب. ستكون متاحة لأي شخص لديه الرابط.",
-  "session.share.action.share": "مشاركة",
-  "session.share.action.publish": "نشر",
-  "session.share.action.publishing": "جارٍ النشر...",
-  "session.share.action.unpublish": "إلغاء النشر",
-  "session.share.action.unpublishing": "جارٍ إلغاء النشر...",
-  "session.share.action.view": "عرض",
-  "session.share.copy.copied": "تم النسخ",
-  "session.share.copy.copyLink": "نسخ الرابط",
 
   "lsp.tooltip.none": "لا توجد خوادم LSP",
   "lsp.label.connected": "{{count}} LSP",

@@ -78,10 +78,6 @@ export const dict = {
   "command.session.compact.description": "สรุปเซสชันเพื่อลดขนาดบริบท",
   "command.session.fork": "แตกแขนงจากข้อความ",
   "command.session.fork.description": "สร้างเซสชันใหม่จากข้อความก่อนหน้า",
-  "command.session.share": "แชร์เซสชัน",
-  "command.session.share.description": "แชร์เซสชันนี้และคัดลอก URL ไปยังคลิปบอร์ด",
-  "command.session.unshare": "ยกเลิกการแชร์เซสชัน",
-  "command.session.unshare.description": "หยุดการแชร์เซสชันนี้",
 
   "palette.search.placeholder": "ค้นหาไฟล์และคำสั่ง",
   "palette.empty": "ไม่พบผลลัพธ์",
@@ -93,7 +89,6 @@ export const dict = {
   "dialog.provider.group.popular": "ยอดนิยม",
   "dialog.provider.group.other": "อื่น ๆ",
   "dialog.provider.tag.recommended": "แนะนำ",
-  "dialog.provider.synsci.note": "โมเดลที่คัดสรร รวมถึง Claude, GPT, Gemini และอื่น ๆ",
   "dialog.provider.anthropic.note": "เข้าถึงโมเดล Claude โดยตรง รวมถึง Pro และ Max",
   "dialog.provider.copilot.note": "โมเดล Claude สำหรับการช่วยเหลือในการเขียนโค้ด",
   "dialog.provider.openai.note": "โมเดล GPT สำหรับงาน AI ทั่วไปที่รวดเร็วและมีความสามารถ",
@@ -106,10 +101,6 @@ export const dict = {
   "dialog.model.empty": "ไม่พบผลลัพธ์โมเดล",
   "dialog.model.manage": "จัดการโมเดล",
   "dialog.model.manage.description": "ปรับแต่งโมเดลที่จะปรากฏในตัวเลือกโมเดล",
-
-  "dialog.model.unpaid.freeModels.title": "โมเดลฟรีจากผู้ให้บริการที่เชื่อมต่อของคุณ",
-  "dialog.model.unpaid.empty": "no free models available yet — connect a provider to add models.",
-  "dialog.model.unpaid.addMore.title": "เพิ่มโมเดลเพิ่มเติมจากผู้ให้บริการยอดนิยม",
 
   "dialog.provider.viewAll": "แสดงผู้ให้บริการเพิ่มเติม",
 
@@ -333,17 +324,6 @@ export const dict = {
   "toast.context.noLineSelection.title": "ไม่มีการเลือกบรรทัด",
   "toast.context.noLineSelection.description": "เลือกช่วงบรรทัดในแท็บไฟล์ก่อน",
 
-  "toast.session.share.copyFailed.title": "ไม่สามารถคัดลอก URL ไปยังคลิปบอร์ด",
-  "toast.session.share.success.title": "แชร์เซสชันแล้ว",
-  "toast.session.share.success.description": "คัดลอก URL แชร์ไปยังคลิปบอร์ดแล้ว!",
-  "toast.session.share.failed.title": "ไม่สามารถแชร์เซสชัน",
-  "toast.session.share.failed.description": "เกิดข้อผิดพลาดระหว่างการแชร์เซสชัน",
-
-  "toast.session.unshare.success.title": "ยกเลิกการแชร์เซสชันแล้ว",
-  "toast.session.unshare.success.description": "ยกเลิกการแชร์เซสชันสำเร็จ!",
-  "toast.session.unshare.failed.title": "ไม่สามารถยกเลิกการแชร์เซสชัน",
-  "toast.session.unshare.failed.description": "เกิดข้อผิดพลาดระหว่างการยกเลิกการแชร์เซสชัน",
-
   "toast.session.listFailed.title": "ไม่สามารถโหลดเซสชันสำหรับ {{project}}",
 
   "toast.update.title": "มีการอัปเดต",
@@ -438,18 +418,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "ปลั๊กอิน",
   "status.popover.action.manageServers": "จัดการเซิร์ฟเวอร์",
-
-  "session.share.popover.title": "เผยแพร่บนเว็บ",
-  "session.share.popover.description.shared": "เซสชันนี้เป็นสาธารณะบนเว็บ สามารถเข้าถึงได้โดยผู้ที่มีลิงก์",
-  "session.share.popover.description.unshared": "แชร์เซสชันสาธารณะบนเว็บ จะเข้าถึงได้โดยผู้ที่มีลิงก์",
-  "session.share.action.share": "แชร์",
-  "session.share.action.publish": "เผยแพร่",
-  "session.share.action.publishing": "กำลังเผยแพร่...",
-  "session.share.action.unpublish": "ยกเลิกการเผยแพร่",
-  "session.share.action.unpublishing": "กำลังยกเลิกการเผยแพร่...",
-  "session.share.action.view": "ดู",
-  "session.share.copy.copied": "คัดลอกแล้ว",
-  "session.share.copy.copyLink": "คัดลอกลิงก์",
 
   "lsp.tooltip.none": "ไม่มีเซิร์ฟเวอร์ LSP",
   "lsp.label.connected": "{{count}} LSP",

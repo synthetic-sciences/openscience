@@ -82,10 +82,6 @@ export const dict = {
   "command.session.compact.description": "总结会话以减少上下文大小",
   "command.session.fork": "从消息分叉",
   "command.session.fork.description": "从之前的消息创建新会话",
-  "command.session.share": "分享会话",
-  "command.session.share.description": "分享此会话并将链接复制到剪贴板",
-  "command.session.unshare": "取消分享会话",
-  "command.session.unshare.description": "停止分享此会话",
 
   "palette.search.placeholder": "搜索文件和命令",
   "palette.empty": "未找到结果",
@@ -100,7 +96,6 @@ export const dict = {
   "dialog.provider.anthropic.note": "使用 Claude Pro/Max 或 API 密钥连接",
   "dialog.provider.openai.note": "使用 ChatGPT Pro/Plus 或 API 密钥连接",
   "dialog.provider.copilot.note": "使用 Copilot 或 API 密钥连接",
-  "dialog.provider.synsci.note": "使用 Synthetic Sciences 或 API 密钥连接",
   "dialog.provider.google.note": "使用 Google 账号或 API 密钥连接",
   "dialog.provider.openrouter.note": "使用 OpenRouter 账号或 API 密钥连接",
   "dialog.provider.vercel.note": "使用 Vercel 账号或 API 密钥连接",
@@ -110,10 +105,6 @@ export const dict = {
   "dialog.model.empty": "未找到模型",
   "dialog.model.manage": "管理模型",
   "dialog.model.manage.description": "自定义模型选择器中显示的模型。",
-
-  "dialog.model.unpaid.freeModels.title": "来自你已连接提供商的免费模型",
-  "dialog.model.unpaid.empty": "no free models available yet — connect a provider to add models.",
-  "dialog.model.unpaid.addMore.title": "从热门提供商添加更多模型",
 
   "dialog.provider.viewAll": "查看更多提供商",
 
@@ -333,16 +324,6 @@ export const dict = {
   "toast.file.listFailed.title": "列出文件失败",
   "toast.context.noLineSelection.title": "未选择行",
   "toast.context.noLineSelection.description": "请先在文件标签中选择行范围。",
-  "toast.session.share.copyFailed.title": "无法复制链接到剪贴板",
-  "toast.session.share.success.title": "会话已分享",
-  "toast.session.share.success.description": "分享链接已复制到剪贴板",
-  "toast.session.share.failed.title": "分享会话失败",
-  "toast.session.share.failed.description": "分享会话时发生错误",
-
-  "toast.session.unshare.success.title": "已取消分享会话",
-  "toast.session.unshare.success.description": "会话已成功取消分享",
-  "toast.session.unshare.failed.title": "取消分享失败",
-  "toast.session.unshare.failed.description": "取消分享会话时发生错误",
 
   "toast.session.listFailed.title": "无法加载 {{project}} 的会话",
 
@@ -435,18 +416,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "插件",
   "status.popover.action.manageServers": "管理服务器",
-
-  "session.share.popover.title": "发布到网页",
-  "session.share.popover.description.shared": "此会话已在网页上公开。任何拥有链接的人都可以访问。",
-  "session.share.popover.description.unshared": "在网页上公开分享此会话。任何拥有链接的人都可以访问。",
-  "session.share.action.share": "分享",
-  "session.share.action.publish": "发布",
-  "session.share.action.publishing": "正在发布...",
-  "session.share.action.unpublish": "取消发布",
-  "session.share.action.unpublishing": "正在取消发布...",
-  "session.share.action.view": "查看",
-  "session.share.copy.copied": "已复制",
-  "session.share.copy.copyLink": "复制链接",
 
   "lsp.tooltip.none": "没有 LSP 服务器",
   "lsp.label.connected": "{{count}} LSP",

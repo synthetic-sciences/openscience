@@ -82,10 +82,6 @@ export const dict = {
   "command.session.compact.description": "總結工作階段以減少上下文大小",
   "command.session.fork": "從訊息分支",
   "command.session.fork.description": "從先前的訊息建立新工作階段",
-  "command.session.share": "分享工作階段",
-  "command.session.share.description": "分享此工作階段並將連結複製到剪貼簿",
-  "command.session.unshare": "取消分享工作階段",
-  "command.session.unshare.description": "停止分享此工作階段",
 
   "palette.search.placeholder": "搜尋檔案和命令",
   "palette.empty": "找不到結果",
@@ -97,7 +93,6 @@ export const dict = {
   "dialog.provider.group.popular": "熱門",
   "dialog.provider.group.other": "其他",
   "dialog.provider.tag.recommended": "推薦",
-  "dialog.provider.synsci.note": "curated models including Claude, GPT, Gemini and more",
   "dialog.provider.anthropic.note": "使用 Claude Pro/Max 或 API 金鑰連線",
   "dialog.provider.openai.note": "使用 ChatGPT Pro/Plus 或 API 金鑰連線",
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
@@ -110,10 +105,6 @@ export const dict = {
   "dialog.model.empty": "找不到模型",
   "dialog.model.manage": "管理模型",
   "dialog.model.manage.description": "自訂模型選擇器中顯示的模型。",
-
-  "dialog.model.unpaid.freeModels.title": "來自你已連接提供者的免費模型",
-  "dialog.model.unpaid.empty": "no free models available yet — connect a provider to add models.",
-  "dialog.model.unpaid.addMore.title": "從熱門提供者新增更多模型",
 
   "dialog.provider.viewAll": "查看更多提供者",
 
@@ -333,16 +324,6 @@ export const dict = {
   "toast.file.listFailed.title": "列出檔案失敗",
   "toast.context.noLineSelection.title": "未選取行",
   "toast.context.noLineSelection.description": "請先在檔案分頁中選取行範圍。",
-  "toast.session.share.copyFailed.title": "無法複製連結到剪貼簿",
-  "toast.session.share.success.title": "工作階段已分享",
-  "toast.session.share.success.description": "分享連結已複製到剪貼簿",
-  "toast.session.share.failed.title": "分享工作階段失敗",
-  "toast.session.share.failed.description": "分享工作階段時發生錯誤",
-
-  "toast.session.unshare.success.title": "已取消分享工作階段",
-  "toast.session.unshare.success.description": "工作階段已成功取消分享",
-  "toast.session.unshare.failed.title": "取消分享失敗",
-  "toast.session.unshare.failed.description": "取消分享工作階段時發生錯誤",
 
   "toast.session.listFailed.title": "無法載入 {{project}} 的工作階段",
 
@@ -435,18 +416,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "外掛程式",
   "status.popover.action.manageServers": "管理伺服器",
-
-  "session.share.popover.title": "發佈到網頁",
-  "session.share.popover.description.shared": "此工作階段已在網頁上公開。任何擁有連結的人都可以存取。",
-  "session.share.popover.description.unshared": "在網頁上公開分享此工作階段。任何擁有連結的人都可以存取。",
-  "session.share.action.share": "分享",
-  "session.share.action.publish": "發佈",
-  "session.share.action.publishing": "正在發佈...",
-  "session.share.action.unpublish": "取消發佈",
-  "session.share.action.unpublishing": "正在取消發佈...",
-  "session.share.action.view": "檢視",
-  "session.share.copy.copied": "已複製",
-  "session.share.copy.copyLink": "複製連結",
 
   "lsp.tooltip.none": "沒有 LSP 伺服器",
   "lsp.label.connected": "{{count}} LSP",

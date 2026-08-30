@@ -4,14 +4,13 @@ const read = (path: string) => Bun.file(new URL(path, import.meta.url)).text()
 
 describe("live workbench edge geometry", () => {
   test("uses the workspace radius ladder and keeps live surfaces free of decorative gradients", async () => {
-    const [home, trace, terminal, sidebar, atlas] = await Promise.all([
+    const [home, terminal, sidebar, atlas] = await Promise.all([
       read("../pages/home-workbench.css"),
-      read("../atlas/SessionTraceSurface.css"),
       read("../atlas/TerminalSurface.css"),
       read("../pages/session-sidebar.css"),
       read("./atlas.css"),
     ])
-    const liveSurfaces = [home, trace, terminal]
+    const liveSurfaces = [home, terminal]
 
     for (const css of liveSurfaces) {
       expect(css).toContain("border-radius: var(--atlas-radius-")
@@ -20,9 +19,6 @@ describe("live workbench edge geometry", () => {
     }
 
     expect(home).toContain("border-radius: 50%")
-    expect(trace).toContain("border-radius: 50%")
-    expect(trace).toContain("background: var(--color-bg-subtle)")
-    expect(trace).toContain("@media (prefers-reduced-motion: reduce)")
     expect(sidebar).toMatch(
       /\.session-sidebar\s*\{[^}]*border: 0;[^}]*border-right: 1px solid color-mix\(in srgb, var\(--color-border\) 60%, transparent\);[^}]*border-radius: 0;[^}]*background: color-mix\(in srgb, var\(--color-bg-subtle\) 88%, var\(--color-bg\)\);/s,
     )

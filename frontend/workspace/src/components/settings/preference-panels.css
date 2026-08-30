@@ -756,15 +756,6 @@
   text-wrap: pretty;
 }
 
-.settings-account-value {
-  max-width: min(360px, 100%);
-  color: var(--text-strong);
-  font-size: 13px;
-  text-align: right;
-  overflow-wrap: anywhere;
-  font-variant-numeric: tabular-nums;
-}
-
 @container settings-main (max-width: 680px) {
   .settings-compute-host-row {
     align-items: flex-start;
@@ -805,12 +796,6 @@
   .settings-preference-disclosure,
   .settings-sandbox-checks {
     padding-left: var(--settings-space-4);
-  }
-
-  .settings-account-value {
-    width: 100%;
-    padding-left: 42px;
-    text-align: left;
   }
 
   .settings-storage-cache {

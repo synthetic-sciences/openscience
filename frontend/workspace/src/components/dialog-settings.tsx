@@ -1079,30 +1079,10 @@ const SETTINGS_STYLES = `
   border-color: var(--border-critical-base);
   background: var(--surface-critical-weak);
 }
-.settings-inference-choice {
-  min-height: 88px;
-  justify-content: flex-start;
-}
-.settings-inference-choice__heading {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 18px;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-.settings-inference-choice__check {
-  color: var(--text-interactive-base);
-}
-.settings-account-summary,
-.settings-connection-card,
 .settings-provider-key-form,
 .settings-defaults-card,
 .settings-model-catalog {
   background: var(--settings-surface);
-}
-.settings-boundary-note {
-  align-items: flex-start;
-  background: var(--settings-surface-muted);
 }
 
 /* Panels use the shared type utility names, but the shell owns their semantic
@@ -1173,7 +1153,7 @@ const SETTINGS_STYLES = `
 .settings-dialog :where(button, [role="button"], [data-slot="select-select-trigger"]) {
   min-height: 32px;
 }
-.settings-dialog :where(.settings-choice, .settings-inference-choice) {
+.settings-dialog .settings-choice {
   height: auto;
   min-height: 88px;
 }

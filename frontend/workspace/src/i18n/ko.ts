@@ -78,10 +78,6 @@ export const dict = {
   "command.session.compact.description": "컨텍스트 크기를 줄이기 위해 세션 요약",
   "command.session.fork": "메시지에서 분기",
   "command.session.fork.description": "이전 메시지에서 새 세션 생성",
-  "command.session.share": "세션 공유",
-  "command.session.share.description": "이 세션을 공유하고 URL을 클립보드에 복사",
-  "command.session.unshare": "세션 공유 중지",
-  "command.session.unshare.description": "이 세션 공유 중지",
 
   "palette.search.placeholder": "파일 및 명령어 검색",
   "palette.empty": "결과 없음",
@@ -93,7 +89,6 @@ export const dict = {
   "dialog.provider.group.popular": "인기",
   "dialog.provider.group.other": "기타",
   "dialog.provider.tag.recommended": "추천",
-  "dialog.provider.synsci.note": "curated models including Claude, GPT, Gemini and more",
   "dialog.provider.anthropic.note": "Claude Pro/Max 또는 API 키로 연결",
   "dialog.provider.openai.note": "ChatGPT Pro/Plus 또는 API 키로 연결",
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
@@ -106,10 +101,6 @@ export const dict = {
   "dialog.model.empty": "모델 결과 없음",
   "dialog.model.manage": "모델 관리",
   "dialog.model.manage.description": "모델 선택기에 표시할 모델 사용자 지정",
-
-  "dialog.model.unpaid.freeModels.title": "연결된 공급자의 무료 모델",
-  "dialog.model.unpaid.empty": "no free models available yet — connect a provider to add models.",
-  "dialog.model.unpaid.addMore.title": "인기 공급자의 모델 추가",
 
   "dialog.provider.viewAll": "더 많은 공급자 보기",
 
@@ -331,16 +322,6 @@ export const dict = {
   "toast.file.listFailed.title": "파일 목록을 불러오지 못했습니다",
   "toast.context.noLineSelection.title": "줄 선택 없음",
   "toast.context.noLineSelection.description": "먼저 파일 탭에서 줄 범위를 선택하세요.",
-  "toast.session.share.copyFailed.title": "URL 클립보드 복사 실패",
-  "toast.session.share.success.title": "세션 공유됨",
-  "toast.session.share.success.description": "공유 URL이 클립보드에 복사되었습니다!",
-  "toast.session.share.failed.title": "세션 공유 실패",
-  "toast.session.share.failed.description": "세션을 공유하는 동안 오류가 발생했습니다",
-
-  "toast.session.unshare.success.title": "세션 공유 해제됨",
-  "toast.session.unshare.success.description": "세션 공유가 성공적으로 해제되었습니다!",
-  "toast.session.unshare.failed.title": "세션 공유 해제 실패",
-  "toast.session.unshare.failed.description": "세션 공유를 해제하는 동안 오류가 발생했습니다",
 
   "toast.session.listFailed.title": "{{project}}에 대한 세션을 로드하지 못했습니다",
 
@@ -434,19 +415,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "플러그인",
   "status.popover.action.manageServers": "서버 관리",
-
-  "session.share.popover.title": "웹에 게시",
-  "session.share.popover.description.shared": "이 세션은 웹에 공개되었습니다. 링크가 있는 누구나 액세스할 수 있습니다.",
-  "session.share.popover.description.unshared":
-    "세션을 웹에 공개적으로 공유합니다. 링크가 있는 누구나 액세스할 수 있습니다.",
-  "session.share.action.share": "공유",
-  "session.share.action.publish": "게시",
-  "session.share.action.publishing": "게시 중...",
-  "session.share.action.unpublish": "게시 취소",
-  "session.share.action.unpublishing": "게시 취소 중...",
-  "session.share.action.view": "보기",
-  "session.share.copy.copied": "복사됨",
-  "session.share.copy.copyLink": "링크 복사",
 
   "lsp.tooltip.none": "LSP 서버 없음",
   "lsp.label.connected": "{{count}} LSP",

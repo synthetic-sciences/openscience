@@ -24,19 +24,6 @@ describe("reviewer workflow removal", () => {
     expect(session).not.toContain("workspace-header__review")
   })
 
-  test("the generated Result trace stays observational", () => {
-    const trace = read("atlas/SessionTraceSurface.tsx")
-    const model = read("atlas/session-trace-model.ts")
-
-    expect(trace).toContain("Generated research result")
-    expect(trace).toContain("Research readiness gates")
-    expect(trace).not.toContain("Run independent review")
-    expect(trace).not.toContain("sdk.client.session.review")
-    expect(trace).not.toContain("Independent reviewer")
-    expect(model).not.toContain("trace.reviewerFindings")
-    expect(model).not.toContain('kind: "review"')
-  })
-
   test("no surface prefills chat to spawn the reviewer", () => {
     for (const file of sources(root)) {
       const text = readFileSync(file, "utf8")

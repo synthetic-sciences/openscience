@@ -78,10 +78,6 @@ export const dict = {
   "command.session.compact.description": "Opsummer sessionen for at reducere kontekststørrelsen",
   "command.session.fork": "Forgren fra besked",
   "command.session.fork.description": "Opret en ny session fra en tidligere besked",
-  "command.session.share": "Del session",
-  "command.session.share.description": "Del denne session og kopier URL'en til udklipsholderen",
-  "command.session.unshare": "Stop deling af session",
-  "command.session.unshare.description": "Stop med at dele denne session",
 
   "palette.search.placeholder": "Søg i filer og kommandoer",
   "palette.empty": "Ingen resultater fundet",
@@ -93,7 +89,6 @@ export const dict = {
   "dialog.provider.group.popular": "Populære",
   "dialog.provider.group.other": "Andre",
   "dialog.provider.tag.recommended": "Anbefalet",
-  "dialog.provider.synsci.note": "curated models including Claude, GPT, Gemini and more",
   "dialog.provider.anthropic.note": "Forbind med Claude Pro/Max eller API-nøgle",
   "dialog.provider.openai.note": "Forbind med ChatGPT Pro/Plus eller API-nøgle",
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
@@ -106,10 +101,6 @@ export const dict = {
   "dialog.model.empty": "Ingen modeller fundet",
   "dialog.model.manage": "Administrer modeller",
   "dialog.model.manage.description": "Tilpas hvilke modeller der vises i modelvælgeren.",
-
-  "dialog.model.unpaid.freeModels.title": "Gratis modeller fra dine forbundne udbydere",
-  "dialog.model.unpaid.empty": "no free models available yet — connect a provider to add models.",
-  "dialog.model.unpaid.addMore.title": "Tilføj flere modeller fra populære udbydere",
 
   "dialog.provider.viewAll": "Vis flere udbydere",
 
@@ -332,16 +323,6 @@ export const dict = {
   "toast.file.listFailed.title": "Kunne ikke liste filer",
   "toast.context.noLineSelection.title": "Ingen linjevalg",
   "toast.context.noLineSelection.description": "Vælg først et linjeinterval i en filfane.",
-  "toast.session.share.copyFailed.title": "Kunne ikke kopiere URL til udklipsholder",
-  "toast.session.share.success.title": "Session delt",
-  "toast.session.share.success.description": "Delings-URL kopieret til udklipsholder!",
-  "toast.session.share.failed.title": "Kunne ikke dele session",
-  "toast.session.share.failed.description": "Der opstod en fejl under deling af sessionen",
-
-  "toast.session.unshare.success.title": "Deling af session stoppet",
-  "toast.session.unshare.success.description": "Deling af session blev stoppet!",
-  "toast.session.unshare.failed.title": "Kunne ikke stoppe deling af session",
-  "toast.session.unshare.failed.description": "Der opstod en fejl under stop af sessionsdeling",
 
   "toast.session.listFailed.title": "Kunne ikke indlæse sessioner for {{project}}",
 
@@ -437,20 +418,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Administrer servere",
-
-  "session.share.popover.title": "Udgiv på nettet",
-  "session.share.popover.description.shared":
-    "Denne session er offentlig på nettet. Den er tilgængelig for alle med linket.",
-  "session.share.popover.description.unshared":
-    "Del session offentligt på nettet. Den vil være tilgængelig for alle med linket.",
-  "session.share.action.share": "Del",
-  "session.share.action.publish": "Udgiv",
-  "session.share.action.publishing": "Udgiver...",
-  "session.share.action.unpublish": "Afpublicer",
-  "session.share.action.unpublishing": "Afpublicerer...",
-  "session.share.action.view": "Vis",
-  "session.share.copy.copied": "Kopieret",
-  "session.share.copy.copyLink": "Kopier link",
 
   "lsp.tooltip.none": "Ingen LSP-servere",
   "lsp.label.connected": "{{count}} LSP",

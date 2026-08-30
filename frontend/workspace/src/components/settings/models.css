@@ -25,10 +25,8 @@
   border-radius: var(--settings-radius-control);
 }
 
-.models-access-card,
 .models-connections-card,
 .models-preferences-card,
-.models-inference,
 .models-provider-keys,
 .models-connected-providers {
   display: flex;
@@ -36,20 +34,10 @@
   flex-direction: column;
 }
 
-.models-access-card,
 .models-connections-card,
 .models-preferences-card,
-.models-inference,
 .models-provider-keys {
   gap: 0;
-}
-
-.models-access-card {
-  width: 100%;
-  min-height: 0;
-  height: auto;
-  flex: 0 0 auto;
-  align-self: flex-start;
 }
 
 .models-connections-card,
@@ -62,7 +50,6 @@
   border-top: 1px solid var(--border-weak-base);
 }
 
-.models-account-summary__identity,
 .models-connection-identity,
 .models-provider-identity,
 .models-model-identity {
@@ -79,10 +66,6 @@
   flex: 0 0 auto;
   align-items: center;
   margin-left: auto;
-}
-
-.models-account-summary__balance {
-  font-variant-numeric: tabular-nums;
 }
 
 .settings-dialog .settings-models-panel [data-component="button"] {
@@ -127,125 +110,6 @@
 .settings-dialog .settings-models-panel :where(button, input):focus-visible,
 .settings-dialog .settings-models-panel [data-slot="select-select-trigger"]:focus-visible {
   outline-color: var(--border-focus);
-}
-
-/* One compact access card: identity and decision first, explanation and
-   account truth second. This keeps billing status attached to the control
-   instead of scattering it across unrelated rows. */
-.models-routing {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--models-gap-3);
-  padding: var(--models-gap-3);
-  border: 0;
-  border-radius: var(--settings-radius-control);
-  background: transparent;
-  box-shadow: none;
-}
-
-.models-routing__details,
-.models-routing__account {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-}
-
-.models-routing__options {
-  width: min(100%, 320px);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--settings-radius-control);
-  background: var(--settings-surface-muted);
-}
-
-.settings-dialog .settings-models-panel .models-routing__option {
-  min-width: 0;
-  min-height: var(--models-control-height);
-  height: var(--models-control-height);
-  padding: 0 var(--models-gap-2);
-  border: 0;
-  border-radius: calc(var(--settings-radius-control) - 2px);
-  background: transparent;
-  color: var(--text-weak);
-  font-size: 12px;
-  font-weight: var(--font-weight-medium);
-  transition:
-    background-color 140ms ease,
-    color 140ms ease,
-    transform 140ms ease;
-}
-
-.settings-dialog .settings-models-panel .models-routing__option:hover:not(:disabled) {
-  background: var(--settings-surface-hover);
-  color: var(--text-strong);
-}
-
-.settings-dialog .settings-models-panel .models-routing__option:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.settings-dialog .settings-models-panel .models-routing__option[aria-pressed="true"] {
-  background: var(--settings-surface-hover);
-  color: var(--text-strong);
-  box-shadow: none;
-}
-
-.models-routing__option-label {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-}
-
-.models-routing__option-label > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.models-routing__description {
-  min-width: 0;
-  margin: 0;
-  color: var(--text-weak);
-  font-size: 11px;
-  line-height: 16px;
-  text-wrap: pretty;
-}
-
-.models-routing__details {
-  justify-content: space-between;
-  gap: var(--models-gap-3);
-  padding: 0 2px;
-}
-
-.models-routing__description {
-  flex: 1 1 auto;
-}
-
-.models-routing__account {
-  flex: 0 1 auto;
-  justify-content: flex-end;
-  gap: var(--models-gap-2);
-  color: var(--text-weak);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.models-routing__account-state {
-  color: var(--text-strong);
-  font-weight: var(--font-weight-medium);
-}
-
-.models-routing__sync {
-  color: var(--text-weaker);
-}
-
-.models-inference > .settings-inline-note {
-  margin: 0;
-  padding: 0 var(--models-gap-3) 8px;
 }
 
 .models-connection-row,
@@ -577,21 +441,6 @@
 }
 
 @container settings-main (max-width: 700px) {
-  .models-routing__details {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .models-routing__options {
-    width: 100%;
-    flex-basis: auto;
-  }
-
-  .models-routing__account {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
   .models-provider-key-form {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
   }
@@ -664,11 +513,5 @@
   .settings-dialog .settings-models-panel :where(button, [role="button"]),
   .settings-dialog .settings-models-panel :where(input, [data-slot="select-select-trigger"]) {
     min-height: 44px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .settings-dialog .settings-models-panel .models-routing__option {
-    transition: none;
   }
 }

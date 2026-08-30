@@ -78,10 +78,6 @@ export const dict = {
   "command.session.compact.description": "Résumer la session pour réduire la taille du contexte",
   "command.session.fork": "Bifurquer à partir du message",
   "command.session.fork.description": "Créer une nouvelle session à partir d'un message précédent",
-  "command.session.share": "Partager la session",
-  "command.session.share.description": "Partager cette session et copier l'URL dans le presse-papiers",
-  "command.session.unshare": "Ne plus partager la session",
-  "command.session.unshare.description": "Arrêter de partager cette session",
 
   "palette.search.placeholder": "Rechercher des fichiers et des commandes",
   "palette.empty": "Aucun résultat trouvé",
@@ -93,7 +89,6 @@ export const dict = {
   "dialog.provider.group.popular": "Populaire",
   "dialog.provider.group.other": "Autre",
   "dialog.provider.tag.recommended": "Recommandé",
-  "dialog.provider.synsci.note": "curated models including Claude, GPT, Gemini and more",
   "dialog.provider.anthropic.note": "Connectez-vous avec Claude Pro/Max ou une clé API",
   "dialog.provider.openai.note": "Connectez-vous avec ChatGPT Pro/Plus ou une clé API",
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
@@ -106,10 +101,6 @@ export const dict = {
   "dialog.model.empty": "Aucun résultat de modèle",
   "dialog.model.manage": "Gérer les modèles",
   "dialog.model.manage.description": "Personnalisez les modèles qui apparaissent dans le sélecteur.",
-
-  "dialog.model.unpaid.freeModels.title": "Modèles gratuits de vos fournisseurs connectés",
-  "dialog.model.unpaid.empty": "no free models available yet — connect a provider to add models.",
-  "dialog.model.unpaid.addMore.title": "Ajouter plus de modèles de fournisseurs populaires",
 
   "dialog.provider.viewAll": "Voir plus de fournisseurs",
 
@@ -335,16 +326,6 @@ export const dict = {
   "toast.file.listFailed.title": "Échec de la liste des fichiers",
   "toast.context.noLineSelection.title": "Aucune sélection de lignes",
   "toast.context.noLineSelection.description": "Sélectionnez d'abord une plage de lignes dans un onglet de fichier.",
-  "toast.session.share.copyFailed.title": "Échec de la copie de l'URL dans le presse-papiers",
-  "toast.session.share.success.title": "Session partagée",
-  "toast.session.share.success.description": "URL de partage copiée dans le presse-papiers !",
-  "toast.session.share.failed.title": "Échec du partage de la session",
-  "toast.session.share.failed.description": "Une erreur s'est produite lors du partage de la session",
-
-  "toast.session.unshare.success.title": "Session non partagée",
-  "toast.session.unshare.success.description": "Session non partagée avec succès !",
-  "toast.session.unshare.failed.title": "Échec de l'annulation du partage",
-  "toast.session.unshare.failed.description": "Une erreur s'est produite lors de l'annulation du partage de la session",
 
   "toast.session.listFailed.title": "Échec du chargement des sessions pour {{project}}",
 
@@ -443,20 +424,6 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Gérer les serveurs",
-
-  "session.share.popover.title": "Publier sur le web",
-  "session.share.popover.description.shared":
-    "Cette session est publique sur le web. Elle est accessible à toute personne disposant du lien.",
-  "session.share.popover.description.unshared":
-    "Partager la session publiquement sur le web. Elle sera accessible à toute personne disposant du lien.",
-  "session.share.action.share": "Partager",
-  "session.share.action.publish": "Publier",
-  "session.share.action.publishing": "Publication...",
-  "session.share.action.unpublish": "Dépublier",
-  "session.share.action.unpublishing": "Dépublication...",
-  "session.share.action.view": "Voir",
-  "session.share.copy.copied": "Copié",
-  "session.share.copy.copyLink": "Copier le lien",
 
   "lsp.tooltip.none": "Aucun serveur LSP",
   "lsp.label.connected": "{{count}} LSP",

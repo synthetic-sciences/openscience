@@ -149,10 +149,9 @@ test("keeps the Compute tab while mounting the unified execution inventory", () 
   expect(source).not.toContain("<KernelPanel />")
 })
 
-test("mounts the local observable trace for the active session", () => {
+test("does not mount the retired trace surface", () => {
   const source = read("./RightPane.tsx")
 
-  expect(source).toContain('import { SessionTraceSurface } from "@/atlas/SessionTraceSurface"')
-  expect(source).toContain('when={context() === "trace"}')
-  expect(source).toContain("<SessionTraceSurface session={session()} />")
+  expect(source).not.toContain("SessionTraceSurface")
+  expect(source).not.toContain('when={context() === "trace"}')
 })
