@@ -13,6 +13,7 @@ import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { settingsApi } from "./api"
 import { walletBalanceLabel } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
+import { withAccountDeadline } from "./account-deadline"
 import "./preference-panels.css"
 
 type FundingOrganization = {
@@ -39,7 +40,9 @@ type Account = {
   balance_usd: number | null
   funding_context: FundingContext
   credential?: { type: "personal" | "organization"; legacy: boolean } | null
+  credential_sync?: SyncStatus
 }
+type SyncStatus = { state: "disconnected" | "syncing" | "ready" | "error"; error?: string }
 
 type LoginResult = { ok: boolean; error?: string }
 type WorkspaceOption = { value: string; label: string }
@@ -54,16 +57,37 @@ export default function General() {
   const fetchFn = platform.fetch ?? fetch
   const [account, setAccount] = createSignal<Account>()
   const [error, setError] = createSignal<string>()
-  const [busy, setBusy] = createSignal<"login" | "logout" | "workspace">()
+  const [busy, setBusy] = createSignal<"login" | "logout" | "workspace" | "sync">()
 
   const loadAccount = () =>
-    settingsApi<Account>(sdk.url, fetchFn, "/account")
+    withAccountDeadline((signal) => settingsApi<Account>(sdk.url, fetchFn, "/account", { signal }), 12_000)
       .then(setAccount)
       .catch((cause) => setError(errorMessage(cause)))
 
   const refreshAccount = () => {
     setError(undefined)
     void loadAccount()
+  }
+
+  const syncCredentials = async () => {
+    if (busy()) return
+    setBusy("sync")
+    setError(undefined)
+    try {
+      const result = await withAccountDeadline(
+        (signal) => settingsApi<SyncStatus>(sdk.url, fetchFn, "/account/sync", { method: "POST", signal }),
+        12_000,
+      )
+      setAccount((current) => current && { ...current, credential_sync: result })
+      if (result.state !== "ready") throw new Error(result.error ?? "Sign in to sync workspace credentials.")
+      void sync
+        .refreshProviders()
+        .catch((cause) => setError(`Credentials synced, but models could not refresh: ${errorMessage(cause)}`))
+    } catch (cause) {
+      setError(errorMessage(cause))
+    } finally {
+      setBusy(undefined)
+    }
   }
 
   const login = async (context: "login" | "workspace") => {
@@ -170,12 +194,12 @@ export default function General() {
   })
 
   const email = () => {
-    if (!account()) return "Checking…"
+    if (!account()) return error() ? "Account unavailable" : "Checking…"
     if (!account()!.session) return "Not connected"
     return account()!.user?.email || "Connected"
   }
   const wallet = () => {
-    if (!account()) return "Checking…"
+    if (!account()) return error() ? "Unavailable" : "Checking…"
     return walletBalanceLabel({ signedIn: account()!.session, balanceUsd: account()!.balance_usd })
   }
 
@@ -202,7 +226,9 @@ export default function General() {
                 </span>
                 <div class="settings-row-copy">
                   <strong>{email()}</strong>
-                  <span>{account()?.session ? "Connected on this device" : "Sign in only if you want Ace"}</span>
+                  <span>
+                    {account()?.session ? "Connected on this device" : "Sign in for Ace or workspace credentials"}
+                  </span>
                 </div>
                 <div class="settings-preference-row__actions">
                   <Show
@@ -233,6 +259,29 @@ export default function General() {
               </AccountRow>
 
               <Show when={account()?.session && account()?.funding_context}>
+                <AccountRow
+                  icon="providers"
+                  title="Workspace credentials"
+                  description="Synced to this device. Local keys take priority."
+                >
+                  <span class="settings-account-value" aria-live="polite">
+                    {busy() === "sync"
+                      ? "Syncing…"
+                      : account()?.credential_sync?.state === "ready"
+                        ? "Up to date"
+                        : account()?.credential_sync?.state === "error"
+                          ? "Sync unavailable"
+                          : "Ready to sync"}
+                  </span>
+                  <Button
+                    size="small"
+                    variant="secondary"
+                    disabled={Boolean(busy())}
+                    onClick={() => void syncCredentials()}
+                  >
+                    {account()?.credential_sync?.state === "error" ? "Retry sync" : "Sync now"}
+                  </Button>
+                </AccountRow>
                 <AccountRow
                   icon="home"
                   title="Funding workspace"

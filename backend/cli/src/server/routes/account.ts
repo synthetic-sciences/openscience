@@ -99,6 +99,7 @@ export const AccountRoutes = lazy(() =>
                     billing_mode: BillingMode.nullable(),
                     funding_context: FundingContext,
                     credential: Credential.nullable(),
+                    credential_sync: z.unknown().optional(),
                   }),
                 ),
               },
@@ -107,11 +108,13 @@ export const AccountRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        void OpenScience.scheduleRefresh()
         const state = await OpenScience.getReconciledFundingState().catch(() => null)
         if (!state) {
           const session = await OpenScience.getSession()
           return c.json({
             session: !!session,
+            credential_sync: OpenScience.credentialSyncStatus(),
             balance_usd: null,
             billing_mode: null,
             credential: credential(session),
@@ -126,6 +129,7 @@ export const AccountRoutes = lazy(() =>
         ])
         return c.json({
           session: true,
+          credential_sync: OpenScience.credentialSyncStatus(),
           user: user ?? (state.snapshot.user_id ? { user_id: state.snapshot.user_id } : undefined),
           balance_usd: credits?.balanceUsd ?? null,
           billing_mode: billing,
@@ -240,6 +244,11 @@ export const AccountRoutes = lazy(() =>
       validator("json", z.object({ mode: z.enum(["byok", "managed"]) })),
       async (c) => c.json(await OpenScience.setBillingMode(c.req.valid("json").mode)),
     )
+    .post("/sync", async (c) => {
+      const result = await OpenScience.syncCredentials({ force: true })
+      if (result.state === "ready") emitDisposed()
+      return c.json(result)
+    })
     .post(
       "/login-browser",
       describeRoute({

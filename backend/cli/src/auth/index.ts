@@ -6,6 +6,7 @@ import { CredentialLifecycle } from "../credentials/lifecycle"
 import { isAtlasManagedKey } from "../credentials/managed-key"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
+import { WorkspaceCredentials } from "../openscience/workspace-credentials"
 
 export const OAUTH_DUMMY_KEY = "synsc-oauth-dummy-key"
 const log = Log.create({ service: "auth" })
@@ -68,7 +69,7 @@ export namespace Auth {
         acc[key] = parsed.data
         return acc
       },
-      {} as Record<string, Info>,
+      { ...(await WorkspaceCredentials.read())?.auth } as Record<string, Info>,
     )
   }
 
@@ -122,10 +123,14 @@ export namespace Auth {
   }
 
   export async function remove(key: string) {
-    await CredentialLifecycle.mutate(`provider-auth.remove:${key}`, () =>
-      JsonStore.update(filepath, (data) => {
+    await CredentialLifecycle.mutate(`provider-auth.remove:${key}`, async () => {
+      const local = await JsonStore.read(filepath)
+      if (!local[key] && (await WorkspaceCredentials.read())?.auth[key]) {
+        throw new Error("Manage this synced provider key in your workspace on app.syntheticsciences.ai.")
+      }
+      await JsonStore.update(filepath, (data) => {
         delete data[key]
-      }),
-    )
+      })
+    })
   }
 }

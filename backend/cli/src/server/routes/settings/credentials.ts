@@ -39,6 +39,7 @@ import { lazy } from "@/util/lazy"
 import { JsonStore } from "@/util/jsonstore"
 import { SecretFile } from "@/util/secret-file"
 import { SecretBox } from "@/util/secret-box"
+import { WorkspaceCredentials } from "@/openscience/workspace-credentials"
 
 type FieldType = "password" | "text" | "textarea"
 
@@ -198,6 +199,7 @@ const StoreEntry = z.object({
   fields: z.record(z.string(), z.string()),
   updated_at: z.string(),
   source: z.enum(["local", "account"]).default("local"),
+  organization_id: z.string().optional(),
   removal: z
     .object({
       token: z.string().uuid(),
@@ -233,15 +235,40 @@ async function decrypt(payload: string): Promise<string> {
 function parseStore(data: Record<string, unknown>): Store {
   const parsed = Store.safeParse(data)
   if (!parsed.success) return {}
-  for (const entry of Object.values(parsed.data)) {
-    entry.source = "local"
+  for (const [id, entry] of Object.entries(parsed.data)) {
+    // Old dashboard copies are explicitly attributed but have no current
+    // workspace grant. Never adopt them as permanent device-owned secrets.
+    if (entry.source === "account") {
+      delete parsed.data[id]
+      continue
+    }
     if (entry.removal) entry.removal.remote = false
   }
   return parsed.data
 }
 
 async function readStore(): Promise<Store> {
-  return parseStore(await JsonStore.read(storePath))
+  const local = parseStore(await JsonStore.read(storePath))
+  const workspace = await WorkspaceCredentials.read()
+  if (!workspace) return local
+  for (const [id, values] of Object.entries(workspace.services)) {
+    if (local[id]) continue
+    const spec = specFor(id)
+    if (!spec) continue
+    const fields: Record<string, string> = {}
+    for (const field of spec.fields) {
+      const value = values[field.name]
+      if (value && validField(id, field.name, value)) fields[field.name] = await encrypt(value)
+    }
+    if (Object.keys(fields).length)
+      local[id] = {
+        fields,
+        source: "account",
+        organization_id: workspace.organization_id,
+        updated_at: new Date().toISOString(),
+      }
+  }
+  return local
 }
 
 async function updateStore(fn: (store: Store) => void | Promise<void>): Promise<Store> {
@@ -543,7 +570,8 @@ const ServiceView = z.object({
   connected: z.boolean(),
   set_fields: z.array(z.string()),
   updated_at: z.string().nullable(),
-  source: z.literal("local").nullable(),
+  source: z.enum(["local", "account"]).nullable(),
+  organization_id: z.string().nullable(),
 })
 
 async function view(store: Store) {
@@ -571,7 +599,8 @@ async function view(store: Store) {
         connected: required.length ? required.every((field) => set.includes(field)) : set.length > 0,
         set_fields: set,
         updated_at: active?.updated_at ?? null,
-        source: active ? ("local" as const) : null,
+        source: active?.source ?? null,
+        organization_id: active?.organization_id ?? null,
       }
     }),
   )
@@ -591,6 +620,7 @@ async function view(store: Store) {
           set_fields: names,
           updated_at: entry.updated_at,
           source: "local" as const,
+          organization_id: null,
         }
       }),
   )
@@ -662,7 +692,7 @@ export const CredentialsRoutes = lazy(() =>
         if (id === "gcp" && gcp && !validField(id, "service_account_json", gcp)) {
           return c.json({ error: "Google Cloud service account credentials must be a JSON object" }, 400)
         }
-        const store = await mutateCredentialStore(id, `settings-credential.set:${id}`, async () => {
+        await mutateCredentialStore(id, `settings-credential.set:${id}`, async () => {
           const stored = await updateStore(async (current) => {
             const entry = current[id] ?? { fields: {}, updated_at: new Date().toISOString() }
             if (entry.removal) {
@@ -683,7 +713,7 @@ export const CredentialsRoutes = lazy(() =>
           })
           return stored
         })
-        return c.json({ services: await view(store) })
+        return c.json({ services: await view(await readStore()) })
       },
     )
     .delete(
@@ -703,6 +733,9 @@ export const CredentialsRoutes = lazy(() =>
       async (c) => {
         const id = c.req.valid("param").id
         const spec = specFor(id)
+        if ((await readStore())[id]?.source === "account") {
+          return c.json({ error: "Manage this synced credential in your workspace on app.syntheticsciences.ai." }, 409)
+        }
         const tombstoned = await mutateCredentialStore(id, `settings-credential.remove:${id}:tombstone`, () =>
           updateStore((current) => {
             const entry = current[id]
@@ -723,12 +756,12 @@ export const CredentialsRoutes = lazy(() =>
         )
         const pending = tombstoned[id]?.removal
         if (!pending) return c.json({ services: await view(tombstoned) })
-        const store = await mutateCredentialStore(id, `settings-credential.remove:${id}:finalize`, () =>
+        await mutateCredentialStore(id, `settings-credential.remove:${id}:finalize`, () =>
           updateStore((current) => {
             if (current[id]?.removal?.token === pending.token) delete current[id]
           }),
         )
-        return c.json({ services: await view(store) })
+        return c.json({ services: await view(await readStore()) })
       },
     ),
 )

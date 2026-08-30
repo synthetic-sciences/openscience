@@ -27,7 +27,8 @@ type Service = {
   connected: boolean
   set_fields: string[]
   updated_at: string | null
-  source: "local" | null
+  source: "local" | "account" | null
+  organization_id?: string | null
 }
 
 export const CredentialServices: Component<{
@@ -84,9 +85,17 @@ export const CredentialServices: Component<{
   const ready = (service: Service) => {
     const required = service.fields.filter((item) => !item.optional)
     if (required.length) {
-      return required.every((item) => service.set_fields.includes(item.name) || Boolean(values()[item.name]?.trim()))
+      return required.every(
+        (item) =>
+          (service.source !== "account" && service.set_fields.includes(item.name)) ||
+          Boolean(values()[item.name]?.trim()),
+      )
     }
-    return service.fields.some((item) => service.set_fields.includes(item.name) || Boolean(values()[item.name]?.trim()))
+    return service.fields.some(
+      (item) =>
+        (service.source !== "account" && service.set_fields.includes(item.name)) ||
+        Boolean(values()[item.name]?.trim()),
+    )
   }
 
   const save = async (id: string, fields = values(), label?: string) => {
@@ -211,13 +220,15 @@ export const CredentialServices: Component<{
                       <div class="flex min-w-0 flex-wrap items-center gap-2">
                         <strong>{service.label}</strong>
                         <Show when={service.connected}>
-                          <span class="settings-chip">Credential saved</span>
+                          <span class="settings-chip">
+                            {service.source === "account" ? "Workspace" : "Credential saved"}
+                          </span>
                         </Show>
                       </div>
                       <span>{service.description}</span>
                       <Show when={service.connected}>
                         <span>
-                          Encrypted on this machine
+                          {service.source === "account" ? "Synced from your workspace" : "Encrypted on this machine"}
                           {service.set_fields.length
                             ? ` · ${service.set_fields.length} field${service.set_fields.length === 1 ? "" : "s"} saved`
                             : ""}
@@ -225,7 +236,7 @@ export const CredentialServices: Component<{
                       </Show>
                     </div>
                     <div class="settings-list-actions ml-auto max-w-full flex-wrap justify-end">
-                      <Show when={service.connected}>
+                      <Show when={service.connected && service.source !== "account"}>
                         <button
                           type="button"
                           class="settings-icon-action"
@@ -237,8 +248,29 @@ export const CredentialServices: Component<{
                           <Icon name="trash" size="small" />
                         </button>
                       </Show>
+                      <Show when={service.source === "account"}>
+                        <Button
+                          size="small"
+                          variant="secondary"
+                          onClick={() =>
+                            platform.openLink(
+                              service.organization_id
+                                ? `https://app.syntheticsciences.ai/workspace/${encodeURIComponent(service.organization_id)}/credentials`
+                                : "https://app.syntheticsciences.ai/integrations",
+                            )
+                          }
+                        >
+                          Manage
+                        </Button>
+                      </Show>
                       <Button size="small" variant="secondary" disabled={saving()} onClick={() => open(service.id)}>
-                        {editing() === service.id ? "Cancel" : service.connected ? "Update" : "Add credential"}
+                        {editing() === service.id
+                          ? "Cancel"
+                          : service.source === "account"
+                            ? "Use local key"
+                            : service.connected
+                              ? "Update"
+                              : "Add credential"}
                       </Button>
                     </div>
                   </div>

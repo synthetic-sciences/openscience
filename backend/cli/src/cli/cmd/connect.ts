@@ -17,6 +17,8 @@ async function withKey(key: string) {
   return OpenScience.loginWithKey(key)
     .then(() => {
       spinner.stop("Authenticated")
+      const sync = OpenScience.credentialSyncStatus()
+      if (sync.state === "error") prompts.log.warn(sync.error ?? "Run openscience sync to retry workspace credentials.")
       return true
     })
     .catch((error) => {
@@ -36,6 +38,8 @@ async function withBrowser() {
   })
     .then(() => {
       prompts.log.success("Authenticated")
+      const sync = OpenScience.credentialSyncStatus()
+      if (sync.state === "error") prompts.log.warn(sync.error ?? "Run openscience sync to retry workspace credentials.")
       return true
     })
     .catch((error) => {
@@ -62,14 +66,16 @@ async function manual() {
 
 /** Shared Ace sign-in used by the top-level login command and onboarding. */
 export async function runAtlasLogin(args: { key?: string; browser?: boolean } = {}) {
+  const key = args.key || process.env.SYNSC_CLI_KEY || process.env.SYNSC_API_KEY
+  if (key) return withKey(key)
   const session = await OpenScience.getSession()
-  if (session) {
+  if (session && args.browser !== true) {
+    const result = await OpenScience.syncCredentials({ force: true })
+    if (result.state === "error") prompts.log.warn(result.error ?? "Workspace credentials could not sync.")
+    if (!(await OpenScience.getSession())) return manual()
     prompts.log.success(`Already authenticated (backend: ${MANAGED_API_BASE})`)
     return true
   }
-
-  const key = args.key || process.env.SYNSC_CLI_KEY || process.env.SYNSC_API_KEY
-  if (key) return withKey(key)
   if (args.browser !== false && !headless() && (await withBrowser())) return true
   return manual()
 }
@@ -93,6 +99,19 @@ export const LoginCommand = cmd({
     prompts.intro("OpenScience Ace")
     const ok = await runAtlasLogin({ key: args.key, browser: args.browser })
     prompts.outro(ok ? "Done" : "Not signed in")
+  },
+})
+
+export const SyncCommand = cmd({
+  command: "sync",
+  describe: "refresh credentials from the workspace connected to this device",
+  async handler() {
+    const result = await OpenScience.syncCredentials({ force: true })
+    if (result.state === "ready") prompts.log.success("Workspace credentials synced. Local credentials take priority.")
+    else {
+      prompts.log.error(result.error ?? "Sign in with openscience login first.")
+      process.exitCode = 1
+    }
   },
 })
 

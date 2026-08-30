@@ -15,6 +15,8 @@ import { Installation } from "../installation"
 import { webVersion } from "../web/assets"
 import { Instance } from "../project/instance"
 import { BYOK_LLM_ENV_KEYS } from "../openscience/synced-env-policy"
+import { OpenScience } from "../openscience"
+import { runAtlasLogin } from "./cmd/connect"
 
 const MARKER = path.join(Global.Path.state, "onboarded")
 
@@ -23,6 +25,7 @@ async function currentConfig() {
 }
 
 export async function isConfigured(): Promise<boolean> {
+  if (await OpenScience.isAuthenticated()) return true
   const keys = await Auth.all().catch(() => ({}))
   if (Object.keys(keys).length) return true
   if (BYOK_LLM_ENV_KEYS.some((key) => !!process.env[key])) return true
@@ -93,6 +96,7 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
     message: "How do you want to power the models?",
     initialValue: "byok",
     options: [
+      { value: "account", label: "Synthetic Sciences account", hint: "Sync workspace credentials · Ace and Wallet" },
       { value: "byok", label: "Provider accounts", hint: "Anthropic · OpenAI · Google · stored locally" },
       {
         value: "local",
@@ -108,7 +112,12 @@ export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
     return
   }
 
-  if (choice === "byok") await onboardByok()
+  if (choice === "account") {
+    if (!(await runAtlasLogin({ browser: true }))) {
+      prompts.outro("Sign in was not completed. Run openscience login to retry.")
+      return
+    }
+  } else if (choice === "byok") await onboardByok()
   else if (choice === "local") await onboardLocal()
   else onboardSkip()
 

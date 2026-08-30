@@ -42,10 +42,10 @@ describe("provider logos", () => {
     expect(providerLogoSource("ollama")).toEqual({ kind: "vector", id: "ollama" })
   })
 
-  test("uses the first-party OpenScience mark for Ace", () => {
+  test("keeps OpenScience separate from Synthetic Sciences and Ace", () => {
     expect(providerLogoSource("openscience")).toEqual({ kind: "vector", id: "openscience" })
-    expect(providerLogoSource("synsci")).toEqual({ kind: "vector", id: "openscience" })
-    expect(providerLogoSource("ace")).toEqual({ kind: "vector", id: "openscience" })
+    for (const id of ["synsci", "ace", "synthetic-sciences", "Synthetic Sciences"])
+      expect(providerLogoSource(id)).toEqual({ kind: "provider", id: "synsci" })
   })
 
   test("covers every built-in compute and integration credential", () => {

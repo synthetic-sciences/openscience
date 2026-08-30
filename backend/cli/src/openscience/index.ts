@@ -13,6 +13,7 @@ import { Lock } from "@/util/lock"
 import { Log } from "@/util/log"
 import { BILLING_URL, DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "@/endpoints"
 import { BYOK_LLM_ENV_KEYS, LOCAL_COMPUTE_CLI_ENV_KEYS, SYNCED_SERVICE_ENV_KEYS } from "./synced-env-policy"
+import { WorkspaceCredentials } from "./workspace-credentials"
 
 const log = Log.create({ service: "openscience" })
 export const API_BASE = MANAGED_API_BASE
@@ -334,7 +335,9 @@ function organizations(value: unknown): FundingOrganization[] {
         funding_available: row.funding_available === true,
         effective_permissions: Array.isArray(row.effective_permissions)
           ? row.effective_permissions.filter((value): value is string => typeof value === "string")
-          : [],
+          : row.effective_permissions && typeof row.effective_permissions === "object"
+            ? Object.entries(row.effective_permissions).flatMap(([name, allowed]) => (allowed === true ? [name] : []))
+            : [],
       },
     ]
   })
@@ -433,6 +436,7 @@ export namespace OpenScience {
       if (expectedApiKey && (await getSession())?.api_key !== expectedApiKey) return false
       await fs.rm(SESSION_PATH, { force: true })
       await fs.rm(SCOPE_PATH, { force: true })
+      await WorkspaceCredentials.clear()
       return true
     }
     const result = await CredentialLifecycle.mutate("managed-session.clear", action)
@@ -493,7 +497,7 @@ export namespace OpenScience {
     return Object.freeze({ api_key: apiKey, user_id: "", account: accountTag({ api_key: apiKey, user_id: "" }) })
   }
 
-  export function fundingHeaders(snapshot: FundingSnapshot): Record<string, string> {
+  export function fundingHeaders(snapshot: Pick<FundingSnapshot, "organization_id">): Record<string, string> {
     return {
       [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL,
       ...(snapshot.organization_id ? { "X-Organization-ID": snapshot.organization_id } : {}),
@@ -524,20 +528,135 @@ export namespace OpenScience {
     throw new FundingContextError("OpenScience could not verify the selected workspace with the gateway.")
   }
 
-  export function scheduleRefresh(): Promise<void> {
-    return Promise.resolve()
+  export type SyncStatus = {
+    state: "disconnected" | "syncing" | "ready" | "error"
+    organization_id?: string
+    synced_at?: number
+    error?: string
+  }
+  const syncs = new Map<string, Promise<SyncStatus>>()
+  const attempts = new Map<string, number>()
+  let synced: SyncStatus = { state: "disconnected" }
+  let syncTimer: ReturnType<typeof setInterval> | undefined
+
+  export function credentialSyncStatus(): SyncStatus {
+    return synced
   }
 
-  export async function reloadSyncedEnv(): Promise<void> {}
+  export async function syncCredentials(options: { force?: boolean; timeoutMs?: number } = {}): Promise<SyncStatus> {
+    const session = await getSession()
+    if (!session) return (synced = { state: "disconnected" })
+    const identity = WorkspaceCredentials.identity(session)
+    const pending = syncs.get(identity)
+    if (pending) return pending
+    if (!options.force && Date.now() - (attempts.get(identity) ?? 0) < 60_000) return synced
+    attempts.set(identity, Date.now())
+    const task = (async (): Promise<SyncStatus> => {
+      synced = { state: "syncing" }
+      const controller = new AbortController()
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const request = (async () => {
+        const response = await fetch(`${API_BASE}/api/cli/sync`, {
+          headers: { Authorization: `Bearer ${session.api_key}`, ...fundingHeaders(session) },
+          signal: controller.signal,
+        })
+        if (!response.ok) return { response }
+        return { response, body: await response.json() }
+      })()
+      try {
+        const result = await Promise.race([
+          request,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              controller.abort()
+              reject(new Error("Credential sync timed out. Retry when connected."))
+            }, options.timeoutMs ?? 8_000)
+          }),
+        ])
+        if (result.response.status === 401) {
+          await clearSession(session.api_key)
+          throw new Error("This device was disconnected. Sign in again.")
+        }
+        if (result.response.status === 403) {
+          await CredentialLifecycle.mutateIf(
+            "workspace-sync.denied",
+            async () => {
+              const current = await getSession()
+              return !!current && WorkspaceCredentials.identity(current) === identity
+            },
+            () => WorkspaceCredentials.clear(),
+          )
+          throw new Error("Workspace credential access changed. Reconnect or choose an available workspace.")
+        }
+        if (!result.response.ok) throw new Error(`Credential sync unavailable (${result.response.status}). Try again.`)
+        const data = WorkspaceCredentials.parse(result.body)
+        if (
+          result.response.headers.get(FUNDING_PROTOCOL_HEADER) !== FUNDING_PROTOCOL ||
+          result.response.headers.get(FUNDING_CONTEXT_HEADER) !== `organization:${data.snapshot.organization_id}` ||
+          (session.organization_id && session.organization_id !== data.snapshot.organization_id) ||
+          (session.user_id && session.user_id !== data.user_id)
+        ) {
+          throw new FundingContextError("Credential sync could not verify the selected workspace. Sign in again.")
+        }
+        const matches = async () => {
+          const current = await getSession()
+          return !!current && WorkspaceCredentials.identity(current) === identity
+        }
+        const previous = await WorkspaceCredentials.read()
+        // A successful unchanged refresh extends the grant without revoking
+        // running children or rebuilding the provider catalog.
+        if (JSON.stringify(previous) === JSON.stringify(data.snapshot)) {
+          await CredentialLifecycle.serialized(async () => {
+            if (await matches()) await WorkspaceCredentials.write(session, data.snapshot)
+          })
+          if (!(await matches())) return synced
+          return (synced = { state: "ready", organization_id: data.snapshot.organization_id, synced_at: Date.now() })
+        }
+        const applied = await CredentialLifecycle.mutateIf("workspace-sync.update", matches, () =>
+          WorkspaceCredentials.write(session, data.snapshot),
+        )
+        if (!applied.applied) return synced
+        await reloadSyncedEnv()
+        const { Provider } = await import("@/provider/provider")
+        Provider.invalidate()
+        if (!(await matches())) return synced
+        return (synced = { state: "ready", organization_id: data.snapshot.organization_id, synced_at: Date.now() })
+      } catch (error) {
+        const current = await getSession()
+        if (current && WorkspaceCredentials.identity(current) !== identity) return synced
+        return (synced = {
+          state: "error",
+          error: error instanceof Error ? error.message : "Credential sync failed. Try again.",
+        })
+      } finally {
+        if (timer) clearTimeout(timer)
+        syncs.delete(identity)
+      }
+    })()
+    syncs.set(identity, task)
+    return task
+  }
 
-  export function isSyncedEnv(_key?: string, _value?: string): boolean {
-    return false
+  export async function scheduleRefresh(): Promise<void> {
+    await syncCredentials()
+  }
+
+  export function startCredentialSync(): void {
+    if (syncTimer) return
+    void scheduleRefresh()
+    syncTimer = setInterval(() => void scheduleRefresh(), 4 * 60_000)
+    syncTimer.unref()
+  }
+
+  export async function reloadSyncedEnv(): Promise<void> {
+    const { applyCredentialEnv } = await import("../server/routes/settings/credentials")
+    await applyCredentialEnv({ strict: true })
   }
 
   const CALLBACK_SUCCESS_HTML =
     "<!doctype html><meta charset=utf-8><title>OpenScience</title>" +
     '<body style="font-family:system-ui,sans-serif;background:#0b0b12;color:#eee;display:grid;place-items:center;height:100vh;margin:0">' +
-    '<div style="text-align:center"><h1>Login complete</h1><p>You can close this tab.</p></div>'
+    '<div style="text-align:center"><h1>Device approved</h1><p>Return to OpenScience to finish connecting your workspace.</p></div>'
   const CALLBACK_ERROR_HTML =
     "<!doctype html><meta charset=utf-8><title>OpenScience</title>" +
     '<body style="font-family:system-ui,sans-serif;background:#0b0b12;color:#eee;display:grid;place-items:center;height:100vh;margin:0">' +
@@ -637,6 +756,7 @@ export namespace OpenScience {
         ...(body.workspace_locked === true || organizationID ? { workspace_locked: true } : {}),
       }
       await saveSession(session)
+      await syncCredentials({ force: true })
       return session
     } finally {
       if (timer) clearTimeout(timer)
@@ -644,9 +764,7 @@ export namespace OpenScience {
     }
   }
 
-  async function readAuthStatus(
-    session: FundingSnapshot | OpenScienceSession,
-  ): Promise<{
+  async function readAuthStatus(session: FundingSnapshot | OpenScienceSession): Promise<{
     organizations: FundingOrganization[]
     pinned?: string
     locked: boolean
@@ -707,6 +825,7 @@ export namespace OpenScience {
       ...(locked ? { workspace_locked: true } : {}),
     }
     await saveSession(session)
+    await syncCredentials({ force: true })
     return session
   }
 
@@ -769,6 +888,7 @@ export namespace OpenScience {
       throw new FundingContextError("That organization is not available to the connected account.")
     }
     await saveSession({ ...session, organization_id: requested })
+    await syncCredentials({ force: true })
     return getFundingContext()
   }
 
@@ -934,6 +1054,7 @@ export namespace OpenScience {
       path.join(Global.Path.data, "auth.json"),
       path.join(Global.Path.data, "credentials.json"),
       path.join(Global.Path.data, "credentials.key"),
+      WorkspaceCredentials.filepath,
       path.join(Global.Path.data, "gcp-service-account.json"),
       CredentialLifecycle.revisionPath(),
       path.join(Global.Path.data, "mcp-auth.json"),

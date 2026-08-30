@@ -32,9 +32,8 @@ const PRIME_INTELLECT =
   "data:image/jpeg;base64,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"
 
 const VECTORS = {
-  // OpenScience's first-party chevron and cursor mark, shared by the public
-  // landing page and docs favicons. Keep Ace on this mark instead of routing
-  // through the shared provider icon set.
+  // OpenScience's chevron and cursor stays distinct from the Synthetic Sciences
+  // company mark used by Ace and managed-provider accounts.
   openscience: {
     viewBox: "0 0 32 32",
     body: '<path d="M10 9.5 16.5 16 10 22.5" fill="none" stroke="var(--icon-brand-base)" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/><rect x="18.5" y="19.7" width="7.5" height="2.8" rx="1.4" fill="currentColor"/>',
@@ -87,6 +86,7 @@ const VECTORS = {
 
 const SOURCES: Record<string, Source> = {
   openscience: { kind: "vector", id: "openscience" },
+  synsci: { kind: "provider", id: "synsci" },
   anthropic: { kind: "provider", id: "anthropic" },
   openai: { kind: "provider", id: "openai" },
   "openai-codex": { kind: "provider", id: "openai" },
@@ -134,9 +134,9 @@ const SOURCES: Record<string, Source> = {
 // as the icon pack. Normalize the known spellings so a real provider never
 // falls back to a generic initial (notably DeepSeek, Kimi, and Z.AI).
 const ALIASES: Record<string, keyof typeof SOURCES> = {
-  ace: "openscience",
-  synsci: "openscience",
-  "synthetic-sciences": "openscience",
+  ace: "synsci",
+  "synthetic-sciences": "synsci",
+  "synthetic sciences": "synsci",
   "deep-seek": "deepseek",
   "deepseek-ai": "deepseek",
   together: "togetherai",

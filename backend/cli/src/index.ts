@@ -28,7 +28,7 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
-import { DevicesCommand, LoginCommand, LogoutCommand, StatusCommand } from "./cli/cmd/connect"
+import { DevicesCommand, LoginCommand, LogoutCommand, StatusCommand, SyncCommand } from "./cli/cmd/connect"
 import { WalletCommand } from "./cli/cmd/billing"
 import { KeysCommand, ConnectCommand, DisconnectCommand } from "./cli/cmd/auth"
 import { LocalCommand } from "./cli/cmd/local"
@@ -163,6 +163,7 @@ const cli = yargs(hideBin(process.argv))
       // keeps the credential route module out of every command's static graph.
       if (!capabilityCanary) {
         await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
+        void import("./openscience").then((m) => m.OpenScience.startCredentialSync())
       }
 
       // First authenticated startup quietly provisions the app-owned Python
@@ -203,6 +204,7 @@ const cli = yargs(hideBin(process.argv))
   .command(SessionCommand)
   .command(InitCommand)
   .command(LoginCommand)
+  .command(SyncCommand)
   .command(LogoutCommand)
   .command(StatusCommand)
   .command(DevicesCommand)
