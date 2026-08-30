@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@synsci/sdk",
-  "version": "2.0.59",
+  "version": "2.0.60",
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
