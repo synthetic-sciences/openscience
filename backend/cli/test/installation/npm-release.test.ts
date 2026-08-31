@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import path from "path"
 import os from "os"
-import { mkdir, mkdtemp, rm } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises"
 import {
   NpmArtifactConflict,
   NpmPermissionError,
@@ -16,6 +16,7 @@ import {
   releasePackageNames,
   releaseCandidateTag,
   releasePromotionNames,
+  releaseStagingTag,
   saveReleaseArtifacts,
   sanitizeNpmDiagnostic,
   stageCandidateRelease,
@@ -26,6 +27,7 @@ import {
   type NpmCommandOptions,
   type PackedPackage,
 } from "../../../../tooling/repo/npm-release"
+import { releaseRoot } from "../../../../tooling/repo/release-workspace"
 
 type FakeState = {
   diff?: string
@@ -331,6 +333,56 @@ test("release artifacts persist exact packed bytes and reject a different source
   await Bun.write(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
   await expect(loadReleaseArtifacts({ directory, source, version: "2.0.32" })).rejects.toThrow("expected 2.0.32")
 })
+
+test("stage-only verifies the complete immutable release without promoting latest", async () => {
+  const artifacts: PackedPackage[] = []
+  for (const name of releasePackageNames()) artifacts.push(await fixturePackage(name))
+  const source = (await Bun.$`git rev-parse HEAD`.cwd(releaseRoot).text()).trim()
+  const directory = path.join(root, "artifacts")
+  await saveReleaseArtifacts({ artifacts, directory, source, version: "2.0.32" })
+  const file = await stateFile({
+    // Only one missing package keeps the shared-file registry's write serial.
+    packages: Object.fromEntries(
+      artifacts.slice(1).map((artifact) => [`${artifact.name}@${artifact.version}`, { integrity: artifact.integrity }]),
+    ),
+    tags: Object.fromEntries(artifacts.map((artifact) => [artifact.name, { latest: "2.0.31" }])),
+  })
+  const command = path.join(root, "npm-fixture")
+  await Bun.write(command, `#!${process.execPath}\nawait import(${JSON.stringify(fake)})\n`)
+  await chmod(command, 0o755)
+  const proc = Bun.spawn([process.execPath, path.join(releaseRoot, "tooling/repo/publish.ts"), "--stage-only"], {
+    cwd: releaseRoot,
+    env: {
+      ...Bun.env,
+      ...fastOptions(file).env,
+      OPENSCIENCE_CHANNEL: "latest",
+      OPENSCIENCE_VERSION: "2.0.32",
+      // Never authorize Git/GitHub writes, even if the stage-only exit regresses.
+      OPENSCIENCE_RELEASE: "",
+      OPENSCIENCE_RELEASE_SOURCE: source,
+      OPENSCIENCE_ARTIFACT_SOURCE: source,
+      OPENSCIENCE_NPM_ARTIFACT_DIR: directory,
+      OPENSCIENCE_NPM_COMMAND: command,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  expect({ code, stderr }).toEqual({ code: 0, stderr: "" })
+  expect(stdout).toContain("staging complete; latest tags and the GitHub draft are unchanged")
+  expect(stdout).not.toContain("promoting npm latest")
+  const state = await readState(file)
+  expect(state.publishCalls).toBe(1)
+  expect(state.publishSpecs).toEqual([`${artifacts[0].name}@2.0.32`])
+  for (const artifact of artifacts) {
+    expect(state.packages[`${artifact.name}@2.0.32`].integrity).toBe(artifact.integrity)
+    expect(state.tags[artifact.name]).toEqual({ latest: "2.0.31", [releaseStagingTag("2.0.32")]: "2.0.32" })
+  }
+}, 30_000)
 
 test("a missing artifact cache fails closed when any package version already exists", async () => {
   const version = "2.0.32-test.12345"

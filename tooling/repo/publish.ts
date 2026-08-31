@@ -14,6 +14,9 @@ import {
 } from "./npm-release"
 import { assertReleaseSource, releaseRoot, setWorkspaceVersion } from "./release-workspace"
 
+const stageOnly = process.argv.includes("--stage-only")
+if (stageOnly && Script.preview) throw new Error("Release staging requires an exact stable version")
+
 if (Script.preview) {
   await import("./publish-preview")
 } else {
@@ -59,6 +62,14 @@ if (Script.preview) {
   await verifyPublishedPackages(ordered)
   for (const artifact of ordered) console.log(`  verified ${artifact.name}@${artifact.version}`)
   await ensureReleaseStagingTags(ordered, stagingTag)
+
+  // This path runs alongside desktop packaging with read-only GitHub access.
+  // The gated final job reruns verification before promotion; no receipt or
+  // environment flag is trusted as a substitute for checking the artifacts.
+  if (stageOnly) {
+    console.log("Npm staging complete; latest tags and the GitHub draft are unchanged")
+    process.exit(0)
+  }
 
   let releaseSha = source
   if (Script.release && !promotionOnly) {
