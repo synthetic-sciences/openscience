@@ -465,10 +465,22 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       if (summary.info.role !== "assistant" || !summary.info.tailStartId) return true
       return message.info.id < summary.info.tailStartId
     }
-    const start = messages.findIndex((message, index) => {
-      if (index > current || message.info.role !== "user") return false
-      return !answered.has(message.info.id) && !compacted(message)
-    })
+    // Walk backward from the current turn and stop at the first user message
+    // that's already been terminally answered (or is already compacted) — that
+    // boundary marks the start of the active, unanswered span. Scanning forward
+    // from the beginning of the whole transcript (as this used to) finds the
+    // *first* unanswered user message anywhere in history, which can be a
+    // long-since-superseded message (e.g. one immediately followed by a retry
+    // that itself got answered) — pinning the protected span, and therefore
+    // selectTail's cut point, to it forever regardless of how much later work
+    // has been properly resolved.
+    let start = -1
+    for (let index = current; index >= 0; index--) {
+      const message = messages[index]
+      if (message.info.role !== "user") continue
+      if (answered.has(message.info.id) || compacted(message)) break
+      start = index
+    }
     if (start < 0) return []
     return messages.slice(start)
   }

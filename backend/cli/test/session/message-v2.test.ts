@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { MessageV2 } from "../../src/session/message-v2"
+import { SessionCompaction } from "../../src/session/compaction"
+import { Identifier } from "../../src/id/id"
 import type { Provider } from "../../src/provider/provider"
 
 const sessionID = "session"
@@ -1146,5 +1148,73 @@ describe("session.message-v2.filterCompacted — verbatim tail (P3.2)", () => {
     ]
     const out = await MessageV2.filterCompacted(streamOf(msgs))
     expect(out.map((m) => m.info.id)).toEqual(["cc", "sum", "cont"])
+  })
+})
+
+describe("session.compaction.selectTail — protectedContext floor (regression)", () => {
+  const mk = (
+    id: string,
+    role: "user" | "assistant",
+    parts: MessageV2.Part[],
+    extra: Record<string, unknown> = {},
+  ): MessageV2.WithParts => ({
+    info: {
+      id,
+      sessionID: "s",
+      role,
+      time: { created: 0 },
+      ...(role === "user"
+        ? { agent: "a", model: { providerID: "p", modelID: "m" } }
+        : {
+            parentID: "p",
+            modelID: "m",
+            providerID: "p",
+            mode: "",
+            agent: "a",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          }),
+      ...extra,
+    } as unknown as MessageV2.WithParts["info"],
+    parts: parts as unknown as MessageV2.Part[],
+  })
+  const txt = (mid: string, t: string) =>
+    ({ id: `${mid}t`, sessionID: "s", messageID: mid, type: "text", text: t }) as unknown as MessageV2.Part
+
+  test("a long-superseded, never-directly-answered user message does not permanently floor the tail", async () => {
+    // Real-world shape: an original request (u1) is immediately followed by a
+    // retry/resend (u2) that DOES get a terminal reply (a2). u1 itself never
+    // gets its own direct reply — it's simply superseded. protectedContext's
+    // job is to protect the span of the *currently active, unanswered* turn,
+    // not every unanswered message that ever occurred in the session. IDs use
+    // Identifier.ascending so id-comparisons behave exactly as in production.
+    const nextId = () => Identifier.ascending("message")
+    const earlier = Array.from({ length: 3 }, () => [nextId(), nextId()] as const)
+    const u1 = nextId()
+    const u2 = nextId()
+    const a2 = nextId()
+    const work = Array.from({ length: 8 }, () => [nextId(), nextId()] as const)
+
+    const oldestToNewest: MessageV2.WithParts[] = [
+      ...earlier.flatMap(([u, a], i) => [
+        mk(u, "user", [txt(u, `earlier turn ${i + 1}`)]),
+        mk(a, "assistant", [txt(a, `earlier reply ${i + 1}`)], { finish: "stop", parentID: u }),
+      ]),
+      mk(u1, "user", [txt("u1", "original request — never directly answered")]),
+      mk(u2, "user", [txt("u2", "retry of the same request")]),
+      mk(a2, "assistant", [txt("a2", "the retry's own reply")], { finish: "stop", parentID: u2 }),
+      ...work.flatMap(([wu, wa], i) => [
+        mk(wu, "user", [txt(wu, `work request ${i + 1}`)]),
+        mk(wa, "assistant", [txt(wa, `work reply ${i + 1}`)], { finish: "stop", parentID: wu }),
+      ]),
+    ]
+
+    const { tailStartId } = SessionCompaction.selectTail(oldestToNewest, {
+      tailTurns: SessionCompaction.TAIL_TURNS,
+      tailTokens: 32000,
+    })
+
+    expect(tailStartId).not.toBe(u1)
+    expect(work.some(([wu]) => wu === tailStartId)).toBe(true)
   })
 })
