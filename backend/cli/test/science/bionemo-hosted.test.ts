@@ -245,6 +245,27 @@ describe("hosted BioNeMo adapters", () => {
     ).toThrow("affinity sample count")
   })
 
+  test("accepts NVIDIA GenMol numeric parameters without rewriting legacy approved payloads", async () => {
+    const { BioNemoHosted } = await import("../../src/science/bionemo/client")
+    const { parseBioNemoInput } = await import("../../src/science/bionemo/schema")
+    for (const payload of [
+      { smiles: "CCO", temperature: 0.8, noise: 1.2 },
+      { smiles: "CCO", temperature: "0.8", noise: "1.2" },
+      { smiles: "CCO", temperature: 10, noise: 0 },
+    ]) {
+      expect(parseBioNemoInput("genmol", payload)).toEqual(payload)
+      const preview = await BioNemoHosted.plan("genmol", payload)
+      expect(preview.payload).toEqual(payload)
+      expect(preview.request_sha256).toBe(new Bun.CryptoHasher("sha256").update(JSON.stringify(payload)).digest("hex"))
+      expect(preview.dispatched).toBe(false)
+    }
+    for (const temperature of [0, 10.1, "", "11", "NaN", true])
+      expect(() => parseBioNemoInput("genmol", { smiles: "CCO", temperature })).toThrow()
+    for (const noise of [-0.1, 2.1, "", "-1", "Infinity", false])
+      expect(() => parseBioNemoInput("genmol", { smiles: "CCO", noise })).toThrow()
+    expect(parseBioNemoInput("boltz2", { polymers: [{ molecule_type: "protein", sequence: "ARNDX" }] })).toBeTruthy()
+  })
+
   test("keeps the NVIDIA credential in-process, validates the request, and captures bounded artifacts", async () => {
     await using tmp = await tmpdir()
     const project = path.join(tmp.path, "project")
@@ -287,7 +308,7 @@ globalThis.fetch = async (input, init) => {
   requests++
   if (String(input) !== "https://health.api.nvidia.com/v1/biology/mit/boltz2/predict") throw new Error("wrong endpoint")
   if (init?.method !== "POST") throw new Error("wrong method")
-  if (init?.redirect !== "error") throw new Error("redirect policy changed")
+  if (init?.redirect !== "manual") throw new Error("redirect policy changed")
   if (new Headers(init?.headers).get("authorization") !== "Bearer " + secret) throw new Error("credential missing")
   const payload = JSON.parse(String(init?.body))
   if (payload.polymers?.[0]?.sequence !== "MVLTIYPDELVQIVSDKK") throw new Error("payload changed")
@@ -488,13 +509,15 @@ await Instance.provide({
       ["diffdock", { protein: "ATOM", ligand: "CCO", ligand_file_type: "smiles" }],
       ["diffdock", { protein: "ATOM", ligand: "CCO", ligand_file_type: "txt", unexpected: true }],
       ["evo2", { sequence: "ACGT", top_k: 7 }],
-      ["genmol", { smiles: "CCO", temperature: 0.8 }],
+      ["genmol", { smiles: "CCO", temperature: 0.001 }],
       ["molmim", { smi: "CCO", min_similarity: 1.1 }],
       ["msa-search", { sequence: "ARND", output_alignment_formats: ["csv"] }],
       ["msa-search", { sequence: "ARND", search_type: "hmmsearch" }],
       ["msa-search", { sequence: "ARND", databases: ["invalid database name"] }],
       ["msa-search", { sequence: "ARND", max_msa_sequences: 10_002 }],
+      ["msa-search", { sequence: "ARNDX" }],
       ["openfold2", { sequence: "ARND", selected_models: [6] }],
+      ["openfold2", { sequence: "ARNDX" }],
       ["openfold3", { msa: {}, inputs: [{ molecules: [{ type: "protein", sequence: "ARND" }] }] }],
       ["openfold3", { inputs: [{ molecules: [{ type: "protein", sequence: "ARND" }], output_format: "mmcif" }] }],
       [
@@ -854,11 +877,13 @@ await Instance.provide({
           })
           const session = await Session.create({})
 
+          const payload = { smiles: "CCO", temperature: 0.8, noise: 1.2 }
           let posts = 0
           let polls = 0
           globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
             expect(new Headers(init?.headers).get("authorization")).toBe("Bearer nvapi-hosted-test-secret")
             if (init?.method === "POST") {
+              expect(JSON.parse(String(init.body))).toEqual(payload)
               posts++
               return new Response(JSON.stringify({ requestId: "nvcf-queued-1", status: "pending" }), {
                 status: 202,
@@ -882,7 +907,7 @@ await Instance.provide({
               headers: { "content-type": "application/json", "nvcf-status": "fulfilled" },
             })
           }) as unknown as typeof fetch
-          const pending = await BioNemoHosted.start("genmol", session.id, { smiles: "CCO" })
+          const pending = await BioNemoHosted.start("genmol", session.id, payload)
           expect(pending).toMatchObject({
             state: "pending",
             pollable: true,
@@ -893,13 +918,13 @@ await Instance.provide({
           expect(pending.next).toContain("will not send another POST")
           expect(posts).toBe(1)
           expect(polls).toBe(3)
-          const completed = await BioNemoHosted.start("genmol", session.id, { smiles: "CCO" })
+          const completed = await BioNemoHosted.start("genmol", session.id, payload)
           if (!("artifacts" in completed)) throw new Error("Expected a completed hosted result")
           expect(completed.dispatch_id).toBe(pending.dispatch_id)
           expect(completed.artifacts.length).toBe(1)
           expect(posts).toBe(1)
           expect(polls).toBe(4)
-          await BioNemoHosted.start("genmol", session.id, { smiles: "CCO" })
+          await BioNemoHosted.start("genmol", session.id, payload)
           expect(posts).toBe(1)
           expect(polls).toBe(4)
 

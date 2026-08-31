@@ -112,6 +112,8 @@ export function capabilityState(record: ScientificCapabilityRecord) {
       action:
         target === "local" ? ("setup" as const) : target === "nvidia" ? ("credentials" as const) : ("compute" as const),
     }
+  if (availability === "configured" && target === "nvidia")
+    return { label: "Connected", tone: "neutral" as const, action: undefined }
   if (availability === "ready" || availability === "configured")
     return { label: "Ready", tone: "success" as const, action: undefined }
   return {

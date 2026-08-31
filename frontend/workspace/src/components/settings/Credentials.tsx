@@ -12,7 +12,7 @@ export const Credentials: Component = () => (
       <CredentialServices
         category="integration"
         title="Integrations"
-        description="GitHub, OpenAlex, Hugging Face, Weights & Biases, and other research services."
+        description="NVIDIA, GitHub, OpenAlex, Hugging Face, and other research services."
         custom
       />
     </PanelBody>

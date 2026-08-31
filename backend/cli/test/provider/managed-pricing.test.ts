@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
 import { GlobalBus } from "../../src/bus/global"
+import { ProviderTransform } from "../../src/provider/transform"
+import type { Provider } from "../../src/provider/provider"
 
 const entry = {
   id: "anthropic/claude-opus-5",
@@ -73,6 +75,71 @@ test("long-context prices retain inclusive provider thresholds", () => {
     ],
   })
   expect(parsed[entry.id]?.cost.tiers?.[0]?.threshold).toBe(200_000)
+})
+
+test("managed controls use exact workspace metadata and a closed Fast transport allowlist", () => {
+  const parsed = ManagedPricing.parse({
+    models: [
+      {
+        ...entry,
+        id: "x-ai/grok-4.6",
+        upstream_provider: "xai",
+        context_length: 500_000,
+        context_options: [200_000, 500_000, 1_000_000],
+        capabilities: { reasoning_efforts: ["low", "medium", "high", "xhigh"], reasoning_default: "high" },
+        fast_mode: true,
+        fast_mode_details: {
+          available: true,
+          transport: { service_tier: "priority", apiKey: "never-import" },
+          pricing: { verified: true, tiers: [{ input: 4, output: 12, cache_read: 1 }] },
+        },
+      },
+    ],
+  })["x-ai/grok-4.6"]!
+  expect(parsed.contextOptions).toEqual([200_000, 500_000])
+  expect(parsed.reasoningOptions).toEqual([
+    { type: "effort", values: ["low", "medium", "high", "xhigh"], default: "high" },
+  ])
+  expect(parsed.modes.fast).toEqual({
+    cost: { input: 4, output: 12, cache: { read: 1, write: 0 }, tiers: [] },
+    provider: { body: { service_tier: "priority" } },
+  })
+  expect(JSON.stringify(parsed)).not.toContain("never-import")
+  for (const details of [
+    { available: false, transport: { speed: "fast" }, pricing: { verified: true, tiers: entry.pricing.tiers } },
+    { available: true, transport: { speed: "fast" }, pricing: { verified: false, tiers: entry.pricing.tiers } },
+    {
+      available: true,
+      transport: { service_tier: "priority" },
+      pricing: { verified: true, tiers: entry.pricing.tiers },
+    },
+  ])
+    expect(
+      ManagedPricing.parse({ models: [{ ...entry, fast_mode: true, fast_mode_details: details }] })[entry.id]!.modes,
+    ).toEqual({})
+})
+
+test("Haiku's zero thinking budget survives ingestion and means Off, not a fake low/high ladder", () => {
+  const parsed = ManagedPricing.parse({
+    models: [
+      {
+        ...entry,
+        id: "anthropic/claude-haiku-4.5",
+        capabilities: { reasoning_efforts: [], thinking_budgets: [0, 4096, 8192, 16384, 32768] },
+      },
+    ],
+  })["anthropic/claude-haiku-4.5"]!
+  expect(parsed.reasoningOptions).toEqual([{ type: "budget_tokens", values: [0, 4096, 8192, 16384, 32768] }])
+  const variants = ProviderTransform.variants({
+    id: "anthropic/claude-haiku-4.5",
+    api: { id: "claude-haiku-4-5", npm: "@ai-sdk/anthropic" },
+    capabilities: { reasoning: true },
+    limit: { output: 64_000 },
+    reasoningOptions: parsed.reasoningOptions,
+  } as Provider.Model)
+  expect(Object.keys(variants)).toEqual(["none", "4096-tokens", "8192-tokens", "16384-tokens", "32768-tokens"])
+  expect(variants.none).toEqual({ thinking: { type: "disabled" } })
+  expect(variants["4096-tokens"]).toEqual({ thinking: { type: "enabled", budgetTokens: 4096 } })
 })
 
 test("pricing cache is nonblocking, deduplicated, and partitioned by immutable workspace", async () => {

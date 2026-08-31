@@ -85,7 +85,13 @@ describe("Session.getUsage cost/token accounting", () => {
       metadata: { anthropic: {} } as any,
     })
     expect(below.cost).toBeCloseTo((271_999 * 3 + 100 * 15) / 1_000_000, 6)
-    expect(exact.cost).toBeCloseTo((272_000 * 10 + 100 * 45) / 1_000_000, 6)
+    expect(exact.cost).toBeCloseTo((272_000 * 3 + 100 * 15) / 1_000_000, 6)
+    const above = Session.getUsage({
+      model: priced,
+      usage: { inputTokens: 272_001, outputTokens: 100, cachedInputTokens: 0 } as any,
+      metadata: { anthropic: {} } as any,
+    })
+    expect(above.cost).toBeCloseTo((272_001 * 10 + 100 * 45) / 1_000_000, 6)
   })
 
   test("clamps a would-be-negative input token count to zero (non-excludes provider)", () => {
@@ -106,5 +112,28 @@ describe("Session.getUsage cost/token accounting", () => {
       usage: { inputTokens: 1_000, outputTokens: 100, cachedInputTokens: 0 } as any,
     })
     expect(r.cost).toBeCloseTo((1_000 * 6 + 100 * 30) / 1_000_000, 6)
+  })
+
+  test("Fast mode uses its own long-context rates only above the published boundary", () => {
+    const priced = model()
+    priced.modes!.fast!.cost!.tiers = [{ input: 12, output: 45, cache: { read: 1.2, write: 15 }, threshold: 272_000 }]
+    for (const input of [272_000, 272_001]) {
+      const result = Session.getUsage({
+        model: priced,
+        tier: "fast",
+        usage: { inputTokens: input, outputTokens: 100, cachedInputTokens: 0 } as any,
+      })
+      expect(result.cost).toBeCloseTo(
+        (input * (input > 272_000 ? 12 : 6) + 100 * (input > 272_000 ? 45 : 30)) / 1_000_000,
+        6,
+      )
+    }
+    const cached = Session.getUsage({
+      model: priced,
+      tier: "fast",
+      usage: { inputTokens: 10_000, outputTokens: 100, cachedInputTokens: 0 } as any,
+      metadata: { anthropic: { cacheCreationInputTokens: 270_000 } } as any,
+    })
+    expect(cached.cost).toBeCloseTo((10_000 * 12 + 100 * 45 + 270_000 * 15) / 1_000_000, 6)
   })
 })

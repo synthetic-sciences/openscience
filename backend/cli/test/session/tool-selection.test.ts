@@ -44,7 +44,26 @@ describe("tool selection", () => {
   })
 
   test("activates scientific capabilities only when the request needs them", () => {
-    for (const capability of ["SciPy", "Matplotlib", "scikit-learn", "Biopython", "RDKit", "AlphaFold2"]) {
+    for (const capability of [
+      "SciPy",
+      "Matplotlib",
+      "scikit-learn",
+      "Biopython",
+      "RDKit",
+      "AlphaFold2",
+      "Boltz-2",
+      "DiffDock",
+      "Evo 2",
+      "GenMol",
+      "MolMIM",
+      "MSA Search",
+      "OpenFold2",
+      "OpenFold3",
+      "ProteinMPNN",
+      "RFdiffusion",
+      "BioNeMo",
+      "NVIDIA NIM",
+    ]) {
       expect(
         ToolSelection.relevant("scientific_capability", {
           agent: "research",

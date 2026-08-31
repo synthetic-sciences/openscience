@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import z from "zod"
 import { JobBroker } from "@/compute/job-broker"
-import { BioNemoHosted } from "@/science/bionemo"
+import { BioNemoHosted, BioNemoInputs } from "@/science/bionemo"
 import { CapabilityEvidence } from "@/science/capability/evidence"
 import { CapabilityRegistry } from "@/science/capability/registry"
 import { CapabilityRuntime } from "@/science/capability/runtime"
@@ -176,6 +176,7 @@ export const ScientificCapabilityTool = Tool.define<typeof ScientificCapabilityP
     description: [
       "One governed gateway for the versioned scientific capability catalog.",
       "Use list/describe/doctor before setup or spend. plan never dispatches. setup may create the exact pinned local pack; start dispatches a packaged workload or sends a strict BYOK NVIDIA NIM request. smoke dispatches a bounded canonical local/Modal check, and verify validates its captured artifacts before recording evidence.",
+      "describe includes the hosted request_schema. Build payload from that schema, then plan validates all cross-field requirements without sending data or spending credits.",
       "status/wait/logs/artifacts/cancel/retry_delivery/release accept only jobs created by scientific_capability and may report stale_binding when the catalog changed. Callers cannot override pinned packages, images, GPU, or secrets.",
     ].join(" "),
     parameters: ScientificCapabilityParameters,
@@ -219,7 +220,16 @@ export const ScientificCapabilityTool = Tool.define<typeof ScientificCapabilityP
       const base = { action: args.action, id: item.id, maturity: item.maturity, dispatched: false } as const
 
       if (args.action === "describe")
-        return { title: `Capability: ${item.name}`, output: json(item), metadata: { scientific_capability: base } }
+        return {
+          title: `Capability: ${item.name}`,
+          output: json({
+            ...item,
+            ...(item.hosted
+              ? { request_schema: z.toJSONSchema(BioNemoInputs[item.hosted.adapter_id], { io: "input" }) }
+              : {}),
+          }),
+          metadata: { scientific_capability: base },
+        }
 
       if (args.action === "doctor") {
         const runtime = await CapabilityRuntime.doctor(item)

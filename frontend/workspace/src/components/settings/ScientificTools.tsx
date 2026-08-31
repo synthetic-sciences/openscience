@@ -133,7 +133,7 @@ export default function ScientificTools() {
                   id="scientific-tools-connected"
                   title="Connected science"
                   count={hosted().length}
-                  description="Run supported scientific adapters with credentials stored on this device."
+                  description="NVIDIA tools share one API key in Credentials. Runs use your NVIDIA account, not your Ace balance."
                 >
                   <div class="settings-card scientific-tools-list" role="list">
                     <For each={hosted()}>

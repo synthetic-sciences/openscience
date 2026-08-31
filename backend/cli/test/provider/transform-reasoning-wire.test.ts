@@ -87,6 +87,35 @@ describe("reasoning options serialize onto provider request bodies", () => {
     expect(wire.bodies[1].reasoning).toEqual({ effort: "medium" })
   })
 
+  test("Grok Fast sends priority on Chat and Responses, without changing standard requests", async () => {
+    const target = model({
+      id: "grok-4.6",
+      providerID: "xai",
+      api: { id: "grok-4.6", url: "https://api.x.ai/v1", npm: "@ai-sdk/xai" },
+      modes: { fast: { provider: { body: { service_tier: "priority" } } } },
+    })
+    const wire = recorder()
+    const sdk = createXai({ apiKey: "test", baseURL: "https://xai.test/v1", fetch: wire.fetch })
+    for (const language of [sdk.chat(target.api.id), sdk.responses(target.api.id)]) {
+      await send(
+        language,
+        ProviderTransform.providerOptions(target, ProviderTransform.tier(target, "standard").options),
+      )
+      await send(
+        language,
+        ProviderTransform.providerOptions(target, {
+          ...ProviderTransform.tier(target, "fast").options,
+          ...ProviderTransform.variants(target).xhigh,
+        }),
+      )
+    }
+    expect(wire.bodies).toHaveLength(4)
+    expect(wire.bodies[0].service_tier).toBeUndefined()
+    expect(wire.bodies[1]).toMatchObject({ service_tier: "priority", reasoning_effort: "xhigh" })
+    expect(wire.bodies[2].service_tier).toBeUndefined()
+    expect(wire.bodies[3]).toMatchObject({ service_tier: "priority", reasoning: { effort: "xhigh" } })
+  })
+
   test("Muse requests stateless encrypted reasoning for replay", async () => {
     const target = model({
       id: "muse-spark-1.1",

@@ -129,9 +129,8 @@ const CATALOG: ServiceSpec[] = [
   {
     id: "nvidia",
     label: "NVIDIA API",
-    description:
-      "Trusted credential for reviewed NVIDIA NIM and BioNeMo requests; it is not an NVIDIA compute-backend connection.",
-    category: "compute",
+    description: "NVIDIA-hosted science tools, including Boltz-2, DiffDock, and Evo 2.",
+    category: "integration",
     fields: [{ name: "api_key", label: "API key", type: "password", placeholder: "nvapi-…" }],
     trusted: true,
   },

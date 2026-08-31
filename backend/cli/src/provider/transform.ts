@@ -471,6 +471,7 @@ export namespace ProviderTransform {
   // of the same date (a pure date gate would misfire on those).
   function openaiEfforts(model: Provider.Model): string[] {
     const id = model.id.toLowerCase()
+    if (!/(^|\/)(gpt-|o[1-9](?:\b|-))/.test(id)) return []
     // OpenRouter publishes separate GPT-5.6 `-pro` routes, but their effort
     // contract is still the full 5.6 ladder. Check 5.6 before the generic
     // historical Pro handling below.
@@ -551,12 +552,8 @@ export namespace ProviderTransform {
     // DeepSeek V4 has three canonical effort values. The native adapter maps
     // these to reasoning_effort and preserves reasoning_content through tool
     // loops; do not surface its accepted compatibility aliases as UI tiers.
-    if (model.api.npm === "@ai-sdk/deepseek") {
-      if (!/deepseek-v[4-9]/.test(id)) return {}
-      const canonical = ["low", "high", "max"]
-      const values = exact?.filter((effort) => canonical.includes(effort)) ?? canonical
-      return efforts(values)
-    }
+    if (/deepseek-v4\b/.test(id) || /glm-5[.-]3\b/.test(id)) return efforts(["low", "high", "max"])
+    if (model.api.npm === "@ai-sdk/deepseek") return {}
 
     // https://www.kimi.com/help/kimi-api/api-model-selection
     if (/kimi-k3\b/.test(id)) return efforts(exact ?? ["low", "high", "max"])
@@ -597,9 +594,9 @@ export namespace ProviderTransform {
         if (id.includes("kimi") || id.includes("minimax") || id.includes("mistral")) return {}
         if (id.includes("glm") && !/glm-[5-9]/.test(id)) return {} // GLM-4.6 = thinking toggle only
         if (model.id.includes("gpt")) return orEffort(openaiEfforts(model))
-        // DeepSeek-v4 / GLM-5.x carry a native "max" tier above high.
-        if (/deepseek-v[4-9]/.test(id) || /glm-[5-9]/.test(id)) return orEffort([...WIDELY_SUPPORTED_EFFORTS, "max"])
-        return orEffort(WIDELY_SUPPORTED_EFFORTS)
+        // Unknown reasoning models may have only on/off thinking, fixed depth,
+        // or different effort enums. Do not invent a common ladder.
+        return {}
       }
 
       // NOTE: the gateway rejects max_tokens when reasoningEffort is set — the
@@ -638,15 +635,7 @@ export namespace ProviderTransform {
         if (exact) {
           return Object.fromEntries(exact.map((effort) => [effort, { reasoningEffort: effort }]))
         }
-        // DeepSeek-v4 and GLM-5.2+ accept a `max` tier above high; their OpenAI-
-        // compatible provider maps `reasoningEffort` -> body `reasoning_effort`.
-        // Other openai-compatible providers use the widely-supported floor.
-        if (/deepseek-v[4-9]/.test(id) || /glm-[5-9]/.test(id)) {
-          return Object.fromEntries(
-            [...WIDELY_SUPPORTED_EFFORTS, "max"].map((effort) => [effort, { reasoningEffort: effort }]),
-          )
-        }
-        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+        return {}
 
       case "@ai-sdk/azure":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
@@ -690,6 +679,18 @@ export namespace ProviderTransform {
         if (exact) {
           return Object.fromEntries(
             exact.map((effort) => [effort, usesEffort ? { thinking: { type: "adaptive" }, effort } : { effort }]),
+          )
+        }
+        const budgets = model.reasoningOptions?.find((option) => option.type === "budget_tokens")?.values
+        if (Array.isArray(budgets)) {
+          return Object.fromEntries(
+            budgets
+              .filter((value) => typeof value === "number" && (value === 0 || (value >= 1024 && value < cap)))
+              .map((value) =>
+                value === 0
+                  ? ["none", { thinking: { type: "disabled" } }]
+                  : [`${value}-tokens`, { thinking: { type: "enabled", budgetTokens: value } }],
+              ),
           )
         }
 
@@ -919,11 +920,18 @@ export namespace ProviderTransform {
         // Grok 4.5/4.6 default to high and reasoning is mandatory.
         // Preserve that default through OpenRouter instead of replacing it with
         // the generic medium default used by other reasoning models.
+        const documented = input.model.reasoningOptions?.find((option) => option.type === "effort")?.default
         const effort =
-          (id.includes("gemini-3") && !/gemini-3[.-]7-flash/.test(id)) || /grok-4[.-][56]\b/.test(id)
-            ? "high"
-            : "medium"
-        result["reasoning"] = { effort }
+          typeof documented === "string"
+            ? documented
+            : /glm-5[.-]3\b|kimi-k3\b/.test(id)
+              ? "max"
+              : /deepseek-v4\b|grok-4[.-][56]\b/.test(id)
+                ? "high"
+                : undefined
+        // Omitting an effort preserves the provider's actual default. Request
+        // reasoning output without imposing medium on every unknown model.
+        result["reasoning"] = effort ? { effort } : { enabled: true }
       }
     }
 
@@ -1035,7 +1043,7 @@ export namespace ProviderTransform {
     const mode = tier ? model.modes?.[tier] : undefined
     const body = mode?.provider?.body ?? {}
     const options =
-      model.api?.npm === "@ai-sdk/openai"
+      model.api?.npm === "@ai-sdk/openai" || model.api?.npm === "@ai-sdk/xai"
         ? {
             ...Object.fromEntries(
               Object.entries(body).filter(([key]) => key !== "service_tier" && key !== "reasoning"),
@@ -1053,6 +1061,11 @@ export namespace ProviderTransform {
 
   export function smallOptions(model: Provider.Model) {
     const apiID = model.api.id.toLowerCase()
+    if (/glm-5[.-]3\b|kimi-k3\b/.test(apiID)) {
+      return model.api.npm === "@openrouter/ai-sdk-provider"
+        ? { reasoning: { effort: "low" } }
+        : { reasoningEffort: "low" }
+    }
     // Grok 4.5/4.6 cannot disable reasoning. Use its lowest valid effort for titles,
     // summaries, and compaction instead of emitting an invalid/ignored off flag
     // or falling back to the expensive high default.

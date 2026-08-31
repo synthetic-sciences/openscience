@@ -1217,9 +1217,11 @@ export namespace Provider {
       // GEMINI_API_KEY). Resolve the key from whichever alias is set and pass it
       // explicitly, otherwise a user who exported GOOGLE_API_KEY lists fine but
       // hits "API key is missing" at call time.
-      const apiKey = [Env.get("GOOGLE_GENERATIVE_AI_API_KEY"), Env.get("GOOGLE_API_KEY"), Env.get("GEMINI_API_KEY")].find(
-        isByokKey,
-      )
+      const apiKey = [
+        Env.get("GOOGLE_GENERATIVE_AI_API_KEY"),
+        Env.get("GOOGLE_API_KEY"),
+        Env.get("GEMINI_API_KEY"),
+      ].find(isByokKey)
       return {
         autoload: false,
         options: {
@@ -1240,6 +1242,16 @@ export namespace Provider {
           read: z.number(),
           write: z.number(),
         }),
+        tiers: z
+          .array(
+            z.object({
+              input: z.number(),
+              output: z.number(),
+              cache: z.object({ read: z.number(), write: z.number() }),
+              threshold: z.number().positive(),
+            }),
+          )
+          .optional(),
       })
       .optional(),
     provider: z
@@ -1315,11 +1327,13 @@ export namespace Provider {
           })
           .optional(),
       }),
-      pricing: z.object({
-        upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
-        audited_at: z.string().optional(),
-        source_url: z.string().optional(),
-      }).optional(),
+      pricing: z
+        .object({
+          upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
+          audited_at: z.string().optional(),
+          source_url: z.string().optional(),
+        })
+        .optional(),
       limit: z.object({
         context: z.number(),
         input: z.number().optional(),
@@ -1330,6 +1344,7 @@ export namespace Provider {
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
       reasoningOptions: z.array(z.record(z.string(), z.any())).optional(),
+      contextOptions: z.array(z.number().positive()).optional(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
       modes: z.record(z.string(), Mode).optional(),
     })
@@ -1431,9 +1446,7 @@ export namespace Provider {
       },
       release_date: "",
       variants: {},
-      modes: {
-        fast: { provider: { body: { provider: { sort: "throughput" } } } },
-      },
+      modes: {},
     }
     m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
     return m
@@ -1450,10 +1463,7 @@ export namespace Provider {
         .filter(([key, mode]) => {
           if (!mode) return false
           if (key === "pro" && /(^|\/)gpt-/.test(modelID)) return false
-          // The pinned xAI adapter drops service_tier from both its Chat and
-          // Responses payloads. Do not advertise a no-op Fast toggle until
-          // the transport can prove that it sends the requested tier.
-          if (providerID === "xai" && key === "fast") return false
+          if (providerID === "xai" && key === "fast") return /^grok-4[.-]6\b/.test(modelID)
           if (providerID !== "anthropic" || key !== "fast") return true
           const id = modelID.toLowerCase().replaceAll(".", "-")
           return id.startsWith("claude-opus-5") || id.startsWith("claude-opus-4-8")
@@ -1487,13 +1497,36 @@ export namespace Provider {
 
   function modelModes(provider: ModelsDev.Provider, model: ModelsDev.Model): Model["modes"] | undefined {
     const direct = directModes(provider.id, model.id, model.experimental) ?? {}
-    // OpenRouter's Fast mode asks the user's provider account to prefer
-    // endpoints with higher observed throughput.
+    // These audited priority routes charge 2x each standard token class,
+    // including long-context and cache rates. Keep local estimates in sync.
+    const priority = () => ({
+      provider: { body: { service_tier: "priority" } },
+      ...(model.cost
+        ? {
+            cost: {
+              input: model.cost.input * 2,
+              output: model.cost.output * 2,
+              cache: { read: (model.cost.cache_read ?? 0) * 2, write: (model.cost.cache_write ?? 0) * 2 },
+              tiers: (
+                model.cost.tiers ??
+                (model.cost.context_over_200k ? [{ ...model.cost.context_over_200k, tier: { size: 200_000 } }] : [])
+              ).map((tier) => ({
+                input: tier.input * 2,
+                output: tier.output * 2,
+                cache: { read: (tier.cache_read ?? 0) * 2, write: (tier.cache_write ?? 0) * 2 },
+                threshold: tier.tier.size,
+              })),
+            },
+          }
+        : {}),
+    })
+    // Priority is a paid service tier, not throughput sorting. Only advertise
+    // audited routes: an arbitrary OR model has no guaranteed Fast endpoint.
     const openrouter: NonNullable<Model["modes"]> =
-      provider.id === "openrouter" && !/-fast$/.test(model.id)
-        ? { fast: { provider: { body: { provider: { sort: "throughput" } } } } }
-        : {}
-    const result = { ...direct, ...openrouter }
+      provider.id === "openrouter" && /^openai\/gpt-5\.6-(sol|terra|luna)$/.test(model.id) ? { fast: priority() } : {}
+    const xai: NonNullable<Model["modes"]> =
+      provider.id === "xai" && /^grok-4[.-]6\b/.test(model.id) ? { fast: priority() } : {}
+    const result = provider.id === "openrouter" ? openrouter : { ...direct, ...xai }
     if (Object.keys(result).length === 0) return undefined
     return result
   }
@@ -1778,6 +1811,7 @@ export namespace Provider {
           family: model.family ?? existingModel?.family ?? "",
           release_date: model.release_date ?? existingModel?.release_date ?? "",
           reasoningOptions: existingModel?.reasoningOptions,
+          contextOptions: existingModel?.contextOptions,
           variants: {},
           modes: directModes(providerID, modelID, model.experimental) ?? existingModel?.modes,
         }
@@ -2012,9 +2046,17 @@ export namespace Provider {
             model.cost = price.cost
             model.pricing = price.pricing
             model.limit = { ...model.limit, ...price.limit }
+            model.reasoningOptions = price.reasoningOptions
+            model.contextOptions = price.contextOptions
+            model.modes = price.modes
           } else {
             model.cost = { input: 0, output: 0, cache: { read: 0, write: 0 } }
             delete model.pricing
+            // Do not inherit unrelated BYOK capabilities or paid modes while
+            // this workspace's route catalogue is unavailable.
+            model.reasoningOptions = []
+            model.contextOptions = [model.limit.context]
+            model.modes = {}
           }
         }
       }
@@ -2231,8 +2273,12 @@ export namespace Provider {
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
 
-      if (provider.source === "managed" && Auth.isAtlasApiKey(effectiveKey(provider)) &&
-          model.providerID === "openrouter" && MANAGED_OPENROUTER_MODEL_SET.has(model.id)) {
+      if (
+        provider.source === "managed" &&
+        Auth.isAtlasApiKey(effectiveKey(provider)) &&
+        model.providerID === "openrouter" &&
+        MANAGED_OPENROUTER_MODEL_SET.has(model.id)
+      ) {
         const route = managedModelRoute(model.id, model.pricing?.upstream_provider)
         if (model.api.npm !== route.npm || model.api.id !== route.id) {
           throw new Error("The Ace model route changed. Refresh the model list and retry.")

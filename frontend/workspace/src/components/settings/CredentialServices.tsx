@@ -8,6 +8,7 @@ import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
 import { ProviderLogo } from "./ProviderLogo"
 import { customCredentialIdentity } from "./custom-credential"
+import { invalidateScientificTools } from "./scientific-tools-loader"
 
 type Field = {
   name: string
@@ -52,7 +53,7 @@ export const CredentialServices: Component<{
   const [secret, setSecret] = createSignal("")
   const category = (service: Service) => {
     if (service.category) return service.category
-    if (["aws", "gcp", "azure", "nvidia"].includes(service.id)) return "compute"
+    if (["aws", "gcp", "azure"].includes(service.id)) return "compute"
     if (service.id === "modal") return undefined
     return "integration"
   }
@@ -116,6 +117,7 @@ export const CredentialServices: Component<{
     })
     setSaving(false)
     if (!result) return false
+    invalidateScientificTools(sdk.url)
     setServices(result.services)
     setEditing(undefined)
     setValues({})
@@ -144,6 +146,7 @@ export const CredentialServices: Component<{
         return undefined
       })
       if (result) {
+        invalidateScientificTools(sdk.url)
         setServices(result.services)
         if (editing() === service.id) setEditing(undefined)
       }

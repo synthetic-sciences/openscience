@@ -273,12 +273,19 @@ type ModelEffortPanelProps = {
 export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => (
   <div data-model-effort-panel>
     <Show when={props.options.length > 0}>
-      <section class="model-settings-option-section" aria-label="Reasoning effort">
-        <div class="model-settings-heading">Effort</div>
+      <section
+        class="model-settings-option-section"
+        aria-label={
+          props.options.some((option) => option.id.endsWith("-tokens")) ? "Thinking budget" : "Reasoning effort"
+        }
+      >
+        <div class="model-settings-heading">
+          {props.options.some((option) => option.id.endsWith("-tokens")) ? "Thinking budget" : "Effort"}
+        </div>
         <ModelOptionList
           id="model-effort-options"
           kind="effort"
-          title="Reasoning effort"
+          title={props.options.some((option) => option.id.endsWith("-tokens")) ? "Thinking budget" : "Reasoning effort"}
           current={props.current}
           options={props.options}
           compact

@@ -8,7 +8,8 @@ import { useModels } from "@/context/models"
 import { foldedRouteMode, routableModelKey } from "@/context/model-catalog"
 import { modelTierOptions, normalizedTier, promptTier, resolvedTier } from "@/context/model-tier"
 import { resolveModelAccessRoute, type ModelAccessRoute, type ModelRouteAccess } from "@/context/model-route-resolution"
-import { modelVariantOptions, normalizedVariant, promptVariant } from "@/context/model-variant"
+import { modelVariantDefault, modelVariantOptions, normalizedVariant, promptVariant } from "@/context/model-variant"
+import { modelContextOptions } from "@/context/model-context"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -256,22 +257,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: {
           current() {
             const m = current()
-            if (!m) return "standard"
+            if (!m) return "default"
             return normalizedVariant(
               models.variant.get({ providerID: m.provider.id, modelID: m.id }),
               Object.keys(m.variants ?? {}),
+              modelVariantDefault(m),
             )
           },
           list() {
             const m = current()
             if (!m) return []
-            return modelVariantOptions(Object.keys(m.variants ?? {}))
+            return modelVariantOptions(Object.keys(m.variants ?? {}), modelVariantDefault(m))
           },
           set(value: string | undefined) {
             const m = current()
             if (!m) return
             const variants = Object.keys(m.variants ?? {})
-            models.variant.set({ providerID: m.provider.id, modelID: m.id }, promptVariant(value, variants))
+            models.variant.set(
+              { providerID: m.provider.id, modelID: m.id },
+              promptVariant(value, variants, modelVariantDefault(m)),
+            )
           },
           cycle() {
             const variants = this.list()
@@ -282,7 +287,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           prompt() {
             const m = current()
             if (!m) return undefined
-            return promptVariant(this.current(), Object.keys(m.variants ?? {}))
+            return promptVariant(this.current(), Object.keys(m.variants ?? {}), modelVariantDefault(m))
           },
         },
         tier: {
@@ -321,11 +326,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           list() {
             const m = current()
             if (!m) return []
-            const thresholds = (m.cost.tiers ?? []).map((tier) => tier.threshold)
-            const defaults = m.limit.context > 272_000 ? [272_000] : []
-            return [...new Set([...thresholds, ...defaults, m.limit.context])]
-              .filter((value) => value > 0 && value <= m.limit.context)
-              .sort((a, b) => a - b)
+            return modelContextOptions(m)
           },
           current() {
             const m = current()

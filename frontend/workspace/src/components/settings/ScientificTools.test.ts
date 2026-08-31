@@ -80,6 +80,24 @@ describe("scientific tools settings state", () => {
     })
   })
 
+  test("distinguishes an NVIDIA credential connection from verified runtime readiness", () => {
+    const hosted = item({
+      runtime: undefined,
+      hosted: {
+        kind: "nvidia_nim",
+        adapter_id: "genmol",
+        credential: "nvidia_nim",
+        docs_url: "https://docs.api.nvidia.com/nim/reference/nvidia-genmol-infer",
+        terms_url: "https://example.com/terms",
+      },
+      current_availability: { local: "unavailable", hosted: "configured" },
+    })
+    expect(capabilityState(hosted)).toMatchObject({ label: "Connected", tone: "neutral", action: undefined })
+    expect(
+      capabilityState({ ...hosted, current_availability: { local: "unavailable", hosted: "setup_needed" } }),
+    ).toMatchObject({ label: "Setup needed", action: "credentials" })
+  })
+
   test("wires installation and account setup without remote catalog polling", async () => {
     const [component, loader, logos] = await Promise.all([
       Bun.file(new URL("./ScientificTools.tsx", import.meta.url)).text(),

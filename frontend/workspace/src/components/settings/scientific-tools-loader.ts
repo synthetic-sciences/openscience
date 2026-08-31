@@ -22,7 +22,7 @@ export function loadScientificTools(url: string, fetcher: typeof fetch, refresh 
 
   return request.then(
     (value) => {
-      cache.set(url, { value, expires: Date.now() + TTL })
+      if (cache.get(url)?.request === request) cache.set(url, { value, expires: Date.now() + TTL })
       return value
     },
     (error) => {
@@ -33,6 +33,11 @@ export function loadScientificTools(url: string, fetcher: typeof fetch, refresh 
   )
 }
 
+/** A credential change invalidates both saved and in-flight catalog snapshots. */
+export function invalidateScientificTools(url: string) {
+  cache.delete(url)
+}
+
 export async function setupScientificTool(url: string, fetcher: typeof fetch, id: string) {
   const result = await settingsApi<ScientificToolSetupResult>(
     url,
@@ -40,6 +45,6 @@ export async function setupScientificTool(url: string, fetcher: typeof fetch, id
     `/settings/scientific-tools/${encodeURIComponent(id)}/setup`,
     { method: "POST" },
   )
-  cache.delete(url)
+  invalidateScientificTools(url)
   return result
 }

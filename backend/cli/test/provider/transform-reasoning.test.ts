@@ -44,7 +44,7 @@ describe("ProviderTransform.options — managed OpenRouter reasoning", () => {
       providerOptions: { baseURL: PROXY_OR },
     })
     expect(result.usage).toEqual({ include: true })
-    expect(result.reasoning).toEqual({ effort: "medium" })
+    expect(result.reasoning).toEqual({ enabled: true })
     expect(result.reasoningEffort).toBeUndefined()
     expect(result.reasoningSummary).toBeUndefined()
     expect(result.include).toBeUndefined()
@@ -57,7 +57,7 @@ describe("ProviderTransform.options — managed OpenRouter reasoning", () => {
       providerOptions: { baseURL: PROXY_OR },
     })
     expect(result.usage).toEqual({ include: true })
-    expect(result.reasoning).toEqual({ effort: "medium" })
+    expect(result.reasoning).toEqual({ enabled: true })
   })
 
   test("Claude via OpenRouter supports reasoning when only api.id carries a mixed-case token", () => {
@@ -66,61 +66,61 @@ describe("ProviderTransform.options — managed OpenRouter reasoning", () => {
       sessionID,
       providerOptions: { baseURL: PROXY_OR },
     })
-    expect(upper.reasoning).toEqual({ effort: "medium" })
+    expect(upper.reasoning).toEqual({ enabled: true })
 
     const aliased = ProviderTransform.options({
       model: orModel("openrouter/anthropic/claude-x", "vendor/opaque-slug"),
       sessionID,
       providerOptions: { baseURL: PROXY_OR },
     })
-    expect(aliased.reasoning).toEqual({ effort: "medium" })
+    expect(aliased.reasoning).toEqual({ enabled: true })
   })
 
-  test("Claude via OpenRouter offers the unified reasoning-effort variants", () => {
+  test("budget-only Claude routes do not invent an effort ladder without route metadata", () => {
     expect(
       Object.keys(
         ProviderTransform.variants(orModel("openrouter/anthropic/claude-sonnet-4", "anthropic/claude-sonnet-4")),
       ),
-    ).toEqual(["low", "medium", "high"])
+    ).toEqual([])
     expect(
       Object.keys(ProviderTransform.variants(orModel("openrouter/some-alias", "Anthropic/Claude-Sonnet-4"))),
-    ).toEqual(["low", "medium", "high"])
+    ).toEqual([])
   })
 
   test("a non-Claude OR model whose id merely contains a vendor token is unaffected", () => {
-    // deepseek model, id has no claude/anthropic → keeps reasoning + effort variants.
+    // Preserve reasoning output without inventing a dial for fixed-depth R1.
     const opts = ProviderTransform.options({
       model: orModel("openrouter/deepseek/deepseek-r1", "deepseek/deepseek-r1"),
       sessionID,
       providerOptions: { baseURL: PROXY_OR },
     })
-    expect(opts.reasoning).toEqual({ effort: "medium" })
+    expect(opts.reasoning).toEqual({ enabled: true })
     expect(
       Object.keys(ProviderTransform.variants(orModel("openrouter/deepseek/deepseek-r1", "deepseek/deepseek-r1"))),
-    ).toContain("medium")
+    ).toEqual([])
   })
 
-  test("OR-routed gpt-5 uses reasoning.effort (not the OpenAI keys), even via the managed proxy", () => {
+  test("OR-routed gpt-5 preserves provider default reasoning through the managed proxy", () => {
     const result = ProviderTransform.options({
       model: orModel("openrouter/openai/gpt-5", "openai/gpt-5"),
       sessionID,
       providerOptions: { baseURL: PROXY_OR },
     })
     expect(result.usage).toEqual({ include: true })
-    expect(result.reasoning).toEqual({ effort: "medium" })
+    expect(result.reasoning).toEqual({ enabled: true })
     expect(result.reasoningEffort).toBeUndefined()
     expect(result.reasoningSummary).toBeUndefined()
     expect(result.include).toBeUndefined()
     expect(result.textVerbosity).toBeUndefined()
   })
 
-  test("OR gemini-3 keeps high effort", () => {
+  test("OR gemini-3 preserves the upstream default when no exact metadata is supplied", () => {
     const result = ProviderTransform.options({
       model: orModel("openrouter/google/gemini-3-pro", "google/gemini-3-pro"),
       sessionID,
       providerOptions: {},
     })
-    expect(result.reasoning).toEqual({ effort: "high" })
+    expect(result.reasoning).toEqual({ enabled: true })
     expect(result.usage).toEqual({ include: true })
   })
 
@@ -172,6 +172,22 @@ describe("ProviderTransform.options — BYOK / direct paths stay untouched", () 
 })
 
 describe("new model reasoning effort contracts", () => {
+  test("Grok 4.6, DeepSeek V4, and GLM 5.3 expose their real levels and defaults", () => {
+    for (const [id, expected, fallback] of [
+      ["x-ai/grok-4.6", ["low", "medium", "high", "xhigh"], "high"],
+      ["deepseek/deepseek-v4-pro", ["low", "high", "max"], "high"],
+      ["z-ai/glm-5.3", ["low", "high", "max"], "max"],
+    ] as const) {
+      const target = orModel(id, id)
+      expect(Object.keys(ProviderTransform.variants(target))).toEqual([...expected])
+      expect(ProviderTransform.options({ model: target, sessionID }).reasoning).toEqual({ effort: fallback })
+    }
+    expect(ProviderTransform.variants(orModel("unknown/reasoner", "unknown/reasoner"))).toEqual({})
+    expect(
+      ProviderTransform.variants(model({ api: { npm: "@ai-sdk/openai-compatible", id: "unknown-reasoner" } })),
+    ).toEqual({})
+  })
+
   test("GPT-5.6 family exposes none through max on direct OpenAI and managed OpenRouter", () => {
     const expected = ["none", "low", "medium", "high", "xhigh", "max"]
     const direct = model({

@@ -2119,11 +2119,6 @@ export type WellKnownAuth = {
 export type Auth = OAuth | ApiAuth | WellKnownAuth
 
 export type Model = {
-  pricing?: {
-    upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
-    audited_at?: string
-    source_url?: string
-  }
   id: string
   providerID: string
   api: {
@@ -2183,6 +2178,11 @@ export type Model = {
       }
     }
   }
+  pricing?: {
+    upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
+    audited_at?: string
+    source_url?: string
+  }
   limit: {
     context: number
     input?: number
@@ -2199,6 +2199,7 @@ export type Model = {
   reasoningOptions?: Array<{
     [key: string]: unknown
   }>
+  contextOptions?: Array<number>
   variants?: {
     [key: string]: {
       [key: string]: unknown
@@ -2214,6 +2215,15 @@ export type Model = {
           read: number
           write: number
         }
+        tiers?: Array<{
+          input: number
+          output: number
+          cache: {
+            read: number
+            write: number
+          }
+          threshold: number
+        }>
       }
       provider?: {
         body?: {
@@ -2827,6 +2837,7 @@ export type AccountGetResponses = {
       type: "personal" | "organization"
       legacy: boolean
     } | null
+    credential_sync?: unknown
   }
 }
 
@@ -3102,7 +3113,8 @@ export type SettingsCredentialsListResponses = {
       connected: boolean
       set_fields: Array<string>
       updated_at: string | null
-      source: "local" | null
+      source: "local" | "account" | null
+      organization_id: string | null
     }>
   }
 }
@@ -3139,7 +3151,8 @@ export type SettingsCredentialsRemoveResponses = {
       connected: boolean
       set_fields: Array<string>
       updated_at: string | null
-      source: "local" | null
+      source: "local" | "account" | null
+      organization_id: string | null
     }>
   }
 }
@@ -3182,7 +3195,8 @@ export type SettingsCredentialsSetResponses = {
       connected: boolean
       set_fields: Array<string>
       updated_at: string | null
-      source: "local" | null
+      source: "local" | "account" | null
+      organization_id: string | null
     }>
   }
 }
@@ -9349,6 +9363,8 @@ export type SettingsWalletGetResponses = {
   200: {
     signedIn: boolean
     balanceUsd: number | null
+    balanceRedacted?: boolean
+    accessVerified?: boolean
     billingMode: "managed" | "byok" | null
     managedSupported: boolean
     managedUnlocked: boolean

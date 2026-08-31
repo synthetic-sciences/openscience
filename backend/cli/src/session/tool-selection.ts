@@ -36,7 +36,8 @@ export namespace ToolSelection {
     /\b(?:api|backend|bash|branch|bug|build|cli|code|codebase|commit|compile|endpoint|frontend|git|github|golang|java|javascript|kotlin|lint|package manager|php|pull request|python|refactor|repo|repository|ruby|rust|sdk|server|shell|source code|swift|test suite|typecheck|typescript|working tree)\b/i
   const science =
     /\b(?:benchmark|bioinformatics|biology|cell|chemistry|clinical|data analysis|dataset|evidence|evaluation|experiment|gene|genomic|hypothesis|literature|machine learning|metric|model comparison|molecule|neural|paper|physics|protein|reproducibility|research|rna|science|scientific|simulation|statistics?|study|validation)\b/i
-  const scientificCatalog = /\b(?:alphafold ?2|biopython|matplotlib|rdkit|scipy|scikit[- ]learn)\b/i
+  const scientificCatalog =
+    /\b(?:alphafold[- ]?2|biopython|matplotlib|rdkit|scipy|scikit[- ]learn|boltz[- ]?2|diffdock|evo[- ]?2|genmol|molmim|msa[- ]?search|openfold[- ]?[23]|protein[- ]?mpnn|rf[- ]?diffusion|bionemo|nvidia[- ]nim)\b/i
   const work =
     /\b(?:analy[sz]e|attached|calculate|cite|create|current|dataset|document|download|fetch|file|find|inspect|latest|load|look up|open|paper|plot|read|review|run|save|source|today|verify|write)\b|\bsearch\s+(?:for|my|our|the|this|these|those)\b|https?:\/\/|\.[a-z0-9]{1,5}\b/i
   const browse = new Set(["glob", "grep", "invalid", "read"])

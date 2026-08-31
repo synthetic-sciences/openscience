@@ -5,6 +5,7 @@ import { CredentialsRoutes } from "../../src/server/routes/settings/credentials"
 import { executionSession, tmpdir } from "../fixture/fixture"
 import { ScientificCapabilityParameters, ScientificCapabilityTool } from "../../src/tool/scientific-capability"
 import { Global } from "../../src/global"
+import { BioNemoInputs } from "../../src/science/bionemo/schema"
 
 const context = {
   sessionID: "ses_scientific_capability",
@@ -100,6 +101,21 @@ describe("scientific_capability tool", () => {
     expect(proposal.input.gpu).toBe("none")
     expect(proposal.execution).toBeUndefined()
     expect(planned.metadata.scientific_capability.dispatched).toBe(false)
+  })
+
+  test("describes each hosted adapter with its actual complete request schema", async () => {
+    const tool = await ScientificCapabilityTool.init()
+    for (const [id, schema] of Object.entries(BioNemoInputs)) {
+      const described = await tool.execute({ action: "describe", id }, context)
+      const result = JSON.parse(described.output)
+      expect(result.request_schema).toEqual(z.toJSONSchema(schema, { io: "input" }))
+      expect(result.request_schema.type).toBe("object")
+      expect(Object.keys(result.request_schema.properties).length).toBeGreaterThan(0)
+      expect(result.request_schema.additionalProperties).toBe(false)
+      expect(described.metadata.scientific_capability.dispatched).toBe(false)
+    }
+    const local = await tool.execute({ action: "describe", id: "scipy" }, context)
+    expect(JSON.parse(local.output).request_schema).toBeUndefined()
   })
 
   test("previews strict hosted BioNeMo requests and fails blocked work closed", async () => {

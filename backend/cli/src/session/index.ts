@@ -622,14 +622,17 @@ export namespace Session {
       const modeCost = input.tier ? input.model.modes?.[input.tier]?.cost : undefined
       const promptTokens = tokens.input + tokens.cache.read + tokens.cache.write
       const tierCost = input.model.cost?.tiers
-        ?.filter((tier) => promptTokens >= tier.threshold)
+        ?.filter((tier) => promptTokens > tier.threshold)
         .sort((a, b) => b.threshold - a.threshold)[0]
       const catalogCost = input.model.cost?.tiers?.length
         ? (tierCost ?? input.model.cost)
         : input.model.cost?.experimentalOver200K && promptTokens > 200_000
           ? input.model.cost.experimentalOver200K
           : input.model.cost
-      const costInfo = modeCost ?? catalogCost
+      const modeTier = modeCost?.tiers
+        ?.filter((tier) => promptTokens > tier.threshold)
+        .sort((a, b) => b.threshold - a.threshold)[0]
+      const costInfo = modeTier ?? modeCost ?? catalogCost
       return {
         cost: safe(
           new Decimal(0)

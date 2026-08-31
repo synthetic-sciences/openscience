@@ -341,6 +341,10 @@ describe("workspace credential sync", () => {
     }))
     const result = await CredentialsRoutes().request("/")
     const body = (await result.json()) as { services: { id: string; source: string | null; connected: boolean }[] }
-    expect(body.services.find((service) => service.id === "nvidia")).toMatchObject({ source: null, connected: false })
+    expect(body.services.find((service) => service.id === "nvidia")).toMatchObject({
+      source: null,
+      connected: false,
+      category: "integration",
+    })
   })
 })

@@ -20,6 +20,27 @@ const Entry = z.object({
   upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
   context_length: Tokens,
   max_output_tokens: Tokens.optional(),
+  context_options: z.array(Tokens).max(8).optional(),
+  capabilities: z
+    .object({
+      reasoning_efforts: z
+        .array(z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]))
+        .max(8)
+        .optional(),
+      reasoning_default: z.string().max(32).optional(),
+      thinking_budgets: z.array(z.number().int().min(0).max(20_000_000)).max(8).optional(),
+    })
+    .optional(),
+  fast_mode: z.boolean().optional(),
+  fast_mode_details: z
+    .object({
+      available: z.boolean(),
+      transport: z
+        .union([z.object({ service_tier: z.literal("priority") }), z.object({ speed: z.literal("fast") })])
+        .optional(),
+      pricing: z.object({ verified: z.boolean().optional(), tiers: z.array(Tier).min(1).max(8) }).optional(),
+    })
+    .optional(),
   pricing: z.object({
     tiers: z.array(Tier).min(1).max(8),
     audited_at: z.string().max(32).optional(),
@@ -37,10 +58,20 @@ export namespace ManagedPricing {
     }
     pricing: { upstream_provider: z.infer<typeof Entry>["upstream_provider"]; audited_at?: string; source_url?: string }
     limit: { context: number; output?: number }
+    contextOptions: number[]
+    reasoningOptions: Array<Record<string, unknown>>
+    modes: Record<
+      string,
+      {
+        cost?: Model["cost"]
+        provider: { body: Record<string, string>; headers?: Record<string, string> }
+      }
+    >
   }
 
   /** Whitelist non-executable metadata. Never accept remote API URLs, npm
-   * packages, headers, keys, options, models, or authorization decisions. */
+   * packages, headers, keys, or authorization decisions. Transport flags below
+   * are reconstructed locally from a closed, route-specific allowlist. */
   export function parse(value: unknown): Record<string, Model> {
     const body = z.object({ models: z.array(z.unknown()).max(100) }).safeParse(value)
     if (!body.success) return {}
@@ -57,17 +88,67 @@ export namespace ManagedPricing {
         output: tier.output,
         cache: { read: tier.cache_read ?? 0, write: tier.cache_write ?? 0 },
       })
+      const tiers = (prices: z.infer<typeof Tier>[]) =>
+        prices
+          .map((tier, index) => ({
+            ...tier,
+            threshold: prices[index - 1]?.max_input_tokens ?? (tier.min_input_tokens ?? 1) - 1,
+          }))
+          .filter((tier) => tier.min_input_tokens !== undefined && tier.threshold > 0)
+          .map((tier) => ({ ...cost(tier), threshold: tier.threshold }))
+          .sort((a, b) => a.threshold - b.threshold)
+      const fast = model.fast_mode_details
+      const transport = fast?.transport
+      const premium = fast?.pricing?.tiers.find((tier) => !tier.min_input_tokens)
+      const body: Record<string, string> | undefined =
+        model.upstream_provider === "anthropic" &&
+        model.id === "anthropic/claude-opus-5" &&
+        transport &&
+        "speed" in transport
+          ? { speed: "fast" }
+          : ((model.upstream_provider === "xai" && model.id === "x-ai/grok-4.6") ||
+                (model.upstream_provider === "openrouter" && /^openai\/gpt-5\.6-(sol|terra|luna)$/.test(model.id))) &&
+              transport &&
+              "service_tier" in transport
+            ? { service_tier: "priority" }
+            : undefined
+      const efforts = model.capabilities?.reasoning_efforts
+      const fallback = model.capabilities?.reasoning_default
       result[model.id] = {
+        contextOptions: [...new Set([...(model.context_options ?? []), model.context_length])]
+          .filter((value) => value <= model.context_length)
+          .sort((a, b) => a - b),
+        reasoningOptions: [
+          ...(efforts?.length
+            ? [
+                {
+                  type: "effort",
+                  values: efforts,
+                  ...(fallback && efforts.includes(fallback as (typeof efforts)[number]) ? { default: fallback } : {}),
+                },
+              ]
+            : []),
+          ...(model.capabilities?.thinking_budgets?.length
+            ? [{ type: "budget_tokens", values: model.capabilities.thinking_budgets }]
+            : []),
+        ],
+        modes:
+          model.fast_mode && fast?.available && fast.pricing?.verified === true && premium && body
+            ? {
+                fast: {
+                  cost: { ...cost(premium), tiers: tiers(fast.pricing.tiers) },
+                  provider: {
+                    body,
+                    ...(model.upstream_provider === "anthropic"
+                      ? { headers: { "anthropic-beta": "fast-mode-2026-02-01" } }
+                      : {}),
+                  },
+                },
+              }
+            : {},
         cost: {
           ...cost(first),
-          tiers: model.pricing.tiers
-            .map((tier, index) => ({
-              ...tier,
-              threshold: model.pricing.tiers[index - 1]?.max_input_tokens ?? (tier.min_input_tokens ?? 1) - 1,
-            }))
-            .filter((tier) => tier.min_input_tokens !== undefined && tier.threshold > 0)
-            .map((tier) => ({ ...cost(tier), threshold: tier.threshold }))
-            .sort((a, b) => a.threshold - b.threshold),
+          tiers: tiers(model.pricing.tiers),
         },
         pricing: {
           upstream_provider: model.upstream_provider,

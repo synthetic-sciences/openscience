@@ -23,7 +23,7 @@ const presentText = (label: string, max = 2_000_000) =>
 const chain = z.string().regex(/^[A-Za-z0-9]{1,4}$/)
 const amino = z
   .string()
-  .regex(/^[ARNDCQEGHILKMFPSTWYVX]+$/)
+  .regex(/^[ARNDCQEGHILKMFPSTWYV]+$/)
   .min(1)
   .max(10_240)
 const requestTag = z.string().min(1).max(128)
@@ -284,12 +284,17 @@ const numericString = (minimum: number, maximum: number) =>
     .regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/)
     .refine((value) => Number(value) >= minimum && Number(value) <= maximum)
 
+// NVIDIA documents numbers in Python and numeric strings in curl examples.
+// Preserve previously accepted strings so approved requests keep their dispatch identity.
+const numeric = (minimum: number, maximum: number) =>
+  z.union([z.number().min(minimum).max(maximum), numericString(minimum, maximum)])
+
 export const GenMolInput = z
   .object({
     smiles: presentText("SAFE or SMILES input", 20_000),
     num_molecules: safeInteger.min(1).max(1_000).optional(),
-    temperature: numericString(0.01, 10).optional(),
-    noise: numericString(0, 2).optional(),
+    temperature: numeric(0.01, 10).optional(),
+    noise: numeric(0, 2).optional(),
     step_size: safeInteger.min(1).max(10).optional(),
     scoring: z.enum(["QED", "LogP"]).optional(),
     unique: z.boolean().optional(),

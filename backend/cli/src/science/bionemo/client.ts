@@ -13,6 +13,7 @@ import {
 } from "./dispatch"
 import { BioNemoCapabilityID, parseBioNemoInput, parseBioNemoOutput, type BioNemoCapabilityID as ID } from "./schema"
 import { retryAfterMilliseconds } from "./polling"
+import { decodeBioNemoResult, downloadBioNemoResult, readBioNemoBody } from "./download"
 
 const TERMS = "https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA_API_Trial_Service_Terms.pdf"
 // Current NVCF async result contract:
@@ -87,34 +88,6 @@ const specs = {
     docs: "https://docs.api.nvidia.com/nim/reference/ipd-rfdiffusion-infer",
   },
 } as const
-
-async function body(response: Response, limit = 25 * 1024 * 1024) {
-  const declared = Number(response.headers.get("content-length"))
-  if (Number.isFinite(declared) && declared > limit)
-    throw new Error(`NVIDIA response exceeds the ${limit}-byte capture limit`)
-  if (!response.body) return ""
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  try {
-    for (;;) {
-      const value = await reader.read()
-      if (value.done) break
-      total += value.value.byteLength
-      if (total > limit) throw new Error(`NVIDIA response exceeds the ${limit}-byte capture limit`)
-      chunks.push(value.value)
-    }
-  } finally {
-    reader.releaseLock()
-  }
-  const joined = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    joined.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return new TextDecoder().decode(joined)
-}
 
 function cleanString(value: string, secret: string) {
   return OpenScience.redactSecrets(value.replaceAll(secret, "[REDACTED]"))
@@ -418,7 +391,12 @@ async function capture(response: Response, secret: string): Promise<Captured> {
   const fromHeader = sanitizeProviderRequestID(BioNemoHostedDispatch.providerRequestID(response.headers), secret)
   let text: string
   try {
-    text = await body(response)
+    if (response.status === 302) {
+      await response.body?.cancel().catch(() => {})
+      text = await downloadBioNemoResult(response.headers.get("location"))
+    } else {
+      text = await decodeBioNemoResult(await readBioNemoBody(response))
+    }
   } catch (error) {
     return {
       safeText: "",
@@ -593,7 +571,7 @@ async function reconcile(input: {
       response = await fetch(endpoint, {
         method: "GET",
         headers: { accept: "application/json", authorization: `Bearer ${input.secret}` },
-        redirect: "error",
+        redirect: "manual",
         signal: AbortSignal.timeout(2 * 60 * 1000),
       })
     } catch (error) {
@@ -608,14 +586,14 @@ async function reconcile(input: {
       return pendingResult(input.preview, record)
     }
     const captured = await capture(response, input.secret)
-    if (response.redirected || REDIRECT.has(response.status)) {
+    if (response.redirected || (REDIRECT.has(response.status) && (response.status !== 302 || captured.captureError))) {
       record = await BioNemoHostedDispatch.pending({
         preview: input.preview,
         sessionID: input.sessionID,
         status: "unknown",
         provider_request_id: providerRequestID,
         http_status: response.status,
-        error: "Refused redirect from the NVIDIA NVCF status endpoint",
+        error: captured.captureError ?? "Refused redirect from the NVIDIA NVCF status endpoint",
         polled: true,
       })
       return pendingResult(input.preview, record)
@@ -648,7 +626,7 @@ async function reconcile(input: {
       })
       throw new Error(message)
     }
-    if (response.status === 200 && !captured.captureError) {
+    if ((response.status === 200 || response.status === 302) && !captured.captureError) {
       const parsed = BioNemoOutputsSafe.parse(input.id, captured.parsed)
       if (parsed && (!captured.lifecycle || SUCCESS.has(captured.lifecycle))) {
         try {
@@ -804,7 +782,7 @@ export namespace BioNemoHosted {
           "nvcf-poll-seconds": "300",
         },
         body: bodyText,
-        redirect: "error",
+        redirect: "manual",
         signal: AbortSignal.timeout(10 * 60 * 1000),
       })
     } catch (error) {
@@ -819,14 +797,28 @@ export namespace BioNemoHosted {
       )
     }
 
+    // Record the original NVIDIA identity before downloading a large result.
+    // An interrupted/expired download can then reconcile without another POST.
+    const redirectedID =
+      response.status === 302
+        ? sanitizeProviderRequestID(BioNemoHostedDispatch.providerRequestID(response.headers), secret)
+        : undefined
+    if (redirectedID)
+      await BioNemoHostedDispatch.pending({
+        preview,
+        sessionID,
+        status: "unknown",
+        provider_request_id: redirectedID,
+        http_status: response.status,
+      })
     const captured = await capture(response, secret)
     const providerRequestID = captured.providerRequestID
-    if (response.redirected || REDIRECT.has(response.status))
+    if (response.redirected || (REDIRECT.has(response.status) && (response.status !== 302 || captured.captureError)))
       return setUnresolved({
         preview,
         sessionID,
         dispatchID: dispatch.created.dispatch_id,
-        message: `OpenScience refused a redirect from the NVIDIA ${id} endpoint.`,
+        message: captured.captureError ?? `OpenScience refused a redirect from the NVIDIA ${id} endpoint.`,
         httpStatus: response.status,
         providerRequestID,
         secret,
@@ -862,7 +854,7 @@ export namespace BioNemoHosted {
       throw new Error(message)
     }
 
-    if (!response.ok) {
+    if (!response.ok && response.status !== 302) {
       const message = cleanString(
         `NVIDIA ${id} returned HTTP ${response.status}: ${captured.safeText.slice(0, 2_000)}`,
         secret,
@@ -893,7 +885,7 @@ export namespace BioNemoHosted {
       throw new Error(message)
     }
 
-    if (response.status === 200 && !captured.captureError) {
+    if ((response.status === 200 || response.status === 302) && !captured.captureError) {
       const terminal = BioNemoOutputsSafe.parse(id, captured.parsed)
       if (terminal && (!captured.lifecycle || SUCCESS.has(captured.lifecycle))) {
         try {

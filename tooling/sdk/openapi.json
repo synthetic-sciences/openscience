@@ -626,7 +626,8 @@
                           "type": "null"
                         }
                       ]
-                    }
+                    },
+                    "credential_sync": {}
                   },
                   "required": [
                     "session",
@@ -1374,7 +1375,20 @@
                             "anyOf": [
                               {
                                 "type": "string",
-                                "const": "local"
+                                "enum": [
+                                  "local",
+                                  "account"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "organization_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
                               },
                               {
                                 "type": "null"
@@ -1392,7 +1406,8 @@
                           "connected",
                           "set_fields",
                           "updated_at",
-                          "source"
+                          "source",
+                          "organization_id"
                         ]
                       }
                     }
@@ -1507,7 +1522,20 @@
                             "anyOf": [
                               {
                                 "type": "string",
-                                "const": "local"
+                                "enum": [
+                                  "local",
+                                  "account"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "organization_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
                               },
                               {
                                 "type": "null"
@@ -1525,7 +1553,8 @@
                           "connected",
                           "set_fields",
                           "updated_at",
-                          "source"
+                          "source",
+                          "organization_id"
                         ]
                       }
                     }
@@ -1676,7 +1705,20 @@
                             "anyOf": [
                               {
                                 "type": "string",
-                                "const": "local"
+                                "enum": [
+                                  "local",
+                                  "account"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "organization_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
                               },
                               {
                                 "type": "null"
@@ -1694,7 +1736,8 @@
                           "connected",
                           "set_fields",
                           "updated_at",
-                          "source"
+                          "source",
+                          "organization_id"
                         ]
                       }
                     }
@@ -23340,6 +23383,12 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "balanceRedacted": {
+                      "type": "boolean"
+                    },
+                    "accessVerified": {
+                      "type": "boolean"
                     },
                     "billingMode": {
                       "anyOf": [
@@ -58037,6 +58086,30 @@
               "cache"
             ]
           },
+          "pricing": {
+            "type": "object",
+            "properties": {
+              "upstream_provider": {
+                "type": "string",
+                "enum": [
+                  "anthropic",
+                  "gemini",
+                  "xai",
+                  "meta",
+                  "openrouter"
+                ]
+              },
+              "audited_at": {
+                "type": "string"
+              },
+              "source_url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "upstream_provider"
+            ]
+          },
           "limit": {
             "type": "object",
             "properties": {
@@ -58093,6 +58166,13 @@
               "additionalProperties": {}
             }
           },
+          "contextOptions": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
           "variants": {
             "type": "object",
             "propertyNames": {
@@ -58140,6 +58220,45 @@
                         "read",
                         "write"
                       ]
+                    },
+                    "tiers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "input": {
+                            "type": "number"
+                          },
+                          "output": {
+                            "type": "number"
+                          },
+                          "cache": {
+                            "type": "object",
+                            "properties": {
+                              "read": {
+                                "type": "number"
+                              },
+                              "write": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "read",
+                              "write"
+                            ]
+                          },
+                          "threshold": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "input",
+                          "output",
+                          "cache",
+                          "threshold"
+                        ]
+                      }
                     }
                   },
                   "required": [
