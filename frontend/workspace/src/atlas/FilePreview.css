@@ -360,7 +360,7 @@
   margin: 0 auto;
   background: transparent;
   font-family: var(--font-family-sans);
-  font-size: var(--document-font-size, 15px);
+  font-size: var(--document-font-size, 13px);
   overflow-wrap: break-word;
   word-break: normal;
 }
@@ -461,7 +461,7 @@
   color: var(--color-text);
   font-family: inherit;
   font-size: inherit;
-  line-height: 1.75;
+  line-height: 1.65;
 }
 
 .atlas-file-document .atlas-md h1,
@@ -480,19 +480,19 @@
 
 .atlas-file-document .atlas-md h1 {
   margin: 1.5em 0 0.65em;
-  font-size: 1.8em;
+  font-size: 1.5em;
   line-height: 1.25;
 }
 
 .atlas-file-document .atlas-md h2 {
   margin: 32px 0 12px;
-  font-size: 1.4em;
+  font-size: 1.25em;
   line-height: 1.35;
 }
 
 .atlas-file-document .atlas-md h3 {
   margin: 24px 0 8px;
-  font-size: 1.15em;
+  font-size: 1.1em;
   line-height: 1.4;
 }
 
@@ -580,7 +580,7 @@
   padding: 16px;
   border-radius: var(--radius-sm);
   font-family: var(--font-family-mono);
-  font-size: 0.87em;
+  font-size: max(12px, 0.87em);
   line-height: 1.6;
   overflow-x: auto;
   overflow-wrap: normal;
@@ -589,7 +589,7 @@
 }
 
 .atlas-file-document .atlas-md code {
-  font-size: 0.87em;
+  font-size: max(12px, 0.87em);
   font-family: var(--font-family-mono);
 }
 
@@ -686,7 +686,7 @@
   max-width: 100%;
   margin: 16px 0;
   overflow-x: auto;
-  font-size: 0.9em;
+  font-size: max(12px, 0.9em);
   font-variant-numeric: tabular-nums;
   scrollbar-width: thin;
 }

@@ -107,6 +107,7 @@ describe("Markdown document reading", () => {
     const host = mount({ text: "# Unchanged source\n\nKeep the research evidence." })
     await ready(() => host.querySelector("h1") !== null)
     const original = host.querySelector(".atlas-md")!.textContent
+    expect(host.querySelector("article")!.style.getPropertyValue("--document-font-size")).toBe("13px")
     host.querySelector<HTMLButtonElement>('[aria-label="Reading options"]')!.click()
     await ready(() => button("Serif") !== undefined)
     button("Serif").click()
@@ -126,7 +127,8 @@ describe("Markdown document reading", () => {
     button("Reset reading options").click()
     expect(article.dataset.readingFont).toBe("sans")
     expect(article.dataset.readingWidth).toBe("readable")
-    expect(article.style.getPropertyValue("--document-font-size")).toBe("15px")
+    expect(article.style.getPropertyValue("--document-font-size")).toBe("13px")
+    expect(button("13").getAttribute("aria-pressed")).toBe("true")
     expect(host.querySelector(".atlas-md")!.textContent).toBe(original)
   })
 

@@ -21,6 +21,16 @@ describe("file preview surface", () => {
     expect(css).toContain("padding-inline: 16px")
   })
 
+  test("keeps compact proportional typography inside file previews only", () => {
+    expect(css).toMatch(/\.atlas-file-document\s*\{[^}]*font-size: var\(--document-font-size, 13px\)/s)
+    expect(css).toMatch(/\.atlas-file-document \.atlas-md\s*\{[^}]*font-size: inherit;[^}]*line-height: 1\.65/s)
+    expect(css).toMatch(/\.atlas-file-document \.atlas-md h1\s*\{[^}]*font-size: 1\.5em/s)
+    expect(css).toMatch(/\.atlas-file-document \.atlas-md h2\s*\{[^}]*font-size: 1\.25em/s)
+    expect(css).toMatch(/\.atlas-file-document \.atlas-md h3\s*\{[^}]*font-size: 1\.1em/s)
+    expect(css).toContain("font-size: max(12px, 0.87em)")
+    expect(css).toContain("font-size: max(12px, 0.9em)")
+  })
+
   test("shares document typography with stored artifacts and notebook Markdown", () => {
     expect(textView).toContain('import "../FilePreview.css"')
     expect(textView).toContain('import { MarkdownDocument } from "../MarkdownDocument"')

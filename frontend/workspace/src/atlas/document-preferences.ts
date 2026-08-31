@@ -4,7 +4,7 @@ export type DocumentPreferences = {
   width: "readable" | "full"
 }
 
-export const documentDefaults: DocumentPreferences = { size: 15, font: "sans", width: "readable" }
+export const documentDefaults: DocumentPreferences = { size: 13, font: "sans", width: "readable" }
 export const documentPreferencesKey = "openscience:document-reading:v1"
 type Storage = Pick<globalThis.Storage, "getItem" | "setItem">
 

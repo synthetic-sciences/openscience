@@ -8,6 +8,21 @@ import {
 } from "./document-preferences"
 
 describe("document reading preferences", () => {
+  test("defaults to compact text without rewriting saved larger reading preferences", () => {
+    expect(documentDefaults.size).toBe(13)
+    expect(readDocumentPreferences({ getItem: () => null, setItem: () => {} }).size).toBe(13)
+    for (const size of [13, 15, 17, 19]) {
+      const saved = JSON.stringify({ size, font: "serif", width: "full" })
+      const writes: string[] = []
+      expect(readDocumentPreferences({ getItem: () => saved, setItem: (_, value) => writes.push(value) })).toEqual({
+        size,
+        font: "serif",
+        width: "full",
+      })
+      expect(writes).toEqual([])
+    }
+  })
+
   test("accepts only supported presentation options", () => {
     expect(normalizeDocumentPreferences({ size: 19, font: "serif", width: "full" })).toEqual({
       size: 19,
