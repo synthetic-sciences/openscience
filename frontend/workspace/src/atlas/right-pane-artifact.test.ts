@@ -16,11 +16,12 @@ const server = await createServer({
     resolve: { conditions: ["browser", "production"] },
   },
 })
-const [pane, artifacts, state, web] = await Promise.all([
+const [pane, artifacts, state, web, stores] = await Promise.all([
   server.ssrLoadModule("/src/atlas/RightPane.tsx") as Promise<typeof import("./RightPane")>,
   server.ssrLoadModule("/src/artifacts/context.ts") as Promise<typeof import("@/artifacts/context")>,
   server.ssrLoadModule("/src/atlas/store/ui.ts") as Promise<typeof import("@/atlas/store/ui")>,
   server.ssrLoadModule("solid-js/web") as Promise<typeof import("solid-js/web")>,
+  server.ssrLoadModule("solid-js/store") as Promise<typeof import("solid-js/store")>,
 ])
 const cleanups: Array<() => void> = []
 
@@ -217,4 +218,70 @@ test("keeps the desktop pane non-modal and leaves focus where it was", async () 
   expect(inspector?.hasAttribute("role")).toBe(false)
   expect(inspector?.hasAttribute("aria-modal")).toBe(false)
   expect(document.activeElement).toBe(opener)
+})
+
+test("fullscreen restores the exact split width and keeps the same editor contents mounted", async () => {
+  const [layout, setLayout] = stores.createStore({ expanded: false, width: 980 })
+  const opener = document.createElement("button")
+  document.body.append(opener)
+  opener.focus()
+  const restore = document.createElement("button")
+  restore.dataset.modalInitialFocus = "true"
+  const editor = document.createElement("textarea")
+  editor.value = "unsaved document text"
+  const host = mount(() =>
+    pane.RightPaneFrame({
+      get modal() {
+        return layout.expanded
+      },
+      get expanded() {
+        return layout.expanded
+      },
+      get width() {
+        return layout.width
+      },
+      mobile: false,
+      stacked: false,
+      onClose: () => setLayout("expanded", false),
+      children: [restore, editor],
+    }),
+  )
+  await Promise.resolve()
+  const inspector = host.querySelector<HTMLElement>("aside")!
+  expect(inspector.style.width).toBe("980px")
+  setLayout("expanded", true)
+  await Promise.resolve()
+  await Promise.resolve()
+  expect(inspector.style.width).toBe("100vw")
+  expect(inspector.style.position).toBe("fixed")
+  expect(inspector.dataset.expanded).toBe("true")
+  expect(inspector.getAttribute("role")).toBe("dialog")
+  expect(document.activeElement).toBe(restore)
+  restore.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+  await Promise.resolve()
+  expect(layout.expanded).toBe(false)
+  expect(inspector.style.width).toBe("980px")
+  expect(inspector.style.flex).toBe("0 0 980px")
+  expect(inspector.hasAttribute("role")).toBe(false)
+  expect(host.querySelector("textarea")).toBe(editor)
+  expect(editor.value).toBe("unsaved document text")
+  expect(document.activeElement).toBe(opener)
+})
+
+test("focusing conversation parks file tabs and preserves their mounted content", async () => {
+  state.uiStore.openFile("/project", "notes.md")
+  const host = mountGate()
+  const inspector = host.querySelector<HTMLElement>("aside")
+  const tabs = state.uiStore.workTabs().map((tab) => tab.id)
+  const file = state.uiStore.workTabs().find((tab) => tab.kind === "file")!
+  expect(file).toBeDefined()
+  state.uiStore.closeContext()
+  await Promise.resolve()
+  expect(host.querySelector("aside")).toBe(inspector)
+  expect(inspector?.parentElement?.dataset.open).toBe("false")
+  expect(state.uiStore.workTabs().map((tab) => tab.id)).toEqual(tabs)
+  state.uiStore.activateWorkTab(file.id)
+  await Promise.resolve()
+  expect(inspector?.parentElement?.dataset.open).toBe("true")
+  expect(host.querySelector("aside")).toBe(inspector)
 })

@@ -26,6 +26,8 @@ interface SkillRow {
   category?: string
   tags?: string[]
   entry?: boolean
+  enabled?: boolean
+  catalog_status?: string
 }
 
 function originOf(skill: SkillRow): string {

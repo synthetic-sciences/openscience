@@ -2,6 +2,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createUniqueId,
   For,
   Match,
   on,
@@ -19,12 +20,14 @@ import { FilesPane } from "@/atlas/FilesPane"
 import { FileView } from "@/atlas/FilePreview"
 import { TerminalSurface } from "@/atlas/TerminalSurface"
 import { useDialog } from "@synsci/ui/context/dialog"
+import { DropdownMenu } from "@synsci/ui/dropdown-menu"
 import { useSDK } from "@/context/sdk"
 import { FileIcon } from "@synsci/ui/file-icon"
 import { StoredArtifactView } from "@/artifacts/StoredArtifactView"
 import { confirmDialog } from "@/atlas/dialogs"
 import { discardFileDraft } from "@/atlas/file-drafts"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
+import { PaneResizer } from "@/atlas/PaneResizer"
 import {
   IconArchive,
   IconArtifact,
@@ -41,18 +44,17 @@ import {
   DEFAULT_PANE_WIDTH,
   MIN_PANE_WIDTH,
   INLINE_PANE_BREAKPOINT,
-  clampPaneWidth,
   equalPaneWidth,
   legacyPaneWidthKey,
   maxPaneWidthForWorkspace,
   paneWidthForWorkspace,
   paneWidthKey,
+  presetPaneWidth,
   readPaneWidth,
   savePaneWidth,
 } from "@/atlas/right-pane-layout"
 import "./right-pane-tabs.css"
 
-const RESIZE_STEP = 16
 const labels: Record<ContextTab, string> = {
   artifact: "Files",
   files: "Files",
@@ -82,6 +84,7 @@ const focusable =
   'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
 
 export function RightPaneFrame(props: {
+  id?: string
   modal: boolean
   mobile: boolean
   stacked: boolean
@@ -174,6 +177,7 @@ export function RightPaneFrame(props: {
         />
       </Show>
       <aside
+        id={props.id}
         ref={(element) => {
           refs.pane = element
           props.onPane?.(element)
@@ -224,6 +228,7 @@ export function RightPane(
   } = {},
 ): JSX.Element {
   const sdk = useSDK()
+  const paneID = createUniqueId()
   const context = uiStore.context
   const project = () => props.project ?? props.route ?? window.location.pathname
   const session = () => props.session ?? "new"
@@ -252,7 +257,6 @@ export function RightPane(
   const [seen, setSeen] = createSignal(context() === "files")
   const limit = createMemo(() => maxPaneWidthForWorkspace(workspace(), persistentSidebar()))
   const paneWidth = createMemo(() => paneWidthForWorkspace(width(), workspace(), persistentSidebar()))
-  const drag = { start: null as { x: number; width: number } | null }
   const frame: {
     observer?: ResizeObserver
     mutation?: MutationObserver
@@ -321,7 +325,15 @@ export function RightPane(
     uiStore.closeContext()
   }
 
-  createEffect(on(key, () => setWidth(initial())))
+  createEffect(
+    on(key, () => {
+      setWidth(initial())
+      setExpanded(false)
+    }),
+  )
+  createEffect(() => {
+    if (!uiStore.rightPaneOpen()) setExpanded(false)
+  })
   createEffect(() => {
     if (context() === "files") setSeen(true)
   })
@@ -379,47 +391,18 @@ export function RightPane(
     attachSidebar()
   }
 
-  const onHandlePointerDown = (event: PointerEvent) => {
-    drag.start = { x: event.clientX, width: paneWidth() }
-    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
-    document.body.style.cursor = "ew-resize"
-    event.preventDefault()
-  }
-  const onHandlePointerMove = (event: PointerEvent) => {
-    if (!drag.start) return
-    const next = clampPaneWidth(drag.start.width + (drag.start.x - event.clientX), limit())
+  const resize = (next: number) => {
     setWidth(next)
+    savePaneWidth(key(), next)
   }
-  const onHandlePointerUp = (event: PointerEvent) => {
-    if (!drag.start) return
-    drag.start = null
-    ;(event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId)
-    document.body.style.cursor = ""
-    try {
-      savePaneWidth(key(), width())
-    } catch {}
-  }
-  const onHandleKeyDown = (event: KeyboardEvent) => {
-    const delta = event.key === "ArrowLeft" ? RESIZE_STEP : event.key === "ArrowRight" ? -RESIZE_STEP : 0
-    if (!delta) return
-    event.preventDefault()
-    const next = clampPaneWidth(paneWidth() + delta, limit())
-    setWidth(next)
-    try {
-      savePaneWidth(key(), next)
-    } catch {}
-  }
-  const splitEvenly = () => {
-    const next = equalPaneWidth(workspace(), persistentSidebar())
-    setWidth(next)
-    try {
-      savePaneWidth(key(), next)
-    } catch {}
-  }
+  const splitEvenly = () => resize(equalPaneWidth(workspace(), persistentSidebar()))
+  const preset = (value: Parameters<typeof presetPaneWidth>[0]) =>
+    resize(presetPaneWidth(value, workspace(), persistentSidebar()))
 
   return (
     <RightPaneGate>
       <RightPaneFrame
+        id={paneID}
         modal={uiStore.rightPaneOpen() && (narrow() || expanded())}
         mobile={uiStore.rightPaneOpen() && narrow()}
         stacked={false}
@@ -429,24 +412,16 @@ export function RightPane(
         onPane={observePane}
       >
         <>
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize research inspector"
-            aria-valuemin={MIN_PANE_WIDTH}
-            aria-valuemax={limit()}
-            aria-valuenow={paneWidth()}
-            tabindex={narrow() ? -1 : 0}
-            onKeyDown={onHandleKeyDown}
-            on:pointerdown={onHandlePointerDown}
-            on:pointermove={onHandlePointerMove}
-            on:pointerup={onHandlePointerUp}
-            on:pointercancel={onHandlePointerUp}
-            onDblClick={splitEvenly}
-            title="Drag to resize. Double-click to split evenly."
-            aria-hidden={narrow() ? "true" : undefined}
-            hidden={narrow() || expanded()}
-            class="research-inspector__resize"
+          <PaneResizer
+            owner={key()}
+            controls={paneID}
+            disabled={narrow() || expanded() || !uiStore.rightPaneOpen()}
+            width={paneWidth()}
+            preferredWidth={width()}
+            max={limit()}
+            onResize={setWidth}
+            onCommit={(next) => savePaneWidth(key(), next)}
+            onReset={splitEvenly}
           />
           <div class="research-inspector__header">
             <Show
@@ -467,15 +442,36 @@ export function RightPane(
             </Show>
             <div class="research-inspector__controls">
               <Show when={!narrow() && !expanded()}>
-                <button
-                  type="button"
-                  class="research-inspector__control"
-                  onClick={splitEvenly}
-                  title="Split workspace evenly"
-                  aria-label="Split workspace evenly"
-                >
-                  <IconSplit size={16} strokeWidth={1.45} />
-                </button>
+                <DropdownMenu placement="bottom-end">
+                  <DropdownMenu.Trigger
+                    class="research-inspector__control"
+                    title="Workspace layout"
+                    aria-label="Workspace layout"
+                  >
+                    <IconSplit size={16} strokeWidth={1.45} />
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content class="research-inspector__layout-menu">
+                      <DropdownMenu.Item onSelect={splitEvenly}>
+                        <DropdownMenu.ItemLabel>Equal split</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item onSelect={() => preset("conversation")}>
+                        <DropdownMenu.ItemLabel>Wider conversation</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item onSelect={() => preset("inspector")}>
+                        <DropdownMenu.ItemLabel>Wider inspector</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item onSelect={() => preset("default")}>
+                        <DropdownMenu.ItemLabel>Reset width</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item onSelect={() => uiStore.closeContext()}>
+                        <DropdownMenu.ItemLabel>Focus conversation</DropdownMenu.ItemLabel>
+                        <DropdownMenu.ItemDescription>Keep files and tabs open</DropdownMenu.ItemDescription>
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu>
               </Show>
               <Show when={!narrow()}>
                 <button
@@ -484,6 +480,7 @@ export function RightPane(
                   onClick={() => setExpanded((value) => !value)}
                   title={expanded() ? "Restore inspector" : "Open inspector full screen"}
                   aria-label={expanded() ? "Restore inspector" : "Open inspector full screen"}
+                  aria-pressed={expanded()}
                 >
                   <Show when={expanded()} fallback={<IconExpand size={16} strokeWidth={1.55} />}>
                     <IconCollapse size={16} strokeWidth={1.55} />

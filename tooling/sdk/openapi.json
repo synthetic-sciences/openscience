@@ -51542,6 +51542,17 @@
                       },
                       "recommended": {
                         "type": "boolean"
+                      },
+                      "enabled": {
+                        "description": "Selected for on-demand use; permissions remain independently enforced.",
+                        "type": "boolean"
+                      },
+                      "disabled_by": {
+                        "type": "string",
+                        "enum": [
+                          "server",
+                          "project"
+                        ]
                       }
                     },
                     "required": [
@@ -57296,6 +57307,14 @@
                 "type": "array",
                 "items": {
                   "type": "string"
+                }
+              },
+              "disabled": {
+                "description": "Skills excluded from agent discovery and loading. Does not change skill permissions or uninstall files.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             }

@@ -1891,6 +1891,10 @@ export type Config = {
      * Additional paths to skill folders
      */
     paths?: Array<string>
+    /**
+     * Skills excluded from agent discovery and loading. Does not change skill permissions or uninstall files.
+     */
+    disabled?: Array<string>
   }
   watcher?: {
     ignore?: Array<string>
@@ -17536,6 +17540,11 @@ export type AppSkillsResponses = {
     entry?: boolean
     permission_action: PermissionAction
     recommended: boolean
+    /**
+     * Selected for on-demand use; permissions remain independently enforced.
+     */
+    enabled?: boolean
+    disabled_by?: "server" | "project"
   }>
 }
 

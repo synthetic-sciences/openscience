@@ -798,6 +798,12 @@ export namespace Config {
 
   export const Skills = z.object({
     paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
+    disabled: z
+      .array(z.string().min(1))
+      .optional()
+      .describe(
+        "Skills excluded from agent discovery and loading. Does not change skill permissions or uninstall files.",
+      ),
   })
   export type Skills = z.infer<typeof Skills>
 
@@ -1839,7 +1845,11 @@ export namespace Config {
    */
   function canPreserveInstances(config: Info) {
     const refreshOnly = new Set<keyof Info>(["billing", "model", "small_model"])
-    return Object.keys(config).every((key) => refreshOnly.has(key as keyof Info))
+    return Object.keys(config).every(
+      (key) =>
+        refreshOnly.has(key as keyof Info) ||
+        (key === "skills" && Object.keys(config.skills ?? {}).every((field) => field === "disabled")),
+    )
   }
 
   async function patchConfigPath(scope: Scope, target: string[], value: unknown) {
@@ -2038,6 +2048,12 @@ export namespace Config {
         preserveInstances: options.preserveInstances ?? canPreserveInstances(config),
         strict: config.mcp !== undefined,
       })
+
+      if (config.skills?.disabled !== undefined) {
+        // Selection is read from live Config revision, so active work and
+        // terminals survive. Refresh catalogs without an instance teardown.
+        GlobalBus.emit("event", { directory: "global", payload: { type: "skill.updated", properties: {} } })
+      }
 
       return McpSecretStorage.reveal(next)
     }

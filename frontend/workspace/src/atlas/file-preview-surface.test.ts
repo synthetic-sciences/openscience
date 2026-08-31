@@ -14,7 +14,7 @@ describe("file preview surface", () => {
   })
 
   test("keeps documents readable without presentation-scale spacing", () => {
-    expect(css).toContain("width: min(100%, calc(72ch + 48px))")
+    expect(css).toContain("width: min(100%, calc(76ch + 48px))")
     expect(css).toContain("font-family: var(--font-family-sans)")
     expect(css).toContain("font-size: 13px")
     expect(css).toContain("padding: 24px 24px 48px")
@@ -23,9 +23,9 @@ describe("file preview surface", () => {
 
   test("shares document typography with stored artifacts and notebook Markdown", () => {
     expect(textView).toContain('import "../FilePreview.css"')
-    expect(textView).toContain('class="atlas-file-document"')
+    expect(textView).toContain('import { MarkdownDocument } from "../MarkdownDocument"')
     expect(textView).toContain('class="atlas-file-document atlas-file-notebook"')
-    expect(textView).toContain('<Markdown class="atlas-md" text={props.text}')
+    expect(textView).toContain("<MarkdownDocument name={props.name} text={props.text}")
     expect(textView).toContain('<Markdown class="atlas-md" text={cell.source}')
     expect(textView).not.toContain('class="markdown-body"')
   })

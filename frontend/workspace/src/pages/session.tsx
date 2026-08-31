@@ -24,6 +24,7 @@ import { usePlatform } from "@/context/platform"
 import { useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
+import { PaneResizer } from "@/atlas/PaneResizer"
 import { AppHeader } from "@/atlas/AppHeader"
 import { FONT_SANS } from "@/styles/tokens"
 import { uiStore } from "@/atlas/store/ui"
@@ -1588,22 +1589,6 @@ function SessionsSidebar(props: {
     })
   })
 
-  const resize = (event: PointerEvent) => {
-    if (props.collapsed) return
-    event.preventDefault()
-    const origin = event.clientX
-    const width = props.width
-    const controller = new AbortController()
-    const move = (next: PointerEvent) => props.onResize(width + next.clientX - origin, false)
-    const stop = (next: PointerEvent) => {
-      props.onResize(width + next.clientX - origin, true)
-      controller.abort()
-    }
-    window.addEventListener("pointermove", move, { signal: controller.signal })
-    window.addEventListener("pointerup", stop, { once: true, signal: controller.signal })
-    window.addEventListener("pointercancel", stop, { once: true, signal: controller.signal })
-  }
-
   return (
     <aside
       ref={sidebar}
@@ -1693,21 +1678,20 @@ function SessionsSidebar(props: {
       </nav>
 
       <Show when={!props.collapsed && !compact()}>
-        <div
+        <PaneResizer
+          owner={props.dirParam}
+          controls="session-sidebar"
           class="session-sidebar__resize"
-          role="separator"
-          aria-label="Resize sessions sidebar"
-          aria-orientation="vertical"
-          aria-valuemin={SIDEBAR_WIDTH.min}
-          aria-valuemax={SIDEBAR_WIDTH.max}
-          aria-valuenow={props.width}
-          tabindex={0}
-          onPointerDown={resize}
-          onKeyDown={(event) => {
-            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
-            event.preventDefault()
-            props.onResize(props.width + (event.key === "ArrowRight" ? 16 : -16), true)
-          }}
+          label="Resize sessions sidebar"
+          title="Drag or use arrow keys to resize. Shift resizes faster. Home/End sets the minimum/maximum. Double-click to reset sidebar width. Escape cancels a drag."
+          edge="right"
+          disabled={props.collapsed || compact()}
+          min={SIDEBAR_WIDTH.min}
+          max={SIDEBAR_WIDTH.max}
+          width={props.width}
+          onResize={(width) => props.onResize(width, false)}
+          onCommit={(width) => props.onResize(width, true)}
+          onReset={() => props.onResize(SIDEBAR_WIDTH.initial, true)}
         />
       </Show>
 

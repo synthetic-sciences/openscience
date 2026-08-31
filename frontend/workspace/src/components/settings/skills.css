@@ -88,9 +88,7 @@
    search/filter/action grid so it stays one calm toolbar at dialog widths. */
 .settings-skills .skills-workspace__toolbar-controls {
   display: grid;
-  grid-template-columns:
-    minmax(180px, 1fr) minmax(148px, max-content) minmax(168px, max-content)
-    max-content;
+  grid-template-columns: minmax(180px, 1fr) max-content max-content;
 }
 
 .settings-skills .skills-workspace .settings-control {

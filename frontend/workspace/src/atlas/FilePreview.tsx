@@ -60,7 +60,7 @@ import { LANG, extension as ext } from "@/atlas/files/artifact-thumb"
 import { resolveViewer } from "@/atlas/files/viewer-registry"
 import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import { discardFileDraft, recoverFileDraftState, rememberFileDraft } from "@/atlas/file-drafts"
-import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"
+import { MarkdownDocument } from "@/atlas/MarkdownDocument"
 import { rawFileQuery } from "@/utils/project-file"
 import { CodeEditor } from "@/atlas/CodeEditor"
 import { HTML_STYLESHEET_BYTES, htmlStylesheets, loadHtmlStylesheets, rewriteHtmlAssets } from "@/utils/html-assets"
@@ -536,7 +536,6 @@ export function FileView(props: {
       inspection: view.inspection,
     }),
   )
-  const markdown = createMemo(() => splitAlignedMarkdown(view.draft))
 
   createEffect(() => {
     const mode = kind() === "pdf" ? pdfMode() : "inline"
@@ -934,45 +933,13 @@ export function FileView(props: {
 
                 {/* ordinary Markdown opens as a quiet document */}
                 <Match when={kind() === "markdown" && !view.source && !manuscript()}>
-                  <article class="atlas-file-document">
-                    <Show
-                      when={markdown().lead}
-                      fallback={
-                        <Markdown
-                          class="atlas-md"
-                          text={view.draft}
-                          resolveImage={image}
-                          resolveFile={file}
-                          onOpenFile={openFile}
-                        />
-                      }
-                    >
-                      {(lead) => (
-                        <>
-                          <div class="atlas-file-document-lead" data-align={lead().alignment}>
-                            <Markdown
-                              class="atlas-md"
-                              text={lead().text}
-                              resolveImage={image}
-                              resolveFile={file}
-                              onOpenFile={openFile}
-                            />
-                          </div>
-                          <Show when={markdown().rest}>
-                            {(rest) => (
-                              <Markdown
-                                class="atlas-md"
-                                text={rest()}
-                                resolveImage={image}
-                                resolveFile={file}
-                                onOpenFile={openFile}
-                              />
-                            )}
-                          </Show>
-                        </>
-                      )}
-                    </Show>
-                  </article>
+                  <MarkdownDocument
+                    name={name()}
+                    text={view.draft}
+                    resolveImage={image}
+                    resolveFile={file}
+                    onOpenFile={openFile}
+                  />
                 </Match>
 
                 {/* HTML documents render fully sandboxed — no scripts, no same-origin access */}

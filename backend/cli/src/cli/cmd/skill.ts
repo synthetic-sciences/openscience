@@ -142,7 +142,7 @@ const SkillEditCommand = cmd({
       directory: process.cwd(),
       async fn() {
         const name = args.name as string
-        const info = await Skill.get(name)
+        const info = await Skill.get(name, { includeDisabled: true })
         if (!info || !(info.location ?? "").includes("/user-skills/")) {
           UI.error(`No user skill named "${name}". Create one with: openscience skill new ${name}`)
           process.exit(1)
@@ -181,7 +181,7 @@ const SkillValidateCommand = cmd({
         const target = (args.target as string).trim()
         const file = await (async () => {
           if (target.endsWith(".md") || target.includes("/") || target.includes("\\")) return target
-          const info = await Skill.get(target)
+          const info = await Skill.get(target, { includeDisabled: true })
           if (!info) {
             UI.error(`no skill named "${target}"`)
             process.exit(1)
@@ -260,7 +260,7 @@ const SkillListCommand = cmd({
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
-        const all = await Skill.all()
+        const all = await Skill.all({ includeDisabled: true })
         const showAll = args.all as boolean
         const defaults: Skill.Info[] = []
         const local: Skill.Info[] = []

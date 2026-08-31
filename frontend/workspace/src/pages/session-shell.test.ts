@@ -310,7 +310,7 @@ describe("focused workspace shell", () => {
     expect(pane).toContain("paneWidthForWorkspace(width(), workspace(), persistentSidebar())")
     expect(pane).toContain("equalPaneWidth(workspace(), persistentSidebar())")
     expect(pane).toContain("new ResizeObserver(measure)")
-    expect(pane).toContain("hidden={narrow() || expanded()}")
+    expect(pane).toContain("disabled={narrow() || expanded() || !uiStore.rightPaneOpen()}")
   })
 
   test("contains inspector startup suspension inside the pane", () => {

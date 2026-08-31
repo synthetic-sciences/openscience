@@ -13,8 +13,8 @@ const source = await Bun.file(new URL("./ManagedInference.tsx", import.meta.url)
 
 describe("Ace model access", () => {
   test("keeps BYOK and Ace as explicit routing contracts", () => {
-    expect(source.indexOf('title: "BYOK / Subscription"')).toBeGreaterThan(-1)
-    expect(source.indexOf('title: "Ace"')).toBeGreaterThan(source.indexOf('title: "BYOK / Subscription"'))
+    expect(source.indexOf('title: "Keys & subscriptions"')).toBeGreaterThan(-1)
+    expect(source.indexOf('title: "Ace"')).toBeGreaterThan(source.indexOf('title: "Keys & subscriptions"'))
     expect(source).toContain('id="synsci"')
     expect(source).toContain('settingsApi<LoginResult>(sdk.url, fetchFn, "/account/login-browser"')
     expect(source).toContain("platform.openLink(URLS.dashboardBilling)")
@@ -140,7 +140,7 @@ describe("Ace model access", () => {
   test("renders useful account controls immediately and recovers from a stalled Wallet read", async () => {
     expect(source).not.toMatch(/Checking account|Checking balance/)
     expect(source).toContain('"/settings/wallet?summary=true"')
-    expect(source).toContain('return state.account === "error" ? "Account unavailable" : "Ace account"')
+    expect(source).toContain('if (state.account === "error") return "Account unavailable"')
     expect(source).toContain('if (state.account === "error") return "Retry"')
 
     const state = { aborted: false }

@@ -1,6 +1,6 @@
 // Skills — the reusable catalog of expert playbooks agents load on demand.
-// Data + enable/disable + add flows use the real app.skills / app.skill.write /
-// permission.skill APIs. The embedded presentation fits the Settings frame
+// Data + selection + add flows use the real app.skills / app.skill.write /
+// skills.disabled APIs. The embedded presentation fits the Settings frame
 // while preserving a useful catalog heading and clear controls.
 import {
   For,
@@ -14,6 +14,7 @@ import {
   type JSX,
 } from "solid-js"
 import { Switch } from "@synsci/ui/switch"
+import { createStore } from "solid-js/store"
 import { Icon } from "@synsci/ui/icon"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -22,20 +23,20 @@ import { useGlobalSync } from "@/context/global-sync"
 import type { Config } from "@synsci/sdk/v2/client"
 import { installFromGit } from "./skills-settings"
 import {
-  restoreExactSkillPermission,
   setSkillPinned,
   skillCatalogSnapshot,
-  skillPermissionChange,
+  skillAction,
   skillPreferences,
   SKILL_PREFERENCES_EVENT,
 } from "./skill-permissions"
 import "./skills-page.css"
 import { SearchInput, FilterMenu, AddMenu, EmptyState, FormField, FormButton } from "@/components/settings/_shared"
 import { skillIconFor } from "./skill-icon"
+import { selectedSkills, skillCatalogKey, skillDensity, skillSelection, type SkillView } from "./skill-selection"
 
 export { skillIconFor } from "./skill-icon"
 
-interface Skill {
+export interface Skill {
   name: string
   description?: string
   location: string
@@ -45,48 +46,52 @@ interface Skill {
   entry?: boolean
   permission_action?: "allow" | "ask" | "deny"
   recommended?: boolean
+  enabled?: boolean
+  disabled_by?: "server" | "project"
+  catalog_status?: string
 }
 
-const SKILL_CACHE_KEY = "openscience.skills.catalog.v1"
 const INITIAL_SKILL_ROWS = 56
 const SKILL_ROW_BATCH = 56
-let memorySkillCache: Skill[] | undefined
-let skillCatalogRequest: Promise<Skill[]> | undefined
+const memorySkillCache = new Map<string, Skill[]>()
+const skillCatalogRequests = new Map<string, Promise<Skill[]>>()
 
-function cachedSkills() {
-  if (memorySkillCache) return memorySkillCache
+function cachedSkills(key: string) {
+  if (memorySkillCache.has(key)) return memorySkillCache.get(key)!
   if (typeof sessionStorage === "undefined") return []
   try {
-    const parsed = JSON.parse(sessionStorage.getItem(SKILL_CACHE_KEY) ?? "null") as { skills?: Skill[] } | null
+    const parsed = JSON.parse(sessionStorage.getItem(key) ?? "null") as { skills?: Skill[] } | null
     if (!Array.isArray(parsed?.skills)) return []
-    memorySkillCache = parsed.skills
+    memorySkillCache.set(key, parsed.skills)
     return parsed.skills
   } catch {
     return []
   }
 }
 
-function rememberSkills(skills: Skill[]) {
-  memorySkillCache = skills
+function rememberSkills(key: string, skills: Skill[]) {
+  memorySkillCache.set(key, skills)
   if (typeof sessionStorage === "undefined") return
   try {
-    sessionStorage.setItem(SKILL_CACHE_KEY, JSON.stringify({ skills }))
+    sessionStorage.setItem(key, JSON.stringify({ skills }))
   } catch {
     // The in-memory cache still makes later Settings visits immediate.
   }
 }
 
-function loadSkillCatalog(load: () => Promise<Skill[]>) {
-  if (skillCatalogRequest) return skillCatalogRequest
-  skillCatalogRequest = load()
+function loadSkillCatalog(key: string, load: () => Promise<Skill[]>) {
+  const pending = skillCatalogRequests.get(key)
+  if (pending) return pending
+  const request = load()
     .then((skills) => {
-      rememberSkills(skills)
+      if (skillCatalogRequests.get(key) === request) rememberSkills(key, skills)
       return skills
     })
     .finally(() => {
-      skillCatalogRequest = undefined
+      if (skillCatalogRequests.get(key) === request) skillCatalogRequests.delete(key)
     })
-  return skillCatalogRequest
+  skillCatalogRequests.set(key, request)
+  return request
 }
 
 type View = "list" | "scratch" | "github"
@@ -115,20 +120,67 @@ const SOURCE_LABEL: Record<Source, string> = {
   project: "Project",
 }
 
-export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
-  const sdk = useGlobalSDK()
-  const platform = usePlatform()
-  const sync = useGlobalSync()
+export type SkillsPageServices = {
+  server: string
+  load: () => Promise<Skill[]>
+  disabled: () => readonly string[]
+  permission: () => unknown
+  select: (names: string[], enabled: boolean) => Promise<readonly string[]>
+  create: (name: string, content: string) => Promise<unknown>
+  install: (url: string) => Promise<{ installed: unknown[]; rejected: unknown[] }>
+  watch?: (refresh: () => void) => () => void
+}
 
-  const initialSkills = cachedSkills()
-  const [skills, skillsCtl] = createResource(
-    () =>
-      loadSkillCatalog(async () => {
-        const res = await sdk.client.app.skills()
-        return (res.data ?? []) as Skill[]
+export default function SkillsPage(props: { embedded?: boolean; services?: SkillsPageServices }): JSX.Element {
+  const service =
+    props.services ??
+    (() => {
+      const sdk = useGlobalSDK()
+      const platform = usePlatform()
+      const sync = useGlobalSync()
+      type SelectionConfig = Config & { skills?: { paths?: string[]; disabled?: string[] } }
+      return {
+        server: sdk.url,
+        load: async () => (await sdk.client.app.skills()).data ?? [],
+        disabled: () => (sync.data.config as SelectionConfig).skills?.disabled ?? [],
+        permission: () => sync.data.config.permission,
+        select: async (names: string[], enabled: boolean) => {
+          // Re-read before a queued edit so selections made elsewhere survive.
+          const current = (await sdk.client.global.config.get()).data as SelectionConfig
+          const disabled = skillSelection(current.skills?.disabled ?? [], names, enabled)
+          const saved = (await sync.updateConfig({ skills: { disabled } } as SelectionConfig)).data as
+            | SelectionConfig
+            | undefined
+          if (
+            !saved?.skills?.disabled ||
+            JSON.stringify([...saved.skills.disabled].sort()) !== JSON.stringify([...disabled].sort())
+          ) {
+            throw new Error("This server did not confirm the selection. Update the OpenScience server and try again.")
+          }
+          sync.set("config", "skills", { ...sync.data.config.skills, disabled } as SelectionConfig["skills"])
+          return disabled
+        },
+        create: (name: string, content: string) => sdk.client.app.skill.write({ name, content }),
+        install: (url: string) => installFromGit(platform.fetch ?? fetch, sdk.url, url),
+        watch: (refresh: () => void) =>
+          sdk.event.listen((event) => {
+            if (event.details?.type === "skill.updated") refresh()
+          }),
+      } satisfies SkillsPageServices
+    })()
+
+  const cacheKey = skillCatalogKey(service.server)
+  const initialSkills = cachedSkills(cacheKey)
+  const [skills, skillsCtl] = createResource(() => loadSkillCatalog(cacheKey, service.load), {
+    initialValue: initialSkills,
+  })
+  if (service.watch)
+    onCleanup(
+      service.watch(() => {
+        skillCatalogRequests.delete(cacheKey)
+        void skillsCtl.refetch()
       }),
-    { initialValue: initialSkills },
-  )
+    )
 
   const [search, setSearch] = createSignal("")
   const [category, setCategory] = createSignal("all")
@@ -137,6 +189,13 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
   const [busy, setBusy] = createSignal(false)
   const [visibleRows, setVisibleRows] = createSignal(INITIAL_SKILL_ROWS)
   const storage = typeof localStorage === "undefined" ? undefined : localStorage
+  const [preferences, setPreferences] = createStore({
+    view: "all" as SkillView,
+    density: skillDensity(storage),
+    customize: false,
+    feedback: "",
+    changes: {} as Record<string, { enabled: boolean; version: number }>,
+  })
   const initialPreferences = skillPreferences(storage)
   const [pinned, setPinned] = createSignal(initialPreferences.pinned)
   const [recent, setRecent] = createSignal(initialPreferences.recent)
@@ -146,17 +205,25 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
   let workspaceElement: HTMLDivElement | undefined
   let fileInput: HTMLInputElement | undefined
 
-  // Enable/disable is the real `permission.skill` config: a skill an agent can
-  // load is one whose skill-permission isn't "deny" (the skill tool filters the
-  // rest), so this toggle is effective, not cosmetic.
+  // Selection never changes permission or re-enables a security-blocked skill.
   const catalog = createMemo(() =>
-    skillCatalogSnapshot(skills() ?? initialSkills, {
-      permission: sync.data.config.permission,
-      pinned: pinned(),
-      recent: recent(),
-    }),
+    skillCatalogSnapshot(
+      (skills() ?? initialSkills).map((skill) => ({
+        ...skill,
+        enabled:
+          skill.disabled_by === "project"
+            ? false
+            : (preferences.changes[skill.name]?.enabled ?? skill.enabled ?? !service.disabled().includes(skill.name)),
+        permission_action: skill.permission_action ?? skillAction(service.permission(), skill.name),
+      })),
+      {
+        pinned: pinned(),
+        recent: recent(),
+      },
+    ),
   )
-  const enabled = (name: string) => catalog().action(name) !== "deny"
+  const activeNames = createMemo(() => new Set(catalog().allowed.map((skill) => skill.name)))
+  const enabled = (name: string) => activeNames().has(name)
 
   function markPermissionPending(name: string, delta: number) {
     setPermissionPending((current) => {
@@ -168,29 +235,44 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
     })
   }
 
-  function toggle(name: string, next: boolean) {
-    const before = sync.data.config.permission
-    const change = skillPermissionChange(before, name, next)
-    const version = (permissionVersions.get(name) ?? 0) + 1
-    permissionVersions.set(name, version)
-
-    // A click updates this switch in the same frame. Disk writes stay ordered,
-    // but a slow write never disables every other skill in the catalog.
-    sync.set("config", "permission", change.optimistic as Config["permission"])
-    markPermissionPending(name, 1)
+  function toggle(names: string[], next: boolean) {
+    if (!names.length) return
+    const versions = names.map((name) => {
+      const version = (permissionVersions.get(name) ?? 0) + 1
+      permissionVersions.set(name, version)
+      setPreferences("changes", name, { enabled: next, version })
+      markPermissionPending(name, 1)
+      return [name, version] as const
+    })
+    setPreferences("feedback", "Saving selection…")
 
     const persist = async () => {
       try {
-        const latest = skillPermissionChange(sync.data.config.permission, name, next)
-        await sync.updateConfig({ permission: latest.patch } as Config)
+        await service.select(names, next)
+        const changed = new Set(names)
+        skillsCtl.mutate((current) =>
+          (current ?? []).map((skill) =>
+            changed.has(skill.name) && skill.disabled_by !== "project"
+              ? {
+                  ...skill,
+                  enabled: next,
+                  disabled_by: next ? undefined : "server",
+                }
+              : skill,
+          ),
+        )
+        setPreferences(
+          "feedback",
+          `${names.length === 1 ? "Skill" : `${names.length} skills`} ${next ? "activated" : "turned off"}.`,
+        )
       } catch (error) {
-        if (permissionVersions.get(name) === version) {
-          const restored = restoreExactSkillPermission(sync.data.config.permission, before, name)
-          sync.set("config", "permission", restored as Config["permission"])
-        }
-        showToast({ variant: "error", title: "Failed to update skill", description: message(error) })
+        setPreferences("feedback", "Selection could not be saved. Your previous settings are unchanged.")
+        showToast({ variant: "error", title: "Could not save skill selection", description: message(error) })
       } finally {
-        markPermissionPending(name, -1)
+        for (const [name, version] of versions) {
+          if (permissionVersions.get(name) === version) setPreferences("changes", name, undefined!)
+          markPermissionPending(name, -1)
+        }
       }
     }
     permissionWrites = permissionWrites.then(persist, persist)
@@ -198,8 +280,7 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
 
   const all = createMemo(() => catalog().library)
   const enabledCount = createMemo(() => catalog().allowed.length)
-  const shortlistCount = createMemo(() => catalog().shortlist.length)
-  const pinnedNames = createMemo(() => new Set(catalog().pinned.map((skill) => skill.name)))
+  const pinnedNames = createMemo(() => new Set(pinned()))
   const recentNames = createMemo(() => new Set(catalog().recent.map((skill) => skill.name)))
 
   const categories = createMemo(() => {
@@ -231,10 +312,12 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
     const q = search().trim().toLowerCase()
     const cat = category()
     const origin = source()
-    return all()
+    return selectedSkills(all(), { view: preferences.view, pinned: pinnedNames(), active: activeNames() })
       .filter((skill) => origin === "all" || sourceOf(skill) === origin)
       .filter((s) => cat === "all" || (s.category ?? "uncategorized") === cat)
-      .filter((s) => !q || s.name.toLowerCase().includes(q) || (s.description ?? "").toLowerCase().includes(q))
+      .filter(
+        (s) => !q || [s.name, s.description ?? "", ...(s.tags ?? [])].some((value) => value.toLowerCase().includes(q)),
+      )
       .sort((a, b) => a.name.localeCompare(b.name))
   })
 
@@ -268,12 +351,31 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
     if (filtered().length === all().length) return `${all().length} available`
     return `${filtered().length} of ${all().length} shown`
   })
-  const filtersActive = createMemo(() => !!search().trim() || category() !== "all" || source() !== "all")
+  const filtersActive = createMemo(
+    () => !!search().trim() || category() !== "all" || source() !== "all" || preferences.view !== "all",
+  )
+  const activatable = createMemo(() =>
+    filtered()
+      .filter(
+        (skill) =>
+          !enabled(skill.name) &&
+          skill.disabled_by !== "project" &&
+          catalog().action(skill.name) !== "deny" &&
+          skill.catalog_status !== "blocked",
+      )
+      .map((skill) => skill.name),
+  )
+  const deactivatable = createMemo(() =>
+    filtered()
+      .filter((skill) => enabled(skill.name))
+      .map((skill) => skill.name),
+  )
 
   function clearFilters() {
     setSearch("")
     setCategory("all")
     setSource("all")
+    setPreferences("view", "all")
     setVisibleRows(INITIAL_SKILL_ROWS)
   }
 
@@ -311,7 +413,12 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
   }
 
   return (
-    <div ref={workspaceElement} class="skills-workspace" data-layout={props.embedded ? "settings" : "workspace"}>
+    <div
+      ref={workspaceElement}
+      class="skills-workspace"
+      data-layout={props.embedded ? "settings" : "workspace"}
+      data-density={preferences.density}
+    >
       <div class="skills-workspace__header">
         <div class="skills-workspace__heading">
           <div class="skills-workspace__heading-copy">
@@ -319,28 +426,56 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
               when={!props.embedded}
               fallback={
                 <>
-                  <h2>Available skills</h2>
-                  <p>Choose the playbooks OpenScience can use for research work.</p>
+                  <h2>Skills</h2>
+                  <p>Your research toolkit. Choose what agents can load when it is useful.</p>
                 </>
               }
             >
               <>
                 <h1>Skills</h1>
-                <p>Playbooks available to this workspace and its research agents.</p>
+                <p>Your research toolkit. Choose what agents can load when it is useful.</p>
               </>
             </Show>
           </div>
           <div class="skills-workspace__summary" aria-live="polite">
-            <span>Library {visibleSummary()}</span>
-            <span aria-hidden="true">·</span>
-            <span>{enabledCount()} allowed</span>
-            <span aria-hidden="true">·</span>
-            <span>{shortlistCount()} recommended or recent</span>
+            <span>{enabledCount()} active</span>
+            <span aria-hidden="true">/</span>
+            <span>{all().length} in library</span>
           </div>
         </div>
 
         <Show when={view() === "list"}>
           <div class="skills-workspace__toolbar">
+            <div class="skills-workspace__views" role="group" aria-label="Skill library views">
+              <For
+                each={
+                  [
+                    { id: "all", label: "All skills", count: all().length },
+                    { id: "active", label: "Active", count: enabledCount() },
+                    {
+                      id: "pinned",
+                      label: "Pinned",
+                      count: all().filter((skill) => pinnedNames().has(skill.name)).length,
+                    },
+                    { id: "off", label: "Off", count: all().length - enabledCount() },
+                  ] as const
+                }
+              >
+                {(tab) => (
+                  <button
+                    type="button"
+                    aria-pressed={preferences.view === tab.id}
+                    onClick={() => {
+                      setPreferences("view", tab.id)
+                      setVisibleRows(INITIAL_SKILL_ROWS)
+                    }}
+                  >
+                    {tab.label}
+                    <span>{tab.count}</span>
+                  </button>
+                )}
+              </For>
+            </div>
             <div class="settings-toolbar skills-workspace__toolbar-controls">
               <SearchInput
                 value={search()}
@@ -351,24 +486,14 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
                 placeholder="Search skills"
                 ariaLabel="Search skills"
               />
-              <FilterMenu
-                options={sources()}
-                value={source()}
-                onSelect={(value) => {
-                  setSource(value as SourceView)
-                  setVisibleRows(INITIAL_SKILL_ROWS)
-                }}
-                ariaLabel="Filter skills by source"
-              />
-              <FilterMenu
-                options={categories()}
-                value={category()}
-                onSelect={(value) => {
-                  setCategory(value)
-                  setVisibleRows(INITIAL_SKILL_ROWS)
-                }}
-                ariaLabel="Filter skills by category"
-              />
+              <button
+                type="button"
+                class="settings-control"
+                aria-expanded={preferences.customize}
+                onClick={() => setPreferences("customize", !preferences.customize)}
+              >
+                <Icon name="settings-gear" size="small" /> Filters & view
+              </button>
               <AddMenu
                 label="Add skill"
                 items={[
@@ -393,6 +518,76 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
                 ]}
               />
             </div>
+            <Show when={preferences.customize}>
+              <div class="skills-workspace__customize">
+                <FilterMenu
+                  options={sources()}
+                  value={source()}
+                  onSelect={(value) => {
+                    setSource(value as SourceView)
+                    setVisibleRows(INITIAL_SKILL_ROWS)
+                  }}
+                  ariaLabel="Filter skills by source"
+                />
+                <FilterMenu
+                  options={categories()}
+                  value={category()}
+                  onSelect={(value) => {
+                    setCategory(value)
+                    setVisibleRows(INITIAL_SKILL_ROWS)
+                  }}
+                  ariaLabel="Filter skills by category"
+                />
+                <label class="skills-workspace__density">
+                  Rows
+                  <select
+                    aria-label="Skill row density"
+                    value={preferences.density}
+                    onChange={(event) => {
+                      const density = event.currentTarget.value === "compact" ? "compact" : "comfortable"
+                      setPreferences("density", density)
+                      try {
+                        storage?.setItem("openscience.skills.density.v1", density)
+                      } catch {
+                        /* This view still works without browser storage. */
+                      }
+                    }}
+                  >
+                    <option value="comfortable">Comfortable</option>
+                    <option value="compact">Compact</option>
+                  </select>
+                </label>
+                <div class="skills-workspace__bulk">
+                  <span>{visibleSummary()}</span>
+                  <button
+                    type="button"
+                    disabled={!activatable().length || skills.loading || !!skills.error}
+                    onClick={() => toggle(activatable(), true)}
+                  >
+                    Activate {activatable().length} shown
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!deactivatable().length || skills.loading || !!skills.error}
+                    onClick={() => toggle(deactivatable(), false)}
+                  >
+                    Turn off {deactivatable().length} shown
+                  </button>
+                  <button type="button" onClick={clearFilters}>
+                    Reset filters
+                  </button>
+                </div>
+              </div>
+            </Show>
+            <p class="skills-workspace__scope">
+              Active means available on demand, not loaded into every chat. Selection applies to this OpenScience
+              server; project permissions still apply. Pin skills for quicker access in the / menu.
+            </p>
+            <Show when={preferences.feedback}>
+              <p class="skills-workspace__feedback" role="status">
+                {preferences.feedback}
+              </p>
+            </Show>
           </div>
         </Show>
       </div>
@@ -419,7 +614,7 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
                 setBusy(true)
                 try {
                   const content = `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`
-                  await sdk.client.app.skill.write({ name, content })
+                  await service.create(name, content)
                   await skillsCtl.refetch()
                   showToast({ variant: "success", title: `Skill "${name}" created` })
                   setView("list")
@@ -439,7 +634,7 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
               onInstall={async (url) => {
                 setBusy(true)
                 try {
-                  const res = await installFromGit(platform.fetch ?? fetch, sdk.url, url)
+                  const res = await service.install(url)
                   await skillsCtl.refetch()
                   const n = res.installed.length
                   const r = res.rejected.length
@@ -459,6 +654,14 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
           </Show>
 
           <Show when={view() === "list"}>
+            <Show when={skills.error && all().length > 0}>
+              <div class="skills-workspace__catalog-warning" role="alert">
+                <span>The saved catalog is shown. Reconnect before changing active skills.</span>
+                <button type="button" onClick={() => void skillsCtl.refetch()}>
+                  Retry
+                </button>
+              </div>
+            </Show>
             <Show
               when={!skills.loading || all().length > 0}
               fallback={<CatalogState icon="refresh" title="Loading skills" hint="Fetching the latest catalog…" />}
@@ -515,7 +718,9 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
                                   pinned={pinnedNames().has(skill.name)}
                                   recent={recentNames().has(skill.name)}
                                   saving={Boolean(permissionPending()[skill.name])}
-                                  onToggle={(v) => toggle(skill.name, v)}
+                                  action={catalog().action(skill.name)}
+                                  disabled={skills.loading || !!skills.error}
+                                  onToggle={(v) => toggle([skill.name], v)}
                                   onPin={(value) => {
                                     setSkillPinned(skill.name, value, storage)
                                     setPinned(skillPreferences(storage).pinned)
@@ -550,7 +755,7 @@ export default function SkillsPage(props: { embedded?: boolean }): JSX.Element {
       if (!frontmatterName(content)) {
         throw new Error("The SKILL.md must start with a frontmatter block containing `name:` and `description:`.")
       }
-      await sdk.client.app.skill.write({ name, content })
+      await service.create(name, content)
       await skillsCtl.refetch()
       showToast({ variant: "success", title: `Skill "${name}" uploaded` })
     } catch (err) {
@@ -567,11 +772,32 @@ export function SkillStateBadges(props: {
   recent?: boolean
   recommended?: boolean
   loaded?: boolean
+  action?: "allow" | "ask" | "deny"
+  blocked?: boolean
+  projectDisabled?: boolean
 }): JSX.Element {
   return (
     <div class="skills-workspace__tags" aria-label="Skill states">
-      <span class="settings-chip" data-state={props.allowed ? "allowed" : "library"}>
-        {props.allowed ? "Allowed" : "Library only"}
+      <span
+        class="settings-chip"
+        data-state={props.allowed ? "allowed" : "library"}
+        title={
+          props.action === "ask"
+            ? "The agent requests permission before loading this skill."
+            : props.action === "deny"
+              ? "Disabled by a permission rule. Selection does not override policy."
+              : undefined
+        }
+      >
+        {props.projectDisabled
+          ? "Off in this project"
+          : props.blocked || props.action === "deny"
+            ? "Blocked by policy"
+            : props.allowed
+              ? props.action === "ask"
+                ? "Ask first"
+                : "Active"
+              : "Off"}
       </span>
       <Show when={props.loaded}>
         <span class="settings-chip" data-state="loaded">
@@ -603,6 +829,8 @@ function SkillRow(props: {
   pinned: boolean
   recent: boolean
   saving: boolean
+  action: "allow" | "ask" | "deny"
+  disabled: boolean
   onToggle: (v: boolean) => void
   onPin: (v: boolean) => void
 }): JSX.Element {
@@ -630,28 +858,27 @@ function SkillRow(props: {
       </div>
 
       <div class="skills-workspace__details">
-        <p data-empty={!props.skill.description}>{props.skill.description || "No description provided."}</p>
-        <Show
-          when={
-            (props.skill.tags ?? []).length > 0 || props.on || props.pinned || props.recent || props.skill.recommended
-          }
-        >
-          <div class="skills-workspace__badges">
-            <SkillStateBadges
-              allowed={props.on}
-              pinned={props.pinned}
-              recent={props.recent}
-              recommended={props.skill.recommended}
-            />
-            <Show when={(props.skill.tags ?? []).length > 0}>
-              <div class="skills-workspace__tags" aria-label="Skill tags">
-                <For each={(props.skill.tags ?? []).slice(0, 2)}>
-                  {(tag) => <span class="settings-chip">{displayLabel(tag)}</span>}
-                </For>
-              </div>
-            </Show>
-          </div>
-        </Show>
+        <p title={props.skill.description} data-empty={!props.skill.description}>
+          {props.skill.description || "No description provided."}
+        </p>
+        <div class="skills-workspace__badges">
+          <SkillStateBadges
+            allowed={props.on}
+            pinned={props.pinned}
+            recent={props.recent}
+            recommended={props.skill.recommended}
+            action={props.action}
+            blocked={props.skill.catalog_status === "blocked"}
+            projectDisabled={props.skill.disabled_by === "project"}
+          />
+          <Show when={(props.skill.tags ?? []).length > 0}>
+            <div class="skills-workspace__tags" aria-label="Skill tags">
+              <For each={(props.skill.tags ?? []).slice(0, 2)}>
+                {(tag) => <span class="settings-chip">{displayLabel(tag)}</span>}
+              </For>
+            </div>
+          </Show>
+        </div>
       </div>
       <div class="skills-workspace__toggle">
         <button
@@ -665,8 +892,19 @@ function SkillRow(props: {
         >
           <Icon name={props.pinned ? "pin-filled" : "pin"} size="small" />
         </button>
-        <Switch data-action="skill-toggle" checked={props.on} onChange={props.onToggle} hideLabel>
-          {props.on ? `Remove ${props.skill.name} permission` : `Allow ${props.skill.name}`}
+        <Switch
+          data-action="skill-toggle"
+          checked={props.on}
+          onChange={props.onToggle}
+          disabled={
+            props.disabled ||
+            props.action === "deny" ||
+            props.skill.catalog_status === "blocked" ||
+            props.skill.disabled_by === "project"
+          }
+          hideLabel
+        >
+          {props.on ? `Turn off ${props.skill.name}` : `Activate ${props.skill.name}`}
         </Switch>
       </div>
     </li>

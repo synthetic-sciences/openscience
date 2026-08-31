@@ -1,5 +1,4 @@
 export const MIN_PANE_WIDTH = 320
-export const MAX_PANE_WIDTH = 720
 export const DEFAULT_PANE_WIDTH = 400
 export const INLINE_PANE_BREAKPOINT = 1100
 export const INLINE_PANE_CHROME = 568
@@ -14,13 +13,16 @@ export function legacyPaneWidthKey(project: string, session = "new") {
 }
 
 export function maxPaneWidthForWorkspace(workspace: number, persistentSidebar = 0) {
-  if (!Number.isFinite(workspace)) return MAX_PANE_WIDTH
+  if (!Number.isFinite(workspace)) return DEFAULT_PANE_WIDTH
   const sidebar = Number.isFinite(persistentSidebar) ? Math.max(0, persistentSidebar) : 0
-  return Math.max(MIN_PANE_WIDTH, Math.min(MAX_PANE_WIDTH, workspace - sidebar - MIN_CONVERSATION_WIDTH))
+  return Math.max(MIN_PANE_WIDTH, workspace - sidebar - MIN_CONVERSATION_WIDTH)
 }
 
-export function clampPaneWidth(width: number, max = MAX_PANE_WIDTH) {
-  return Math.max(MIN_PANE_WIDTH, Math.min(max, width))
+export function clampPaneWidth(width: number, max = Number.POSITIVE_INFINITY, min = MIN_PANE_WIDTH) {
+  const value = Number.isFinite(width) ? width : DEFAULT_PANE_WIDTH
+  const floor = Number.isFinite(min) ? Math.max(0, min) : MIN_PANE_WIDTH
+  const ceiling = Number.isFinite(max) ? Math.max(floor, max) : Number.POSITIVE_INFINITY
+  return Math.max(floor, Math.min(ceiling, value))
 }
 
 export function paneWidthForViewport(width: number, viewport: number) {
@@ -33,6 +35,16 @@ export function paneWidthForWorkspace(width: number, workspace: number, persiste
 
 export function equalPaneWidth(workspace: number, persistentSidebar = 0) {
   return paneWidthForWorkspace((workspace - persistentSidebar) / 2, workspace, persistentSidebar)
+}
+
+export function presetPaneWidth(
+  preset: "conversation" | "inspector" | "equal" | "default",
+  workspace: number,
+  sidebar = 0,
+) {
+  if (preset === "default") return paneWidthForWorkspace(DEFAULT_PANE_WIDTH, workspace, sidebar)
+  if (preset === "equal") return equalPaneWidth(workspace, sidebar)
+  return paneWidthForWorkspace((workspace - sidebar) * (preset === "inspector" ? 0.7 : 0.3), workspace, sidebar)
 }
 
 export function readPaneWidth(

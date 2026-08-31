@@ -1,12 +1,12 @@
 import { Button } from "@synsci/ui/button"
-import { For, Show, createMemo, onCleanup, onMount } from "solid-js"
+import { For, Show, createMemo, createUniqueId, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { URLS } from "@/config/urls"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
-import { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
+import { formatCreditBalance } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
 import { createAccountRecovery } from "./account-recovery"
 
@@ -34,6 +34,15 @@ type Wallet = {
   }
 }
 type AccountStatus = "idle" | "loading" | "ready" | "error"
+type Services = {
+  sdk: Pick<ReturnType<typeof useGlobalSDK>, "url">
+  sync: {
+    data: { config: { billing?: { llm?: Mode | null } } }
+    refreshProviders: () => Promise<void>
+    onProvidersRefreshed: (callback: () => void) => () => void
+  }
+  platform: Pick<ReturnType<typeof usePlatform>, "fetch" | "openLink">
+}
 
 const ACCOUNT_TIMEOUT_MS = 6_000
 
@@ -51,13 +60,13 @@ export function aceContractLabel(contract: NonNullable<Wallet["aceContract"]>) {
 const MODES: { value: Mode; title: string; body: string }[] = [
   {
     value: "byok",
-    title: "BYOK / Subscription",
-    body: "Use connected provider keys or models included with an eligible subscription.",
+    title: "Keys & subscriptions",
+    body: "Uses your connected provider keys or eligible subscriptions.",
   },
   {
     value: "managed",
     title: "Ace",
-    body: "Use supported models with your purchased Wallet balance, without configuring provider keys.",
+    body: "Uses your purchased Wallet for supported models.",
   },
 ]
 
@@ -80,11 +89,12 @@ const accountWallet = (signedIn: boolean): Wallet => ({
   aceEnabled: false,
 })
 
-export function ManagedInference(props: { onError?: (error: string | undefined) => void }) {
-  const sdk = useGlobalSDK()
-  const globalSync = useGlobalSync()
-  const platform = usePlatform()
+export function ManagedInference(props: { onError?: (error: string | undefined) => void; services?: Services }) {
+  const sdk = props.services?.sdk ?? useGlobalSDK()
+  const globalSync = props.services?.sync ?? useGlobalSync()
+  const platform = props.services?.platform ?? usePlatform()
   const fetchFn = platform.fetch ?? fetch
+  const description = `managed-inference-${createUniqueId()}`
   const [state, setState] = createStore<{
     wallet?: Wallet
     mode: Mode
@@ -168,7 +178,12 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   }
 
   const update = (value: Mode) => {
-    if (state.saving || (value === "managed" && (state.account !== "ready" || !canSelectManaged(state.wallet)))) return
+    if (
+      value === state.mode ||
+      state.saving ||
+      (value === "managed" && (state.account !== "ready" || !canSelectManaged(state.wallet)))
+    )
+      return
     const previous = state.mode
     setState("mode", value)
     setState("saving", true)
@@ -228,19 +243,22 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
 
   const managedUnavailable = () => state.wallet !== undefined && !canSelectManaged(state.wallet)
   const aceLabel = () => {
-    if (!state.wallet) return state.account === "error" ? "Account unavailable" : "Ace account"
-    if (!state.wallet.signedIn) return "Account required"
-    if (!state.wallet.managedSupported) return "Ace unavailable"
-    if (state.wallet.aceEnabled) return "Ace on"
+    if (state.account === "error") return "Account unavailable"
+    if (!state.wallet) return "Account"
+    if (!state.wallet.signedIn) return "Sign in required"
+    if (!state.wallet.managedSupported) return "Unavailable"
+    if (state.wallet.aceEnabled) return "On"
     if (state.wallet.managedUnlocked) return "Wallet funded"
     if (state.wallet.balanceUsd === null) return "Account connected"
     return "No purchased balance"
   }
   const balanceLabel = () => {
-    if (state.wallet && !state.wallet.signedIn) return walletBalanceLabel(state.wallet)
-    if (!state.wallet || (state.account === "loading" && state.wallet.balanceUsd === null)) return "Purchased Wallet"
-    if (state.wallet.balanceRedacted) return "Balance private to workspace admins"
-    return walletBalanceLabel(state.wallet)
+    if (state.wallet && !state.wallet.signedIn) return "Sign in to view"
+    if (!state.wallet || (state.account === "loading" && state.wallet.balanceUsd === null))
+      return state.account === "error" ? "Unavailable" : "—"
+    if (state.wallet.balanceRedacted) return "Private to admins"
+    if (state.wallet.balanceUsd === null) return "Unavailable"
+    return formatCreditBalance(state.wallet.balanceUsd)
   }
   const accountAction = () => {
     if (state.wallet && !state.wallet.signedIn) return state.signingIn ? "Waiting for browser…" : "Sign in"
@@ -274,56 +292,30 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   return (
     <div class="models-inference">
       <div class="models-routing" aria-label="Model access">
-        <div class="models-routing__identity">
-          <ProviderLogo id="synsci" label="Ace" />
-          <div class="models-routing__identity-copy">
-            <strong>Ace</strong>
-            <span>Managed models, one purchased Wallet.</span>
-          </div>
-        </div>
-        <div
-          class="models-routing__options"
-          role="group"
-          aria-label="Model access mode"
-          aria-describedby="managed-inference-description"
-        >
-          <For each={MODES}>
-            {(option) => (
-              <button
-                type="button"
-                aria-pressed={state.mode === option.value}
-                aria-busy={state.saving}
-                disabled={
-                  state.saving ||
-                  (option.value === "managed" && (state.account !== "ready" || !canSelectManaged(state.wallet)))
-                }
-                class="models-routing__option"
-                title={
-                  option.value === "managed" && managedUnavailable()
-                    ? "Sign in, add purchased Wallet funds, or turn on Ace to use managed models"
-                    : undefined
-                }
-                onClick={() => update(option.value)}
-              >
-                <span class="models-routing__option-label">
-                  <span>{option.title}</span>
+        <div class="models-routing__overview">
+          <div class="models-routing__identity">
+            <ProviderLogo id="synsci" label="Ace" />
+            <div class="models-routing__identity-copy">
+              <div class="models-routing__heading">
+                <strong>Ace</strong>
+                <span
+                  class="models-routing__status"
+                  data-active={state.account === "ready" && state.wallet?.aceEnabled ? "true" : undefined}
+                  role="status"
+                >
+                  {aceLabel()}
                 </span>
-              </button>
-            )}
-          </For>
-        </div>
-        <div class="models-routing__details">
-          <p id="managed-inference-description" class="models-routing__description" aria-live="polite">
-            {state.saving ? `Saving ${selected().title}…` : selected().body}
-            <Show when={!state.saving && state.refreshing}>
-              <span class="models-routing__sync"> Updating model availability…</span>
-            </Show>
-          </p>
+              </div>
+              <span>Managed models, no provider keys.</span>
+            </div>
+          </div>
           <div class="models-routing__account">
-            <span class="models-routing__account-state">{aceLabel()}</span>
-            <span aria-live="polite" class="models-account-summary__balance">
-              {balanceLabel()}
-            </span>
+            <dl class="models-routing__wallet">
+              <dt>Purchased Wallet</dt>
+              <dd aria-live="polite" class="models-account-summary__balance">
+                {balanceLabel()}
+              </dd>
+            </dl>
             <Button
               class="settings-panel-action models-secondary-action"
               size="small"
@@ -335,11 +327,70 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
             </Button>
           </div>
         </div>
+        <div class="models-routing__preference">
+          <div class="models-routing__preference-copy">
+            <strong>Preferred model access</strong>
+            <p id={description} class="models-routing__description" aria-live="polite">
+              {state.saving ? `Saving ${selected().title}…` : selected().body}
+              <Show when={!state.saving && state.refreshing}>
+                <span class="models-routing__sync"> Updating model availability…</span>
+              </Show>
+            </p>
+          </div>
+          <div
+            class="models-routing__options"
+            role="group"
+            aria-label="Model access mode"
+            aria-describedby={description}
+          >
+            <For each={MODES}>
+              {(option) => (
+                <button
+                  type="button"
+                  aria-pressed={state.mode === option.value}
+                  aria-busy={state.saving}
+                  disabled={
+                    state.saving ||
+                    (option.value === "managed" && (state.account !== "ready" || !canSelectManaged(state.wallet)))
+                  }
+                  class="models-routing__option"
+                  title={
+                    option.value === "managed" && managedUnavailable()
+                      ? "Sign in, add purchased Wallet funds, or turn on Ace to use managed models"
+                      : undefined
+                  }
+                  onClick={() => update(option.value)}
+                >
+                  {option.title}
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
       </div>
 
       <Show when={state.wallet?.aceContract}>
         {(contract) => (
-          <p class="settings-inline-note text-12-regular text-text-weak">{aceContractLabel(contract())}</p>
+          <details
+            class="models-routing__terms"
+            open={state.wallet?.signedIn && !state.wallet.aceEnabled && !state.wallet.managedUnlocked}
+          >
+            <summary>
+              <Show
+                when={state.wallet?.aceEnabled && contract().reloadControlledByAce}
+                fallback={<span>Authorization & reload details</span>}
+              >
+                <span>Auto-reload on</span>
+                <span class="models-routing__terms-value">
+                  ${contract().reloadAmountUsd} below ${contract().reloadThresholdUsd}
+                </span>
+              </Show>
+            </summary>
+            <p>{aceContractLabel(contract())}</p>
+            <Show when={state.wallet?.aceEnabled}>
+              <p>Changing preferred model access does not turn off Ace or its auto-reload. Manage these in Wallet.</p>
+            </Show>
+          </details>
         )}
       </Show>
 

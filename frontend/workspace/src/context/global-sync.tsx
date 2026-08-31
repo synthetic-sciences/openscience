@@ -100,6 +100,9 @@ export interface Skill {
   entry?: boolean
   permission_action?: "allow" | "ask" | "deny"
   recommended?: boolean
+  enabled?: boolean
+  disabled_by?: "server" | "project"
+  catalog_status?: string
 }
 
 type State = {
@@ -901,6 +904,7 @@ function createGlobalSync() {
     }
   }
 
+  let skillRefreshVersion = 0
   const unsub = globalSDK.event.listen((e) => {
     const directory = e.name
     const event = e.details
@@ -923,6 +927,24 @@ function createGlobalSync() {
           // into — unlike the settings panels, which await their own call and
           // report the failure there.
           void refreshProviders().catch((error) => console.error("Failed to refresh providers", { error }))
+          return
+        }
+        case "skill.updated": {
+          const version = ++skillRefreshVersion
+          void globalSDK.client.global.config
+            .get()
+            .then((response) => {
+              if (version === skillRefreshVersion && response.data) setGlobalStore("config", reconcile(response.data))
+            })
+            .catch(() => {})
+          for (const [directory, [store, setStore]] of Object.entries(children)) {
+            void sdkFor(directory, store.project || undefined)
+              .app.skills()
+              .then((response) => {
+                if (version === skillRefreshVersion) setStore("skill", response.data ?? [])
+              })
+              .catch(() => {})
+          }
           return
         }
         case "project.updated": {

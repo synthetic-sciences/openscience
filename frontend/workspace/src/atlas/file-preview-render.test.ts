@@ -47,12 +47,14 @@ describe("file preview markdown images", () => {
 
   test("README alignment wrappers keep their inner Markdown parsed and sanitized", async () => {
     const preview = await read("./FilePreview.tsx")
+    const document = await read("./MarkdownDocument.tsx")
     const css = await read("./FilePreview.css")
 
-    expect(preview).toContain('import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"')
-    expect(preview).toContain("data-align={lead().alignment}")
-    expect(preview).toContain("text={lead().text}")
-    expect(preview).toContain("text={rest()}")
+    expect(preview).toContain("<MarkdownDocument")
+    expect(document).toContain('import { splitAlignedMarkdown } from "./FilePreviewMarkdown"')
+    expect(document).toContain("data-align={lead().alignment}")
+    expect(document).toContain("content(lead().text)")
+    expect(document).toContain("content(rest())")
     expect(css).toContain('.atlas-file-document-lead[data-align="center"]')
     expect(css).toContain("p:has(a > img)")
   })

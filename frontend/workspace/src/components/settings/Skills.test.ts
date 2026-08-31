@@ -56,7 +56,7 @@ test("embedded skills catalog uses a useful sentence-case heading and live actio
   expect(wrapper).toContain('import "./skills.css"')
   expect(catalog).toContain('data-layout={props.embedded ? "settings" : "workspace"}')
   expect(catalog).toContain("when={!props.embedded}")
-  expect(catalog).toContain("<h2>Available skills</h2>")
+  expect(catalog).toContain("<h2>Skills</h2>")
   expect(catalog).toContain("sdk.client.app.skills()")
   expect(catalog).toContain("sdk.client.app.skill.write")
   expect(catalog).toContain("sync.updateConfig")
@@ -90,7 +90,7 @@ test("embedded skills catalog uses a useful sentence-case heading and live actio
   expect(styles).toMatch(/\.settings-skills \.skills-workspace__header\s*\{[^}]*border-bottom: 0/s)
   expect(styles).toContain("@container skills-workspace (max-width: 960px)")
   expect(styles).toMatch(
-    /\.settings-skills \.skills-workspace__toolbar-controls\s*\{[^}]*display: grid;[^}]*minmax\(148px, max-content\)[^}]*minmax\(168px, max-content\)/s,
+    /\.settings-skills \.skills-workspace__toolbar-controls\s*\{[^}]*display: grid;[^}]*minmax\(180px, 1fr\) max-content max-content/s,
   )
   expect(styles).toMatch(/\.settings-skills \.skills-workspace \.settings-control\s*\{[^}]*height: 32px/s)
   expect(styles).not.toContain('[data-slot="switch-control"]')

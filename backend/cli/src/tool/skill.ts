@@ -79,8 +79,8 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
   // execute(). Avoid evaluating every catalog entry here: this initializer is
   // rebuilt for every model step, and a 311-entry permission scan created
   // thousands of redundant log records during long research runs.
-  const accessibleSkills = (await Skill.catalog(ctx?.agent?.permission ?? [])).allowed
-  const accessibleByName = new Map(accessibleSkills.map((skill) => [skill.name, skill]))
+  const ctxPermission = ctx?.agent?.permission ?? []
+  const accessibleSkills = (await Skill.catalog(ctxPermission)).allowed
 
   // Group skills by category for the description
   const categories: Record<string, Skill.Info[]> = {}
@@ -129,6 +129,10 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
+      // Selection can change after the model saw this tool's description.
+      // Re-check before search and direct loading, not only at initialization.
+      const accessibleSkills = (await Skill.catalog(ctxPermission)).allowed
+      const accessibleByName = new Map(accessibleSkills.map((skill) => [skill.name, skill]))
       if (params.query && !params.name) {
         const matched = searchSkills(params.query, accessibleSkills)
         if (matched.length === 0) {
@@ -202,6 +206,10 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         always: [skill.name],
         metadata: {},
       })
+
+      if (!(await Skill.catalog(ctxPermission)).allowed.some((current) => current.name === skill.name)) {
+        throw new Error(`Skill "${skill.name}" is no longer active. Enable it in Skills before loading it.`)
+      }
 
       const dir = path.dirname(skill.location)
       // A skill's references and scripts are part of the instructions the user

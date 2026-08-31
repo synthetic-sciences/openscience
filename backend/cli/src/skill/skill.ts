@@ -70,6 +70,8 @@ export namespace Skill {
   export const CatalogEntry = Info.extend({
     permission_action: PermissionNext.Action,
     recommended: z.boolean(),
+    enabled: z.boolean().optional().describe("Selected for on-demand use; permissions remain independently enforced."),
+    disabled_by: z.enum(["server", "project"]).optional(),
   })
   export type CatalogEntry = z.infer<typeof CatalogEntry>
   export type CatalogSnapshot = {
@@ -545,15 +547,32 @@ export namespace Skill {
     return true
   }
 
-  export async function get(name: string) {
+  export async function get(name: string, options: { includeDisabled?: boolean } = {}) {
     if (isRetiredProductSkillName(name)) return undefined
+    if (!options.includeDisabled && (await selection()).has(name)) return undefined
     return state().then((x) => {
       const skill = x[name]
       return skill?.catalog_status === "blocked" ? undefined : skill
     })
   }
 
-  export async function all() {
+  export async function all(options: { includeDisabled?: boolean } = {}) {
+    if (options.includeDisabled) return entries()
+    const disabled = await selection()
+    return (await entries()).filter((skill) => !disabled.has(skill.name))
+  }
+
+  async function selection() {
+    const [global, project] = await Promise.all([Config.getGlobal(), Config.get()])
+    // A project's selection can narrow the server default, not silently turn
+    // a skill back on after the user disabled it for this installation.
+    return new Map([
+      ...(project.skills?.disabled ?? []).map((name) => [name, "project"] as const),
+      ...(global.skills?.disabled ?? []).map((name) => [name, "server"] as const),
+    ])
+  }
+
+  async function entries() {
     const current = await state()
     const cached = lists.get(current)
     if (cached) return cached
@@ -568,8 +587,9 @@ export namespace Skill {
    * discovery surface. Skill contents stay lazy; this snapshot contains only
    * the already-indexed frontmatter metadata. */
   export async function catalog(permission: PermissionNext.Ruleset): Promise<CatalogSnapshot> {
-    const current = await all()
-    const key = JSON.stringify(permission)
+    const current = await entries()
+    const disabled = await selection()
+    const key = JSON.stringify([permission, [...disabled].sort()])
     const cached = catalogs.get(current)?.get(key)
     if (cached) return cached
 
@@ -577,15 +597,17 @@ export namespace Skill {
       ...skill,
       permission_action: PermissionNext.evaluate("skill", skill.name, permission).action,
       recommended: recommended.has(skill.name),
+      enabled: !disabled.has(skill.name),
+      disabled_by: disabled.get(skill.name),
     }))
     const snapshot = {
       library,
-      allowed: library.filter((skill) => skill.permission_action !== "deny"),
+      allowed: library.filter((skill) => skill.enabled && skill.permission_action !== "deny"),
     }
-    const entries = catalogs.get(current) ?? new Map<string, CatalogSnapshot>()
-    entries.set(key, snapshot)
-    if (entries.size > 32) entries.delete(entries.keys().next().value!)
-    catalogs.set(current, entries)
+    const snapshots = catalogs.get(current) ?? new Map<string, CatalogSnapshot>()
+    snapshots.set(key, snapshot)
+    if (snapshots.size > 32) snapshots.delete(snapshots.keys().next().value!)
+    catalogs.set(current, snapshots)
     return snapshot
   }
 }

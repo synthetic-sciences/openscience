@@ -77,8 +77,23 @@
 
 .research-inspector__resize:hover::before,
 .research-inspector__resize:focus-visible::before,
-.research-inspector__resize:active::before {
+.research-inspector__resize:active::before,
+.research-inspector__resize[data-dragging="true"]::before {
   background: var(--color-border-strong);
+}
+
+.research-inspector__resize[hidden] {
+  display: none;
+}
+
+.research-inspector__layout-menu {
+  min-width: 216px;
+}
+
+.research-inspector__layout-menu [data-slot="dropdown-menu-item"]:has([data-slot="dropdown-menu-item-description"]) {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .research-inspector__resize:focus-visible {

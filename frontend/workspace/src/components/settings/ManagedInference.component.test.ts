@@ -1,0 +1,235 @@
+import { afterAll, afterEach, describe, expect, test } from "bun:test"
+import { once } from "node:events"
+import { createServer as createHTTPServer } from "node:http"
+import { fileURLToPath } from "node:url"
+import { createServer } from "vite"
+import solid from "vite-plugin-solid"
+import type { ManagedInference } from "./ManagedInference"
+
+const vite = await createServer({
+  root: fileURLToPath(new URL("../../..", import.meta.url)),
+  mode: "production",
+  logLevel: "silent",
+  plugins: [solid({ ssr: false, dev: false })],
+  server: { middlewareMode: true },
+  appType: "custom",
+  resolve: { conditions: ["browser", "production"], dedupe: ["solid-js", "solid-js/web"] },
+  ssr: { noExternal: true, resolve: { conditions: ["browser", "production"] } },
+})
+const web = (await vite.ssrLoadModule("solid-js/web")) as typeof import("solid-js/web")
+const subject = (await vite.ssrLoadModule(
+  "/src/components/settings/ManagedInference.tsx",
+)) as typeof import("./ManagedInference")
+const cleanups: Array<() => void> = []
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+const ready = async (check: () => boolean) => {
+  for (let i = 0; i < 100 && !check(); i++) await settle()
+  expect(check()).toBe(true)
+}
+const contract = {
+  activationAuthorizationUsd: 0,
+  reloadThresholdUsd: 5,
+  reloadAmountUsd: 20,
+  serviceMarginPercent: 2,
+  processingFeeDisclosedSeparately: true,
+  reloadControlledByAce: true,
+}
+const funded = {
+  signedIn: true,
+  accessVerified: true,
+  balanceUsd: 778.16,
+  balanceRedacted: false,
+  billingMode: "managed" as "managed" | "byok",
+  managedSupported: true,
+  managedUnlocked: true,
+  aceEnabled: true,
+  aceContract: contract,
+}
+type Wallet = Omit<typeof funded, "balanceUsd"> & { balanceUsd: number | null }
+type Services = NonNullable<Parameters<typeof ManagedInference>[0]["services"]>
+
+// Exercise the real component, recovery controller and JSON transport against
+// an isolated loopback account. No provider, account or payment is contacted.
+const mount = async (wallet: Wallet = funded) => {
+  const state = {
+    wallet,
+    mode: wallet.billingMode,
+    unavailable: false,
+    rejectWrite: false,
+    refreshes: 0,
+    writes: [] as unknown[],
+    links: [] as string[],
+    errors: [] as Array<string | undefined>,
+  }
+  // Node's HTTP response avoids HappyDOM's replacement of global Response,
+  // while preserving an actual streamed request/response through settingsApi.
+  const server = createHTTPServer(async (request, response) => {
+    const json = (data: unknown, status = 200) => {
+      response.writeHead(status, {
+        "content-type": "application/json",
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET, PUT, OPTIONS",
+        "access-control-allow-headers": "content-type",
+      })
+      response.end(JSON.stringify(data))
+    }
+    if (request.method === "OPTIONS") return json(null, 204)
+    const path = new URL(request.url!, "http://127.0.0.1").pathname
+    if (path === "/settings/wallet") {
+      if (state.unavailable) return json({ message: "Temporarily unavailable" }, 503)
+      return json({ ...state.wallet, billingMode: state.mode })
+    }
+    if (path === "/settings/billing") {
+      if (request.method === "PUT") {
+        const chunks: Buffer[] = []
+        for await (const chunk of request) chunks.push(chunk)
+        const body = JSON.parse(Buffer.concat(chunks).toString()) as { llm: typeof state.mode }
+        state.writes.push(body)
+        if (state.rejectWrite) return json({ message: "Access preference could not be saved" }, 409)
+        state.mode = body.llm
+      }
+      return json({ llm: state.mode })
+    }
+    return json({ message: `Unexpected request: ${request.method} ${path}` }, 500)
+  })
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("Expected a loopback TCP listener")
+  const services: Services = {
+    sdk: { url: `http://127.0.0.1:${address.port}` },
+    sync: {
+      data: { config: { billing: { llm: state.mode } } },
+      refreshProviders: async () => {
+        state.refreshes++
+      },
+      onProvidersRefreshed: () => () => {},
+    },
+    platform: { fetch, openLink: (url) => state.links.push(url) },
+  }
+  const host = document.createElement("div")
+  document.body.append(host)
+  const dispose = web.render(
+    () => subject.ManagedInference({ services, onError: (message) => state.errors.push(message) }),
+    host,
+  )
+  cleanups.push(() => {
+    dispose()
+    server.closeAllConnections()
+    server.close()
+  })
+  return { host, state }
+}
+const button = (host: HTMLElement, label: string) =>
+  [...host.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.trim() === label)!
+
+afterAll(() => vite.close())
+afterEach(() => {
+  cleanups.splice(0).forEach((dispose) => dispose())
+  document.body.replaceChildren()
+})
+
+describe("Ace account surface", () => {
+  test("separates exact purchased balance, authorization and routing with native disclosure", async () => {
+    const { host } = await mount()
+    await ready(() => host.textContent?.includes("$778.16") === true)
+    expect(host.querySelector("dt")?.textContent).toBe("Purchased Wallet")
+    expect(host.querySelector("dd")?.textContent).toBe("$778.16")
+    expect([...host.querySelectorAll("strong")].filter((item) => item.textContent === "Ace")).toHaveLength(1)
+    expect(host.querySelector('[role="status"]')?.textContent).toBe("On")
+    expect(button(host, "Ace").getAttribute("aria-pressed")).toBe("true")
+    expect(button(host, "Manage Ace")).toBeDefined()
+    const details = host.querySelector("details")!
+    expect(details.open).toBe(false)
+    expect(details.querySelector("summary")?.textContent).toBe("Auto-reload on$20 below $5")
+    details.querySelector("summary")!.click()
+    expect(details.open).toBe(true)
+    expect(details.textContent).toContain(subject.aceContractLabel(contract))
+    expect(details.textContent).toContain("does not turn off Ace or its auto-reload")
+  })
+
+  test("uses server-provided reload amounts and never turns a routing choice into a payment", async () => {
+    const { host, state } = await mount({
+      ...funded,
+      aceContract: { ...contract, reloadAmountUsd: 40, reloadThresholdUsd: 9 },
+    })
+    await ready(() => host.querySelector("summary")?.textContent?.includes("$40 below $9") === true)
+    button(host, "Ace").click()
+    await settle()
+    expect(state.writes).toEqual([])
+    button(host, "Keys & subscriptions").click()
+    await ready(() => state.refreshes === 1)
+    expect(state.writes).toEqual([{ llm: "byok" }])
+    expect(button(host, "Keys & subscriptions").getAttribute("aria-pressed")).toBe("true")
+    expect(host.querySelector('[role="status"]')?.textContent).toBe("On")
+    expect(host.querySelector("summary")?.textContent).toContain("Auto-reload on")
+    expect(state.links).toEqual([])
+  })
+
+  test("shows authorization terms before activation and opens the existing consent flow", async () => {
+    const { host, state } = await mount({ ...funded, balanceUsd: 0, aceEnabled: false, managedUnlocked: false })
+    await ready(() => button(host, "Turn on Ace") !== undefined)
+    expect(button(host, "Ace").disabled).toBe(true)
+    expect(host.querySelector("details")?.open).toBe(true)
+    expect(host.querySelector("details")?.textContent).toContain("$0 authorization, not a purchase or subscription")
+    expect(host.querySelector("details")?.textContent).toContain(
+      "processing fee is disclosed separately before payment",
+    )
+    button(host, "Turn on Ace").click()
+    expect(state.links).toHaveLength(1)
+    expect(state.links[0]).toContain("billing")
+    expect(state.writes).toEqual([])
+  })
+
+  test("redacted member balances stay private while verified managed access remains selectable", async () => {
+    const { host } = await mount({ ...funded, balanceRedacted: true, balanceUsd: null, billingMode: "byok" })
+    await ready(() => host.textContent?.includes("Private to admins") === true)
+    expect(host.querySelector("dd")?.textContent).toBe("Private to admins")
+    expect(button(host, "Ace").disabled).toBe(false)
+    expect(host.textContent).not.toContain("$778.16")
+  })
+
+  test("signed-out users see sign-in and cannot select purchased model access", async () => {
+    const { host, state } = await mount({
+      ...funded,
+      signedIn: false,
+      balanceUsd: null,
+      aceEnabled: false,
+      managedUnlocked: false,
+    })
+    await ready(() => button(host, "Sign in") !== undefined)
+    expect(host.querySelector('[role="status"]')?.textContent).toBe("Sign in required")
+    expect(host.querySelector("dd")?.textContent).toBe("Sign in to view")
+    expect(button(host, "Ace").disabled).toBe(true)
+    expect(host.querySelector("details")?.open).toBe(false)
+    expect(state.writes).toEqual([])
+  })
+
+  test("a failed account refresh clears the displayed balance and Retry restores current truth", async () => {
+    const { host, state } = await mount()
+    await ready(() => host.textContent?.includes("$778.16") === true)
+    state.unavailable = true
+    window.dispatchEvent(new Event("focus"))
+    await ready(() => button(host, "Retry") !== undefined)
+    expect(host.textContent).not.toContain("$778.16")
+    expect(host.querySelector('[role="status"]')?.textContent).toBe("Account unavailable")
+    expect(button(host, "Ace").disabled).toBe(true)
+    expect(host.querySelector("details")).toBeNull()
+    state.unavailable = false
+    state.wallet = { ...funded, balanceUsd: 125.25 }
+    button(host, "Retry").click()
+    await ready(() => host.querySelector("dd")?.textContent === "$125.25")
+    expect(button(host, "Ace").disabled).toBe(false)
+  })
+
+  test("a failed routing write restores the saved choice without changing authorization", async () => {
+    const { host, state } = await mount()
+    await ready(() => host.textContent?.includes("$778.16") === true)
+    state.rejectWrite = true
+    button(host, "Keys & subscriptions").click()
+    await ready(() => state.errors.includes("Access preference could not be saved"))
+    expect(button(host, "Ace").getAttribute("aria-pressed")).toBe("true")
+    expect(host.querySelector('[role="status"]')?.textContent).toBe("On")
+    expect(state.refreshes).toBe(0)
+  })
+})

@@ -5,6 +5,8 @@ export type CatalogSkill = {
   entry?: boolean
   permission_action?: SkillPermissionAction
   recommended?: boolean
+  enabled?: boolean
+  catalog_status?: string
 }
 
 export interface SkillCatalogSnapshot<T extends CatalogSkill> {
@@ -36,15 +38,27 @@ export function skillAction(
   name: string,
   fallback: SkillPermissionAction = "allow",
 ): SkillPermissionAction {
+  if (isAction(permission)) return permission
   if (!permission || typeof permission !== "object" || Array.isArray(permission)) return fallback
-  const skill = (permission as Record<string, unknown>).skill
-  if (isAction(skill)) return skill
-  if (!skill || typeof skill !== "object" || Array.isArray(skill)) return fallback
-  const rules = skill as Record<string, unknown>
-  const exact = rules[name]
-  if (isAction(exact)) return exact
-  const wildcard = rules["*"]
-  return isAction(wildcard) ? wildcard : fallback
+  const matches = (value: string, pattern: string) =>
+    new RegExp(
+      `^${pattern
+        .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+        .replace(/\*/g, ".*")
+        .replace(/\?/g, ".")}$`,
+      "s",
+    ).test(value)
+  // The backend evaluates the last matching rule, including permission-wide
+  // wildcards. Keep Settings and slash discovery faithful to that contract.
+  const actions = Object.entries(permission).flatMap(([key, rule]) => {
+    if (!matches("skill", key)) return []
+    if (isAction(rule)) return [rule]
+    if (!rule || typeof rule !== "object" || Array.isArray(rule)) return []
+    return Object.entries(rule).flatMap(([pattern, action]) =>
+      matches(name, pattern) && isAction(action) ? [action] : [],
+    )
+  })
+  return actions.at(-1) ?? fallback
 }
 
 export function visibleSkills<T extends CatalogSkill>(skills: readonly T[], reserved: Iterable<string>) {
@@ -62,7 +76,10 @@ export function enabledSkills<T extends CatalogSkill>(
   permission: unknown,
 ) {
   return visibleSkills(skills, reserved).filter(
-    (skill) => skillAction(permission, skill.name, skill.permission_action ?? "allow") !== "deny",
+    (skill) =>
+      skill.enabled !== false &&
+      skill.catalog_status !== "blocked" &&
+      skillAction(permission, skill.name, skill.permission_action ?? "allow") !== "deny",
   )
 }
 
@@ -90,7 +107,11 @@ export function skillPreferences(storage: Pick<Storage, "getItem"> | undefined):
 }
 
 function writeNames(storage: Pick<Storage, "setItem"> | undefined, key: string, names: string[]) {
-  storage?.setItem(key, JSON.stringify(names))
+  try {
+    storage?.setItem(key, JSON.stringify(names))
+  } catch {
+    /* Browsing remains usable when storage is unavailable. */
+  }
   if (typeof globalThis.dispatchEvent === "function" && typeof CustomEvent === "function") {
     globalThis.dispatchEvent(new CustomEvent(SKILL_PREFERENCES_EVENT))
   }
@@ -142,7 +163,9 @@ export function skillCatalogSnapshot<T extends CatalogSkill>(
     ]),
   )
   const action = (name: string) => actions.get(name) ?? "deny"
-  const allowed = library.filter((skill) => action(skill.name) !== "deny")
+  const allowed = library.filter(
+    (skill) => skill.enabled !== false && skill.catalog_status !== "blocked" && action(skill.name) !== "deny",
+  )
   const pinned = selectNames(allowed, options.pinned ?? [])
   const recent = selectNames(allowed, options.recent ?? [])
   const loadedThisTurn = selectNames(allowed, options.loadedThisTurn ?? [])

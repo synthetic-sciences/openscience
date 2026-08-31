@@ -159,13 +159,13 @@
   outline-color: var(--border-focus);
 }
 
-/* Ace stays one flat decision surface: brand and mode first, account truth and
-   purchased-Wallet terms directly below. No catalog work is mounted here. */
+/* Account truth, routing preference, and payment terms have separate jobs.
+   Keep them in compact rows on one surface, with terms expanded on demand. */
 .models-routing {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--models-gap-3);
+  gap: var(--models-gap-4);
   padding: var(--models-gap-3);
   border: 0;
   border-radius: var(--settings-radius-control);
@@ -174,42 +174,86 @@
 }
 
 .models-routing__identity,
-.models-routing__details,
+.models-routing__overview,
+.models-routing__heading,
+.models-routing__preference,
 .models-routing__account {
   display: flex;
   min-width: 0;
   align-items: center;
 }
 
+.models-routing__overview,
+.models-routing__preference {
+  justify-content: space-between;
+  gap: var(--models-gap-4);
+}
+
 .models-routing__identity {
+  flex: 1 1 auto;
   gap: var(--models-gap-3);
 }
 
-.models-routing__identity-copy {
+.models-routing__identity-copy,
+.models-routing__preference-copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--models-gap-1);
 }
 
-.models-routing__identity-copy strong {
+.models-routing__identity-copy strong,
+.models-routing__preference-copy > strong {
   color: var(--text-strong);
   font-size: 12px;
   font-weight: var(--font-weight-medium);
 }
 
-.models-routing__identity-copy span {
-  overflow: hidden;
+.models-routing__identity-copy > span {
   color: var(--text-weak);
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 16px;
+  text-wrap: pretty;
+}
+
+.models-routing__heading {
+  flex-wrap: wrap;
+  gap: var(--models-gap-2);
+}
+
+.models-routing__status {
+  padding: 1px 6px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 999px;
+  color: var(--text-weak);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.models-routing__status[data-active="true"] {
+  color: var(--text-strong);
+}
+
+.models-routing__status[data-active="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--icon-success-base, currentColor);
+  vertical-align: 1px;
+}
+
+.models-routing__preference {
+  padding-top: var(--models-gap-3);
+  border-top: 1px solid var(--border-weak-base);
 }
 
 .models-routing__options {
-  width: min(100%, 320px);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
   gap: 2px;
   padding: 2px;
   border-radius: var(--settings-radius-control);
@@ -227,6 +271,7 @@
   color: var(--text-weak);
   font-size: 12px;
   font-weight: var(--font-weight-medium);
+  white-space: nowrap;
   transition:
     background-color 140ms ease,
     color 140ms ease,
@@ -248,17 +293,9 @@
   box-shadow: none;
 }
 
-.models-routing__option-label {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-}
-
-.models-routing__option-label > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.settings-dialog .settings-models-panel .models-routing__option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .models-routing__description {
@@ -271,24 +308,35 @@
   text-wrap: pretty;
 }
 
-.models-routing__details {
-  justify-content: space-between;
-  gap: var(--models-gap-3);
-  padding: 0 2px;
-}
-
 .models-routing__account {
   flex: 0 1 auto;
   justify-content: flex-end;
-  gap: var(--models-gap-2);
+  gap: var(--models-gap-3);
   color: var(--text-weak);
   font-size: 11px;
   white-space: nowrap;
 }
 
-.models-routing__account-state {
+.models-routing__wallet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--models-gap-1);
+  margin: 0;
+  text-align: right;
+}
+
+.models-routing__wallet dt {
+  color: var(--text-weak);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.models-routing__wallet dd {
+  margin: 0;
   color: var(--text-strong);
+  font-size: 14px;
   font-weight: var(--font-weight-medium);
+  line-height: 18px;
 }
 
 .models-routing__sync {
@@ -298,6 +346,45 @@
 .models-inference > .settings-inline-note {
   margin: 0;
   padding: 0 var(--models-gap-3) 8px;
+}
+
+.models-routing__terms {
+  margin: 0 var(--models-gap-3);
+  border-top: 1px solid var(--border-weak-base);
+  color: var(--text-weak);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.models-routing__terms summary {
+  width: fit-content;
+  max-width: 100%;
+  min-height: var(--models-control-height);
+  padding: 7px 0;
+  cursor: pointer;
+}
+
+.models-routing__terms summary::marker {
+  color: var(--text-weaker);
+  font-size: 9px;
+}
+
+.models-routing__terms summary:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.models-routing__terms-value {
+  margin-left: var(--models-gap-2);
+  color: var(--text-weaker);
+  font-variant-numeric: tabular-nums;
+}
+
+.models-routing__terms p {
+  max-width: 76ch;
+  margin: 0 0 var(--models-gap-2);
+  text-wrap: pretty;
 }
 
 .models-connection-row,
@@ -629,18 +716,8 @@
 }
 
 @container settings-main (max-width: 700px) {
-  .models-routing__details {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .models-routing__options {
-    width: 100%;
-    flex-basis: auto;
-  }
-
-  .models-routing__account {
-    justify-content: flex-start;
+  .models-routing__overview,
+  .models-routing__preference {
     flex-wrap: wrap;
   }
 
@@ -655,6 +732,29 @@
 }
 
 @container settings-main (max-width: 520px) {
+  .models-routing__overview {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .models-routing__account {
+    width: 100%;
+    justify-content: space-between;
+    white-space: normal;
+  }
+
+  .models-routing__wallet {
+    text-align: left;
+  }
+
+  .models-routing__options {
+    width: 100%;
+  }
+
+  .models-routing__option {
+    flex: 1 1 auto;
+  }
+
   .models-provider-key-form {
     grid-template-columns: 1fr;
   }
@@ -714,6 +814,7 @@
 
 @media (pointer: coarse) {
   .settings-dialog .settings-models-panel :where(button, [role="button"]),
+  .settings-dialog .settings-models-panel .models-routing__terms summary,
   .settings-dialog .settings-models-panel :where(input, [data-slot="select-select-trigger"]) {
     min-height: 44px;
   }

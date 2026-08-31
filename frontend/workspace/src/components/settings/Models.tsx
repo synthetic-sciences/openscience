@@ -321,7 +321,7 @@ export default function Models() {
               {error()}
             </div>
           </Show>
-          <Section id="model-access" title="Ace" description="Managed model access and your purchased Wallet balance.">
+          <Section id="model-access" title="Model access">
             <div class="settings-card models-access-card">
               <ManagedInference onError={setError} />
             </div>
