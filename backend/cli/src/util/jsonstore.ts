@@ -22,16 +22,20 @@ export namespace JsonStore {
   const LOCK_TIMEOUT = 10_000
 
   async function parse(filepath: string): Promise<Record<string, unknown>> {
-    const file = Bun.file(filepath)
-    if (!(await file.exists())) return {}
-    const text = await file.text()
+    const text = await fs.readFile(filepath, "utf8").catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return undefined
+      throw error
+    })
+    if (text === undefined) return {}
     if (!text.trim()) throw new Error("JSON store is empty or truncated")
     return JSON.parse(text) as Record<string, unknown>
   }
 
-  /** Read path: a missing, empty, or corrupt file degrades to `{}`. */
-  export async function read(filepath: string): Promise<Record<string, unknown>> {
+  /** By default unreadable stores degrade to `{}`; strict funding decisions
+   * distinguish a missing store from corruption or permission errors. */
+  export async function read(filepath: string, options: { strict?: boolean } = {}): Promise<Record<string, unknown>> {
     using _ = await Lock.read(filepath)
+    if (options.strict) return parse(filepath)
     return await parse(filepath).catch(() => ({}) as Record<string, unknown>)
   }
 

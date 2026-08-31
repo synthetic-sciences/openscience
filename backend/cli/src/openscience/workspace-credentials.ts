@@ -7,6 +7,7 @@ import { SecretBox } from "../util/secret-box"
 import { SecretFile } from "../util/secret-file"
 import { isAtlasManagedKey } from "../credentials/managed-key"
 import { CredentialLifecycle } from "../credentials/lifecycle"
+import { isDeepStrictEqual } from "node:util"
 
 /** A revocable overlay, never a replacement for this device's own credentials.
  * No dashboard config, executable code, arbitrary environment, or billing
@@ -17,10 +18,18 @@ export namespace WorkspaceCredentials {
   let expiry: ReturnType<typeof setTimeout> | undefined
   let deadline = 0
   type Session = { api_key: string; organization_id?: string }
+  const Renewal = z
+    .object({
+      kind: z.literal("github-app-installation"),
+      authority: z.string().regex(/^[a-f0-9]{64}$/),
+      expires_at: z.number().int().positive(),
+    })
+    .strict()
   const Snapshot = z.object({
     organization_id: z.string(),
     auth: z.record(z.string(), z.object({ type: z.literal("api"), key: z.string() })),
     services: z.record(z.string(), z.record(z.string(), z.string())),
+    github_renewal: Renewal.optional(),
   })
   export type Snapshot = z.infer<typeof Snapshot>
   const Response = z.object({
@@ -110,8 +119,43 @@ export namespace WorkspaceCredentials {
           Object.fromEntries(Object.entries(portable).filter(([, value]) => value && !isAtlasManagedKey(value))),
         )
       if (Object.keys(fields).length) snapshot.services[id] = fields
+      if (
+        id === "github" &&
+        fields.token &&
+        service.metadata.source === "github_connection" &&
+        service.metadata.token_kind === "app"
+      ) {
+        const renewal = Renewal.safeParse(service.metadata.credential_renewal)
+        if (renewal.success) snapshot.github_renewal = renewal.data
+      }
     }
     return { snapshot, user_id: data.user.user_id }
+  }
+
+  /** Never infer renewable authority from a token prefix. The authenticated
+   * gateway supplies a receipt for the exact minted installation scope. */
+  export function change(
+    previous: Snapshot | undefined,
+    next: Snapshot,
+    now = Date.now(),
+  ): "unchanged" | "renew" | "revoke" {
+    // Even an identical response cannot extend an explicitly expired grant.
+    // Unreasonably distant timestamps are not short-lived GitHub authority.
+    for (const receipt of [previous?.github_renewal, next.github_renewal]) {
+      if (receipt && (receipt.expires_at <= now || receipt.expires_at > now + 65 * 60_000)) return "revoke"
+    }
+    if (isDeepStrictEqual(previous, next)) return "unchanged"
+    if (!previous) return "revoke"
+    const before = previous.github_renewal
+    const after = next.github_renewal
+    if (!before || !after || before.authority !== after.authority) return "revoke"
+    if (!previous.services.github?.token || !next.services.github?.token) return "revoke"
+    const stable = (value: Snapshot) => ({
+      ...value,
+      github_renewal: undefined,
+      services: { ...value.services, github: { ...value.services.github, token: undefined } },
+    })
+    return isDeepStrictEqual(stable(previous), stable(next)) ? "renew" : "revoke"
   }
 
   export async function write(session: Session, snapshot: Snapshot): Promise<void> {
@@ -152,23 +196,34 @@ export namespace WorkspaceCredentials {
     expiry.unref()
   }
 
-  export async function read(): Promise<Snapshot | undefined> {
-    const store = await JsonStore.read(filepath)
-    if (typeof store.expires_at !== "number" || store.expires_at <= Date.now() || typeof store.payload !== "string")
-      return
+  export async function read(options: { strict?: boolean } = {}): Promise<Snapshot | undefined> {
+    const unreadable = () => {
+      if (options.strict) throw new Error("Saved workspace credentials could not be read")
+      return undefined
+    }
+    const store = await JsonStore.read(filepath, options).catch((error) => {
+      if (options.strict) throw new Error("Saved workspace credentials could not be read")
+      throw error
+    })
+    if (!store || typeof store !== "object" || Array.isArray(store)) return unreadable()
+    if (!Object.keys(store).length) return
+    if (typeof store.expires_at !== "number" || !Number.isFinite(store.expires_at)) return unreadable()
+    if (store.expires_at <= Date.now()) return
+    if (typeof store.identity !== "string" || !/^[a-f0-9]{64}$/.test(store.identity)) return unreadable()
     arm(store.expires_at)
     const { OpenScience } = await import("./index")
     const session = await OpenScience.getSession()
     if (!session || identity(session) !== store.identity) return
+    if (typeof store.payload !== "string" || !store.payload) return unreadable()
     // Reading must not create a key or silently repair corrupted ciphertext.
     const key = await Bun.file(path.join(Global.Path.data, "credentials.key"))
       .arrayBuffer()
       .catch(() => undefined)
-    if (!key) return
+    if (!key) return unreadable()
     try {
       return Snapshot.parse(JSON.parse(SecretBox.open(Buffer.from(key), store.payload)))
     } catch {
-      return
+      return unreadable()
     }
   }
 }

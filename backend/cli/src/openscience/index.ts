@@ -602,23 +602,28 @@ export namespace OpenScience {
           const current = await getSession()
           return !!current && WorkspaceCredentials.identity(current) === identity
         }
-        const previous = await WorkspaceCredentials.read()
-        // A successful unchanged refresh extends the grant without revoking
-        // running children or rebuilding the provider catalog.
-        if (JSON.stringify(previous) === JSON.stringify(data.snapshot)) {
-          await CredentialLifecycle.serialized(async () => {
-            if (await matches()) await WorkspaceCredentials.write(session, data.snapshot)
-          })
-          if (!(await matches())) return synced
-          return (synced = { state: "ready", organization_id: data.snapshot.organization_id, synced_at: Date.now() })
-        }
-        const applied = await CredentialLifecycle.mutateIf("workspace-sync.update", matches, () =>
-          WorkspaceCredentials.write(session, data.snapshot),
-        )
+        const applied = await CredentialLifecycle.update(async () => {
+          if (!(await matches())) return
+          const change = WorkspaceCredentials.change(await WorkspaceCredentials.read(), data.snapshot)
+          return {
+            reason:
+              change === "unchanged"
+                ? undefined
+                : change === "renew"
+                  ? "workspace-sync.renew"
+                  : "workspace-sync.update",
+            action: async () => {
+              await WorkspaceCredentials.write(session, data.snapshot)
+              return change
+            },
+          }
+        })
         if (!applied.applied) return synced
-        await reloadSyncedEnv()
-        const { Provider } = await import("@/provider/provider")
-        Provider.invalidate()
+        if (applied.value !== "unchanged") {
+          await reloadSyncedEnv()
+          const { Provider } = await import("@/provider/provider")
+          Provider.invalidate()
+        }
         if (!(await matches())) return synced
         return (synced = { state: "ready", organization_id: data.snapshot.organization_id, synced_at: Date.now() })
       } catch (error) {

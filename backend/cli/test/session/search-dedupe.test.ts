@@ -118,3 +118,199 @@ test("does not dedupe dynamic unavailable or exhausted search results", () => {
     ).toBeUndefined()
   }
 })
+
+function completed(input: Record<string, unknown>, output: unknown, tool = "research_search") {
+  return {
+    ...part,
+    tool,
+    state: {
+      status: "completed" as const,
+      input,
+      output: typeof output === "string" ? output : JSON.stringify(output),
+      title: "Research search",
+      metadata: {
+        resultCount: 6,
+        creditState: "wallet",
+        operationID: "original_operation",
+        dedupeSignature: SearchDedupe.key(tool, input),
+      },
+      time: { start: 100, end: 150 },
+    },
+  }
+}
+
+test("rechecks cached developer results without changing original accounting or provenance", () => {
+  const input = {
+    query: "Python documentation",
+    source: "developer",
+    include_domains: ["docs.python.org"],
+    published_after: "2026-01-01",
+    published_before: "2026-08-30",
+  }
+  const original = completed(input, {
+    provider: "firecrawl",
+    funding: "wallet",
+    operation_id: "original_operation",
+    wallet_charge_microusd: 1000,
+    provider_credits_used: 6,
+    pending_usage: false,
+    results: [
+      { url: "https://docs.python.org/3/", title: "Python", published_at: "2026-01-01", markdown: "Docs" },
+      { url: "https://docs.python.org/3/latest", published_at: "2026-08-30T23:00:00Z" },
+      { url: "https://medium.com/python", published_at: "2026-04-01", content: "Not allowed" },
+      { url: "https://docs.python.org/3/undated", content: "No date" },
+      { url: "https://docs.python.org/3/old", published_at: "2025-12-31" },
+      { url: "https://docs.python.org.evil.example/", published_at: "2026-04-01" },
+    ],
+    search_details: {
+      requested_limit: 8,
+      effective_limit: 8,
+      returned_count: 6,
+      enriched_count: 3,
+      ranking: "provider",
+    },
+    warnings: ["Original provider warning"],
+  })
+  const snapshot = JSON.stringify(original)
+  const hit = SearchDedupe.find([{ ...message, parts: [original] }], "research_search", input)
+  expect(hit).toBe(original)
+  const result = SearchDedupe.reuse(hit!)
+  const output = JSON.parse(result.output)
+  expect(output.results).toEqual([
+    { url: "https://docs.python.org/3/", title: "Python", published_at: "2026-01-01", markdown: "Docs" },
+    { url: "https://docs.python.org/3/latest", published_at: "2026-08-30T23:00:00Z" },
+  ])
+  expect(output).toMatchObject({
+    provider: "firecrawl",
+    funding: "wallet",
+    operation_id: "original_operation",
+    wallet_charge_microusd: 1000,
+    provider_credits_used: 6,
+    pending_usage: false,
+    search_details: {
+      requested_limit: 8,
+      effective_limit: 8,
+      returned_count: 2,
+      enriched_count: 1,
+      ranking: "provider",
+    },
+  })
+  expect(output.warnings).toContain("Original provider warning")
+  expect(output.warnings.join(" ")).toContain("2 results outside the requested domain restrictions")
+  expect(output.warnings.join(" ")).toContain("1 results without an absolute provider-reported publication date")
+  expect(output.warnings.join(" ")).toContain("1 results outside the requested publication-date range")
+  expect(output.warnings.join(" ")).toContain("No new provider request or search charge was made")
+  expect(result.metadata).toMatchObject({
+    resultCount: 2,
+    creditState: "wallet",
+    operationID: "original_operation",
+    dedupeSignature: original.state.metadata.dedupeSignature,
+    dedupeHit: true,
+    dedupeOf: { messageID: "msg_search", partID: "part_search", callID: "call_search" },
+  })
+  expect(JSON.stringify(original)).toBe(snapshot)
+})
+
+test("cached date filters cannot use relative dates, crawl dates, snippets, or URL dates as publication evidence", () => {
+  const original = completed(
+    { query: "new research", published_after: "2026-08-01" },
+    {
+      results: [
+        { url: "https://example.org/relative", published_at: "2 days ago" },
+        { url: "https://example.org/crawled", crawled_at: "2026-08-20" },
+        { url: "https://example.org/2026-08-20/paper", snippet: "Published 2026-08-20" },
+        { url: "https://example.org/invalid", published_at: "2026-02-30" },
+      ],
+    },
+  )
+  const result = SearchDedupe.reuse(original)
+  expect(JSON.parse(result.output).results).toEqual([])
+  expect(result.metadata.resultCount).toBe(0)
+  expect(JSON.parse(result.output).warnings.join(" ")).toContain(
+    "4 results without an absolute provider-reported publication date",
+  )
+})
+
+test("legacy websearch replays enforce domain exclusions and safe unique source URLs", () => {
+  const original = completed(
+    { query: "protein folding", numResults: 4, exclude_domains: ["example.com"] },
+    {
+      results: [
+        { url: "https://sub.example.com/blocked" },
+        { url: "https://example.org/paper#results", title: "Retained" },
+        { url: "https://example.org/paper#methods" },
+        { url: "file:///tmp/private" },
+        { url: "https://user:secret@example.org/" },
+        null,
+      ],
+    },
+    "websearch",
+  )
+  const hit = SearchDedupe.find([{ ...message, parts: [original] }], "research_search", {
+    query: "protein folding",
+    limit: 4,
+    exclude_domains: ["example.com"],
+  })
+  expect(hit).toBe(original)
+  const result = SearchDedupe.reuse(hit!)
+  expect(JSON.parse(result.output).results).toEqual([{ url: "https://example.org/paper#results", title: "Retained" }])
+  expect(result.metadata.resultCount).toBe(1)
+})
+
+test("filtered legacy text is omitted explicitly while retaining the original cache hit", () => {
+  for (const output of [
+    "Legacy result without source metadata",
+    { summary: "Legacy result", wallet_charge_microusd: 900 },
+  ]) {
+    const input = { query: "filtered legacy result", published_before: "2026-08-30" }
+    const original = completed(input, output, "websearch")
+    const history = [{ ...message, parts: [original] }]
+    const result = SearchDedupe.reuse(original)
+    const parsed = JSON.parse(result.output)
+    expect(parsed.results).toEqual([])
+    expect(parsed.warnings.join(" ")).toContain("without structured source/date metadata")
+    expect(parsed.warnings.join(" ")).toContain("No new provider request or search charge was made")
+    expect(parsed.summary).toBeUndefined()
+    expect(result.metadata.resultCount).toBe(0)
+    expect(result.metadata.dedupeHit).toBe(true)
+    if (typeof output !== "string") expect(parsed.wallet_charge_microusd).toBe(900)
+    // Keep the cache eligible; dropping it would cause a second paid request.
+    expect(SearchDedupe.find(history, "research_search", input)).toBe(original)
+  }
+})
+
+test("invalid persisted filters fail closed without breaking dedupe or throwing", () => {
+  for (const filters of [
+    { published_after: "2026-02-30" },
+    { published_after: "2026-08-30", published_before: "2026-08-01" },
+    { published_after: "" },
+    { include_domains: "example.org" },
+    { include_domains: [null] },
+    { include_domains: ["https://example.org/path"] },
+    { include_domains: ["example.org"], exclude_domains: ["example.net"] },
+  ]) {
+    const original = completed(
+      { query: "legacy search", ...filters },
+      {
+        results: [{ url: "https://example.org/", published_at: "2026-08-20" }],
+      },
+    )
+    const result = SearchDedupe.reuse(original)
+    expect(JSON.parse(result.output).results).toEqual([])
+    expect(JSON.parse(result.output).warnings.join(" ")).toContain(
+      "persisted domain/date filters could not be validated",
+    )
+    expect(result.metadata.resultCount).toBe(0)
+    expect(SearchDedupe.find([{ ...message, parts: [original] }], "research_search", original.state.input)).toBe(
+      original,
+    )
+  }
+})
+
+test("non-research search output is not rewritten", () => {
+  const original = completed({ query: "protein folding" }, { results: [{ url: "internal:paper" }] }, "science_search")
+  const result = SearchDedupe.reuse(original)
+  expect(result.output).toBe(original.state.output)
+  expect(result.metadata.resultCount).toBe(6)
+  expect(result.metadata.dedupeHit).toBe(true)
+})

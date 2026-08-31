@@ -39,6 +39,8 @@ export namespace CredentialLifecycle {
     reason: string
     pid: number
     updated_at: string
+    /** Sticky across verified renewals so a reader cannot miss a revocation. */
+    revocation?: string
   }
 
   export interface Event {
@@ -51,6 +53,7 @@ export namespace CredentialLifecycle {
   const refreshers = new Set<Handler>()
   const revokers = new Set<Handler>()
   let seen: string | null | undefined
+  let revoked: string | undefined
   let checking: Promise<boolean> | undefined
   let reconciliation: Promise<void> = Promise.resolve()
   let timer: ReturnType<typeof setInterval> | undefined
@@ -131,7 +134,8 @@ export namespace CredentialLifecycle {
       (item.phase !== "updating" && item.phase !== "ready") ||
       typeof item.reason !== "string" ||
       typeof item.pid !== "number" ||
-      typeof item.updated_at !== "string"
+      typeof item.updated_at !== "string" ||
+      (item.revocation !== undefined && (typeof item.revocation !== "string" || !item.revocation))
     ) {
       throw new Error("credential revision has an invalid shape")
     }
@@ -208,8 +212,13 @@ export namespace CredentialLifecycle {
           : { token: revision.token, refreshers: new Set<Handler>(), revokers: new Set<Handler>() }
       retry.progress = current
       await run(refreshers, current.refreshers, event)
-      await run(revokers, current.revokers, event)
+      // Only a verified renewal in an already-reconciled authority generation
+      // may preserve children. A fresh process, an older writer, or a reader
+      // that missed an intervening revocation must still fail closed.
+      if (revision.reason !== "workspace-sync.renew" || !revision.revocation || revoked !== revision.revocation)
+        await run(revokers, current.revokers, event)
       seen = revision.token
+      revoked = revision.revocation ?? revision.token
       retry.progress = undefined
       return true
     })
@@ -297,46 +306,64 @@ export namespace CredentialLifecycle {
     return checking
   }
 
+  type Change<T> = { reason?: string; action: () => T | Promise<T> }
+
   async function runMutation<T>(
-    reason: string,
-    action: () => T | Promise<T>,
+    prepare: () => Change<T> | undefined | Promise<Change<T> | undefined>,
     options: { reconcileLocal?: boolean } = {},
-    condition?: () => boolean | Promise<boolean>,
   ): Promise<{ applied: false } | { applied: true; value: T }> {
     let ready: Revision | undefined
     let value: T | undefined
     let failure: unknown
     let failed = false
+    let applied = false
     {
       await withMutationLease(async () => {
         // Evaluate the condition under the same lease as the mutation. This
         // is the compare-and-mutate seam for account-key revocation: a late
         // response for key A cannot clear key B after B has been saved.
-        if (condition && !(await condition())) return
+        const change = await prepare()
+        if (!change) return
+        applied = true
+        // Metadata-only refreshes extend an identical cached grant, with the
+        // comparison and write both protected by this same credential lease.
+        if (!change.reason) {
+          value = await change.action()
+          return
+        }
         const token = crypto.randomUUID()
+        const previous = change.reason === "workspace-sync.renew" ? await read() : undefined
         const base = {
           version: 1 as const,
           token,
-          reason,
+          reason: change.reason,
+          revocation: previous?.revocation ?? previous?.token ?? token,
           pid: process.pid,
         }
         await publish({ ...base, phase: "updating", updated_at: new Date().toISOString() })
 
         try {
-          value = await action()
+          value = await change.action()
         } catch (error) {
           failed = true
           failure = error
         }
 
-        ready = { ...base, phase: "ready", updated_at: new Date().toISOString() }
+        ready = {
+          ...base,
+          revocation: failed ? token : base.revocation,
+          phase: "ready",
+          updated_at: new Date().toISOString(),
+        }
         await publish(ready)
       })
     }
 
-    if (!ready) return { applied: false }
-    if (options.reconcileLocal === false) seen = ready.token
-    else await reconcile(ready, true)
+    if (!applied) return { applied: false }
+    if (ready && options.reconcileLocal === false) {
+      seen = ready.token
+      revoked = ready.revocation ?? ready.token
+    } else if (ready) await reconcile(ready, true)
     if (failed) throw failure
     return { applied: true, value: value as T }
   }
@@ -350,7 +377,7 @@ export namespace CredentialLifecycle {
     action: () => T | Promise<T>,
     options: { reconcileLocal?: boolean } = {},
   ): Promise<T> {
-    const result = await runMutation(reason, action, options)
+    const result = await runMutation(() => ({ reason, action }), options)
     if (!result.applied) throw new Error("unconditional credential mutation was not applied")
     return result.value
   }
@@ -363,7 +390,15 @@ export namespace CredentialLifecycle {
     action: () => T | Promise<T>,
     options: { reconcileLocal?: boolean } = {},
   ): Promise<{ applied: false } | { applied: true; value: T }> {
-    return runMutation(reason, action, options, condition)
+    return runMutation(async () => ((await condition()) ? { reason, action } : undefined), options)
+  }
+
+  /** Classify a snapshot and prepare its write under the same credential
+   * lease. An absent change means stale identity; absent reason means only
+   * grant metadata changed. workspace-sync.renew is reserved for the strict
+   * same-authority GitHub receipt check in WorkspaceCredentials. */
+  export async function update<T>(prepare: () => Promise<Change<T> | undefined>) {
+    return runMutation(prepare)
   }
 
   /** Start a low-cost process-local watcher; spawn boundaries still check synchronously. */

@@ -99,6 +99,7 @@ const { Auth } = await import("../../src/auth")
 const { Config } = await import("../../src/config/config")
 const { Global } = await import("../../src/global")
 const { JsonStore } = await import("../../src/util/jsonstore")
+const { CredentialLifecycle } = await import("../../src/credentials/lifecycle")
 const { CredentialsRoutes, resolveCredentialFields } = await import("../../src/server/routes/settings/credentials")
 
 beforeEach(async () => {
@@ -121,6 +122,139 @@ afterAll(async () => {
 })
 
 describe("workspace credential sync", () => {
+  function github() {
+    Object.assign(payload.services.github.metadata, {
+      source: "github_connection",
+      token_kind: "app",
+      credential_renewal: {
+        kind: "github-app-installation",
+        authority: "a".repeat(64),
+        expires_at: Date.now() + 60 * 60_000,
+      },
+    })
+  }
+
+  test("same-authority GitHub renewal refreshes env without aborting active work", async () => {
+    github()
+    await OpenScience.syncCredentials({ force: true })
+    const before = await Bun.file(CredentialLifecycle.revisionPath()).json()
+    const active = new AbortController()
+    let refreshed = 0
+    const off = CredentialLifecycle.onRevoke(() => active.abort())
+    const refresh = CredentialLifecycle.onRefresh(() => {
+      refreshed++
+    })
+    try {
+      payload.services.github.env.GITHUB_TOKEN = "fixture-renewed-github"
+      github()
+      expect((await OpenScience.syncCredentials({ force: true })).state).toBe("ready")
+      expect(process.env.GITHUB_TOKEN).toBe("fixture-renewed-github")
+      expect(active.signal.aborted).toBe(false)
+      expect(refreshed).toBe(1)
+      const after = await Bun.file(CredentialLifecycle.revisionPath()).json()
+      expect(after.reason).toBe("workspace-sync.renew")
+      expect(after.revocation).toBe(before.revocation)
+      // A simultaneous provider-key change is a real revocation, even with a
+      // valid GitHub renewal receipt.
+      payload.services.openai.env.OPENAI_API_KEY = "fixture-replaced-provider"
+      expect((await OpenScience.syncCredentials({ force: true })).state).toBe("ready")
+      expect(active.signal.aborted).toBe(true)
+      expect((await Bun.file(CredentialLifecycle.revisionPath()).json()).revocation).not.toBe(before.revocation)
+    } finally {
+      off()
+      refresh()
+    }
+  })
+
+  test("credential comparisons ignore JSON property order but never credential changes", async () => {
+    await OpenScience.syncCredentials({ force: true })
+    const before = await Bun.file(CredentialLifecycle.revisionPath()).json()
+    payload.services = Object.fromEntries(Object.entries(payload.services).reverse()) as typeof payload.services
+    await OpenScience.syncCredentials({ force: true })
+    expect((await Bun.file(CredentialLifecycle.revisionPath()).json()).token).toBe(before.token)
+  })
+
+  test("snapshot classification happens after acquiring the credential lease", async () => {
+    github()
+    await OpenScience.syncCredentials({ force: true })
+    const active = new AbortController()
+    const off = CredentialLifecycle.onRevoke(() => active.abort())
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const blocker = CredentialLifecycle.serialized(async () => {
+      entered.resolve()
+      await release.promise
+      const changed = WorkspaceCredentials.parse(payload).snapshot
+      changed.services.github.token = "fixture-concurrent-connection"
+      changed.github_renewal!.authority = "b".repeat(64)
+      await WorkspaceCredentials.write(session, changed)
+    })
+    try {
+      await entered.promise
+      const previousCount = count
+      const request = OpenScience.syncCredentials({ force: true })
+      while (count === previousCount) await Bun.sleep(1)
+      await Bun.sleep(10)
+      release.resolve()
+      await blocker
+      await request
+      expect(active.signal.aborted).toBe(true)
+    } finally {
+      release.resolve()
+      await blocker
+      off()
+    }
+  })
+
+  test("renewal classification fails closed on authority, identity, scope, receipt and expiry changes", () => {
+    github()
+    const before = WorkspaceCredentials.parse(payload).snapshot
+    const now = Date.now()
+    const rotate = () => {
+      const next = structuredClone(before)
+      next.services.github.token = "fixture-renewal"
+      return next
+    }
+    expect(WorkspaceCredentials.change(before, rotate(), now)).toBe("renew")
+    const invalid = [
+      (next: typeof before) => {
+        next.github_renewal!.authority = "b".repeat(64)
+      },
+      (next: typeof before) => {
+        delete next.github_renewal
+      },
+      (next: typeof before) => {
+        next.github_renewal!.expires_at = now - 1
+      },
+      (next: typeof before) => {
+        next.github_renewal!.expires_at = now + 70 * 60_000
+      },
+      (next: typeof before) => {
+        next.organization_id = "other"
+      },
+      (next: typeof before) => {
+        delete next.services.github
+      },
+      (next: typeof before) => {
+        next.services.nvidia.api_key = "other"
+      },
+      (next: typeof before) => {
+        next.auth.openai.key = "other"
+      },
+    ]
+    for (const mutate of invalid) {
+      const next = rotate()
+      mutate(next)
+      expect(WorkspaceCredentials.change(before, next, now)).toBe("revoke")
+    }
+    const expired = structuredClone(before)
+    expired.github_renewal!.expires_at = now - 1
+    expect(WorkspaceCredentials.change(expired, rotate(), now)).toBe("revoke")
+    expect(WorkspaceCredentials.change(expired, structuredClone(expired), now)).toBe("revoke")
+    payload.services.github.metadata.source = "byok"
+    expect(WorkspaceCredentials.parse(payload).snapshot.github_renewal).toBeUndefined()
+  })
+
   test("browser approval redeems a scoped device and completes its first credential sync", async () => {
     await OpenScience.clearSession()
     const result = await OpenScience.browserLogin({

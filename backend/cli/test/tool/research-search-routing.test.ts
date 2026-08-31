@@ -70,6 +70,18 @@ test("without a personal key, search uses the selected Ace workspace and durable
           funding: "wallet",
           results: [{ url: "https://example.test/research" }],
           wallet_charge_microusd: 2000,
+          search_details: {
+            source: "web",
+            mode: "balanced",
+            requested_limit: 8,
+            effective_limit: 8,
+            returned_count: 1,
+            content_requested: false,
+            enriched_count: 0,
+            ranking: "provider",
+            date_filter: "none",
+            domain_filter: "none",
+          },
         },
         {
           headers: {
@@ -88,6 +100,7 @@ test("without a personal key, search uses the selected Ace workspace and durable
       baseURL: server.url.toString(),
     })
     expect(result).toMatchObject({ funding: "wallet", wallet_charge_microusd: 2000 })
+    expect(result?.search_details).toMatchObject({ returned_count: 1, enriched_count: 0, content_requested: false })
   } finally {
     server.stop(true)
   }

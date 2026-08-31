@@ -231,8 +231,9 @@ async function decrypt(payload: string): Promise<string> {
   return SecretBox.open(await machineKey(), payload)
 }
 
-function parseStore(data: Record<string, unknown>): Store {
+function parseStore(data: Record<string, unknown>, strict = false): Store {
   const parsed = Store.safeParse(data)
+  if (!parsed.success && strict) throw new Error("Saved service credentials could not be read")
   if (!parsed.success) return {}
   for (const [id, entry] of Object.entries(parsed.data)) {
     // Old dashboard copies are explicitly attributed but have no current
@@ -246,9 +247,18 @@ function parseStore(data: Record<string, unknown>): Store {
   return parsed.data
 }
 
-async function readStore(): Promise<Store> {
-  const local = parseStore(await JsonStore.read(storePath))
-  const workspace = await WorkspaceCredentials.read()
+async function readStore(options: { strict?: boolean; service?: string } = {}): Promise<Store> {
+  const local = parseStore(
+    await JsonStore.read(storePath, options).catch((error) => {
+      if (options.strict) throw new Error("Saved service credentials could not be read")
+      throw error
+    }),
+    options.strict,
+  )
+  // A device-owned credential takes precedence and does not depend on whether
+  // an unrelated workspace overlay is currently readable.
+  if (options.service && local[options.service]) return local
+  const workspace = await WorkspaceCredentials.read({ strict: options.strict })
   if (!workspace) return local
   for (const [id, values] of Object.entries(workspace.services)) {
     if (local[id]) continue
@@ -426,12 +436,20 @@ async function validDecryptedFields(id: string, entry: StoreEntry): Promise<Reco
 
 /** Resolve one encrypted service credential for a trusted in-process adapter.
  * Values are never returned by HTTP routes and never copied into process.env. */
-export async function resolveCredentialFields(id: string): Promise<Record<string, string> | undefined> {
+export async function resolveCredentialFields(
+  id: string,
+  options: { required?: string[] } = {},
+): Promise<Record<string, string> | undefined> {
   const spec = specFor(id)
   if (!spec?.trusted) return
-  const entry = (await readStore())[id]
+  const entry = (await readStore({ strict: options.required !== undefined, service: id }))[id]
   if (!entry || entry.removal) return
   const fields = await validDecryptedFields(id, entry)
+  if (options.required?.some((name) => !fields[name]?.trim())) {
+    throw new Error(
+      `Your saved ${spec.label} credential could not be read. Reconnect it in Customize → Connectors; no other funding source was used.`,
+    )
+  }
   if (!Object.keys(fields).length) return
   OpenScience.registerSecretValues(Object.values(fields))
   return fields

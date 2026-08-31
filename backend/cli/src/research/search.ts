@@ -12,6 +12,20 @@ export namespace ResearchSearch {
     warnings: z.array(z.string()).optional(),
     wallet_charge_microusd: z.number().int().nonnegative().optional(),
     provider_usage_pending: z.boolean().optional(),
+    search_details: z
+      .object({
+        source: z.enum(["web", "research", "news", "developer"]),
+        mode: z.enum(["fast", "balanced", "deep"]),
+        requested_limit: z.number().int().nonnegative(),
+        effective_limit: z.number().int().nonnegative(),
+        returned_count: z.number().int().nonnegative(),
+        content_requested: z.boolean(),
+        enriched_count: z.number().int().nonnegative(),
+        ranking: z.literal("provider"),
+        date_filter: z.enum(["none", "publication_date_required"]),
+        domain_filter: z.enum(["none", "enforced"]),
+      })
+      .optional(),
   })
 
   export async function search(
