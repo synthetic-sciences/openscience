@@ -8,6 +8,8 @@ import {
   createResource,
   createSignal,
   onCleanup,
+  onMount,
+  untrack,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -26,7 +28,7 @@ import { readSource, writeSource } from "@/atlas/files/last-source"
 import { RemoteFileView, type RemoteFile } from "@/atlas/files/RemoteFileView"
 import { remotePreview } from "@/atlas/files/remote-preview"
 import { downloadBlob, requestStoredArtifact } from "@/artifacts/bytes"
-import { createArtifactsResource, restoreStoredArtifact } from "@/artifacts/resource"
+import { loadStoredArtifacts, restoreStoredArtifact } from "@/artifacts/resource"
 import type { StoredArtifact } from "@/artifacts/store"
 import { uiStore } from "@/atlas/store/ui"
 import { FolderPicker } from "@/atlas/FolderPicker"
@@ -299,7 +301,7 @@ export function FilesPane(
   const dialog = standalone ? undefined : useDialog()
   const platform = standalone ? undefined : usePlatform()
   const server = standalone ? undefined : useServer()
-  const transport: Transport = props.request ?? sdk!.request
+  const transport: Transport = (path, init, query) => (props.request ?? sdk!.request)(path, init, query)
 
   const projectRoot = () =>
     props.directory ?? (sdk?.directory || sync?.data.path.directory || sync?.project?.worktree || "")
@@ -332,6 +334,11 @@ export function FilesPane(
     if (!session || !projectRoot()) return
     return { sessionID: session, projectID: sdk?.projectID, directory: projectRoot() }
   }
+  const scope = createMemo(() =>
+    JSON.stringify([sdk?.url ?? "", sdk?.projectID ?? "", projectRoot(), sessionID() ?? ""]),
+  )
+  let mounted = true
+  onCleanup(() => (mounted = false))
 
   // A grant is minted against a session, and the landing route (/:dir/session)
   // reaches this pane before one exists. The connect form is still worth
@@ -347,26 +354,32 @@ export function FilesPane(
   // The artifact store is project-scoped through the request headers, so it
   // needs no session identity — only the project root as a refetch key.
   const ask = (path: string, init?: RequestInit) => transport(path, init)
-  const [artifacts, { refetch: refetchArtifacts }] = createArtifactsResource(ask, () => sdk?.directory ?? true)
-  const [trashError, setTrashError] = createSignal("")
-  const [deleted, { refetch: refetchDeleted }] = createResource(
-    () => projectRoot() || true,
-    () =>
-      transport("/file/trash")
-        .then(json)
-        .then((value) => {
-          setTrashError("")
-          return normalizeTrash(value)
-        })
-        .catch((value) => {
-          setTrashError(concise(value))
-          return [] as TrashedFile[]
-        }),
+  const [artifacts, { refetch: refetchArtifacts }] = createResource(scope, async (scope) => ({
+    scope,
+    ...(await loadStoredArtifacts(ask)),
+  }))
+  onMount(() => {
+    const refresh = () => void refetchArtifacts()
+    window.addEventListener("openscience:artifacts-changed", refresh)
+    onCleanup(() => window.removeEventListener("openscience:artifacts-changed", refresh))
+  })
+  const artifactData = () => (artifacts.latest?.scope === scope() ? artifacts.latest : undefined)
+  const [deleted, { refetch: refetchDeleted }] = createResource(scope, (scope) =>
+    transport("/file/trash")
+      .then(json)
+      .then((value) => ({ scope, rows: normalizeTrash(value), error: "" }))
+      .catch((value) => ({ scope, rows: [] as TrashedFile[], error: concise(value) })),
   )
+  const deletedData = () => (deleted.latest?.scope === scope() ? deleted.latest : undefined)
 
-  const [snapshot, { refetch: refetchSnapshot }] = createResource(identity, (current) =>
-    readAccess(transport, current).catch(() => undefined),
+  const [snapshot, { refetch: refetchSnapshot }] = createResource(
+    () => identity() && { scope: scope(), identity: identity()! },
+    async (current) => ({
+      scope: current.scope,
+      value: await readAccess(transport, current.identity).catch(() => undefined),
+    }),
   )
+  const accessSnapshot = () => (snapshot.latest?.scope === scope() ? snapshot.latest.value : undefined)
   const filesystemChanged = sdk?.event.on("session.filesystem.changed", (event) => {
     if (event.properties.sessionID !== sessionID()) return
     void refetchSnapshot()
@@ -388,6 +401,8 @@ export function FilesPane(
   const [modalReady, setModalReady] = createSignal(false)
   createEffect(() => {
     if (opened() === 0) return
+    scope()
+    setModalReady(false)
     let live = true
     onCleanup(() => (live = false))
     void transport("/settings/compute")
@@ -406,8 +421,8 @@ export function FilesPane(
     buildSources({
       projectRoot: projectRoot(),
       projectName: projectName(),
-      grants: connectedFilesystemGrants(snapshot.latest),
-      sessionRoot: sessionFilesystemRoot(snapshot.latest),
+      grants: connectedFilesystemGrants(accessSnapshot()),
+      sessionRoot: sessionFilesystemRoot(accessSnapshot()),
       modal: modalReady(),
     }),
   )
@@ -451,7 +466,10 @@ export function FilesPane(
     sources().filter((source) => !["project", "session", "artifacts"].includes(source.kind)),
   )
   const primaryActive = () => primarySources().some((source) => source.id === current().id)
-  const [path, setPath] = createSignal<string[]>([])
+  const place = createMemo(() => JSON.stringify([scope(), current().id, current().kind, current().root]))
+  const [navigation, setNavigation] = createStore({ place: "", parts: [] as string[] })
+  const path = () => (navigation.place === place() ? navigation.parts : [])
+  const setPath = (parts: string[]) => setNavigation({ place: place(), parts })
   const [filter, setFilter] = createSignal("")
   const [error, setError] = createSignal("")
   const [listingError, setListingError] = createSignal("")
@@ -466,6 +484,26 @@ export function FilesPane(
     path: "",
     access: "read" as FilesystemAccess,
     scope: "project" as FilesystemScope,
+  })
+  const operation = createMemo(() => ({ key: JSON.stringify([place(), path()]) }))
+  const owns = (ticket: ReturnType<typeof operation>) => mounted && operation() === ticket
+  createEffect(() => {
+    operation()
+    untrack(() => {
+      setBusy(false)
+      setError("")
+    })
+  })
+  createEffect(() => {
+    place()
+    untrack(() => {
+      setFilter("")
+      setError("")
+      setListingError("")
+      setBusy(false)
+      setRemoteOpen()
+      setConnect({ open: false, path: "", access: "read", scope: "project" })
+    })
   })
 
   const pickSource = (next: PaneSource) => {
@@ -488,121 +526,121 @@ export function FilesPane(
   // moved. Compare the parts instead.
   // The source id joins the key so that switching between two Modal Volumes,
   // which share a kind and an empty root, actually re-lists.
-  const key = createMemo(() => [where(), sessionID(), current().kind, current().id] as const, undefined, {
-    equals: (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3],
+  const key = createMemo(() => [where(), sessionID(), current().kind, current().id, scope()] as const, undefined, {
+    equals: (a, b) => a.every((value, index) => value === b[index]),
   })
   const listingRequest = createFileRequestOwner()
   const listingRetry = { key: "", count: 0 }
   onCleanup(() => listingRequest.dispose())
-  const [entries, { refetch: refetchEntries }] = createResource<FileRow[], ReturnType<typeof key>>(
-    key,
-    async ([target, session, kind, id], info) => {
-      const ownerKey = [sdk?.projectID ?? "", projectRoot(), session ?? "", kind, id, target].join("\n")
-      if (listingRetry.key !== ownerKey) {
-        listingRetry.key = ownerKey
+  const [entries, { refetch: refetchEntries }] = createResource<
+    { key: string; rows: FileRow[] },
+    ReturnType<typeof key>
+  >(key, async ([target, session, kind, id], info) => {
+    const ownerKey = JSON.stringify(key())
+    if (listingRetry.key !== ownerKey) {
+      listingRetry.key = ownerKey
+      listingRetry.count = 0
+    }
+    const ticket = listingRequest.begin(ownerKey)
+    const previous = info.value?.key === ownerKey ? info.value : { key: ownerKey, rows: [] }
+    const owns = () => listingRequest.owns(ticket, ownerKey) && JSON.stringify(key()) === ownerKey
+    const success = (rows: FileRow[]) => {
+      if (owns()) {
         listingRetry.count = 0
+        setListingError("")
       }
-      const ticket = listingRequest.begin(ownerKey)
-      const previous = (info.value ?? []) as FileRow[]
-      const owns = () => listingRequest.owns(ticket, ownerKey)
-      const success = (rows: FileRow[]) => {
-        if (owns()) {
-          listingRetry.count = 0
-          setListingError("")
+      return { key: ownerKey, rows }
+    }
+    const failure = (value: unknown, source = current().name) => {
+      if (!owns()) return previous
+      if (isFileRequestCancellation(value)) {
+        if (listingRetry.count === 0) {
+          listingRetry.count++
+          queueMicrotask(() => {
+            if (owns()) void refetchEntries()
+          })
+        } else {
+          setListingError("Refresh was interrupted. Showing the last known files.")
         }
-        return rows
-      }
-      const failure = (value: unknown, source = current().name) => {
-        if (!owns()) return previous
-        if (isFileRequestCancellation(value)) {
-          if (listingRetry.count === 0) {
-            listingRetry.count++
-            queueMicrotask(() => {
-              if (owns()) void refetchEntries()
-            })
-          } else {
-            setListingError("Refresh was interrupted. Showing the last known files.")
-          }
-          return previous
-        }
-        setListingError(fileListingFailure(value, source))
         return previous
       }
+      setListingError(fileListingFailure(value, source))
+      return previous
+    }
 
-      // The artifacts and trash pseudo-sources always have root "" — they are
-      // backed by the artifact store, not the filesystem, and the server
-      // falls back an empty path to the project root (File.list(dir || root)),
-      // which would silently list the project's files mislabeled as
-      // artifacts. Every other kind always carries a real root once a live
-      // project context exists, so gate on the source kind rather than on
-      // target emptiness.
-      if (kind === "artifacts" || kind === "trash") {
-        // No listing is attempted, so the previous listing's failure no longer
-        // describes anything on screen — leaving it up puts "this folder could
-        // not be read" over a perfectly good trash list.
-        if (owns()) {
-          setError("")
-          setListingError("")
-        }
-        return Promise.resolve([] as FileRow[])
+    // The artifacts and trash pseudo-sources always have root "" — they are
+    // backed by the artifact store, not the filesystem, and the server
+    // falls back an empty path to the project root (File.list(dir || root)),
+    // which would silently list the project's files mislabeled as
+    // artifacts. Every other kind always carries a real root once a live
+    // project context exists, so gate on the source kind rather than on
+    // target emptiness.
+    if (kind === "artifacts" || kind === "trash") {
+      // No listing is attempted, so the previous listing's failure no longer
+      // describes anything on screen — leaving it up puts "this folder could
+      // not be read" over a perfectly good trash list.
+      if (owns()) {
+        setError("")
+        setListingError("")
       }
-      // A Volume is not on this machine: it lists over Modal's API, and its
-      // entries carry a path relative to the volume root rather than to any
-      // directory on disk.
-      if (kind === "modal") {
-        // The first level inside Modal is the Volume list; everything below it is
-        // a path inside whichever Volume was entered.
-        const [volume, ...rest] = target.split("/").filter(Boolean)
-        if (!volume) {
-          return transport("/settings/compute/modal/volumes", { signal: ticket.controller.signal })
-            .then(listingJson)
-            .then((value) => {
-              if (!Array.isArray(value)) return success([])
-              // Volumes are folders here: entering one lists it.
-              return success(
-                (value as Array<{ name: string }>).map((item) => ({
-                  name: item.name,
-                  type: "directory" as const,
-                })),
-              )
-            })
-            .catch((value) => failure(value, "Modal Volumes"))
-        }
-        return transport(
-          `/settings/compute/modal/volumes/${encodeURIComponent(volume)}/files`,
-          { signal: ticket.controller.signal },
-          {
-            path: `/${rest.join("/")}`,
-          },
-        )
+      return Promise.resolve({ key: ownerKey, rows: [] })
+    }
+    // A Volume is not on this machine: it lists over Modal's API, and its
+    // entries carry a path relative to the volume root rather than to any
+    // directory on disk.
+    if (kind === "modal") {
+      // The first level inside Modal is the Volume list; everything below it is
+      // a path inside whichever Volume was entered.
+      const [volume, ...rest] = target.split("/").filter(Boolean)
+      if (!volume) {
+        return transport("/settings/compute/modal/volumes", { signal: ticket.controller.signal })
           .then(listingJson)
           .then((value) => {
             if (!Array.isArray(value)) return success([])
+            // Volumes are folders here: entering one lists it.
             return success(
-              (value as Array<{ path: string; type: string; size: number }>).map((entry) => ({
-                name: entry.path.split("/").filter(Boolean).at(-1) ?? entry.path,
-                type: entry.type === "directory" ? ("directory" as const) : ("file" as const),
-                size: entry.size,
-                path: entry.path,
+              (value as Array<{ name: string }>).map((item) => ({
+                name: item.name,
+                type: "directory" as const,
               })),
             )
           })
-          .catch((value) => failure(value, volume))
+          .catch((value) => failure(value, "Modal Volumes"))
       }
-      const query = fileListQuery(kind, target, session)
-      return transport("/file", { signal: ticket.controller.signal }, query)
+      return transport(
+        `/settings/compute/modal/volumes/${encodeURIComponent(volume)}/files`,
+        { signal: ticket.controller.signal },
+        {
+          path: `/${rest.join("/")}`,
+        },
+      )
         .then(listingJson)
         .then((value) => {
-          // GET /file returns a bare FileNode[] (backend/cli/src/server/routes/file.ts:158-182,
-          // FileListResponses in tooling/sdk/js/src/v2/gen/types.gen.ts:7889). The {data}
-          // wrapper only exists on the generated client's RequestResult, never on the body.
-          if (Array.isArray(value)) return success(value as FileRow[])
-          const data = (value as { data?: unknown }).data
-          return success(Array.isArray(data) ? (data as FileRow[]) : [])
+          if (!Array.isArray(value)) return success([])
+          return success(
+            (value as Array<{ path: string; type: string; size: number }>).map((entry) => ({
+              name: entry.path.split("/").filter(Boolean).at(-1) ?? entry.path,
+              type: entry.type === "directory" ? ("directory" as const) : ("file" as const),
+              size: entry.size,
+              path: entry.path,
+            })),
+          )
         })
-        .catch((value) => failure(value))
-    },
-  )
+        .catch((value) => failure(value, volume))
+    }
+    const query = fileListQuery(kind, target, session)
+    return transport("/file", { signal: ticket.controller.signal }, query)
+      .then(listingJson)
+      .then((value) => {
+        // GET /file returns a bare FileNode[] (backend/cli/src/server/routes/file.ts:158-182,
+        // FileListResponses in tooling/sdk/js/src/v2/gen/types.gen.ts:7889). The {data}
+        // wrapper only exists on the generated client's RequestResult, never on the body.
+        if (Array.isArray(value)) return success(value as FileRow[])
+        const data = (value as { data?: unknown }).data
+        return success(Array.isArray(data) ? (data as FileRow[]) : [])
+      })
+      .catch((value) => failure(value))
+  })
 
   const sourceLoading = createMemo(() => {
     const kind = current().kind
@@ -614,11 +652,11 @@ export function FilesPane(
   const sourceError = createMemo(() => {
     const kind = current().kind
     if (kind === "artifacts") {
-      const message = artifacts.latest?.errors.active
+      const message = artifactData()?.errors.active
       return message ? `Results could not be loaded. ${message}` : ""
     }
     if (kind === "trash") {
-      const message = artifacts.latest?.errors.trash ?? trashError()
+      const message = artifactData()?.errors.trash || deletedData()?.error
       return message ? `Trash could not be loaded. ${message}` : ""
     }
     return listingError()
@@ -657,19 +695,20 @@ export function FilesPane(
 
   const rows = createMemo(() => {
     const query = filter().trim().toLowerCase()
-    const list = entries.latest ?? []
+    const list = entries.latest?.key === JSON.stringify(key()) ? entries.latest.rows : []
     return query ? list.filter((row) => row.name.toLowerCase().includes(query)) : list
   })
+  const available = (row: FileRow) => !busy() && !entries.loading && !listingError() && rows().includes(row)
 
   const artifactTrash = createMemo(() => {
     const query = filter().trim().toLowerCase()
-    const list = artifacts.latest?.trash ?? []
+    const list = artifactData()?.trash ?? []
     return query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
   })
 
   const fileTrash = createMemo(() => {
     const query = filter().trim().toLowerCase()
-    const list = deleted.latest ?? []
+    const list = deletedData()?.rows ?? []
     return query ? list.filter((item) => item.filename.toLowerCase().includes(query)) : list
   })
 
@@ -678,7 +717,7 @@ export function FilesPane(
   // artifact different from a file in a folder.
   const stored = createMemo(() => {
     const query = filter().trim().toLowerCase()
-    const list = artifacts.latest?.active ?? []
+    const list = artifactData()?.active ?? []
     return query ? list.filter((item) => item.title.toLowerCase().includes(query)) : list
   })
 
@@ -735,56 +774,87 @@ export function FilesPane(
   const readArtifact = (artifact: StoredArtifact) =>
     requestStoredArtifact(transport, artifact.id, artifact.current.id).then((response) => response.blob())
 
+  const mutate = async (
+    ticket: ReturnType<typeof operation>,
+    execute: () => Promise<unknown>,
+    refresh: () => unknown,
+    message: string,
+  ) => {
+    // Dialogs can outlive their source, project, session, or server. Never
+    // reinterpret an old selection using the transport's new context.
+    if (!owns(ticket) || busy()) return
+    setBusy(true)
+    try {
+      await execute()
+      if (!owns(ticket)) return
+      await refresh()
+      if (owns(ticket)) setError("")
+    } catch (value) {
+      if (owns(ticket)) setError(`${message} ${concise(value)}`)
+    } finally {
+      if (owns(ticket)) setBusy(false)
+    }
+  }
+
   const downloadArtifact = (artifact: StoredArtifact) => {
-    if (busy()) return
+    if (busy() || !stored().includes(artifact)) return
+    const ticket = operation()
     setBusy(true)
     return requestStoredArtifact(transport, artifact.id, artifact.current.id, true)
       .then((response) => response.blob())
       .then((blob) => {
+        if (!owns(ticket)) return
         if (props.onDownload) return props.onDownload(artifact.current.filename, blob)
         downloadBlob(artifact.current.filename, blob)
       })
-      .then(() => setError(""))
-      .catch((value) => setError(`${artifact.current.filename} could not be downloaded. ${concise(value)}`))
-      .finally(() => setBusy(false))
+      .then(() => owns(ticket) && setError(""))
+      .catch(
+        (value) => owns(ticket) && setError(`${artifact.current.filename} could not be downloaded. ${concise(value)}`),
+      )
+      .finally(() => owns(ticket) && setBusy(false))
   }
 
   const openArtifact = (artifact: StoredArtifact) => {
+    if (!stored().includes(artifact)) return
     if (props.onOpenArtifact) return props.onOpenArtifact(artifact)
     uiStore.openSaved(artifact)
   }
 
   const trashArtifact = async (artifact: StoredArtifact) => {
-    setBusy(true)
-    return transport(`/file/artifact-store/${encodeURIComponent(artifact.id)}`, { method: "DELETE" })
-      .then(json)
-      .then(() => {
+    if (!stored().includes(artifact)) return
+    return mutate(
+      operation(),
+      () => transport(`/file/artifact-store/${encodeURIComponent(artifact.id)}`, { method: "DELETE" }).then(json),
+      () => {
         // The store's own listeners refresh every other artifact surface too,
         // so the grid does not have to know who else is showing this artifact.
         window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
         return refetchArtifacts()
-      })
-      .catch((value) => setError(errorMessage(value)))
-      .finally(() => setBusy(false))
+      },
+      "The Result could not be moved to Trash.",
+    )
   }
 
   const renameArtifact = (artifact: StoredArtifact) => {
+    if (!stored().includes(artifact)) return
+    const ticket = operation()
     const submit = async (title: string) => {
       const next = title.trim()
       if (!next || next === artifact.title) return
-      setBusy(true)
-      return transport(`/file/artifact-store/${encodeURIComponent(artifact.id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: next }),
-      })
-        .then(json)
-        .then(() => {
+      return mutate(
+        ticket,
+        () =>
+          transport(`/file/artifact-store/${encodeURIComponent(artifact.id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: next }),
+          }).then(json),
+        () => {
           window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
           return refetchArtifacts()
-        })
-        .catch((value) => setError(errorMessage(value)))
-        .finally(() => setBusy(false))
+        },
+        "The Result could not be renamed.",
+      )
     }
     if (props.onRenameArtifact) return props.onRenameArtifact(artifact, submit)
     dialog?.show(() => <RenameArtifact artifact={artifact} onSubmit={submit} onClose={() => dialog.close()} />)
@@ -806,9 +876,9 @@ export function FilesPane(
     return response.blob()
   }
 
-  const downloadRemote = async (row: FileRow) => {
-    const volume = path()[0]
+  const downloadRemote = async (row: FileRow, volume = path()[0]) => {
     if (!volume) return
+    const ticket = operation()
     // Leading slash on purpose. The route resolves the containing directory with
     // path.posix.dirname (routes/settings/compute.ts), and dirname("hello.txt")
     // is ".", which Modal answers with NOT_FOUND -- so a file at a Volume's root
@@ -837,13 +907,15 @@ export function FilesPane(
       .then(async (response) => {
         if (!response.ok) throw new Error((await response.text()) || `Download failed (${response.status})`)
         const blob = await response.blob()
+        if (!owns(ticket)) return
         props.onDownload?.(row.name, blob)
       })
-      .catch((value) => setError(`${row.name} could not be downloaded. ${concise(value)}`))
-      .finally(() => setBusy(false))
+      .catch((value) => owns(ticket) && setError(`${row.name} could not be downloaded. ${concise(value)}`))
+      .finally(() => owns(ticket) && setBusy(false))
   }
 
   const open = (row: FileRow) => {
+    if (!available(row)) return
     const from = current()
     // A session's relative FileNode.path is relative to its isolated scratch
     // root, even when the picker is browsing the project or a connected
@@ -865,32 +937,42 @@ export function FilesPane(
   const mutable = createMemo(() => {
     const kind = current().kind
     return Boolean(
-      sessionID() && !current().readonly && (kind === "project" || kind === "session" || kind === "connected"),
+      !busy() &&
+        !entries.loading &&
+        !listingError() &&
+        sessionID() &&
+        !current().readonly &&
+        (kind === "project" || kind === "session" || kind === "connected"),
     )
   })
 
   const renameFile = (row: FileRow) => {
+    if (!available(row) || !mutable()) return
+    const ticket = operation()
+    const session = sessionID()
+    const from = filePath(row)
+    const parent = where()
     const submit = async (name: string) => {
+      if (!owns(ticket) || !mutable()) return
       const next = name.trim()
       if (!next || next === row.name) return
       if (next === "." || next === ".." || /[\\/\u0000]/u.test(next)) {
         setError("A file name cannot contain a path separator.")
         return
       }
-      const session = sessionID()
       if (!session) return setError("Start a session before renaming workspace files.")
-      const target = [current().root, ...path(), next].filter(Boolean).join("/")
-      setBusy(true)
-      return transport("/file/rename", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from: filePath(row), to: target, sessionID: session }),
-      })
-        .then(json)
-        .then(() => refetchEntries())
-        .then(() => setError(""))
-        .catch((value) => setError(`${row.name} could not be renamed. ${concise(value)}`))
-        .finally(() => setBusy(false))
+      const target = [parent, next].filter(Boolean).join("/")
+      return mutate(
+        ticket,
+        () =>
+          transport("/file/rename", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ from, to: target, sessionID: session }),
+          }).then(json),
+        () => refetchEntries(),
+        `${row.name} could not be renamed.`,
+      )
     }
     if (props.onRenameFile) return props.onRenameFile(row, submit)
     if (!dialog) return
@@ -903,20 +985,24 @@ export function FilesPane(
   }
 
   const trashFile = (row: FileRow) => {
+    if (!available(row) || !mutable()) return
+    const ticket = operation()
+    const session = sessionID()
+    const target = filePath(row)
     const submit = async () => {
-      const session = sessionID()
+      if (!owns(ticket) || !mutable()) return
       if (!session) return setError("Start a session before changing workspace files.")
-      setBusy(true)
-      return transport("/file/trash", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: filePath(row), sessionID: session }),
-      })
-        .then(json)
-        .then(() => Promise.all([refetchEntries(), refetchDeleted()]))
-        .then(() => setError(""))
-        .catch((value) => setError(`${row.name} could not be moved to Trash. ${concise(value)}`))
-        .finally(() => setBusy(false))
+      return mutate(
+        ticket,
+        () =>
+          transport("/file/trash", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: target, sessionID: session }),
+          }).then(json),
+        () => Promise.all([refetchEntries(), refetchDeleted()]),
+        `${row.name} could not be moved to Trash.`,
+      )
     }
     if (props.onTrashFile) return props.onTrashFile(row, submit)
     if (!dialog) return
@@ -934,26 +1020,31 @@ export function FilesPane(
   // needs the dialog host, so outside a provider the typed path stays the
   // only route in — which is also what keeps this form testable.
   const browse = async () => {
+    const ticket = operation()
     if (platform?.openDirectoryPickerDialog && server?.isLocal()) {
       const result = await platform
         .openDirectoryPickerDialog({ title: "Connect a folder", serverUrl: sdk?.url })
         .catch((error) => {
+          if (!owns(ticket)) return
           if (!(error instanceof NativeDirectoryPickerUnavailable)) {
             setError(`The system folder picker could not open. ${concise(error)}`)
           }
           return undefined
         })
       if (result !== undefined) {
+        if (!owns(ticket)) return
         const picked = Array.isArray(result) ? result[0] : result
         if (picked) setConnect("path", picked)
         return
       }
     }
+    if (!owns(ticket)) return
     dialog?.show(() => (
       <FolderPicker
         kind="folder"
         title="Connect a folder"
         onSelect={(result) => {
+          if (!owns(ticket)) return
           const picked = Array.isArray(result) ? result[0] : result
           if (picked) setConnect("path", picked)
         }}
@@ -972,66 +1063,65 @@ export function FilesPane(
       setError(blocked() || "This folder could not be connected.")
       return
     }
-    setBusy(true)
-    grantAccess(transport, current, { path, access: connect.access, scope: connect.scope })
-      .then(() => refetchSnapshot())
-      .then(() => {
-        setBusy(false)
-        setError("")
-        setConnect({ open: false, path: "", access: "read", scope: "project" })
-      })
-      .catch((cause) => {
-        setBusy(false)
-        setError(errorMessage(cause))
-      })
+    const ticket = operation()
+    const input = { path, access: connect.access, scope: connect.scope }
+    void mutate(
+      ticket,
+      () => grantAccess(transport, current, input),
+      async () => {
+        await refetchSnapshot()
+        if (owns(ticket)) {
+          setConnect({ open: false, path: "", access: "read", scope: "project" })
+        }
+      },
+      "This folder could not be connected.",
+    )
   }
 
   const restoreArtifact = (artifact: StoredArtifact) => {
-    if (busy()) return
-    setBusy(true)
-    restoreStoredArtifact(ask, artifact.id)
-      .then(() => refetchArtifacts())
-      .then(() => {
-        setBusy(false)
-        setError("")
-      })
-      .catch((cause) => {
-        setBusy(false)
-        setError(errorMessage(cause))
-      })
+    if (!artifactTrash().includes(artifact)) return
+    void mutate(
+      operation(),
+      () => restoreStoredArtifact(ask, artifact.id),
+      () => refetchArtifacts(),
+      "The Result could not be restored.",
+    )
   }
 
   const restoreFile = (file: TrashedFile) => {
     const session = sessionID()
-    if (!session || busy()) return
-    setBusy(true)
-    transport(`/file/trash/${encodeURIComponent(file.id)}/restore`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionID: session }),
-    })
-      .then(json)
-      .then(() => Promise.all([refetchDeleted(), refetchEntries()]))
-      .then(() => setError(""))
-      .catch((value) => setError(`${file.filename} could not be restored. ${concise(value)}`))
-      .finally(() => setBusy(false))
+    if (!session || !fileTrash().includes(file)) return
+    void mutate(
+      operation(),
+      () =>
+        transport(`/file/trash/${encodeURIComponent(file.id)}/restore`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: session }),
+        }).then(json),
+      () => Promise.all([refetchDeleted(), refetchEntries()]),
+      `${file.filename} could not be restored.`,
+    )
   }
 
   const purgeFile = (file: TrashedFile) => {
+    if (!fileTrash().includes(file)) return
+    const ticket = operation()
+    const session = sessionID()
     const submit = async () => {
-      const session = sessionID()
+      if (!owns(ticket)) return
       if (!session) return setError("Start a session before changing workspace files.")
-      setBusy(true)
-      return transport(`/file/trash/${encodeURIComponent(file.id)}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionID: session }),
-      })
-        .then(json)
-        .then(() => refetchDeleted())
-        .then(() => setError(""))
-        .catch((value) => setError(`${file.filename} could not be deleted. ${concise(value)}`))
-        .finally(() => setBusy(false))
+      return mutate(
+        ticket,
+        () =>
+          transport(`/file/trash/${encodeURIComponent(file.id)}`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionID: session }),
+          }).then(json),
+        () => refetchDeleted(),
+        `${file.filename} could not be deleted.`,
+      )
     }
     if (props.onPurgeFile) return props.onPurgeFile(file, submit)
     if (!dialog) return
@@ -1328,7 +1418,7 @@ export function FilesPane(
           <FileTable
             rows={rows()}
             depth={path().length}
-            busy={sourceLoading()}
+            busy={sourceLoading() || busy()}
             mutable={mutable()}
             filtered={Boolean(filter().trim())}
             loading={sourceLoading()}
@@ -1343,6 +1433,7 @@ export function FilesPane(
               setFilter("")
             }}
             onOpen={(row) => {
+              if (!available(row)) return
               if (row.type === "directory") {
                 setPath([...path(), row.name])
                 setFilter("")
@@ -1372,7 +1463,9 @@ export function FilesPane(
           <RemoteFileView
             file={file}
             read={remoteBytes}
-            onDownload={(remote) => void downloadRemote({ name: remote.name, type: "file", path: remote.path })}
+            onDownload={(remote) =>
+              void downloadRemote({ name: remote.name, type: "file", path: remote.path }, remote.volume)
+            }
             onClose={() => setRemoteOpen()}
           />
         )}

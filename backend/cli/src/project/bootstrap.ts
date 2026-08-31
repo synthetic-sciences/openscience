@@ -101,6 +101,7 @@ const filesystemSync = Instance.state(
       if (payload.data.grant.scope !== "installation" && payload.data.projectID !== projectID) return
       Instance.provide({
         directory,
+        projectID,
         fn: async () => stopFilesystem(payload.data.sessionID, payload.data.grant.scope),
       }).catch((error) => Log.Default.error("failed to apply filesystem authority change", { error, directory }))
     }
@@ -118,6 +119,7 @@ const authoritySync = Instance.state(
     return AuthoritySignal.watch(async (change) => {
       return Instance.provide({
         directory,
+        projectID,
         fn: async () => {
           if (change.type === "resync") {
             const sessions = []
@@ -235,6 +237,16 @@ export async function InstanceBootstrap() {
   filesystemSync()
   await authoritySync()
   runtimeCancellationSync()
+
+  // Successful agent write/edit/apply_patch tools publish this event directly,
+  // without going through the file editor's write API. Filesystem watcher
+  // notifications and reads must not move project recency.
+  const projectID = Instance.project.id
+  Bus.subscribe(File.Event.Edited, async () => {
+    await Project.touchActivity(projectID).catch((error) =>
+      Log.Default.warn("project activity update failed", { error }),
+    )
+  })
 
   // Scratch workspaces: remove orphans whose session record is gone.
   SessionFilesystem.sweep().catch(() => {})

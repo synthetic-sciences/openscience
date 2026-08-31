@@ -20,30 +20,36 @@ async function current(projectID: string) {
   })
 }
 
-export const ProjectRoutes = lazy(() =>
-  new Hono()
-    .get(
-      "/",
-      describeRoute({
-        summary: "List OpenScience projects",
-        description: "Get the app-created OpenScience projects owned by this server.",
-        operationId: "project.list",
-        responses: {
-          200: {
-            description: "List of projects",
-            content: {
-              "application/json": {
-                schema: resolver(Project.Info.array()),
-              },
+export const ProjectListRoutes = lazy(() =>
+  new Hono().get(
+    "/",
+    describeRoute({
+      summary: "List OpenScience projects",
+      description: "Get the app-created OpenScience projects owned by this server.",
+      operationId: "project.list",
+      responses: {
+        200: {
+          description: "List of projects",
+          content: {
+            "application/json": {
+              schema: resolver(Project.Info.array()),
             },
           },
         },
-      }),
-      async (c) => {
-        const projects = await ManagedProject.list()
-        return c.json(projects)
       },
-    )
+    }),
+    // Retain the existing SDK call shape. Library discovery is global, so this
+    // legacy query is accepted but must never resolve or register a directory.
+    validator("query", z.object({ directory: z.string().optional().meta({ deprecated: true }) })),
+    async (c) => {
+      const projects = await ManagedProject.list()
+      return c.json(projects)
+    },
+  ),
+)
+
+export const ProjectRoutes = lazy(() =>
+  new Hono()
     .get(
       "/current",
       describeRoute({
@@ -62,7 +68,7 @@ export const ProjectRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(Instance.project)
+        return c.json(await Project.get(Instance.project.id))
       },
     )
     .get(

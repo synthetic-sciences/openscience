@@ -504,7 +504,7 @@ describe("files pane", () => {
     await settle()
 
     expect(host.querySelector("[data-files-loading]")).not.toBeNull()
-    expect(host.querySelector<HTMLButtonElement>('[data-file-row="beta"]')?.disabled).toBe(true)
+    expect(host.querySelector<HTMLButtonElement>('[data-file-row="beta"]')).toBeNull()
     expect(host.textContent).not.toContain("This folder is empty.")
 
     // The click that used to produce volume/alpha/beta.
@@ -744,6 +744,185 @@ describe("files pane", () => {
     await settle()
     expect(host.querySelector("[data-files-error]")).toBeNull()
     expect(host.querySelector('[data-file-row="current.csv"]')).not.toBeNull()
+  })
+
+  test("never offers parent rows as files in a folder whose listing failed", async () => {
+    const opened: PaneFile[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        directory: DIRECTORY,
+        session: SESSION,
+        onOpenFile: (file) => opened.push(file),
+        request: async (route, _init, query) => {
+          if (route !== "/file") return listing([])
+          if (query?.path === DIRECTORY)
+            return listing([
+              { name: "child", type: "directory" },
+              { name: "parent.txt", type: "file" },
+            ])
+          return new Response("missing child", { status: 404 })
+        },
+      }),
+    )
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-row="child"]')?.click()
+    await settle()
+    expect(host.querySelector("[data-files-error]")).not.toBeNull()
+    expect(host.querySelector('[data-file-row="parent.txt"]')).toBeNull()
+    expect(host.querySelector("[data-file-rename]")).toBeNull()
+    expect(opened).toEqual([])
+    host.querySelector<HTMLButtonElement>("[data-file-up]")?.click()
+    await settle()
+    expect(host.querySelector('[data-file-row="parent.txt"]')).not.toBeNull()
+  })
+
+  test("resets a nested folder and hides old rows immediately when the project changes", async () => {
+    const [directory, setDirectory] = solidjs.createSignal("/project/old")
+    const paths: string[] = []
+    let complete!: (response: Response) => void
+    const next = new Promise<Response>((resolve) => (complete = resolve))
+    const host = mount(() =>
+      subject.FilesPane({
+        get directory() {
+          return directory()
+        },
+        request: async (route, _init, query) => {
+          if (route !== "/file") return listing([])
+          paths.push(query!.path)
+          if (query?.path === "/project/new") return next
+          return listing(
+            query?.path.endsWith("/child")
+              ? [{ name: "old.txt", type: "file" }]
+              : [{ name: "child", type: "directory" }],
+          )
+        },
+      }),
+    )
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-row="child"]')?.click()
+    await settle()
+    setDirectory("/project/new")
+    await settle()
+    expect(host.querySelector('[data-file-row="old.txt"]')).toBeNull()
+    expect(paths).toContain("/project/new")
+    expect(paths).not.toContain("/project/new/child")
+    complete(new Response("unavailable", { status: 503 }))
+    await settle()
+    expect(host.querySelector('[data-file-row="old.txt"]')).toBeNull()
+  })
+
+  test("invalidates delayed rename and trash confirmation across session or project changes", async () => {
+    const [directory, setDirectory] = solidjs.createSignal(DIRECTORY)
+    const [session, setSession] = solidjs.createSignal(SESSION)
+    let rename!: (name: string) => Promise<unknown>
+    let trash!: () => Promise<unknown>
+    const writes: string[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        get directory() {
+          return directory()
+        },
+        get session() {
+          return session()
+        },
+        onRenameFile: (_row, submit) => {
+          rename = submit
+        },
+        onTrashFile: (_row, submit) => {
+          trash = submit
+        },
+        request: async (route, init) => {
+          if (init?.method) writes.push(route)
+          return listing(route === "/file" ? [{ name: "same.txt", type: "file" }] : [])
+        },
+      }),
+    )
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-rename="same.txt"]')?.click()
+    host.querySelector<HTMLButtonElement>('[data-file-trash="same.txt"]')?.click()
+    setSession("ses_other")
+    await settle()
+    await rename("renamed.txt")
+    await trash()
+    expect(writes).toEqual([])
+    host.querySelector<HTMLButtonElement>('[data-file-trash="same.txt"]')?.click()
+    setDirectory("/project/other")
+    await settle()
+    setDirectory(DIRECTORY)
+    await settle()
+    await trash()
+    expect(writes).toEqual([])
+  })
+
+  test("late mutations cannot refresh or report errors in another project", async () => {
+    const [directory, setDirectory] = solidjs.createSignal(DIRECTORY)
+    let complete!: (response: Response) => void
+    const pending = new Promise<Response>((resolve) => (complete = resolve))
+    let reads = 0
+    const host = mount(() =>
+      subject.FilesPane({
+        get directory() {
+          return directory()
+        },
+        session: SESSION,
+        onTrashFile: (_row, submit) => {
+          void submit()
+        },
+        request: async (route, init) => {
+          if (init?.method === "POST") return pending
+          if (route === "/file") reads++
+          return listing(route === "/file" ? [{ name: "same.txt", type: "file" }] : [])
+        },
+      }),
+    )
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-trash="same.txt"]')?.click()
+    setDirectory("/project/other")
+    await settle()
+    const before = reads
+    complete(new Response("wrong project", { status: 403 }))
+    await settle()
+    expect(reads).toBe(before)
+    expect(host.textContent).not.toContain("wrong project")
+    expect(host.querySelector('[data-file-row="same.txt"]')).not.toBeNull()
+  })
+
+  test("blocks entering another folder during a pending mutation and releases controls afterwards", async () => {
+    let complete!: (response: Response) => void
+    const pending = new Promise<Response>((resolve) => (complete = resolve))
+    const paths: string[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        directory: DIRECTORY,
+        session: SESSION,
+        onTrashFile: (_row, submit) => {
+          void submit()
+        },
+        request: async (route, init, query) => {
+          if (init?.method === "POST") return pending
+          if (route !== "/file") return listing([])
+          paths.push(query!.path)
+          return listing([
+            { name: "child", type: "directory" },
+            { name: "same.txt", type: "file" },
+          ])
+        },
+      }),
+    )
+    await settle()
+    host.querySelector<HTMLButtonElement>('[data-file-trash="same.txt"]')!.click()
+    await settle()
+    const child = host.querySelector<HTMLButtonElement>('[data-file-row="child"]')!
+    expect(child.disabled).toBe(true)
+    child.click()
+    expect(paths).toEqual([DIRECTORY])
+    complete(listing({}))
+    await settle()
+    expect(host.querySelector<HTMLButtonElement>('[data-file-row="child"]')?.disabled).toBe(false)
+    host.querySelector<HTMLButtonElement>('[data-file-row="child"]')!.click()
+    await settle()
+    expect(paths).toContain(`${DIRECTORY}/child`)
+    expect(host.querySelector('[data-file-trash="same.txt"]')).not.toBeNull()
   })
 
   test("omits a route session until the active project owns it", () => {

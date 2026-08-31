@@ -22,13 +22,13 @@ describe("home project preparation", () => {
           id: "prj_newer",
           worktree: "/work/newer",
           origin: "openscience" as const,
-          time: { created: 20, updated: 50 },
+          time: { created: 20, updated: 50, activity: 50 },
         },
         {
           id: "prj_older",
           worktree: "/work/older",
           origin: "openscience" as const,
-          time: { created: 10, updated: 70 },
+          time: { created: 10, updated: 70, activity: 70 },
         },
         { id: "prj_hidden", worktree: "/work/hidden", origin: "openscience" as const, time: { created: 100 } },
         {
@@ -46,7 +46,7 @@ describe("home project preparation", () => {
         id: "prj_older",
         worktree: "/work/older",
         origin: "openscience",
-        time: { created: 10, updated: 70 },
+        time: { created: 10, updated: 70, activity: 70 },
         updatedAt: 70,
         pinned: false,
       },
@@ -54,7 +54,7 @@ describe("home project preparation", () => {
         id: "prj_newer",
         worktree: "/work/newer",
         origin: "openscience",
-        time: { created: 20, updated: 50 },
+        time: { created: 20, updated: 50, activity: 50 },
         updatedAt: 50,
         pinned: false,
       },
@@ -80,6 +80,58 @@ describe("home project preparation", () => {
     ])
   })
 
+  test("keeps newer activity independently of metadata ordering and resolves archives before filtering", async () => {
+    const subject = await load()
+    if (!subject) return
+    const base = {
+      id: "prj_study",
+      worktree: "/study",
+      origin: "openscience" as const,
+      time: { created: 10, updated: 20, activity: 30 },
+    }
+    const active = { ...base, time: { ...base.time, activity: 100 } }
+    for (const records of [
+      [base, active],
+      [active, base],
+    ]) {
+      expect(subject.prepareProjects(records, new Set())[0].updatedAt).toBe(100)
+    }
+    const archived = { ...base, time: { ...base.time, updated: 150, archived: 150 } }
+    for (const records of [
+      [active, archived],
+      [archived, active],
+    ]) {
+      expect(subject.prepareProjects(records, new Set())).toEqual([])
+      expect(subject.prepareArchivedProjects(records)).toHaveLength(1)
+      expect(subject.prepareArchivedProjects(records)[0].time.activity).toBe(100)
+    }
+    const restored = { ...base, time: { ...base.time, updated: 160 } }
+    expect(subject.prepareArchivedProjects([archived, restored])).toEqual([])
+  })
+
+  test("does not use polluted metadata updates for recency, including legacy records", async () => {
+    const subject = await load()
+    if (!subject) return
+    const projects = subject.prepareProjects(
+      [
+        { id: "prj_idle", worktree: "/idle", origin: "openscience", time: { created: 10, updated: 9999 } },
+        {
+          id: "prj_active",
+          worktree: "/active",
+          origin: "openscience",
+          time: { created: 20, updated: 30, activity: 200 },
+        },
+        { id: "prj_new", worktree: "/new", origin: "openscience", time: { created: 100, updated: 100 } },
+      ],
+      new Set(),
+    )
+    expect(projects.map((project) => [project.id, project.updatedAt])).toEqual([
+      ["prj_active", 200],
+      ["prj_new", 100],
+      ["prj_idle", 10],
+    ])
+  })
+
   test("keeps arbitrary resolved directories out and orders equal activity deterministically", async () => {
     const subject = await load()
     if (!subject) return
@@ -92,14 +144,14 @@ describe("home project preparation", () => {
           name: "Zeta study",
           worktree: "/data/projects/zeta",
           origin: "openscience",
-          time: { created: 50, updated: 100 },
+          time: { created: 50, updated: 100, activity: 100 },
         },
         {
           id: "prj_alpha",
           name: "Alpha study",
           worktree: "/data/projects/alpha",
           origin: "openscience",
-          time: { created: 40, updated: 100 },
+          time: { created: 40, updated: 100, activity: 100 },
         },
       ],
       new Set(),

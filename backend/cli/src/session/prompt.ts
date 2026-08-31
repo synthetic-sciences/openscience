@@ -850,7 +850,7 @@ export namespace SessionPrompt {
         const error = new NamedError.Unknown({
           message:
             message ??
-            "This message is too large for the model's context window, even after summarizing earlier history. Shorten it or start a new session.",
+            "The assembled conversation still exceeds the provider's input limit after an attempt to summarize earlier history. Your conversation is preserved. Remove large attachments, choose a model with a larger input allowance, or start a new session with a short handoff.",
         }).toObject()
         Bus.publish(Session.Event.Error, { sessionID, error })
         await Session.updateMessage({

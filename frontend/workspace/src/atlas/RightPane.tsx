@@ -19,6 +19,7 @@ import { FilesPane } from "@/atlas/FilesPane"
 import { FileView } from "@/atlas/FilePreview"
 import { TerminalSurface } from "@/atlas/TerminalSurface"
 import { useDialog } from "@synsci/ui/context/dialog"
+import { useSDK } from "@/context/sdk"
 import { FileIcon } from "@synsci/ui/file-icon"
 import { StoredArtifactView } from "@/artifacts/StoredArtifactView"
 import { confirmDialog } from "@/atlas/dialogs"
@@ -222,9 +223,13 @@ export function RightPane(
     route?: string
   } = {},
 ): JSX.Element {
+  const sdk = useSDK()
   const context = uiStore.context
   const project = () => props.project ?? props.route ?? window.location.pathname
   const session = () => props.session ?? "new"
+  const fileOwner = createMemo(() => ({ server: sdk.url, project: project(), session: session() }))
+  let live = true
+  onCleanup(() => (live = false))
   const key = createMemo(() => paneWidthKey(project()))
   const legacy = createMemo(() => [
     legacyPaneWidthKey(project(), session()),
@@ -279,6 +284,7 @@ export function RightPane(
     setDirtyFiles((items) => (dirty ? [...new Set([...items, id])] : items.filter((item) => item !== id)))
   const openDirty = () => dirtyFiles().filter((id) => fileTabs().some((tab) => tab.id === id))
   const closeWorkTab = async (id?: string) => {
+    const owner = fileOwner()
     const target = uiStore.workTabs().find((tab) => tab.id === (id ?? uiStore.activeWorkTab()))
     if (target?.kind === "file" && openDirty().includes(target.id)) {
       const confirmed = await confirmDialog(dialog, {
@@ -287,14 +293,15 @@ export function RightPane(
         confirmLabel: "Discard and close",
         danger: true,
       })
-      if (!confirmed) return
+      if (!confirmed || !live || fileOwner() !== owner) return
       markDirty(target.id, false)
     }
     if (target?.kind === "file")
-      discardFileDraft(target.file.directory, target.file.path, target.file.scope, target.file.sessionID)
-    uiStore.closeWorkTab(id)
+      discardFileDraft(target.file.directory, target.file.path, target.file.scope, target.file.sessionID, owner.server)
+    uiStore.closeWorkTab(target?.id ?? id)
   }
   const closePane = async () => {
+    const owner = fileOwner()
     const pending = openDirty()
     if (pending.length > 0) {
       const confirmed = await confirmDialog(dialog, {
@@ -303,12 +310,12 @@ export function RightPane(
         confirmLabel: "Discard and close",
         danger: true,
       })
-      if (!confirmed) return
+      if (!confirmed || !live || fileOwner() !== owner) return
       setDirtyFiles([])
     }
     for (const id of pending) {
       const tab = fileTabs().find((item) => item.id === id)
-      if (tab) discardFileDraft(tab.file.directory, tab.file.path, tab.file.scope, tab.file.sessionID)
+      if (tab) discardFileDraft(tab.file.directory, tab.file.path, tab.file.scope, tab.file.sessionID, owner.server)
       uiStore.closeWorkTab(id)
     }
     uiStore.closeContext()

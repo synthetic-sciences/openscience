@@ -11,6 +11,7 @@ export interface FileToolbarProps {
   sourceLabel?: string
   dirty: boolean
   saving: boolean
+  saveDisabled?: boolean
   writable?: boolean
   disabled?: boolean
   artifact?: boolean
@@ -108,7 +109,7 @@ export function FileToolbar(props: FileToolbarProps): JSX.Element {
                   class="atlas-file-button"
                   classList={{ "is-primary": control.id === "save" }}
                   aria-label={control.id === "save" ? "Save changes" : "Discard changes"}
-                  disabled={props.disabled || control.disabled}
+                  disabled={props.disabled || control.disabled || (control.id === "save" && props.saveDisabled)}
                   onClick={() => action(control.id)}
                 >
                   {control.label}

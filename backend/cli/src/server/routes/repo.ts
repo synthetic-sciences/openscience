@@ -282,6 +282,7 @@ async function within<T>(
   }
   return Instance.provide({
     directory: selected.directory,
+    projectID: selected.project.id,
     init: InstanceBootstrap,
     async fn() {
       if (Instance.project.id !== selected.project.id) {

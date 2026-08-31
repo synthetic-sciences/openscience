@@ -122,13 +122,12 @@ export function visibleServerProjects(projects: StoredProject[], legacy: LegacyP
     if (!project) return []
     return [{ ...item, worktree: project.worktree }]
   })
-  const pending = legacy.map(
-    (item): VisibleProject => ({
-      projectID: "",
-      worktree: item.worktree,
-      expanded: item.expanded,
-    }),
-  )
+  // A legacy path is only a hint until this server confirms its ownership.
+  // Keep unresolved paths in migration state, never render/bootstrap them as projects.
+  const pending = legacy.flatMap((item): VisibleProject[] => {
+    const project = match(catalog, item.worktree)
+    return project ? [{ projectID: project.id, worktree: project.worktree, expanded: item.expanded }] : []
+  })
 
   return [...resolved, ...pending].reduce<VisibleProject[]>((result, item) => {
     const project = item.projectID ? match(catalog, item.projectID) : match(catalog, item.worktree)
@@ -185,6 +184,11 @@ function projectsKey(url: string) {
   return url
 }
 
+/** Live catalogs are server authorities, unlike the port-independent local UI history. */
+export function serverCatalogKey(url: string) {
+  return normalizeServerUrl(url) ?? ""
+}
+
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
   init: (props: { defaultUrl: string }) => {
@@ -223,6 +227,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       projects: {} as Record<string, Project[]>,
     })
     const loading = new Map<string, Promise<Project[]>>()
+    const loaded = new Map<string, number>()
 
     const healthy = () => state.healthy
     const checking = () => state.checking
@@ -289,10 +294,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     const loadProjects = (url: string, force = false) => {
-      const key = projectsKey(url)
+      const key = serverCatalogKey(url)
       if (!key) return Promise.resolve([] as Project[])
       const cached = state.projects[key]
-      if (cached && !force) return Promise.resolve(cached)
+      if (cached && !force && Date.now() - (loaded.get(key) ?? 0) < 30_000) return Promise.resolve(cached)
       const active = loading.get(key)
       if (active) return active
 
@@ -308,6 +313,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         })
         .then((projects) => {
           setState("projects", key, projects)
+          loaded.set(key, Date.now())
           return projects
         })
         .finally(() => loading.delete(key))
@@ -395,7 +401,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       visibleServerProjects(
         store.projects[origin()] ?? [],
         legacy.projects[origin()] ?? [],
-        state.projects[origin()] ?? [],
+        state.projects[serverCatalogKey(state.active)] ?? [],
       ),
     )
     const isLocal = createMemo(() => origin() === "local")
@@ -404,7 +410,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (!ready()) return
       const key = origin()
       if (!key) return
-      const catalog = state.projects[key]
+      const catalog = state.projects[serverCatalogKey(state.active)]
       if (!catalog) return
 
       const result = resolveServerProjects(key, store, legacy, catalog)
@@ -437,7 +443,8 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       })
     })
 
-    const selected = (key: string, selector: string) => match(state.projects[key] ?? [], selector)
+    const selected = (_key: string, selector: string) =>
+      match(state.projects[serverCatalogKey(state.active)] ?? [], selector)
     const pending = (key: string, selector: string) =>
       (legacy.projects[key] ?? []).findIndex((project) => project.worktree === selector)
 
@@ -493,7 +500,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const current = store.projects[key] ?? []
           if (current.some((item) => item.projectID === project.id)) return
           const unresolved = (legacy.projects[key] ?? []).filter(
-            (item) => match(state.projects[key] ?? [], item.worktree)?.id !== project.id,
+            (item) => match(state.projects[serverCatalogKey(state.active)] ?? [], item.worktree)?.id !== project.id,
           )
           batch(() => {
             setStore("projects", key, [{ projectID: project.id, expanded: true }, ...current])

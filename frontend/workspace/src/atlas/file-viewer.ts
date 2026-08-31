@@ -19,6 +19,7 @@ export interface FileData {
   mimeType?: string
   size?: number
   truncated?: boolean
+  revision?: string
 }
 
 export interface FileDescription {
@@ -29,6 +30,7 @@ export interface FileDescription {
 }
 
 export interface FileRequestIdentity {
+  server?: string
   projectID?: string
   directory: string
   sessionID?: string
@@ -106,7 +108,7 @@ export function missingFileFallback(input: {
  * that component after navigation.
  */
 export function fileRequestKey(input: FileRequestIdentity) {
-  return [input.projectID ?? "", input.directory, input.sessionID ?? "", input.path].join("\n")
+  return [input.server ?? "", input.projectID ?? "", input.directory, input.sessionID ?? "", input.path].join("\n")
 }
 
 /** Browser and transport implementations use several spellings for the same

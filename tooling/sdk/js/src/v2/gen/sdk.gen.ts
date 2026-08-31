@@ -97,6 +97,7 @@ import type {
   FileTrashPurgeResponses,
   FileTrashRestoreErrors,
   FileTrashRestoreResponses,
+  FileWriteErrors,
   FileWriteResponses,
   FindFilesResponses,
   FindSymbolsResponses,
@@ -5645,6 +5646,7 @@ export class File_ extends HeyApiClient {
       path: string
       content: string
       sessionID: string
+      expectedRevision?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5657,11 +5659,12 @@ export class File_ extends HeyApiClient {
             { in: "body", key: "path" },
             { in: "body", key: "content" },
             { in: "body", key: "sessionID" },
+            { in: "body", key: "expectedRevision" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).put<FileWriteResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).put<FileWriteResponses, FileWriteErrors, ThrowOnError>({
       url: "/file/content",
       ...options,
       ...params,

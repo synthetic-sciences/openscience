@@ -31,6 +31,8 @@ bun evals/cadence-harness/dev-lab.ts run P24
 
 Every invocation creates one isolated campaign below `~/.openscience-dev/researchagent-test/campaigns`. It refuses to run if the listening backend's source SHA or worktree fingerprint differs from the current checkout. The health identity also records the exact backend process run ID, so a stale server on the same port is visible in every trajectory.
 
+New harness projects are archived immediately, so evaluation work does not populate Home's active project list even if a run is interrupted. Their files and sessions remain available in Archived and campaign evidence. Existing projects are never identified, archived, or deleted by name.
+
 The runner has a transport timeout and a scoped permission policy. It does not impose arbitrary model-call, tool-call, child-agent, or cost budgets. Optional diagnostic ceilings are available as `--max-events`, `--max-tool-calls`, and `--max-child-agents`; they are off unless explicitly supplied. Resource constraints written in a prompt remain authoritative. Direct MCP, raw Modal, external-directory, and environment-mutation permissions remain denied; Modal work must go through the trusted `compute_job` capability.
 
 Use `bun evals/cadence-harness/dev-lab.ts paths` to inspect the active non-secret paths and URLs.

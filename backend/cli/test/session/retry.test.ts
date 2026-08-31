@@ -318,6 +318,38 @@ describe("SessionRetry.isContextOverflow", () => {
   const api = (data: { statusCode?: number; responseBody?: string; message?: string }) =>
     new MessageV2.APIError({ message: "", isRetryable: true, ...data }).toObject() as MessageV2.APIError
 
+  test.each([
+    undefined,
+    "Request Entity Too Large",
+    "<html><body><h1>413 Request Entity Too Large</h1></body></html>",
+    JSON.stringify({ detail: "Idempotent request body is too large" }),
+  ])("reduces HTTP 413 payload failures without retrying the identical body (%s)", (responseBody) => {
+    const error = MessageV2.fromError(
+      new APICallError({
+        message: "Request Entity Too Large",
+        statusCode: 413,
+        url: "https://provider.example/v1/chat/completions",
+        requestBodyValues: {},
+        responseBody,
+        isRetryable: true,
+      }),
+      { providerID: "openrouter" },
+    )
+
+    expect(SessionRetry.isContextOverflow(error)).toBe(true)
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("recognizes a streamed numeric payload rejection without a top-level HTTP status", () => {
+    const error = wrap(JSON.stringify({ error: { code: 413, message: "Request Entity Too Large" } }))
+    expect(SessionRetry.isContextOverflow(error)).toBe(true)
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test.each([401, 429, 503])("does not turn a %s into payload overflow based on ambiguous wording", (statusCode) => {
+    expect(SessionRetry.isContextOverflow(api({ statusCode, message: "Request Entity Too Large" }))).toBe(false)
+  })
+
   test("true for OpenAI/Codex context_length_exceeded code in responseBody", () => {
     const err = api({
       statusCode: 400,

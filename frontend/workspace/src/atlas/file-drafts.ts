@@ -2,17 +2,25 @@ import { resolveArtifactPath } from "@/artifacts/context"
 import type { FileOpenScope } from "@/atlas/file-viewer"
 
 type DraftWindow = Window & {
-  __openscienceFileDrafts?: Map<string, string>
+  __openscienceFileDrafts?: Map<string, FileDraft | string>
   __openscienceFileDraftGuard?: boolean
 }
 
+export interface FileDraft {
+  draft: string
+  saved: string
+  revision?: string
+}
+
 const browser = typeof window === "undefined" ? undefined : (window as DraftWindow)
-const drafts = browser ? (browser.__openscienceFileDrafts ??= new Map<string, string>()) : new Map<string, string>()
+const drafts = browser
+  ? (browser.__openscienceFileDrafts ??= new Map<string, FileDraft | string>())
+  : new Map<string, FileDraft | string>()
 
 // Auto drafts belong to the clicked reference and originating session, not a
 // later resolved basename. Closing that tab must discard exactly its draft.
-const key = (directory: string, path: string, scope?: FileOpenScope, sessionID?: string) =>
-  `${scope ?? "project"}\n${directory}\n${scope === "session" || scope === "auto" ? path : resolveArtifactPath(directory, path)}${(scope === "session" || scope === "auto") && sessionID ? `\n${sessionID}` : ""}`
+const key = (directory: string, path: string, scope?: FileOpenScope, sessionID?: string, server = "") =>
+  `${server}\n${scope ?? "project"}\n${directory}\n${scope === "session" || scope === "auto" ? path : resolveArtifactPath(directory, path)}${(scope === "session" || scope === "auto") && sessionID ? `\n${sessionID}` : ""}`
 
 export function rememberFileDraft(
   directory: string,
@@ -21,13 +29,15 @@ export function rememberFileDraft(
   saved: string,
   scope?: FileOpenScope,
   sessionID?: string,
+  revision?: string,
+  server?: string,
 ) {
-  const id = key(directory, path, scope, sessionID)
+  const id = key(directory, path, scope, sessionID, server)
   if (draft === saved) {
     drafts.delete(id)
     return
   }
-  drafts.set(id, draft)
+  drafts.set(id, { draft, saved, revision })
 }
 
 export function recoverFileDraft(
@@ -36,12 +46,34 @@ export function recoverFileDraft(
   saved: string,
   scope?: FileOpenScope,
   sessionID?: string,
+  server?: string,
 ) {
-  return drafts.get(key(directory, path, scope, sessionID)) ?? saved
+  return recoverFileDraftState(directory, path, saved, scope, sessionID, undefined, server).draft
 }
 
-export function discardFileDraft(directory: string, path: string, scope?: FileOpenScope, sessionID?: string) {
-  drafts.delete(key(directory, path, scope, sessionID))
+/** A recovered edit remains based on its original bytes, never a newer read. */
+export function recoverFileDraftState(
+  directory: string,
+  path: string,
+  saved: string,
+  scope?: FileOpenScope,
+  sessionID?: string,
+  revision?: string,
+  server?: string,
+): FileDraft {
+  const previous = drafts.get(key(directory, path, scope, sessionID, server))
+  if (typeof previous === "string") return { draft: previous, saved }
+  return previous ?? { draft: saved, saved, revision }
+}
+
+export function discardFileDraft(
+  directory: string,
+  path: string,
+  scope?: FileOpenScope,
+  sessionID?: string,
+  server?: string,
+) {
+  drafts.delete(key(directory, path, scope, sessionID, server))
 }
 
 export function discardAllFileDrafts() {

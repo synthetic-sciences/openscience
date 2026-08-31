@@ -5,6 +5,7 @@ import {
   guardUnsavedFileDrafts,
   hasUnsavedFileDrafts,
   recoverFileDraft,
+  recoverFileDraftState,
   rememberFileDraft,
 } from "./file-drafts"
 
@@ -14,6 +15,21 @@ const path = "notes.md"
 beforeEach(discardAllFileDrafts)
 
 describe("file draft retention", () => {
+  test("preserves the original base and revision across a changed read", () => {
+    rememberFileDraft(directory, path, "my changes", "original", undefined, undefined, "rev-a", "https://one")
+    expect(
+      recoverFileDraftState(directory, path, "new disk contents", undefined, undefined, "rev-b", "https://one"),
+    ).toEqual({ draft: "my changes", saved: "original", revision: "rev-a" })
+  })
+
+  test("isolates matching paths on different servers and discards only the selected server", () => {
+    rememberFileDraft(directory, path, "server one edit", "original", undefined, undefined, "rev-a", "https://one")
+    rememberFileDraft(directory, path, "server two edit", "original", undefined, undefined, "rev-b", "https://two")
+    discardFileDraft(directory, path, undefined, undefined, "https://one")
+    expect(recoverFileDraft(directory, path, "disk one", undefined, undefined, "https://one")).toBe("disk one")
+    expect(recoverFileDraft(directory, path, "disk two", undefined, undefined, "https://two")).toBe("server two edit")
+  })
+
   test("restores an unsaved project draft after its view remounts", () => {
     rememberFileDraft(directory, path, "edited locally", "saved on disk")
 

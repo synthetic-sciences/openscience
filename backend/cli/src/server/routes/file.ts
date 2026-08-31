@@ -298,6 +298,7 @@ export const FileRoutes = lazy(() =>
               },
             },
           },
+          409: { description: "The file no longer matches the editor's read revision" },
         },
       }),
       validator(
@@ -306,11 +307,15 @@ export const FileRoutes = lazy(() =>
           path: z.string(),
           content: z.string(),
           sessionID: Identifier.schema("session"),
+          expectedRevision: File.Revision.optional(),
         }),
       ),
       async (c) => {
         const body = c.req.valid("json")
-        const content = await File.write(body.path, body.content, { sessionID: body.sessionID })
+        const content = await File.write(body.path, body.content, {
+          sessionID: body.sessionID,
+          expectedRevision: body.expectedRevision,
+        })
         return c.json(content)
       },
     )

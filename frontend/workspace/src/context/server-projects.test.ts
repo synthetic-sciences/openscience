@@ -5,6 +5,7 @@ import {
   normalizeServerUrl,
   resolveServerProjects,
   serverDisplayName,
+  serverCatalogKey,
   visibleServerProjects,
 } from "./server"
 
@@ -19,6 +20,16 @@ const project: Project = {
 }
 
 describe("server project persistence", () => {
+  test("never shares a live catalog between desktop and development servers", () => {
+    expect(serverCatalogKey("http://localhost:4096")).not.toBe(serverCatalogKey("http://localhost:5555"))
+    expect(serverCatalogKey("http://127.0.0.1:4096")).not.toBe(serverCatalogKey("http://127.0.0.1:5555"))
+    expect(serverCatalogKey("http://localhost:4096/")).toBe(serverCatalogKey("http://localhost:4096"))
+  })
+
+  test("does not render unverified legacy folders from another server or deleted projects", () => {
+    expect(visibleServerProjects([], [{ worktree: "/unrelated", expanded: true }], [project])).toEqual([])
+    expect(visibleServerProjects([{ projectID: project.id, expanded: true }], [], [])).toEqual([])
+  })
   test("normalizes adversarial slash-heavy server input without a regular expression", () => {
     const slashes = "/".repeat(100_000)
     expect(normalizeServerUrl(` example.com${slashes}`)).toBe("http://example.com")

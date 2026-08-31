@@ -24,6 +24,10 @@ export type Project = {
   time: {
     created: number
     updated: number
+    /**
+     * Last substantive session or file activity, not metadata refresh
+     */
+    activity?: number
     initialized?: number
     archived?: number
   }
@@ -2423,6 +2427,7 @@ export type FileContent = {
   mimeType?: string
   size?: number
   truncated?: boolean
+  revision?: string
 }
 
 export type File = {
@@ -9479,6 +9484,9 @@ export type ProjectListData = {
   body?: never
   path?: never
   query?: {
+    /**
+     * @deprecated
+     */
     directory?: string
   }
   url: "/project"
@@ -12487,12 +12495,20 @@ export type FileWriteData = {
     path: string
     content: string
     sessionID: string
+    expectedRevision?: string
   }
   path?: never
   query?: {
     directory?: string
   }
   url: "/file/content"
+}
+
+export type FileWriteErrors = {
+  /**
+   * The file no longer matches the editor's read revision
+   */
+  409: unknown
 }
 
 export type FileWriteResponses = {

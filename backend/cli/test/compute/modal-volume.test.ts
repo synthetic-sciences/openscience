@@ -155,6 +155,68 @@ describe("ModalVolume", () => {
     expect((await fs.stat(paths[0]!)).isFile()).toBe(true)
   })
 
+  test("finds an existing uv installation outside a desktop launch PATH without running it", async () => {
+    if (process.platform === "win32") return
+    const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-runtime-"))
+    roots.push(root)
+    const installed = path.join(root, "installed")
+    const missing = path.join(root, "desktop-path")
+    await fs.mkdir(installed)
+    const binary = path.join(installed, "uv")
+    await fs.writeFile(binary, "#!/bin/sh\nexit 99\n", { mode: 0o700 })
+    await using _testing = ModalVolume.testing({ directories: [installed] })
+
+    const selected = await ModalVolume.command({
+      tokenId: "ak-test",
+      tokenSecret: "as-test",
+      env: { PATH: missing },
+    })
+
+    expect(selected).toEqual([
+      await fs.realpath(binary),
+      "run",
+      "--no-project",
+      "--python",
+      "3.12",
+      "--with",
+      `modal==${ModalVolume.VERSION}`,
+      "python",
+      "-I",
+      await ModalVolume.driverPath(),
+    ])
+  })
+
+  test("preserves uv on an explicit runtime PATH before checking fallback installations", async () => {
+    if (process.platform === "win32") return
+    const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-path-"))
+    roots.push(root)
+    const binary = path.join(root, "uv")
+    await fs.writeFile(binary, "#!/bin/sh\nexit 99\n", { mode: 0o700 })
+    await using _testing = ModalVolume.testing({ directories: [] })
+
+    const selected = await ModalVolume.command({
+      tokenId: "ak-test",
+      tokenSecret: "as-test",
+      env: { PATH: root },
+    })
+
+    expect(selected[0]).toBe(binary)
+  })
+
+  test("rejects a non-executable fallback and explains how to supply the pinned runtime", async () => {
+    if (process.platform === "win32") return
+    const root = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "openscience-modal-missing-"))
+    roots.push(root)
+    await fs.writeFile(path.join(root, "uv"), "not an executable", { mode: 0o600 })
+    await using _testing = ModalVolume.testing({ directories: [root] })
+
+    await expect(
+      ModalVolume.command({ tokenId: "ak-test", tokenSecret: "as-test", env: { PATH: root } }),
+    ).rejects.toThrow(
+      `OpenScience could not find uv or an isolated Python installation with Modal SDK ${ModalVolume.VERSION}`,
+    )
+  })
+
   test("accepts a system Python only when the pinned SDK is available in isolated mode", async () => {
     const python = Bun.which("python3") ?? Bun.which("python")
     if (!python) throw new Error("Python is required for the Modal Volume driver test")

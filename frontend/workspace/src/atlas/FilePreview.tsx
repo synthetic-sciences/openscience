@@ -43,6 +43,7 @@ import {
   fileReadRetryDelay,
   initialFileScope,
   fileReadSession,
+  fileErrorMessage,
   linkedFileTarget,
   isMissingFileError,
   missingFileFallback,
@@ -58,7 +59,7 @@ import {
 import { LANG, extension as ext } from "@/atlas/files/artifact-thumb"
 import { resolveViewer } from "@/atlas/files/viewer-registry"
 import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
-import { recoverFileDraft, rememberFileDraft } from "@/atlas/file-drafts"
+import { discardFileDraft, recoverFileDraftState, rememberFileDraft } from "@/atlas/file-drafts"
 import { splitAlignedMarkdown } from "@/atlas/FilePreviewMarkdown"
 import { rawFileQuery } from "@/utils/project-file"
 import { CodeEditor } from "@/atlas/CodeEditor"
@@ -99,6 +100,8 @@ interface ViewState {
   data?: FileData
   error?: Error
   saveError?: string
+  revision?: string
+  conflict?: boolean
   inspection?: ArtifactInspection
 }
 
@@ -129,12 +132,16 @@ export function FileView(props: {
   active?: boolean
   writable?: boolean
   onDirtyChange?: (dirty: boolean) => void
+  /** Explicit transport seam for embedding and component-level regression checks. */
+  services?: Pick<ReturnType<typeof useSDK>, "request" | "client" | "projectID" | "url">
 }): JSX.Element {
-  const sdk = useSDK()
-  const sync = useSync()
-  const params = useParams()
-  const directory = () => props.directory || sdk.directory || sync.data.path.directory || sync.project?.worktree || ""
-  const activeSessionID = () => props.sessionID ?? (params.id && params.id !== "new" ? params.id : undefined)
+  const production = props.services ? undefined : useSDK()
+  const sdk = props.services ?? production!
+  const sync = props.services ? undefined : useSync()
+  const params = props.services ? undefined : useParams()
+  const directory = () =>
+    props.directory || production?.directory || sync?.data.path.directory || sync?.project?.worktree || ""
+  const activeSessionID = () => props.sessionID ?? (params?.id && params.id !== "new" ? params.id : undefined)
   const initialScope = () =>
     initialFileScope(props.scope, { directory: directory(), path: props.path, sessionID: activeSessionID() })
   const [resolvedScope, setResolvedScope] = createSignal<ResolvedFileScope>(initialScope())
@@ -142,7 +149,14 @@ export function FileView(props: {
   const [resolvedWritable, setResolvedWritable] = createSignal<boolean>()
   let scopeIdentity = ""
   createEffect(() => {
-    const next = [props.scope ?? "project", directory(), props.path, activeSessionID() ?? ""].join("\n")
+    const next = [
+      sdk.url,
+      sdk.projectID,
+      props.scope ?? "project",
+      directory(),
+      props.path,
+      activeSessionID() ?? "",
+    ].join("\n")
     if (next === scopeIdentity) return
     scopeIdentity = next
     setResolvedScope(initialScope())
@@ -161,6 +175,17 @@ export function FileView(props: {
     })
   const name = () => resolvedPath().split("/").pop() || resolvedPath()
   const e = () => ext(name())
+  const owner = createMemo(() => ({
+    server: sdk.url,
+    projectID: sdk.projectID,
+    directory: directory(),
+    sessionID: activeSessionID(),
+    path: props.path,
+    target: requestPath(),
+    scope: props.scope,
+  }))
+  let mounted = true
+  onCleanup(() => (mounted = false))
 
   const [view, setView] = createStore<ViewState>({
     source: false,
@@ -175,6 +200,7 @@ export function FileView(props: {
   const request = createFileRequestOwner()
   const readRetry = { key: "", count: 0 }
   let readyKey = ""
+  let readyOwner: ReturnType<typeof owner> | undefined
   let readRetryTimer: ReturnType<typeof setTimeout> | undefined
   const pdfRequest = { current: 0 }
   const pdfAbort = { current: undefined as AbortController | undefined }
@@ -185,8 +211,15 @@ export function FileView(props: {
     const dir = directory()
     const path = requestPath()
     const activeSession = fileSessionID()
+    const location = owner()
     view.refresh
-    const key = fileRequestKey({ projectID: sdk.projectID, directory: dir, sessionID: activeSession, path })
+    const key = fileRequestKey({
+      server: sdk.url,
+      projectID: sdk.projectID,
+      directory: dir,
+      sessionID: activeSession,
+      path,
+    })
     if (readRetryTimer) {
       clearTimeout(readRetryTimer)
       readRetryTimer = undefined
@@ -198,12 +231,12 @@ export function FileView(props: {
     const ticket = request.begin(key)
     // Read completion and editor state are outputs, not request dependencies:
     // tracking them would launch another read when a refresh replaces data.
-    const retained = untrack(() => readyKey === key && view.status === "ready" && view.data)
+    const retained = untrack(() => readyOwner === location && readyKey === key && view.status === "ready" && view.data)
     if (retained) {
       // A reconnect or explicit refresh must not blank a valid preview. Keep
       // the rendered bytes and any unsaved draft while the replacement read
       // happens in the background.
-      setView({ error: undefined, saveError: undefined, saving: false })
+      setView({ error: undefined })
     } else {
       readyKey = ""
       setView({
@@ -215,6 +248,8 @@ export function FileView(props: {
         draft: "",
         saved: "",
         saving: false,
+        revision: undefined,
+        conflict: false,
         inspection: undefined,
       })
     }
@@ -232,7 +267,7 @@ export function FileView(props: {
       const envelope = response as unknown as { data?: FileData }
       return envelope.data ?? (response as unknown as FileData)
     }).then((result) => {
-      if (!request.owns(ticket, key)) return
+      if (!request.owns(ticket, key) || owner() !== location) return
       if (result.cancelled) {
         const delay = fileReadRetryDelay(readRetry.count)
         if (delay !== undefined) {
@@ -276,9 +311,10 @@ export function FileView(props: {
           void sdk
             .request("/file/resolve", { signal: ticket.controller.signal }, { path: reference, sessionID: session })
             .then(async (response) => {
-              if (!request.owns(ticket, key)) return
+              if (!request.owns(ticket, key) || owner() !== location) return
               if (!response.ok) throw new Error(await response.text())
               const resolved = (await response.json()) as { path?: unknown; writable?: unknown }
+              if (!request.owns(ticket, key) || owner() !== location) return
               if (typeof resolved.path === "string" && resolved.path) {
                 if (typeof resolved.writable === "boolean") setResolvedWritable(resolved.writable)
                 setResolvedPath(resolved.path)
@@ -287,7 +323,8 @@ export function FileView(props: {
               setView({ status: "error", error: originalError, data: undefined })
             })
             .catch(() => {
-              if (request.owns(ticket, key)) setView({ status: "error", error: originalError, data: undefined })
+              if (request.owns(ticket, key) && owner() === location)
+                setView({ status: "error", error: originalError, data: undefined })
             })
           return
         }
@@ -297,13 +334,27 @@ export function FileView(props: {
       const data = result.data ?? {}
       readRetry.count = 0
       const text = data.encoding === "base64" ? "" : (data.content ?? "")
+      const recovered = recoverFileDraftState(
+        dir,
+        location.path,
+        text,
+        location.scope,
+        location.sessionID,
+        data.revision,
+        location.server,
+      )
+      const conflict = recovered.draft !== recovered.saved && recovered.revision !== data.revision
       readyKey = key
+      readyOwner = location
       setView({
         status: "ready",
         data,
         error: undefined,
-        draft: recoverFileDraft(dir, props.path, text, props.scope, activeSessionID()),
-        saved: text,
+        ...recovered,
+        conflict,
+        saveError: conflict
+          ? "This file changed on disk. Your edits are preserved; copy them before discarding and reloading the latest file."
+          : undefined,
       })
     })
   })
@@ -324,7 +375,18 @@ export function FileView(props: {
   createEffect(() => props.onDirtyChange?.(dirty()))
   createEffect(() => {
     if (view.status !== "ready") return
-    rememberFileDraft(directory(), props.path, view.draft, view.saved, props.scope, activeSessionID())
+    const location = owner()
+    if (readyOwner !== location) return
+    rememberFileDraft(
+      location.directory,
+      location.path,
+      view.draft,
+      view.saved,
+      location.scope,
+      location.sessionID,
+      view.revision,
+      location.server,
+    )
   })
   const scientific = createMemo(() => (isBinary() ? undefined : detectScientificFile(e(), view.draft)))
   const biological = createMemo(() => (isBinary() ? undefined : detectBiologicalFormat(e())))
@@ -539,7 +601,14 @@ export function FileView(props: {
   })
 
   const save = async () => {
-    if (view.saving || isBinary() || truncated() || !dirty()) return
+    if (view.status !== "ready" || view.saving || isBinary() || truncated() || !dirty() || view.conflict) return
+    if (!view.revision) {
+      setView(
+        "saveError",
+        "This server did not provide a file revision. Your edits are preserved. Update the server and reload before saving.",
+      )
+      return
+    }
     if (writable() === false) {
       toast.error("read-only source", "Reconnect this location with Read & write access to change files.")
       return
@@ -549,56 +618,71 @@ export function FileView(props: {
       toast.error("save unavailable", "Start a research session before changing workspace files.")
       return
     }
-    const identity = fileRequestKey({
-      projectID: sdk.projectID,
-      directory: directory(),
-      sessionID: session,
-      path: requestPath(),
-    })
+    const location = owner()
+    const owns = () => mounted && owner() === location
     const path = requestPath()
     const content = view.draft
+    const expectedRevision = view.revision
     const title = name()
+    // A pending read must not replace the base revision after this write starts.
+    request.dispose()
     setView({ saving: true, saveError: undefined })
     try {
       const res = await sdk.request("/file/content", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, content, sessionID: session }),
+        body: JSON.stringify({ path, content, sessionID: session, expectedRevision }),
       })
-      if (!res.ok) throw new Error(`save failed (${res.status})`)
-      const payload = (await res.json().catch(() => ({}))) as unknown
-      const saved =
-        payload && typeof payload === "object" && "content" in payload
-          ? (payload as { content?: unknown }).content
-          : undefined
-      if (
-        identity !==
-        fileRequestKey({
-          projectID: sdk.projectID,
-          directory: directory(),
-          sessionID: activeSessionID(),
-          path: requestPath(),
-        })
+      const payload = (await res.json().catch(() => undefined)) as FileData | undefined
+      if (!res.ok) {
+        if (res.status === 409 && owns()) setView("conflict", true)
+        throw new Error(
+          res.status === 409
+            ? "This file changed on disk. Your edits are preserved; copy them before discarding and reloading the latest file."
+            : payload
+              ? fileErrorMessage(payload)
+              : `Save failed (${res.status}). Your edits are preserved.`,
+        )
+      }
+      if (!payload?.revision)
+        throw new Error(
+          "The server did not confirm the saved revision. Your edits are preserved; reload the file before trying again.",
+        )
+      const next = typeof payload.content === "string" ? payload.content : content
+      const previous = recoverFileDraftState(
+        location.directory,
+        location.path,
+        content,
+        location.scope,
+        location.sessionID,
+        expectedRevision,
+        location.server,
       )
-        return
-      const next = typeof saved === "string" ? saved : content
+      if (previous.revision === expectedRevision) {
+        const settled = reconcileSavedDraft(previous.draft, content, next)
+        rememberFileDraft(
+          location.directory,
+          location.path,
+          settled.draft,
+          settled.saved,
+          location.scope,
+          location.sessionID,
+          payload.revision,
+          location.server,
+        )
+      }
+      if (!owns()) return
       setView({
         ...reconcileSavedDraft(view.draft, content, next),
         saving: false,
         saveError: undefined,
+        revision: payload.revision,
+        conflict: false,
+        data: { ...view.data, content: next, revision: payload.revision },
       })
       toast.success("saved", title)
     } catch (error) {
-      if (
-        identity !==
-        fileRequestKey({
-          projectID: sdk.projectID,
-          directory: directory(),
-          sessionID: activeSessionID(),
-          path: requestPath(),
-        })
-      )
-        return
+      if (!owns()) return
       const message = error instanceof Error ? error.message : String(error)
       setView({ saving: false, saveError: message })
       toast.error("save failed", message)
@@ -609,6 +693,10 @@ export function FileView(props: {
   // file's bytes on disk (not the unsaved draft) and registers a durable,
   // versioned artifact with provenance.
   const [archiving, setArchiving] = createSignal(false)
+  createEffect(() => {
+    owner()
+    setArchiving(false)
+  })
   const artifact = async () => {
     if (archiving()) return
     if (dirty()) {
@@ -620,6 +708,9 @@ export function FileView(props: {
       toast.error("artifact unavailable", "Open this file inside a research session to save artifacts.")
       return
     }
+    const location = owner()
+    const owns = () => mounted && owner() === location
+    const title = name()
     setArchiving(true)
     try {
       const res = await sdk.request("/file/artifact", {
@@ -629,35 +720,43 @@ export function FileView(props: {
       })
       if (!res.ok) throw new Error(`artifact save failed (${res.status})`)
       const saved = normalizeStoredArtifact(await res.json().catch(() => undefined))
+      if (!owns()) return
       window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
       showToast({
         variant: "success",
         title: "Saved to Results",
-        description: saved ? savedResultLabel(saved) : name(),
+        description: saved ? savedResultLabel(saved) : title,
         actions: saved
           ? [
               {
                 label: "Open",
-                onClick: () => uiStore.openSaved(saved),
+                onClick: () => {
+                  if (owns()) uiStore.openSaved(saved)
+                },
               },
             ]
           : undefined,
       })
     } catch (error) {
+      if (!owns()) return
       toast.error("artifact save failed", error instanceof Error ? error.message : String(error))
     } finally {
-      setArchiving(false)
+      if (owns()) setArchiving(false)
     }
   }
 
   const copy = async () => {
+    const location = owner()
+    const title = name()
     try {
       await navigator.clipboard?.writeText(isBinary() ? dataUrl() : view.draft)
-      toast.success("copied", name())
+      if (mounted && owner() === location) toast.success("copied", title)
     } catch {}
   }
 
   const download = async () => {
+    const location = owner()
+    const title = name()
     try {
       const session = fileSessionID()
       const response = await sdk.request(
@@ -666,8 +765,10 @@ export function FileView(props: {
         rawFileQuery({ directory: directory(), path: requestPath(), sessionID: session, scope: resolvedScope() }),
       )
       if (!response.ok) throw new Error(`download failed (${response.status})`)
-      downloadBlob(name(), await response.blob())
+      const blob = await response.blob()
+      if (mounted && owner() === location) downloadBlob(title, blob)
     } catch (error) {
+      if (!mounted || owner() !== location) return
       toast.error("download failed", error instanceof Error ? error.message : String(error))
     }
   }
@@ -689,13 +790,21 @@ export function FileView(props: {
         sourceLabel={description().source && writable() !== false ? "Edit" : undefined}
         dirty={dirty()}
         saving={view.saving}
+        saveDisabled={!view.revision || view.conflict === true}
         writable={writable()}
         disabled={view.status !== "ready"}
         artifact={Boolean(activeSessionID())}
         archiving={archiving()}
         onPreview={() => setView("source", false)}
         onSource={() => setView("source", true)}
-        onDiscard={() => setView({ draft: view.saved, saveError: undefined })}
+        onDiscard={() => {
+          discardFileDraft(directory(), props.path, props.scope, activeSessionID(), sdk.url)
+          if (view.conflict) {
+            setView({ conflict: false, saveError: undefined, draft: view.saved, refresh: view.refresh + 1 })
+            return
+          }
+          setView({ draft: view.saved, saveError: undefined })
+        }}
         onSave={() => void save()}
         onArtifact={() => void artifact()}
         onCopy={() => void copy()}
@@ -707,8 +816,35 @@ export function FileView(props: {
         {(error) => (
           <div class="atlas-file-save-error" role="alert">
             Couldn’t save changes. {error()}
+            <Show when={view.conflict}>
+              <button
+                type="button"
+                class="atlas-file-button"
+                onClick={() => {
+                  discardFileDraft(directory(), props.path, props.scope, activeSessionID(), sdk.url)
+                  setView({ draft: view.saved, conflict: false, saveError: undefined, refresh: view.refresh + 1 })
+                }}
+              >
+                Discard changes and reload
+              </button>
+            </Show>
           </div>
         )}
+      </Show>
+      <Show
+        when={
+          view.status === "ready" &&
+          !isBinary() &&
+          !truncated() &&
+          !view.revision &&
+          !view.saveError &&
+          writable() !== false
+        }
+      >
+        <div class="atlas-file-save-error" role="status">
+          Saving is unavailable because this server did not provide a file revision. Your edits are preserved; update
+          the server and reload before saving.
+        </div>
       </Show>
 
       <div class="atlas-file-body" data-slot="file-body">
@@ -791,7 +927,7 @@ export function FileView(props: {
                     saving={view.saving}
                     onChange={(draft) => {
                       if (writable() === false) return
-                      setView({ draft, saveError: undefined })
+                      setView({ draft, saveError: view.conflict ? view.saveError : undefined })
                     }}
                   />
                 </Match>
@@ -961,7 +1097,7 @@ export function FileView(props: {
                     language={LANG[e()] ?? "text"}
                     readOnly={writable() === false}
                     wrap={kind() === "markdown"}
-                    onChange={(draft) => setView({ draft, saveError: undefined })}
+                    onChange={(draft) => setView({ draft, saveError: view.conflict ? view.saveError : undefined })}
                     onSave={() => void save()}
                   />
                 </Match>

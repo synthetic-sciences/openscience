@@ -160,12 +160,16 @@ export namespace SessionRetry {
     return { statusCode, code, type, message }
   }
 
-  // True when an error means the request exceeded the model's context window.
-  // Deterministic: retrying the same input can only fail again, so the caller
-  // should compact + resume rather than retry.
+  // True when the assembled request exceeds a context or HTTP payload limit.
+  // A small new prompt can still carry an oversized conversation. Both limits
+  // need the same bounded compact + resume path, never an identical retry.
   export function isContextOverflow(error: ReturnType<NamedError["toObject"]>): boolean {
     const { statusCode, code, type, message } = normalizeProviderError(error)
     if (statusCode === 429) return false
+    // Gateways can reject the serialized body before the model sees it, with
+    // only an HTML/plain-text 413 and no provider-specific context error code.
+    // This is a byte limit, not proof that the model's token window is full.
+    if (statusCode === 413) return true
     if (OVERFLOW_CODES.has(code) || OVERFLOW_CODES.has(type)) return true
     const lower = message.toLowerCase()
     // Catches transient failures with no statusCode (streamed error chunks) whose

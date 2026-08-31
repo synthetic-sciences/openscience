@@ -1,4 +1,5 @@
-import { For, Match, Show, Switch, type JSX } from "solid-js"
+import { For, Match, Show, Switch, onCleanup, onMount, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { DateTime } from "luxon"
 import { AppHeader } from "@/atlas/AppHeader"
 import {
@@ -42,6 +43,16 @@ export function ProjectsWorkbench(props: {
   onServer: () => void
 }): JSX.Element {
   const recent = () => props.state === "recent"
+  const [clock, setClock] = createStore({ now: Date.now() })
+  onMount(() => {
+    const refresh = () => setClock("now", Date.now())
+    const interval = setInterval(refresh, 60_000)
+    document.addEventListener("visibilitychange", refresh)
+    onCleanup(() => {
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", refresh)
+    })
+  })
   let input: HTMLInputElement | undefined
 
   const clearSearch = () => {
@@ -56,9 +67,11 @@ export function ProjectsWorkbench(props: {
     return `${total} ${noun}`
   }
 
-  const editedLabel = (project: HomeProject) => {
-    const relative = DateTime.fromMillis(project.updatedAt).toRelative() ?? "recently"
-    return `Edited ${relative}`
+  const activityLabel = (project: HomeProject) => {
+    const relative =
+      DateTime.fromMillis(project.updatedAt).toRelative({ base: DateTime.fromMillis(clock.now) }) ?? "recently"
+    const label = (project.time.activity ?? 0) > project.time.created ? "Active" : "Created"
+    return `${label} ${relative}`
   }
 
   return (
@@ -240,8 +253,11 @@ export function ProjectsWorkbench(props: {
                                   ·
                                 </span>
                               </Show>
-                              <time datetime={DateTime.fromMillis(project.updatedAt).toISO() ?? undefined}>
-                                {editedLabel(project)}
+                              <time
+                                datetime={DateTime.fromMillis(project.updatedAt).toISO() ?? undefined}
+                                title="Last research activity; opening a project does not change this date"
+                              >
+                                {activityLabel(project)}
                               </time>
                             </span>
                           </span>

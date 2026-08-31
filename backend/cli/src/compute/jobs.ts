@@ -518,6 +518,7 @@ export namespace ComputeJobs {
   async function currentAuthority(authority: ExecutionAuthority.Decision) {
     const current = await Instance.provide({
       directory: authority.directory ?? authority.workspace,
+      projectID: authority.projectID,
       fn: () =>
         ExecutionAuthority.require({
           projectID: authority.projectID,

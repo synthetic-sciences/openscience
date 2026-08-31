@@ -275,9 +275,12 @@ export namespace Session {
   )
 
   export const touch = fn(Identifier.schema("session"), async (sessionID) => {
-    await update(sessionID, (draft) => {
+    const session = await update(sessionID, (draft) => {
       draft.time.updated = Date.now()
     })
+    await Project.touchActivity(session.projectID, session.time.updated).catch((error) =>
+      log.warn("project activity update failed", { error }),
+    )
   })
 
   export async function createNext(input: {
@@ -336,6 +339,9 @@ export namespace Session {
       throw error
     })
     validated().add(result.id)
+    await Project.touchActivity(result.projectID, result.time.created).catch((error) =>
+      log.warn("project activity update failed", { error }),
+    )
     Bus.publish(Event.Created, {
       info: result,
     })
@@ -501,6 +507,14 @@ export namespace Session {
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
     await assertDirectory(msg.sessionID)
     await Storage.write(["message", msg.sessionID, msg.id], msg)
+    // Completing real provider work is activity. Replayed historical records
+    // keep their original timestamp; internal compaction/title bookkeeping is
+    // not a new user edit and must not reorder the project library.
+    if (msg.role === "assistant" && !msg.summary && msg.time.completed) {
+      await Project.touchActivity(Instance.project.id, msg.time.completed).catch((error) =>
+        log.warn("project activity update failed", { error }),
+      )
+    }
     Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })

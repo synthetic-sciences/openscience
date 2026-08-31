@@ -45,6 +45,7 @@ async function project<T>(context: Context, fn: () => T): Promise<T> {
   }
   return Instance.provide({
     directory: canonical,
+    projectID: selected.project?.id,
     init: InstanceBootstrap,
     async fn() {
       if (selected.project && Instance.project.id !== selected.project.id) {

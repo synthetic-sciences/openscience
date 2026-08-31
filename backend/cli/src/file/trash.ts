@@ -11,6 +11,8 @@ import { Filesystem } from "@/util/filesystem"
 import { Lock } from "@/util/lock"
 import { SafeFileIO } from "./safe-io"
 import { SafeTrashIO } from "./safe-trash-io"
+import { Project } from "@/project/project"
+import { Log } from "@/util/log"
 
 /** Recoverable trash for source and workspace files. Recovery metadata stays
  * in the protected data root; new payloads stay beside their authorized source
@@ -18,6 +20,9 @@ import { SafeTrashIO } from "./safe-trash-io"
 export namespace FileTrash {
   export const RETENTION_MS = 30 * 24 * 60 * 60 * 1000
   export const FOLDER = ".openscience-trash"
+  const log = Log.create({ service: "file.trash" })
+  const activity = (projectID: string) =>
+    Project.touchActivity(projectID).catch((error) => log.warn("file activity update failed", { error }))
 
   const Identity = z.object({
     dev: z.number().int().nonnegative(),
@@ -166,6 +171,14 @@ export namespace FileTrash {
   }
 
   async function remove(record: Record, options?: { verified?: SafeTrashIO.Snapshot }) {
+    // Same-volume restoration moves the payload back to its original path
+    // and removes the local trash entry. The remaining global record is only
+    // bookkeeping: expiry must not look for (or touch) the restored file.
+    if (record.state === "restored" && record.store === "workspace") {
+      const trusted = await target(entryRoot(record.projectID, record.id))
+      await SafeTrashIO.remove(trusted)
+      return
+    }
     const verified = options?.verified ?? (await verifyPayload(record)).current
     const entry = localEntry(record)
     if (entry) {
@@ -182,8 +195,21 @@ export namespace FileTrash {
 
   async function purgeExpiredUnlocked(projectID: string, now = Date.now()) {
     const expired = (await parsed(projectID)).filter((record) => record.expiresAt <= now)
-    await Promise.all(expired.map((record) => remove(record)))
-    return expired.length
+    const removed = await Promise.all(
+      expired.map((record) =>
+        remove(record).then(
+          () => 1,
+          (error) => {
+            // Automatic cleanup must not block unrelated recovery when a
+            // volume is unavailable or a payload cannot be verified. Keep
+            // the record for a later attempt; explicit operations stay strict.
+            log.warn("expired trash cleanup deferred", { id: record.id, error })
+            return 0
+          },
+        ),
+      ),
+    )
+    return removed.reduce((total, count) => total + count, 0)
   }
 
   export async function list(projectID: string) {
@@ -325,7 +351,7 @@ export namespace FileTrash {
 
     using _ = await Lock.write(lock(input.projectID))
     await purgeExpiredUnlocked(input.projectID, now)
-    return await AuthoritySignal.exclusive(async () => {
+    const result = await AuthoritySignal.exclusive(async () => {
       if (authorization) {
         const current = await SessionFilesystem.revalidateAuthorization(authorization)
         if (current.path !== canonical) throw new Error("Trash path changed after authorization")
@@ -378,6 +404,8 @@ export namespace FileTrash {
         if (store) await store.close().catch(() => undefined)
       }
     })
+    await activity(input.projectID)
+    return result
   }
 
   async function validateWorkspaceRecord(record: Record) {
@@ -403,7 +431,7 @@ export namespace FileTrash {
     using authority = await binding({ sessionID: input.sessionID, path: record.originalPath })
     const authorization = authority.authorization!
     await hooks.value?.afterAuthorization?.("restore", record, authorization)
-    return await AuthoritySignal.exclusive(async () => {
+    const result = await AuthoritySignal.exclusive(async () => {
       const current = await SessionFilesystem.revalidateAuthorization(authorization)
       if (current.path !== record.originalPath) throw new Error("Trash restore path changed after authorization")
       await validateWorkspaceRecord(record)
@@ -428,6 +456,8 @@ export namespace FileTrash {
       if (entry) await SafeTrashIO.remove(entry)
       return result
     })
+    await activity(input.projectID)
+    return result
   }
 
   export async function purge(input: { projectID: string; sessionID: string; id: string }) {
@@ -437,7 +467,7 @@ export namespace FileTrash {
     using authority = await binding({ sessionID: input.sessionID, path: record.originalPath })
     const authorization = authority.authorization!
     await hooks.value?.afterAuthorization?.("purge", record, authorization)
-    return await AuthoritySignal.exclusive(async () => {
+    const result = await AuthoritySignal.exclusive(async () => {
       const current = await SessionFilesystem.revalidateAuthorization(authorization)
       if (current.path !== record.originalPath) throw new Error("Trash purge path changed after authorization")
       await validateWorkspaceRecord(record)
@@ -445,6 +475,8 @@ export namespace FileTrash {
       await remove(record, { verified: verified.current })
       return record
     })
+    await activity(input.projectID)
+    return result
   }
 
   /** Roll back a just-created trash record when a larger single-file edit

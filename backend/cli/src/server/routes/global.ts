@@ -118,6 +118,7 @@ export const GlobalRoutes = lazy(() =>
         const checkpoint = async (created: Project.Info) => {
           await Instance.provide({
             directory: created.worktree,
+            projectID: created.id,
             fn: async () => {
               await SessionFilesystem.seedProject({ projectID: created.id, grants: input.sources })
             },

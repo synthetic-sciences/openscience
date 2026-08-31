@@ -351,7 +351,14 @@ export namespace SessionLoopState {
   }
 
   export function terminalError(input: { user: MessageV2.User; assistant?: MessageV2.Assistant }) {
-    return !!input.assistant?.error && input.assistant.parentID === input.user.id
+    if (!input.assistant?.error) return false
+    if (input.assistant.parentID === input.user.id) return true
+    // A failed compaction is displayed under the real prompt, while the newest
+    // user record may be its synthetic carrier/continuation. It still terminates
+    // that epoch; restarting the loop must not send another oversized request.
+    const intent = input.user.internal
+    if (intent?.type !== "compaction" && intent?.type !== "continuation") return false
+    return input.assistant.parentID === intent.epoch
   }
 
   function isFinalized(

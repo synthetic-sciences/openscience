@@ -275,6 +275,12 @@ async function unwrap<T>(value: Promise<{ data?: T; error?: unknown }> | { data?
   return result.data
 }
 
+/** Evaluation evidence stays recoverable in Archived, not mixed into the user's active projects. */
+export async function createCampaignProject(client: ReturnType<typeof createOpenScienceClient>, name: string) {
+  const project = await unwrap(client.global.project.create({ name, sources: [] }))
+  return unwrap(client.project.update({ projectID: project.id, archived: true }))
+}
+
 async function cleanupCampaignProject(input: {
   client: ReturnType<typeof createOpenScienceClient>
   project: Json
@@ -1006,11 +1012,9 @@ async function runOne(input: {
         client.project.trust.update({ projectID: resume.projectId, body: { trusted: true, root: trust.root } }),
       )
     } else {
-      const createdProject = await unwrap<any>(
-        root.global.project.create({
-          name: `Cadence harness · ${input.prompt.id} · ${input.prompt.title}`,
-          sources: [],
-        }),
+      const createdProject = await createCampaignProject(
+        root,
+        `Cadence harness · ${input.prompt.id} · ${input.prompt.title}`,
       )
       project = createdProject
       client = createOpenScienceClient({ baseUrl: input.baseUrl, projectID: createdProject.id })

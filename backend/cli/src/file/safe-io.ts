@@ -6,6 +6,7 @@ import { SafeDirectoryIO } from "./safe-directory-io"
 /** Final-component symlink-safe file I/O for host broker operations. */
 export namespace SafeFileIO {
   type TestHooks = {
+    afterReadStat?: (target: string) => void | Promise<void>
     afterDirectoryVerify?: (target: string) => void | Promise<void>
     afterRenameVerify?: (source: string, target: string) => void | Promise<void>
     afterRenameMutation?: (source: string, target: string) => void | Promise<void>
@@ -83,7 +84,11 @@ export namespace SafeFileIO {
     if (canonical !== expected) throw new Error(`Refusing to follow an indirect symbolic link: ${filepath}`)
     const requested = await fs.lstat(filepath)
     if (requested.isSymbolicLink()) throw new Error(`Refusing to follow a symbolic link: ${filepath}`)
-    const handle = await fs.open(filepath, FS.O_RDONLY | FS.O_NOFOLLOW)
+    if (!requested.isFile()) throw new Error(`Only regular files can be accessed: ${filepath}`)
+    await hooks.value?.afterReadStat?.(filepath)
+    // A pipe can replace a regular file after lstat. Nonblocking open lets the
+    // handle identity/type checks reject it without waiting for a writer.
+    const handle = await fs.open(filepath, FS.O_RDONLY | FS.O_NOFOLLOW | FS.O_NONBLOCK)
     try {
       const before = await handle.stat()
       const current = await fs.lstat(filepath)
@@ -244,7 +249,10 @@ export namespace SafeFileIO {
   }
 
   export async function assert(filepath: string, approved: Snapshot) {
-    const current = await read(filepath)
+    const current = await read(filepath, { maxBytes: approved.bytes.byteLength }).catch((error: unknown) => {
+      if (error instanceof LimitError) throw new Error(`Refusing to write ${filepath}: the file changed after approval`)
+      throw error
+    })
     if (current.dev !== approved.dev || current.ino !== approved.ino) {
       throw new Error(`Refusing to write ${filepath}: the file identity changed after approval`)
     }

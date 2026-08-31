@@ -138,11 +138,6 @@ export namespace ManagedProject {
     return createAt(name, path.join(Global.Path.data, "projects", crypto.randomUUID()), checkpoint)
   }
 
-  function inside(root: string, target: string) {
-    const relative = path.relative(root, target)
-    return !!relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
-  }
-
   /**
    * Home is an OpenScience project library, not a history of every directory
    * the runtime has resolved. Durable markers are authoritative; app-created
@@ -166,11 +161,30 @@ export namespace ManagedProject {
         .map((marker) => `${marker.projectID}\0${Project.canonicalize(marker.directory)}`),
     )
     const root = Project.canonicalize(path.join(Global.Path.data, "projects"))
-    const owned = projects.filter((project) => {
-      if (project.origin === "openscience") return true
-      const directory = Project.canonicalize(project.worktree)
-      return markers.has(`${project.id}\0${directory}`) || inside(root, directory)
-    })
+    const owned = (
+      await Promise.all(
+        projects.map(async (project) => {
+          const directory = Project.canonicalize(project.worktree)
+          if (markers.has(`${project.id}\0${directory}`)) return project
+          const relative = path.relative(root, directory)
+          const descendant =
+            !!relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+          // Prior versions promoted arbitrary descendants after incidental runtime
+          // reads. Retain their records/provenance, but do not present an unreceipted
+          // nested folder as an app-created project.
+          if (project.origin === "openscience" && (!descendant || path.dirname(directory) === root)) return project
+          // Legacy app creation used only direct UUID (or operation-digest) roots.
+          // Migrate that exact shape, never a broad prefix, absent path or child.
+          if (
+            path.dirname(directory) !== root ||
+            !/^(?:[a-f0-9]{64}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i.test(path.basename(directory))
+          )
+            return
+          const stat = await fs.stat(directory).catch(() => undefined)
+          return stat?.isDirectory() ? project : undefined
+        }),
+      )
+    ).filter((project): project is Project.Info => !!project)
     const promoted = await Promise.all(
       owned.map((project) => (project.origin === "openscience" ? project : Project.markOpenScience(project.id))),
     )

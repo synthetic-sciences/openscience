@@ -26,7 +26,7 @@ import { Config } from "../config/config"
 import { Auth } from "../auth"
 import { Command } from "../command"
 import { Global } from "../global"
-import { ProjectRoutes } from "./routes/project"
+import { ProjectRoutes, ProjectListRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
 import { RuntimeRoutes } from "./routes/runtime"
 import { PtyRoutes } from "./routes/pty"
@@ -375,12 +375,15 @@ export namespace Server {
         .route("/api/resolve-folder", FolderResolveRoutes())
         // Repository tab (status/commit/push/remote) — shells out to git.
         .route("/api/repo", RepoRoutes())
+        // Global library discovery must not bootstrap/register the server cwd.
+        .route("/project", ProjectListRoutes())
         .use(async (c, next) => {
           const selected = await projectSelection(c)
           if (selected.selector) await Project.assertDirectory(selected.selector)
           const directory = selected.directory ?? process.cwd()
           return Instance.provide({
             directory,
+            projectID: selected.project?.id,
             init: InstanceBootstrap,
             async fn() {
               if (selected.project && Instance.project.id !== selected.project.id) {

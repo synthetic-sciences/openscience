@@ -431,14 +431,19 @@ export namespace SafeDirectoryIO {
     }
   }
 
-  async function snapshot(directory: Directory, file: string) {
+  async function snapshot(directory: Directory, file: string, approved: Snapshot) {
     const api = native()
     const fd = invoke("openat", file, () =>
-      api.openat(directory.fd, name(file), FS.O_RDONLY | FS.O_NOFOLLOW | O_CLOEXEC, 0),
+      api.openat(directory.fd, name(file), FS.O_RDONLY | FS.O_NOFOLLOW | FS.O_NONBLOCK | O_CLOEXEC, 0),
     )
     try {
       const before = await stat(fd)
       if (!before.isFile()) throw new Error(`Only regular files can be approved for replacement: ${file}`)
+      // Compare before allocating: concurrent sparse-file growth must not turn
+      // a small editor save into an unbounded read under mutation authority.
+      if (before.dev !== approved.dev || before.ino !== approved.ino || before.size !== approved.bytes.byteLength) {
+        throw new Error(`Refusing to write ${file}: the approved file changed before replacement`)
+      }
       const bytes = await readAll(fd, before.size)
       const after = await stat(fd)
       if (
@@ -546,7 +551,7 @@ export namespace SafeDirectoryIO {
     try {
       rename(directory, target, backup)
       state.moved = true
-      const current = await snapshot(directory, backup)
+      const current = await snapshot(directory, backup, approved)
       if (current.dev !== approved.dev || current.ino !== approved.ino || !current.bytes.equals(approved.bytes)) {
         throw new Error(`Refusing to write ${target}: the approved file changed before replacement`)
       }

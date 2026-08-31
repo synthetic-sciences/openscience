@@ -9,6 +9,7 @@ import { CredentialProcessLedger } from "../../credentials/process-ledger"
 import { ProcessIdentity } from "../../process/process-identity"
 import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "../../process/darwin-responsibility-launcher"
 import { WindowsJobLauncher } from "../../process/windows-job-launcher"
+import { TrustedExecutable } from "../../process/trusted-executable"
 import { Shell } from "../../shell/shell"
 
 export namespace ModalVolume {
@@ -28,6 +29,7 @@ export namespace ModalVolume {
   type TestHooks = {
     probe?: { argv: string[]; timeout: number }
     beforeUv?: () => void | Promise<void>
+    directories?: string[]
   }
 
   const hooks = { value: undefined as TestHooks | undefined }
@@ -202,7 +204,16 @@ export namespace ModalVolume {
     if (signal?.aborted) throw abortReason(signal)
     if (context.command) return context.command
     const file = await driverPath()
-    const python = context.python ?? Bun.which("python3") ?? Bun.which("python")
+    const env = environment({ ...process.env, ...context.env })
+    // Finder-launched desktop apps inherit a minimal PATH. Resolve existing
+    // Homebrew/user installations directly, without sourcing shell startup
+    // files or making the user reinstall a runtime that is already present.
+    const search =
+      process.platform === "win32" ? Object.entries(env).find(([key]) => key.toUpperCase() === "PATH")?.[1] : env.PATH
+    const executable = async (name: string) =>
+      Bun.which(name, { PATH: search ?? "" }) ??
+      (await TrustedExecutable.resolve(name, { directories: hooks.value?.directories }))
+    const python = context.python ?? (await executable("python3")) ?? (await executable("python"))
     if (python) {
       const probe = await execute(
         hooks.value?.probe?.argv ?? [
@@ -211,7 +222,7 @@ export namespace ModalVolume {
           "-c",
           `import modal; assert modal.__version__ == '${VERSION}'; assert hasattr(modal.Volume, 'read_file')`,
         ],
-        environment({ ...process.env, ...context.env }),
+        env,
         hooks.value?.probe?.timeout ?? PROBE_TIMEOUT,
         "SDK probe",
         undefined,
@@ -226,12 +237,15 @@ export namespace ModalVolume {
       if (probe?.code === null) throw new Error("Modal Volume SDK probe ended without an exit code")
     }
     if (signal?.aborted) throw abortReason(signal)
-    const uv = context.uv ?? Bun.which("uv")
+    const uv = context.uv ?? (await executable("uv"))
     if (uv) {
       await hooks.value?.beforeUv?.()
       return [uv, "run", "--no-project", "--python", "3.12", "--with", `modal==${VERSION}`, "python", "-I", file]
     }
-    throw new Error("Modal Volume access requires uv or a Python installation that can import the Modal SDK")
+    throw new Error(
+      `OpenScience could not find uv or an isolated Python installation with Modal SDK ${VERSION}. ` +
+        "Install uv, then retry Modal Volumes.",
+    )
   }
 
   const RUNTIME_ENV = new Set([

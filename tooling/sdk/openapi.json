@@ -23699,15 +23699,6 @@
     "/project": {
       "get": {
         "operationId": "project.list",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "summary": "List OpenScience projects",
         "description": "Get the app-created OpenScience projects owned by this server.",
         "responses": {
@@ -23725,6 +23716,16 @@
             }
           }
         },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "deprecated": true,
+              "type": "string"
+            }
+          }
+        ],
         "x-codeSamples": [
           {
             "lang": "js",
@@ -32132,6 +32133,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "The file no longer matches the editor's read revision"
           }
         },
         "requestBody": {
@@ -32149,6 +32153,10 @@
                   "sessionID": {
                     "type": "string",
                     "pattern": "^ses.*"
+                  },
+                  "expectedRevision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
                   }
                 },
                 "required": [
@@ -51929,6 +51937,11 @@
               "updated": {
                 "type": "number"
               },
+              "activity": {
+                "description": "Last substantive session or file activity, not metadata refresh",
+                "type": "number",
+                "minimum": 0
+              },
               "initialized": {
                 "type": "number"
               },
@@ -58957,6 +58970,10 @@
           },
           "truncated": {
             "type": "boolean"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
           }
         },
         "required": [

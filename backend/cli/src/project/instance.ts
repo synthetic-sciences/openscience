@@ -19,28 +19,47 @@ const disposal = {
 }
 
 export const Instance = {
-  async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+  async provide<R>(input: {
+    directory: string
+    projectID?: string
+    init?: () => Promise<any>
+    fn: () => R
+  }): Promise<R> {
     // Canonicalize so spelling variants of the same folder (trailing slash, `.`,
     // symlinks) resolve to one live instance and one project id.
     const directory = Project.canonicalize(input.directory)
     let existing = cache.get(directory)
     if (!existing) {
-      Log.Default.info("creating instance", { directory })
-      existing = iife(async () => {
-        const { project, sandbox } = await Project.fromDirectory(directory)
-        const ctx = {
-          directory,
-          worktree: sandbox,
-          project,
-        }
-        await context.provide(ctx, async () => {
-          await input.init?.()
+      // Validate before new registration, not before accessing a live context:
+      // internal revocation/disposal must still stop resources after a root is
+      // deleted or unmounted. Public routes validate selectors independently.
+      await Project.assertDirectory(input.directory)
+      const selected = input.projectID ? await Project.resolve(input.projectID, directory) : undefined
+      existing = cache.get(directory)
+      if (!existing) {
+        Log.Default.info("creating instance", { directory })
+        existing = iife(async () => {
+          // A selected parent already owns the cwd. Resolving a non-git child
+          // must not register another project before checking that authority.
+          const { project, sandbox } = selected
+            ? { project: selected.project, sandbox: selected.worktree }
+            : await Project.fromDirectory(directory)
+          const ctx = { directory, worktree: sandbox, project }
+          await context.provide(ctx, async () => {
+            await input.init?.()
+          })
+          return ctx
         })
-        return ctx
-      })
-      cache.set(directory, existing)
+        cache.set(directory, existing)
+        existing.catch(() => {
+          if (cache.get(directory) === existing) cache.delete(directory)
+        })
+      }
     }
     const ctx = await existing
+    if (input.projectID && ctx.project.id !== input.projectID) {
+      throw new Project.MismatchError({ projectID: input.projectID, directory })
+    }
     return context.provide(ctx, async () => {
       return input.fn()
     })

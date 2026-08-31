@@ -6,6 +6,7 @@ import { formatPatch, structuredPatch } from "diff"
 import { HTTPException } from "hono/http-exception"
 import path from "path"
 import fs from "fs"
+import crypto from "node:crypto"
 import ignore from "ignore"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
@@ -24,6 +25,7 @@ import { SafeFileIO } from "./safe-io"
 import { FileTrash } from "./trash"
 import { Lock } from "@/util/lock"
 import { AuthoritySignal } from "@/project/authority-signal"
+import { Project } from "@/project/project"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -77,6 +79,10 @@ export namespace File {
     })
   export type Node = z.infer<typeof Node>
 
+  export const Revision = z.string().regex(/^[a-f0-9]{64}$/)
+  const revision = (snapshot: SafeFileIO.Snapshot) =>
+    crypto.createHash("sha256").update(`${snapshot.dev}:${snapshot.ino}\0`).update(snapshot.bytes).digest("hex")
+
   export const Content = z
     .object({
       type: z.literal("text"),
@@ -105,6 +111,7 @@ export namespace File {
       mimeType: z.string().optional(),
       size: z.number().optional(),
       truncated: z.boolean().optional(),
+      revision: Revision.optional(),
     })
     .meta({
       ref: "FileContent",
@@ -256,6 +263,7 @@ export namespace File {
   }
 
   type RawOptions = AccessOptions & { maxBytes?: number }
+  type WriteOptions = AccessOptions & { expectedRevision?: string }
 
   export type RawSource = SafeFileIO.Source & {
     mimeType: string
@@ -508,7 +516,14 @@ export namespace File {
     if (encode) {
       const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
       const content = Buffer.from(buffer).toString("base64")
-      return { type: "text", content, mimeType, encoding: "base64", size: bunFile.size }
+      return {
+        type: "text",
+        content,
+        mimeType,
+        encoding: "base64",
+        size: bunFile.size,
+        revision: revision(snapshot),
+      }
     }
 
     const truncated = snapshot.size > snapshot.bytes.byteLength
@@ -535,10 +550,10 @@ export namespace File {
           ignoreWhitespace: true,
         })
         const diff = formatPatch(patch)
-        return { type: "text", content, before: original, patch, diff }
+        return { type: "text", content, before: original, patch, diff, revision: revision(snapshot) }
       }
     }
-    return { type: "text", content }
+    return { type: "text", content, revision: revision(snapshot) }
   }
 
   export async function read(file: string, options?: AccessOptions): Promise<Content> {
@@ -773,12 +788,30 @@ export namespace File {
     return await PublicationReview.finalize(id, input, scope)
   }
 
-  export async function write(file: string, content: string, options?: AccessOptions): Promise<Content> {
+  export async function write(file: string, content: string, options?: WriteOptions): Promise<Content> {
     using _ = log.time("write", { file })
     const mutate = async (full: string) => {
-      const approved = await SafeFileIO.optional(full)
-      await SafeFileIO.write(full, content, approved)
-      return { full, exists: !!approved, content: await readPath(file, full) }
+      const conflict = () =>
+        new HTTPException(409, {
+          message: "File changed on disk. Reload it before saving, or save your draft to a different file.",
+        })
+      // The editor supplies the revision it actually read, not a fresh
+      // snapshot captured after another editor or agent has already saved.
+      // If a previously editable file grew out of preview bounds, reject
+      // without loading the replacement into memory.
+      const approved = await SafeFileIO.optional(
+        full,
+        options?.expectedRevision === undefined ? undefined : { maxBytes: preview },
+      ).catch((error: unknown) => {
+        if (options?.expectedRevision !== undefined && error instanceof SafeFileIO.LimitError) throw conflict()
+        throw error
+      })
+      if (options?.expectedRevision !== undefined && (!approved || revision(approved) !== options.expectedRevision)) {
+        throw conflict()
+      }
+      const changed = !approved?.bytes.equals(Buffer.from(content))
+      if (changed) await SafeFileIO.write(full, content, approved)
+      return { full, exists: !!approved, changed, content: await readPath(file, full) }
     }
     const result = await (async () => {
       if (!options?.sessionID) return mutate(await contained(file, "write"))
@@ -804,13 +837,18 @@ export namespace File {
         SessionFilesystem.releaseAuthorization(binding)
       }
     })()
-    await Bus.publish(File.Event.Edited, {
-      file: result.full,
-    })
-    await Bus.publish(FileWatcher.Event.Updated, {
-      file: result.full,
-      event: result.exists ? "change" : "add",
-    })
+    if (result.changed) {
+      await Project.touchActivity(Instance.project.id).catch((error) =>
+        log.warn("file activity update failed", { error }),
+      )
+      await Bus.publish(File.Event.Edited, {
+        file: result.full,
+      })
+      await Bus.publish(FileWatcher.Event.Updated, {
+        file: result.full,
+        event: result.exists ? "change" : "add",
+      })
+    }
     return result.content
   }
 
@@ -928,6 +966,9 @@ export namespace File {
       }
     })()
     if (result.from !== result.to) {
+      await Project.touchActivity(Instance.project.id).catch((error) =>
+        log.warn("file activity update failed", { error }),
+      )
       await Promise.all([
         Bus.publish(FileWatcher.Event.Updated, { file: result.from, event: "unlink" }),
         Bus.publish(FileWatcher.Event.Updated, { file: result.to, event: "add" }),

@@ -156,6 +156,29 @@ describe("session loop restart state", () => {
     expect(SessionLoopState.terminalError({ user: retry.info, assistant: delayed.info })).toBe(false)
   })
 
+  test.each(["compaction", "continuation"] as const)(
+    "a %s record cannot restart a terminal error attached to its real prompt",
+    (type) => {
+      const carrier = user("c1", [], "compaction")
+      const error = assistant("e1", "u1", "")
+      if (carrier.info.role !== "user" || error.info.role !== "assistant") throw new Error("bad fixture")
+      if (type === "compaction") carrier.info.internal = { type, auto: true, epoch: "u1", transaction: "c1" }
+      error.info.error = { name: "UnknownError", data: { message: "assembled conversation exceeds input limit" } }
+      expect(SessionLoopState.terminalError({ user: carrier.info, assistant: error.info })).toBe(true)
+
+      const unrelated = { ...carrier.info, internal: { ...carrier.info.internal!, epoch: "u2" } }
+      expect(SessionLoopState.terminalError({ user: unrelated, assistant: error.info })).toBe(false)
+      const fresh = user("u2", [text("u2", "a genuine new request")])
+      if (fresh.info.role !== "user") throw new Error("bad fixture")
+      fresh.info.internal = SessionLoopState.prompt("u2")
+      expect(SessionLoopState.terminalError({ user: fresh.info, assistant: error.info })).toBe(false)
+      // Only synthetic carriers inherit the old stop; even a malformed real
+      // prompt with a stale epoch must not be mistaken for a continuation.
+      fresh.info.internal = SessionLoopState.prompt("u1")
+      expect(SessionLoopState.terminalError({ user: fresh.info, assistant: error.info })).toBe(false)
+    },
+  )
+
   test("an atomic assistant claim restores the exact step and ignores unrelated assistants", () => {
     const command: MessageV2.TextPart = { ...text("cmd", "/status"), ignored: true }
     const history = [

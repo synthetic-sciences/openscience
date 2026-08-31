@@ -203,6 +203,92 @@ describe("recoverable source file trash", () => {
     })
   })
 
+  test.each(["file", "directory"] as const)(
+    "expires restored %s metadata without touching restored content",
+    async (kind) => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await executionSession()
+          const target = path.join(tmp.path, "restored")
+          if (kind === "directory") await fs.mkdir(target)
+          const content = kind === "directory" ? path.join(target, "result.txt") : target
+          await fs.writeFile(content, "approved result\n")
+          const record = await FileTrash.trash({ projectID: Instance.project.id, sessionID: session.id, path: target })
+          expect(record.store).toBe("workspace")
+          expect(
+            (await FileTrash.restore({ projectID: Instance.project.id, sessionID: session.id, id: record.id }))?.state,
+          ).toBe("restored")
+          await fs.writeFile(content, "new result after restore\n")
+
+          expect(await FileTrash.purgeExpired(Instance.project.id, record.expiresAt + 1)).toBe(1)
+          expect(await fs.readFile(content, "utf8")).toBe("new result after restore\n")
+          expect(await FileTrash.list(Instance.project.id)).toEqual([])
+          expect(await FileTrash.purgeExpired(Instance.project.id, record.expiresAt + 1)).toBe(0)
+
+          const next = path.join(tmp.path, "next.txt")
+          await fs.writeFile(next, "next result\n")
+          const trashed = await FileTrash.trash({ projectID: Instance.project.id, sessionID: session.id, path: next })
+          expect(await FileTrash.list(Instance.project.id)).toMatchObject([{ id: trashed.id }])
+        },
+      })
+    },
+  )
+
+  test.each(["unavailable", "changed"] as const)(
+    "automatic expiry retains an %s payload record without blocking unrelated trash",
+    async (state) => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await executionSession()
+          const projectID = Instance.project.id
+          const target = path.join(tmp.path, "retained.txt")
+          await fs.writeFile(target, "approved result\n")
+          const record = await FileTrash.trash({
+            projectID,
+            sessionID: session.id,
+            path: target,
+            now: Date.now() - FileTrash.RETENTION_MS - 1,
+          })
+          const retained = `${record.payloadPath!}.unavailable`
+          if (state === "unavailable") await fs.rename(record.payloadPath!, retained)
+          if (state === "changed") await fs.writeFile(record.payloadPath!, "changed payload\n")
+          const metadata = path.join(
+            Global.Path.data,
+            "file-trash",
+            crypto.createHash("sha256").update(projectID).digest("hex"),
+            record.id,
+            "record.json",
+          )
+
+          const next = path.join(tmp.path, "expired.txt")
+          await fs.writeFile(next, "safe to expire\n")
+          await FileTrash.trash({
+            projectID,
+            sessionID: session.id,
+            path: next,
+            now: Date.now() - FileTrash.RETENTION_MS - 1,
+          })
+          expect(await FileTrash.purgeExpired(projectID)).toBe(1)
+          expect(await FileTrash.purgeExpired(projectID)).toBe(0)
+          await expect(FileTrash.list(projectID)).resolves.toBeArray()
+          expect(await Bun.file(metadata).json()).toMatchObject({ id: record.id, state: "trash" })
+          expect(await fs.readFile(state === "unavailable" ? retained : record.payloadPath!, "utf8")).toBe(
+            state === "unavailable" ? "approved result\n" : "changed payload\n",
+          )
+
+          const purge = FileTrash.purge({ projectID, sessionID: session.id, id: record.id })
+          if (state === "unavailable") expect(await purge).toBeUndefined()
+          if (state === "changed") await expect(purge).rejects.toThrow("checksum mismatch")
+          expect(await Bun.file(metadata).exists()).toBe(true)
+        },
+      })
+    },
+  )
+
   test("does not advertise metadata written before a recovery payload exists", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

@@ -45,7 +45,7 @@ const props = {
       id: "prj_atlas",
       name: "Gateway",
       worktree: "/Users/aayam/Research/gateway",
-      time: { created: Date.now() - 86_400_000 },
+      time: { created: Date.now() - 172_800_000, activity: Date.now() - 86_400_000 },
       updatedAt: Date.now() - 86_400_000,
       pinned: false,
       sessions: 4,
@@ -68,6 +68,44 @@ const props = {
 }
 
 describe("ProjectsWorkbench", () => {
+  test("refreshes activity labels when returning to the app without changing project data", async () => {
+    const original = Date.now
+    const now = original()
+    Date.now = () => now
+    try {
+      const host = mount(() =>
+        subject.ProjectsWorkbench({
+          ...props,
+          projects: [
+            {
+              ...props.projects[0],
+              time: { created: now - 172_800_000, activity: now - 86_400_000 },
+              updatedAt: now - 86_400_000,
+            },
+          ],
+        }),
+      )
+      await Promise.resolve()
+      expect(host.querySelector("time")?.textContent).toContain("1 day")
+      Date.now = () => now + 172_800_000
+      document.dispatchEvent(new Event("visibilitychange"))
+      expect(host.querySelector("time")?.textContent).toContain("3 days")
+    } finally {
+      Date.now = original
+    }
+  })
+
+  test("uses creation rather than edit language when no research activity is recorded", () => {
+    const host = mount(() =>
+      subject.ProjectsWorkbench({
+        ...props,
+        projects: [{ ...props.projects[0], time: { created: props.projects[0].updatedAt } }],
+      }),
+    )
+    expect(host.querySelector("time")?.textContent).toContain("Created")
+    expect(host.querySelector("time")?.textContent).not.toContain("Edited")
+  })
+
   test("renders a useful project row and opens the selected project", async () => {
     const opened: string[] = []
     const host = mount(() => subject.ProjectsWorkbench({ ...props, onOpen: (project) => opened.push(project.id) }))
@@ -78,7 +116,8 @@ describe("ProjectsWorkbench", () => {
     expect(row?.textContent).toContain("Gateway")
     expect(row?.textContent).not.toContain("Local project")
     expect(row?.textContent).toContain("4 sessions")
-    expect(row?.textContent).toContain("Edited")
+    expect(row?.textContent).toContain("Active")
+    expect(row?.textContent).not.toContain("Edited")
     expect(row?.querySelector("time")?.dateTime).toBeTruthy()
     row?.click()
     expect(host.textContent).not.toContain("/Users/aayam")

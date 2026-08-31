@@ -24,6 +24,7 @@ import { Binary } from "@synsci/util/binary"
 import { retry } from "@synsci/util/retry"
 import { useGlobalSDK } from "./global-sdk"
 import { createInflightCache } from "./inflight-cache"
+import { createProjectCatalogSync, projectCatalogCacheKey } from "./project-catalog"
 import { createListeners } from "./listeners"
 import {
   createReconnectGenerationGuard,
@@ -248,7 +249,7 @@ function createGlobalSync() {
   }
 
   const [projectCache, setProjectCache, , projectCacheReady] = persisted(
-    Persist.global("globalSync.project", ["globalSync.project.v1"]),
+    Persist.global(projectCatalogCacheKey(globalSDK.url)),
     createStore({ value: [] as Project[] }),
   )
 
@@ -281,6 +282,33 @@ function createGlobalSync() {
     config: {},
     reload: undefined,
   })
+
+  const serverURL = globalSDK.url
+  const [catalogState, setCatalogState] = createStore({ loaded: false })
+  const projectCatalog = createProjectCatalogSync({
+    load: async () => {
+      const response = await globalSDK.client.project.list()
+      if (response.error) throw response.error
+      return (response.data ?? [])
+        .filter((project) => !!project?.id)
+        .filter((project) => !!project.worktree && !project.worktree.includes("openscience-test"))
+    },
+    read: () => globalStore.project,
+    write: (projects) =>
+      batch(() => {
+        setCatalogState("loaded", true)
+        setGlobalStore("project", reconcile(projects, { key: "id" }))
+      }),
+    isCurrent: () => globalSDK.url === serverURL,
+  })
+  onCleanup(() => projectCatalog.dispose())
+
+  const rememberProject = (project: Project) => {
+    void projectCatalog
+      .update(project)
+      ?.catch((error) => console.warn("Failed to refresh the project library", { error }))
+    return project
+  }
 
   const queued = new Set<string>()
   let root = false
@@ -352,6 +380,7 @@ function createGlobalSync() {
 
   createEffect(() => {
     if (!projectCacheReady()) return
+    if (catalogState.loaded) return
     if (globalStore.project.length !== 0) return
     const cached = projectCache.value
     if (cached.length === 0) return
@@ -361,7 +390,7 @@ function createGlobalSync() {
   createEffect(() => {
     if (!projectCacheReady()) return
     const projects = globalStore.project
-    if (projects.length === 0) {
+    if (projects.length === 0 && !catalogState.loaded) {
       const cachedLength = untrack(() => projectCache.value.length)
       if (cachedLength !== 0) return
     }
@@ -897,17 +926,7 @@ function createGlobalSync() {
           return
         }
         case "project.updated": {
-          const result = Binary.search(globalStore.project, event.properties.id, (s) => s.id)
-          if (result.found) {
-            setGlobalStore("project", result.index, reconcile(event.properties))
-            return
-          }
-          setGlobalStore(
-            "project",
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties)
-            }),
-          )
+          rememberProject(event.properties)
           break
         }
       }
@@ -1245,16 +1264,7 @@ function createGlobalSync() {
           setGlobalStore("config", x.data!)
         }),
       ),
-      retry(() =>
-        globalSDK.client.project.list().then(async (x) => {
-          const projects = (x.data ?? [])
-            .filter((p) => !!p?.id)
-            .filter((p) => !!p.worktree && !p.worktree.includes("openscience-test"))
-            .slice()
-            .sort((a, b) => a.id.localeCompare(b.id))
-          setGlobalStore("project", projects)
-        }),
-      ),
+      retry(() => projectCatalog.refresh()),
       retry(async () => {
         // The root catalog belongs to the server worktree. Loading it through
         // the same directory-keyed helper lets a direct project route share the
@@ -1320,21 +1330,6 @@ function createGlobalSync() {
     if (store.icon === value) return
     cached.setStore("value", value)
     setStore("icon", value)
-  }
-
-  function rememberProject(project: Project) {
-    const result = Binary.search(globalStore.project, project.id, (item) => item.id)
-    if (result.found) {
-      setGlobalStore("project", result.index, reconcile(project))
-      return project
-    }
-    setGlobalStore(
-      "project",
-      produce((draft) => {
-        draft.splice(result.index, 0, project)
-      }),
-    )
-    return project
   }
 
   async function resolveProject(directory: string) {
