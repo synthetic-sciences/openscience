@@ -90,8 +90,38 @@ describe("DeepSeek tool schema normalization", () => {
     expect(result.anyOf[0].properties.scope).toEqual({ type: "string", enum: ["project"] })
   })
 
-  test("runs only at the native DeepSeek provider boundary", () => {
+  test("runs at the DeepSeek and openai-compatible provider boundaries, not elsewhere", () => {
     expect((ProviderTransform.schema(model("@ai-sdk/deepseek"), union as any) as any).type).toBe("object")
-    expect((ProviderTransform.schema(model("@ai-sdk/openai-compatible"), union as any) as any).type).toBeUndefined()
+    expect((ProviderTransform.schema(model("@ai-sdk/openai-compatible"), union as any) as any).type).toBe("object")
+    expect((ProviderTransform.schema(model("@ai-sdk/anthropic"), union as any) as any).type).toBeUndefined()
+  })
+
+  test("normalizes compute_job's real discriminated-union schema for an openai-compatible model (e.g. local Ollama)", () => {
+    // Regression for: compute_job silently disappeared from the tool list for
+    // openai-compatible providers (confirmed with a local Ollama model) even
+    // though it has "allow" permission — the un-normalized root oneOf from its
+    // discriminatedUnion("action", [...]) parameter schema isn't a shape most
+    // openai-compatible function-calling parsers accept, so the tool was
+    // dropped rather than the request being rejected outright.
+    const computeJobLikeSchema = {
+      oneOf: [
+        {
+          type: "object",
+          properties: { action: { type: "string", const: "start" }, target: { type: "object" } },
+          required: ["action", "target"],
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          properties: { action: { type: "string", const: "status" }, job_id: { type: "string", minLength: 1 } },
+          required: ["action", "job_id"],
+          additionalProperties: false,
+        },
+      ],
+    }
+    const result = ProviderTransform.schema(model("@ai-sdk/openai-compatible"), computeJobLikeSchema as any) as any
+    expect(result.type).toBe("object")
+    expect(result.oneOf).toBeUndefined()
+    expect(result.anyOf).toHaveLength(2)
   })
 })

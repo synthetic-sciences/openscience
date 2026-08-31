@@ -52,9 +52,11 @@ function normalize(value: unknown): unknown {
 }
 
 /**
- * Normalize only representational differences accepted by DeepSeek while
- * preserving the set of valid tool inputs. Runtime Zod validation remains the
- * authority; this function never strips constraints or makes fields optional.
+ * Normalize only representational differences accepted by DeepSeek (and other
+ * providers with the same object-rooted-schema expectation, e.g.
+ * openai-compatible) while preserving the set of valid tool inputs. Runtime
+ * Zod validation remains the authority; this function never strips
+ * constraints or makes fields optional.
  */
 export function normalizeDeepSeekToolSchema(schema: JSONSchema.BaseSchema): JSONSchema.BaseSchema {
   return normalize(schema) as JSONSchema.BaseSchema

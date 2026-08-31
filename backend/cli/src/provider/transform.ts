@@ -1207,7 +1207,14 @@ export namespace ProviderTransform {
       schema = sanitizeGemini(schema)
     }
 
-    if (model.api.npm === "@ai-sdk/deepseek") {
+    // Not actually DeepSeek-specific: any provider whose function-calling
+    // parser expects an object-rooted schema chokes on a bare root oneOf, the
+    // shape Zod emits for a discriminated union (e.g. compute_job's action
+    // parameter). openai-compatible (Ollama and others) hits the same defect,
+    // just silently — the tool disappears from the model's tool list instead
+    // of the request being rejected outright the way DeepSeek's strict
+    // validator rejects it.
+    if (model.api.npm === "@ai-sdk/deepseek" || model.api.npm === "@ai-sdk/openai-compatible") {
       schema = normalizeDeepSeekToolSchema(schema)
     }
 
