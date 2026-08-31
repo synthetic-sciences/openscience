@@ -1,12 +1,12 @@
 import type { BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import type { ThemeRegistrationResolved } from "@pierre/diffs"
+import { backslashMath, guardedDollarMath } from "./marked-math"
 
 // Heavy render deps (katex ~150KB gzip, shiki grammar registry, the marked
 // extensions) are loaded on FIRST USE, not at module load — so first paint (the
 // launchpad renders no markdown/math/code) never pays for them. Each loader is
 // memoized after its first await.
-type Katex = (typeof import("katex"))["default"]
 export function retryable<T>(load: () => Promise<T>) {
   let pending: Promise<T> | undefined
   return () => {
@@ -413,53 +413,6 @@ const loadDiffs = retryable(() =>
   }),
 )
 
-function renderMathInText(text: string, katex: Katex): string {
-  let result = text
-
-  // Display math: $$...$$
-  const displayMathRegex = /\$\$([\s\S]*?)\$\$/g
-  result = result.replace(displayMathRegex, (_, math) => {
-    try {
-      return katex.renderToString(math, {
-        displayMode: true,
-        throwOnError: false,
-      })
-    } catch {
-      return `$$${math}$$`
-    }
-  })
-
-  // Inline math: $...$
-  const inlineMathRegex = /(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/g
-  result = result.replace(inlineMathRegex, (_, math) => {
-    try {
-      return katex.renderToString(math, {
-        displayMode: false,
-        throwOnError: false,
-      })
-    } catch {
-      return `$${math}$`
-    }
-  })
-
-  return result
-}
-
-function renderMathExpressions(html: string, katex: Katex): string {
-  // Split on code/pre/kbd tags to avoid processing their contents
-  const codeBlockPattern = /(<(?:pre|code|kbd)[^>]*>[\s\S]*?<\/(?:pre|code|kbd)>)/gi
-  const parts = html.split(codeBlockPattern)
-
-  return parts
-    .map((part, i) => {
-      // Odd indices are the captured code blocks - leave them alone
-      if (i % 2 === 1) return part
-      // Process math only in non-code parts
-      return renderMathInText(part, katex)
-    })
-    .join("")
-}
-
 async function highlightCodeBlocks(html: string): Promise<string> {
   const codeBlockRegex = /<pre><code(?:\s+class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g
   const matches = [...html.matchAll(codeBlockRegex)]
@@ -528,17 +481,18 @@ export async function highlightSnippet(code: string, lang: string): Promise<stri
 export type NativeMarkdownParser = (markdown: string) => Promise<string>
 
 // The pure-JS marked pipeline (katex + shiki extensions) — built lazily on first
-// use so its deps stay out of the entry chunk. Only reached when no nativeParser
-// is supplied (the desktop app always supplies one).
-type MarkedParser = ReturnType<(typeof import("marked"))["marked"]["use"]>
-const loadJsParser = retryable<MarkedParser>(async () => {
-  const [{ marked }, { default: markedKatex }, { default: markedShiki }, bundledLanguages] = await Promise.all([
-    import("marked"),
-    import("marked-katex-extension"),
-    import("marked-shiki"),
-    loadLangs(),
-  ])
-  return marked.use(
+// use so its deps stay out of the entry chunk. Electron and web use this path;
+// hosts with an optional native parser also use it for math-bearing Markdown.
+const loadJsParser = retryable(async () => {
+  const [{ Marked }, { default: markedKatex }, { default: markedShiki }, { default: katex }, bundledLanguages] =
+    await Promise.all([
+      import("marked"),
+      import("marked-katex-extension"),
+      import("marked-shiki"),
+      import("katex"),
+      loadLangs(),
+    ])
+  return new Marked(
     {
       renderer: {
         link({ href, title, text }) {
@@ -547,7 +501,8 @@ const loadJsParser = retryable<MarkedParser>(async () => {
         },
       },
     },
-    markedKatex({ throwOnError: false, nonStandard: true }),
+    guardedDollarMath(markedKatex({ throwOnError: false, nonStandard: true, trust: false })),
+    backslashMath(katex),
     markedShiki({
       async highlight(code, lang) {
         const diffs = await loadDiffs()
@@ -564,25 +519,19 @@ const loadJsParser = retryable<MarkedParser>(async () => {
   )
 })
 
+export async function parseMarkdown(markdown: string, nativeParser?: NativeMarkdownParser): Promise<string> {
+  // Native parsers may consume TeX backslashes as Markdown escapes. Parse math
+  // from the original source; never substitute equations into arbitrary HTML.
+  if (nativeParser && !/\$|\\[([]/.test(markdown)) return highlightCodeBlocks(await nativeParser(markdown))
+  const parser = await loadJsParser()
+  const html = await parser.parse(markdown)
+  if (html.includes('class="katex')) await loadKatex()
+  return html
+}
+
 export const { use: useMarked, provider: MarkedProvider } = createSimpleContext({
   name: "Marked",
-  init: (props: { nativeParser?: NativeMarkdownParser }) => {
-    if (props.nativeParser) {
-      const nativeParser = props.nativeParser
-      return {
-        async parse(markdown: string): Promise<string> {
-          const html = await nativeParser(markdown)
-          const withMath = html.includes("$") ? renderMathExpressions(html, await loadKatex()) : html
-          return highlightCodeBlocks(withMath)
-        },
-      }
-    }
-
-    return {
-      async parse(markdown: string): Promise<string> {
-        const parser = await loadJsParser()
-        return parser.parse(markdown)
-      },
-    }
-  },
+  init: (props: { nativeParser?: NativeMarkdownParser }) => ({
+    parse: (markdown: string) => parseMarkdown(markdown, props.nativeParser),
+  }),
 })

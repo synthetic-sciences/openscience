@@ -276,7 +276,7 @@ jobs:
           set -euo pipefail
           [[ -z "$WINDOWS_CSC_LINK" && -z "$WINDOWS_CSC_KEY_PASSWORD" ]] || exit 0
           body="$(gh release view "$OPENSCIENCE_TAG" --json body --jq .body)"
-          notice='> The macOS downloads are signed and notarized. The Windows installer is unsigned, so Windows SmartScreen may show a warning.'
+          notice='> The macOS downloads are signed and notarized. The Windows installer is unsigned. Windows Smart App Control may block it, and SmartScreen may warn. Do not disable Windows security protections to install it.'
           if ! grep -Fq 'The Windows installer is unsigned' <<<"$body"; then
             notes="$RUNNER_TEMP/release-notes.txt"
             printf '%s\n\n%s\n' "$body" "$notice" > "$notes"

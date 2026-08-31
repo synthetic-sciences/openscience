@@ -6,3 +6,13 @@ export function lastResponseTextPart(parts: readonly Part[]) {
     if (part?.type === "text" && !part.synthetic) return part as TextPart
   }
 }
+
+/** Match the visible trace: newest value at the first position of each part ID.
+ * Preserve source Markdown (including absolute links and indentation), copying
+ * prose only, never hidden reasoning, tool output, or synthetic notices. */
+export function responseText(parts: readonly Part[]) {
+  return [...new Map(parts.map((part) => [part.id, part])).values()]
+    .filter((part): part is TextPart => part.type === "text" && !part.synthetic && !!part.text.trim())
+    .map((part) => part.text)
+    .join("\n\n")
+}

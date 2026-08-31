@@ -1474,12 +1474,13 @@ export namespace SessionPrompt {
       // estimate. Previous provider usage cannot see a newly attached document,
       // a large current prompt, or a tool/schema change.
       const codex = LLM.isCodexSubscriptionModel(model, await Auth.get(model.providerID))
+      const header = LLM.prompts({ agent, model, direct: route.direct, inspection: route.inspection }, codex)
       const providerSystem = [
-        ...(agent.prompt ? [agent.prompt] : codex ? [] : SystemPrompt.provider(model, route.direct, route.inspection)),
+        ...header.system,
         ...system,
         ...(lastUser.system ? [lastUser.system] : []),
         ...(minimal ? [] : await SystemPrompt.planModeInstructions()),
-        ...(codex && !minimal ? [SystemPrompt.instructions(route.direct, route.inspection)] : []),
+        ...(header.instructions ? [header.instructions] : []),
       ]
       const tier = ProviderTransform.tier(model, lastUser.tier)
       const routeModel = tier.model ? await Provider.getModel(model.providerID, tier.model) : model

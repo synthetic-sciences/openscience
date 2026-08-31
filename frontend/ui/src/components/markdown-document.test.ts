@@ -52,10 +52,13 @@ afterAll(async () => {
   await vite.close()
   globalThis.CustomEvent = originalCustomEvent
 })
-afterEach(() => {
+afterEach(async () => {
   cleanups.splice(0).forEach((dispose) => dispose())
   document.body.replaceChildren()
   localStorage.removeItem(documentPreferencesKey)
+  // Kobalte defers focus-scope cleanup to the next task. Drain it before
+  // afterAll restores Bun's non-DOM CustomEvent for the following test file.
+  await settle()
 })
 
 // Keep rendered Markdown tests in this package's jsdom environment. HappyDOM

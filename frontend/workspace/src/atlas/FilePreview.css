@@ -365,6 +365,13 @@
   word-break: normal;
 }
 
+/* A recessed reading canvas, including the gutters beside readable-width
+   Markdown. Keep the toolbar and other preview types on their existing layer. */
+.atlas-file-scroll:has(> .atlas-markdown-document),
+.atlas-markdown-document {
+  background: var(--color-bg);
+}
+
 .atlas-file-document[data-reading-width="full"] {
   width: 100%;
 }

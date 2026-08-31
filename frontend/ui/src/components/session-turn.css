@@ -541,17 +541,23 @@
     }
 
     > [data-slot="session-turn-response-copy-wrapper"] {
-      position: absolute;
-      right: 4px;
-      bottom: 0;
-      opacity: 0;
-      transition: opacity 0.15s ease;
+      position: static;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+      color: var(--text-weak);
+      opacity: 1;
     }
 
-    &:hover > [data-slot="session-turn-response-copy-wrapper"],
-    &:focus-within > [data-slot="session-turn-response-copy-wrapper"],
-    > [data-slot="session-turn-response-copy-wrapper"][data-copied="true"] {
-      opacity: 1;
+    > [data-slot="session-turn-response-copy-wrapper"] [data-component="button"] {
+      min-height: 32px;
+    }
+
+    > [data-slot="session-turn-response-copy-wrapper"] [role="status"] {
+      font-size: var(--font-size-small);
+      line-height: var(--line-height-large);
     }
   }
 

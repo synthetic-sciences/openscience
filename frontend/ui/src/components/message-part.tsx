@@ -744,7 +744,11 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     <Show when={throttledText()}>
       <div data-component="text-part">
         <div data-slot="text-part-body">
-          <Markdown text={throttledText()} cacheKey={part.id} />
+          <Markdown
+            data-slot={props.message.role === "assistant" ? "assistant-prose" : undefined}
+            text={throttledText()}
+            cacheKey={part.id}
+          />
           <Show when={!props.hideCopy}>
             <div data-slot="text-part-copy-wrapper">
               <Tooltip
@@ -1233,7 +1237,8 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const dialog = useDialog()
-    const route = () => (props.metadata.route === "gemini" ? "Connected Gemini account" : "Connected OpenRouter account")
+    const route = () =>
+      props.metadata.route === "gemini" ? "Connected Gemini account" : "Connected OpenRouter account"
     const filepath = () =>
       typeof props.metadata.filepath === "string"
         ? props.metadata.filepath

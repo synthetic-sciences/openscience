@@ -359,6 +359,22 @@ export function Markdown(
     const temp = document.createElement("div")
     temp.innerHTML = content
 
+    // Only assistant prose opts into a keyboard-scrollable table frame. Build
+    // it before reconciliation so updates preserve native table semantics and
+    // do not fight the Markdown DOM diff or affect standalone file previews.
+    if (container.dataset.slot === "assistant-prose") {
+      for (const table of temp.querySelectorAll("table")) {
+        const frame = document.createElement("div")
+        frame.setAttribute("data-component", "markdown-table")
+        frame.setAttribute("data-scrollable", "true")
+        frame.setAttribute("role", "region")
+        frame.setAttribute("aria-label", table.caption?.textContent?.trim() || "Response table")
+        frame.tabIndex = 0
+        table.replaceWith(frame)
+        frame.append(table)
+      }
+    }
+
     const resolve = local.resolveImage ?? shared?.resolveImage
     if (resolve) resolveImages(temp, resolve)
     const resolveFile = local.resolveFile ?? shared?.resolveFile

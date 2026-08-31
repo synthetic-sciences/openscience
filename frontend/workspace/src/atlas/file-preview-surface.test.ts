@@ -31,6 +31,17 @@ describe("file preview surface", () => {
     expect(css).toContain("font-size: max(12px, 0.9em)")
   })
 
+  test("recesses only the Markdown reading canvas using the current theme background", () => {
+    expect(css).toMatch(
+      /\.atlas-file-scroll:has\(> \.atlas-markdown-document\),\s*\.atlas-markdown-document\s*\{\s*background: var\(--color-bg\);\s*\}/s,
+    )
+    expect(css).toMatch(/\.atlas-file-document\s*\{[^}]*background: transparent;/s)
+    expect(css).toMatch(/\.atlas-file-toolbar\s*\{[^}]*background: var\(--color-surface-solid\)/s)
+    expect(css).toMatch(
+      /\.atlas-file-document \.atlas-md :not\(pre\) > code\s*\{[^}]*background: var\(--color-bg-subtle\)/s,
+    )
+  })
+
   test("shares document typography with stored artifacts and notebook Markdown", () => {
     expect(textView).toContain('import "../FilePreview.css"')
     expect(textView).toContain('import { MarkdownDocument } from "../MarkdownDocument"')

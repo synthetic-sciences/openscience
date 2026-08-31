@@ -53,6 +53,23 @@ export namespace LLM {
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
 
+  // Share the exact header selection with context preflight. Codex sends its
+  // base instructions separately from the assembled conversation context.
+  export function prompts(input: Pick<StreamInput, "agent" | "model" | "direct" | "inspection">, codex = false) {
+    return {
+      system: input.agent.prompt
+        ? [input.agent.prompt]
+        : codex
+          ? []
+          : SystemPrompt.provider(input.model, input.direct, input.inspection),
+      instructions: codex
+        ? ToolSelection.minimalResearchAgent(input.agent.name) && input.agent.prompt
+          ? input.agent.prompt
+          : SystemPrompt.instructions(input.direct, input.inspection)
+        : undefined,
+    }
+  }
+
   export async function repairToolCall(failed: Parameters<ToolCallRepairFunction<ToolSet>>[0], tools: ToolSet) {
     const source = InvalidCall.tool(failed.toolCall.toolName)
     const name = tools[failed.toolCall.toolName] ? failed.toolCall.toolName : tools[source] ? source : undefined
@@ -100,17 +117,12 @@ export namespace LLM {
       Auth.get(input.model.providerID),
     ])
     const isCodex = isCodexSubscriptionModel(input.model, auth)
+    const prompt = prompts(input, isCodex)
 
     const system = []
     system.push(
       [
-        // use agent prompt otherwise provider prompt
-        // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
-        ...(input.agent.prompt
-          ? [input.agent.prompt]
-          : isCodex
-            ? []
-            : SystemPrompt.provider(input.model, input.direct, input.inspection)),
+        ...prompt.system,
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -156,10 +168,7 @@ export namespace LLM {
       base as Record<string, any>,
     )
     if (isCodex) {
-      options.instructions =
-        ToolSelection.minimalResearchAgent(input.agent.name) && input.agent.prompt
-          ? input.agent.prompt
-          : SystemPrompt.instructions(input.direct, input.inspection)
+      options.instructions = prompt.instructions
     }
 
     const params = await Plugin.trigger(

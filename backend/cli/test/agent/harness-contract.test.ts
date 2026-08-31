@@ -35,10 +35,14 @@ test("context overflow compacts into an explicit resume turn", async () => {
   expect(compaction).toContain('return "continue"')
 })
 
-test("every provider receives one compact product operating contract", () => {
+test("every provider receives one compact product operating contract", async () => {
   const instructions = SystemPrompt.instructions()
   expect(SystemPrompt.provider(undefined as never)[0]?.trim()).toBe(instructions)
-  expect(instructions.length).toBeLessThan(4_000)
+  // Preserve the operating-core budget while accounting for the shared,
+  // separately bounded response-structure defaults.
+  expect((await read("session/prompt/core.txt")).length).toBeLessThan(4_000)
+  expect((await read("session/prompt/response.txt")).length).toBeLessThan(1_600)
+  expect(instructions.length).toBeLessThan(5_600)
   expect(instructions).toContain("Keep simple work simple")
   expect(instructions).toContain("Synthetic Sciences graph state is optional")
   expect(instructions).toContain("Default to no children")

@@ -325,7 +325,7 @@ export default function Download() {
                 {download.platform === "mac"
                   ? "Open the DMG and drag OpenScience into Applications. Developer ID signed and notarized."
                   : download.platform === "windows"
-                    ? "Open the installer. Microsoft SmartScreen may warn because this installer is unsigned."
+                    ? "This installer is unsigned. Windows Smart App Control may block it; SmartScreen may also warn. Do not disable Windows security protections to install it."
                     : "Make the AppImage executable, then open it."}
               </p>
             </section>

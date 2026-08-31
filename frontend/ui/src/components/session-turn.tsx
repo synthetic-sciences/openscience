@@ -5,7 +5,6 @@ import {
   Part as PartType,
   type PermissionRequest,
   type QuestionRequest,
-  TextPart,
   ToolPart,
 } from "@synsci/sdk/v2/client"
 import { type FileDiff } from "@synsci/sdk/v2"
@@ -33,17 +32,15 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { IconButton } from "./icon-button"
 import { Card } from "./card"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
-import { Tooltip } from "./tooltip"
 import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { lastResponseTextPart } from "./session-turn-response"
+import { responseText } from "./session-turn-response"
 import { visibleResearchTrace } from "./research-trace"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
@@ -322,16 +319,6 @@ export function SessionTurn(
 
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
 
-  const lastTextPart = createMemo(() => {
-    const msgs = assistantMessages()
-    for (let mi = msgs.length - 1; mi >= 0; mi--) {
-      const msgParts = data.store.part[msgs[mi].id] ?? emptyParts
-      const part = lastResponseTextPart(msgParts)
-      if (part) return part
-    }
-    return undefined
-  })
-
   const hasSteps = createMemo(() => {
     for (const m of assistantMessages()) {
       const msgParts = data.store.part[m.id]
@@ -468,18 +455,32 @@ export function SessionTurn(
     { equals: same },
   )
 
-  const response = createMemo(() => lastTextPart()?.text)
+  const response = createMemo(() =>
+    responseText(assistantMessages().flatMap((message) => data.store.part[message.id] ?? emptyParts)),
+  )
   const messageDiffs = createMemo(() => message()?.summary?.diffs ?? emptyDiffs)
   const hasDiffs = createMemo(() => messageDiffs().length > 0)
 
-  const [copied, setCopied] = createSignal(false)
+  const [copy, setCopy] = createStore({ copied: false, error: false })
+  const copyTimer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+  onCleanup(() => clearTimeout(copyTimer.current))
 
   const handleCopy = async () => {
-    const content = response() ?? ""
+    const content = response()
     if (!content) return
-    await navigator.clipboard.writeText(content)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    clearTimeout(copyTimer.current)
+    setCopy({ copied: false, error: false })
+    if (!navigator.clipboard) {
+      setCopy("error", true)
+      return
+    }
+    await navigator.clipboard.writeText(content).then(
+      () => {
+        setCopy("copied", true)
+        copyTimer.current = setTimeout(() => setCopy("copied", false), 2000)
+      },
+      () => setCopy("error", true),
+    )
   }
 
   const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
@@ -730,24 +731,25 @@ export function SessionTurn(
                         <Show when={response()}>
                           <div
                             data-slot="session-turn-response-copy-wrapper"
-                            data-copied={copied() ? "true" : undefined}
+                            role="group"
+                            aria-label="Response actions"
                           >
-                            <Tooltip
-                              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-                              placement="top"
-                              gutter={8}
+                            <Button
+                              icon={copy.copied ? "check" : "copy"}
+                              size="small"
+                              variant="ghost"
+                              onMouseDown={(event: MouseEvent) => event.preventDefault()}
+                              onClick={(event: MouseEvent) => {
+                                event.stopPropagation()
+                                void handleCopy()
+                              }}
+                              aria-label="Copy response"
                             >
-                              <IconButton
-                                icon={copied() ? "check" : "copy"}
-                                variant="ghost"
-                                onMouseDown={(event) => event.preventDefault()}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  handleCopy()
-                                }}
-                                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-                              />
-                            </Tooltip>
+                              {copy.copied ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                            </Button>
+                            <span role="status" aria-live="polite">
+                              {copy.error ? "Could not copy. Select the response text and copy it manually." : ""}
+                            </span>
                           </div>
                         </Show>
                         <Show when={props.stepsExpanded && error()}>

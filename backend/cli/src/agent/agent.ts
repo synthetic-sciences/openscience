@@ -160,7 +160,7 @@ export namespace Agent {
         description: "Primary research agent for focused questions, analysis, synthesis, and durable outputs.",
         options: {},
         color: "#d48765",
-        prompt: PROMPT_RESEARCH_AGENT_TEST,
+        prompt: SystemPrompt.response(PROMPT_RESEARCH_AGENT_TEST),
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
@@ -190,7 +190,7 @@ export namespace Agent {
               ),
               mode: "primary" as const,
               native: true,
-              prompt: PROMPT_RESEARCH_AGENT_TEST,
+              prompt: SystemPrompt.response(PROMPT_RESEARCH_AGENT_TEST),
             },
           }
         : {}),
