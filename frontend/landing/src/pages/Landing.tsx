@@ -322,7 +322,9 @@ function Hero() {
             style={{ animationDelay: "420ms" }}
           >
             <Cta href="/download#desktop">Download desktop</Cta>
-            <Cta href="/download#terminal" variant="ghost" arrow={false}>Install with npm</Cta>
+            <Cta href="/download#terminal" variant="ghost" arrow={false}>
+              Install with npm
+            </Cta>
           </div>
         </div>
       </div>
@@ -968,7 +970,9 @@ export default function Landing() {
                   </p>
                   <div className="mt-8 flex flex-wrap items-center gap-3">
                     <Cta href="/download#desktop">Download desktop</Cta>
-                    <Cta href="/download#terminal" variant="ghost" arrow={false}>Install with npm</Cta>
+                    <Cta href="/download#terminal" variant="ghost" arrow={false}>
+                      Install with npm
+                    </Cta>
                   </div>
                 </Reveal>
               </div>

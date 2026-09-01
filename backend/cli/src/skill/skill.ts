@@ -559,7 +559,9 @@ export namespace Skill {
   export async function all(options: { includeDisabled?: boolean } = {}) {
     if (options.includeDisabled) return entries()
     const disabled = await selection()
-    return (await entries()).filter((skill) => !disabled.has(skill.name))
+    const skills = await entries()
+    if (!disabled.size) return skills
+    return skills.filter((skill) => !disabled.has(skill.name))
   }
 
   async function selection() {

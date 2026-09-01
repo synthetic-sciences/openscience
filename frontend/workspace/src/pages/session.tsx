@@ -992,7 +992,12 @@ export default function Page(): JSX.Element {
     >
       <ToastContainer />
       <HelpOverlay open={uiStore.helpOpen()} onClose={() => uiStore.setHelpOpen(false)} />
-      <CommandPalette open={uiStore.paletteOpen()} onClose={() => uiStore.setPaletteOpen(false)} />
+      <CommandPalette
+        open={uiStore.paletteOpen()}
+        onClose={() => uiStore.setPaletteOpen(false)}
+        directory={sdk.directory}
+        projectID={sdk.projectID}
+      />
 
       <DisconnectedPanel />
 

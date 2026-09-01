@@ -299,6 +299,7 @@ describe("generate_image response parsing", () => {
       await using tmp = await tmpdir({
         git: true,
         config: {
+          enabled_providers: ["openrouter"],
           provider: {
             openrouter: {
               options: {
@@ -313,6 +314,8 @@ describe("generate_image response parsing", () => {
         directory: tmp.path,
         init: async () => Provider.invalidate(),
         fn: async () => {
+          expect(await Provider.getProvider("google")).toBeUndefined()
+          expect(await Provider.getProvider("openrouter")).toBeUndefined()
           const session = await executionSession()
           const tool = await GenerateImageTool.init()
           await expect(

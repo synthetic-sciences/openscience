@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { generateText } from "ai"
 import { createXai } from "@ai-sdk/xai"
 import { GlobalBus } from "../../src/bus/global"
+import { MANAGED_MODEL_DETAILS, MANAGED_OPENROUTER_MODELS } from "../../src/provider/managed-catalog"
 
 const key = "osk_fixture_native_sdk"
 const organization = "org_native_sdk"
@@ -10,37 +11,61 @@ const headers = {
   "OpenScience-Funding-Protocol": "1",
   "OpenScience-Funding-Context": `organization:${organization}`,
 }
+const catalog = MANAGED_OPENROUTER_MODELS.map((id) => ({
+  id,
+  upstream_provider: id.startsWith("anthropic/")
+    ? "anthropic"
+    : id.startsWith("google/")
+      ? "gemini"
+      : id.startsWith("x-ai/")
+        ? "xai"
+        : id.startsWith("meta/")
+          ? "meta"
+          : "openrouter",
+  context_length: MANAGED_MODEL_DETAILS[id].context,
+  max_output_tokens: MANAGED_MODEL_DETAILS[id].output,
+  pricing: { tiers: [{ input: 2, output: 6 }] },
+  ...(id === "openai/gpt-5.6-sol"
+    ? {
+        fast_mode: true,
+        fast_mode_details: {
+          available: true,
+          transport: { service_tier: "priority" },
+          pricing: { verified: true, tiers: [{ input: 4, output: 12 }] },
+        },
+      }
+    : {}),
+  ...(id === "anthropic/claude-fable-5"
+    ? {
+        fast_mode: true,
+        fast_mode_details: {
+          available: true,
+          transport: { speed: "fast" },
+          pricing: { verified: true, tiers: [{ input: 20, output: 100 }] },
+        },
+      }
+    : {}),
+  ...(id === "anthropic/claude-haiku-4.5"
+    ? { capabilities: { reasoning_efforts: [], thinking_budgets: [0, 4096, 8192, 16384, 32768] } }
+    : {}),
+  ...(id === "x-ai/grok-4.6"
+    ? {
+        capabilities: {
+          reasoning_efforts: ["low", "medium", "high", "xhigh"],
+          reasoning_default: "high",
+        },
+        fast_mode: true,
+        fast_mode_details: {
+          available: true,
+          transport: { service_tier: "priority" },
+          pricing: { verified: true, tiers: [{ input: 4, output: 12 }] },
+        },
+      }
+    : {}),
+}))
 async function gateway(request: Request) {
   const url = new URL(request.url)
-  if (url.pathname.endsWith("/model-catalog"))
-    return Response.json(
-      {
-        models: [
-          {
-            id: "anthropic/claude-fable-5",
-            upstream_provider: "anthropic",
-            context_length: 1_000_000,
-            max_output_tokens: 128_000,
-            pricing: { tiers: [{ input: 10, output: 50 }] },
-          },
-          {
-            id: "google/gemini-3.7-flash",
-            upstream_provider: "gemini",
-            context_length: 1_048_576,
-            max_output_tokens: 65_536,
-            pricing: { tiers: [{ input: 0.75, output: 3.75 }] },
-          },
-          {
-            id: "x-ai/grok-4.6",
-            upstream_provider: "xai",
-            context_length: 500_000,
-            max_output_tokens: 450_000,
-            pricing: { tiers: [{ input: 2, output: 6 }] },
-          },
-        ],
-      },
-      { headers },
-    )
+  if (url.pathname.endsWith("/model-catalog")) return Response.json({ models: catalog }, { headers })
   calls.push({
     url: url.pathname,
     headers: new Headers(request.headers),
@@ -85,7 +110,8 @@ const { Provider } = await import("../../src/provider/provider")
 const { ProviderTransform } = await import("../../src/provider/transform")
 const { Instance } = await import("../../src/project/instance")
 
-test("Ace uses real native SDK bodies with scoped credentials, cache control, and supported reasoning", async () => {
+test("Ace keeps every curated model on the scoped OpenRouter transport", async () => {
+  calls.length = 0
   const originalFetch = globalThis.fetch
   globalThis.fetch = ((input, init) => {
     expect(init?.redirect).toBe("error")
@@ -112,8 +138,14 @@ test("Ace uses real native SDK bodies with scoped credentials, cache control, an
       fn: async () => {
         await Provider.list()
         await refreshed
-        for (const id of ["anthropic/claude-fable-5", "google/gemini-3.7-flash"]) {
-          const model = (await Provider.list()).openrouter.models[id]
+        const provider = (await Provider.list()).openrouter
+        for (const id of MANAGED_OPENROUTER_MODELS) {
+          const model = provider.models[id]
+          expect(model.api).toMatchObject({
+            id,
+            npm: "@openrouter/ai-sdk-provider",
+          })
+          expect(model.api.url).toEndWith("/api/llm/proxy/openrouter/v1")
           const options = ProviderTransform.options({ model, sessionID: "fixture" })
           const result = await generateText({
             model: await Provider.getLanguage(model),
@@ -133,44 +165,74 @@ test("Ace uses real native SDK bodies with scoped credentials, cache control, an
             maxRetries: 0,
           })
           expect(result.text).toBe("ok")
-          expect(result.usage.cachedInputTokens).toBe(5)
+          expect(calls.at(-1)?.url).toBe("/api/llm/proxy/openrouter/v1/chat/completions")
+          expect(calls.at(-1)?.body.model).toBe(id)
         }
-        const grok = (await Provider.list()).openrouter.models["x-ai/grok-4.6"]
+        expect(provider.models["anthropic/claude-fable-5"].modes).toEqual({})
+        expect(provider.models["x-ai/grok-4.6"].modes).toEqual({})
+
+        const grok = provider.models["x-ai/grok-4.6"]
+        expect(grok.api).toMatchObject({
+          id: "x-ai/grok-4.6",
+          npm: "@openrouter/ai-sdk-provider",
+        })
+        expect(grok.api.url).toEndWith("/api/llm/proxy/openrouter/v1")
         for (const effort of ["low", "medium", "high", "xhigh"]) {
+          const variant = ProviderTransform.variants(grok)[effort]!
+          expect(variant).toEqual({ reasoning: { effort } })
           const result = await generateText({
             model: await Provider.getLanguage(grok),
             prompt: "Hi",
-            providerOptions: ProviderTransform.providerOptions(grok, ProviderTransform.variants(grok)[effort]!),
+            providerOptions: ProviderTransform.providerOptions(grok, variant),
             maxRetries: 0,
           })
           expect(result.text).toBe("ok")
-          expect(calls.at(-1)?.body.reasoning_effort).toBe(effort)
-          expect(calls.at(-1)?.url).toBe("/api/llm/proxy/xai/v1/chat/completions")
+          expect(calls.at(-1)?.body.reasoning).toEqual({ effort })
+          expect(calls.at(-1)?.url).toBe("/api/llm/proxy/openrouter/v1/chat/completions")
         }
+
+        const haiku = provider.models["anthropic/claude-haiku-4.5"]
+        const variants = ProviderTransform.variants(haiku)
+        expect(variants.none).toEqual({ reasoning: { enabled: false } })
+        expect(variants["4096-tokens"]).toEqual({ reasoning: { max_tokens: 4096 } })
+        for (const variant of [variants.none, variants["4096-tokens"]]) {
+          const result = await generateText({
+            model: await Provider.getLanguage(haiku),
+            prompt: "Hi",
+            providerOptions: ProviderTransform.providerOptions(haiku, variant),
+            maxRetries: 0,
+          })
+          expect(result.text).toBe("ok")
+        }
+        expect(calls.at(-2)?.body.reasoning).toEqual({ enabled: false })
+        expect(calls.at(-1)?.body.reasoning).toEqual({ max_tokens: 4096 })
+
+        const sol = provider.models["openai/gpt-5.6-sol"]
+        expect(sol.modes?.fast).toBeDefined()
+        const fast = ProviderTransform.tier(sol, "fast").options
+        const result = await generateText({
+          model: await Provider.getLanguage(sol),
+          prompt: "Hi",
+          providerOptions: ProviderTransform.providerOptions(sol, fast),
+          maxRetries: 0,
+        })
+        expect(result.text).toBe("ok")
+        expect(calls.at(-1)?.body.service_tier).toBe("priority")
       },
     })
-    expect(calls).toHaveLength(6)
+    expect(calls).toHaveLength(MANAGED_OPENROUTER_MODELS.length + 7)
     for (const call of calls) {
       expect(call.headers.get("X-Organization-ID")).toBe(organization)
       expect(call.headers.get("OpenScience-Funding-Protocol")).toBe("1")
       expect(call.headers.get("authorization")).toBe(`Bearer ${key}`)
       expect(call.headers.has("x-api-key")).toBe(false)
       expect(call.headers.has("x-goog-api-key")).toBe(false)
-      expect(call.url).toStartWith("/api/llm/proxy/")
+      expect(call.headers.has("anthropic-beta")).toBe(false)
+      expect(call.body.speed).toBeUndefined()
+      if (call !== calls.at(-1)) expect(call.body.service_tier).toBeUndefined()
+      expect(call.body.reasoning_effort).toBeUndefined()
+      expect(call.url).toBe("/api/llm/proxy/openrouter/v1/chat/completions")
     }
-    const anthropic = calls[0]!
-    expect(anthropic.url).toBe("/api/llm/proxy/anthropic/v1/messages")
-    expect(anthropic.body.model).toBe("claude-fable-5")
-    expect(anthropic.body.thinking).toEqual({ type: "adaptive" })
-    expect(anthropic.body.output_config.effort).toBe("high")
-    expect(anthropic.body.system[0].cache_control).toEqual({ type: "ephemeral" })
-    expect(anthropic.body).not.toHaveProperty("reasoning")
-    const gemini = calls[1]!
-    expect(gemini.url).toContain("/gemini/v1beta/models/gemini-3.7-flash:generateContent")
-    expect(gemini.body.generationConfig.thinkingConfig.thinkingLevel).toBe("medium")
-    expect(gemini.body.generationConfig).not.toHaveProperty("temperature")
-    expect(gemini.body.generationConfig).not.toHaveProperty("topP")
-    expect(gemini.body.generationConfig).not.toHaveProperty("topK")
   } finally {
     globalThis.fetch = originalFetch
     await OpenScience.clearSession()
@@ -181,18 +243,28 @@ test("bundled xAI Chat adapter preserves native Grok 4.6 efforts", async () => {
   const bodies: Record<string, any>[] = []
   const sdk = createXai({
     apiKey: "fixture",
-    fetch: Object.assign(async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-      bodies.push(JSON.parse(init!.body as string))
-      return Response.json({
-        id: "chat_fixture", object: "chat.completion", created: 1, model: "grok-4.6",
-        choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
-        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
-      })
-    }, { preconnect() {} }),
+    fetch: Object.assign(
+      async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        bodies.push(JSON.parse(init!.body as string))
+        return Response.json({
+          id: "chat_fixture",
+          object: "chat.completion",
+          created: 1,
+          model: "grok-4.6",
+          choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+        })
+      },
+      { preconnect() {} },
+    ),
   })
   for (const effort of ["low", "medium", "high", "xhigh"]) {
-    const result = await generateText({ model: sdk.languageModel("grok-4.6"), prompt: "Hi",
-      providerOptions: { xai: { reasoningEffort: effort } }, maxRetries: 0 })
+    const result = await generateText({
+      model: sdk.languageModel("grok-4.6"),
+      prompt: "Hi",
+      providerOptions: { xai: { reasoningEffort: effort } },
+      maxRetries: 0,
+    })
     expect(result.text).toBe("ok")
     expect(bodies.at(-1)?.reasoning_effort).toBe(effort)
   }
@@ -202,25 +274,28 @@ test("bundled xAI Responses adapter preserves all four Grok 4.6 efforts", async 
   const bodies: Record<string, any>[] = []
   const sdk = createXai({
     apiKey: "fixture",
-    fetch: Object.assign(async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-      bodies.push(JSON.parse(init!.body as string))
-      return Response.json({
-        id: "response_fixture",
-        object: "response",
-        status: "completed",
-        model: "grok-4.6",
-        output: [
-          {
-            id: "msg_fixture",
-            type: "message",
-            role: "assistant",
-            status: "completed",
-            content: [{ type: "output_text", text: "ok", annotations: [] }],
-          },
-        ],
-        usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
-      })
-    }, { preconnect() {} }),
+    fetch: Object.assign(
+      async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        bodies.push(JSON.parse(init!.body as string))
+        return Response.json({
+          id: "response_fixture",
+          object: "response",
+          status: "completed",
+          model: "grok-4.6",
+          output: [
+            {
+              id: "msg_fixture",
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [{ type: "output_text", text: "ok", annotations: [] }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+        })
+      },
+      { preconnect() {} },
+    ),
   })
   for (const effort of ["low", "medium", "high", "xhigh"]) {
     const result = await generateText({

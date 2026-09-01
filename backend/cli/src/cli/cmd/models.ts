@@ -31,7 +31,8 @@ const PROVIDER_LABELS: Record<string, string> = {
  *
  *  Detection rules:
  *  - openai-codex routes via OAuth (Sign in with ChatGPT), neither.
- *  - Retired product keys and proxy URLs are rejected by the provider layer.
+ *  - a managed provider using an Atlas key and proxy is the selected Ace workspace.
+ *  - Atlas keys and proxy URLs outside that managed route are rejected by the provider layer.
  *  - anything else with a key → BYOK.
  */
 function routingLabel(providerID: string, provider: Provider.Info): string {
@@ -44,6 +45,9 @@ function routingLabel(providerID: string, provider: Provider.Info): string {
   // demo sentinel is not a real credential.
   const effective = Provider.effectiveKey(provider)
   const baseURL = (provider.options?.baseURL as string | undefined) ?? ""
+  if (provider.source === "managed" && Auth.isAtlasApiKey(effective) && baseURL.includes("/api/llm/proxy/")) {
+    return "Ace workspace"
+  }
   if (Auth.isAtlasApiKey(effective) || baseURL.includes("/api/llm/proxy/")) return "retired credential"
   // A config-registered local endpoint stores its key under options.apiKey (not
   // provider.key), so it would otherwise read as "unconfigured".

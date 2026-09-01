@@ -119,6 +119,9 @@ test("wires /search through the project-scoped request helper with debounce and 
   )
   expect(source).toContain("q.length >= 2") // no fetch below the server minimum
   expect(source).toContain("resolveProjectRoute(params.dir, sync.data.project)")
+  expect(source).toContain("if (route || !params.dir || !props.directory || !props.projectID) return route")
+  expect(session).toContain("directory={sdk.directory}")
+  expect(session).toContain("projectID={sdk.projectID}")
   expect(source).toContain("requestProjectSearch")
   expect(source).toContain("setSearchError(true)")
   expect(source).toContain("setSearchRetry((value) => value + 1)")
@@ -129,8 +132,8 @@ test("renders the four search groups and routes selection correctly", () => {
   expect(source).toContain('category: "Messages"')
   expect(source).toContain('category: "Files"')
   expect(source).toContain('category: "Artifacts"')
-  expect(source).toContain("projectHref(scope.project, scope.directory, s.id)")
-  expect(source).toContain("projectHref(scope.project, scope.directory, m.sessionID)")
+  expect(source).toContain("projectPathname(scope.segment, s.id)")
+  expect(source).toContain("projectPathname(scope.segment, m.sessionID)")
   expect(source).toContain("reveal(m.messageID)")
   expect(source).toContain("data-message-id") // transcript anchor for scroll-to-message
   expect(source).toContain("uiStore.openFile(scope.directory, f.path)")

@@ -45,12 +45,12 @@ describe("tool.registry", () => {
     })
   })
 
-  test("includes the native Atlas host broker", async () => {
+  test("does not restore the retired Atlas host broker", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        expect(await ToolRegistry.ids()).toEqual(expect.arrayContaining(["atlas", "atlas_record"]))
+        expect(await ToolRegistry.ids()).not.toEqual(expect.arrayContaining(["atlas", "atlas_record"]))
       },
     })
   })

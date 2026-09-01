@@ -9,13 +9,16 @@ export default defineConfig({
     port: 8080,
     hmr: { overlay: false },
   },
-  plugins: [react(), {
-    name: "publish-openscience-docs",
-    apply: "build",
-    async closeBundle() {
-      await cp(path.resolve(__dirname, "../docs/dist"), path.resolve(__dirname, "dist/docs"), { recursive: true })
+  plugins: [
+    react(),
+    {
+      name: "publish-openscience-docs",
+      apply: "build",
+      async closeBundle() {
+        await cp(path.resolve(__dirname, "../docs/dist"), path.resolve(__dirname, "dist/docs"), { recursive: true })
+      },
     },
-  }],
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

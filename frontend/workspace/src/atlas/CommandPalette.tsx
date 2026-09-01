@@ -7,7 +7,7 @@ import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { uiStore } from "@/atlas/store/ui"
 import { IconBolt, IconFile, IconFolder, IconMessageSquare, IconSearch } from "@/atlas/shared/Icon"
-import { projectHref, resolveProjectRoute } from "@/utils/project-route"
+import { projectHref, projectPathname, resolveProjectRoute } from "@/utils/project-route"
 import { projectName } from "@/pages/home-projects"
 import { createProjectRequest } from "@/utils/openscience-fetch"
 import { requestProjectSearch, type ProjectSearchHits } from "@/atlas/project-search"
@@ -16,6 +16,8 @@ import "./CommandPalette.css"
 interface CommandPaletteProps {
   open: boolean
   onClose: () => void
+  directory?: string
+  projectID?: string
 }
 
 interface Cmd {
@@ -78,9 +80,21 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
   let restoreFocus: HTMLElement | undefined
   let pendingRun: (() => void) | undefined
 
-  // The palette mounts on both the home page (no project) and project pages,
-  // so the active project comes from the route rather than the SDK context.
-  const active = createMemo(() => resolveProjectRoute(params.dir, sync.data.project))
+  // The palette mounts on both Home (no project SDK) and project pages. A
+  // direct CLI project is intentionally absent from Home's managed catalog,
+  // so preserve the directory layout's selected SDK scope as a route-local
+  // fallback instead of silently turning project search into Home search.
+  const active = createMemo(() => {
+    const route = resolveProjectRoute(params.dir, sync.data.project)
+    if (route || !params.dir || !props.directory || !props.projectID) return route
+    return {
+      project: { id: props.projectID, worktree: props.directory },
+      projectID: props.projectID,
+      directory: props.directory,
+      segment: params.dir,
+      legacy: false,
+    }
+  })
   const request = createProjectRequest({
     baseUrl: () => global.url,
     fetch: () => platform.fetch ?? fetch,
@@ -178,7 +192,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
         hint: "Recent project session",
         icon: IconMessageSquare,
         category: "Recent sessions",
-        run: () => navigate(projectHref(scope.project, scope.directory, session.id)),
+        run: () => navigate(projectPathname(scope.segment, session.id)),
       }))
   })
 
@@ -197,7 +211,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
         hint: "Project session",
         icon: IconMessageSquare,
         category: "Sessions",
-        run: () => navigate(projectHref(scope.project, scope.directory, s.id)),
+        run: () => navigate(projectPathname(scope.segment, s.id)),
       })
     })
     data.messages.forEach((m) => {
@@ -208,7 +222,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
         icon: IconSearch,
         category: "Messages",
         run: () => {
-          navigate(projectHref(scope.project, scope.directory, m.sessionID))
+          navigate(projectPathname(scope.segment, m.sessionID))
           reveal(m.messageID)
         },
       })

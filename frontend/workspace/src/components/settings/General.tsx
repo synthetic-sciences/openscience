@@ -151,7 +151,7 @@ export default function General() {
   const workspaceValue = createMemo(() => {
     const context = account()?.funding_context
     const selected = context?.organizations.find((item) => item.organization_id === context.organization_id)
-    return selected?.is_personal ? "personal" : context?.organization_id ?? "personal"
+    return selected?.is_personal ? "personal" : (context?.organization_id ?? "personal")
   })
   const workspace = createMemo(() => workspaceOptions().find((option) => option.value === workspaceValue()))
   const workspaceLabel = createMemo(() => {
@@ -306,7 +306,8 @@ export default function General() {
                     when={canDirectlySwitchWorkspace() && workspaceOptions().length > 1}
                     fallback={
                       <span class="settings-account-value">
-                        {workspaceLabel()}{account()!.funding_context.available ? "" : " · Unavailable"}
+                        {workspaceLabel()}
+                        {account()!.funding_context.available ? "" : " · Unavailable"}
                       </span>
                     }
                   >

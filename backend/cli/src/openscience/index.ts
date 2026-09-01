@@ -11,12 +11,21 @@ import { DataRootBarrier } from "@/global/data-root-barrier"
 import { ToolOutputPath } from "@/tool/tool-output-path"
 import { Lock } from "@/util/lock"
 import { Log } from "@/util/log"
-import { BILLING_URL, DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE } from "@/endpoints"
-import { BYOK_LLM_ENV_KEYS, LOCAL_COMPUTE_CLI_ENV_KEYS, SYNCED_SERVICE_ENV_KEYS } from "./synced-env-policy"
+import { BILLING_URL, DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE, managedApiBase } from "@/endpoints"
+import {
+  BYOK_LLM_BASE_URL_KEYS,
+  BYOK_LLM_ENV_KEYS,
+  LOCAL_COMPUTE_CLI_ENV_KEYS,
+  SYNCED_SERVICE_ENV_KEYS,
+} from "./synced-env-policy"
 import { WorkspaceCredentials } from "./workspace-credentials"
 
 const log = Log.create({ service: "openscience" })
 export const API_BASE = MANAGED_API_BASE
+
+function apiBase(): string {
+  return managedApiBase()
+}
 
 export interface OpenScienceSession {
   api_key: string
@@ -98,7 +107,12 @@ const PRIVATE_KEY_SECRET = /-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----[\s\S]*?--
 const SECRET_FIELD =
   /(^|[_-])(api[_-]?key|private[_-]?key|signing[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password|passphrase|credential|authorization|cookie|deletion[_-]?proof)($|[_-])|^(apiKey|privateKey|signingKey|accessToken|refreshToken|authToken|clientSecret|secretKey|deletionProof|access|refresh|key)$/i
 
-const SAFE_ENV_KEYS = new Set([...BYOK_LLM_ENV_KEYS, ...SYNCED_SERVICE_ENV_KEYS, "OPENSCIENCE_RUNTIME"])
+const SAFE_ENV_KEYS = new Set([
+  ...BYOK_LLM_ENV_KEYS,
+  ...BYOK_LLM_BASE_URL_KEYS,
+  ...SYNCED_SERVICE_ENV_KEYS,
+  "OPENSCIENCE_RUNTIME",
+])
 const SAFE_ENV_PREFIXES = ["PATH", "HOME", "USER", "SHELL", "TERM", "LANG", "LC_", "TMPDIR", "XDG_", "EDITOR", "VISUAL"]
 const KERNEL_RUNTIME_KEYS = new Set([
   "TMP",
@@ -203,6 +217,7 @@ const FUNDING_PROTOCOL = "1"
 const FUNDING_PROTOCOL_HEADER = "OpenScience-Funding-Protocol"
 const FUNDING_CONTEXT_HEADER = "OpenScience-Funding-Context"
 const ATLAS_FETCH_TIMEOUT_MS = Number(process.env.OPENSCIENCE_ATLAS_TIMEOUT_MS) || 60_000
+const DEVICE_REVOKE_TIMEOUT_MS = 5_000
 const VERIFICATION_PAGE = process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || `${DEFAULT_MANAGED_API_BASE}/cli`
 
 interface WorkspaceScope {
@@ -220,8 +235,20 @@ interface AuthStatusResponse {
   funding_context?: { type?: "personal" | "organization"; organization_id?: string; locked?: boolean }
 }
 
+interface AuthStatus {
+  organizations: FundingOrganization[]
+  pinned?: string
+  locked: boolean
+  context?: AuthStatusResponse["funding_context"]
+  user?: AccountProfile
+}
+
 function isAccountKey(value: unknown): value is string {
   return typeof value === "string" && (value.startsWith("thk_") || value.startsWith("osk_"))
+}
+
+function isLegacyUnscoped(session: Pick<OpenScienceSession, "api_key" | "organization_id" | "workspace_locked">) {
+  return session.api_key.startsWith("thk_") && !session.organization_id && session.workspace_locked !== true
 }
 
 function validOrganizationID(value: unknown): value is string {
@@ -377,8 +404,9 @@ async function authenticatedAtlasFetch(
   session: OpenScienceSession,
   input: string,
   init: RequestInit = {},
+  timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
 ): Promise<Response> {
-  return accountAtlasFetch(session, input, init, false)
+  return accountAtlasFetch(session, input, init, false, timeoutMs)
 }
 
 async function fundedAtlasFetch(
@@ -391,7 +419,30 @@ async function fundedAtlasFetch(
   return OpenScience.validateFundingResponse(response, session)
 }
 
+async function revokeSessionDevice(
+  session: OpenScienceSession,
+  timeoutMs = DEVICE_REVOKE_TIMEOUT_MS,
+): Promise<boolean> {
+  try {
+    const response = await authenticatedAtlasFetch(
+      session,
+      `${apiBase()}/api/cli/devices/current`,
+      { method: "DELETE" },
+      timeoutMs,
+    )
+    return response.status === 204
+  } catch {
+    return false
+  }
+}
+
 export namespace OpenScience {
+  let loginWarning: string | undefined
+
+  export function getLoginWarning(): string | undefined {
+    return loginWarning
+  }
+
   export async function getSession(): Promise<OpenScienceSession | null> {
     if (!existsSync(SESSION_PATH)) return null
     try {
@@ -428,6 +479,76 @@ export namespace OpenScience {
     invalidateBalance()
     const { Provider } = await import("@/provider/provider")
     Provider.invalidate()
+  }
+
+  /** Activate a newly proved device before retiring the previous one. A failed
+   * first sync may leave the new credential usable offline, but an auth failure
+   * that cleared it must never be reported as a successful login. */
+  async function activateSession(session: OpenScienceSession): Promise<OpenScienceSession> {
+    return CredentialLifecycle.serialized(async () => {
+      loginWarning = undefined
+      const previous = await getSession()
+      await saveSession(session)
+      await syncCredentials({ force: true })
+      const current = await getSession()
+      if (!current || current.api_key !== session.api_key) {
+        await revokeSessionDevice(session)
+        throw new Error("This device could not verify the new login. Sign in again.")
+      }
+      if (previous && previous.api_key !== current.api_key && !(await revokeSessionDevice(previous))) {
+        loginWarning =
+          "Signed in, but the previous device could not be revoked remotely. You can remove it from account settings."
+      }
+      return current
+    })
+  }
+
+  /** Persist the immutable workspace proved by Atlas for sessions written by
+   * an older client that discarded it. The comparison is repeated under both
+   * credential and file locks so a slow response for account A cannot relabel
+   * a newly connected account B. */
+  async function reconcileSession(
+    expected: OpenScienceSession,
+    organizationID: string | undefined,
+    userID: string,
+  ): Promise<OpenScienceSession | null> {
+    const matches = (current: OpenScienceSession | null) =>
+      !!current &&
+      current.api_key === expected.api_key &&
+      current.user_id === expected.user_id &&
+      current.organization_id === expected.organization_id &&
+      current.workspace_locked === expected.workspace_locked
+    const next = {
+      ...expected,
+      user_id: userID || expected.user_id,
+      ...(organizationID ? { organization_id: organizationID } : {}),
+      workspace_locked: true,
+    }
+    if (!organizationID) delete next.organization_id
+    if (
+      next.user_id === expected.user_id &&
+      next.organization_id === expected.organization_id &&
+      expected.workspace_locked === true
+    ) {
+      return expected
+    }
+    const result = await CredentialLifecycle.mutateIf(
+      "managed-session.reconcile",
+      async () => matches(await getSession()),
+      async () => {
+        using _ = await Lock.write(SESSION_PATH)
+        const current = await getSession()
+        if (!matches(current)) return null
+        await writeWorkspaceScope(next)
+        await atomicWrite(SESSION_PATH, JSON.stringify(next, null, 2))
+        return next
+      },
+    )
+    if (!result.applied || !result.value) return null
+    invalidateBalance()
+    const { Provider } = await import("@/provider/provider")
+    Provider.invalidate()
+    return result.value
   }
 
   export async function clearSession(expectedApiKey?: string): Promise<boolean> {
@@ -481,20 +602,33 @@ export namespace OpenScience {
     snapshot?: FundingSnapshot | null,
   ): Promise<FundingSnapshot> {
     if (!apiKey || !isAtlasManagedKey(apiKey)) throw new FundingContextError("Expected an Atlas managed API key.")
-    const selected = snapshot ?? (await getFundingSnapshot())
+    const selected = await (async () => {
+      if (!snapshot) return (await getReconciledFundingState())?.snapshot
+      if (!isLegacyUnscoped(snapshot)) return snapshot
+      const state = await getReconciledFundingState()
+      if (state?.snapshot.api_key !== snapshot.api_key) return
+      return state.snapshot
+    })()
     if (selected) {
       if (selected.api_key !== apiKey) {
         throw new FundingContextError("The connected account changed during managed inference. Retry it.")
       }
+      const current = await getFundingSnapshot()
+      if (!current && existsSync(SESSION_PATH)) {
+        throw new FundingContextError("OpenScience could not safely read the selected funding account. Sign in again.")
+      }
+      if (
+        current &&
+        (current.api_key !== selected.api_key ||
+          current.user_id !== selected.user_id ||
+          current.organization_id !== selected.organization_id ||
+          current.workspace_locked !== selected.workspace_locked)
+      ) {
+        throw new FundingContextError("The connected account changed during managed inference. Retry it.")
+      }
       return selected
     }
-    if (existsSync(SESSION_PATH)) {
-      throw new FundingContextError("OpenScience could not safely read the selected funding account. Sign in again.")
-    }
-    if (isWorkspaceKey(apiKey)) {
-      throw new FundingContextError("A workspace credential requires a saved workspace scope. Sign in again.")
-    }
-    return Object.freeze({ api_key: apiKey, user_id: "", account: accountTag({ api_key: apiKey, user_id: "" }) })
+    throw new FundingContextError("OpenScience could not safely read the selected funding account. Sign in again.")
   }
 
   export function fundingHeaders(snapshot: Pick<FundingSnapshot, "organization_id">): Record<string, string> {
@@ -511,13 +645,9 @@ export namespace OpenScience {
     if (!snapshot || !response.ok) return response
     const protocol = response.headers.get(FUNDING_PROTOCOL_HEADER)
     const context = response.headers.get(FUNDING_CONTEXT_HEADER)
-    if (!snapshot.organization_id) {
-      if ((!context || context === "personal") && protocol !== FUNDING_PROTOCOL) return response
-      if (protocol === FUNDING_PROTOCOL && context === "personal") return response
-      if (protocol === FUNDING_PROTOCOL && context?.startsWith("organization:") && !isWorkspaceKey(snapshot.api_key)) {
-        return response
-      }
-    } else if (
+    if (!snapshot.organization_id && protocol === FUNDING_PROTOCOL && context === "personal") return response
+    if (
+      snapshot.organization_id &&
       isAtlasManagedKey(snapshot.api_key) &&
       protocol === FUNDING_PROTOCOL &&
       context === `organization:${snapshot.organization_id}`
@@ -547,6 +677,7 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return (synced = { state: "disconnected" })
     const identity = WorkspaceCredentials.identity(session)
+    const identities = new Set([identity])
     const pending = syncs.get(identity)
     if (pending) return pending
     if (!options.force && Date.now() - (attempts.get(identity) ?? 0) < 60_000) return synced
@@ -556,7 +687,7 @@ export namespace OpenScience {
       const controller = new AbortController()
       let timer: ReturnType<typeof setTimeout> | undefined
       const request = (async () => {
-        const response = await fetch(`${API_BASE}/api/cli/sync`, {
+        const response = await fetch(`${apiBase()}/api/cli/sync`, {
           headers: { Authorization: `Bearer ${session.api_key}`, ...fundingHeaders(session) },
           signal: controller.signal,
         })
@@ -598,9 +729,14 @@ export namespace OpenScience {
         ) {
           throw new FundingContextError("Credential sync could not verify the selected workspace. Sign in again.")
         }
+        const scoped = await reconcileSession(session, data.snapshot.organization_id, data.user_id)
+        if (!scoped) return synced
+        const target = WorkspaceCredentials.identity(scoped)
+        identities.add(target)
+        attempts.set(target, attempts.get(identity) ?? Date.now())
         const matches = async () => {
           const current = await getSession()
-          return !!current && WorkspaceCredentials.identity(current) === identity
+          return !!current && WorkspaceCredentials.identity(current) === target
         }
         const applied = await CredentialLifecycle.update(async () => {
           if (!(await matches())) return
@@ -613,7 +749,7 @@ export namespace OpenScience {
                   ? "workspace-sync.renew"
                   : "workspace-sync.update",
             action: async () => {
-              await WorkspaceCredentials.write(session, data.snapshot)
+              await WorkspaceCredentials.write(scoped, data.snapshot)
               return change
             },
           }
@@ -628,7 +764,7 @@ export namespace OpenScience {
         return (synced = { state: "ready", organization_id: data.snapshot.organization_id, synced_at: Date.now() })
       } catch (error) {
         const current = await getSession()
-        if (current && WorkspaceCredentials.identity(current) !== identity) return synced
+        if (current && !identities.has(WorkspaceCredentials.identity(current))) return synced
         return (synced = {
           state: "error",
           error: error instanceof Error ? error.message : "Credential sync failed. Try again.",
@@ -710,7 +846,7 @@ export namespace OpenScience {
     const redirectUri = `http://127.0.0.1:${callback.port}/callback`
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      const start = await atlasFetch(`${API_BASE}/api/v1/auth/cli/browser/start`, {
+      const start = await atlasFetch(`${apiBase()}/api/v1/auth/cli/browser/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
@@ -735,7 +871,7 @@ export namespace OpenScience {
           )
         }),
       ])
-      const redeem = await atlasFetch(`${API_BASE}/api/v1/auth/cli/browser/redeem`, {
+      const redeem = await atlasFetch(`${apiBase()}/api/v1/auth/cli/browser/redeem`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ state, exchange_token: result.exchange_token, redirect_uri: redirectUri }),
@@ -760,30 +896,50 @@ export namespace OpenScience {
         ...(organizationID ? { organization_id: organizationID } : {}),
         ...(body.workspace_locked === true || organizationID ? { workspace_locked: true } : {}),
       }
-      await saveSession(session)
-      await syncCredentials({ force: true })
-      return session
+      return activateSession(session)
     } finally {
       if (timer) clearTimeout(timer)
       callback.stop()
     }
   }
 
-  async function readAuthStatus(session: FundingSnapshot | OpenScienceSession): Promise<{
-    organizations: FundingOrganization[]
-    pinned?: string
-    locked: boolean
-    context?: AuthStatusResponse["funding_context"]
-    user?: AccountProfile
-  } | null> {
+  async function readAuthStatus(session: FundingSnapshot | OpenScienceSession): Promise<AuthStatus | null> {
     try {
-      const response = await fundedAtlasFetch(session, `${API_BASE}/api/v1/auth/status`, {
-        headers: { Accept: "application/json" },
-      })
+      // Auth status is the sole legacy reconciliation read allowed to accept an
+      // organization echo before the old unscoped session has been repaired.
+      // Every spend-capable request uses validateFundingResponse's exact scope.
+      const response = await accountAtlasFetch(
+        session,
+        `${apiBase()}/api/v1/auth/status`,
+        { headers: { Accept: "application/json" } },
+        true,
+      )
       if (!response.ok) return null
       const body = (await response.json()) as AuthStatusResponse
       const selected = body.funding_context?.type === "organization" ? body.funding_context.organization_id : undefined
       const pinned = loginOrganizationID(body.api_key?.organization_id ?? selected)
+      if (body.api_key?.organization_id && selected && body.api_key.organization_id !== selected) return null
+      if (body.funding_context?.type === "personal" && pinned) return null
+      const legacy = isLegacyUnscoped(session)
+      const user = typeof body.user?.user_id === "string" && body.user.user_id ? body.user.user_id : undefined
+      if (session.user_id && user !== session.user_id) return null
+      if (!legacy && (!session.user_id || !user || user !== session.user_id)) return null
+      if (!legacy && pinned !== session.organization_id) return null
+      if (!legacy && session.organization_id && selected !== session.organization_id) return null
+      if (!legacy && !session.organization_id && body.funding_context?.type !== "personal") return null
+      const expected = legacy
+        ? pinned
+          ? `organization:${pinned}`
+          : "personal"
+        : session.organization_id
+          ? `organization:${session.organization_id}`
+          : "personal"
+      if (
+        response.headers.get(FUNDING_PROTOCOL_HEADER) !== FUNDING_PROTOCOL ||
+        response.headers.get(FUNDING_CONTEXT_HEADER) !== expected
+      ) {
+        return null
+      }
       return {
         organizations: organizations(body.organizations ?? body.available_organizations),
         pinned,
@@ -799,14 +955,14 @@ export namespace OpenScience {
   export async function loginWithKey(rawKey: string): Promise<OpenScienceSession> {
     const key = rawKey.trim()
     if (!isAccountKey(key)) throw new Error("Expected an OpenScience API key starting with `thk_` or `osk_`.")
-    const probe = await atlasFetch(`${API_BASE}/api/cli/balance`, {
+    const probe = await atlasFetch(`${apiBase()}/api/cli/balance`, {
       headers: { Authorization: `Bearer ${key}`, [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL },
     })
     if (probe.status === 401 || probe.status === 403)
       throw new Error("That key was rejected. Double-check it and try again.")
     if (!probe.ok) throw new Error(`Could not validate key: HTTP ${probe.status}`)
 
-    const response = await atlasFetch(`${API_BASE}/api/v1/auth/status`, {
+    const response = await atlasFetch(`${apiBase()}/api/v1/auth/status`, {
       headers: {
         Authorization: `Bearer ${key}`,
         Accept: "application/json",
@@ -829,9 +985,7 @@ export namespace OpenScience {
       ...(organizationID ? { organization_id: organizationID } : {}),
       ...(locked ? { workspace_locked: true } : {}),
     }
-    await saveSession(session)
-    await syncCredentials({ force: true })
-    return session
+    return activateSession(session)
   }
 
   export async function getProfile(snapshot?: FundingSnapshot): Promise<AccountProfile | null> {
@@ -840,10 +994,42 @@ export namespace OpenScience {
     return (await readAuthStatus(session))?.user ?? (session.user_id ? { user_id: session.user_id } : null)
   }
 
-  export async function getFundingContext(operation?: FundingSnapshot): Promise<FundingContext> {
-    const snapshot = operation ?? (await getFundingSnapshot())
-    if (!snapshot) return { type: "personal", available: true, locked: false, organizations: [] }
-    const status = await readAuthStatus(snapshot)
+  async function fundingContext(snapshot: FundingSnapshot, status: AuthStatus | null): Promise<FundingContext> {
+    if (status?.locked) {
+      const current = await getSession()
+      if (
+        isLegacyUnscoped(snapshot) &&
+        current?.api_key === snapshot.api_key &&
+        current.user_id === snapshot.user_id &&
+        current.organization_id === snapshot.organization_id &&
+        current.workspace_locked === snapshot.workspace_locked
+      ) {
+        await reconcileSession(
+          current,
+          status.pinned,
+          typeof status.user?.user_id === "string" ? status.user.user_id : "",
+        )
+      }
+      if (!status.pinned) {
+        return {
+          type: "personal",
+          available: !status.context || status.context.type === "personal",
+          locked: true,
+          organizations: status.organizations,
+        }
+      }
+      const row = status.organizations.find((item) => item.organization_id === status.pinned)
+      return {
+        type: "organization",
+        organization_id: status.pinned,
+        available:
+          organizationAvailable(row) &&
+          status.context?.type === "organization" &&
+          status.context.organization_id === status.pinned,
+        locked: true,
+        organizations: status.organizations,
+      }
+    }
     if (snapshot.organization_id) {
       const row = status?.organizations.find((item) => item.organization_id === snapshot.organization_id)
       const echoed = status?.context
@@ -866,13 +1052,39 @@ export namespace OpenScience {
     }
   }
 
+  export async function getFundingContext(operation?: FundingSnapshot): Promise<FundingContext> {
+    const snapshot = operation ?? (await getFundingSnapshot())
+    if (!snapshot) return { type: "personal", available: true, locked: false, organizations: [] }
+    return fundingContext(snapshot, await readAuthStatus(snapshot))
+  }
+
   export async function getReconciledFundingState(): Promise<{
     snapshot: FundingSnapshot
     context: FundingContext
   } | null> {
+    const read = async (
+      snapshot: FundingSnapshot,
+      retries: number,
+    ): Promise<{ snapshot: FundingSnapshot; context: FundingContext } | null> => {
+      const status = await readAuthStatus(snapshot)
+      if (isLegacyUnscoped(snapshot) && !status) return null
+      const context = await fundingContext(snapshot, status)
+      const current = await getFundingSnapshot()
+      if (!current) return null
+      if (
+        current.api_key === snapshot.api_key &&
+        current.user_id === snapshot.user_id &&
+        current.organization_id === snapshot.organization_id &&
+        current.workspace_locked === snapshot.workspace_locked
+      ) {
+        return { snapshot: current, context }
+      }
+      if (!retries) return null
+      return read(current, retries - 1)
+    }
     const snapshot = await getFundingSnapshot()
     if (!snapshot) return null
-    return { snapshot, context: await getFundingContext(snapshot) }
+    return read(snapshot, 2)
   }
 
   export async function setFundingContext(organizationID: string | null): Promise<FundingContext> {
@@ -906,12 +1118,37 @@ export namespace OpenScience {
     expires_at: string | null
   }
 
+  function deviceInfo(body: unknown): DeviceInfo | null {
+    if (!body || typeof body !== "object" || Array.isArray(body)) return null
+    const row = body as Record<string, unknown>
+    if (
+      typeof row.key_id !== "string" ||
+      typeof row.name !== "string" ||
+      typeof row.key_prefix !== "string" ||
+      typeof row.created_at !== "string" ||
+      (row.last_used_at !== null && typeof row.last_used_at !== "string") ||
+      (row.expires_at !== null && typeof row.expires_at !== "string")
+    ) {
+      return null
+    }
+    return {
+      key_id: row.key_id,
+      name: row.name,
+      key_prefix: row.key_prefix,
+      created_at: row.created_at,
+      last_used_at: row.last_used_at,
+      expires_at: row.expires_at,
+    }
+  }
+
   export async function listDevices(): Promise<DeviceInfo[] | null> {
     const session = await getSession()
     if (!session) return null
     try {
-      const response = await authenticatedAtlasFetch(session, `${API_BASE}/api/cli/devices`)
-      return response.ok ? ((await response.json()) as DeviceInfo[]) : null
+      const response = await authenticatedAtlasFetch(session, `${apiBase()}/api/cli/devices/current`)
+      if (!response.ok) return null
+      const device = deviceInfo(await response.json())
+      return device ? [device] : null
     } catch {
       return null
     }
@@ -921,24 +1158,21 @@ export namespace OpenScience {
     const session = await getSession()
     if (!session) return false
     try {
-      const response = await authenticatedAtlasFetch(
-        session,
-        `${API_BASE}/api/cli/devices/${encodeURIComponent(keyID)}`,
-        { method: "DELETE" },
-      )
-      return response.ok || response.status === 204
+      const response = await authenticatedAtlasFetch(session, `${apiBase()}/api/cli/devices/current`)
+      if (!response.ok) return false
+      const device = deviceInfo(await response.json())
+      if (!device || device.key_id !== keyID) return false
+      if (!(await revokeSessionDevice(session))) return false
+      return clearSession(session.api_key)
     } catch {
       return false
     }
   }
 
-  export async function revokeCurrentDevice(): Promise<boolean> {
+  export async function revokeCurrentDevice(timeoutMs = DEVICE_REVOKE_TIMEOUT_MS): Promise<boolean> {
     const session = await getSession()
     if (!session) return false
-    const devices = await listDevices()
-    const matches =
-      devices?.filter((device) => device.key_prefix.length > 4 && session.api_key.startsWith(device.key_prefix)) ?? []
-    return matches.length === 1 ? revokeDevice(matches[0].key_id) : false
+    return revokeSessionDevice(session, timeoutMs)
   }
 
   export async function refreshByokSecrets(env: NodeJS.ProcessEnv = process.env): Promise<void> {
@@ -1073,6 +1307,7 @@ export namespace OpenScience {
       path.join(home, ".config", "gcloud"),
       path.join(home, ".config", "gh"),
       path.join(home, ".config", "huggingface"),
+      process.env.ATLAS_CLI_CONFIG_PATH || path.join(home, ".config", "atlas-cli", "config.json"),
       path.join(home, ".config", "pip", "pip.conf"),
       path.join(home, ".config", "rclone", "rclone.conf"),
       path.join(home, ".netrc"),
@@ -1089,7 +1324,7 @@ export namespace OpenScience {
       const spec = BYOK_SUBPROCESS_PROVIDERS[providerID]
       if (!spec || spec.keys.some((key) => result[key])) continue
       for (const key of spec.keys) result[key] = info.key
-      if (spec.baseUrl && spec.publicBaseUrl) result[spec.baseUrl] = spec.publicBaseUrl
+      if (spec.baseUrl && spec.publicBaseUrl && !result[spec.baseUrl]) result[spec.baseUrl] = spec.publicBaseUrl
     }
     return normalizeByokRouting(result)
   }
@@ -1142,7 +1377,7 @@ export namespace OpenScience {
   }
 
   export async function getBalance(snapshot?: FundingSnapshot): Promise<number | null> {
-    const session = snapshot ?? (await getFundingSnapshot())
+    const session = snapshot ?? (await getReconciledFundingState())?.snapshot
     if (!session) return null
     const context = contextTag(session)
     if (cachedBalance?.context === context && Date.now() - cachedBalance.at < BALANCE_CACHE_TTL_MS) {
@@ -1152,7 +1387,7 @@ export namespace OpenScience {
     const revision = balanceRevision
     const request = (async () => {
       try {
-        const response = await fundedAtlasFetch(session, `${API_BASE}/api/cli/balance`)
+        const response = await fundedAtlasFetch(session, `${apiBase()}/api/cli/balance`)
         if (!response.ok) return null
         const body = (await response.json()) as Record<string, unknown>
         const value =
@@ -1204,15 +1439,15 @@ export namespace OpenScience {
     snapshot?: FundingSnapshot,
     options: { timeoutMs?: number; lifetimeSpent?: boolean } = {},
   ): Promise<Credits | null> {
-    const session = snapshot ?? (await getFundingSnapshot())
+    const session = snapshot ?? (await getReconciledFundingState())?.snapshot
     if (!session) return null
     const timeoutMs = options.timeoutMs ?? ATLAS_FETCH_TIMEOUT_MS
     try {
       let currentWallet = true
-      let response = await fundedAtlasFetch(session, `${API_BASE}/api/v1/wallet`, {}, timeoutMs)
+      let response = await fundedAtlasFetch(session, `${apiBase()}/api/v1/wallet`, {}, timeoutMs)
       if (response.status === 404 || response.status === 405) {
         currentWallet = false
-        response = await fundedAtlasFetch(session, `${API_BASE}/api/credits`, {}, timeoutMs)
+        response = await fundedAtlasFetch(session, `${apiBase()}/api/credits`, {}, timeoutMs)
       }
       if (!response.ok) return null
       const body = (await response.json()) as {
@@ -1228,7 +1463,7 @@ export namespace OpenScience {
       }
       let lifetimeSpent = body.lifetime_spent_cents ?? null
       if (currentWallet && lifetimeSpent === null && options.lifetimeSpent !== false) {
-        const metadata = await fundedAtlasFetch(session, `${API_BASE}/api/credits`, {}, timeoutMs).catch(
+        const metadata = await fundedAtlasFetch(session, `${apiBase()}/api/credits`, {}, timeoutMs).catch(
           () => undefined,
         )
         if (metadata?.ok) {
@@ -1264,10 +1499,10 @@ export namespace OpenScience {
   }
 
   export async function getTransactions(limit = 20, snapshot?: FundingSnapshot): Promise<Transaction[] | null> {
-    const session = snapshot ?? (await getFundingSnapshot())
+    const session = snapshot ?? (await getReconciledFundingState())?.snapshot
     if (!session) return null
     try {
-      const response = await fundedAtlasFetch(session, `${API_BASE}/api/credits/transactions`)
+      const response = await fundedAtlasFetch(session, `${apiBase()}/api/credits/transactions`)
       if (!response.ok) return null
       const body = (await response.json()) as
         | Array<Record<string, unknown>>
@@ -1302,11 +1537,11 @@ export namespace OpenScience {
     knownCredits?: Credits | null | Promise<Credits | null>,
     timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
   ): Promise<BillingMode | null> {
-    const session = snapshot ?? (await getFundingSnapshot())
+    const session = snapshot ?? (await getReconciledFundingState())?.snapshot
     if (!session) return null
     const [configModule, accessResponse, credits] = await Promise.all([
       import("@/config/config"),
-      fundedAtlasFetch(session, `${API_BASE}/api/cli/access`, {}, timeoutMs).catch(() => undefined),
+      fundedAtlasFetch(session, `${apiBase()}/api/cli/access`, {}, timeoutMs).catch(() => undefined),
       knownCredits === undefined ? getCredits(session).catch(() => null) : Promise.resolve(knownCredits),
     ])
     const access = accessResponse?.ok
@@ -1325,11 +1560,11 @@ export namespace OpenScience {
     const envOwnKey = !!envOpenRouterKey && !isAtlasManagedKey(envOpenRouterKey)
     const balance = credits?.balanceCents ?? access?.cli_balance_cents ?? 0
     const denied = accessResponse?.status === 401 || accessResponse?.status === 403
-    const verified = denied || (
-      accessResponse?.ok === true &&
-      typeof access?.managed_unlocked === "boolean" &&
-      typeof access.managed_supported === "boolean"
-    )
+    const verified =
+      denied ||
+      (accessResponse?.ok === true &&
+        typeof access?.managed_unlocked === "boolean" &&
+        typeof access.managed_supported === "boolean")
     const supported = !denied && access?.managed_supported === true
     return {
       mode:

@@ -19,6 +19,25 @@ export const BYOK_LLM_ENV_KEYS = [
   "PERPLEXITY_API_KEY",
 ]
 
+/** User-owned routing overrides paired with direct-provider credentials. */
+export const BYOK_LLM_BASE_URL_KEYS = [
+  "ANTHROPIC_BASE_URL",
+  "OPENAI_BASE_URL",
+  "GOOGLE_GENERATIVE_AI_BASE_URL",
+  "GOOGLE_BASE_URL",
+  "GEMINI_BASE_URL",
+  "OPENROUTER_BASE_URL",
+  "META_MODEL_BASE_URL",
+  "TOGETHER_BASE_URL",
+  "GROQ_BASE_URL",
+  "FIREWORKS_BASE_URL",
+  "XAI_BASE_URL",
+  "MISTRAL_BASE_URL",
+  "DEEPSEEK_BASE_URL",
+  "CEREBRAS_BASE_URL",
+  "PERPLEXITY_BASE_URL",
+]
+
 /** User-owned service credentials that approved local subprocesses may receive. */
 export const SYNCED_SERVICE_ENV_KEYS = [
   "NVIDIA_API_KEY",

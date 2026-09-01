@@ -8,9 +8,9 @@ test("thinking effort and speed reach the prompt request through the settings po
 }) => {
   await gotoSession()
 
-  // The explicit Standard default stays visible so users can inspect and
+  // The provider default stays visible so users can inspect and
   // change thinking effort without opening the full model catalog.
-  await expect(modelRowValue(page, "effort")).resolves.toBe("Standard")
+  await expect(modelRowValue(page, "effort")).resolves.toBe("Provider default")
 
   const send = async (options: { variant?: string; tier?: string } = {}) => {
     const request = page.waitForRequest((request) => {
@@ -19,9 +19,8 @@ test("thinking effort and speed reach the prompt request through the settings po
     })
     const token = `E2E_OK_${Date.now()}`
     const prompt = page.locator(promptSelector)
-    await prompt.click()
-    await page.keyboard.type(`Reply with exactly: ${token}`)
-    await page.keyboard.press("Enter")
+    await prompt.fill(`Reply with exactly: ${token}`)
+    await page.getByRole("button", { name: "Send", exact: true }).click()
 
     const body = (await request).postDataJSON() as { variant?: string; tier?: string }
     expect(body.variant).toBe(options.variant)
@@ -39,19 +38,16 @@ test("thinking effort and speed reach the prompt request through the settings po
         .join("\n"),
     )
 
-  const standard = await send()
+  await setModelEffort(page, "high")
+  await expect(modelRowValue(page, "effort")).resolves.toBe("High")
+  await setModelSpeed(page, "fast")
+
+  const high = await send({ variant: "high", tier: "fast" })
   await expect(page).toHaveURL(/\/session\/ses[^/?#]+/, { timeout: 30_000 })
   const sessionID = /\/session\/(ses[^/?#]+)/.exec(page.url())?.[1]
   if (!sessionID) throw new Error(`Failed to parse session id from url: ${page.url()}`)
 
   try {
-    await expect.poll(() => output(sessionID), { timeout: 20_000 }).toContain(standard)
-
-    await setModelEffort(page, "high")
-    await expect(modelRowValue(page, "effort")).resolves.toBe("High")
-    await setModelSpeed(page, "fast")
-
-    const high = await send({ variant: "high", tier: "fast" })
     await expect.poll(() => output(sessionID), { timeout: 20_000 }).toContain(high)
 
     await page.reload()

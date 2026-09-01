@@ -118,6 +118,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
           reasoning: true,
           interleaved: { field: "reasoning_details" },
         },
+        reasoningOptions: [{ type: "effort", values: ["low", "medium", "high"], default: "medium" }],
       },
       sessionID,
       providerOptions: {},
@@ -1555,6 +1556,7 @@ describe("ProviderTransform.variants", () => {
           url: "https://openrouter.ai",
           npm: "@openrouter/ai-sdk-provider",
         },
+        reasoningOptions: [{ type: "effort", values: ["low", "medium", "high"] }],
       })
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({
@@ -1636,6 +1638,7 @@ describe("ProviderTransform.variants", () => {
           url: "https://openrouter.ai",
           npm: "@openrouter/ai-sdk-provider",
         },
+        reasoningOptions: [{ type: "effort", values: ["low", "medium", "high"] }],
       })
       const result = ProviderTransform.variants(model)
       // Gemini exposes low/medium/high reasoning levels — not OpenAI's
@@ -1820,6 +1823,7 @@ describe("ProviderTransform.variants", () => {
           url: "https://api.cerebras.ai",
           npm: "@ai-sdk/cerebras",
         },
+        reasoningOptions: [{ type: "effort", values: ["low", "medium", "high"] }],
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "medium", "high"])
@@ -1838,6 +1842,7 @@ describe("ProviderTransform.variants", () => {
           url: "https://api.togetherai.com",
           npm: "@ai-sdk/togetherai",
         },
+        reasoningOptions: [{ type: "effort", values: ["low", "medium", "high"] }],
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "medium", "high"])
@@ -1911,6 +1916,7 @@ describe("ProviderTransform.variants", () => {
           url: "https://api.deepinfra.com",
           npm: "@ai-sdk/deepinfra",
         },
+        reasoningOptions: [{ type: "effort", values: ["low", "medium", "high"] }],
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "medium", "high"])
@@ -1929,6 +1935,7 @@ describe("ProviderTransform.variants", () => {
           url: "https://api.custom.com",
           npm: "@ai-sdk/openai-compatible",
         },
+        reasoningOptions: [{ type: "effort", values: ["low", "medium", "high"] }],
       })
       const result = ProviderTransform.variants(model)
       expect(Object.keys(result)).toEqual(["low", "medium", "high"])

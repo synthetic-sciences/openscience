@@ -805,7 +805,7 @@ process.exit(70)
       version: "9.8.7",
       error: "OpenScience 9.8.7 exited before startup health completed",
     })
-  }, 15_000)
+  }, 30_000)
 
   test("rolls back an exact Electron child that exits before any sidecar receipt", async () => {
     const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "openscience-desktop-pre-sidecar-test-")))

@@ -161,10 +161,16 @@ function validServiceIdentity(payload, value) {
 async function observedProcess(identity) {
   if (!alive(identity.pid)) return
   try {
-    const [started, command] = await Promise.all([
+    const [started, command, state] = await Promise.all([
       exec("/bin/ps", ["-p", String(identity.pid), "-o", "lstart="], { timeout: 2_000 }),
       exec("/bin/ps", ["-ww", "-p", String(identity.pid), "-o", "command="], { timeout: 2_000 }),
+      exec("/bin/ps", ["-p", String(identity.pid), "-o", "state="], { timeout: 2_000 }),
     ])
+    // macOS ps(1) reports E while a process is trying to exit and Z after it
+    // has exited but is awaiting reaping. Neither can execute from the app
+    // bundle. Treat both as terminal so an exact, identity-bound rollback is
+    // not held forever by a dead sidecar that launchd has not reaped.
+    if (/[EZ]/.test(state.stdout.trim())) return
     return { started: started.stdout.trim(), command: command.stdout.trim() }
   } catch (error) {
     if (!alive(identity.pid)) return

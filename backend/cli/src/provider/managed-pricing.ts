@@ -101,17 +101,12 @@ export namespace ManagedPricing {
       const transport = fast?.transport
       const premium = fast?.pricing?.tiers.find((tier) => !tier.min_input_tokens)
       const body: Record<string, string> | undefined =
-        model.upstream_provider === "anthropic" &&
-        model.id === "anthropic/claude-opus-5" &&
+        model.upstream_provider === "openrouter" &&
+        /^openai\/gpt-5\.6-(sol|terra|luna)$/.test(model.id) &&
         transport &&
-        "speed" in transport
-          ? { speed: "fast" }
-          : ((model.upstream_provider === "xai" && model.id === "x-ai/grok-4.6") ||
-                (model.upstream_provider === "openrouter" && /^openai\/gpt-5\.6-(sol|terra|luna)$/.test(model.id))) &&
-              transport &&
-              "service_tier" in transport
-            ? { service_tier: "priority" }
-            : undefined
+        "service_tier" in transport
+          ? { service_tier: "priority" }
+          : undefined
       const efforts = model.capabilities?.reasoning_efforts
       const fallback = model.capabilities?.reasoning_default
       result[model.id] = {
@@ -137,12 +132,7 @@ export namespace ManagedPricing {
             ? {
                 fast: {
                   cost: { ...cost(premium), tiers: tiers(fast.pricing.tiers) },
-                  provider: {
-                    body,
-                    ...(model.upstream_provider === "anthropic"
-                      ? { headers: { "anthropic-beta": "fast-mode-2026-02-01" } }
-                      : {}),
-                  },
+                  provider: { body },
                 },
               }
             : {},
@@ -177,14 +167,16 @@ export namespace ManagedPricing {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), TIMEOUT)
     try {
+      const selected = await OpenScience.managedRequestSnapshot(snapshot.api_key, snapshot)
+      if (fingerprint(selected) !== key) return
       // Device keys deliberately cannot read the browser administration API.
       const endpoint = `${API_BASE}/api/cli/model-catalog?provider=openrouter`
       const response = await fetch(endpoint, {
-        headers: { Authorization: `Bearer ${snapshot.api_key}`, ...OpenScience.fundingHeaders(snapshot) },
+        headers: { Authorization: `Bearer ${selected.api_key}`, ...OpenScience.fundingHeaders(selected) },
         signal: controller.signal,
         redirect: "error",
       })
-      await OpenScience.validateFundingResponse(response, snapshot)
+      await OpenScience.validateFundingResponse(response, selected)
       if (!response.ok) throw new Error("Model pricing request failed")
       const reader = response.body?.getReader()
       if (!reader) throw new Error("Model pricing response was empty")

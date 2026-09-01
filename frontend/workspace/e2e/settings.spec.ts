@@ -10,13 +10,11 @@ test("settings dialog navigates between sections and closes", async ({ page, got
 
   await dialog.getByRole("button", { name: "General", exact: true }).click()
   await expect(dialog.getByRole("heading", { name: "General" })).toBeVisible()
-  await expect(dialog.getByRole("heading", { name: "Account", exact: true })).toBeVisible()
-  await expect(dialog.getByRole("button", { name: "Switch workspace", exact: true })).toBeVisible()
-  await expect(dialog.getByRole("button", { name: "Open billing", exact: true })).toBeVisible()
-  const sounds = dialog.getByRole("button", { name: "Show sound settings", exact: true })
-  await expect(sounds).toBeVisible()
-  await sounds.click()
-  await expect(dialog.getByRole("button", { name: "Hide sound settings", exact: true })).toBeVisible()
+  await expect(dialog.getByRole("heading", { name: "Ace account", exact: true })).toBeVisible()
+  await expect(dialog.getByRole("button", { name: /^(?:Sign in|Disconnect)$/ })).toBeVisible()
+  await expect(dialog.getByRole("button", { name: "Manage billing", exact: true })).toBeVisible()
+  await expect(dialog.getByRole("region", { name: "Sound effects", exact: true })).toBeVisible()
+  await expect(dialog.getByRole("switch", { name: "Play sound effects", exact: true })).toBeVisible()
 
   const back = dialog.getByRole("button", { name: "Back" })
   const forward = dialog.getByRole("button", { name: "Forward" })

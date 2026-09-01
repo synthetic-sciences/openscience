@@ -4,20 +4,21 @@ import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { Session } from "../../src/session"
 import { Log } from "../../src/util/log"
+import { tmpdir } from "../fixture/fixture"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
 describe("session.list", () => {
   test("filters by directory", async () => {
+    await using other = await tmpdir()
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
         const first = await Session.create({})
 
-        const otherDir = path.join(projectRoot, "..", "__session_list_other")
         const second = await Instance.provide({
-          directory: otherDir,
+          directory: other.path,
           fn: async () => Session.create({}),
         })
 

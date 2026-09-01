@@ -21,7 +21,9 @@ branch.
 
    ```bash
    gh workflow run npm-test.yml --ref main \
-     -f run_packaged_e2e=true -f run_os_smoke=true
+     -f run_packaged_e2e=true \
+     -f run_os_smoke=true \
+     -f run_scientific_canary=true
    ```
 
    Before production, install that exact candidate in an isolated release

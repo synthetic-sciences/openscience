@@ -26,8 +26,17 @@ const ShowCommand = cmd({
       return
     }
 
-    const creditsRequest = OpenScience.getCredits()
-    const [mode, credits] = await Promise.all([OpenScience.getBillingMode(undefined, creditsRequest), creditsRequest])
+    const state = await OpenScience.getReconciledFundingState().catch(() => null)
+    if (!state) {
+      prompts.log.error(`The selected workspace is unavailable. Check your connection or visit ${BILLING_URL}`)
+      prompts.outro("Done")
+      return
+    }
+    const creditsRequest = OpenScience.getCredits(state.snapshot)
+    const [mode, credits] = await Promise.all([
+      OpenScience.getBillingMode(state.snapshot, creditsRequest),
+      creditsRequest,
+    ])
     prompts.log.info(credits ? `Purchased Wallet: $${credits.balanceUsd.toFixed(2)}` : "Purchased Wallet: unavailable")
     if (!mode) {
       prompts.log.error(`Model access is unavailable. Check your connection or visit ${BILLING_URL}`)

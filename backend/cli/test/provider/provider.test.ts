@@ -1,4 +1,4 @@
-import { test, expect, mock } from "bun:test"
+import { afterEach, test, expect, mock } from "bun:test"
 import path from "path"
 
 // Mock BunProc and default plugins to prevent actual installations during tests
@@ -317,22 +317,46 @@ test("seeded catalog exposes GPT-5.6, Grok 4.5, and Muse Spark 1.1 for direct BY
   }
 })
 
+const MANAGED_ENV_KEYS = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_BASE_URL",
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "GOOGLE_GENERATIVE_AI_API_KEY",
+  "GOOGLE_GENERATIVE_AI_BASE_URL",
+  "GOOGLE_API_KEY",
+  "GEMINI_API_KEY",
+  "GEMINI_BASE_URL",
+  "OPENROUTER_API_KEY",
+  "OPENROUTER_BASE_URL",
+] as const
+const PROVIDER_ENV_KEYS = [
+  ...MANAGED_ENV_KEYS,
+  "XAI_API_KEY",
+  "META_MODEL_API_KEY",
+  "GITHUB_TOKEN",
+  "MULTI_ENV_KEY_1",
+  "MULTI_ENV_KEY_2",
+  "SINGLE_ENV_KEY",
+  "PRIMARY_KEY",
+  "FALLBACK_KEY",
+] as const
+const providerEnv = new Map(PROVIDER_ENV_KEYS.map((key) => [key, process.env[key]]))
+
 function clearManagedLLMEnv() {
-  for (const key of [
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_BASE_URL",
-    "OPENAI_API_KEY",
-    "OPENAI_BASE_URL",
-    "GOOGLE_GENERATIVE_AI_API_KEY",
-    "GOOGLE_GENERATIVE_AI_BASE_URL",
-    "GEMINI_API_KEY",
-    "GEMINI_BASE_URL",
-    "OPENROUTER_API_KEY",
-    "OPENROUTER_BASE_URL",
-  ]) {
-    Env.remove(key)
+  for (const key of MANAGED_ENV_KEYS) {
+    delete process.env[key]
   }
 }
+
+afterEach(() => {
+  for (const key of PROVIDER_ENV_KEYS) {
+    const value = providerEnv.get(key)
+    if (value === undefined) delete process.env[key]
+    if (value !== undefined) process.env[key] = value
+  }
+  Provider.invalidate()
+})
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
@@ -534,10 +558,9 @@ test("openrouter BYOK honours a custom (non-Atlas) OPENROUTER_BASE_URL gateway",
   })
 })
 
-test("openrouter on a BYOK key ignores the managed whitelist and shows the full catalog", async () => {
+test("openrouter on a BYOK key honors the user's explicit whitelist", async () => {
   await using tmp = await tmpdir({
     config: {
-      // The curated managed whitelist binds only the managed route.
       provider: { openrouter: { whitelist: ["deepseek/deepseek-r1"] } },
     },
   })
@@ -549,8 +572,7 @@ test("openrouter on a BYOK key ignores the managed whitelist and shows the full 
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["openrouter"]).toBeDefined()
-      // BYOK ⇒ whitelist skipped ⇒ far more than the single whitelisted model.
-      expect(Object.keys(providers["openrouter"].models).length).toBeGreaterThan(1)
+      expect(Object.keys(providers["openrouter"].models)).toEqual(["deepseek/deepseek-r1"])
     },
   })
 })

@@ -17,18 +17,7 @@ import { KernelRuntime, type KernelIdentity } from "../../../src/science/kernel/
 import { AuthorityProcessLedger } from "../../../src/project/authority-process"
 import { Sandbox } from "../../../src/sandbox/sandbox"
 import { Global } from "../../../src/global"
-import { Config } from "../../../src/config/config"
 import "../../../src/tool/rkernel"
-
-async function containedExecution() {
-  const previous = (await Config.trustedSandbox()).enabled
-  await Config.setSandbox({ enabled: true })
-  return {
-    async [Symbol.asyncDispose]() {
-      await Config.setSandbox({ enabled: previous })
-    },
-  }
-}
 
 test("Python environment names cannot escape the project virtual-environment directory", () => {
   expect(() => KernelEnvironmentName.parse("../nbody")).toThrow("path separators")
@@ -62,7 +51,6 @@ test("a named Python environment resolves only its fixed project-local interpret
 })
 
 test("project .venv discovery is side-effect free before sandboxed execution", async () => {
-  await using _sandbox = await containedExecution()
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {
@@ -126,7 +114,6 @@ test("project .venv discovery is side-effect free before sandboxed execution", a
 test.skipIf(process.platform === "win32")(
   "an R override is discovered without execution and reports its version only after durable READY",
   async () => {
-    await using _sandbox = await containedExecution()
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
@@ -199,7 +186,6 @@ test.skipIf(process.platform === "win32")(
   "spontaneous built-in launcher exits complete durable ownership without accumulation",
   async () => {
     if (!Bun.which("python3")) return
-    await using _sandbox = await containedExecution()
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,

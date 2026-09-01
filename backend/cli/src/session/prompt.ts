@@ -1636,8 +1636,18 @@ export namespace SessionPrompt {
       continue
     }
     await SessionCompaction.prune({ sessionID })
-    for await (const item of MessageV2.stream(sessionID)) {
-      if (item.info.role === "user") continue
+    const item = await (async () => {
+      for (const delay of [0, 5, 20]) {
+        if (delay) await Bun.sleep(delay)
+        // Keep the established newest-first raw-stream semantics. Compaction
+        // filtering deliberately rewrites tail order for model context and is
+        // not an authoritative ordering for the response returned to callers.
+        for await (const message of MessageV2.stream(sessionID)) {
+          if (message.info.role !== "user") return message
+        }
+      }
+    })()
+    if (item) {
       const queued = state()[sessionID]?.callbacks ?? []
       for (const q of queued) {
         q.resolve(item)

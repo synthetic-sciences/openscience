@@ -109,14 +109,10 @@ describe("project-ID navigation wiring", () => {
       read("../atlas/FilePreview.tsx"),
     ])
 
-    expect(explorer).toContain(
-      'const projectRoot = () => sdk.directory || sync.data.path.directory || sync.project?.worktree || ""',
-    )
+    expect(explorer).toContain("props.file.directory || sdk.directory")
     expect(tree).toContain(
       'const directory = () => sdk.directory || sync.data.path.directory || sync.project?.worktree || ""',
     )
-    expect(preview).toContain(
-      'props.directory || sdk.directory || sync.data.path.directory || sync.project?.worktree || ""',
-    )
+    expect(preview).toContain("props.directory || production?.directory || sync?.data.path.directory")
   })
 })

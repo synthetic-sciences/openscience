@@ -573,6 +573,14 @@ export namespace Provider {
     deepseek: "https://api.deepseek.com",
   }
 
+  const PROVIDER_BASE_URL_ENV: Record<string, string[]> = {
+    anthropic: ["ANTHROPIC_BASE_URL"],
+    openai: ["OPENAI_BASE_URL"],
+    google: ["GOOGLE_GENERATIVE_AI_BASE_URL", "GOOGLE_BASE_URL", "GEMINI_BASE_URL"],
+    xai: ["XAI_BASE_URL"],
+    deepseek: ["DEEPSEEK_BASE_URL"],
+  }
+
   /** DeepSeek V4 thinking rejects tool_choice even though the AI SDK's generic
    * tool preparation emits "auto". Omit only that unsupported wire field;
    * non-thinking V4 and every other request keep the caller's exact choice. */
@@ -705,7 +713,9 @@ export namespace Provider {
     const effective = effectiveKey(provider, options)
     if (Auth.isAtlasApiKey(effective)) return
     if (!isByokKey(effective)) return
-    if (hasManagedProxyPath(options["baseURL"])) {
+    const configured =
+      options["baseURL"] ?? PROVIDER_BASE_URL_ENV[provider.id]?.map((key) => Env.get(key)).find((value) => !!value)
+    if (hasManagedProxyPath(configured)) {
       log.warn("refusing to route a user key through a retired proxy; using the public endpoint", {
         provider: provider.id,
       })
@@ -2037,7 +2047,7 @@ export namespace Provider {
           if (reviewed.temperature !== undefined) model.capabilities.temperature = reviewed.temperature
           // Never present models.dev's unrelated upstream price as Ace pricing.
           const price = prices[modelID]
-          model.api = { ...model.api, ...managedModelRoute(modelID, price?.pricing.upstream_provider) }
+          model.api = { ...model.api, ...managedModelRoute(modelID) }
           if (price?.pricing.upstream_provider === "gemini") {
             model.capabilities.input.audio = false
             model.capabilities.input.video = false
@@ -2279,7 +2289,7 @@ export namespace Provider {
         model.providerID === "openrouter" &&
         MANAGED_OPENROUTER_MODEL_SET.has(model.id)
       ) {
-        const route = managedModelRoute(model.id, model.pricing?.upstream_provider)
+        const route = managedModelRoute(model.id)
         if (model.api.npm !== route.npm || model.api.id !== route.id) {
           throw new Error("The Ace model route changed. Refresh the model list and retry.")
         }

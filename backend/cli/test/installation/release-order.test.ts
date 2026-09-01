@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import path from "path"
+import { tmpdir } from "../fixture/fixture"
 
 const root = path.join(import.meta.dir, "../../../..")
 const read = (file: string) => Bun.file(path.join(root, file)).text()
@@ -26,15 +28,71 @@ test("exhaustive and native suites stay off the pull request path", async () => 
   expect(workflow).not.toContain("pull_request:")
 })
 
-test("production is a single release pass without a rehearsal gate", async () => {
+test("production requires an exact artifact-source deep release rehearsal", async () => {
   const workflow = await read(".github/workflows/publish.yml")
+  const script = await read("tooling/repo/version.ts")
+  const source = workflow.indexOf("Resolve release rehearsal source")
+  const rehearsal = workflow.indexOf("Verify exact artifact-source release rehearsal")
+  const version = workflow.indexOf("Resolve version and draft release")
 
   expect(workflow).toContain("name: Release")
   expect(workflow).toContain("Verify npm publisher")
+  expect(source).toBeGreaterThan(-1)
+  expect(rehearsal).toBeGreaterThan(source)
+  expect(version).toBeGreaterThan(rehearsal)
+  expect(workflow).toContain('OPENSCIENCE_SOURCE_PREFLIGHT: "true"')
+  expect(workflow).toContain("SOURCE: ${{ steps.rehearsal.outputs.rehearsal_source }}")
+  expect(workflow).toContain("OPENSCIENCE_EXPECTED_ARTIFACT_SOURCE: ${{ steps.rehearsal.outputs.rehearsal_source }}")
+  expect(workflow).toContain("head_sha: process.env.SOURCE")
+  expect(workflow).toContain('const exact = ["publish-test", "packaged-e2e", "musl-baseline-smoke", "promote-test"]')
+  expect(workflow).toContain("os === 4 && science === 3")
+  expect(workflow).not.toContain("SOURCE: ${{ github.sha }}")
+  expect(script).toContain('process.env.OPENSCIENCE_SOURCE_PREFLIGHT === "true"')
+  expect(script).toContain("rehearsal_source=${source}")
+  expect(script).toContain("OPENSCIENCE_EXPECTED_ARTIFACT_SOURCE")
+  expect(script).toContain("Release artifact source changed after rehearsal")
+  expect(script.match(/already exists at \$\{tagged\} without a GitHub release/g)).toHaveLength(2)
   expect(workflow).toContain("needs: [version, sign-macos-cli, prepare-npm, build-desktop]")
   expect(workflow).not.toContain("npm-test-gate")
   expect(workflow).not.toContain("verify-native-cli")
   expect(workflow).not.toContain("verify-desktop-updater")
+})
+
+test("a stale release tag cannot create or preflight a draft", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const bin = path.join(tmp.path, "bin")
+  const log = path.join(tmp.path, "gh.log")
+  const gh = path.join(bin, "gh")
+  await fs.mkdir(bin)
+  await Bun.write(gh, '#!/bin/sh\nprintf "%s\\n" "$*" >> "$GH_LOG"\nprintf "release not found\\n" >&2\nexit 1\n')
+  await fs.chmod(gh, 0o700)
+  await Bun.$`git tag v9.9.9`.cwd(tmp.path).quiet()
+  const commit = await Bun.$`git rev-parse HEAD`
+    .cwd(tmp.path)
+    .text()
+    .then((value) => value.trim())
+  const env = {
+    ...process.env,
+    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    GH_LOG: log,
+    GITHUB_SHA: commit,
+    OPENSCIENCE_VERSION: "9.9.9",
+  }
+  const run = async (preflight: boolean) => {
+    const child = Bun.spawn([process.execPath, path.join(root, "tooling/repo/version.ts")], {
+      cwd: tmp.path,
+      env: { ...env, ...(preflight ? { OPENSCIENCE_SOURCE_PREFLIGHT: "true" } : {}) },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [exit, error] = await Promise.all([child.exited, new Response(child.stderr).text()])
+    expect(exit).not.toBe(0)
+    expect(error).toContain("already exists at")
+    expect(error).toContain("without a GitHub release")
+  }
+  await run(true)
+  await run(false)
+  expect(await Bun.file(log).text()).not.toContain("release create")
 })
 
 test("stable macOS artifacts remain signed, notarized, stapled, and smoked", async () => {

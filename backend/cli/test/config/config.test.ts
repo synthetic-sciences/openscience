@@ -178,14 +178,13 @@ test("handles environment variable substitution", async () => {
   }
 })
 
-test("preserves env variables when adding $schema to config", async () => {
+test("resolves env variables without rewriting the user-owned config", async () => {
   const originalEnv = process.env["PRESERVE_VAR"]
   process.env["PRESERVE_VAR"] = "secret_value"
 
   try {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        // Config without $schema - should trigger auto-add
         await Bun.write(
           path.join(dir, "openscience.json"),
           JSON.stringify({
@@ -200,11 +199,10 @@ test("preserves env variables when adding $schema to config", async () => {
         const config = await Config.get()
         expect(config.theme).toBe("secret_value")
 
-        // Read the file to verify the env variable was preserved
         const content = await Bun.file(path.join(tmp.path, "openscience.json")).text()
         expect(content).toContain("{env:PRESERVE_VAR}")
         expect(content).not.toContain("secret_value")
-        expect(content).toContain("$schema")
+        expect(content).toBe(JSON.stringify({ theme: "{env:PRESERVE_VAR}" }))
       },
     })
   } finally {

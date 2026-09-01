@@ -8,10 +8,18 @@ const session = {
   organization_id: "org_a",
   workspace_locked: true,
 }
-function snapshot() {
+const device = {
+  key_id: "device_a",
+  name: "OpenScience CLI",
+  key_prefix: "osk_fixture",
+  created_at: "2026-09-01T00:00:00Z",
+  last_used_at: "2026-09-01T01:00:00Z",
+  expires_at: null,
+}
+function snapshot(organizationID = "org_a", userID = "user_a") {
   return {
-    organization_id: "org_a",
-    user: { user_id: "user_a" },
+    organization_id: organizationID,
+    user: { user_id: userID },
     services: {
       openai: {
         connected: true,
@@ -36,7 +44,38 @@ let headers: Headers | undefined
 let wait: Promise<void> | undefined
 let stallBody = false
 let permissions: unknown = {}
+let authOrg: string | undefined = "org_a"
+let authUser = "user_a"
+let authStatus = 200
+let authReads = 0
 let browser: { state: string; redirect_uri: string } | undefined
+let redeemed = session
+let revokes: string[] = []
+let activeRevokes: string[] = []
+let revokeStatus = 204
+let deviceBody: unknown = device
+let deviceStatus = 200
+let deviceReads: string[] = []
+const previousApiBase = process.env.OPENSCIENCE_API_BASE
+const envKeys = [
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "GOOGLE_API_KEY",
+  "GOOGLE_GENERATIVE_AI_API_KEY",
+  "GOOGLE_GENERATIVE_AI_BASE_URL",
+  "GEMINI_API_KEY",
+  "GEMINI_BASE_URL",
+  "OPENROUTER_API_KEY",
+  "OPENROUTER_BASE_URL",
+  "XAI_API_KEY",
+  "META_MODEL_API_KEY",
+  "GITHUB_TOKEN",
+  "GH_TOKEN",
+  "NVIDIA_API_KEY",
+  "AWS_ACCESS_KEY_ID",
+] as const
+const previousEnv = new Map(envKeys.map((key) => [key, process.env[key]]))
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -53,24 +92,47 @@ const server = Bun.serve({
         body.exchange_token !== "fixture-exchange"
       )
         return new Response(null, { status: 400 })
-      return Response.json(session)
+      return Response.json(redeemed)
     }
-    if (new URL(input.url).pathname === "/api/v1/auth/status")
+    if (new URL(input.url).pathname === "/api/v1/auth/status") {
+      authReads++
       return Response.json(
         {
-          user: { user_id: "user_a" },
-          funding_context: { type: "organization", organization_id: "org_a", locked: true },
-          organizations: [
-            {
-              organization_id: "org_a",
-              name: "Workspace",
-              funding_available: true,
-              effective_permissions: permissions,
-            },
-          ],
+          user: { user_id: authUser },
+          api_key: { organization_id: authOrg, workspace_locked: true },
+          funding_context: authOrg
+            ? { type: "organization", organization_id: authOrg, locked: true }
+            : { type: "personal", locked: true },
+          organizations: authOrg
+            ? [
+                {
+                  organization_id: authOrg,
+                  name: "Workspace",
+                  funding_available: true,
+                  effective_permissions: permissions,
+                },
+              ]
+            : [],
         },
-        { headers: { "OpenScience-Funding-Protocol": "1", "OpenScience-Funding-Context": "organization:org_a" } },
+        {
+          status: authStatus,
+          headers: {
+            "OpenScience-Funding-Protocol": "1",
+            "OpenScience-Funding-Context": authOrg ? `organization:${authOrg}` : "personal",
+          },
+        },
       )
+    }
+    if (new URL(input.url).pathname === "/api/cli/devices/current") {
+      if (input.method === "GET") {
+        deviceReads.push(input.headers.get("authorization") ?? "")
+        return Response.json(deviceBody, { status: deviceStatus })
+      }
+      expect(input.method).toBe("DELETE")
+      revokes.push(input.headers.get("authorization") ?? "")
+      activeRevokes.push((await OpenScience.getSession())?.api_key ?? "")
+      return new Response(null, { status: revokeStatus })
+    }
     if (new URL(input.url).pathname !== "/api/cli/sync") return Response.json({})
     headers = new Headers(input.headers)
     count++
@@ -101,6 +163,11 @@ const { Global } = await import("../../src/global")
 const { JsonStore } = await import("../../src/util/jsonstore")
 const { CredentialLifecycle } = await import("../../src/credentials/lifecycle")
 const { CredentialsRoutes, resolveCredentialFields } = await import("../../src/server/routes/settings/credentials")
+const { AccountRoutes } = await import("../../src/server/routes/account")
+const { Provider } = await import("../../src/provider/provider")
+const { SessionProcessor } = await import("../../src/session/processor")
+const previousAuth = await Auth.all()
+const previousConfig = await Config.getGlobalRaw()
 
 beforeEach(async () => {
   payload = snapshot()
@@ -110,7 +177,18 @@ beforeEach(async () => {
   wait = undefined
   stallBody = false
   permissions = {}
+  authOrg = "org_a"
+  authUser = "user_a"
+  authStatus = 200
+  authReads = 0
   browser = undefined
+  redeemed = session
+  revokes = []
+  activeRevokes = []
+  revokeStatus = 204
+  deviceBody = device
+  deviceStatus = 200
+  deviceReads = []
   await OpenScience.clearSession()
   await JsonStore.update(path.join(Global.Path.data, "auth.json"), () => ({}))
   await JsonStore.update(path.join(Global.Path.data, "credentials.json"), () => ({}))
@@ -118,7 +196,16 @@ beforeEach(async () => {
 })
 afterAll(async () => {
   await OpenScience.clearSession()
+  await JsonStore.update(path.join(Global.Path.data, "auth.json"), () => previousAuth)
+  await Config.replaceGlobal(previousConfig.content)
+  for (const [key, value] of previousEnv) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+  Provider.invalidate()
   server.stop(true)
+  if (previousApiBase === undefined) delete process.env.OPENSCIENCE_API_BASE
+  else process.env.OPENSCIENCE_API_BASE = previousApiBase
 })
 
 describe("workspace credential sync", () => {
@@ -272,12 +359,200 @@ describe("workspace credential sync", () => {
     expect(await Auth.get("openai")).toEqual({ type: "api", key: "fixture-cloud-openai" })
   })
 
+  test("browser workspace replacement revokes the prior device only after activating the new one", async () => {
+    redeemed = {
+      api_key: "osk_fixture_workspace_b",
+      user_id: "user_b",
+      organization_id: "org_b",
+      workspace_locked: true,
+    }
+    payload = snapshot("org_b", "user_b")
+    const result = await OpenScience.browserLogin({
+      timeoutMs: 2000,
+      onApprovalUrl: () => {
+        const callback = new URL(browser!.redirect_uri)
+        callback.searchParams.set("state", browser!.state)
+        callback.searchParams.set("exchange_token", "fixture-exchange")
+        void fetch(callback).then((response) => response.body?.cancel())
+      },
+    })
+
+    expect(result).toMatchObject(redeemed)
+    expect(await OpenScience.getSession()).toMatchObject(redeemed)
+    expect(revokes).toEqual([`Bearer ${session.api_key}`])
+    expect(activeRevokes).toEqual([redeemed.api_key])
+    expect(headers?.get("X-Organization-ID")).toBe("org_b")
+  })
+
   test("an explicit login key replaces the existing device session and syncs its workspace", async () => {
     const { runAtlasLogin } = await import("../../src/cli/cmd/connect")
     const key = "osk_fixture_reconnected"
     expect(await runAtlasLogin({ key, browser: false })).toBe(true)
     expect((await OpenScience.getSession())?.api_key).toBe(key)
     expect(OpenScience.credentialSyncStatus().state).toBe("ready")
+    expect(revokes).toEqual([`Bearer ${session.api_key}`])
+    expect(OpenScience.getLoginWarning()).toBeUndefined()
+  })
+
+  test("concurrent logins serialize replacement and revoke every nonfinal device", async () => {
+    const keys = ["osk_fixture_concurrent_a", "osk_fixture_concurrent_b"]
+    await Promise.all(keys.map((key) => OpenScience.loginWithKey(key)))
+
+    const final = (await OpenScience.getSession())?.api_key
+    if (!final) throw new Error("Expected one concurrent login to remain active")
+    expect(keys).toContain(final)
+    const loser = keys.find((key) => key !== final)!
+    expect(new Set(revokes)).toEqual(new Set([`Bearer ${session.api_key}`, `Bearer ${loser}`]))
+    expect(revokes).not.toContain(`Bearer ${final}`)
+  })
+
+  test("an old server without self-revoke keeps the replacement active and exposes a warning", async () => {
+    revokeStatus = 404
+    const key = "osk_fixture_old_server"
+    const result = await OpenScience.loginWithKey(key)
+
+    expect(result.api_key).toBe(key)
+    expect((await OpenScience.getSession())?.api_key).toBe(key)
+    expect(OpenScience.credentialSyncStatus().state).toBe("ready")
+    expect(revokes).toEqual([`Bearer ${session.api_key}`])
+    expect(OpenScience.getLoginWarning()).toContain("previous device could not be revoked")
+  })
+
+  test("logout can revoke only its own device without browser-administration access", async () => {
+    expect(await OpenScience.revokeCurrentDevice(2_000)).toBe(true)
+    expect(revokes).toEqual([`Bearer ${session.api_key}`])
+    expect(await OpenScience.getSession()).toEqual(session)
+  })
+
+  test("device listing reads only the authenticated device and rejects malformed or denied responses", async () => {
+    expect(await OpenScience.listDevices()).toEqual([device])
+    expect(deviceReads).toEqual([`Bearer ${session.api_key}`])
+
+    deviceBody = { ...device, key_id: 42 }
+    expect(await OpenScience.listDevices()).toBeNull()
+    deviceStatus = 403
+    expect(await OpenScience.listDevices()).toBeNull()
+    expect(deviceReads).toHaveLength(3)
+  })
+
+  test("the local account route can revoke only its exact current device", async () => {
+    const denied = await AccountRoutes().request("/devices/device_peer", { method: "DELETE" })
+    expect(denied.status).toBe(200)
+    expect(await denied.json()).toBe(false)
+    expect(revokes).toEqual([])
+    expect(await OpenScience.getSession()).toEqual(session)
+
+    const revoked = await AccountRoutes().request(`/devices/${device.key_id}`, { method: "DELETE" })
+    expect(revoked.status).toBe(200)
+    expect(await revoked.json()).toBe(true)
+    expect(deviceReads).toEqual([`Bearer ${session.api_key}`, `Bearer ${session.api_key}`])
+    expect(revokes).toEqual([`Bearer ${session.api_key}`])
+    expect(await OpenScience.getSession()).toBeNull()
+  })
+
+  test("verified sync repairs a legacy session that discarded its immutable workspace", async () => {
+    await OpenScience.clearSession()
+    await OpenScience.saveSession({
+      api_key: "thk_fixture_legacy",
+      user_id: "",
+      device_name: "legacy client",
+    })
+
+    expect((await OpenScience.syncCredentials({ force: true })).state).toBe("ready")
+    expect(await OpenScience.getSession()).toEqual({
+      api_key: "thk_fixture_legacy",
+      user_id: "user_a",
+      device_name: "legacy client",
+      organization_id: "org_a",
+      workspace_locked: true,
+    })
+    expect(await Auth.get("openai")).toEqual({ type: "api", key: "fixture-cloud-openai" })
+    permissions = { use_shared_wallet: true }
+    expect(await OpenScience.getFundingContext()).toMatchObject({
+      type: "organization",
+      organization_id: "org_a",
+      available: true,
+      locked: true,
+    })
+
+    await OpenScience.syncCredentials({ force: true })
+    expect(headers?.get("X-Organization-ID")).toBe("org_a")
+  })
+
+  test("account status reconciles a legacy session and returns one immutable billing snapshot", async () => {
+    await OpenScience.clearSession()
+    await OpenScience.saveSession({ api_key: "thk_fixture_status", user_id: "" })
+    permissions = { use_shared_wallet: true }
+
+    const state = await OpenScience.getReconciledFundingState()
+    expect(state?.snapshot).toMatchObject({
+      api_key: "thk_fixture_status",
+      user_id: "user_a",
+      organization_id: "org_a",
+      workspace_locked: true,
+    })
+    expect(state?.context).toMatchObject({
+      type: "organization",
+      organization_id: "org_a",
+      available: true,
+      locked: true,
+    })
+  })
+
+  test("a managed turn starting from a legacy snapshot binds the verified workspace before dispatch", async () => {
+    await OpenScience.clearSession()
+    await OpenScience.saveSession({ api_key: "thk_fixture_pre_sync", user_id: "" })
+    const stale = (await OpenScience.getFundingSnapshot())!
+    const drift = Response.json(
+      {},
+      {
+        headers: {
+          "OpenScience-Funding-Protocol": "1",
+          "OpenScience-Funding-Context": "organization:org_other",
+        },
+      },
+    )
+    await expect(OpenScience.validateFundingResponse(drift, stale)).rejects.toThrow("verify the selected workspace")
+
+    const selected = await OpenScience.managedRequestSnapshot(stale.api_key, stale)
+    expect(selected).toMatchObject({
+      api_key: stale.api_key,
+      user_id: "user_a",
+      organization_id: "org_a",
+      workspace_locked: true,
+    })
+    expect(await OpenScience.getSession()).toMatchObject({
+      api_key: selected.api_key,
+      user_id: selected.user_id,
+      organization_id: selected.organization_id,
+      workspace_locked: selected.workspace_locked,
+    })
+    expect(authReads).toBeGreaterThan(0)
+  })
+
+  test("a scoped account cannot be relabeled by another self-consistent workspace response", async () => {
+    authOrg = "org_b"
+    authUser = "user_b"
+    permissions = { use_shared_wallet: true }
+
+    const state = await OpenScience.getReconciledFundingState()
+    expect(state?.snapshot).toMatchObject(session)
+    expect(state?.context).toMatchObject({ type: "organization", organization_id: "org_a", available: false })
+    expect(await OpenScience.getSession()).toEqual(session)
+  })
+
+  test("unsaved legacy and workspace keys both fail before managed dispatch", async () => {
+    await OpenScience.clearSession()
+    for (const key of ["thk_fixture_unsaved", "osk_fixture_unsaved"]) {
+      await expect(OpenScience.managedRequestSnapshot(key)).rejects.toThrow("Sign in again")
+    }
+    expect(authReads).toBe(0)
+  })
+
+  test("a BYOK turn never consults Atlas because an Ace session is saved", async () => {
+    authStatus = 503
+    expect(await SessionProcessor.fundingSnapshot("byok")).toBeUndefined()
+    expect(authReads).toBe(0)
   })
 
   test("uses the scoped wire contract and real encrypted provider/trusted-service consumers without changing Ace", async () => {
@@ -421,6 +696,30 @@ describe("workspace credential sync", () => {
     release()
     await pending
     expect((await OpenScience.getSession())?.organization_id).toBe("org_b")
+    expect(await Auth.get("openai")).toBeUndefined()
+  })
+
+  test("legacy scope reconciliation cannot overwrite a newly connected account", async () => {
+    await OpenScience.clearSession()
+    await OpenScience.saveSession({ api_key: "thk_fixture_legacy", user_id: "" })
+    const release = Promise.withResolvers<void>()
+    wait = release.promise
+    const pending = OpenScience.syncCredentials({ force: true })
+    while (!count) await Bun.sleep(1)
+    await OpenScience.saveSession({
+      api_key: "osk_fixture_workspace_b",
+      user_id: "user_b",
+      organization_id: "org_b",
+      workspace_locked: true,
+    })
+    release.resolve()
+    await pending
+    expect(await OpenScience.getSession()).toEqual({
+      api_key: "osk_fixture_workspace_b",
+      user_id: "user_b",
+      organization_id: "org_b",
+      workspace_locked: true,
+    })
     expect(await Auth.get("openai")).toBeUndefined()
   })
 

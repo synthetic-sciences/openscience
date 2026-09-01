@@ -17,6 +17,7 @@ import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
 import { accessRoute, resolveCredentialSource } from "./access-route"
 import { requiresWalletBalance } from "./access-route"
+import type { CredentialSource } from "./access-route"
 import { OpenScience } from "@/openscience"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
@@ -45,6 +46,11 @@ export namespace SessionProcessor {
       isRetryable: true,
       metadata: { openscience_state: "paused", action: "retry" },
     })
+  }
+
+  export async function fundingSnapshot(source: CredentialSource) {
+    if (!requiresWalletBalance(source)) return
+    return (await OpenScience.getReconciledFundingState())?.snapshot
   }
 
   /** True when the last `threshold` TOOL calls are the same tool with the same
@@ -546,9 +552,12 @@ export namespace SessionProcessor {
       },
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
+        // Resolve the transport before touching Atlas. BYOK and subscription
+        // turns must stay independent from an unrelated saved Ace session.
+        const credentialSource = await resolveCredentialSource(input.model.providerID, input.model.id)
         // One immutable funding choice spans preflight and every retry/step in
         // this provider operation. A settings change applies to the next turn.
-        const funding = await OpenScience.getFundingSnapshot()
+        const funding = await fundingSnapshot(credentialSource)
         const tracking = tracks({ tools: streamInput.tools, toolcall: input.model.capabilities.toolcall })
         needsCompaction = false
         overflow = false
@@ -557,9 +566,6 @@ export namespace SessionProcessor {
         let traceRoute = "custom"
         while (true) {
           try {
-            // Classify the user-owned credential backing this call for local
-            // trace labels only. It never triggers an account or billing read.
-            const credentialSource = await resolveCredentialSource(input.model.providerID, input.model.id)
             traceRoute = accessRoute(credentialSource, input.model)
 
             if (requiresWalletBalance(credentialSource)) {

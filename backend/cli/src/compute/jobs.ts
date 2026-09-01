@@ -910,6 +910,10 @@ export namespace ComputeJobs {
     const output = options.stdout ? await fs.open(options.stdout, "w", 0o600) : undefined
     const detached = process.platform !== "win32"
     const ledger = `${credentialProcessID(scope.root, job.id)}-${crypto.randomUUID()}`
+    // The SSH broker is the sole subprocess allowed to use the host agent.
+    // Take it from the server environment, never project/runtime overlays;
+    // ordinary subprocess sanitization intentionally removes this capability.
+    const agent = process.env.SSH_AUTH_SOCK
     const cleanupGate = async (release?: string) => {
       if (!release) return
       await Promise.all([
@@ -940,6 +944,7 @@ export namespace ComputeJobs {
               "USERPROFILE",
             ].flatMap((key) => (env[key] ? [[key, env[key]]] : [])),
           )
+          if (agent) transport.SSH_AUTH_SOCK = agent
           // This is OpenScience's fixed, host-key-pinned broker transport, not
           // project-authored code. Session sandboxes intentionally deny all
           // network access, so applying them here would make every approved

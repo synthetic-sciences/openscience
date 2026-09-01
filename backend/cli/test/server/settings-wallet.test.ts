@@ -28,6 +28,16 @@ const mode: OpenScience.BillingMode = {
 }
 const account = {
   getFundingSnapshot: async () => snapshot,
+  getReconciledFundingState: async () => ({
+    snapshot,
+    context: {
+      type: "organization" as const,
+      organization_id: snapshot.organization_id,
+      available: true,
+      locked: true,
+      organizations: [],
+    },
+  }),
   getCredits: async () => credits,
   getBillingMode: async () => mode,
   getTransactions: async () => [],
@@ -101,10 +111,13 @@ describe("Wallet account summary", () => {
     await expect(
       readWallet(true, {
         ...account,
-        getFundingSnapshot: async () =>
-          ++state.reads === 1 ? snapshot : { ...snapshot, organization_id: "workspace-b" },
+        getFundingSnapshot: async () => {
+          state.reads++
+          return { ...snapshot, organization_id: "workspace-b" }
+        },
       }),
     ).rejects.toThrow("selected account changed")
+    expect(state.reads).toBe(1)
   })
 
   test("keeps selected-workspace response proof mandatory", async () => {

@@ -343,6 +343,7 @@ test("dispatches through a real OpenSSH daemon and reattaches from a fresh serve
       lifecycle: { delivery: "complete", resource: "closed" },
     })
     expect(recovered.remote_id).toMatch(/^pid:[0-9]+$/)
+    expect(recovered.events).not.toContain("Permission denied (publickey)")
     expect(recovered.remote_id).toBe(attachedRemoteID)
     expect(recovered.log).toContain("remote:payload")
     expect(recovered.events).toContain(`Submitted ${recovered.remote_id}`)

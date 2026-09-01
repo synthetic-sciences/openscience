@@ -276,11 +276,19 @@ export default function Download() {
           </div>
 
           <div className="mx-auto mt-12 grid max-w-[1060px] gap-5 md:grid-cols-2">
-            <section id="desktop" aria-labelledby="desktop-title" className="flex min-w-0 scroll-mt-6 flex-col gap-6 border border-border/60 bg-background/40 p-6 sm:p-8">
+            <section
+              id="desktop"
+              aria-labelledby="desktop-title"
+              className="flex min-w-0 scroll-mt-6 flex-col gap-6 border border-border/60 bg-background/40 p-6 sm:p-8"
+            >
               <div>
                 <div className="text-[12px] tracking-[0.06em] text-foreground/50">Desktop</div>
-                <h2 id="desktop-title" className="mt-3 text-[32px] leading-none tracking-[-0.025em]">Download the app</h2>
-                <p className="mt-4 text-[14px] leading-6 text-foreground/60">A desktop window for your research. No terminal required.</p>
+                <h2 id="desktop-title" className="mt-3 text-[32px] leading-none tracking-[-0.025em]">
+                  Download the app
+                </h2>
+                <p className="mt-4 text-[14px] leading-6 text-foreground/60">
+                  A desktop window for your research. No terminal required.
+                </p>
               </div>
               <div className="border border-border/55">
                 <div className="grid grid-cols-3" role="group" aria-label="Choose your operating system">
@@ -301,7 +309,11 @@ export default function Download() {
                     </button>
                   ))}
                 </div>
-                <div className="flex min-h-11 flex-wrap items-center justify-center gap-1 border-t border-border/40 px-2" role="group" aria-label={`Choose ${download.label} architecture`}>
+                <div
+                  className="flex min-h-11 flex-wrap items-center justify-center gap-1 border-t border-border/40 px-2"
+                  role="group"
+                  aria-label={`Choose ${download.label} architecture`}
+                >
                   {options.map((item) => (
                     <button
                       type="button"
@@ -315,7 +327,11 @@ export default function Download() {
                   ))}
                 </div>
               </div>
-              <a href={`${RELEASE}/${download.file}`} className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-4 text-center text-[14px]" aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}>
+              <a
+                href={`${RELEASE}/${download.file}`}
+                className="btn-primary inline-flex min-h-14 w-full items-center justify-center gap-3 px-4 text-center text-[14px]"
+                aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
+              >
                 <svg width="15" height="16" viewBox="0 0 15 16" fill="none" aria-hidden>
                   <path d="M7.5 1v9m0 0L11 6.5M7.5 10 4 6.5M1 14.5h13" stroke="currentColor" strokeWidth="1.3" />
                 </svg>
@@ -330,11 +346,19 @@ export default function Download() {
               </p>
             </section>
 
-            <section id="terminal" aria-labelledby="npm-title" className="flex min-w-0 scroll-mt-6 flex-col gap-6 border border-border/60 bg-background/40 p-6 sm:p-8">
+            <section
+              id="terminal"
+              aria-labelledby="npm-title"
+              className="flex min-w-0 scroll-mt-6 flex-col gap-6 border border-border/60 bg-background/40 p-6 sm:p-8"
+            >
               <div>
                 <div className="text-[12px] tracking-[0.06em] text-foreground/50">Command line</div>
-                <h2 id="npm-title" className="mt-3 text-[32px] leading-none tracking-[-0.025em]">Install with npm</h2>
-                <p className="mt-4 text-[14px] leading-6 text-foreground/60">Run from your terminal. Opens the workspace in your browser.</p>
+                <h2 id="npm-title" className="mt-3 text-[32px] leading-none tracking-[-0.025em]">
+                  Install with npm
+                </h2>
+                <p className="mt-4 text-[14px] leading-6 text-foreground/60">
+                  Run from your terminal. Opens the workspace in your browser.
+                </p>
               </div>
               <div className="space-y-2">
                 <div className="text-[12.5px] text-foreground/55">1. Install the CLI</div>
@@ -344,7 +368,9 @@ export default function Download() {
                 <div className="text-[12.5px] text-foreground/55">2. Run in your project folder</div>
                 <Copy command="openscience" />
               </div>
-              <p className="text-[12.5px] leading-5 text-foreground/55">Requires Node.js and npm. No desktop download needed.</p>
+              <p className="text-[12.5px] leading-5 text-foreground/55">
+                Requires Node.js and npm. No desktop download needed.
+              </p>
             </section>
           </div>
         </section>
@@ -354,11 +380,7 @@ export default function Download() {
             <h2 className="sr-only">Quick start</h2>
             <div className="grid gap-px border-y border-border/45 bg-border/45 sm:grid-cols-3">
               {[
-                [
-                  "01",
-                  "Open",
-                  "Launch the desktop app, or run openscience in your project folder.",
-                ],
+                ["01", "Open", "Launch the desktop app, or run openscience in your project folder."],
                 ["02", "Connect", "Choose Ace, a provider account, your own API key, or a local model."],
                 ["03", "Research", "Open a project and start your first research session."],
               ].map((step) => (

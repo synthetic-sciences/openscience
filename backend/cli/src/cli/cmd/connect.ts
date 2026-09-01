@@ -17,6 +17,8 @@ async function withKey(key: string) {
   return OpenScience.loginWithKey(key)
     .then(() => {
       spinner.stop("Authenticated")
+      const warning = OpenScience.getLoginWarning()
+      if (warning) prompts.log.warn(warning)
       const sync = OpenScience.credentialSyncStatus()
       if (sync.state === "error") prompts.log.warn(sync.error ?? "Run openscience sync to retry workspace credentials.")
       return true
@@ -38,6 +40,8 @@ async function withBrowser() {
   })
     .then(() => {
       prompts.log.success("Authenticated")
+      const warning = OpenScience.getLoginWarning()
+      if (warning) prompts.log.warn(warning)
       const sync = OpenScience.credentialSyncStatus()
       if (sync.state === "error") prompts.log.warn(sync.error ?? "Run openscience sync to retry workspace credentials.")
       return true
@@ -155,17 +159,35 @@ export const StatusCommand = cmd({
       return
     }
 
+    const state = await OpenScience.getReconciledFundingState().catch(() => null)
+    if (!state) {
+      prompts.log.warn("Saved locally; the selected workspace is currently unavailable.")
+      prompts.outro("Done")
+      return
+    }
+
     prompts.log.success("Connected")
     prompts.log.info(`Backend: ${MANAGED_API_BASE}`)
-    if (session.user_id) prompts.log.info(`User: ${session.user_id}`)
+    if (state.snapshot.user_id) prompts.log.info(`User: ${state.snapshot.user_id}`)
     if (session.device_name) prompts.log.info(`Device: ${session.device_name}`)
+    if (state.context.type === "organization") {
+      const workspace = state.context.organizations.find(
+        (item) => item.organization_id === state.context.organization_id,
+      )
+      const name = workspace?.name
+        ? `${workspace.name} (${state.context.organization_id})`
+        : state.context.organization_id
+      prompts.log.info(`Workspace: ${name}`)
+    }
+    if (state.context.type === "personal") prompts.log.info("Workspace: Personal")
+    if (!state.context.available) prompts.log.warn("The selected workspace cannot currently fund Ace requests.")
 
-    const creditsRequest = OpenScience.getCredits().catch(() => null)
+    const creditsRequest = OpenScience.getCredits(state.snapshot).catch(() => null)
     const [profile, mode, credits, transactions] = await Promise.all([
-      OpenScience.getProfile().catch(() => null),
-      OpenScience.getBillingMode(undefined, creditsRequest).catch(() => null),
+      OpenScience.getProfile(state.snapshot).catch(() => null),
+      OpenScience.getBillingMode(state.snapshot, creditsRequest).catch(() => null),
       creditsRequest,
-      OpenScience.getTransactions(5).catch(() => null),
+      OpenScience.getTransactions(5, state.snapshot).catch(() => null),
     ])
     if (profile?.display_name) prompts.log.info(`Name: ${profile.display_name}`)
     if (profile?.email) prompts.log.info(`Email: ${profile.email}`)
@@ -195,7 +217,7 @@ export const StatusCommand = cmd({
 
 export const DevicesCommand = cmd({
   command: "devices",
-  describe: "list devices signed in to your Synthetic Sciences account",
+  describe: "show this device's Synthetic Sciences sign-in",
   async handler() {
     UI.empty()
     prompts.intro("OpenScience Ace")
@@ -222,7 +244,7 @@ export const DevicesCommand = cmd({
       const last = device.last_used_at ? new Date(device.last_used_at).toLocaleString() : "never"
       prompts.log.info(`${device.name}  [${device.key_prefix}…]  last used: ${last}`)
     }
-    prompts.log.info("Revoke devices from your Synthetic Sciences account settings.")
+    prompts.log.info("Manage other devices from your Synthetic Sciences account settings.")
     prompts.outro("Done")
   },
 })

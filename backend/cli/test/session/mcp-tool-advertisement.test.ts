@@ -160,7 +160,7 @@ await Instance.provide({
         : []
       const researchSearch = providerTools.find((item) => item.function?.name === "research_search")
       expect(normal.tools.filter((name) => name === "research_search")).toHaveLength(1)
-      expect(researchSearch?.function?.description).toContain("Search for current web, research, news")
+      expect(researchSearch?.function?.description).toContain("Search web, research, news")
       expect(researchSearch?.function?.description).not.toContain("MCP collision fixture")
       expect(direct.tools).not.toContain("research_echo")
       expect(direct.tools).toEqual([])

@@ -6,11 +6,10 @@ import { Instance } from "../../src/project/instance"
 import { Global } from "../../src/global"
 import { tmpdir } from "../fixture/fixture"
 
-// The Atlas sync writes openscience-synced.json into the user's XDG config dir; it's
-// read fresh per-instance by Config.state(). The user's own config goes in the
-// project's openscience.json (via tmpdir({config})), which is per-test isolated —
-// unlike the global openscience.json, which Config caches process-wide. These tests
-// exercise the real Config load path end-to-end (#159 / #142).
+// Atlas versions before local-first OpenScience wrote openscience-synced.json into
+// the user's XDG config dir. Current OpenScience must ignore that retired dashboard
+// policy file so it cannot restore a server-selected model or narrow local BYOK
+// providers after an upgrade. These tests exercise the real Config load path.
 const syncedConfig = path.join(Global.Path.config, "openscience-synced.json")
 
 async function writeSynced(obj: object) {
@@ -25,8 +24,8 @@ afterEach(async () => {
   await fs.rm(syncedConfig, { force: true }).catch(() => {})
 })
 
-describe("Atlas synced-config merge", () => {
-  test("user's default model and custom OpenRouter model survive the sync (#159)", async () => {
+describe("retired Atlas synced-config isolation", () => {
+  test("user's default model and custom OpenRouter model survive a retired policy file (#159)", async () => {
     await writeSynced({
       model: "openrouter/anthropic/claude-opus-4.8",
       provider: { openrouter: { models: { "anthropic/claude-opus-4.8": {} } } },
@@ -42,17 +41,14 @@ describe("Atlas synced-config merge", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        // 1. The user's chosen default model wins — NOT reverted to the synced one.
         expect(config.model).toBe("openrouter/deepseek/deepseek-v4-pro")
-        // 2. The user's custom model persists (this is what was being clobbered).
         expect(config.provider?.openrouter?.models?.["deepseek/deepseek-v4-pro"]).toBeDefined()
-        // 3. The server-recommended model the user did NOT declare is still added (union).
-        expect(config.provider?.openrouter?.models?.["anthropic/claude-opus-4.8"]).toBeDefined()
+        expect(config.provider?.openrouter?.models?.["anthropic/claude-opus-4.8"]).toBeUndefined()
       },
     })
   })
 
-  test("synced config still applies when the user hasn't set those fields", async () => {
+  test("retired policy cannot select a model when the user has not set one", async () => {
     await writeSynced({
       model: "openrouter/anthropic/claude-opus-4.8",
       provider: { openrouter: { models: { "anthropic/claude-opus-4.8": {} } } },
@@ -63,9 +59,8 @@ describe("Atlas synced-config merge", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        // With no competing user value, the server recommendation is the default.
-        expect(config.model).toBe("openrouter/anthropic/claude-opus-4.8")
-        expect(config.provider?.openrouter?.models?.["anthropic/claude-opus-4.8"]).toBeDefined()
+        expect(config.model).toBeUndefined()
+        expect(config.provider?.openrouter?.models?.["anthropic/claude-opus-4.8"]).toBeUndefined()
       },
     })
   })
@@ -102,7 +97,6 @@ describe("Atlas synced-config merge", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        // The synced enabled_providers=[openrouter] must NOT drop the custom provider.
         expect(config.provider?.["my-byok"]).toBeDefined()
         expect(config.provider?.["my-byok"]?.options?.baseURL).toBe("https://byok.example/v1")
       },

@@ -186,6 +186,30 @@ describe("reasoning options serialize onto provider request bodies", () => {
     expect(wire.bodies[0].provider).toEqual({ sort: "throughput" })
   })
 
+  test("Managed Haiku token budgets reach OpenRouter and preserve Off", async () => {
+    const target = model({
+      id: "anthropic/claude-haiku-4.5",
+      providerID: "openrouter",
+      api: {
+        id: "anthropic/claude-haiku-4.5",
+        url: "https://atlas.test/api/llm/proxy/openrouter/v1",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+      limit: { context: 200_000, output: 64_000 },
+      reasoningOptions: [{ type: "budget_tokens", values: [0, 4096, 8192, 16384, 32768] }],
+    })
+    const variants = ProviderTransform.variants(target)
+    const wire = recorder()
+    const sdk = createOpenRouter({ apiKey: "test", baseURL: target.api.url, fetch: wire.fetch })
+
+    await send(sdk.chat(target.api.id), ProviderTransform.providerOptions(target, variants.none))
+    await send(sdk.chat(target.api.id), ProviderTransform.providerOptions(target, variants["4096-tokens"]))
+
+    expect(wire.bodies).toHaveLength(2)
+    expect(wire.bodies[0].reasoning).toEqual({ enabled: false })
+    expect(wire.bodies[1].reasoning).toEqual({ max_tokens: 4096 })
+  })
+
   test("Anthropic fast mode reaches the speed field", async () => {
     const target = model({
       id: "claude-opus-4-8",

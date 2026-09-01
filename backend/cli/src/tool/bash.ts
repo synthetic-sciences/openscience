@@ -436,7 +436,16 @@ export const BashTool = Tool.define("bash", async () => {
               // Re-sanitize at the final process boundary too: runtime/cache
               // overlays must never restore a managed token or re-pair a
               // user's key with the Ace managed proxy after subprocessEnv ran.
-              env: OpenScience.filterEnvForSubprocess({ ...env, ...(runtime.env ?? {}), ...cache }),
+              env: {
+                ...OpenScience.filterEnvForSubprocess({ ...env, ...(runtime.env ?? {}), ...cache }),
+                // The final overlay pass re-sanitizes runtime/cache values and
+                // therefore drops control variables. Restore only the fixed
+                // Git policy from subprocessEnv so Git never falls back to a
+                // user-owned ~/.gitconfig or credential prompt.
+                GIT_CONFIG_NOSYSTEM: env.GIT_CONFIG_NOSYSTEM,
+                GIT_CONFIG_GLOBAL: env.GIT_CONFIG_GLOBAL,
+                GIT_TERMINAL_PROMPT: env.GIT_TERMINAL_PROMPT,
+              },
               stdio: ["ignore", "pipe", "pipe"],
               detached: process.platform !== "win32",
             })

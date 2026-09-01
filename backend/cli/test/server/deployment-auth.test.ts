@@ -30,11 +30,10 @@ describe.serial("deployment authentication", () => {
     expect(response.headers.get("www-authenticate")).toBe('Bearer realm="openscience"')
   })
 
-  test("passes deployment auth and then requires an account", async () => {
+  test("passes deployment auth through to route validation", async () => {
     const response = await request({ authorization: `Bearer ${token}` })
-    expect(response.status).toBe(401)
-    expect(response.headers.get("www-authenticate")).toBe('Bearer realm="openscience-account"')
-    expect(await response.json()).toMatchObject({ code: "openscience_account_required" })
+    expect(response.status).toBe(400)
+    expect(response.headers.get("www-authenticate")).toBeNull()
   })
 
   test("keeps health open for liveness probes", async () => {

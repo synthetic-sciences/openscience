@@ -106,13 +106,14 @@ describe("tool.bash sandbox integration", () => {
             await BashTool.init()
           ).execute(
             {
-              command: "git branch --show-current && git status --porcelain",
+              command:
+                'test "$GIT_CONFIG_NOSYSTEM" = "1" && test "$GIT_CONFIG_GLOBAL" = "/dev/null" && git branch --show-current && git status --porcelain',
               workdir: linked,
               description: "check linked worktree state",
             },
             ctx,
           )
-          expect(result.metadata.exit).toBe(0)
+          expect(result.metadata.exit, result.output).toBe(0)
           expect(result.output.trim()).toBe(branch)
         },
       })

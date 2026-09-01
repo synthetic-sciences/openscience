@@ -41,6 +41,7 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("no-ops for paths inside Instance.directory", async () => {
+    await using project = await tmpdir()
     const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
@@ -50,9 +51,9 @@ describe("tool.assertExternalDirectory", () => {
     }
 
     await Instance.provide({
-      directory: "/tmp/project",
+      directory: project.path,
       fn: async () => {
-        await assertExternalDirectory(ctx, path.join("/tmp/project", "file.txt"))
+        await assertExternalDirectory(ctx, path.join(project.path, "file.txt"))
       },
     })
 
@@ -60,6 +61,8 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("asks with a single canonical glob", async () => {
+    await using project = await tmpdir()
+    await using outside = await tmpdir()
     const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
@@ -68,12 +71,11 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
-    const directory = "/tmp/project"
-    const target = "/tmp/outside/file.txt"
+    const target = path.join(outside.path, "file.txt")
     const expected = path.join(path.dirname((await Filesystem.canonical(target))!), "*")
 
     await Instance.provide({
-      directory,
+      directory: project.path,
       fn: async () => {
         await assertExternalDirectory(ctx, target)
       },
@@ -86,6 +88,8 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("uses target directory when kind=directory", async () => {
+    await using project = await tmpdir()
+    await using outside = await tmpdir()
     const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
@@ -94,12 +98,11 @@ describe("tool.assertExternalDirectory", () => {
       },
     }
 
-    const directory = "/tmp/project"
-    const target = "/tmp/outside"
+    const target = outside.path
     const expected = path.join((await Filesystem.canonical(target))!, "*")
 
     await Instance.provide({
-      directory,
+      directory: project.path,
       fn: async () => {
         await assertExternalDirectory(ctx, target, { kind: "directory" })
       },
@@ -112,6 +115,8 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("skips prompting when bypass=true", async () => {
+    await using project = await tmpdir()
+    await using outside = await tmpdir()
     const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
@@ -121,9 +126,9 @@ describe("tool.assertExternalDirectory", () => {
     }
 
     await Instance.provide({
-      directory: "/tmp/project",
+      directory: project.path,
       fn: async () => {
-        await assertExternalDirectory(ctx, "/tmp/outside/file.txt", { bypass: true })
+        await assertExternalDirectory(ctx, path.join(outside.path, "file.txt"), { bypass: true })
       },
     })
 

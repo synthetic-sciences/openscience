@@ -54,15 +54,13 @@ export async function readWallet(
   summary: boolean,
   account: Pick<
     typeof OpenScience,
-    "getFundingSnapshot" | "getCredits" | "getBillingMode" | "getTransactions"
+    "getFundingSnapshot" | "getReconciledFundingState" | "getCredits" | "getBillingMode" | "getTransactions"
   > = OpenScience,
 ): Promise<WalletState> {
-  // The local immutable funding snapshot plus gateway response proof is the
-  // authorization boundary. Avoid a separate auth-status round trip before
-  // the Wallet reads so the default Models panel can load them together. The
-  // summary skips history and has a short budget; full ledger reads retain the
-  // existing contract for callers that need transaction history.
-  const snapshot = await account.getFundingSnapshot().catch(() => null)
+  // Reconcile a legacy unscoped device before any Wallet endpoint sees it.
+  // The resulting immutable snapshot plus each gateway response proof is the
+  // authorization boundary for every parallel read below.
+  const snapshot = (await account.getReconciledFundingState().catch(() => null))?.snapshot
   if (!snapshot) return SIGNED_OUT
   const creditsRequest = summary
     ? withTimeout(
@@ -81,7 +79,12 @@ export async function readWallet(
   ])
   const current = await account.getFundingSnapshot()
   if (!current) return SIGNED_OUT
-  if (current.api_key !== snapshot.api_key || current.organization_id !== snapshot.organization_id) {
+  if (
+    current.api_key !== snapshot.api_key ||
+    current.user_id !== snapshot.user_id ||
+    current.organization_id !== snapshot.organization_id ||
+    current.workspace_locked !== snapshot.workspace_locked
+  ) {
     throw new Error("The selected account changed while refreshing the Wallet. Retry.")
   }
   const redacted = Boolean(credits?.balanceRedacted || mode?.balance_redacted)

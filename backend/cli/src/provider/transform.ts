@@ -549,6 +549,24 @@ export namespace ProviderTransform {
         ]),
       )
 
+    if (budget && model.api.npm === "@openrouter/ai-sdk-provider") {
+      const values = model.reasoningOptions?.find((option) => option.type === "budget_tokens")?.values
+      if (!Array.isArray(values)) return {}
+      return Object.fromEntries(
+        values
+          .filter(
+            (value) => typeof value === "number" && (value === 0 || (value >= 1024 && value < model.limit.output)),
+          )
+          .map((value) =>
+            value === 0
+              ? ["none", { reasoning: { enabled: false } }]
+              : [`${value}-tokens`, { reasoning: { max_tokens: value } }],
+          ),
+      )
+    }
+
+    if (exact && model.api.npm === "@openrouter/ai-sdk-provider") return efforts(exact)
+
     // DeepSeek V4 has three canonical effort values. The native adapter maps
     // these to reasoning_effort and preserves reasoning_content through tool
     // loops; do not surface its accepted compatibility aliases as UI tiers.

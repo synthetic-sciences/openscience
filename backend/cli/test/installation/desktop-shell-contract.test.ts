@@ -34,7 +34,7 @@ test("wires the packaged macOS shell to the authenticated desktop updater", asyn
   expect(source).not.toContain("url.startsWith(state.address)")
   expect(source.indexOf("await acknowledgeUpdatePending()")).toBeLessThan(source.indexOf("await updates()"))
   expect(source.indexOf("await createWindow()")).toBeLessThan(source.indexOf("await acknowledgeUpdateHealth()"))
-  expect(workspace.indexOf("<DesktopReadySignal />")).toBeLessThan(workspace.indexOf("<AccountGate>"))
+  expect(workspace.indexOf("<DesktopReadySignal />")).toBeLessThan(workspace.indexOf("<DesktopOnboarding>"))
   expect(source).toContain("if (updateFailure)")
   expect(source).toContain("await state.updateTask?.catch")
   expect(source).toContain("await discardUpdate(recovered)")

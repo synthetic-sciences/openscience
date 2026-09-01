@@ -36,15 +36,8 @@ describe("pre-instance project selection routes", () => {
     await using tmp = await tmpdir({ git: true })
     const created = await Project.fromDirectory(tmp.path)
     await trust(tmp.path)
-    await fs.mkdir(path.join(tmp.path, ".openscience"), { recursive: true })
-    await Bun.write(path.join(tmp.path, ".openscience", "project.json"), JSON.stringify({ project_id: "atlas-root" }))
 
     const repo = await fetch("http://openscience.internal/api/repo/status", {
-      headers: {
-        "x-openscience-project": created.project.id,
-      },
-    })
-    const atlas = await fetch("http://openscience.internal/api/atlas/project", {
       headers: {
         "x-openscience-project": created.project.id,
       },
@@ -63,8 +56,6 @@ describe("pre-instance project selection routes", () => {
       directory: tmp.path,
       isGit: true,
     })
-    expect(atlas.status).toBe(200)
-    expect(await atlas.json()).toEqual({ project_id: "atlas-root" })
     expect(folder.status).toBe(200)
     expect(await folder.json()).toMatchObject({
       ok: true,
@@ -93,12 +84,12 @@ describe("pre-instance project selection routes", () => {
     })
   })
 
-  test("returns a structured stale-project error from Atlas project resolution", async () => {
+  test("returns a structured stale-project error from repository project resolution", async () => {
     await using tmp = await tmpdir()
     const created = await Project.fromDirectory(tmp.path)
     await fs.rm(tmp.path, { recursive: true, force: true })
 
-    const response = await fetch("http://openscience.internal/api/atlas/project", {
+    const response = await fetch("http://openscience.internal/api/repo/status", {
       headers: {
         "x-openscience-project": created.project.id,
       },
@@ -152,10 +143,6 @@ describe("pre-instance project selection routes", () => {
       `http://openscience.internal/api/repo/status?directory=${encodeURIComponent(second.path)}`,
       { headers },
     )
-    const atlas = await fetch(
-      `http://openscience.internal/api/atlas/project?directory=${encodeURIComponent(second.path)}`,
-      { headers },
-    )
     const folder = await fetch("http://openscience.internal/api/resolve-folder/validate", {
       method: "POST",
       headers: {
@@ -164,20 +151,7 @@ describe("pre-instance project selection routes", () => {
       },
       body: JSON.stringify({ path: second.path }),
     })
-    const staged = await fetch("http://openscience.internal/api/atlas/nodes", {
-      method: "POST",
-      headers: {
-        ...headers,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        title: "must not stage",
-        parent_id: "parent-1",
-        directory: second.path,
-      }),
-    })
-
-    for (const response of [repo, atlas, folder, staged]) {
+    for (const response of [repo, folder]) {
       expect(response.status).toBe(409)
       expect(await response.json()).toEqual({
         name: "ProjectMismatchError",

@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { spawn, type ChildProcess } from "node:child_process"
-import { ComputeSettings } from "../server/routes/settings/compute"
+import type { ComputeSettings } from "../server/routes/settings/compute"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { CredentialProcessLedger } from "../credentials/process-ledger"
 import { ProcessIdentity } from "../process/process-identity"
@@ -11,6 +11,10 @@ import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "../process/darwin-respo
 import { OpenScience } from "../openscience"
 import { Shell } from "../shell/shell"
 import { TrustedExecutable } from "../process/trusted-executable"
+
+async function settings() {
+  return (await import("../server/routes/settings/compute")).ComputeSettings
+}
 
 /**
  * Reviewed, read-only provider CLI bridge.
@@ -400,7 +404,8 @@ export namespace ProviderCli {
     await TrustedExecutable.assertImmutableAuthority(selected, {
       allowMutableTestRoot: allowMutableTestRoot(options),
     })
-    const pinned = await ComputeSettings.approveProviderExecutable(target, selected)
+    const store = await settings()
+    const pinned = await store.approveProviderExecutable(target, selected)
     await TrustedExecutable.revalidate(pinned)
     await TrustedExecutable.assertImmutableAuthority(pinned, {
       allowMutableTestRoot: allowMutableTestRoot(options),
@@ -415,6 +420,7 @@ export namespace ProviderCli {
     explicitSettingsApproval = false,
   ): Promise<InvokeResult> {
     const checked = new Date().toISOString()
+    const store = await settings()
     const root = await fs.mkdtemp(path.join(os.tmpdir(), `openscience-${target}-provider-`))
     let launched: Awaited<ReturnType<typeof launch>> | undefined
     let credentialRevision: string | undefined
@@ -422,12 +428,12 @@ export namespace ProviderCli {
       if (options.signal?.aborted) throw new Error(`${spec.cli} operation was cancelled before launch`)
       const pinned = explicitSettingsApproval
         ? await approve(target, spec, options)
-        : await ComputeSettings.approvedProviderExecutable(target)
+        : await store.approvedProviderExecutable(target)
       await TrustedExecutable.revalidate(pinned)
       await TrustedExecutable.assertImmutableAuthority(pinned, {
         allowMutableTestRoot: allowMutableTestRoot(options),
       })
-      const result = await ComputeSettings.withProviderEnv(target, process.env, async (provided, revision) => {
+      const result = await store.withProviderEnv(target, process.env, async (provided, revision) => {
         if (options.signal?.aborted) throw new Error(`${spec.cli} operation was cancelled before launch`)
         credentialRevision = revision
         const stdin = spec.stdin?.(provided)
@@ -518,7 +524,7 @@ export namespace ProviderCli {
               : `${spec.cli} exited with code ${status.code}`,
           }
         }
-        await ComputeSettings.markProviderUsed(target, credentialRevision)
+        await store.markProviderUsed(target, credentialRevision)
         return {
           ok: true,
           provider: target,
@@ -587,7 +593,7 @@ export namespace ProviderCli {
     // This path is called only by the user's explicit Settings connection
     // check. Agent provider operations never create trust on first use.
     const result = await invoke(target, DOCTOR_SPECS[target], options, true)
-    if (!result.ok) await ComputeSettings.markProviderCheckFailed(target)
+    if (!result.ok) await (await settings()).markProviderCheckFailed(target)
     const { output: _output, ...doctor } = result
     return doctor
   }

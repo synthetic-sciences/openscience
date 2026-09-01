@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { createHash } from "node:crypto"
+import os from "node:os"
 import path from "node:path"
 import { OpenScience } from "../src/openscience"
 import { ToolOutputPath } from "../src/tool/tool-output-path"
@@ -31,8 +32,8 @@ test("subprocess env filtering never passes managed Atlas provider keys", () => 
   expect(filtered.OPENAI_API_KEY).toBeUndefined()
   expect(filtered.META_MODEL_API_KEY).toBeUndefined()
   expect(filtered.XAI_API_KEY).toBe("xai-user-owned")
-  expect(filtered.OPENROUTER_BASE_URL).toBe("https://atlas.test/api/llm/proxy/openrouter/v1")
-  expect(filtered.META_MODEL_BASE_URL).toBe("https://atlas.test/api/llm/proxy/meta/v1")
+  expect(filtered.OPENROUTER_BASE_URL).toBeUndefined()
+  expect(filtered.META_MODEL_BASE_URL).toBeUndefined()
 })
 
 test("subprocess env filtering still passes BYOK OpenRouter keys", () => {
@@ -159,7 +160,7 @@ test("kernel subprocesses cannot fall back to host Git config or credential prom
   expect(env.GIT_TERMINAL_PROMPT).toBe("0")
 })
 
-test("kernel credential mask covers Atlas and OpenScience credential stores", () => {
+test("kernel credential mask covers current OpenScience credential stores", () => {
   const paths = OpenScience.kernelSensitivePaths()
   const names = paths.map((value) => path.basename(value))
   expect(names).toContain("openscience-session.json")
@@ -173,7 +174,7 @@ test("kernel credential mask covers Atlas and OpenScience credential stores", ()
   expect(names).toContain(".netrc")
   expect(names).toContain(".git-credentials")
   expect(paths).toContain(
-    process.env.ATLAS_CLI_CONFIG_PATH || path.join(process.env.HOME!, ".config", "atlas-cli", "config.json"),
+    process.env.ATLAS_CLI_CONFIG_PATH || path.join(os.homedir(), ".config", "atlas-cli", "config.json"),
   )
 })
 

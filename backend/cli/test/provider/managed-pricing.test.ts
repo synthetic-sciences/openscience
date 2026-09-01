@@ -77,7 +77,7 @@ test("long-context prices retain inclusive provider thresholds", () => {
   expect(parsed[entry.id]?.cost.tiers?.[0]?.threshold).toBe(200_000)
 })
 
-test("managed controls use exact workspace metadata and a closed Fast transport allowlist", () => {
+test("managed controls cannot import native-provider Fast transports into OpenRouter", () => {
   const parsed = ManagedPricing.parse({
     models: [
       {
@@ -100,11 +100,43 @@ test("managed controls use exact workspace metadata and a closed Fast transport 
   expect(parsed.reasoningOptions).toEqual([
     { type: "effort", values: ["low", "medium", "high", "xhigh"], default: "high" },
   ])
-  expect(parsed.modes.fast).toEqual({
+  expect(parsed.modes).toEqual({})
+
+  const openrouter = ManagedPricing.parse({
+    models: [
+      {
+        ...entry,
+        id: "openai/gpt-5.6-sol",
+        upstream_provider: "openrouter",
+        fast_mode: true,
+        fast_mode_details: {
+          available: true,
+          transport: { service_tier: "priority" },
+          pricing: { verified: true, tiers: [{ input: 4, output: 12, cache_read: 1 }] },
+        },
+      },
+    ],
+  })["openai/gpt-5.6-sol"]!
+  expect(openrouter.modes.fast).toEqual({
     cost: { input: 4, output: 12, cache: { read: 1, write: 0 }, tiers: [] },
     provider: { body: { service_tier: "priority" } },
   })
-  expect(JSON.stringify(parsed)).not.toContain("never-import")
+  expect(JSON.stringify([parsed, openrouter])).not.toContain("never-import")
+  expect(
+    ManagedPricing.parse({
+      models: [
+        {
+          ...entry,
+          fast_mode: true,
+          fast_mode_details: {
+            available: true,
+            transport: { speed: "fast" },
+            pricing: { verified: true, tiers: entry.pricing.tiers },
+          },
+        },
+      ],
+    })[entry.id]!.modes,
+  ).toEqual({})
   for (const details of [
     { available: false, transport: { speed: "fast" }, pricing: { verified: true, tiers: entry.pricing.tiers } },
     { available: true, transport: { speed: "fast" }, pricing: { verified: false, tiers: entry.pricing.tiers } },
@@ -117,6 +149,7 @@ test("managed controls use exact workspace metadata and a closed Fast transport 
     expect(
       ManagedPricing.parse({ models: [{ ...entry, fast_mode: true, fast_mode_details: details }] })[entry.id]!.modes,
     ).toEqual({})
+  expect(JSON.stringify(ManagedPricing.parse({ models: [{ ...entry }] }))).not.toContain("anthropic-beta")
 })
 
 test("Haiku's zero thinking budget survives ingestion and means Off, not a fake low/high ladder", () => {
@@ -132,14 +165,18 @@ test("Haiku's zero thinking budget survives ingestion and means Off, not a fake 
   expect(parsed.reasoningOptions).toEqual([{ type: "budget_tokens", values: [0, 4096, 8192, 16384, 32768] }])
   const variants = ProviderTransform.variants({
     id: "anthropic/claude-haiku-4.5",
-    api: { id: "claude-haiku-4-5", npm: "@ai-sdk/anthropic" },
+    api: {
+      id: "anthropic/claude-haiku-4.5",
+      npm: "@openrouter/ai-sdk-provider",
+      url: "https://atlas.test/api/llm/proxy/openrouter/v1",
+    },
     capabilities: { reasoning: true },
     limit: { output: 64_000 },
     reasoningOptions: parsed.reasoningOptions,
   } as Provider.Model)
   expect(Object.keys(variants)).toEqual(["none", "4096-tokens", "8192-tokens", "16384-tokens", "32768-tokens"])
-  expect(variants.none).toEqual({ thinking: { type: "disabled" } })
-  expect(variants["4096-tokens"]).toEqual({ thinking: { type: "enabled", budgetTokens: 4096 } })
+  expect(variants.none).toEqual({ reasoning: { enabled: false } })
+  expect(variants["4096-tokens"]).toEqual({ reasoning: { max_tokens: 4096 } })
 })
 
 test("pricing cache is nonblocking, deduplicated, and partitioned by immutable workspace", async () => {

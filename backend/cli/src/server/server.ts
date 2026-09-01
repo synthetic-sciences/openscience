@@ -781,7 +781,9 @@ export namespace Server {
         .all("/*", async (c) => {
           // Unmatched /api/* must 404 — never SPA-fallback (the SPA would
           // try to JSON.parse `<!doctype`) and never proxy upstream.
-          if (c.req.path.startsWith("/api/")) return c.notFound()
+          if (c.req.path.startsWith("/api/")) {
+            return c.json({ error: "not_found", detail: "API route not found", path: c.req.path }, 404)
+          }
 
           if (wantsJson(c.req.header("accept") ?? null, c.req.header("content-type") ?? null)) {
             log.warn("unmatched API-shaped request", { method: c.req.method, path: c.req.path })

@@ -1,11 +1,16 @@
 import { test, expect } from "./fixtures"
 import { createSdk, promptSelector } from "./utils"
 
-test("home project search filters the recent list and clears back to it", async ({ page, directory }) => {
-  const current = await createSdk(directory)
-    .project.current()
+async function createProject(label: string) {
+  const project = await createSdk()
+    .global.project.create({ name: `${label} ${Date.now()}`, sources: [] })
     .then((result) => result.data)
-  if (!current?.id) throw new Error("Failed to resolve the current project id")
+  if (!project?.id) throw new Error("Failed to create a managed project")
+  return project
+}
+
+test("home project search filters the recent list and clears back to it", async ({ page }) => {
+  const current = await createProject("Search project")
 
   await page.goto("/")
   const card = page.locator(`[data-project="${current.id}"]`)
@@ -21,11 +26,8 @@ test("home project search filters the recent list and clears back to it", async 
   await expect(card).toBeVisible()
 })
 
-test("opening a project resumes its last active session", async ({ page, directory }) => {
-  const project = await createSdk(directory)
-    .project.current()
-    .then((result) => result.data)
-  if (!project?.id) throw new Error("Failed to resolve the current project id")
+test("opening a project resumes its last active session", async ({ page }) => {
+  const project = await createProject("Resume project")
   const projectSdk = createSdk(project.worktree)
 
   const remembered = await projectSdk.session.create({ title: `resume me ${Date.now()}` }).then((result) => result.data)

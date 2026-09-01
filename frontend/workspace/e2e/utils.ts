@@ -141,11 +141,11 @@ export async function openConnectedFile(page: Page, folder: string, filename: st
   return tab
 }
 
-/** Opens the composer Research menu where request-scoped controls live. */
+/** Opens the composer Tools menu where request-scoped controls live. */
 export async function openResearchTools(page: Page) {
   const tools = page.locator(researchToolsSelector)
   if ((await tools.getAttribute("open")) === null) await tools.locator(":scope > summary").click()
-  await expect(tools.getByRole("group", { name: "Research tools", exact: true })).toBeVisible()
+  await expect(tools.getByRole("group", { name: "Tools", exact: true })).toBeVisible()
   return tools
 }
 

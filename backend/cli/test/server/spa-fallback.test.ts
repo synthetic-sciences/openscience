@@ -47,7 +47,7 @@ describe("spa fallback", () => {
     })
   })
 
-  test("unmatched /api/* request still 404s (regression)", async () => {
+  test("unmatched /api/* request returns a structured 404", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
@@ -55,6 +55,13 @@ describe("spa fallback", () => {
         const response = await fetch("http://openscience.internal/api/also-nonexistent")
 
         expect(response.status).toBe(404)
+        expect(response.headers.get("content-type")).toContain("application/json")
+        expect(response.headers.get("cache-control")).toBe("no-store")
+        expect(await response.json()).toEqual({
+          error: "not_found",
+          detail: "API route not found",
+          path: "/api/also-nonexistent",
+        })
       },
     })
   })

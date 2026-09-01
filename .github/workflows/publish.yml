@@ -22,16 +22,17 @@ concurrency:
 permissions:
   contents: read
 
-# The default release is intentionally one pass: preflight, build, sign,
-# package, one packaged macOS smoke, then publish. Deep candidate matrices,
-# browser E2E, native ownership tests, and updater lifecycle rehearsals are
-# available in the manual/scheduled workflows and do not gate a patch.
+# Stable publication requires a successful exact-source deep release rehearsal
+# with packaged browser E2E, every native OS smoke, and every scientific
+# capability canary. The release then rebuilds, signs, packages, verifies the
+# updater lifecycle, and publishes those immutable artifacts.
 jobs:
   version:
     name: Prepare release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      actions: read
       contents: write
     steps:
       - name: Validate source
@@ -58,6 +59,58 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun
+
+      - id: rehearsal
+        name: Resolve release rehearsal source
+        run: ./tooling/repo/version.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_BUMP: ${{ inputs.bump }}
+          OPENSCIENCE_VERSION: ${{ inputs.version }}
+          OPENSCIENCE_SOURCE_PREFLIGHT: "true"
+
+      - name: Verify exact artifact-source release rehearsal
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SOURCE: ${{ steps.rehearsal.outputs.rehearsal_source }}
+        with:
+          script: |
+            if (!/^[0-9a-f]{40}$/i.test(process.env.SOURCE ?? "")) {
+              core.setFailed("The release did not resolve an immutable 40-character artifact source.")
+              return
+            }
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              ...context.repo,
+              workflow_id: "npm-test.yml",
+              event: "workflow_dispatch",
+              status: "completed",
+              head_sha: process.env.SOURCE,
+              per_page: 100,
+            })
+            const candidates = runs
+              .filter((run) => run.conclusion === "success")
+              .sort((a, b) => b.id - a.id)
+            for (const run of candidates) {
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                ...context.repo,
+                run_id: run.id,
+                filter: "latest",
+                per_page: 100,
+              })
+              const passed = jobs.filter((job) => job.conclusion === "success")
+              const names = new Set(passed.map((job) => job.name))
+              const exact = ["publish-test", "packaged-e2e", "musl-baseline-smoke", "promote-test"]
+              const os = passed.filter((job) => job.name.startsWith("os-smoke (")).length
+              const science = passed.filter((job) => job.name.startsWith("scientific capability canary (")).length
+              if (exact.every((name) => names.has(name)) && os === 4 && science === 3) {
+                core.info(`Verified artifact-source release rehearsal ${run.html_url}`)
+                return
+              }
+            }
+            core.setFailed(
+              `No successful fully gated npm-test.yml rehearsal exists for artifact source ${process.env.SOURCE}. ` +
+                "Run it from main with packaged E2E, OS smoke, and scientific canary enabled.",
+            )
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -104,6 +157,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OPENSCIENCE_BUMP: ${{ inputs.bump }}
           OPENSCIENCE_VERSION: ${{ inputs.version }}
+          OPENSCIENCE_EXPECTED_ARTIFACT_SOURCE: ${{ steps.rehearsal.outputs.rehearsal_source }}
 
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -256,6 +310,7 @@ jobs:
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
         run: |
+          # shellcheck disable=SC2016
           bun -e '
             const lines = (await Bun.file("backend/cli/dist/checksums.txt").text()).trim().split(/\r?\n/);
             if (lines.length !== 11 || lines.some(line => !/^[0-9a-f]{64}  openscience-[a-z0-9-]+\.(zip|tar\.gz)$/.test(line))) throw new Error("Invalid signed CLI checksum manifest");

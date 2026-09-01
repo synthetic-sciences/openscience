@@ -2,7 +2,7 @@ import { expect, test } from "./fixtures"
 
 test.use({ hasTouch: true })
 
-test("keeps the composer and Research menu contained at release viewports", async ({ page, openSession }) => {
+test("keeps the composer and Tools menu contained at release viewports", async ({ page, openSession }) => {
   await openSession("e2e responsive composer")
 
   const sizes = [
@@ -22,7 +22,7 @@ test("keeps the composer and Research menu contained at release viewports", asyn
     await expect(composer).toBeVisible()
     await research.click()
 
-    const menu = composer.getByRole("group", { name: "Research tools", exact: true })
+    const menu = composer.getByRole("group", { name: "Tools", exact: true })
     await expect(menu).toBeVisible()
     const geometry = await composer.evaluate((form, size) => {
       const box = (selector: string) => {

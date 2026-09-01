@@ -6,17 +6,13 @@ test.skip(
   "requires the deterministic model supplied by test:e2e:local (or the E2E CI harness)",
 )
 
-test("model speed toggles through Research tools and reaches the prompt request", async ({
-  page,
-  sdk,
-  gotoSession,
-}) => {
+test("model speed toggles through model options and reaches the prompt request", async ({ page, sdk, gotoSession }) => {
   await gotoSession()
 
   // Speed and thinking effort are independent. Both stay available in the
   // compact model-options popover without opening the full model catalog.
   await expect(modelRowValue(page, "speed")).resolves.toBe("Standard")
-  await expect(modelRowValue(page, "effort")).resolves.toBe("Standard")
+  await expect(modelRowValue(page, "effort")).resolves.toBe("Provider default")
 
   const send = async (tier?: string) => {
     const request = page.waitForRequest((request) => {

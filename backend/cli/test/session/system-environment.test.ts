@@ -4,22 +4,17 @@ import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { SystemPrompt } from "../../src/session/system"
 import { tmpdir } from "../fixture/fixture"
-import { Config } from "../../src/config/config"
+import { ProjectAccess } from "../../src/project/access"
 
 describe("session environment prompt", () => {
   test("shows connected folders and tells the agent to work in place", async () => {
     await using project = await tmpdir()
     await using source = await tmpdir()
-    const sandbox = await Config.trustedSandbox()
-    await Config.setSandbox({ enabled: false })
-    await using restore = {
-      async [Symbol.asyncDispose]() {
-        await Config.setSandbox(sandbox)
-      },
-    }
     await Instance.provide({
       directory: project.path,
       fn: async () => {
+        const access = await ProjectAccess.status(Instance.project)
+        await ProjectAccess.update(Instance.project, { mode: "full", root: access.root })
         const session = await Session.create({ title: "connected source" })
         await SessionFilesystem.grant({
           sessionID: session.id,

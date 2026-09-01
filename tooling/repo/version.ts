@@ -6,6 +6,52 @@ import { buildNotes, getLatestRelease } from "./changelog"
 
 const output = [`version=${Script.version}`]
 
+async function tagCommit(tag: string) {
+  const ref = await $`git show-ref --verify --quiet refs/tags/${tag}`.quiet().nothrow()
+  if (ref.exitCode !== 0) return
+  const commit = await $`git rev-parse --verify refs/tags/${tag}^{commit}`.quiet().nothrow()
+  if (commit.exitCode !== 0) throw new Error(`Existing tag ${tag} does not resolve to a commit`)
+  return commit.stdout.toString().trim()
+}
+
+if (process.env.OPENSCIENCE_SOURCE_PREFLIGHT === "true") {
+  if (Script.preview) throw new Error("Production release source preflight cannot run in preview mode")
+  const checkout = await $`git rev-parse HEAD`.text().then((value) => value.trim())
+  if (!/^[0-9a-f]{40}$/i.test(checkout)) throw new Error(`Could not resolve the release checkout: ${checkout}`)
+  if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== checkout) {
+    throw new Error(`Release checkout mismatch: GITHUB_SHA is ${process.env.GITHUB_SHA}, but HEAD is ${checkout}`)
+  }
+  const tag = `v${Script.version}`
+  const lookup = await $`gh release view ${tag} --json tagName,isDraft,body`.quiet().nothrow()
+  const source = await (async () => {
+    if (lookup.exitCode !== 0) {
+      const detail = lookup.stderr.toString()
+      if (!/release not found/i.test(detail)) throw new Error(`Could not inspect ${tag}: ${detail.trim()}`)
+      const tagged = await tagCommit(tag)
+      if (tagged) {
+        throw new Error(`${tag} already exists at ${tagged} without a GitHub release; refusing to create a draft`)
+      }
+      return checkout
+    }
+    const release = JSON.parse(lookup.stdout.toString()) as {
+      isDraft: boolean
+      tagName: string
+      body: string
+    }
+    if (!release.isDraft) throw new Error(`${tag} is already public; refusing to resume a completed release`)
+    if (release.tagName !== tag)
+      throw new Error(`Existing release tag mismatch: expected ${tag}, received ${release.tagName}`)
+    const marker = release.body.match(/<!-- openscience-release-source:([0-9a-f]{40}) -->/i)?.[1]
+    if (!marker) throw new Error(`Draft release ${tag} is missing its immutable artifact-source marker`)
+    const exists = await $`git cat-file -e ${marker}^{commit}`.quiet().nothrow()
+    if (exists.exitCode !== 0) throw new Error(`Draft release artifact source ${marker} is not present in the checkout`)
+    return marker
+  })()
+  output.push(`rehearsal_source=${source}`)
+  if (process.env.GITHUB_OUTPUT) await Bun.write(process.env.GITHUB_OUTPUT, output.join("\n"))
+  process.exit(0)
+}
+
 if (!Script.preview) {
   let body = "Initial release"
   try {
@@ -44,12 +90,15 @@ if (!Script.preview) {
     }
     const detail = lookup.stderr.toString()
     if (!/release not found/i.test(detail)) throw new Error(`Could not inspect ${tag}: ${detail.trim()}`)
+    const tagged = await tagCommit(tag)
+    if (tagged) {
+      throw new Error(`${tag} already exists at ${tagged} without a GitHub release; refusing to create a draft`)
+    }
     await $`gh release create ${tag} -d --target ${checkout} --title ${tag} --notes-file ${file}`
     return await $`gh release view ${tag} --json id,tagName,isDraft,targetCommitish,body`.json()
   })()
 
-  const tagCommit = await $`git rev-parse --verify refs/tags/${tag}^{commit}`.quiet().nothrow()
-  const tagged = tagCommit.exitCode === 0 ? tagCommit.stdout.toString().trim() : undefined
+  const tagged = await tagCommit(tag)
   const target = release.targetCommitish
   const targetIsSha = /^[0-9a-f]{40}$/i.test(target)
   const source = tagged ?? (targetIsSha ? target : undefined)
@@ -63,6 +112,10 @@ if (!Script.preview) {
   const marker = release.body.match(/<!-- openscience-release-source:([0-9a-f]{40}) -->/i)?.[1]
   if (!marker) throw new Error(`Draft release ${tag} is missing its immutable artifact-source marker`)
   const artifactSource = marker
+  const expected = process.env.OPENSCIENCE_EXPECTED_ARTIFACT_SOURCE?.trim()
+  if (expected && artifactSource !== expected) {
+    throw new Error(`Release artifact source changed after rehearsal: expected ${expected}, received ${artifactSource}`)
+  }
   const artifactSourceExists = await $`git cat-file -e ${artifactSource}^{commit}`.quiet().nothrow()
   if (artifactSourceExists.exitCode !== 0) {
     throw new Error(`Draft release artifact source ${artifactSource} is not present in the checkout`)

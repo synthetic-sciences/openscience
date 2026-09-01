@@ -219,12 +219,12 @@ test("recognizes Atlas-era adapters and preserves a version-only Cursor hook fil
   }
 })
 
-test("runs the retirement migration before the account gate", async () => {
+test("runs the retirement migration before constructing the command parser", async () => {
   const source = await Bun.file(path.join(import.meta.dir, "../../src/index.ts")).text()
   const cleanup = source.indexOf("await purgeRetiredAtlasAgentInstall(Global.Path.home)")
-  const gate = source.indexOf("requiresOpenScienceAccount(command")
+  const parser = source.indexOf("const cli = yargs(")
   expect(cleanup).toBeGreaterThan(-1)
-  expect(gate).toBeGreaterThan(cleanup)
+  expect(parser).toBeGreaterThan(cleanup)
 })
 
 test("version and help invocations retire managed instructions before yargs exits", async () => {

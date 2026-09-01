@@ -49,9 +49,7 @@ describe("sessionErrorText", () => {
           responseBody: '{"error":"insufficient_balance","required_cents":374,"available_cents":258}',
         },
       }),
-    ).toBe(
-      "The connected provider account needs $3.74 for this step; $2.58 is available.",
-    )
+    ).toBe("The connected provider account needs $3.74 for this step; $2.58 is available.")
   })
 
   test("preserves ordinary provider errors", () => {
