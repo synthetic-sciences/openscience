@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import type { MessageV2 } from "./message-v2"
 
 export namespace SessionLoopState {
-  export type Continuation = "output" | "contract" | "compaction" | "task"
+  export type Continuation = "output" | "contract" | "compaction" | "task" | "context"
 
   export type ContractMarker = {
     progress: string
@@ -15,6 +15,7 @@ export namespace SessionLoopState {
     outputContinuations: number
     contractContinuations: number
     overflowCompactions: number
+    preflightCompactions: number
   }
 
   export type PendingCompaction = {
@@ -90,7 +91,8 @@ export namespace SessionLoopState {
    * normal task on the current research agent; no reviewer profile or writable
    * review workflow is reintroduced. */
   function compatibleContinuation(value: unknown): Continuation | undefined {
-    if (value === "output" || value === "contract" || value === "compaction" || value === "task") return value
+    if (value === "output" || value === "contract" || value === "compaction" || value === "task" || value === "context")
+      return value
     if (value === "review" || value === "review-summary") return "task"
   }
 
@@ -271,6 +273,7 @@ export namespace SessionLoopState {
         return kinds.reduce<Info & { durableStep?: number }>((next, value) => {
           if (value === "output") return { ...next, outputContinuations: next.outputContinuations + 1 }
           if (value === "contract") return { ...next, contractContinuations: next.contractContinuations + 1 }
+          if (value === "context") return { ...next, preflightCompactions: next.preflightCompactions + 1 }
           return next
         }, state)
       },
@@ -280,6 +283,7 @@ export namespace SessionLoopState {
         outputContinuations: 0,
         contractContinuations: 0,
         overflowCompactions: 0,
+        preflightCompactions: 0,
       },
     )
     return {
@@ -288,6 +292,7 @@ export namespace SessionLoopState {
       outputContinuations: state.outputContinuations,
       contractContinuations: state.contractContinuations,
       overflowCompactions: state.overflowCompactions,
+      preflightCompactions: state.preflightCompactions,
     }
   }
 
@@ -348,6 +353,17 @@ export namespace SessionLoopState {
     if (!input.unanswered || input.assistant?.finish !== "compact") return "none"
     if (input.assistant.summary === true || input.attempts > 1) return "fail"
     return "compact"
+  }
+
+  /** A pre-flight rejection ("the current turn alone is too large") records a
+   * terminal error reply, which makes that turn answered and therefore no
+   * longer protected from compaction. One automatic retry via a synthetic
+   * continuation lets that now-compactable bulk get reclaimed; a second
+   * rejection in the same epoch means the turn's own content doesn't fit even
+   * after everything else has been compacted away, and needs a real user
+   * decision instead of looping forever. */
+  export function preflightRecovery(input: { attempts: number }): "none" | "compact" {
+    return input.attempts > 0 ? "none" : "compact"
   }
 
   export function terminalError(input: { user: MessageV2.User; assistant?: MessageV2.Assistant }) {

@@ -748,6 +748,14 @@ export namespace SessionPrompt {
     // Reset on any non-overflow result; a second overflow means the pending
     // message itself is too large to ever fit.
     let overflowCompactions = recovered.overflowCompactions
+    // Consecutive pre-flight "current turn alone is too large" rejections.
+    // Capped at one automatic retry: the first rejection compacts (via a
+    // synthetic continuation, since the failed turn's own error reply makes it
+    // no longer "unanswered" and therefore no longer protected from
+    // compaction) and retries; a second rejection for the same epoch means
+    // the turn's own content doesn't fit even after everything else has been
+    // compacted away, and requires a real user decision instead of looping.
+    let preflightCompactions = recovered.preflightCompactions
     // Compact once, then don't compact again until context drops back under the
     // threshold. Prevents an infinite compaction loop when fixed system+tool+
     // summary overhead alone already exceeds the 0.75 threshold.
@@ -827,6 +835,7 @@ export namespace SessionPrompt {
         epoch = current
         step = 0
         overflowCompactions = 0
+        preflightCompactions = 0
         outputContinuations = 0
         compactionArmed = true
         SessionCompaction.resetBreaker(sessionID)
@@ -1509,6 +1518,22 @@ export namespace SessionPrompt {
         await failTooLarge(
           `This message cannot fit in ${window.name}'s context window: the newest request plus required instructions and tool schemas is estimated at ${preflight.newest.toLocaleString()} tokens, above the safe input budget of ${preflight.hard.toLocaleString()}. Shorten or split the request, remove large attachments, or choose a model with a larger context window. No provider request was sent.`,
         )
+        // The error reply just recorded makes this turn terminal (answered,
+        // even though it failed), so it's no longer protected from compaction
+        // on the next attempt. One automatic retry via a synthetic
+        // continuation lets that now-compactable bulk get reclaimed instead
+        // of leaving the session stuck until a human notices and sends
+        // anything at all to unstick it (this used to require exactly that).
+        if (SessionLoopState.preflightRecovery({ attempts: preflightCompactions }) === "compact") {
+          preflightCompactions++
+          await enqueue({
+            user: lastUser,
+            kind: "context",
+            epoch: turn,
+            text: "The previous request did not fit in the context window and was not sent. Earlier history has been compacted automatically to make room — continue from the existing work without repeating it.",
+          })
+          continue
+        }
         break
       }
       if (preflight.total > preflight.hard && config.compaction?.auto === false) {

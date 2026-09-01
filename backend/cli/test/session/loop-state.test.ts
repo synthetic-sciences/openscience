@@ -122,6 +122,7 @@ describe("session loop restart state", () => {
       outputContinuations: 0,
       contractContinuations: 0,
       overflowCompactions: 0,
+      preflightCompactions: 0,
     })
   })
 
@@ -233,6 +234,7 @@ describe("session loop restart state", () => {
       outputContinuations: 0,
       contractContinuations: 0,
       overflowCompactions: 0,
+      preflightCompactions: 0,
     })
 
     const manual = user("compact", [
@@ -475,6 +477,25 @@ describe("session loop restart state", () => {
     expect(SessionLoopState.overflowRecovery({ assistant: normal, unanswered: true, attempts: 2 })).toBe("fail")
     expect(SessionLoopState.overflowRecovery({ assistant: summary, unanswered: true, attempts: 1 })).toBe("fail")
     expect(SessionLoopState.overflowRecovery({ assistant: normal, unanswered: false, attempts: 1 })).toBe("none")
+  })
+
+  test("retries a pre-flight context-window rejection exactly once, then stops", () => {
+    // Regression for a real overnight stall: "the current turn alone is too
+    // large" hard-failed with no retry, leaving the session stuck until a
+    // human noticed and sent anything at all (e.g. "resume") to unstick it.
+    expect(SessionLoopState.preflightRecovery({ attempts: 0 })).toBe("compact")
+    expect(SessionLoopState.preflightRecovery({ attempts: 1 })).toBe("none")
+    expect(SessionLoopState.preflightRecovery({ attempts: 2 })).toBe("none")
+  })
+
+  test("restores preflightCompactions from a synthetic context continuation, resumable after reload", () => {
+    const history = [
+      user("u1", [text("u1", "run the long pipeline")]),
+      assistant("a1", "u1", "stop"),
+      user("c1", [text("c1", "continue", { synthetic: true, kind: "context" })], "context"),
+    ]
+    const reloaded = JSON.parse(JSON.stringify(history)) as MessageV2.WithParts[]
+    expect(SessionLoopState.restore(reloaded)).toMatchObject({ preflightCompactions: 1 })
   })
 
   test("recognizes pre-marker contract continuations from existing sessions", () => {

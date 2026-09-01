@@ -398,7 +398,7 @@ export namespace MessageV2 {
           // Legacy reviewer continuations still parse so 2.x session archives
           // remain readable; SessionLoopState normalizes both to ordinary task
           // continuations and no reviewer workflow is launched.
-          kind: z.enum(["output", "contract", "review", "review-summary", "compaction", "task"]),
+          kind: z.enum(["output", "contract", "review", "review-summary", "compaction", "task", "context"]),
           text: z.string(),
           epoch: z.string(),
           transaction: z.string(),
