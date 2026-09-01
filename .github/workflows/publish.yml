@@ -222,7 +222,7 @@ jobs:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-signed-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
+          key: cli-signed-jit-v1-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
       - name: Restore unsigned build
         if: steps.signed.outputs.cache-hit != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -254,7 +254,7 @@ jobs:
           binaries=(backend/cli/dist/@synsci/openscience-darwin-*/bin/openscience)
           [[ ${#binaries[@]} -eq 3 ]] || { echo "::error::Expected three macOS binaries"; exit 1; }
           for binary in "${binaries[@]}"; do
-            codesign --force --options runtime --timestamp --identifier ai.syntheticsciences.openscience --sign "$identity" "$binary"
+            codesign --force --options runtime --timestamp --identifier ai.syntheticsciences.openscience --entitlements frontend/desktop/build/entitlements.mac.plist --sign "$identity" "$binary"
             codesign --verify --strict --verbose=2 "$binary"
             details="$(codesign -dv --verbose=4 "$binary" 2>&1)"
             grep -Fxq 'Identifier=ai.syntheticsciences.openscience' <<<"$details"
@@ -290,6 +290,28 @@ jobs:
           while IFS= read -r archive; do
             printf '%s  %s\n' "$(shasum -a 256 "$archive" | awk '{print $1}')" "$(basename "$archive")" >> backend/cli/dist/checksums.txt
           done < <(find backend/cli/dist -maxdepth 1 -type f \( -name 'openscience-*.zip' -o -name 'openscience-*.tar.gz' \) | sort)
+      - name: Verify standalone macOS runtime signatures
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          binaries=(backend/cli/dist/@synsci/openscience-darwin-*/bin/openscience)
+          [[ ${#binaries[@]} -eq 3 ]] || { echo "::error::Expected three macOS binaries"; exit 1; }
+          for binary in "${binaries[@]}"; do
+            codesign --verify --strict --verbose=2 "$binary"
+            details="$(codesign -dv --verbose=4 "$binary" 2>&1)"
+            grep -Fxq 'Identifier=ai.syntheticsciences.openscience' <<<"$details"
+            grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details"
+            for key in \
+              com.apple.security.cs.allow-jit \
+              com.apple.security.cs.allow-unsigned-executable-memory \
+              com.apple.security.cs.disable-library-validation; do
+              keypath="${key//./\\.}"
+              value="$(codesign -d --entitlements :- "$binary" 2>/dev/null | /usr/bin/plutil -extract "$keypath" raw -o - -)"
+              [[ "$value" == "true" ]] || { echo "::error::$binary is missing $key"; exit 1; }
+            done
+          done
       - name: Save signed build
         if: steps.signed.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -297,7 +319,7 @@ jobs:
           path: |
             backend/cli/dist
             frontend/workspace/dist/version.json
-          key: cli-signed-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
+          key: cli-signed-jit-v1-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
       - name: Upload native CLI assets
         run: ./tooling/repo/release-assets.ts backend/cli/dist
         env:
@@ -338,7 +360,7 @@ jobs:
             gh release edit "$OPENSCIENCE_TAG" --notes-file "$notes"
           fi
     outputs:
-      cache_key: cli-signed-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
+      cache_key: cli-signed-jit-v1-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
       sidecar_manifest: ${{ steps.sidecars.outputs.manifest }}
 
   prepare-npm:
@@ -380,7 +402,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .release/npm/${{ needs.version.outputs.version }}
-          key: npm-release-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
+          key: npm-release-jit-v1-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
       - name: Pack immutable npm artifacts
         if: steps.cache.outputs.cache-hit != 'true'
         run: ./tooling/repo/prepare-npm.ts
@@ -400,7 +422,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .release/npm/${{ needs.version.outputs.version }}
-          key: npm-release-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
+          key: npm-release-jit-v1-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
 
       # npm's registry visibility wait overlaps desktop packaging. This phase
       # never promotes latest or makes the draft GitHub release public.
@@ -589,7 +611,33 @@ jobs:
             details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DESKTOP_SIDECAR" 2>&1)"
             grep -Fxq 'Identifier=ai.syntheticsciences.openscience' <<<"$details"
             grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details"
+            for key in \
+              com.apple.security.cs.allow-jit \
+              com.apple.security.cs.allow-unsigned-executable-memory \
+              com.apple.security.cs.disable-library-validation; do
+              keypath="${key//./\\.}"
+              value="$(codesign -d --entitlements :- "$OPENSCIENCE_DESKTOP_SIDECAR" 2>/dev/null | /usr/bin/plutil -extract "$keypath" raw -o - -)"
+              [[ "$value" == "true" ]] || { echo "::error::$OPENSCIENCE_DESKTOP_SIDECAR is missing $key"; exit 1; }
+            done
           fi
+      - name: Smoke native macOS desktop sidecar
+        if: steps.existing.outputs.found != 'true' && matrix.signing == 'mac'
+        shell: bash
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ matrix.sidecar }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const { execFileSync } = require("node:child_process")
+            const value = execFileSync(process.env.OPENSCIENCE_DESKTOP_SIDECAR, ["--version"], {
+              encoding: "utf8",
+              timeout: 15_000,
+            }).trim()
+            if (value !== process.env.OPENSCIENCE_VERSION) {
+              throw new Error(`Expected OpenScience ${process.env.OPENSCIENCE_VERSION}, received ${value}`)
+            }
+          '
       - name: Detect Windows signing
         id: windows
         if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows'
@@ -736,7 +784,7 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .release/npm/${{ needs.version.outputs.version }}
-          key: npm-release-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
+          key: npm-release-jit-v1-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
           fail-on-cache-miss: true
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

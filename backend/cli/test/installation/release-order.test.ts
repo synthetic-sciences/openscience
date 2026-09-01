@@ -95,13 +95,32 @@ test("a stale release tag cannot create or preflight a draft", async () => {
   expect(await Bun.file(log).text()).not.toContain("release create")
 })
 
-test("stable macOS artifacts remain signed, notarized, stapled, and smoked", async () => {
+test("stable macOS artifacts remain entitled, signed, notarized, stapled, and smoked", async () => {
   const workflow = await read(".github/workflows/publish.yml")
+  const entitlements = await read("frontend/desktop/build/entitlements.mac.plist")
 
   expect(workflow).toContain("runner: macos-15")
   expect(workflow).toContain("runner: macos-15-intel")
   expect(workflow).toContain("Apple-Actions/import-codesign-certs")
   expect(workflow).toContain("codesign --force --options runtime --timestamp")
+  expect(workflow).toContain("--entitlements frontend/desktop/build/entitlements.mac.plist")
+  expect(workflow).toContain("codesign -d --entitlements :-")
+  expect(workflow).toContain("name: Smoke native macOS desktop sidecar")
+  expect(workflow).toContain('execFileSync(process.env.OPENSCIENCE_DESKTOP_SIDECAR, ["--version"]')
+  expect(workflow).toContain("timeout: 15_000")
+  const smoke = workflow.slice(
+    workflow.indexOf("- name: Smoke native macOS desktop sidecar"),
+    workflow.indexOf("- name: Detect Windows signing"),
+  )
+  expect(smoke).not.toContain("GH_TOKEN")
+  for (const key of [
+    "com.apple.security.cs.allow-jit",
+    "com.apple.security.cs.allow-unsigned-executable-memory",
+    "com.apple.security.cs.disable-library-validation",
+  ]) {
+    expect(workflow).toContain(key)
+    expect(entitlements).toContain(`<key>${key}</key>\n  <true/>`)
+  }
   expect(workflow).toContain("xcrun notarytool submit")
   expect(workflow).toContain("xcrun stapler staple")
   expect(workflow).toContain("spctl -a -t open")
@@ -119,7 +138,10 @@ test("release caches and resumed mac assets are bound and reverified", async () 
     "key: cli-build-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}",
   )
   expect(workflow).toContain(
-    "key: npm-release-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}",
+    "key: cli-signed-jit-v1-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}",
+  )
+  expect(workflow).toContain(
+    "key: npm-release-jit-v1-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}",
   )
   expect(workflow).toContain("Verify resumed macOS assets")
   expect(workflow).toContain("TeamIdentifier=$APPLE_TEAM_ID")

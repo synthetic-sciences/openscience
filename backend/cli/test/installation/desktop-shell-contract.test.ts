@@ -13,6 +13,22 @@ test("declares UTF-8 for every inline desktop document", async () => {
   expect(source.match(/data:text\/html;charset=utf-8,/g)).toHaveLength(3)
 })
 
+test("desktop sidecar inherits the terminal's OpenScience root selectors unchanged", async () => {
+  const source = await Bun.file(new URL("../../../../frontend/desktop/src/main.mjs", import.meta.url)).text()
+  const begin = source.indexOf("async function start()")
+  const end = source.indexOf("function stop()")
+
+  expect(begin).toBeGreaterThan(-1)
+  expect(end).toBeGreaterThan(begin)
+  const start = source.slice(begin, end)
+
+  expect(start).toContain("...process.env")
+  expect(start).toContain("cwd: workspace")
+  for (const key of ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "OPENSCIENCE_DATA_DIR", "OPENSCIENCE_CONFIG_DIR"]) {
+    expect(start).not.toContain(`${key}:`)
+  }
+})
+
 test("wires the packaged macOS shell to the authenticated desktop updater", async () => {
   const source = await Bun.file(new URL("../../../../frontend/desktop/src/main.mjs", import.meta.url)).text()
   const updater = await Bun.file(new URL("../../../../frontend/desktop/src/updater.mjs", import.meta.url)).text()
