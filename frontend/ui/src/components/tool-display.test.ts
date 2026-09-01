@@ -49,9 +49,7 @@ describe("sessionErrorText", () => {
           responseBody: '{"error":"insufficient_balance","required_cents":374,"available_cents":258}',
         },
       }),
-    ).toBe(
-      "The connected provider account needs $3.74 for this step; $2.58 is available.",
-    )
+    ).toBe("The connected provider account needs $3.74 for this step; $2.58 is available.")
   })
 
   test("preserves ordinary provider errors", () => {
@@ -255,6 +253,18 @@ describe("provider reasoning presentation", () => {
     expect(reasoningDisplayText("**Inspecting assay quality**\nThe substantive analysis remains visible.")).toBe(
       "The substantive analysis remains visible.",
     )
+  })
+
+  test("keeps ordinary mid-sentence bold emphasis from a non-bridged provider", () => {
+    // Regression: a direct (non-OpenRouter) provider's reasoning can contain
+    // completely ordinary inline emphasis, preceded by a space like any real
+    // bold text - this must never be deleted just because it matches the
+    // shape of a concatenated OpenRouter phase label. The distinguishing
+    // signal is whitespace before the `**`, which OpenRouter's concatenated
+    // headers never have (they touch the previous phase directly).
+    const text =
+      "Let me also make sure about **featureCounts GTF requirement**: featureCounts works best with a GFF/GTF that has gene/transcript features."
+    expect(reasoningDisplayText(text)).toBe(text)
   })
 })
 

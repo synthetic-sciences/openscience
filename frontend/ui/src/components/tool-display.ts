@@ -27,7 +27,13 @@ export function stripRedactedReasoning(text: string): string {
   return visible.trim() ? visible : ""
 }
 
-const providerReasoningPhase = /\*\*([^*\n]+)\*\*(?:\r?\n[ \t]*)*/g
+// Only matches a bold span that isn't preceded by whitespace (i.e. it's at
+// the very start of the text, or directly touching the previous phase's
+// closing punctuation with no separator — OpenRouter's actual concatenation
+// shape, "done.**Next**"). Ordinary inline emphasis in a model's own prose
+// always has a space before it ("...make sure about **X**: ...") and must
+// never be silently deleted just because it happens to be bold.
+const providerReasoningPhase = /(?:^|(?<=\S))\*\*([^*\n]+)\*\*(?:\r?\n[ \t]*)*/g
 const providerStatusOnly =
   /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing)\b[^.!?]*$/i
 
