@@ -465,10 +465,16 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       if (summary.info.role !== "assistant" || !summary.info.tailStartId) return true
       return message.info.id < summary.info.tailStartId
     }
-    const start = messages.findIndex((message, index) => {
+    // Everything through the newest terminal or compacted user turn is closed
+    // history. Starting from the first still-open user after that boundary
+    // avoids pinning the tail to an old request that a later retry superseded.
+    const boundary = messages.findLastIndex((message, index) => {
       if (index > current || message.info.role !== "user") return false
-      return !answered.has(message.info.id) && !compacted(message)
+      return answered.has(message.info.id) || compacted(message)
     })
+    const start = messages.findIndex(
+      (message, index) => index > boundary && index <= current && message.info.role === "user",
+    )
     if (start < 0) return []
     return messages.slice(start)
   }
@@ -511,7 +517,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     const current = messages[turnStarts.at(-1)!].info.id
     const protectedID = protectedContext(messages, current)[0]?.info.id
     const protectedStart = protectedID ? messages.findIndex((message) => message.info.id === protectedID) : -1
-    if (protectedStart > 0) cut = Math.min(cut, protectedStart)
+    if (protectedStart >= 0) cut = Math.min(cut, protectedStart)
     if (cut <= 0 || cut >= messages.length) return {} // tail covers everything / nothing kept
     return { tailStartId: messages[cut].info.id }
   }
@@ -718,6 +724,12 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       focus: z.string().optional(),
       handoffFile: z.string().optional(),
       trigger: z.enum(["proactive", "overflow", "manual"]).optional(),
+      recovery: z
+        .object({
+          type: z.literal("preflight"),
+          continuationID: Identifier.schema("message"),
+        })
+        .optional(),
       epoch: z.string().optional(),
     }),
     async (input) => {
@@ -745,6 +757,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
           focus: input.focus,
           handoffFile: input.handoffFile,
           trigger: input.trigger,
+          recovery: input.recovery,
         },
         time: {
           created: Date.now(),

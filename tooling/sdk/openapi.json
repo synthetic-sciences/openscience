@@ -52764,7 +52764,8 @@
                       "review",
                       "review-summary",
                       "compaction",
-                      "task"
+                      "task",
+                      "context"
                     ]
                   },
                   "text": {
@@ -52775,6 +52776,10 @@
                   },
                   "transaction": {
                     "type": "string"
+                  },
+                  "routing": {
+                    "type": "string",
+                    "maxLength": 8000
                   },
                   "progress": {
                     "type": "string",
@@ -52820,6 +52825,23 @@
                       "proactive",
                       "overflow",
                       "manual"
+                    ]
+                  },
+                  "recovery": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "preflight"
+                      },
+                      "continuationID": {
+                        "type": "string",
+                        "pattern": "^msg.*"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "continuationID"
                     ]
                   },
                   "before": {
@@ -52952,6 +52974,30 @@
             },
             "required": [
               "providerID",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "data"
+        ]
+      },
+      "MessageContextWindowError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "MessageContextWindowError"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
               "message"
             ]
           }
@@ -53109,6 +53155,9 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ProviderAuthError"
+              },
+              {
+                "$ref": "#/components/schemas/MessageContextWindowError"
               },
               {
                 "$ref": "#/components/schemas/UnknownError"
@@ -55331,6 +55380,9 @@
                 "anyOf": [
                   {
                     "$ref": "#/components/schemas/ProviderAuthError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MessageContextWindowError"
                   },
                   {
                     "$ref": "#/components/schemas/UnknownError"

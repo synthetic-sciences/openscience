@@ -122,6 +122,7 @@ describe("session loop restart state", () => {
       outputContinuations: 0,
       contractContinuations: 0,
       overflowCompactions: 0,
+      preflightRecoveries: 0,
     })
   })
 
@@ -233,6 +234,7 @@ describe("session loop restart state", () => {
       outputContinuations: 0,
       contractContinuations: 0,
       overflowCompactions: 0,
+      preflightRecoveries: 0,
     })
 
     const manual = user("compact", [
@@ -475,6 +477,64 @@ describe("session loop restart state", () => {
     expect(SessionLoopState.overflowRecovery({ assistant: normal, unanswered: true, attempts: 2 })).toBe("fail")
     expect(SessionLoopState.overflowRecovery({ assistant: summary, unanswered: true, attempts: 1 })).toBe("fail")
     expect(SessionLoopState.overflowRecovery({ assistant: normal, unanswered: false, attempts: 1 })).toBe("none")
+  })
+
+  test("preflight recovery is durable and capped at one attempt", () => {
+    expect(SessionLoopState.preflightRecovery({ attempts: 0 })).toBe(true)
+    expect(SessionLoopState.preflightRecovery({ attempts: 1 })).toBe(false)
+    expect(SessionLoopState.preflightRecovery({ attempts: 2 })).toBe(false)
+
+    const recovery = user("003", [text("003", "continue", { synthetic: true, kind: "context" })], "context")
+    const reloaded = JSON.parse(JSON.stringify([user("001", [text("001", "oversized")]), recovery]))
+    expect(SessionLoopState.restore(reloaded)).toMatchObject({ preflightRecoveries: 1 })
+  })
+
+  test("repairs only a preflight error that crashed before its continuation", () => {
+    const source = user("001", [text("001", "run the genome pipeline")])
+    const error = assistant("002", "001", "")
+    if (source.info.role !== "user" || error.info.role !== "assistant") throw new Error("bad fixture")
+    error.info.error = new MessageV2.ContextWindowError({ message: "request did not fit" }).toObject()
+    expect(SessionLoopState.pendingPreflight([source, error])).toEqual({ user: source.info, epoch: source.info.id })
+
+    const recovery = user("003", [text("003", "continue", { synthetic: true, kind: "context" })], "context")
+    if (recovery.info.role !== "user" || recovery.info.internal?.type !== "continuation") throw new Error("bad fixture")
+    recovery.info.internal.epoch = source.info.id
+    recovery.info.internal.routing = "run the genome pipeline"
+    expect(SessionLoopState.routing([source, error, recovery])).toBe("run the genome pipeline")
+    expect(SessionLoopState.pendingPreflight([source, error, recovery])).toBeUndefined()
+
+    const repeated = assistant("004", "001", "")
+    if (repeated.info.role !== "assistant") throw new Error("bad fixture")
+    repeated.info.error = error.info.error
+    expect(SessionLoopState.pendingPreflight([source, error, recovery, repeated])).toBeUndefined()
+    expect(
+      SessionLoopState.pendingPreflight([source, error, user("005", [text("005", "new request")])]),
+    ).toBeUndefined()
+  })
+
+  test("preflight recovery passes its originating error through the compaction carrier only", () => {
+    const error = assistant("002", "001", "")
+    const recovery = user("003", [text("003", "continue", { synthetic: true, kind: "context" })], "context")
+    const carrier = user("004", [])
+    if (error.info.role !== "assistant" || recovery.info.role !== "user" || carrier.info.role !== "user")
+      throw new Error("bad fixture")
+    error.info.error = { name: "UnknownError", data: { message: "current turn is too large" } }
+    carrier.info.internal = {
+      type: "compaction",
+      auto: true,
+      epoch: "001",
+      transaction: carrier.info.id,
+      trigger: "proactive",
+      recovery: { type: "preflight", continuationID: recovery.info.id },
+    }
+
+    expect(SessionLoopState.terminalError({ user: recovery.info, assistant: error.info })).toBe(false)
+    expect(SessionLoopState.terminalError({ user: carrier.info, assistant: error.info })).toBe(false)
+
+    const failed = assistant("005", "001", "")
+    if (failed.info.role !== "assistant") throw new Error("bad fixture")
+    failed.info.error = error.info.error
+    expect(SessionLoopState.terminalError({ user: carrier.info, assistant: failed.info })).toBe(true)
   })
 
   test("recognizes pre-marker contract continuations from existing sessions", () => {

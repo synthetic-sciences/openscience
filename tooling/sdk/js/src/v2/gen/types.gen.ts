@@ -236,10 +236,11 @@ export type UserMessage = {
       }
     | {
         type: "continuation"
-        kind: "output" | "contract" | "review" | "review-summary" | "compaction" | "task"
+        kind: "output" | "contract" | "review" | "review-summary" | "compaction" | "task" | "context"
         text: string
         epoch: string
         transaction: string
+        routing?: string
         progress?: string
         repair?: boolean
       }
@@ -251,6 +252,10 @@ export type UserMessage = {
         focus?: string
         handoffFile?: string
         trigger?: "proactive" | "overflow" | "manual"
+        recovery?: {
+          type: "preflight"
+          continuationID: string
+        }
         before?: number
         headTokens?: number
         continuationID?: string
@@ -278,6 +283,13 @@ export type ProviderAuthError = {
   name: "ProviderAuthError"
   data: {
     providerID: string
+    message: string
+  }
+}
+
+export type MessageContextWindowError = {
+  name: "MessageContextWindowError"
+  data: {
     message: string
   }
 }
@@ -327,7 +339,13 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
+  error?:
+    | ProviderAuthError
+    | MessageContextWindowError
+    | UnknownError
+    | MessageOutputLengthError
+    | MessageAbortedError
+    | ApiError
   parentID: string
   modelID: string
   providerID: string
@@ -972,7 +990,13 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
+    error?:
+      | ProviderAuthError
+      | MessageContextWindowError
+      | UnknownError
+      | MessageOutputLengthError
+      | MessageAbortedError
+      | ApiError
   }
 }
 

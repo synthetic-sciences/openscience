@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { Identifier } from "../../src/id/id"
+import { SessionCompaction } from "../../src/session/compaction"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
 
@@ -1146,5 +1148,50 @@ describe("session.message-v2.filterCompacted — verbatim tail (P3.2)", () => {
     ]
     const out = await MessageV2.filterCompacted(streamOf(msgs))
     expect(out.map((m) => m.info.id)).toEqual(["cc", "sum", "cont"])
+  })
+
+  test("a superseded unanswered request cannot pin every later compaction tail", () => {
+    const id = () => Identifier.ascending("message")
+    const earlier = Array.from({ length: 3 }, () => [id(), id()] as const)
+    const orphan = id()
+    const retry = id()
+    const reply = id()
+    const recent = Array.from({ length: 8 }, () => [id(), id()] as const)
+    const messages = [
+      ...earlier.flatMap(([user, assistant], index) => [
+        mk(user, "user", [txt(user, `earlier request ${index}`)]),
+        mk(assistant, "assistant", [txt(assistant, `earlier reply ${index}`)], {
+          finish: "stop",
+          parentID: user,
+        }),
+      ]),
+      mk(orphan, "user", [txt(orphan, "request superseded before it received a direct reply")]),
+      mk(retry, "user", [txt(retry, "retry of the request")]),
+      mk(reply, "assistant", [txt(reply, "reply to the retry")], { finish: "stop", parentID: retry }),
+      ...recent.flatMap(([user, assistant], index) => [
+        mk(user, "user", [txt(user, `recent request ${index}`)]),
+        mk(assistant, "assistant", [txt(assistant, `recent reply ${index}`)], {
+          finish: "stop",
+          parentID: user,
+        }),
+      ]),
+    ]
+
+    const selected = SessionCompaction.selectTail(messages, {
+      tailTurns: SessionCompaction.TAIL_TURNS,
+      tailTokens: SessionCompaction.TAIL_TOKENS_MAX,
+    })
+    expect(selected.tailStartId).not.toBe(orphan)
+    expect(recent.some(([user]) => user === selected.tailStartId)).toBe(true)
+  })
+
+  test("keeps a queued unanswered span that begins at the first message", () => {
+    const first = Identifier.ascending("message")
+    const second = Identifier.ascending("message")
+    const messages = [
+      mk(first, "user", [txt(first, "first request still waiting for the same provider turn")]),
+      mk(second, "user", [txt(second, "second queued request")]),
+    ]
+    expect(SessionCompaction.selectTail(messages, { tailTurns: 1, tailTokens: 1 })).toEqual({})
   })
 })

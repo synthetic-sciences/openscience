@@ -519,6 +519,19 @@ export namespace SessionPrompt {
     return state()[sessionID]?.abort.signal
   }
 
+  const PREFLIGHT_CONTINUATION =
+    "The previous request was not sent because it exceeded the context window. Continue from its compacted record without repeating it."
+
+  function routingExcerpt(messages: MessageV2.WithParts[], id: string) {
+    const text = messages
+      .find((message) => message.info.role === "user" && message.info.id === id)
+      ?.parts.flatMap((part) => (part.type === "text" && !part.synthetic && !part.ignored ? [part.text] : []))
+      .join("\n")
+      .trim()
+    if (!text || text.length <= 8_000) return text
+    return `${text.slice(0, 3_990)}\n…\n${text.slice(-3_990)}`
+  }
+
   async function enqueue(input: {
     user: MessageV2.User
     kind: SessionLoopState.Continuation
@@ -526,6 +539,7 @@ export namespace SessionPrompt {
     epoch: string
     agent?: string
     model?: MessageV2.User["model"]
+    routing?: string
     progress?: string
     repair?: boolean
   }) {
@@ -544,6 +558,7 @@ export namespace SessionPrompt {
         text: input.text,
         epoch: input.epoch,
         transaction: id,
+        routing: input.routing,
         progress: input.progress,
         repair: input.repair,
       }),
@@ -717,6 +732,19 @@ export namespace SessionPrompt {
     return true
   }
 
+  async function recoverPreflightContinuation(messages: MessageV2.WithParts[]) {
+    const pending = SessionLoopState.pendingPreflight(messages)
+    if (!pending) return false
+    await enqueue({
+      user: pending.user,
+      kind: "context",
+      epoch: pending.epoch,
+      text: PREFLIGHT_CONTINUATION,
+      routing: routingExcerpt(messages, pending.user.id),
+    })
+    return true
+  }
+
   async function execute(sessionID: string, session: Session.Info, abort: AbortSignal) {
     const initial = await Session.messages({ sessionID })
     const incomplete = SessionLoopState.incomplete(initial)
@@ -737,7 +765,9 @@ export namespace SessionPrompt {
     const interruptedTools = await recoverInterruptedTools(taskReconciled)
     const reconciled = interruptedTools ? await Session.messages({ sessionID }) : taskReconciled
     const continued = await recoverTaskContinuation(reconciled)
-    const durable = continued ? await Session.messages({ sessionID }) : reconciled
+    const taskDurable = continued ? await Session.messages({ sessionID }) : reconciled
+    const preflight = await recoverPreflightContinuation(taskDurable)
+    const durable = preflight ? await Session.messages({ sessionID }) : taskDurable
     const recovered = SessionLoopState.restore(durable)
     SessionCompaction.restoreBreaker(sessionID, durable)
     const interrupted = SessionLoopState.pendingCompaction(durable)
@@ -748,6 +778,10 @@ export namespace SessionPrompt {
     // Reset on any non-overflow result; a second overflow means the pending
     // message itself is too large to ever fit.
     let overflowCompactions = recovered.overflowCompactions
+    // A preflight rejection gets one durable synthetic continuation. It turns
+    // the rejected active span into reducible history without requiring a
+    // person to notice the stalled session and type "resume".
+    let preflightRecoveries = recovered.preflightRecoveries
     // Compact once, then don't compact again until context drops back under the
     // threshold. Prevents an infinite compaction loop when fixed system+tool+
     // summary overhead alone already exceeds the 0.75 threshold.
@@ -827,6 +861,7 @@ export namespace SessionPrompt {
         epoch = current
         step = 0
         overflowCompactions = 0
+        preflightRecoveries = 0
         outputContinuations = 0
         compactionArmed = true
         SessionCompaction.resetBreaker(sessionID)
@@ -835,7 +870,7 @@ export namespace SessionPrompt {
       // Terminal for "input exceeds the window and compaction can't help":
       // either the summarization itself overflowed, or the input is still too
       // big after one compaction. Surface an actionable error, never loop.
-      const failTooLarge = async (message?: string) => {
+      const failTooLarge = async (message?: string, recoverable = false) => {
         // Attach the terminal error under the user's real prompt, not a synthetic
         // bookkeeping message — the compaction carrier (only a compaction marker) OR
         // the auto-resume "Continue if you have next steps" turn (only synthetic text)
@@ -847,11 +882,12 @@ export namespace SessionPrompt {
               m.info.role === "user" &&
               m.parts.some((p) => p.type !== "compaction" && !(p.type === "text" && p.synthetic)),
           )?.info as MessageV2.User | undefined) ?? user
-        const error = new NamedError.Unknown({
-          message:
-            message ??
-            "The assembled conversation still exceeds the provider's input limit after an attempt to summarize earlier history. Your conversation is preserved. Remove large attachments, choose a model with a larger input allowance, or start a new session with a short handoff.",
-        }).toObject()
+        const detail =
+          message ??
+          "The assembled conversation still exceeds the provider's input limit after an attempt to summarize earlier history. Your conversation is preserved. Remove large attachments, choose a model with a larger input allowance, or start a new session with a short handoff."
+        const error = recoverable
+          ? new MessageV2.ContextWindowError({ message: detail }).toObject()
+          : new NamedError.Unknown({ message: detail }).toObject()
         Bus.publish(Session.Event.Error, { sessionID, error })
         await Session.updateMessage({
           id: await MessageV2.nextMessageID(sessionID),
@@ -878,6 +914,10 @@ export namespace SessionPrompt {
           auto: true,
           trigger,
           epoch: turn,
+          recovery:
+            SessionLoopState.messageKind(user) === "context"
+              ? { type: "preflight", continuationID: user.id }
+              : undefined,
         })
       // Latched compaction: fire once, then not again until context drops back under
       // the threshold (re-arm happens in the reactive branch). Returns whether it fired.
@@ -1506,9 +1546,23 @@ export namespace SessionPrompt {
       })
       const config = await Config.get()
       if (preflight.newest > preflight.hard) {
+        const recoverable =
+          config.compaction?.auto !== false && SessionLoopState.preflightRecovery({ attempts: preflightRecoveries })
         await failTooLarge(
           `This message cannot fit in ${window.name}'s context window: the newest request plus required instructions and tool schemas is estimated at ${preflight.newest.toLocaleString()} tokens, above the safe input budget of ${preflight.hard.toLocaleString()}. Shorten or split the request, remove large attachments, or choose a model with a larger context window. No provider request was sent.`,
+          recoverable,
         )
+        if (recoverable) {
+          preflightRecoveries++
+          await enqueue({
+            user: lastUser,
+            kind: "context",
+            epoch: turn,
+            text: PREFLIGHT_CONTINUATION,
+            routing: routingExcerpt(msgs, lastUser.id),
+          })
+          continue
+        }
         break
       }
       if (preflight.total > preflight.hard && config.compaction?.auto === false) {
@@ -1849,14 +1903,17 @@ export namespace SessionPrompt {
       },
     })
 
-    const selectionRequest = input.messages
-      .filter((message) => message.info.role === "user")
-      .slice(-4)
-      .flatMap((message) =>
-        message.parts.flatMap((part) => (part.type === "text" && !part.synthetic && !part.ignored ? [part.text] : [])),
-      )
-      .join("\n")
-      .slice(-8_000)
+    const selectionRequest =
+      input.messages
+        .filter((message) => message.info.role === "user")
+        .slice(-4)
+        .flatMap((message) =>
+          message.parts.flatMap((part) =>
+            part.type === "text" && !part.synthetic && !part.ignored ? [part.text] : [],
+          ),
+        )
+        .join("\n")
+        .slice(-8_000) || SessionLoopState.routing(input.messages)
     const loadedCapabilities = new Set<string>()
     const activatedTools = new Set<string>()
     const currentTurn = input.messages.slice(

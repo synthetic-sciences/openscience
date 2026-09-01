@@ -55,6 +55,7 @@ export namespace MessageV2 {
   }
 
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
+  export const ContextWindowError = NamedError.create("MessageContextWindowError", z.object({ message: z.string() }))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const AuthError = NamedError.create(
     "ProviderAuthError",
@@ -398,10 +399,13 @@ export namespace MessageV2 {
           // Legacy reviewer continuations still parse so 2.x session archives
           // remain readable; SessionLoopState normalizes both to ordinary task
           // continuations and no reviewer workflow is launched.
-          kind: z.enum(["output", "contract", "review", "review-summary", "compaction", "task"]),
+          kind: z.enum(["output", "contract", "review", "review-summary", "compaction", "task", "context"]),
           text: z.string(),
           epoch: z.string(),
           transaction: z.string(),
+          /** Bounded original request text retained only for tool/capability
+           * routing after the oversized turn itself is compacted away. */
+          routing: z.string().max(8_000).optional(),
           /** Semantic research progress captured by the durable controller. */
           progress: z
             .string()
@@ -418,6 +422,14 @@ export namespace MessageV2 {
           focus: z.string().optional(),
           handoffFile: z.string().optional(),
           trigger: z.enum(["proactive", "overflow", "manual"]).optional(),
+          /** Identifies the preflight continuation whose older error this
+           * carrier is allowed to pass while it performs one bounded retry. */
+          recovery: z
+            .object({
+              type: z.literal("preflight"),
+              continuationID: Identifier.schema("message"),
+            })
+            .optional(),
           before: z.number().nonnegative().optional(),
           headTokens: z.number().nonnegative().optional(),
           continuationID: Identifier.schema("message").optional(),
@@ -467,6 +479,7 @@ export namespace MessageV2 {
     error: z
       .discriminatedUnion("name", [
         AuthError.Schema,
+        ContextWindowError.Schema,
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,
