@@ -23,6 +23,8 @@ const CATALOG_PINS = {
   ],
   moonshotai: ["kimi-k3"],
   meta: ["muse-spark-1.1"],
+  zai: ["glm-5.3-flash"],
+  zhipuai: ["glm-5.3-flash"],
   vercel: ["meta/muse-spark-1.1"],
   openrouter: [
     "anthropic/claude-opus-5",

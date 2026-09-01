@@ -45,6 +45,8 @@ const FRONTIER_MODELS = {
     "grok-4.20-multi-agent-0309",
   ],
   moonshotai: ["kimi-k3"],
+  zai: ["glm-5.3-flash"],
+  zhipuai: ["glm-5.3-flash"],
   vercel: ["meta/muse-spark-1.1"],
   openrouter: [
     "anthropic/claude-opus-5",

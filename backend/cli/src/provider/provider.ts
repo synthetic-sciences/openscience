@@ -450,6 +450,26 @@ export namespace Provider {
 
   const REMOVED_MODEL_IDS = new Set(["mistralai/mistral-small-3.2-24b-instruct"])
 
+  // A bundled or cached models.dev catalog can lag a newly released native
+  // model. Keep the official Z.AI and Zhipu routes selectable while that cache
+  // catches up; fromModelsDevProvider prefers any live catalog entry below.
+  const GLM53 = {
+    id: "glm-5.3-flash",
+    name: "GLM-5.3-Flash",
+    family: "glm",
+    release_date: "2026-08-26",
+    attachment: true,
+    reasoning: true,
+    reasoning_options: [{ type: "effort", values: ["low", "high", "max"] }],
+    temperature: true,
+    tool_call: true,
+    interleaved: { field: "reasoning_content" },
+    cost: { input: 0.075, output: 0.25, cache_read: 0.015, cache_write: 0 },
+    limit: { context: 1_000_000, output: 131_072 },
+    modalities: { input: ["text", "image", "video", "pdf"], output: ["text"] },
+    options: {},
+  } satisfies ModelsDev.Model
+
   function isRemovedModel(modelID: string) {
     const normalized = modelID.toLowerCase()
     return REMOVED_MODEL_IDS.has(normalized)
@@ -1637,6 +1657,10 @@ export namespace Provider {
   }
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
+    const models =
+      (provider.id === "zai" || provider.id === "zhipuai") && !provider.models[GLM53.id]
+        ? { ...provider.models, [GLM53.id]: GLM53 }
+        : provider.models
     return {
       id: provider.id,
       source: "custom",
@@ -1644,7 +1668,7 @@ export namespace Provider {
       env: provider.env ?? [],
       options: {},
       models: Object.fromEntries(
-        Object.entries(provider.models)
+        Object.entries(models)
           .filter(([modelID]) => !isRemovedModel(modelID))
           .map(([modelID, model]) => [modelID, fromModelsDevModel(provider, model)]),
       ),
