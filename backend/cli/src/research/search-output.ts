@@ -5,6 +5,8 @@ import { Truncate } from "../tool/truncation"
 export namespace SearchOutput {
   const warning =
     "Search output was reduced to fit the tool limit. Some result text or trailing results were omitted; use retained source URLs for complete pages."
+  const unavailable =
+    "The best-effort free search fallback returned no usable content. This is a degraded search-provider outcome, not evidence that the query has no matches or that outbound network access is blocked. Connect Firecrawl in Customize → Connectors or use a funded Ace Wallet; science_search, science_fetch, and WebFetch remain available alternatives."
   const fields = ["markdown", "content", "snippet", "description", "title"] as const
 
   function record(value: unknown): value is Record<string, unknown> {
@@ -27,6 +29,31 @@ export namespace SearchOutput {
     ).length
   }
 
+  /** Convert only the hosted provider's explicit degraded sentinel. Empty
+   * results without this exact funding/warning combination are valid search
+   * outcomes and must remain completed. Callers that re-filter cached results
+   * use format() directly so a locally emptied cache is never reclassified. */
+  export function classify(value: unknown) {
+    if (
+      !record(value) ||
+      value.status !== "completed" ||
+      value.funding !== "free_fallback" ||
+      !Array.isArray(value.results) ||
+      value.results.length !== 0 ||
+      !Array.isArray(value.warnings) ||
+      !value.warnings.includes("search_content_unavailable")
+    )
+      return
+    return {
+      ...value,
+      status: "partial" as const,
+      type: "search_unavailable" as const,
+      message: unavailable,
+      retryable: false as const,
+      alternatives: ["science_search", "science_fetch", "WebFetch"] as const,
+    }
+  }
+
   function prefix(value: string, budget: number) {
     // Binary search serialized bytes; a control character may cost six bytes.
     // Move a UTF-16 boundary back when it would split a surrogate pair.
@@ -44,7 +71,13 @@ export namespace SearchOutput {
     return slice(state.low)
   }
 
-  function fallback(value?: unknown): { output: string; resultCount: number; truncated: true; unavailable: true } {
+  function fallback(value?: unknown): {
+    output: string
+    resultCount: number
+    truncated: true
+    unavailable: true
+    stopReason: "search_output_unavailable"
+  } {
     // An oversized/unknown envelope cannot be echoed in an exception or cut in
     // half. Retain bounded recognized financial fields, never arbitrary text.
     const keys = [
@@ -83,7 +116,13 @@ export namespace SearchOutput {
       ],
     }
     recount(result, result.results)
-    return { output: JSON.stringify(result), resultCount: 0, truncated: true, unavailable: true }
+    return {
+      output: JSON.stringify(result),
+      resultCount: 0,
+      truncated: true,
+      unavailable: true,
+      stopReason: "search_output_unavailable",
+    }
   }
 
   export function format(value: unknown): {
@@ -91,6 +130,7 @@ export namespace SearchOutput {
     resultCount?: number
     truncated: boolean
     unavailable?: true
+    stopReason?: "search_output_unavailable"
   } {
     const encoded = (() => {
       try {
@@ -134,5 +174,14 @@ export namespace SearchOutput {
       if (!results.length) return fallback(data)
       results.pop()
     }
+  }
+
+  /** Format a fresh hosted-provider response after applying its dynamic
+   * availability signal. Cached responses deliberately bypass this boundary. */
+  export function provider(value: unknown) {
+    const classified = classify(value)
+    const formatted = format(classified ?? value)
+    if (!classified || formatted.unavailable) return formatted
+    return { ...formatted, unavailable: true as const, stopReason: "search_unavailable" as const }
   }
 }

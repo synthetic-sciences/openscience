@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { Global } from "../../src/global"
+import { OpenScience } from "../../src/openscience"
 import { SecretBox } from "../../src/util/secret-box"
 import { SecretFile } from "../../src/util/secret-file"
 import { ResearchSearchTool } from "../../src/tool/research-search"
@@ -93,3 +94,128 @@ for (const body of ["科学证据🧬".repeat(12_000), 'line\n"quoted"\\tab\t'.r
     }
   })
 }
+
+test("research_search exposes the hosted empty free fallback as a typed partial provider outcome", async () => {
+  const store = path.join(Global.Path.data, "credentials.json")
+  const prior = await OpenScience.getSession()
+  await Bun.write(store, "{}")
+  await OpenScience.saveSession({
+    api_key: "osk_fixture_search_fallback",
+    user_id: "user_search_fallback",
+    organization_id: "org_search_fallback",
+    workspace_locked: true,
+  })
+  const routes: string[] = []
+  const server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const url = new URL(request.url)
+      routes.push(url.pathname)
+      const headers = {
+        "OpenScience-Funding-Protocol": "1",
+        "OpenScience-Funding-Context": "organization:org_search_fallback",
+      }
+      if (url.pathname === "/api/v1/auth/status")
+        return Response.json(
+          {
+            user: { user_id: "user_search_fallback" },
+            api_key: { organization_id: "org_search_fallback", workspace_locked: true },
+            funding_context: {
+              type: "organization",
+              organization_id: "org_search_fallback",
+              locked: true,
+            },
+            organizations: [
+              {
+                organization_id: "org_search_fallback",
+                name: "Search fixture",
+                status: "active",
+                membership_status: "active",
+                funding_available: true,
+                effective_permissions: ["use_shared_wallet"],
+              },
+            ],
+          },
+          { headers },
+        )
+      expect(url.pathname).toBe("/api/v1/research/search")
+      const body = (await request.json()) as { operation_id: string }
+      return Response.json(
+        {
+          operation_id: body.operation_id,
+          status: "completed",
+          provider: "free_search",
+          funding: "free_fallback",
+          results: [],
+          warnings: ["managed_search_wallet_unavailable", "free_search_fallback", "search_content_unavailable"],
+          wallet_charge_microusd: 0,
+          provider_usage_pending: false,
+          search_details: {
+            source: "web",
+            mode: "balanced",
+            requested_limit: 8,
+            effective_limit: 8,
+            returned_count: 0,
+            content_requested: false,
+            enriched_count: 0,
+            ranking: "provider",
+            date_filter: "none",
+            domain_filter: "none",
+          },
+        },
+        { headers },
+      )
+    },
+  })
+  const original = globalThis.fetch
+  globalThis.fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], options?: Parameters<typeof fetch>[1]) => {
+      const source = new URL(String(input))
+      return original(new URL(`${source.pathname}${source.search}`, server.url), options)
+    },
+    { preconnect: original.preconnect },
+  )
+  try {
+    const tool = await ResearchSearchTool.init()
+    expect(tool.description).toContain("partial provider failure")
+    expect(tool.description).toContain("not as evidence of zero matches or blocked network access")
+    const result = await tool.execute(
+      { query: "protein research", source: "web", mode: "balanced", content: "snippets", limit: 8 },
+      {
+        sessionID: "search_fallback_fixture",
+        messageID: "msg_search_fallback",
+        callID: "call_search_fallback",
+        agent: "research",
+        abort: new AbortController().signal,
+        messages: [],
+        metadata() {},
+        async ask() {},
+      },
+    )
+    expect(JSON.parse(result.output)).toMatchObject({
+      status: "partial",
+      type: "search_unavailable",
+      funding: "free_fallback",
+      results: [],
+      wallet_charge_microusd: 0,
+      provider_usage_pending: false,
+    })
+    expect(result).toMatchObject({
+      title: "Research search unavailable",
+      metadata: {
+        creditState: "free_fallback",
+        outcome: "partial",
+        stopReason: "search_unavailable",
+        resultCount: 0,
+        truncated: false,
+      },
+    })
+    expect(routes).toEqual(["/api/v1/auth/status", "/api/v1/research/search"])
+  } finally {
+    globalThis.fetch = original
+    server.stop(true)
+    await OpenScience.clearSession()
+    if (prior) await OpenScience.saveSession(prior)
+    await Bun.write(store, "{}")
+  }
+})

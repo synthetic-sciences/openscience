@@ -84,7 +84,8 @@ export namespace SearchDedupe {
       return (
         output.type === "search_unavailable" ||
         output.type === "credits_exhausted" ||
-        output.type === "search_allowance_exhausted"
+        output.type === "search_allowance_exhausted" ||
+        SearchOutput.classify(output) !== undefined
       )
     } catch {
       return false
@@ -236,7 +237,9 @@ export namespace SearchDedupe {
       metadata: {
         ...part.state.metadata,
         ...(result ? { resultCount: result.resultCount, truncated: result.truncated } : {}),
-        ...(result?.unavailable ? { outcome: "partial", stopReason: "search_output_unavailable" } : {}),
+        ...(result?.unavailable
+          ? { outcome: "partial", stopReason: result.stopReason ?? "search_output_unavailable" }
+          : {}),
         dedupeHit: true,
         dedupeOf: {
           messageID: part.messageID,

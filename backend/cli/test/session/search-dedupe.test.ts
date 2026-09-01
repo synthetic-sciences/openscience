@@ -139,6 +139,66 @@ function completed(input: Record<string, unknown>, output: unknown, tool = "rese
   }
 }
 
+test("raw degraded free fallback is not cache-eligible while a genuine empty result stays cached", () => {
+  const input = {
+    query: "protein folding",
+    source: "web",
+    mode: "balanced",
+    limit: 4,
+    content: "snippets",
+  }
+  const unavailable = completed(input, {
+    status: "completed",
+    provider: "free_search",
+    funding: "free_fallback",
+    results: [],
+    warnings: ["free_search_fallback", "search_content_unavailable"],
+  })
+  const empty = completed(input, {
+    status: "completed",
+    provider: "free_search",
+    funding: "free_fallback",
+    results: [],
+    warnings: ["free_search_fallback"],
+  })
+
+  expect(SearchDedupe.find([{ ...message, parts: [unavailable] }], "research_search", input)).toBeUndefined()
+  expect(SearchDedupe.find([{ ...message, parts: [empty] }], "research_search", input)).toBe(empty)
+})
+
+test("cache filtering to zero never reclassifies a previously usable provider response", () => {
+  const input = {
+    query: "protein folding",
+    source: "web",
+    mode: "balanced",
+    limit: 4,
+    content: "snippets",
+    include_domains: ["allowed.example"],
+  }
+  const original = completed(input, {
+    status: "completed",
+    provider: "free_search",
+    funding: "free_fallback",
+    results: [{ url: "https://outside.example/paper", title: "Outside" }],
+    warnings: ["free_search_fallback", "search_content_unavailable"],
+    search_details: { returned_count: 1, enriched_count: 0 },
+  })
+  original.state.metadata.creditState = "free_fallback"
+  const hit = SearchDedupe.find([{ ...message, parts: [original] }], "research_search", input)
+  expect(hit).toBe(original)
+
+  const cached = SearchDedupe.reuse(hit!)
+  const output = JSON.parse(cached.output)
+  expect(output).toMatchObject({ status: "completed", funding: "free_fallback", results: [] })
+  expect(output.type).toBeUndefined()
+  expect(output.warnings).toContain("search_content_unavailable")
+  expect(output.warnings.join(" ")).toContain("outside the requested domain restrictions")
+  expect(cached.title).toBe(original.state.title)
+  expect(cached.metadata.outcome).toBeUndefined()
+  expect(cached.metadata.stopReason).toBeUndefined()
+  expect(cached.metadata.dedupeHit).toBe(true)
+})
+
 test("rechecks cached developer results without changing original accounting or provenance", () => {
   const input = {
     query: "Python documentation",

@@ -24,7 +24,82 @@ function parse(output: string) {
   return JSON.parse(output)
 }
 
+function degraded() {
+  return {
+    operation_id: "operation-free-fallback",
+    status: "completed",
+    provider: "free_search",
+    funding: "free_fallback",
+    results: [],
+    warnings: ["managed_search_wallet_unavailable", "free_search_fallback", "search_content_unavailable"],
+    wallet_charge_microusd: 0,
+    provider_usage_pending: false,
+    search_details: {
+      source: "web",
+      mode: "balanced",
+      requested_limit: 8,
+      effective_limit: 8,
+      returned_count: 0,
+      content_requested: false,
+      enriched_count: 0,
+      ranking: "provider",
+      date_filter: "none",
+      domain_filter: "none",
+    },
+  }
+}
+
 describe("structured research search output", () => {
+  test("provider boundary turns the exact empty free fallback sentinel into an actionable partial result", () => {
+    const value = degraded()
+    const before = structuredClone(value)
+    const formatted = SearchOutput.provider(value)
+    const result = parse(formatted.output)
+
+    expect(formatted).toMatchObject({
+      resultCount: 0,
+      truncated: false,
+      unavailable: true,
+      stopReason: "search_unavailable",
+    })
+    expect(result).toMatchObject({
+      operation_id: value.operation_id,
+      status: "partial",
+      type: "search_unavailable",
+      provider: "free_search",
+      funding: "free_fallback",
+      results: [],
+      warnings: value.warnings,
+      wallet_charge_microusd: 0,
+      provider_usage_pending: false,
+      search_details: value.search_details,
+      retryable: false,
+      alternatives: ["science_search", "science_fetch", "WebFetch"],
+    })
+    expect(result.message).toContain("not evidence that the query has no matches")
+    expect(result.message).toContain("outbound network access is blocked")
+    expect(value).toEqual(before)
+  })
+
+  test("shared classification leaves genuine empty results and near-miss warning shapes completed", () => {
+    const value = degraded()
+    const cases = [
+      { ...value, warnings: ["free_search_fallback"] },
+      { ...value, warnings: ["search_content_unavailable_later"] },
+      { ...value, funding: "wallet" },
+      { ...value, status: "partial" },
+      { ...value, results: [{ url: "https://example.test/source" }] },
+    ]
+    for (const item of cases) {
+      expect(SearchOutput.classify(item)).toBeUndefined()
+      expect(SearchOutput.provider(item)).toEqual({
+        output: JSON.stringify(item, null, 2),
+        resultCount: item.results.length,
+        truncated: false,
+      })
+    }
+  })
+
   test("normal payloads and their pretty JSON remain unchanged", () => {
     const value = payload("# Evidence\n\nA small page.")
     const before = structuredClone(value)
