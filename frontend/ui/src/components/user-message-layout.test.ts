@@ -38,7 +38,7 @@ describe("user message layout", () => {
   })
 
   test("keeps assistant copy reachable by focus, copied feedback, and touch", () => {
-    expect(turnSource).toContain('data-copied={copied() ? "true" : undefined}')
+    expect(turnSource).toContain('data-copied={copy.copied ? "true" : undefined}')
     expect(turnCss).toContain('[data-slot="session-turn-response"]:focus-within')
     expect(turnCss).toContain('[data-slot="session-turn-response-copy-wrapper"][data-copied="true"]')
     expect(turnCss).toContain("@media (pointer: coarse)")

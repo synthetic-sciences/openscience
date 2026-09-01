@@ -731,6 +731,7 @@ export function SessionTurn(
                         <Show when={response()}>
                           <div
                             data-slot="session-turn-response-copy-wrapper"
+                            data-copied={copy.copied ? "true" : undefined}
                             role="group"
                             aria-label="Response actions"
                           >

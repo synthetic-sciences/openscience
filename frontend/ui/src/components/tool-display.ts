@@ -27,9 +27,12 @@ export function stripRedactedReasoning(text: string): string {
   return visible.trim() ? visible : ""
 }
 
-const providerReasoningPhase = /\*\*([^*\n]+)\*\*(?:\r?\n[ \t]*)*/g
+// Provider phase headings occur at the start of a reasoning part or directly
+// after the punctuation that ended the previous phase, and occupy their own
+// line. Ordinary Markdown emphasis in prose does not have that shape.
+const providerReasoningPhase = /(^|[.!?])\*\*([^*\n]+)\*\*(?:(?:\r?\n[ \t]*)+|$)/g
 const providerStatusOnly =
-  /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing)\b[^.!?]*$/i
+  /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|choosing|simplifying)\b[^.!?]*$/i
 
 function statusOnlyReasoning(text: string) {
   const value = text.trim()
@@ -47,7 +50,9 @@ export function reasoningDisplayText(text: string): string {
   const visible = stripRedactedReasoning(text)
   if (!visible) return ""
   const readable = visible
-    .replace(providerReasoningPhase, "\n\n")
+    .replace(providerReasoningPhase, (value, prefix: string, label: string) =>
+      statusOnlyReasoning(label) ? `${prefix}\n\n` : value,
+    )
     .replace(/\n{3,}/g, "\n\n")
     .trim()
   // Some Responses-compatible providers emit the phase label as its own
@@ -61,7 +66,10 @@ export function reasoningDisplayText(text: string): string {
 export function reasoningTopic(text: string): string | undefined {
   const visible = stripRedactedReasoning(text)
   let topic: string | undefined
-  for (const match of visible.matchAll(providerReasoningPhase)) topic = match[1]?.trim() || topic
+  for (const match of visible.matchAll(providerReasoningPhase)) {
+    const label = match[2]?.trim()
+    if (label && statusOnlyReasoning(label)) topic = label
+  }
   if (topic) return topic
   return statusOnlyReasoning(visible) ? visible.trim() : undefined
 }

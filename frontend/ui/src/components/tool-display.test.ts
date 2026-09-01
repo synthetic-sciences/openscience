@@ -254,6 +254,22 @@ describe("provider reasoning presentation", () => {
       "The substantive analysis remains visible.",
     )
   })
+
+  test("preserves ordinary bold reasoning prose", () => {
+    const prose =
+      "Let me also make sure about **featureCounts GTF requirement**: featureCounts works best with a GFF/GTF."
+    expect(reasoningDisplayText(prose)).toBe(prose)
+    expect(reasoningTopic(prose)).toBeUndefined()
+    expect(reasoningDisplayText("This is (**important context**) for the result.")).toBe(
+      "This is (**important context**) for the result.",
+    )
+  })
+
+  test("does not classify arbitrary bold headings as provider phases", () => {
+    const heading = "**Feature counts requirement**\nThe explanation remains below it."
+    expect(reasoningDisplayText(heading)).toBe(heading)
+    expect(reasoningTopic(heading)).toBeUndefined()
+  })
 })
 
 describe("toolErrorDisplay", () => {
