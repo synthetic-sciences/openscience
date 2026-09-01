@@ -2,7 +2,9 @@ Run a shell command in the session workspace. Set `workdir` instead of changing 
 
 Use Bash for builds, tests, packages, Git, utilities, and scripts. Prefer file tools for reading, searching, creating, or editing files; do not write through shell redirection when a file tool fits.
 
-Use research_search or webfetch for internet retrieval, not curl or wget. Use `compute_job` action `wait` for detached compute instead of shell polling or sleep.
+Use research_search or webfetch for internet retrieval, not curl or wget.
+
+All Bash children stop when the call ends; `&`, `nohup`, `disown`, and `setsid` are not durable. When available, use `compute_job` action `start` with target `{"kind":"local"}` for durable work, then `wait`, `status`, or `logs`; never poll with Bash.
 
 Do not emit timestamp, marker, no-op, or repeated readiness commands. Before a long run, use at most one bounded preflight that checks all necessary inputs together, then launch immediately when it passes.
 

@@ -128,6 +128,43 @@ describe("tool selection", () => {
     ).toBe(true)
   })
 
+  test("surfaces durable compute for natural scientific pipeline language", () => {
+    const pipeline = {
+      agent: "research",
+      message:
+        "Download 18 SRA runs, build the STAR genome index, align the reads, and run the expression quantification pipeline.",
+    }
+    expect(ToolSelection.relevant("compute_job", pipeline)).toBe(true)
+    expect(ToolSelection.relevant("modal", pipeline)).toBe(false)
+    expect(
+      ToolSelection.relevant("compute_job", {
+        agent: "research",
+        message: "Start this long-running background job and let me check its status later.",
+      }),
+    ).toBe(true)
+    expect(
+      ToolSelection.relevant("compute_job", {
+        agent: "research",
+        message: "Fix the repository pipeline for this genomic dataset experiment.",
+      }),
+    ).toBe(false)
+    for (const message of [
+      "Use compute_job to run this.",
+      "Use compute-job for this task.",
+      "Run this in the background.",
+      "Run this long running job.",
+      "Run this overnight.",
+    ]) {
+      expect(ToolSelection.relevant("compute_job", { agent: "research", message })).toBe(true)
+    }
+    expect(
+      ToolSelection.relevant("modal", {
+        agent: "research",
+        message: "Use compute_job to run this.",
+      }),
+    ).toBe(false)
+  })
+
   test("keeps provenance recording out of the user-facing Research tool surface", () => {
     expect(
       ToolSelection.relevant("provenance_record", {

@@ -35,7 +35,7 @@ export namespace ToolSelection {
   const code =
     /\b(?:api|backend|bash|branch|bug|build|cli|code|codebase|commit|compile|endpoint|frontend|git|github|golang|java|javascript|kotlin|lint|package manager|php|pull request|python|refactor|repo|repository|ruby|rust|sdk|server|shell|source code|swift|test suite|typecheck|typescript|working tree)\b/i
   const science =
-    /\b(?:benchmark|bioinformatics|biology|cell|chemistry|clinical|data analysis|dataset|evidence|evaluation|experiment|gene|genomic|hypothesis|literature|machine learning|metric|model comparison|molecule|neural|paper|physics|protein|reproducibility|research|rna|science|scientific|simulation|statistics?|study|validation)\b/i
+    /\b(?:alignment|benchmark|bioinformatics|biology|cell|chemistry|clinical|data analysis|dataset|evidence|evaluation|experiment|gene|genom(?:e|ic)|hypothesis|literature|machine learning|metric|model comparison|molecule|neural|paper|physics|protein|reproducibility|research|rna|science|scientific|sequenc(?:e|ing)|simulation|statistics?|study|transcriptom(?:e|ic)|validation)\b/i
   const scientificCatalog =
     /\b(?:alphafold[- ]?2|biopython|matplotlib|rdkit|scipy|scikit[- ]learn|boltz[- ]?2|diffdock|evo[- ]?2|genmol|molmim|msa[- ]?search|openfold[- ]?[23]|protein[- ]?mpnn|rf[- ]?diffusion|bionemo|nvidia[- ]nim)\b/i
   const work =
@@ -199,11 +199,28 @@ export namespace ToolSelection {
       return /\b(?:diagrams?|figures?|graphics?|illustrations?|images?|posters?|schematics?|slides?|visuals?)\b/i.test(
         text,
       )
-    if (tool === "compute_job" || tool === "modal")
-      return (
-        /\b(?:cluster|compute job|gpu|modal|remote compute|slurm|pbs|h100)\b/i.test(text) ||
-        /modal-compute|protein-binder/i.test(capability)
+    const compute = /\bcompute[-_ ]job\b/i.test(text)
+    const remote =
+      /\b(?:cluster|gpu|modal|remote compute|slurm|pbs|h100)\b/i.test(text) ||
+      /modal-compute|protein-binder/i.test(capability)
+    const durable =
+      /\b(?:in the background|long[- ]running|multi[- ]hour|overnight|outlive (?:this|the) call|durable\s+(?:command|job|pipeline|process|task|work))\b/i.test(
+        text,
       )
+    const repository =
+      /\b(?:backend|branch|codebase|frontend|git|github|pull request|repo|repository|source code|test suite)\b/i.test(
+        text,
+      )
+    if (tool === "compute_job")
+      return (
+        compute ||
+        remote ||
+        durable ||
+        (scientific &&
+          !repository &&
+          /\b(?:align|batch|download|index|pipeline|process|quantif|run|train|workflow)\w*\b/i.test(text))
+      )
+    if (tool === "modal") return remote
     if (tool === "research_contract") return /\bresearch contract\b/i.test(text)
     if (todo.has(tool)) {
       // A long research prompt is not consent to add controller ceremony. A

@@ -53,6 +53,17 @@ describe("tool.bash", () => {
     expect(normalizeBashInput({})).toEqual({})
   })
 
+  test("documents process containment and the durable local job path", async () => {
+    const bash = await BashTool.init()
+    expect(bash.description).toContain("All Bash children stop when the call ends")
+    for (const escape of ["`&`", "`nohup`", "`disown`", "`setsid`"]) {
+      expect(bash.description).toContain(escape)
+    }
+    expect(bash.description).toContain("`compute_job` action `start`")
+    expect(bash.description).toContain('target `{"kind":"local"}`')
+    expect(bash.description).toContain("`wait`, `status`, or `logs`")
+  })
+
   test("basic", async () => {
     await Instance.provide({
       directory: projectRoot,
