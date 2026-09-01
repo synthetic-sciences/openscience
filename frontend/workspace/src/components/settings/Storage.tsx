@@ -125,6 +125,7 @@ export const Storage: Component = () => {
   const [editing, setEditing] = createSignal(false)
   const [target, setTarget] = createSignal("")
   const [status, setStatus] = createSignal<string>()
+  const [picker, setPicker] = createSignal<string>()
 
   let poll: ReturnType<typeof setTimeout> | undefined
   let request = 0
@@ -168,12 +169,13 @@ export const Storage: Component = () => {
     setEditing(true)
     setError(undefined)
     setStatus(undefined)
+    setPicker(undefined)
     if (!platform.openDirectoryPickerDialog) return
     const choice = await storageLocationChoice(() =>
       platform.openDirectoryPickerDialog!({ title: "Choose a new OpenScience data location", serverUrl: sdk.url }),
     )
     if (choice.kind === "error") {
-      setError(`The system folder picker could not open. ${choice.message}`)
+      setPicker(`The system folder picker could not open. ${choice.message} Enter a path manually below.`)
       return
     }
     if (choice.kind === "selected") setTarget(choice.path)
@@ -186,6 +188,7 @@ export const Storage: Component = () => {
     void load({ background: true })
     setError(undefined)
     setStatus(undefined)
+    setPicker(undefined)
     try {
       const result = await settingsApi<{ ok: true; target: string; files: number; bytes: number; warning?: string }>(
         base(),
@@ -279,6 +282,22 @@ export const Storage: Component = () => {
               </span>
               <span class="min-w-0 flex-1">{status()}</span>
             </div>
+          </Show>
+          <Show when={picker()}>
+            {(message) => (
+              <div class="settings-alert" data-tone="warning" role="status">
+                <Icon name="alert-circle" size="small" class="shrink-0 text-icon-weak-base" />
+                <span class="min-w-0 flex-1">{message()}</span>
+                <button
+                  type="button"
+                  class="settings-inline-action"
+                  disabled={busy()}
+                  onClick={() => void chooseLocation()}
+                >
+                  Try again
+                </button>
+              </div>
+            )}
           </Show>
           <Show when={usage()?.scan_error}>
             {(message) => (
@@ -433,6 +452,7 @@ export const Storage: Component = () => {
                         onClick={() => {
                           setEditing(false)
                           setTarget("")
+                          setPicker(undefined)
                         }}
                       >
                         Cancel

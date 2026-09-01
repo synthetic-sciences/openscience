@@ -42,6 +42,12 @@ describe("Storage settings recovery", () => {
         throw new Error("native bridge unavailable")
       }),
     ).resolves.toEqual({ kind: "error", message: "native bridge unavailable" })
+
+    const source = readFileSync(fileURLToPath(new URL("./Storage.tsx", import.meta.url)), "utf8")
+    expect(source).toContain("const [picker, setPicker] = createSignal<string>()")
+    expect(source).toContain("Enter a path manually below.")
+    expect(source).toContain("<Show when={picker()}>")
+    expect(source).not.toContain("setError(`The system folder picker could not open.")
   })
 
   test("describes active phases without fake percentages and offers truthful interrupted recovery", () => {
