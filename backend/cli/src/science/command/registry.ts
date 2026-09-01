@@ -65,8 +65,13 @@ export namespace CommandRuntime {
     stop: () => Promise<void>,
     options: { authorityGeneration?: string; windowsRelease?: string } = {},
   ) {
-    WindowsJobLauncher.bind(process, options.windowsRelease)
     if (!process.pid) throw new Error("Shell command started without a process id")
+    const bound = WindowsJobLauncher.bind(process, options.windowsRelease)
+    const subreaper = globalThis.process.platform === "linux" && bound && WindowsJobLauncher.isLinuxSubreaper(process)
+    if (globalThis.process.platform === "linux" && !subreaper) {
+      await stop()
+      throw new Error("Linux command was not launched behind the verified child-subreaper registration gate")
+    }
     const value: Entry = {
       ...input,
       id: `command-${crypto.randomUUID()}`,
@@ -75,7 +80,7 @@ export namespace CommandRuntime {
       started_at: Date.now(),
       process,
       stop,
-      linuxSubreaper: globalThis.process.platform === "linux" && !!options.windowsRelease,
+      linuxSubreaper: subreaper,
     }
     let completed = false
     const complete = () => {
@@ -105,6 +110,7 @@ export namespace CommandRuntime {
       sessionID: value.sessionID,
       authorityGeneration: options.authorityGeneration,
       windowsRelease: options.windowsRelease,
+      ...(value.linuxSubreaper ? { subreaper: process } : {}),
     })
     if (!registered) {
       await stop()

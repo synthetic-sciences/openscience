@@ -1,4 +1,5 @@
 import crypto from "node:crypto"
+import type { ChildProcess } from "node:child_process"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Global } from "../global"
@@ -6,6 +7,7 @@ import { DataRootBarrier } from "../global/data-root-barrier"
 import { DarwinResponsibility } from "../process/darwin-responsibility"
 import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "../process/darwin-responsibility-launcher"
 import { WindowsJob } from "../process/windows-job"
+import { WindowsJobLauncher } from "../process/windows-job-launcher"
 import { AuthorityProcessLedger } from "../project/authority-process"
 import { FileLease } from "../util/file-lease"
 
@@ -438,6 +440,7 @@ export namespace CredentialProcessLedger {
     sessionID?: string
     authorityGeneration?: string
     windowsRelease?: string
+    subreaper?: ChildProcess
   }): Promise<boolean> {
     if ((process.platform === "win32" || process.platform === "darwin") && !input.windowsRelease) {
       throw new Error(
@@ -468,6 +471,21 @@ export namespace CredentialProcessLedger {
         `Credential-bearing ${input.kind} child ${input.pid} is not its own process-group leader; refusing an unreapable spawn`,
       )
     }
+    // Existing non-command launchers publish containment through their release
+    // gate. Commands additionally prove the exact process-local handle that
+    // CommandRuntime bound to a gate minted by wrap().
+    const subreaper =
+      process.platform === "linux" &&
+      (input.kind === "command"
+        ? !!input.windowsRelease &&
+          input.subreaper?.pid === input.pid &&
+          WindowsJobLauncher.isLinuxSubreaper(input.subreaper)
+        : !!input.windowsRelease)
+    if (process.platform === "linux" && input.kind === "command" && !subreaper) {
+      throw new Error(
+        `Credential-bearing command child ${input.pid} was not launched behind the verified Linux child-subreaper registration gate`,
+      )
+    }
     // Close the capture/check window before publishing durable ownership.
     if (!(await owns(input.pid, processIdentity))) return false
     return serialized(async () => {
@@ -490,7 +508,7 @@ export namespace CredentialProcessLedger {
         pid: input.pid,
         detached: input.detached,
         ...(windowsJob ? { windows_job: windowsJob } : {}),
-        ...(process.platform === "linux" && input.windowsRelease ? { linux_subreaper: true } : {}),
+        ...(subreaper ? { linux_subreaper: true } : {}),
         identity: processIdentity,
         owner_pid: process.pid,
         created_at: new Date().toISOString(),

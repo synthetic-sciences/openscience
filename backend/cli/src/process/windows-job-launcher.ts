@@ -92,9 +92,10 @@ export namespace WindowsJobLauncher {
 
   /** Bind the trusted server-side spawn handle to a release token minted by
    * wrap(). Project argv cannot forge this process-local WeakSet brand. */
-  export function bind(process: ChildProcess, release?: string): void {
-    if (!release || !pendingLinuxLaunches.delete(release)) return
+  export function bind(process: ChildProcess, release?: string): boolean {
+    if (!release || !pendingLinuxLaunches.delete(release)) return false
     linuxSubreapers.add(process)
+    return true
   }
 
   export function isLinuxSubreaper(process: ChildProcess): boolean {

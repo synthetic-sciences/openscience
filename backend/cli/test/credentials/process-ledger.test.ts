@@ -8,53 +8,69 @@ import { WindowsJobLauncher } from "../../src/process/windows-job-launcher"
 
 const linuxTest = process.platform === "linux" ? test : test.skip
 
-async function waitText(file: string): Promise<string> {
-  for (let attempt = 0; attempt < 200; attempt++) {
-    const value = await fs.readFile(file, "utf8").catch(() => undefined)
-    if (value?.trim()) return value.trim()
-    await Bun.sleep(10)
-  }
-  throw new Error(`Timed out waiting for ${file}`)
+async function waitText(file: string, attempt = 0): Promise<string> {
+  const value = await fs.readFile(file, "utf8").catch(() => undefined)
+  if (value?.trim()) return value.trim()
+  if (attempt >= 500) throw new Error(`Timed out waiting for ${file}`)
+  await Bun.sleep(10)
+  return waitText(file, attempt + 1)
 }
 
-linuxTest("revocation reaps a same-group descendant after its recorded leader exits", async () => {
+async function waitIdentity(pid: number, attempt = 0): Promise<string> {
+  const identity = await CredentialProcessLedger.identity(pid)
+  if (identity) return identity
+  if (attempt >= 500) throw new Error(`Timed out capturing process identity for ${pid}`)
+  await Bun.sleep(10)
+  return waitIdentity(pid, attempt + 1)
+}
+
+linuxTest("legacy group revocation reaps a same-group descendant after its recorded leader exits", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-credential-descendant-"))
   const marker = path.join(root, "descendant.pid")
+  const release = path.join(root, "release")
   const projectID = `project-descendant-${crypto.randomUUID()}`
-  const id = `command-descendant-${crypto.randomUUID()}`
+  const id = `provider-descendant-${crypto.randomUUID()}`
   const leader = spawn(
     "/bin/sh",
-    ["-c", 'sleep 600 & printf "%s" "$!" > "$1"; sleep 0.2; exit 0', "credential-ledger", marker],
+    [
+      "-c",
+      'sleep 600 & printf "%s" "$!" > "$1"; while [ ! -e "$2" ]; do sleep 0.01; done; exit 0',
+      "credential-ledger",
+      marker,
+      release,
+    ],
     { detached: true, stdio: "ignore" },
   )
-  let descendantPID = 0
-  let descendantIdentity: string | undefined
+  const completion = new Promise<void>((resolve, reject) => {
+    leader.once("exit", () => resolve())
+    leader.once("error", reject)
+  })
+  const state: { pid?: number; identity?: string } = {}
   try {
     expect(
       await CredentialProcessLedger.register({
         id,
-        kind: "command",
+        kind: "provider",
         pid: leader.pid!,
         detached: true,
         projectID,
         sessionID: "session-descendant",
       }),
     ).toBe(true)
-    descendantPID = Number(await waitText(marker))
-    descendantIdentity = await CredentialProcessLedger.identity(descendantPID)
-    expect(descendantIdentity).toMatch(/^[a-f0-9]{64}$/)
-    await new Promise<void>((resolve, reject) => {
-      leader.once("exit", () => resolve())
-      leader.once("error", reject)
-    })
-    expect(await CredentialProcessLedger.owns(descendantPID, descendantIdentity)).toBe(true)
+    state.pid = Number(await waitText(marker))
+    state.identity = await waitIdentity(state.pid)
+    expect(state.identity).toMatch(/^[a-f0-9]{64}$/)
+    await Bun.write(release, "release")
+    await completion
+    expect(await CredentialProcessLedger.owns(state.pid, state.identity)).toBe(true)
 
-    expect(await CredentialProcessLedger.revoke({ kind: "command", projectID })).toBe(1)
-    expect(await CredentialProcessLedger.owns(descendantPID, descendantIdentity)).toBe(false)
+    expect(await CredentialProcessLedger.revoke({ kind: "provider", projectID })).toBe(1)
+    expect(await CredentialProcessLedger.owns(state.pid, state.identity)).toBe(false)
   } finally {
-    await CredentialProcessLedger.revoke({ kind: "command", projectID }).catch(() => undefined)
-    if (descendantPID && (await CredentialProcessLedger.owns(descendantPID, descendantIdentity))) {
-      process.kill(descendantPID, "SIGKILL")
+    await Bun.write(release, "release").catch(() => undefined)
+    await CredentialProcessLedger.revoke({ kind: "provider", projectID }).catch(() => undefined)
+    if (state.pid && (await CredentialProcessLedger.owns(state.pid, state.identity))) {
+      process.kill(state.pid, "SIGKILL")
     }
     if (leader.exitCode === null && leader.signalCode === null) leader.kill("SIGKILL")
     await fs.rm(root, { recursive: true, force: true })
@@ -77,6 +93,80 @@ linuxTest("command registration rejects a child that does not own a process grou
   } finally {
     child.kill("SIGKILL")
     await new Promise<void>((resolve) => child.once("exit", () => resolve()))
+  }
+})
+
+linuxTest("command registration rejects an unverified child-subreaper claim", async () => {
+  const id = `command-uncontained-${crypto.randomUUID()}`
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+    detached: true,
+    stdio: "ignore",
+  })
+  const completion = new Promise<void>((resolve) => {
+    child.once("exit", () => resolve())
+    child.once("error", () => resolve())
+  })
+  const identity = await waitIdentity(child.pid!)
+  try {
+    await expect(
+      CredentialProcessLedger.register({
+        id,
+        kind: "command",
+        pid: child.pid!,
+        detached: true,
+        projectID: "project-uncontained",
+        sessionID: "session-uncontained",
+        windowsRelease: path.join(os.tmpdir(), `openscience-forged-release-${crypto.randomUUID()}`),
+        subreaper: child,
+      }),
+    ).rejects.toThrow("verified Linux child-subreaper registration gate")
+  } finally {
+    await CredentialProcessLedger.revoke({ id }).catch(() => undefined)
+    if (await CredentialProcessLedger.owns(child.pid!, identity)) process.kill(-child.pid!, "SIGKILL")
+    await completion
+  }
+})
+
+linuxTest("legacy non-command release inference persists child-subreaper containment", async () => {
+  const owner = await waitIdentity(process.pid)
+  const wrapped = WindowsJobLauncher.wrap({
+    file: process.execPath,
+    args: ["-e", "setInterval(() => {}, 1000)"],
+    linuxOwner: { pid: process.pid, identity: owner },
+  })
+  if (!wrapped.release) throw new Error("Linux launcher did not mint a release gate")
+  const id = `provider-subreaper-${crypto.randomUUID()}`
+  const child = spawn(wrapped.file, wrapped.args, { detached: true, stdio: "ignore" })
+  const completion = new Promise<void>((resolve) => {
+    child.once("exit", () => resolve())
+    child.once("error", () => resolve())
+  })
+  const identity = await waitIdentity(child.pid!)
+  try {
+    expect(WindowsJobLauncher.bind(child, wrapped.release)).toBe(true)
+    expect(
+      await CredentialProcessLedger.register({
+        id,
+        kind: "provider",
+        pid: child.pid!,
+        detached: true,
+        projectID: "project-provider-subreaper",
+        windowsRelease: wrapped.release,
+      }),
+    ).toBe(true)
+    const ledger = (await Bun.file(CredentialProcessLedger.pathForTests()).json()) as Array<{
+      id?: string
+      linux_subreaper?: boolean
+    }>
+    expect(ledger.find((item) => item.id === id)?.linux_subreaper).toBe(true)
+
+    expect(await CredentialProcessLedger.revoke({ id, kind: "provider" })).toBe(1)
+    await completion
+    expect(await CredentialProcessLedger.owns(child.pid!, identity)).toBe(false)
+  } finally {
+    await CredentialProcessLedger.revoke({ id }).catch(() => undefined)
+    if (await CredentialProcessLedger.owns(child.pid!, identity)) process.kill(-child.pid!, "SIGKILL")
+    await completion
   }
 })
 

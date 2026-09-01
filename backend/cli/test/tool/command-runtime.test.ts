@@ -101,6 +101,29 @@ test("credential revocation stops every real registered command", async () => {
 const posixTest = process.platform === "win32" ? test.skip : test
 const linuxTest = process.platform === "linux" ? test : test.skip
 
+async function waitText(file: string, attempt = 0): Promise<string> {
+  const value = await fs.readFile(file, "utf8").catch(() => undefined)
+  if (value?.trim()) return value.trim()
+  if (attempt >= 500) throw new Error(`Timed out waiting for ${file}`)
+  await Bun.sleep(10)
+  return waitText(file, attempt + 1)
+}
+
+async function waitIdentity(pid: number, attempt = 0): Promise<string> {
+  const identity = await CredentialProcessLedger.identity(pid)
+  if (identity) return identity
+  if (attempt >= 500) throw new Error(`Timed out capturing process identity for ${pid}`)
+  await Bun.sleep(10)
+  return waitIdentity(pid, attempt + 1)
+}
+
+async function waitGone(pid: number, identity: string, attempt = 0): Promise<boolean> {
+  if (!(await CredentialProcessLedger.owns(pid, identity))) return true
+  if (attempt >= 500) return false
+  await Bun.sleep(10)
+  return waitGone(pid, identity, attempt + 1)
+}
+
 test("pre-exec ownership preserves immediate exit 0 and exit 127", async () => {
   for (const code of [0, 127]) {
     const projectID = `project-command-fast-${code}-${crypto.randomUUID()}`
@@ -219,6 +242,147 @@ linuxTest("registration failure never releases the command body", async () => {
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+linuxTest("a forged launcher release is rejected before the command body runs", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-command-forged-gate-"))
+  const marker = path.join(root, "executed")
+  const projectID = `project-command-forged-${crypto.randomUUID()}`
+  const sessionID = "session-command-forged"
+  const state: {
+    child?: ReturnType<typeof spawn>
+    identity?: string
+    completion?: Promise<void>
+  } = {}
+  try {
+    const wrapped = await CommandRuntime.wrap({
+      file: process.execPath,
+      args: ["-e", `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran")`],
+    })
+    if (!wrapped.release) throw new Error("Linux command wrapper did not mint a release gate")
+    state.child = spawn(wrapped.file, wrapped.args, { detached: true, stdio: "ignore" })
+    const child = state.child
+    state.completion = new Promise<void>((resolve) => {
+      child.once("exit", () => resolve())
+      child.once("error", () => resolve())
+    })
+    state.identity = await waitIdentity(child.pid!)
+
+    await expect(
+      CommandRuntime.start(
+        {
+          projectID,
+          sessionID,
+          messageID: "message-command-forged",
+          description: "Forged registration gate",
+          command: "must not execute",
+        },
+        child,
+        () =>
+          Shell.killTree(child, {
+            exited: () => child.exitCode !== null || child.signalCode !== null,
+            detached: true,
+          }),
+        { windowsRelease: `${wrapped.release}-forged` },
+      ),
+    ).rejects.toThrow("verified child-subreaper registration gate")
+    await state.completion
+
+    expect(await Bun.file(marker).exists()).toBe(false)
+    expect(await waitGone(child.pid!, state.identity)).toBe(true)
+    expect(CommandRuntime.list(projectID, sessionID)).toEqual([])
+    const text = await fs.readFile(CredentialProcessLedger.pathForTests(), "utf8").catch(() => "[]")
+    const ledger = JSON.parse(text) as Array<{ project_id?: string }>
+    expect(ledger.some((item) => item.project_id === projectID)).toBe(false)
+  } finally {
+    await CommandRuntime.stopProject(projectID).catch(() => undefined)
+    if (state.child && state.identity && (await CredentialProcessLedger.owns(state.child.pid!, state.identity))) {
+      process.kill(-state.child.pid!, "SIGKILL")
+    }
+    await state.completion?.catch(() => undefined)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+linuxTest(
+  "normal completion reaps a setsid descendant after its shell leader exits",
+  async () => {
+    const setsid = Bun.which("setsid")
+    if (!setsid) return
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-command-setsid-completion-"))
+    const marker = path.join(root, "descendant.pid")
+    const release = path.join(root, "release")
+    const projectID = `project-command-setsid-completion-${crypto.randomUUID()}`
+    const sessionID = "session-command-setsid-completion"
+    const script =
+      '"$1" sleep 600 </dev/null >/dev/null 2>&1 & printf "%s" "$!" > "$2"; while [ ! -e "$3" ]; do sleep 0.01; done; exit 0'
+    const state: {
+      child?: ReturnType<typeof spawn>
+      completion?: Promise<number | null>
+      entry?: Awaited<ReturnType<typeof CommandRuntime.start>>
+      pid?: number
+      identity?: string
+    } = {}
+    try {
+      const wrapped = await CommandRuntime.wrap({
+        file: "/bin/sh",
+        args: ["-c", script, "command-runtime", setsid, marker, release],
+      })
+      state.child = spawn(wrapped.file, wrapped.args, { detached: true, stdio: "ignore" })
+      const child = state.child
+      state.completion = new Promise<number | null>((resolve, reject) => {
+        child.once("error", reject)
+        child.once("exit", resolve)
+      })
+      state.entry = await CommandRuntime.start(
+        {
+          projectID,
+          sessionID,
+          messageID: "message-command-setsid-completion",
+          description: "Normal setsid completion regression",
+          command: script,
+        },
+        child,
+        () =>
+          Shell.killTree(child, {
+            exited: () => child.exitCode !== null || child.signalCode !== null,
+            detached: true,
+          }),
+        { windowsRelease: wrapped.release },
+      )
+      state.pid = Number(await waitText(marker))
+      state.identity = await waitIdentity(state.pid)
+      expect(state.identity).toMatch(/^[a-f0-9]{64}$/)
+      expect(await CredentialProcessLedger.owns(state.pid, state.identity)).toBe(true)
+
+      await Bun.write(release, "release")
+      expect(await state.completion).toBe(0)
+      await CommandRuntime.settle(state.entry.id)
+
+      expect(await waitGone(state.pid, state.identity)).toBe(true)
+      const ledger = (await Bun.file(CredentialProcessLedger.pathForTests()).json()) as Array<{ id?: string }>
+      expect(ledger.some((item) => item.id === state.entry?.id)).toBe(false)
+      expect(CommandRuntime.list(projectID, sessionID)).toEqual([])
+    } finally {
+      await Bun.write(release, "release").catch(() => undefined)
+      if (state.entry) {
+        await CredentialProcessLedger.revoke({ id: state.entry.id, kind: "command", projectID }).catch(() => undefined)
+      }
+      await CommandRuntime.stopProject(projectID).catch(() => undefined)
+      if (state.child && state.child.exitCode === null && state.child.signalCode === null) {
+        await Shell.killTree(state.child, {
+          exited: () => state.child!.exitCode !== null || state.child!.signalCode !== null,
+          detached: true,
+        }).catch(() => undefined)
+      }
+      if (state.pid && state.identity && (await CredentialProcessLedger.owns(state.pid, state.identity))) {
+        process.kill(state.pid, "SIGKILL")
+      }
+      await state.completion?.catch(() => undefined)
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+  15_000,
+)
 
 posixTest("command completion reaps a same-group background descendant", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-command-descendant-"))
