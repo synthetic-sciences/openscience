@@ -68,4 +68,17 @@ describe("wrapper package manifest", () => {
       expect(() => assertPublicPackageSurface({ "README.md": copy })).toThrow("retired public copy")
     }
   })
+
+  test("rejects recursive mutation of the OpenScience data root from npm-visible launchers", () => {
+    expect(() =>
+      assertPublicPackageSurface({
+        "bin/openscience": 'spawnSync("xattr", ["-rc", openscienceDir], { stdio: "ignore" })',
+      }),
+    ).toThrow("recursive xattr")
+    expect(() =>
+      assertPublicPackageSurface({
+        "bin/openscience": 'fs.rmSync(path.join(openscienceDir, "node_modules"), { recursive: true })',
+      }),
+    ).toThrow("recursive OpenScience data-root deletion")
+  })
 })

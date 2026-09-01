@@ -22,13 +22,27 @@ const retiredPublicCopy = [
   /initialize-(?:atlas|research)-graph/i,
 ] as const
 
+const unsafePublicCode = [
+  {
+    name: "recursive xattr",
+    pattern: /\bxattr\b[\s\S]{0,120}["'`]-r[a-z]*\b/i,
+  },
+  {
+    name: "recursive OpenScience data-root deletion",
+    pattern: /\brmSync\s*\([\s\S]{0,160}(?:openscienceDir|\.openscience)[\s\S]{0,160}\brecursive\s*:\s*true/i,
+  },
+] as const
+
 /** Fail packaging when an npm-visible text file reintroduces a retired public
- * product or billing contract. Internal compatibility identifiers are not
- * scanned; callers pass only the files npm users can read or execute. */
+ * contract or destructive launcher behavior. Internal compatibility
+ * identifiers are not scanned; callers pass only files npm users can read or
+ * execute. */
 export function assertPublicPackageSurface(files: Record<string, string>) {
   for (const [file, content] of Object.entries(files)) {
     const match = retiredPublicCopy.find((pattern) => pattern.test(content))
     if (match) throw new Error(`${file} contains retired public copy matching ${match}`)
+    const unsafe = unsafePublicCode.find((entry) => entry.pattern.test(content))
+    if (unsafe) throw new Error(`${file} contains unsafe public package code: ${unsafe.name}`)
   }
 }
 
