@@ -1,4 +1,4 @@
-import { test, expect, mock } from "bun:test"
+import { afterEach, beforeEach, test, expect, mock } from "bun:test"
 import path from "path"
 import { unlink } from "fs/promises"
 
@@ -41,6 +41,24 @@ const { Instance } = await import("../../src/project/instance")
 const { Provider } = await import("../../src/provider/provider")
 const { Env } = await import("../../src/env")
 const { Global } = await import("../../src/global")
+
+const keys = [
+  "AWS_REGION",
+  "AWS_PROFILE",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "AWS_WEB_IDENTITY_TOKEN_FILE",
+  "AWS_ROLE_ARN",
+] as const
+const env = new Map(keys.map((key) => [key, process.env[key]]))
+function restore() {
+  for (const [key, value] of env) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+}
+beforeEach(restore)
+afterEach(restore)
 
 test("Bedrock: config region takes precedence over AWS_REGION env var", async () => {
   await using tmp = await tmpdir({
