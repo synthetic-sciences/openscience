@@ -556,7 +556,7 @@ def get_activators(ec_number: str) -> List[Dict[str, Any]]:
                         activators.append({
                             'name': activator,
                             'type': 'metal ion' if '+' in activator else 'reducing agent' if 'dtt' in activator.lower() or 'mercapto' in activator.lower() else 'other',
-                            'mechanism': 'allosteric' if 'allosteric' in commentary else 'cofactor' else 'unknown',
+                            'mechanism': 'allosteric' if 'allosteric' in commentary else ('cofactor' if 'cofactor' in commentary else 'unknown'),
                             'organism': parsed.get('organism', ''),
                             'ec_number': ec_number,
                             'commentary': parsed.get('commentary', '')
