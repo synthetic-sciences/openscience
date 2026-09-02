@@ -1588,9 +1588,34 @@ export namespace SessionPrompt {
         if (await armedCompact()) continue
       }
       if (preflight.total > preflight.hard) {
+        // Same recovery as the newest-alone-too-big case above: the failed
+        // reply failTooLarge is about to record makes this turn terminal,
+        // un-protecting it from the tail floor on the *next* attempt — so a
+        // retry can genuinely reclaim content this pass could not. But unlike
+        // that case, we only reach here after armedCompact() already fired
+        // and spent its one-shot latch (or never had anything to reclaim) —
+        // a retry that doesn't re-arm it just repeats the identical failed
+        // preflight against the identical un-compactable context. Re-arm so
+        // the retry gets a real second compaction attempt against the newly
+        // unprotected history, not just a second look at the same numbers.
+        const recoverable =
+          config.compaction?.auto !== false && SessionLoopState.preflightRecovery({ attempts: preflightRecoveries })
         await failTooLarge(
           `The assembled request is still estimated at ${preflight.total.toLocaleString()} tokens after context reduction, above ${window.name}'s safe input budget of ${preflight.hard.toLocaleString()}. Shorten the request or start a new session. No provider request was sent for this oversized attempt.`,
+          recoverable,
         )
+        if (recoverable) {
+          preflightRecoveries++
+          compactionArmed = true
+          await enqueue({
+            user: lastUser,
+            kind: "context",
+            epoch: turn,
+            text: PREFLIGHT_CONTINUATION,
+            routing: routingExcerpt(msgs, lastUser.id),
+          })
+          continue
+        }
         break
       }
 

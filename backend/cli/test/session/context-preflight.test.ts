@@ -297,6 +297,108 @@ describe("current-turn context preflight", () => {
     }
   }, 30_000)
 
+  test("automatically retries a turn still oversized after its one compaction attempt", async () => {
+    const provider = startStressProvider([scenario])
+    try {
+      const base = stressProviderConfig(`http://127.0.0.1:${provider.server.port}/v1`)
+      base.provider[STRESS_PROVIDER_ID].models[STRESS_PROVIDER_COMPACT_MODEL].limit.context = 20_000
+      await using tmp = await tmpdir({
+        git: true,
+        config: { ...base, compaction: { tailTurns: 2, tailTokens: 50_000 } },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          await trustProject()
+          await Provider.invalidate()
+        },
+        fn: async () => {
+          const session = await Session.create({ title: "Post-compaction preflight retry" })
+          const model = { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_COMPACT_MODEL }
+          const t1 = await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            tools: { "*": false },
+            system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
+            parts: [{ type: "text", text: "trivial prior turn" }],
+          })
+          expect(t1.info.role).toBe("assistant")
+          await provider.quiet()
+
+          // A second, heavier turn old enough to be eligible for the tail floor
+          // (kept verbatim by tailTurns/tailTokens, not summarized) once a later
+          // turn arrives — the fixture's real usage, not the fixture's flat
+          // 12-token mock reply, so the session's own "last real turn was
+          // comfortably under threshold" re-arm cannot mask the stall below.
+          const t2 = await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            tools: { "*": false },
+            noReply: true,
+            system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
+            parts: [{ type: "text", text: `Kept-tail turn:\n${"k".repeat(48_000)}` }],
+          })
+          if (t2.info.role !== "user") throw new Error("Expected queued user message")
+          await Session.updateMessage({
+            id: await MessageV2.nextMessageID(session.id),
+            sessionID: session.id,
+            parentID: t2.info.id,
+            role: "assistant",
+            mode: "research",
+            agent: "research",
+            path: { cwd: tmp.path, root: tmp.path },
+            modelID: model.modelID,
+            providerID: model.providerID,
+            cost: 0,
+            tokens: { input: 12_000, output: 12, reasoning: 0, cache: { read: 0, write: 0 } },
+            finish: "stop",
+            time: { created: Date.now(), completed: Date.now() },
+          })
+          await provider.quiet()
+          const before = provider.requests.length
+
+          const result = await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            tools: { "*": false },
+            system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
+            parts: [{ type: "text", text: `Small current turn:\n${"c".repeat(8_000)}` }],
+          })
+          await provider.quiet()
+
+          expect(result.info.role).toBe("assistant")
+          if (result.info.role !== "assistant") throw new Error("Expected recovered assistant response")
+          expect(result.info.error).toBeUndefined()
+
+          const requests = provider.requests.slice(before)
+          const summaries = requests.filter((request) => request.kind === "summary")
+          // One compaction pass alone could not clear the tail-floor-protected
+          // turn; a second, freshly re-armed pass (after the retry un-protects
+          // it) is what actually gets this turn under budget.
+          expect(summaries.length).toBeGreaterThanOrEqual(2)
+
+          const history = await Session.messages({ sessionID: session.id })
+          const rejections = history.filter((message) => message.info.role === "assistant" && message.info.error)
+          const recoveries = history.filter(
+            (message) => message.info.role === "user" && SessionLoopState.messageKind(message.info) === "context",
+          )
+          expect(rejections).toHaveLength(1)
+          expect(
+            rejections.some(
+              (r) => r.info.role === "assistant" && r.info.error?.data.message.includes("after context reduction"),
+            ),
+          ).toBe(true)
+          expect(recoveries).toHaveLength(1)
+        },
+      })
+    } finally {
+      provider.stop()
+    }
+  }, 30_000)
+
   test("does not mistake a delayed prior-turn assistant for an answer to a queued prompt", async () => {
     const provider = startStressProvider([scenario])
     try {
