@@ -1,5 +1,4 @@
 export const dict = {
-
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Commenting on ",

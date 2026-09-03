@@ -1,5 +1,4 @@
 export const dict = {
-
   "ui.lineComment.label.prefix": "แสดงความคิดเห็นบน ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "กำลังแสดงความคิดเห็นบน ",
