@@ -90,8 +90,8 @@
 }
 
 .models-rate-details summary:focus-visible {
-  outline: 2px solid var(--border-base);
-  outline-offset: 3px;
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .models-rate-route {
@@ -152,11 +152,6 @@
   .settings-models-panel
   [data-component="button"].models-secondary-action[data-variant="secondary"]:focus:not(:disabled) {
   background: var(--settings-surface-hover);
-}
-
-.settings-dialog .settings-models-panel :where(button, input):focus-visible,
-.settings-dialog .settings-models-panel [data-slot="select-select-trigger"]:focus-visible {
-  outline-color: var(--border-focus);
 }
 
 /* Account truth, routing preference, and payment terms have separate jobs.
@@ -371,7 +366,7 @@
 
 .models-routing__terms summary:focus-visible {
   border-radius: 2px;
-  outline: 2px solid var(--border-focus);
+  outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
 
@@ -638,14 +633,6 @@
 
 .settings-dialog .settings-models-panel .models-catalog-toolbar .settings-control--menu {
   flex: 0 0 auto;
-}
-
-.settings-dialog .settings-models-panel .settings-list-header {
-  min-height: 30px;
-  padding: 0 var(--models-gap-3);
-  border: 0;
-  border-radius: var(--settings-radius-control);
-  background: transparent;
 }
 
 .settings-dialog .settings-models-panel .settings-model-row {

@@ -27,6 +27,9 @@
   --text-critical-base: var(--icon-critical-base);
   --text-success-base: var(--icon-success-base);
   --text-warning-base: var(--icon-warning-base);
+  /* Settings surfaces use the shorter danger/success names for the same hues */
+  --text-danger: var(--icon-critical-base);
+  --text-success: var(--icon-success-base);
 
   /* Misc */
   --icon-weak: var(--icon-weak-base);

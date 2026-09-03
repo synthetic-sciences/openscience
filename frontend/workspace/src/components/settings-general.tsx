@@ -156,17 +156,15 @@ export const AppearanceSections: Component = () => {
             <div
               role="group"
               aria-label={language.t("settings.general.row.appearance.title")}
-              class="inline-flex max-w-full items-center rounded-md border border-border-weak-base bg-surface-base p-0.5"
+              class="settings-segmented-control"
             >
               <For each={colorSchemeOptions()}>
                 {(option) => (
                   <button
                     type="button"
                     aria-pressed={theme.colorScheme() === option.value}
-                    class="h-8 min-w-[56px] rounded-sm px-2.5 text-12-medium text-text-weak transition-colors duration-150 hover:text-text-strong focus-visible:z-10"
-                    classList={{
-                      "bg-surface-raised-strong text-text-strong shadow-xs": theme.colorScheme() === option.value,
-                    }}
+                    class="settings-segmented-control__option"
+                    data-selected={theme.colorScheme() === option.value ? "true" : undefined}
                     onClick={() => theme.setColorScheme(option.value)}
                   >
                     {option.label}
@@ -453,10 +451,15 @@ export const AppearanceSections: Component = () => {
           </SettingsRow>
         </div>
         <Show when={store.releases.length > 0}>
-          <div class="settings-update-history" aria-label="Recent OpenScience releases">
+          <div class="settings-card settings-update-history" aria-label="Recent OpenScience releases">
             <For each={store.releases.slice(0, 3)}>
               {(release) => (
-                <button type="button" onClick={() => platform.openLink(release.url)}>
+                <button
+                  type="button"
+                  class="settings-row"
+                  data-interactive="true"
+                  onClick={() => platform.openLink(release.url)}
+                >
                   <span>
                     <strong>{release.name}</strong>
                     <small>

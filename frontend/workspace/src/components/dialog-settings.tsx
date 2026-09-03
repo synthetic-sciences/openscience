@@ -400,20 +400,23 @@ const SETTINGS_STYLES = `
   height: 100%;
   background: var(--settings-canvas);
 }
+/* The skeleton shares .settings-page-header / .settings-page-body geometry so
+   a lazy panel resolves in place instead of shifting its title and body. */
 .settings-panel-loading__header {
   display: flex;
+  width: 100%;
   flex-direction: column;
-  gap: 9px;
-  padding: 28px 44px 22px;
-  border-bottom: 1px solid var(--settings-border);
+  gap: var(--settings-space-1);
+  padding: var(--settings-space-5) max(var(--settings-space-6), calc((100% - 900px) / 2)) var(--settings-space-3);
+  border-bottom: 0;
 }
 .settings-panel-loading__body {
   display: flex;
   max-width: 900px;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--settings-space-5);
   margin-inline: auto;
-  padding: 28px 44px 64px;
+  padding: var(--settings-space-3) var(--settings-space-6) var(--settings-space-7);
 }
 .settings-panel-loading__line,
 .settings-panel-loading__rows span {
@@ -423,15 +426,15 @@ const SETTINGS_STYLES = `
 }
 .settings-panel-loading__line[data-size="title"] {
   width: 132px;
-  height: 20px;
+  height: var(--settings-leading-title);
 }
 .settings-panel-loading__line[data-size="copy"] {
   width: min(420px, 72%);
-  height: 13px;
+  height: var(--settings-leading-body);
 }
 .settings-panel-loading__line[data-size="label"] {
   width: 84px;
-  height: 14px;
+  height: var(--settings-leading-helper);
 }
 .settings-panel-loading__rows {
   overflow: hidden;
@@ -451,6 +454,31 @@ const SETTINGS_STYLES = `
 }
 .settings-panel-loading__rows span + span {
   border-top: 0;
+}
+/* A skeleton nested inside a card borrows the card's surface instead of
+   stacking a second one. */
+.settings-card > .settings-panel-loading__rows {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.settings-card-empty {
+  margin: 0;
+  padding: 14px var(--settings-space-3);
+  color: var(--text-weak);
+  font-size: var(--settings-type-helper);
+  line-height: var(--settings-leading-helper);
+  text-align: center;
+  text-wrap: pretty;
+}
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--settings-space-3);
+}
+.settings-form-grid > [data-span="full"] {
+  grid-column: 1 / -1;
 }
 
 .settings-page-header {
@@ -536,14 +564,6 @@ const SETTINGS_STYLES = `
   align-items: center;
   gap: 8px;
   padding-inline: 2px;
-}
-.settings-error {
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--text-danger) 35%, var(--border-base));
-  border-radius: var(--settings-radius-control);
-  color: var(--text-danger);
-  font-size: 12px;
-  line-height: 1.5;
 }
 .credential-services {
   display: flex;
@@ -729,82 +749,14 @@ const SETTINGS_STYLES = `
   flex-direction: column;
   justify-content: flex-start;
 }
-.settings-inline-action {
-  min-height: 32px;
-  padding: 4px 9px;
-  border: 1px solid transparent;
-  border-radius: var(--settings-radius-control);
-  color: var(--text-weak);
-  background: transparent;
-  font-size: 12px;
-  font-weight: var(--font-weight-medium);
-}
-.settings-inline-action:hover {
-  color: var(--text-strong);
-  background: var(--settings-surface-hover);
-}
-.settings-inline-action[data-quiet="true"] {
-  border-color: transparent;
-}
-.settings-choice-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-.settings-choice {
-  min-height: 88px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: var(--settings-space-3);
-  border: 1px solid transparent;
-  border-radius: var(--settings-radius-card);
-  color: var(--text-weak);
-  background: var(--settings-surface-muted);
-  text-align: left;
-  transition:
-    background 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
-}
-.settings-choice:hover:not(:disabled) {
-  background: var(--settings-surface-hover);
-}
-.settings-choice[aria-pressed="true"] {
-  border-color: var(--settings-border-strong);
-  color: var(--text-strong);
-  background: var(--settings-surface);
-}
-.settings-choice:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-.settings-filter-pill {
-  min-height: 32px;
-  padding: 4px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--settings-radius-pill);
-  color: var(--text-weak);
-  background: transparent;
-  font-size: 11px;
-  font-weight: var(--font-weight-medium);
-}
-.settings-filter-pill:hover,
-.settings-filter-pill[aria-pressed="true"] {
-  color: var(--text-strong);
-  background: var(--settings-surface-hover);
-}
-.settings-filter-pill[aria-pressed="true"] {
-  border-color: transparent;
-}
 .settings-list-header {
-  min-height: 34px;
+  min-height: 30px;
   display: flex;
   align-items: center;
-  padding: 0 18px;
+  padding: 0 var(--settings-space-3);
   border-bottom: 0;
   border-radius: var(--settings-radius-control);
-  background: var(--settings-surface-muted);
+  background: transparent;
 }
 .settings-model-row {
   flex-wrap: nowrap;
@@ -830,12 +782,6 @@ const SETTINGS_STYLES = `
   min-height: 32px;
   padding-block: 5px;
   font-family: var(--font-family-mono);
-}
-
-@media (max-width: 640px) {
-  .settings-choice-grid {
-    grid-template-columns: 1fr;
-  }
 }
 .settings-avatar {
   width: 32px;
@@ -895,21 +841,35 @@ const SETTINGS_STYLES = `
   gap: 8px;
   flex-wrap: wrap;
 }
+/* One segmented control recipe (shared with Models' access-mode options):
+   borderless muted track, quiet selected segment, no shadow. */
 .settings-segmented-control {
   min-height: 32px;
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
   border: 0;
   border-radius: var(--settings-radius-control);
   background: var(--settings-surface-muted);
 }
 .settings-segmented-control__option {
+  min-width: 0;
   min-height: 28px;
+  padding: 0 10px;
+  border: 0;
   border-radius: calc(var(--settings-radius-control) - 2px);
+  background: transparent;
   color: var(--text-weak);
+  font-size: var(--settings-type-helper);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
 }
 .settings-segmented-control__option:hover,
 .settings-segmented-control__option[data-selected="true"] {
   color: var(--text-strong);
-  background: var(--settings-surface-active);
+  background: var(--settings-surface-hover);
 }
 .settings-control {
   min-width: 0;
@@ -1153,10 +1113,6 @@ const SETTINGS_STYLES = `
 .settings-dialog :where(button, [role="button"], [data-slot="select-select-trigger"]) {
   min-height: 32px;
 }
-.settings-dialog .settings-choice {
-  height: auto;
-  min-height: 88px;
-}
 .settings-dialog :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
   min-height: 32px;
 }
@@ -1220,8 +1176,13 @@ const SETTINGS_STYLES = `
 /* Generic panels respond to the Settings column rather than the browser.
    Panels with bespoke layouts own their intrinsic breakpoints locally. */
 @container settings-main (max-width: 600px) {
-  .settings-choice-grid,
   .credential-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@container settings-main (max-width: 520px) {
+  .settings-form-grid {
     grid-template-columns: 1fr;
   }
 }

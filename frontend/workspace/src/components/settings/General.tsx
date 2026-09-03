@@ -1,5 +1,4 @@
 import { Button } from "@synsci/ui/button"
-import { Icon, type IconProps } from "@synsci/ui/icon"
 import { Select } from "@synsci/ui/select"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { Show, createMemo, createSignal, onCleanup, onMount, type Component, type JSX } from "solid-js"
@@ -262,7 +261,7 @@ export default function General() {
                 </div>
               </div>
 
-              <AccountRow icon="star" title="Purchased Wallet" description="Available purchased funds for Ace.">
+              <AccountRow title="Purchased Wallet" description="Available purchased funds for Ace.">
                 <span class="settings-account-value">{wallet()}</span>
                 <Button size="small" variant="secondary" onClick={() => platform.openLink(URLS.dashboardBilling)}>
                   Manage billing
@@ -271,7 +270,6 @@ export default function General() {
 
               <Show when={account()?.session && account()?.funding_context}>
                 <AccountRow
-                  icon="providers"
                   title="Workspace credentials"
                   description="Synced to this device. Local keys take priority."
                 >
@@ -294,7 +292,6 @@ export default function General() {
                   </Button>
                 </AccountRow>
                 <AccountRow
-                  icon="home"
                   title="Funding workspace"
                   description={
                     needsBrowserWorkspaceApproval()
@@ -349,15 +346,11 @@ export default function General() {
 }
 
 const AccountRow: Component<{
-  icon: IconProps["name"]
   title: string
   description: string
   children: JSX.Element
 }> = (props) => (
   <div class="settings-row settings-preference-row">
-    <span class="settings-preference-icon" aria-hidden="true">
-      <Icon name={props.icon} size="small" />
-    </span>
     <div class="settings-row-copy">
       <strong>{props.title}</strong>
       <span>{props.description}</span>

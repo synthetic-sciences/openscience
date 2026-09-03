@@ -650,7 +650,7 @@ form.workspace-composer .workspace-composer__intent-close [data-slot="icon-svg"]
 form.workspace-composer .workspace-composer__research-tools {
   position: relative;
   flex: 0 0 auto;
-  height: 32px;
+  height: 34px;
 }
 
 form.workspace-composer .workspace-composer__research-tools > summary {
@@ -709,20 +709,42 @@ form.workspace-composer .workspace-composer__research-tools-menu {
   bottom: calc(100% + var(--space-2));
   left: 0;
   z-index: 40;
-  width: min(336px, calc(100vw - 24px));
+  /* Same geometry as the adjacent model popover ([data-model-settings-popover]). */
+  width: min(344px, calc(100vw - 24px));
   max-height: min(72dvh, 440px);
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 8px;
+  padding: 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
   background-clip: padding-box;
   box-shadow: var(--atlas-shadow-md);
+}
+
+/* Title row shared with .model-settings-popover__header so both composer
+   menus open with the same chrome. */
+form.workspace-composer .workspace-composer__research-tools-header {
+  min-height: 36px;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 3px 5px 7px;
+  border-bottom: 1px solid var(--border-weak-base);
+}
+
+form.workspace-composer .workspace-composer__research-tools-header > span {
+  min-width: 0;
+  flex: 1;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
 }
 
 form.workspace-composer .workspace-composer__research-controls {

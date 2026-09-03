@@ -192,14 +192,6 @@
   text-wrap: pretty;
 }
 
-.scientific-tools-loading {
-  min-height: 112px;
-  display: grid;
-  place-items: center;
-  color: var(--text-weak);
-  font-size: 12px;
-}
-
 .scientific-tools-footnote {
   margin: 0;
   color: var(--text-weak);
@@ -208,7 +200,9 @@
   text-wrap: pretty;
 }
 
-@media (max-width: 720px) {
+/* Break on the Settings column, not the viewport: the rail and expanded
+   dialog change the available width without changing the window. */
+@container settings-main (max-width: 700px) {
   .settings-dialog .scientific-tools-panel .scientific-tool-row {
     grid-template-columns: 32px minmax(0, 1fr);
     align-items: start;
@@ -231,14 +225,5 @@
   .settings-dialog .scientific-tools-panel [data-component="button"].scientific-tool-action,
   .settings-dialog .scientific-tools-panel [data-component="icon-button"].scientific-tool-source {
     min-height: 44px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .scientific-tools-panel *,
-  .scientific-tools-panel *::before,
-  .scientific-tools-panel *::after {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
   }
 }

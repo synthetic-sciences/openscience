@@ -75,7 +75,13 @@ export default function ScientificTools() {
             <div class="settings-alert" data-tone="critical" role="alert">
               <span>{problem()}</span>
               <Show when={!state()}>
-                <Button size="small" variant="secondary" disabled={loading()} onClick={() => void load(true)}>
+                <Button
+                  size="small"
+                  variant="secondary"
+                  class="settings-panel-action"
+                  disabled={loading()}
+                  onClick={() => void load(true)}
+                >
                   Retry
                 </Button>
               </Show>
@@ -89,8 +95,10 @@ export default function ScientificTools() {
           </Show>
 
           <Show when={loading() && !state()}>
-            <div class="scientific-tools-loading" role="status" aria-live="polite">
-              Loading tools…
+            <div class="settings-panel-loading__rows" role="status" aria-label="Loading tools">
+              <span />
+              <span />
+              <span />
             </div>
           </Show>
 

@@ -3,7 +3,7 @@
    disclosure. Semantic color is reserved for live status. */
 .connectors-panel {
   --connectors-control-height: 32px;
-  --connectors-radius: var(--radius-sm);
+  --connectors-radius: var(--settings-radius-control);
   --connectors-row-columns: 32px minmax(180px, 1fr) minmax(92px, auto) auto;
 
   min-width: 0;
@@ -30,7 +30,6 @@
 
 .connectors-panel .settings-control,
 .connectors-panel .settings-button,
-.connectors-panel .settings-inline-action,
 .connectors-panel .settings-field {
   min-height: var(--connectors-control-height);
   height: var(--connectors-control-height);
@@ -68,37 +67,19 @@
 }
 
 .connectors-panel .settings-button[data-variant="ghost"] {
-  border-color: var(--border-weak-base);
+  border: 1px solid var(--border-weak-base);
   background: transparent;
+}
+
+.connectors-section,
+.connectors-catalog,
+.connectors-list {
+  min-width: 0;
 }
 
 .connectors-list {
   display: flex;
-  min-width: 0;
   flex-direction: column;
-}
-
-.connectors-loading__row {
-  min-height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  color: var(--text-weak);
-  font-size: 12px;
-}
-
-.connectors-loading__row [data-component="icon"] {
-  color: var(--text-weaker);
-}
-
-.connectors-catalog__lead,
-.connectors-section__lead {
-  max-width: 720px;
-  margin: 0;
-  color: var(--text-weak);
-  font-size: 12px;
-  line-height: 18px;
 }
 
 .connectors-catalog__list {
@@ -213,11 +194,6 @@
   gap: 4px;
 }
 
-.connectors-catalog__actions button:focus-visible {
-  outline: 2px solid var(--border-strong-base);
-  outline-offset: 2px;
-}
-
 .connectors-action--primary {
   background: var(--settings-primary);
   color: var(--settings-on-primary);
@@ -262,8 +238,8 @@
 }
 
 .connectors-manual > summary:focus-visible {
-  outline: 2px solid var(--border-focus);
-  outline-offset: 1px;
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .connectors-manual > summary:active {
@@ -341,9 +317,9 @@
   gap: 12px;
   margin: 0 12px 10px 56px;
   padding: 8px 10px;
-  border: 1px solid var(--border-weak-base);
+  border: 0;
   border-radius: var(--connectors-radius);
-  background: var(--surface-base);
+  background: var(--settings-surface-muted);
 }
 
 .connectors-oauth > div:first-child {
@@ -669,31 +645,24 @@
   margin-top: 4px;
 }
 
+/* The whole-panel empty state is the shared EmptyState tile; only the two
+   follow-up actions are local. */
 .connectors-empty {
   display: flex;
+  min-width: 0;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 48px 16px;
-  text-align: center;
 }
 
-.connectors-empty__icon {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
+.connectors-empty .settings-empty-state {
+  padding-bottom: 12px;
+}
+
+.connectors-empty__actions {
   justify-content: center;
-  border: 1px solid var(--border-weak-base);
-  border-radius: var(--connectors-radius);
-  color: var(--icon-weak-base);
+  padding-bottom: 40px;
 }
 
-.connectors-empty__copy {
-  max-width: 380px;
-}
-
-.connectors-empty__copy strong,
 .connectors-form__lead strong {
   color: var(--text-strong);
   font-size: 13px;
@@ -701,7 +670,6 @@
   line-height: 18px;
 }
 
-.connectors-empty__copy p,
 .connectors-form__lead p {
   margin: 2px 0 0;
   color: var(--text-weak);
@@ -762,12 +730,6 @@
   line-height: 16px;
 }
 
-.connectors-panel .settings-field {
-  padding: 6px 10px;
-  border: 1px solid var(--border-weak-base);
-  background: var(--surface-raised-base);
-}
-
 .connectors-panel .settings-field--multiline {
   min-height: 88px;
   height: auto;
@@ -781,7 +743,9 @@
   text-wrap: pretty;
 }
 
-@media (max-width: 840px) {
+/* Break on the Settings column, not the viewport: the rail and expanded
+   dialog change the available width without changing the window. */
+@container settings-main (max-width: 700px) {
   .connectors-panel {
     --connectors-row-columns: 32px minmax(0, 1fr) auto;
   }
@@ -797,7 +761,7 @@
   }
 }
 
-@media (max-width: 680px) {
+@container settings-main (max-width: 520px) {
   .connectors-panel .settings-toolbar,
   .connectors-form__grid {
     grid-template-columns: 1fr;
@@ -806,10 +770,6 @@
   .connectors-form__field[data-span="full"],
   .connectors-form__hint {
     grid-column: auto;
-  }
-
-  .connectors-row {
-    grid-template-columns: 32px minmax(0, 1fr);
   }
 
   .connectors-catalog__main {
@@ -831,16 +791,6 @@
 
   .connectors-catalog__details {
     padding-right: 12px;
-  }
-
-  .connectors-row__actions {
-    grid-column: 2;
-    grid-row: 3;
-    justify-content: flex-start;
-  }
-
-  .connectors-details {
-    padding-left: 56px;
   }
 
   .connectors-inspection__grid {

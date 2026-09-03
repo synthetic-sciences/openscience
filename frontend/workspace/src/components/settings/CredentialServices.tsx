@@ -8,29 +8,8 @@ import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
 import { ProviderLogo } from "./ProviderLogo"
 import { customCredentialIdentity } from "./custom-credential"
+import { invalidateCredentials, loadCredentials, type Service } from "./credential-loader"
 import { invalidateScientificTools } from "./scientific-tools-loader"
-
-type Field = {
-  name: string
-  label: string
-  type: "password" | "text" | "textarea"
-  optional: boolean
-  placeholder?: string
-}
-
-type Service = {
-  id: string
-  label: string
-  description: string
-  category?: "compute" | "integration"
-  custom: boolean
-  fields: Field[]
-  connected: boolean
-  set_fields: string[]
-  updated_at: string | null
-  source: "local" | "account" | null
-  organization_id?: string | null
-}
 
 export const CredentialServices: Component<{
   category: "compute" | "integration"
@@ -60,14 +39,10 @@ export const CredentialServices: Component<{
   const items = createMemo(() => services().filter((service) => category(service) === props.category))
   const count = createMemo(() => items().filter((service) => service.connected).length)
 
-  const load = async () => {
+  const load = async (refresh = false) => {
     setLoading(true)
     setError(undefined)
-    const result = await settingsApi<{ services: Service[] }>(
-      sdk.url,
-      platform.fetch ?? fetch,
-      "/settings/credentials",
-    ).catch((cause) => {
+    const result = await loadCredentials(sdk.url, platform.fetch ?? fetch, refresh).catch((cause) => {
       setError(cause instanceof Error ? cause.message : String(cause))
       return undefined
     })
@@ -117,6 +92,7 @@ export const CredentialServices: Component<{
     })
     setSaving(false)
     if (!result) return false
+    invalidateCredentials(sdk.url)
     invalidateScientificTools(sdk.url)
     setServices(result.services)
     setEditing(undefined)
@@ -146,6 +122,7 @@ export const CredentialServices: Component<{
         return undefined
       })
       if (result) {
+        invalidateCredentials(sdk.url)
         invalidateScientificTools(sdk.url)
         setServices(result.services)
         if (editing() === service.id) setEditing(undefined)
@@ -183,22 +160,25 @@ export const CredentialServices: Component<{
       <Show when={error()}>
         <div class="settings-alert" data-tone="critical" role="alert">
           <span>{error()}</span>
-          <button
-            type="button"
-            class="settings-inline-action"
+          <Button
+            size="small"
+            variant="secondary"
+            class="settings-panel-action"
             disabled={loading() || saving()}
-            onClick={() => void load()}
+            onClick={() => void load(true)}
           >
             Retry
-          </button>
+          </Button>
         </div>
       </Show>
 
       <Show
         when={!loading()}
         fallback={
-          <div class="settings-card">
-            <div class="settings-row text-12-regular text-text-weak">Loading services…</div>
+          <div class="settings-panel-loading__rows" role="status" aria-label="Loading services">
+            <span />
+            <span />
+            <span />
           </div>
         }
       >
@@ -206,10 +186,9 @@ export const CredentialServices: Component<{
           when={items().length > 0}
           fallback={
             <div class="settings-card">
-              <div class="settings-row">
-                <Icon name="providers" size="small" class="shrink-0 text-icon-weak-base" />
-                <span class="text-12-regular text-text-weak">No services are available from this server.</span>
-              </div>
+              <p class="settings-card-empty" role="status">
+                No services are available from this server.
+              </p>
             </div>
           }
         >

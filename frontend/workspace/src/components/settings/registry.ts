@@ -34,11 +34,11 @@ export const SETTINGS_PANEL_IDS = [
   "skills",
   "scientific-tools",
   "connectors",
+  "credentials",
   "compute",
   "permissions",
   "network",
   "sandbox",
-  "credentials",
   "storage",
   "general",
 ] as const
@@ -71,7 +71,7 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   {
     id: "local-models",
     title: "Local models",
-    icon: "cpu",
+    icon: "brain",
     section: "inference",
     component: lazy(() => import("./LocalModels")),
   },
@@ -85,7 +85,7 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   {
     id: "scientific-tools",
     title: "Tools",
-    icon: "flask",
+    icon: "atom",
     section: "capabilities",
     component: lazy(() => import("./ScientificTools")),
   },
@@ -95,6 +95,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "mcp",
     section: "capabilities",
     component: lazy(() => import("./Connectors")),
+  },
+  {
+    id: "credentials",
+    title: "Credentials",
+    icon: "providers",
+    section: "capabilities",
+    component: lazy(() => import("./Credentials")),
   },
   // ── Runtime ──
   {
@@ -106,7 +113,7 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
   },
   {
     id: "permissions",
-    title: "Security & access",
+    title: "Permissions",
     icon: "shield",
     section: "runtime",
     component: lazy(() => import("./Permissions")),
@@ -124,13 +131,6 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "code",
     section: "runtime",
     component: lazy(() => import("./Sandbox")),
-  },
-  {
-    id: "credentials",
-    title: "Credentials",
-    icon: "providers",
-    section: "runtime",
-    component: lazy(() => import("./Credentials")),
   },
   // ── App ──
   { id: "storage", title: "Storage", icon: "folder", section: "app", component: lazy(() => import("./Storage")) },

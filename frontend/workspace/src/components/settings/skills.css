@@ -16,14 +16,16 @@
   font-optical-sizing: auto;
 }
 
+/* Same page geometry as PanelHeader / PanelBody so switching to Skills does
+   not shift the title or indent the content. */
 .settings-skills .skills-workspace__header {
-  padding: var(--settings-space-6) var(--settings-space-7) var(--settings-space-4);
+  padding: var(--settings-space-5) var(--settings-space-6) var(--settings-space-3);
   border-bottom: 0;
   background: var(--settings-canvas);
 }
 
 .settings-skills .skills-workspace__body {
-  padding: var(--settings-space-3) var(--settings-space-7) 64px;
+  padding: var(--settings-space-3) var(--settings-space-6) var(--settings-space-7);
 }
 
 .settings-skills .skills-workspace__heading,
@@ -114,14 +116,6 @@
   background: var(--settings-surface-active);
 }
 
-.settings-skills .skills-workspace .settings-control:focus-within,
-.settings-skills .skills-workspace .settings-control:focus-visible {
-  border-color: transparent;
-  outline: 1px solid var(--settings-border-strong);
-  outline-offset: 0;
-  box-shadow: none;
-}
-
 .settings-skills .skills-workspace .settings-control[aria-label="Add skill"] {
   background: var(--settings-surface-active);
   color: var(--text-strong);
@@ -205,13 +199,6 @@
   min-height: 88px;
 }
 
-.settings-skills .skills-workspace__form-fields .settings-field:focus {
-  border-color: transparent;
-  outline: 1px solid var(--settings-border-strong);
-  outline-offset: 0;
-  box-shadow: none;
-}
-
 .settings-skills .skills-workspace__state > .settings-button {
   min-height: 32px;
   padding-inline: 12px;
@@ -233,11 +220,11 @@
 
 @container skills-workspace (max-width: 960px) {
   .settings-skills .skills-workspace__header {
-    padding: 24px 20px 16px;
+    padding: 20px 20px 16px;
   }
 
   .settings-skills .skills-workspace__body {
-    padding: 12px 20px 32px;
+    padding: 16px 20px 36px;
   }
 }
 

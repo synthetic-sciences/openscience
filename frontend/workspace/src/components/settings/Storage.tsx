@@ -1,6 +1,7 @@
 // Storage — real on-disk footprint of the OpenScience data directory.
 // Backed by /settings/storage (routes/settings/storage.ts).
 import { type Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
@@ -270,9 +271,15 @@ export const Storage: Component = () => {
           <Show when={error()}>
             <div class="settings-alert whitespace-pre-wrap" data-tone="critical" role="alert">
               <span>{error()}</span>
-              <button type="button" class="settings-inline-action" disabled={loading()} onClick={() => void retry()}>
+              <Button
+                size="small"
+                variant="secondary"
+                class="settings-panel-action"
+                disabled={loading()}
+                onClick={() => void retry()}
+              >
                 Retry
-              </button>
+              </Button>
             </div>
           </Show>
           <Show when={status() && usage()}>
@@ -288,14 +295,15 @@ export const Storage: Component = () => {
               <div class="settings-alert" data-tone="warning" role="status">
                 <Icon name="alert-circle" size="small" class="shrink-0 text-icon-weak-base" />
                 <span class="min-w-0 flex-1">{message()}</span>
-                <button
-                  type="button"
-                  class="settings-inline-action"
+                <Button
+                  size="small"
+                  variant="secondary"
+                  class="settings-panel-action"
                   disabled={busy()}
                   onClick={() => void chooseLocation()}
                 >
                   Try again
-                </button>
+                </Button>
               </div>
             )}
           </Show>
@@ -304,9 +312,9 @@ export const Storage: Component = () => {
               <div class="settings-alert" data-tone="warning" role="status">
                 <Icon name="alert-circle" size="small" class="shrink-0 text-icon-weak-base" />
                 <span>Disk usage could not be refreshed. Cached values remain visible. {message()}</span>
-                <button type="button" class="settings-inline-action" onClick={() => void retry()}>
+                <Button size="small" variant="secondary" class="settings-panel-action" onClick={() => void retry()}>
                   Retry
-                </button>
+                </Button>
               </div>
             )}
           </Show>
@@ -367,9 +375,6 @@ export const Storage: Component = () => {
             <Section title="Data location" description="Sessions, credentials, skills, and logs live here.">
               <div class="settings-card settings-preferences-card">
                 <div class="settings-storage-location">
-                  <span class="settings-preference-icon" aria-hidden="true">
-                    <Icon name="folder" size="small" />
-                  </span>
                   <div class="settings-row-copy">
                     <div class="flex min-w-0 flex-wrap items-center gap-2">
                       <strong class="settings-storage-path min-w-0 truncate font-mono" title={usage()?.data_dir}>
@@ -481,9 +486,6 @@ export const Storage: Component = () => {
             <Section title="Local cache" description="Downloaded runtime packages and metadata. Recreated when needed.">
               <div class="settings-card settings-preferences-card">
                 <div class="settings-storage-cache settings-row settings-preference-row">
-                  <span class="settings-preference-icon" aria-hidden="true">
-                    <Icon name="archive" size="small" />
-                  </span>
                   <div class="settings-row-copy">
                     <strong>OpenScience cache</strong>
                     <code class="min-w-0 truncate text-11-regular text-text-weak" title={usage()?.cache_dir}>
@@ -519,12 +521,9 @@ export const Storage: Component = () => {
                 when={usage() && usage()!.entries.length > 0}
                 fallback={
                   <div class="settings-card settings-preferences-card">
-                    <div class="settings-row settings-preference-row text-12-regular text-text-weak">
-                      <span class="settings-preference-icon" aria-hidden="true">
-                        <Icon name="archive" size="small" />
-                      </span>
+                    <p class="settings-card-empty" role="status">
                       {usage()?.scanning ? "Calculating disk usage…" : "Nothing stored yet."}
-                    </div>
+                    </p>
                   </div>
                 }
               >
@@ -532,9 +531,6 @@ export const Storage: Component = () => {
                   <For each={usage()!.entries}>
                     {(entry) => (
                       <div class="settings-row settings-preference-row settings-storage-usage-row">
-                        <span class="settings-preference-icon" aria-hidden="true">
-                          <Icon name={entry.kind === "dir" ? "folder" : "file"} size="small" />
-                        </span>
                         <code class="min-w-0 truncate text-13-regular text-text-strong">
                           {entry.name}
                           {entry.kind === "dir" ? "/" : ""}

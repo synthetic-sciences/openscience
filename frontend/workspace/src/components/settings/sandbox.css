@@ -1,26 +1,6 @@
 /* Sandbox is deliberately quieter than the previous icon-per-row layout.
    One semantic mark communicates backend availability; policy, path, and test
    actions rely on proximity and a consistent 32px control rhythm. */
-.settings-preferences-panel--sandbox .settings-page-header__inner {
-  position: relative;
-}
-
-.settings-preferences-panel--sandbox .settings-sandbox-save-state {
-  position: absolute;
-  top: 2px;
-  right: 0;
-  min-width: 48px;
-  color: var(--text-weak);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  line-height: 18px;
-  text-align: right;
-}
-
-.settings-preferences-panel--sandbox .settings-preferences-card {
-  overflow: hidden;
-}
-
 .settings-preferences-panel--sandbox .settings-sandbox-control-row {
   min-height: 56px;
   display: grid;

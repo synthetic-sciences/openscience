@@ -95,6 +95,8 @@ const providerLabels: Record<string, string> = {
   zai: "Z.AI",
 }
 
+const MANAGE_MODELS_HINT = "Choose which models appear here."
+
 const ModelMark: Component<{ id: string; name: string }> = (props) => (
   <span class="model-settings-logo" aria-hidden="true">
     <Show when={providerIcon(props.id)} fallback={<span>{props.name.charAt(0).toUpperCase()}</span>}>
@@ -815,18 +817,26 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                     <span data-model-menu-label>More models</span>
                     <small>Browse models from your connected providers.</small>
                   </span>
-                  <span aria-hidden="true" data-model-menu-value>
-                    ›
-                  </span>
+                  <Icon
+                    name="chevron-right"
+                    size="small"
+                    aria-hidden="true"
+                    data-model-menu-value
+                    class="model-settings-chevron"
+                  />
                 </button>
                 <button type="button" data-model-menu-item class={`${row} model-settings-manage`} onClick={manage}>
                   <span class="model-settings-setting">
                     <span data-model-menu-label>Manage models</span>
-                    <small>Choose which models appear here.</small>
+                    <small>{MANAGE_MODELS_HINT}</small>
                   </span>
-                  <span aria-hidden="true" data-model-menu-value>
-                    ›
-                  </span>
+                  <Icon
+                    name="chevron-right"
+                    size="small"
+                    aria-hidden="true"
+                    data-model-menu-value
+                    class="model-settings-chevron"
+                  />
                 </button>
               </div>
             </div>
@@ -926,11 +936,15 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                 <button type="button" data-model-menu-item class={`${row} model-settings-manage`} onClick={manage}>
                   <span class="model-settings-setting">
                     <span data-model-menu-label>Manage models</span>
-                    <small>Choose which connected models appear here.</small>
+                    <small>{MANAGE_MODELS_HINT}</small>
                   </span>
-                  <span aria-hidden="true" data-model-menu-value>
-                    ›
-                  </span>
+                  <Icon
+                    name="chevron-right"
+                    size="small"
+                    aria-hidden="true"
+                    data-model-menu-value
+                    class="model-settings-chevron"
+                  />
                 </button>
               </div>
             </div>
