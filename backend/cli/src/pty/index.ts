@@ -74,7 +74,7 @@ export namespace Pty {
   interface ActiveSession {
     info: Info
     process: IPty
-    buffer: string
+    buffer: Replay.Ring
     subscribers: Map<WSContext, boolean>
     releaseUpdate: () => void
   }
@@ -160,15 +160,15 @@ export namespace Pty {
 
         let session: ActiveSession | undefined
         let earlyExit: number | undefined
-        let earlyBuffer = ""
+        const earlyBuffer = Replay.create()
         const sessions = state()
         ptyProcess.onData((data) => {
           const active = session
           if (!active) {
-            earlyBuffer = Replay.append(earlyBuffer, data)
+            Replay.append(earlyBuffer, data)
             return
           }
-          active.buffer = Replay.append(active.buffer, data)
+          Replay.append(active.buffer, data)
           for (const [ws, ready] of active.subscribers) {
             if (ws.readyState !== 1) {
               active.subscribers.delete(ws)
@@ -321,7 +321,7 @@ export namespace Pty {
           const buffer = session.buffer
           if (ws.readyState !== 1) return
           session.subscribers.set(ws, true)
-          if (buffer) {
+          if (buffer.length) {
             try {
               for (const chunk of Replay.chunks(buffer)) ws.send(chunk)
             } catch {

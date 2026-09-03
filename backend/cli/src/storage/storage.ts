@@ -155,7 +155,16 @@ export namespace Storage {
     for (let index = migration; index < MIGRATIONS.length; index++) {
       log.info("running migration", { index })
       const migration = MIGRATIONS[index]
-      await migration(dir).catch(() => log.error("failed to run migration", { index }))
+      // Only a completed migration advances the marker; a failed one is
+      // retried on the next start instead of being silently skipped forever.
+      const ok = await migration(dir).then(
+        () => true,
+        (error) => {
+          log.error("failed to run migration", { index, error })
+          return false
+        },
+      )
+      if (!ok) break
       await Bun.write(path.join(dir, "migration"), (index + 1).toString())
     }
     return {
@@ -271,9 +280,10 @@ export namespace Storage {
       if (attempt.status === "acquired") {
         const handle = attempt.handle
         const token = randomUUID()
+        // The lock JSON is only an ownership hint read back on dispose; the
+        // O_EXCL create is what excludes other writers, so no fsync is needed.
         await handle
           .writeFile(JSON.stringify({ pid: process.pid, token, created: Date.now() }))
-          .then(() => handle.sync())
           .catch(async (error) => {
             await handle.close().catch(() => undefined)
             await fs.unlink(lockfile).catch(() => undefined)
@@ -378,8 +388,11 @@ export namespace Storage {
       ).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split(path.sep)]))
       result.sort()
       return result
-    } catch {
-      return []
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === "ENOENT" || code === "ENOTDIR") return []
+      log.error("failed to list storage keys", { prefix, error })
+      throw error
     }
   }
 }

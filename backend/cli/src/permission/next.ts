@@ -378,7 +378,7 @@ export namespace PermissionNext {
               })
             : base.action,
         }
-        log.info("evaluated", { permission: request.permission, pattern, action: rule })
+        log.debug("evaluated", { permission: request.permission, pattern, action: rule })
         return rule
       })
       const denied = evaluated.find((rule) => rule.action === "deny")
@@ -399,7 +399,11 @@ export namespace PermissionNext {
             reject,
             trace,
           }
-          Bus.publish(Event.Asked, info)
+          // The pending request must outlive a failed broadcast: the client
+          // can still discover it through the list endpoint and reply.
+          Bus.publish(Event.Asked, info).catch((error) =>
+            log.error("failed to publish permission request", { id, error }),
+          )
         })
       }
       await materialize(request, "session")
@@ -567,10 +571,10 @@ export namespace PermissionNext {
 
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     const merged = merge(...rulesets)
-    log.info("evaluate", { permission, pattern, ruleset: merged })
     const match = merged.findLast(
       (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
     )
+    log.debug("evaluate", { permission, pattern, rule: match, rules: merged.length })
     return match ?? { action: "ask", permission, pattern: "*" }
   }
 

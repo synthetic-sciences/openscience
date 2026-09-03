@@ -1,5 +1,6 @@
 import path from "path"
 import fs from "fs/promises"
+import { appendFileSync } from "fs"
 import { Global } from "../global"
 import { DataRootBarrier } from "../global/data-root-barrier"
 import z from "zod"
@@ -57,8 +58,38 @@ export namespace Log {
   }
   let pending = Promise.resolve()
 
-  export function flush() {
+  // File-mode lines are batched so one barrier marker and one append cover
+  // many lines instead of an fsync-backed marker per line.
+  const FLUSH_MS = 50
+  const FLUSH_BYTES = 64 * 1024
+  const buffered: string[] = []
+  const buffer = { size: 0, timer: undefined as ReturnType<typeof setTimeout> | undefined, exit: false }
+
+  function drain() {
+    if (buffer.timer) clearTimeout(buffer.timer)
+    buffer.timer = undefined
+    if (!buffered.length) return pending
+    const content = buffered.join("")
+    buffered.length = 0
+    buffer.size = 0
+    // Resolve the stable data-root link for every serialized append instead
+    // of retaining an fd into one physical root. Relocation intent blocks a
+    // new append, drains earlier ones, snapshots the logs, switches the link,
+    // then releases the same precomputed path onto the new target.
+    pending = pending
+      .catch(() => undefined)
+      .then(async () => {
+        await using operation = await DataRootBarrier.enter(logpath, 120_000)
+        await fs.appendFile(logpath, content)
+      })
+      .catch((error) => {
+        process.stderr.write(`OpenScience log write failed: ${String(error)}\n`)
+      })
     return pending
+  }
+
+  export function flush() {
+    return drain()
   }
 
   export async function init(options: Options) {
@@ -72,21 +103,28 @@ export namespace Log {
     await fs.truncate(logpath).catch(() => {})
     write = (msg: any) => {
       const content = String(msg)
-      // Resolve the stable data-root link for every serialized append instead
-      // of retaining an fd into one physical root. Relocation intent blocks a
-      // new append, drains earlier ones, snapshots the logs, switches the link,
-      // then releases the same precomputed path onto the new target.
-      pending = pending
-        .catch(() => undefined)
-        .then(async () => {
-          await using operation = await DataRootBarrier.enter(logpath, 120_000)
-          await fs.appendFile(logpath, content)
-        })
-        .catch((error) => {
-          process.stderr.write(`OpenScience log write failed: ${String(error)}\n`)
-        })
+      buffered.push(content)
+      buffer.size += content.length
+      if (buffer.size >= FLUSH_BYTES) {
+        drain()
+        return content.length
+      }
+      if (!buffer.timer) buffer.timer = setTimeout(drain, FLUSH_MS).unref()
       return content.length
     }
+    if (buffer.exit) return
+    buffer.exit = true
+    // process.exit() skips the async drain, so land whatever is still
+    // buffered synchronously on the stable log path. DataRootBarrier is
+    // skipped on purpose: it is async, so lines buffered during an in-flight
+    // relocation may land on the old physical root rather than be lost.
+    process.on("exit", () => {
+      if (!buffered.length || !logpath) return
+      try {
+        appendFileSync(logpath, buffered.join(""))
+      } catch {}
+      buffered.length = 0
+    })
   }
 
   async function cleanup(dir: string) {

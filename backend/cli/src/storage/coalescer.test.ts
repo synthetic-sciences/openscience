@@ -32,6 +32,22 @@ describe("createCoalescer", () => {
     expect(writes).toEqual([])
   })
 
+  test("a rejected timer flush is reported instead of dropped", async () => {
+    const errors: [string, unknown][] = []
+    const c = createCoalescer<number>(
+      async () => {
+        throw new Error("disk full")
+      },
+      1,
+      (key, error) => void errors.push([key, error]),
+    )
+    c.push("a", 1)
+    await Bun.sleep(25)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.[0]).toBe("a")
+    expect(errors[0]?.[1]).toBeInstanceOf(Error)
+  })
+
   test("flushWhere only flushes keys matching the predicate", async () => {
     const writes: [string, number][] = []
     const c = createCoalescer<number>((k, v) => void writes.push([k, v]), 1000)

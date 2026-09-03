@@ -171,9 +171,16 @@ const cli = yargs(hideBin(process.argv))
       // first kernel request joins the same lease-backed setup if it is still
       // running. OpenScience never modifies the user's Python, R, or Conda.
       if (!capabilityCanary) {
-        await import("./science/kernel/environment-manager")
-          .then((m) => m.ManagedEnvironments.startInBackground())
-          .catch(() => {})
+        const start = () =>
+          import("./science/kernel/environment-manager")
+            .then((m) => m.ManagedEnvironments.startInBackground())
+            .catch(() => {})
+        // The long-lived server commands (bare `openscience`, `web`, `serve`)
+        // defer the interpreter probes so they do not compete with workspace
+        // startup for CPU and disk; short-lived commands keep starting at once.
+        const server = !command || command === "web" || command === "serve"
+        if (server) setTimeout(start, 10_000).unref()
+        if (!server) await start()
       }
     }
 

@@ -649,6 +649,99 @@ sleep 30
       else process.env.OPENSCIENCE_SSH_TEST_REGISTRATION_FAILURE = previousFailure
     }
   }, 15_000)
+
+  test("settles an SSH record without submission authority instead of retrying it", async () => {
+    await using tmp = await tmpdir()
+    const root = path.join(tmp.path, "state")
+    const pinned = ComputeJobs.Host.parse({
+      ...host,
+      fingerprint: "SHA256:Qhi22lbcPTt1frRtqU56iDRQ6YjdwJU8EDmi0QCdnbc",
+      host_key: "hpc.example.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAUsmADCYwCBoe8869NDLxsh3Vvnsd3raFGoMF1h8fXB",
+    })
+    const record = (id: string, value: Partial<ComputeJobs.Job>) =>
+      ComputeJobs.Job.parse({
+        id,
+        name: id,
+        command: "python3 train.py",
+        cwd: tmp.path,
+        target: { kind: "ssh", host_id: pinned.id },
+        target_label: pinned.label,
+        scheduler: pinned.scheduler,
+        created_at: new Date(Date.now() - 60_000).toISOString(),
+        started_at: new Date(Date.now() - 59_000).toISOString(),
+        remote_id: `slurm:${id}`,
+        ssh: {
+          protocol: 1,
+          host: pinned,
+          root: `/scratch/team project/${id}`,
+          cwd: `/scratch/team project/${id}/workspace`,
+          fingerprint: pinned.fingerprint,
+          uploads: [],
+          upload_bytes: 0,
+          approval: "a".repeat(64),
+        },
+        ...value,
+      })
+    // Neither record carries an authority, so nothing can reach its host again.
+    const running = record("orphaned-running", {
+      status: "running",
+      lifecycle: { execution: "running", delivery: "none", resource: "active", recoverable: false },
+    })
+    const pending = record("orphaned-pending", {
+      status: "succeeded",
+      completed_at: new Date(Date.now() - 1_000).toISOString(),
+      exit_code: 0,
+      lifecycle: { execution: "succeeded", delivery: "pending", resource: "active", recoverable: false },
+    })
+    await fs.mkdir(root, { recursive: true })
+    await Bun.write(path.join(root, "jobs.json"), JSON.stringify([running, pending]))
+    const options = { root, workspace: tmp.path, hosts: [pinned] }
+    const events = (id: string) =>
+      Bun.file(path.join(root, "jobs", `${id}.events.log`))
+        .text()
+        .catch(() => "")
+    const message = (id: string) =>
+      `SSH job ${id} has no submission authority; release /scratch/team project/${id} by hand`
+
+    await ComputeJobs.list(options)
+    const settled = await (async function poll(attempts = 100): Promise<ComputeJobs.Job[]> {
+      const jobs = await Promise.all([running, pending].map((job) => ComputeJobs.get(job.id, options)))
+      const closed = jobs.filter((job): job is ComputeJobs.Job => job?.lifecycle?.resource === "closed")
+      if (closed.length === jobs.length) return closed
+      if (!attempts) throw new Error("Timed out waiting for orphaned SSH records to settle")
+      await Bun.sleep(20)
+      return poll(attempts - 1)
+    })()
+
+    expect(settled[0]).toMatchObject({
+      status: "failed",
+      error: message(running.id),
+      cleanup_error: message(running.id),
+      lifecycle: { execution: "failed", delivery: "none", resource: "closed", recoverable: false },
+    })
+    // A delivered-nothing terminal record keeps its outcome and abandons the
+    // outputs it can no longer harvest.
+    expect(settled[1]).toMatchObject({
+      status: "succeeded",
+      cleanup_error: message(pending.id),
+      lifecycle: { execution: "succeeded", delivery: "failed", resource: "closed", recoverable: false },
+    })
+    expect(settled[1]!.error).toBeUndefined()
+    for (const job of settled) {
+      expect(job.recovery_attempts).toBeUndefined()
+      expect(job.recovery_retry_at).toBeUndefined()
+      expect((await events(job.id)).match(/no submission authority/g)).toHaveLength(1)
+    }
+
+    // Later syncs leave the settled records alone: no retry, no repeated event.
+    await Bun.sleep(20)
+    await ComputeJobs.list(options)
+    await Bun.sleep(20)
+    for (const job of settled) {
+      expect((await events(job.id)).match(/no submission authority/g)).toHaveLength(1)
+      expect(await ComputeJobs.get(job.id, options)).toEqual(job)
+    }
+  })
 })
 
 describe("ComputeJobs persistence", () => {
@@ -968,6 +1061,17 @@ describe("ComputeJobs local lifecycle", () => {
       recoverable: false,
     })
     expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path })).toContain("alpha\nbeta")
+    // A bounded read returns whole trailing lines without decoding the file in
+    // full, and a window shorter than the last line still returns its tail.
+    expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path, bytes: 5 })).toBe("beta\n")
+    expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path, bytes: 3 })).toBe("ta\n")
+    // A window with no line boundary that opens inside a multi-byte character
+    // (or whose extra byte leads one) returns only whole characters, and one
+    // opening exactly on the line start keeps that line whole.
+    await fs.appendFile(path.join(root, "jobs", `${job.id}.log`), "😀ok")
+    expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path, bytes: 4 })).toBe("ok")
+    expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path, bytes: 5 })).toBe("ok")
+    expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path, bytes: 6 })).toBe("😀ok")
     expect(finished.reproducibility).toMatchObject({
       platform: process.platform,
       arch: process.arch,

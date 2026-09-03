@@ -2171,7 +2171,13 @@ export namespace Provider {
       _stateCacheTrust = trusted
     }
     if (_stateCache === null) {
-      _stateCache = _loadState()
+      // A rejected load must not be memoised forever; drop it so the next
+      // caller retries, unless a newer load already replaced it.
+      const loading: ReturnType<typeof _loadState> = _loadState().catch((error) => {
+        if (_stateCache === loading) _stateCache = null
+        throw error
+      })
+      _stateCache = loading
     }
     return _stateCache
   }

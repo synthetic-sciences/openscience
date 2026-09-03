@@ -75,6 +75,18 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace Server {
   const log = Log.create({ service: "server" })
 
+  /** Upper bound on events buffered per SSE client before the oldest are dropped. */
+  const EVENT_QUEUE_LIMIT = 2000
+
+  type QueuedEvent = { type: string; properties?: unknown }
+
+  /** Part id of a streamed `message.part.updated` event, used to coalesce a full queue. */
+  function partID(event: QueuedEvent) {
+    if (event.type !== "message.part.updated") return
+    const part = (event.properties as { part?: { id?: unknown } } | undefined)?.part
+    return typeof part?.id === "string" ? part.id : undefined
+  }
+
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
   let _server: Bun.Server<unknown> | undefined
@@ -230,19 +242,21 @@ export namespace Server {
         })
         .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
+          const started = Date.now()
           if (!skipLogging) {
-            log.info("request", {
+            log.debug("request", {
               method: c.req.method,
               path: c.req.path,
             })
           }
-          const timer = log.time("request", {
-            method: c.req.method,
-            path: c.req.path,
-          })
           await next()
           if (!skipLogging) {
-            timer.stop()
+            log.debug("request", {
+              method: c.req.method,
+              path: c.req.path,
+              status: "completed",
+              duration: Date.now() - started,
+            })
           }
         })
         .use(
@@ -748,14 +762,6 @@ export namespace Server {
                   properties: {},
                 }),
               })
-              const unsub = Bus.subscribeAll(async (event) => {
-                await stream.writeSSE({
-                  data: JSON.stringify(event),
-                })
-                if (event.type === Bus.InstanceDisposed.type) {
-                  stream.close()
-                }
-              })
 
               // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
               const heartbeat = setInterval(() => {
@@ -767,14 +773,66 @@ export namespace Server {
                 })
               }, 30000)
 
-              await new Promise<void>((resolve) => {
-                stream.onAbort(() => {
-                  clearInterval(heartbeat)
-                  unsub()
-                  resolve()
-                  log.info("event disconnected")
-                })
+              // The subscriber never awaits the socket. Events land in a
+              // bounded per-connection queue drained by one writer loop, so a
+              // stalled browser tab cannot backpressure `Bus.publish` callers.
+              const queue: QueuedEvent[] = []
+              const done = Promise.withResolvers<void>()
+              const state = { closed: false, draining: false, overflowed: false }
+              const cleanup = () => {
+                if (state.closed) return
+                state.closed = true
+                clearInterval(heartbeat)
+                unsub()
+                done.resolve()
+              }
+              const drain = async () => {
+                if (state.draining) return
+                state.draining = true
+                try {
+                  for (;;) {
+                    const event = state.closed ? undefined : queue.shift()
+                    if (!event) break
+                    await stream.writeSSE({
+                      data: JSON.stringify(event),
+                    })
+                    if (event.type !== Bus.InstanceDisposed.type) continue
+                    cleanup()
+                    stream.close()
+                  }
+                } catch (error) {
+                  log.debug("event write failed", { error })
+                  cleanup()
+                } finally {
+                  state.draining = false
+                }
+              }
+              const unsub = Bus.subscribeAll((event: QueuedEvent) => {
+                if (state.closed) return
+                if (queue.length >= EVENT_QUEUE_LIMIT) {
+                  const part = partID(event)
+                  // Replace the newest queued update for the part, never an
+                  // older one, so the client still receives states in order.
+                  const index = part === undefined ? -1 : queue.findLastIndex((item) => partID(item) === part)
+                  if (index >= 0) {
+                    queue[index] = event
+                    return
+                  }
+                  if (!state.overflowed) {
+                    state.overflowed = true
+                    log.warn("event queue overflow; dropping oldest events", { limit: EVENT_QUEUE_LIMIT })
+                  }
+                  queue.shift()
+                }
+                queue.push(event)
+                void drain()
               })
+
+              stream.onAbort(() => {
+                cleanup()
+                log.info("event disconnected")
+              })
+              await done.promise
             })
           },
         )

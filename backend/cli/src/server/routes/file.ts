@@ -859,7 +859,8 @@ export const FileRoutes = lazy(() =>
         const graph = await Provenance.project({ projectID: Instance.project.id, directory: Instance.directory })
         const absolute = path.resolve(Instance.directory, query.path)
         const relative = path.relative(Instance.directory, absolute)
-        const inside = relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+        const inside =
+          relative !== "" && relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative)
         const matches = (value?: string) =>
           value !== undefined &&
           (value === absolute || (inside && (value === relative || value.endsWith(`/${relative}`))))
