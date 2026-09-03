@@ -41,6 +41,26 @@ describe("project request boundary", () => {
     expect(headers.get("x-openscience-directory")).toBe("/work/alpha")
   })
 
+  test("drops a caller-supplied directory header when no root override is bound", async () => {
+    const calls: Array<{ init?: RequestInit }> = []
+    const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ init })
+      return Response.json({ ok: true })
+    }) as typeof fetch
+    const request = createProjectRequest({
+      baseUrl: () => "http://127.0.0.1:4096",
+      projectID: () => "prj_alpha",
+      directory: () => "",
+      fetch: () => fetcher,
+    })
+
+    await request("/file/content", { headers: { "x-openscience-directory": "/work/wrong" } })
+
+    const headers = new Headers(calls[0]!.init?.headers)
+    expect(headers.get("x-openscience-project")).toBe("prj_alpha")
+    expect(headers.has("x-openscience-directory")).toBe(false)
+  })
+
   test("uses bound query selectors only for direct transports", () => {
     const request = createProjectRequest({
       baseUrl: () => "http://127.0.0.1:4096",
