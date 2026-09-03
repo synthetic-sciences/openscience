@@ -196,27 +196,20 @@ const Sandbox: Component = () => {
         class="settings-preferences-panel settings-preferences-panel--sandbox"
         aria-busy={saving() ? "true" : undefined}
       >
-        <PanelHeader
-          title="Sandbox"
-          description="Isolate local terminals, kernels, and shell commands."
-          toolbar={
-            <span class="settings-sandbox-save-state" role="status" aria-live="polite">
-              {saving() ? "Saving…" : ""}
-            </span>
-          }
-        />
+        <PanelHeader title="Sandbox" description="Isolate local terminals, kernels, and shell commands." />
         <PanelBody>
           <Show when={data.error}>
             <div class="settings-alert" data-tone="critical" role="alert">
               <span>Sandbox settings could not be loaded. {String(data.error)}</span>
-              <button
-                type="button"
-                class="settings-inline-action"
+              <Button
+                size="small"
+                variant="secondary"
+                class="settings-panel-action"
                 disabled={data.loading || saving()}
                 onClick={() => void refetch()}
               >
                 Retry
-              </button>
+              </Button>
             </div>
           </Show>
           <Show
@@ -234,6 +227,11 @@ const Sandbox: Component = () => {
             <Section
               title="Protection"
               description="Permissions approve a command; the sandbox limits what it can reach."
+              action={
+                <span class="settings-sandbox-save-state" role="status" aria-live="polite">
+                  {saving() ? "Saving…" : ""}
+                </span>
+              }
             >
               <div class="settings-card settings-preferences-card">
                 <div class="settings-row settings-sandbox-control-row settings-sandbox-enable-row">
@@ -258,7 +256,11 @@ const Sandbox: Component = () => {
                 </div>
                 <Show
                   when={status()}
-                  fallback={<div class="settings-panel-loading-copy">Checking native containment…</div>}
+                  fallback={
+                    <div class="settings-panel-loading__rows" role="status" aria-label="Checking native containment">
+                      <span />
+                    </div>
+                  }
                 >
                   {(s) => (
                     <>
@@ -377,6 +379,7 @@ const Sandbox: Component = () => {
                       </span>
                     </div>
                     <Select
+                      aria-label="Network access"
                       options={NETWORK_OPTS}
                       current={NETWORK_OPTS.find((o) => o.value === effectiveNetwork())}
                       value={(o) => o.value}
@@ -395,6 +398,7 @@ const Sandbox: Component = () => {
                       <span>Choose what happens if filesystem isolation cannot start.</span>
                     </div>
                     <Select
+                      aria-label="Fallback behavior"
                       options={UNAVAILABLE_OPTS}
                       current={UNAVAILABLE_OPTS.find((o) => o.value === (config().onUnavailable ?? "error"))}
                       value={(o) => o.value}

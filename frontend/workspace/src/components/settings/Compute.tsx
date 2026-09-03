@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createResource, type Component, type JSX, type Setter } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
-import { Icon, type IconProps } from "@synsci/ui/icon"
+import { Icon } from "@synsci/ui/icon"
 import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
 import { showToast } from "@synsci/ui/toast"
@@ -12,7 +12,7 @@ import { confirmDialog } from "@/atlas/dialogs"
 import { settingsApi } from "./api"
 import { CredentialServices } from "./CredentialServices"
 import { ProviderLogo } from "./ProviderLogo"
-import { PanelBody, PanelHeader, PanelScroll } from "./_shared"
+import { Card, PanelBody, PanelHeader, PanelScroll, RowCopy, Section } from "./_shared"
 import "./preference-panels.css"
 
 type Scheduler = "none" | "slurm" | "pbs"
@@ -676,27 +676,31 @@ const Compute: Component = () => {
         <PanelBody>
           <Section
             title="Local runtimes"
-            subtitle="OpenScience owns shared, reproducible starter environments and keeps your system Python, R, and shell untouched."
+            description="OpenScience owns shared, reproducible starter environments and keeps your system Python, R, and shell untouched."
           >
-            <Panel>
-              <Row
-                icon="braces"
-                title="Python starter"
-                subtitle="Python 3.11 with NumPy, pandas, SciPy, Matplotlib, Seaborn, and Pillow. Variables persist for the session."
-              >
-                <Badge tone={environment("python")?.ready ? "ready" : "muted"}>
-                  {environment("python")?.ready ? "Ready" : "Setup needed"}
-                </Badge>
-              </Row>
-              <Row
-                icon="braces"
-                title="R starter"
-                subtitle="R with tidyverse, ggplot2, and jsonlite. It is isolated from your system R libraries."
-              >
-                <Badge tone={environment("r")?.ready ? "ready" : "muted"}>
-                  {environment("r")?.ready ? "Ready" : "Setup needed"}
-                </Badge>
-              </Row>
+            <Card>
+              <div class="settings-row settings-compute-summary-row">
+                <RowCopy
+                  title="Python starter"
+                  description="Python 3.11 with NumPy, pandas, SciPy, Matplotlib, Seaborn, and Pillow. Variables persist for the session."
+                />
+                <div class="settings-compute-summary-action">
+                  <Badge tone={environment("python")?.ready ? "ready" : "muted"}>
+                    {environment("python")?.ready ? "Ready" : "Setup needed"}
+                  </Badge>
+                </div>
+              </div>
+              <div class="settings-row settings-compute-summary-row">
+                <RowCopy
+                  title="R starter"
+                  description="R with tidyverse, ggplot2, and jsonlite. It is isolated from your system R libraries."
+                />
+                <div class="settings-compute-summary-action">
+                  <Badge tone={environment("r")?.ready ? "ready" : "muted"}>
+                    {environment("r")?.ready ? "Ready" : "Setup needed"}
+                  </Badge>
+                </div>
+              </div>
               <Show when={data()?.environments.status !== "ready"}>
                 <div class="settings-row items-center gap-3">
                   <div class="settings-list-copy min-w-0 flex-1">
@@ -720,11 +724,11 @@ const Compute: Component = () => {
                   </Button>
                 </div>
               </Show>
-            </Panel>
+            </Card>
           </Section>
 
-          <Section title="Modal" subtitle="Connect Modal for approved jobs in isolated cloud sandboxes.">
-            <Panel>
+          <Section title="Modal" description="Connect Modal for approved jobs in isolated cloud sandboxes.">
+            <Card>
               <div class="settings-compute-card" aria-busy={modalBusy() ? "true" : undefined}>
                 <div class="settings-compute-provider-row">
                   <div class="flex min-w-0 flex-1 basis-[240px] items-center gap-2.5">
@@ -784,7 +788,7 @@ const Compute: Component = () => {
                 </Show>
                 <Show when={!data.loading && !modal()?.connected && !data()?.modal_file.ready}>
                   <div class="flex flex-col gap-2">
-                    <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="settings-form-grid">
                       <Field label="Modal token ID" value={token()} placeholder="ak-…" onInput={setToken} />
                       <Field
                         label="Modal token secret"
@@ -811,21 +815,23 @@ const Compute: Component = () => {
                   <div class="settings-list-header">
                     <h4 class="text-11-medium text-text-weak">Job defaults</h4>
                   </div>
-                  <div class="grid gap-3 sm:grid-cols-2">
+                  <div class="settings-form-grid">
                     <Field label="Modal app" value={app()} placeholder="openscience" onInput={setApp} />
                     <Field label="Default image" value={image()} placeholder="python:3.12-slim" onInput={setImage} />
-                    <label class="flex min-w-0 flex-col gap-1.5">
+                    <div class="flex min-w-0 flex-col gap-1.5">
                       <span class="text-12-medium text-text-strong">Network</span>
-                      <select
+                      <Select
                         aria-label="Modal network"
-                        class="settings-control px-3 text-13-regular text-text-strong"
-                        value={network()}
-                        onChange={(event) => setNetwork(event.currentTarget.value as Modal["network"])}
-                      >
-                        <option value="none">Blocked</option>
-                        <option value="unrestricted">Unrestricted</option>
-                      </select>
-                    </label>
+                        options={networks}
+                        current={networks.find((item) => item.value === network())}
+                        value={(item) => item.value}
+                        label={(item) => item.label}
+                        onSelect={(item) => item && setNetwork(item.value)}
+                        variant="secondary"
+                        size="small"
+                        triggerVariant="settings"
+                      />
+                    </div>
                     <Field
                       label="Default timeout (minutes)"
                       value={timeout()}
@@ -868,14 +874,14 @@ const Compute: Component = () => {
                   </p>
                 </Show>
               </div>
-            </Panel>
+            </Card>
           </Section>
 
           <Section
             title="GPU provider credentials"
-            subtitle="Store encrypted credentials for reviewed read-only agent operations. Test connection admits only administrator-managed executables; ordinary Homebrew and pip installs remain credential-only. Credentials never enter agent shells, and paid or mutating actions remain unavailable."
+            description="Store encrypted credentials for reviewed read-only agent operations. Test connection admits only administrator-managed executables; ordinary Homebrew and pip installs remain credential-only. Credentials never enter agent shells, and paid or mutating actions remain unavailable."
           >
-            <Panel>
+            <Card>
               <For each={cliProviders()}>
                 {(item) => {
                   const rowBusy = () =>
@@ -1013,47 +1019,50 @@ const Compute: Component = () => {
                   )
                 }}
               </For>
-            </Panel>
+            </Card>
           </Section>
 
           <Section
             title="Remote hosts"
-            subtitle="Pin a host key, then dispatch staged jobs through your active SSH agent. A selected identity file and data-only ProxyJump are optional."
+            description="Pin a host key, then dispatch staged jobs through your active SSH agent. A selected identity file and data-only ProxyJump are optional."
           >
             <div class="settings-compute-remote" aria-busy={hasBusyPrefix("ssh:") ? "true" : undefined}>
               <Show
                 when={!data.loading}
                 fallback={
-                  <Panel>
-                    <Row icon="server" title="Loading SSH hosts" subtitle="Reading saved compute profiles.">
-                      <Badge tone="muted">Loading</Badge>
-                    </Row>
-                  </Panel>
+                  <Card>
+                    <div class="settings-panel-loading__rows" role="status" aria-label="Loading SSH hosts">
+                      <span />
+                      <span />
+                    </div>
+                  </Card>
                 }
               >
                 <Show
                   when={(data()?.ssh_hosts.length ?? 0) > 0}
                   fallback={
-                    <Panel>
-                      <Row
-                        icon="server"
-                        title="No remote hosts connected"
-                        subtitle="Add a plain SSH, Slurm, or PBS host, then run a real connection check."
-                      >
-                        <Button
-                          class="settings-panel-action settings-panel-action--quiet"
-                          size="small"
-                          variant="secondary"
-                          disabled={sshMutationBusy()}
-                          onClick={() => setAdding(true)}
-                        >
-                          Add host
-                        </Button>
-                      </Row>
-                    </Panel>
+                    <Card>
+                      <div class="settings-row settings-compute-summary-row">
+                        <RowCopy
+                          title="No remote hosts connected"
+                          description="Add a plain SSH, Slurm, or PBS host, then run a real connection check."
+                        />
+                        <div class="settings-compute-summary-action">
+                          <Button
+                            class="settings-panel-action settings-panel-action--quiet"
+                            size="small"
+                            variant="secondary"
+                            disabled={sshMutationBusy()}
+                            onClick={() => setAdding(true)}
+                          >
+                            Add host
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
                   }
                 >
-                  <Panel>
+                  <Card>
                     <For each={data()?.ssh_hosts}>
                       {(item) => {
                         const probe = () => probes()[item.id]
@@ -1061,9 +1070,6 @@ const Compute: Component = () => {
                           <>
                             <div class="settings-row settings-compute-host-row">
                               <div class="settings-compute-host-copy">
-                                <div class="settings-row-icon mt-0.5" aria-hidden="true">
-                                  <Icon name="server" size="small" />
-                                </div>
                                 <div class="min-w-0 flex-1">
                                   <div class="flex min-w-0 flex-wrap items-center gap-2">
                                     <span class="truncate text-14-medium text-text-strong">{item.label}</span>
@@ -1186,7 +1192,7 @@ const Compute: Component = () => {
                         )
                       }}
                     </For>
-                  </Panel>
+                  </Card>
                 </Show>
               </Show>
 
@@ -1201,14 +1207,11 @@ const Compute: Component = () => {
                       </p>
                     </div>
                   </div>
-                  <Panel>
+                  <Card>
                     <For each={configHosts()}>
                       {(item) => (
                         <div class="settings-row settings-compute-host-row">
                           <div class="settings-compute-host-copy">
-                            <div class="settings-row-icon mt-0.5" aria-hidden="true">
-                              <Icon name="server" size="small" />
-                            </div>
                             <div class="min-w-0 flex-1">
                               <p class="text-13-medium text-text-strong">{item.alias}</p>
                               <p class="mt-0.5 truncate text-11-regular text-text-weak">
@@ -1232,7 +1235,7 @@ const Compute: Component = () => {
                         </div>
                       )}
                     </For>
-                  </Panel>
+                  </Card>
                 </div>
               </Show>
 
@@ -1257,9 +1260,6 @@ const Compute: Component = () => {
                   }}
                 >
                   <div class="flex items-start gap-3">
-                    <div class="settings-row-icon mt-0.5" aria-hidden="true">
-                      <Icon name="server" size="small" />
-                    </div>
                     <div class="min-w-0">
                       <h4 class="text-14-medium text-text-strong">New SSH host</h4>
                       <p class="mt-0.5 text-12-regular text-text-weak">
@@ -1268,7 +1268,7 @@ const Compute: Component = () => {
                       </p>
                     </div>
                   </div>
-                  <div class="grid gap-3 sm:grid-cols-2">
+                  <div class="settings-form-grid">
                     <Field label="Name" value={label()} placeholder="Lab cluster" onInput={setLabel} />
                     <Field label="Hostname" value={host()} placeholder="hpc.example.edu" onInput={setHost} />
                     <Field label="User" value={user()} placeholder="Optional" onInput={setUser} />
@@ -1312,7 +1312,7 @@ const Compute: Component = () => {
                       inputMode="numeric"
                       onInput={setSshConcurrency}
                     />
-                    <div class="sm:col-span-2">
+                    <div data-span="full">
                       <TextArea
                         label="Host notes"
                         value={notes()}
@@ -1400,19 +1400,10 @@ const TextArea: Component<{
   </label>
 )
 
-const Section: Component<{ title: string; subtitle: string; children: JSX.Element }> = (props) => (
-  <section class="settings-section">
-    <div class="settings-section-heading">
-      <div>
-        <h3>{props.title}</h3>
-        <p>{props.subtitle}</p>
-      </div>
-    </div>
-    {props.children}
-  </section>
-)
-
-const Panel: Component<{ children: JSX.Element }> = (props) => <div class="settings-card">{props.children}</div>
+const networks: Array<{ value: Modal["network"]; label: string }> = [
+  { value: "none", label: "Blocked" },
+  { value: "unrestricted", label: "Unrestricted" },
+]
 
 const NoticeBox: Component<{ notice: Notice }> = (props) => (
   <div
@@ -1444,21 +1435,6 @@ const NoticeBox: Component<{ notice: Notice }> = (props) => (
         <p class="mt-0.5 text-11-regular text-text-weak">{props.notice.detail}</p>
       </Show>
     </div>
-  </div>
-)
-
-const Row: Component<{ icon: IconProps["name"]; title: string; subtitle: string; children: JSX.Element }> = (props) => (
-  <div class="settings-row settings-compute-summary-row">
-    <div class="flex min-w-0 flex-1 basis-[220px] items-center gap-3">
-      <div class="settings-row-icon" aria-hidden="true">
-        <Icon name={props.icon} size="small" />
-      </div>
-      <div class="flex min-w-0 flex-col gap-0.5">
-        <span class="text-14-medium text-text-strong">{props.title}</span>
-        <span class="text-12-regular text-text-weak">{props.subtitle}</span>
-      </div>
-    </div>
-    <div class="settings-compute-summary-action">{props.children}</div>
   </div>
 )
 

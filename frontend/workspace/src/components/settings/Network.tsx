@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
+import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
 import { Switch } from "@synsci/ui/switch"
 import { useDialog } from "@synsci/ui/context/dialog"
@@ -166,27 +167,20 @@ export default function Network() {
         class="settings-preferences-panel settings-preferences-panel--network"
         aria-busy={saving() ? "true" : undefined}
       >
-        <PanelHeader
-          title="Network"
-          description="Choose which online services research tools can reach."
-          toolbar={
-            <span class="settings-network-save-state" role="status" aria-live="polite">
-              {saving() ? "Saving…" : ""}
-            </span>
-          }
-        />
+        <PanelHeader title="Network" description="Choose which online services research tools can reach." />
         <PanelBody>
           <Show when={error()}>
             <div class="settings-alert" data-tone="critical" role="alert">
               <span>{error()}</span>
-              <button
-                type="button"
-                class="settings-inline-action"
+              <Button
+                size="small"
+                variant="secondary"
+                class="settings-panel-action"
                 disabled={loading() || saving()}
                 onClick={() => void load()}
               >
                 Retry
-              </button>
+              </Button>
             </div>
           </Show>
 
@@ -206,7 +200,15 @@ export default function Network() {
               </Show>
             }
           >
-            <Section title="Access policy" description="Web fetches and science connectors follow this policy.">
+            <Section
+              title="Access policy"
+              description="Web fetches and science connectors follow this policy."
+              action={
+                <span class="settings-network-save-state" role="status" aria-live="polite">
+                  {saving() ? "Saving…" : ""}
+                </span>
+              }
+            >
               <div class="settings-card settings-preferences-card">
                 <div class="settings-row settings-preference-row settings-network-policy-row">
                   <div class="settings-row-copy">
@@ -242,11 +244,13 @@ export default function Network() {
                   </div>
                 }
               >
-                <div class="settings-card settings-preferences-card settings-network-groups">
+                <div class="settings-card settings-preferences-card">
                   <For
                     each={catalog()}
                     fallback={
-                      <span class="settings-empty-copy settings-network-empty-copy">No service groups available.</span>
+                      <p class="settings-card-empty" role="status">
+                        No service groups available.
+                      </p>
                     }
                   >
                     {(group) => {
@@ -306,15 +310,15 @@ export default function Network() {
               description="Add domains that are specific to your work."
               action={
                 <Show when={state().custom.length > 0}>
-                  <button
-                    type="button"
-                    class="settings-inline-action text-text-danger"
-                    data-quiet="true"
+                  <Button
+                    size="small"
+                    variant="ghost"
+                    class="settings-panel-action settings-panel-action--danger-quiet"
                     onClick={clearCustom}
                     aria-label="Clear allowed domains"
                   >
                     Clear
-                  </button>
+                  </Button>
                 </Show>
               }
             >
@@ -331,11 +335,13 @@ export default function Network() {
                   </div>
                 }
               >
-                <div class="settings-card settings-preferences-card settings-network-domains">
+                <div class="settings-card settings-preferences-card">
                   <For
                     each={state().custom}
                     fallback={
-                      <span class="settings-empty-copy settings-network-empty-copy">No custom domains added.</span>
+                      <p class="settings-card-empty" role="status">
+                        No custom domains added.
+                      </p>
                     }
                   >
                     {(domain) => (

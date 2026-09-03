@@ -16,11 +16,6 @@
   accent-color: var(--icon-strong-base);
 }
 
-.settings-sound-volume input:focus-visible {
-  outline: 2px solid var(--border-selected);
-  outline-offset: 3px;
-}
-
 .settings-sound-volume input:disabled {
   opacity: 0.45;
 }
@@ -32,36 +27,14 @@
   font-size: var(--font-size-small);
   text-align: right;
 }
-.settings-update-history {
-  display: grid;
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--border-base);
-  border-radius: 14px;
-  background: var(--border-weak-base);
-}
-
+/* Recent releases are one more borderless settings card of interactive rows;
+   the shell owns the surface, radius, hover, and focus ring. */
 .settings-update-history button {
-  display: flex;
-  min-width: 0;
-  align-items: center;
+  width: 100%;
+  flex-wrap: nowrap;
   justify-content: space-between;
-  gap: 18px;
-  padding: 13px 15px;
-  border: 0;
-  background: var(--surface-raised-base);
   color: var(--text-base);
   text-align: left;
-}
-
-.settings-update-history button:hover,
-.settings-update-history button:focus-visible {
-  background: var(--surface-base-hover);
-}
-
-.settings-update-history button:focus-visible {
-  outline: 2px solid var(--border-interactive-base);
-  outline-offset: -2px;
 }
 
 .settings-update-history span {
@@ -80,7 +53,7 @@
 .settings-update-history strong {
   color: var(--text-strong);
   font-size: 12px;
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .settings-update-history small,

@@ -41,6 +41,12 @@
   box-shadow: none;
 }
 
+/* Grouped preference rows sit flush inside one surface, as in Models. */
+.settings-preferences-card {
+  gap: 0;
+  overflow: hidden;
+}
+
 .settings-preferences-panel .settings-list-item + .settings-list-item {
   border-top: 0;
 }
@@ -196,7 +202,7 @@
 }
 
 .settings-preference-disclosure {
-  padding: 0 var(--settings-space-4) var(--settings-space-3) 56px;
+  padding: 0 var(--settings-space-4) var(--settings-space-3) var(--settings-space-4);
 }
 
 .settings-preference-domain-list {
@@ -218,7 +224,7 @@
 .settings-inline-editor {
   display: grid;
   gap: var(--settings-space-3);
-  padding: 2px var(--settings-space-4) var(--settings-space-4) 56px;
+  padding: 2px var(--settings-space-4) var(--settings-space-4) var(--settings-space-4);
 }
 
 .settings-inline-editor__actions {
@@ -255,34 +261,10 @@
   color: var(--text-strong);
 }
 
-.settings-panel-loading-copy {
-  min-height: 60px;
-  display: flex;
-  align-items: center;
-  padding: var(--settings-space-3) var(--settings-space-4);
-  color: var(--text-weak);
-  font-size: 12px;
-}
-
-.settings-empty-copy {
-  display: block;
-  padding: var(--settings-space-4);
-  color: var(--text-weak);
-  font-size: 12px;
-  text-wrap: pretty;
-}
-
-/* Network follows the same flat row language as Compute. Repeated service
-   icons were removed; the large disclosure target and switches carry the
-   interaction without another visual column. */
-.settings-preferences-panel--network .settings-page-header__inner {
-  position: relative;
-}
-
-.settings-preferences-panel--network .settings-network-save-state {
-  position: absolute;
-  top: 2px;
-  right: 0;
+/* Background saves announce inline beside the affected section heading, the
+   way Models reports "Saving…", instead of floating over the page header. */
+.settings-preferences-panel .settings-network-save-state,
+.settings-preferences-panel .settings-sandbox-save-state {
   min-width: 48px;
   color: var(--text-weak);
   font-size: 11px;
@@ -291,6 +273,9 @@
   text-align: right;
 }
 
+/* Network follows the same flat row language as Compute. Repeated service
+   icons were removed; the large disclosure target and switches carry the
+   interaction without another visual column. */
 .settings-preferences-panel--network .settings-network-loading-rows {
   gap: 2px;
   padding: 4px;
@@ -380,13 +365,6 @@
   min-height: 48px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  padding-block: var(--settings-space-2);
-}
-
-.settings-preferences-panel--network .settings-network-empty-copy {
-  min-height: 40px;
-  display: flex;
   align-items: center;
   padding-block: var(--settings-space-2);
 }
@@ -501,7 +479,7 @@
 .settings-compute-host-notes-editor {
   display: grid;
   gap: var(--settings-space-2);
-  padding: 0 var(--settings-space-4) var(--settings-space-4) 56px;
+  padding: 0 var(--settings-space-4) var(--settings-space-4) var(--settings-space-4);
 }
 
 .settings-compute-host-notes-editor > p {
@@ -571,7 +549,7 @@
 
 .settings-storage-usage-row {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   column-gap: var(--settings-space-3);
   row-gap: var(--settings-space-2);
@@ -579,7 +557,7 @@
 
 .settings-storage-cache {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   column-gap: var(--settings-space-3);
 }
@@ -589,7 +567,7 @@
 }
 
 .settings-storage-meter {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
   height: 3px;
   overflow: hidden;
   border-radius: 999px;
@@ -606,7 +584,7 @@
 .settings-sandbox-checks {
   display: grid;
   gap: var(--settings-space-2);
-  padding: 0 var(--settings-space-4) var(--settings-space-4) 56px;
+  padding: 0 var(--settings-space-4) var(--settings-space-4) var(--settings-space-4);
 }
 
 .settings-sandbox-check {
@@ -678,7 +656,6 @@
     width: 100%;
     justify-content: flex-start;
     margin-left: 0;
-    padding-left: calc(32px + var(--settings-space-3));
   }
 
   .settings-compute-host-notes-editor {
@@ -703,7 +680,6 @@
     width: 100%;
     justify-content: flex-start;
     margin-left: 0;
-    padding-left: 42px;
   }
 
   .settings-account-workspace {
@@ -717,11 +693,11 @@
   }
 
   .settings-storage-cache {
-    grid-template-columns: 30px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .settings-storage-cache .settings-preference-action {
-    grid-column: 2 / -1;
+    grid-column: 1 / -1;
     justify-self: start;
   }
 
@@ -750,7 +726,6 @@
   .settings-compute-summary-action {
     width: 100%;
     margin-left: 0;
-    padding-left: calc(32px + var(--settings-space-3));
   }
 }
 
@@ -761,18 +736,5 @@
 
   .settings-preferences-panel--network .settings-network-add-row .settings-preference-action {
     justify-self: start;
-  }
-
-  .settings-compute-host-actions,
-  .settings-compute-summary-action {
-    padding-left: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .settings-preferences-panel *,
-  .settings-preferences-panel *::before,
-  .settings-preferences-panel *::after {
-    transition-duration: 0.01ms !important;
   }
 }

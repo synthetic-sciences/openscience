@@ -173,19 +173,23 @@ const Permissions: Component = () => {
               <div class="settings-card settings-preferences-card">
                 <Show
                   when={!trust.loading}
-                  fallback={<div class="settings-panel-loading-copy">Checking project trust…</div>}
+                  fallback={
+                    <div class="settings-panel-loading__rows" role="status" aria-label="Checking project trust">
+                      <span />
+                    </div>
+                  }
                 >
                   <Show
                     when={!trust.error}
                     fallback={
-                      <div class="settings-row settings-preference-row" role="alert">
-                        <span class="settings-preference-icon" data-tone="warning" aria-hidden="true">
-                          <Icon name="alert-circle" size="small" />
-                        </span>
-                        <span class="min-w-0 flex-1 text-12-regular text-text-danger">
-                          Project trust could not be loaded. {String(trust.error)}
-                        </span>
-                        <Button size="small" variant="ghost" onClick={() => void trustControls.refetch()}>
+                      <div class="settings-alert" data-tone="critical" role="alert">
+                        <span>Project trust could not be loaded. {String(trust.error)}</span>
+                        <Button
+                          size="small"
+                          variant="secondary"
+                          class="settings-panel-action"
+                          onClick={() => void trustControls.refetch()}
+                        >
                           Retry
                         </Button>
                       </div>
@@ -234,16 +238,23 @@ const Permissions: Component = () => {
               <div class="settings-card settings-preferences-card">
                 <Show
                   when={!folders.loading}
-                  fallback={<div class="settings-panel-loading-copy">Loading connected folders…</div>}
+                  fallback={
+                    <div class="settings-panel-loading__rows" role="status" aria-label="Loading connected folders">
+                      <span />
+                    </div>
+                  }
                 >
                   <Show
                     when={!folders.error}
                     fallback={
-                      <div class="settings-row settings-preference-row" role="alert">
-                        <span class="min-w-0 flex-1 text-12-regular text-text-danger">
-                          Connected folders could not be loaded.
-                        </span>
-                        <Button size="small" variant="ghost" onClick={() => void folderControls.refetch()}>
+                      <div class="settings-alert" data-tone="critical" role="alert">
+                        <span>Connected folders could not be loaded.</span>
+                        <Button
+                          size="small"
+                          variant="secondary"
+                          class="settings-panel-action"
+                          onClick={() => void folderControls.refetch()}
+                        >
                           Retry
                         </Button>
                       </div>
@@ -252,22 +263,14 @@ const Permissions: Component = () => {
                     <Show
                       when={(folders() ?? []).length > 0}
                       fallback={
-                        <div class="settings-row settings-preference-row">
-                          <span class="settings-preference-icon" aria-hidden="true">
-                            <Icon name="folder" size="small" />
-                          </span>
-                          <span class="min-w-0 flex-1 text-12-regular text-text-weak">
-                            No connected folders in this session.
-                          </span>
-                        </div>
+                        <p class="settings-card-empty" role="status">
+                          No connected folders in this session.
+                        </p>
                       }
                     >
                       <For each={folders()}>
                         {(grant) => (
                           <div class="settings-row settings-preference-row justify-between">
-                            <span class="settings-preference-icon" aria-hidden="true">
-                              <Icon name="folder" size="small" />
-                            </span>
                             <div class="settings-row-copy">
                               <strong class="break-all">{grant.path}</strong>
                               <span class="text-11-regular text-text-weak">
@@ -306,19 +309,25 @@ const Permissions: Component = () => {
               <div class="settings-card settings-preferences-card">
                 <Show
                   when={!standing.loading}
-                  fallback={<div class="settings-panel-loading-copy">Loading standing approvals…</div>}
+                  fallback={
+                    <div class="settings-panel-loading__rows" role="status" aria-label="Loading standing approvals">
+                      <span />
+                      <span />
+                    </div>
+                  }
                 >
                   <Show
                     when={!standing.error}
                     fallback={
-                      <div class="settings-row settings-preference-row" role="alert">
-                        <span class="settings-preference-icon" data-tone="warning" aria-hidden="true">
-                          <Icon name="alert-circle" size="small" />
-                        </span>
-                        <span class="min-w-0 flex-1 text-12-regular text-text-danger">
-                          Standing approvals could not be loaded. {String(standing.error)}
-                        </span>
-                        <Button size="small" variant="ghost" disabled={standing.loading} onClick={() => void refetch()}>
+                      <div class="settings-alert" data-tone="critical" role="alert">
+                        <span>Standing approvals could not be loaded. {String(standing.error)}</span>
+                        <Button
+                          size="small"
+                          variant="secondary"
+                          class="settings-panel-action"
+                          disabled={standing.loading}
+                          onClick={() => void refetch()}
+                        >
                           Retry
                         </Button>
                       </div>
@@ -327,23 +336,14 @@ const Permissions: Component = () => {
                     <Show
                       when={(standing() ?? []).length > 0}
                       fallback={
-                        <div class="settings-row settings-preference-row">
-                          <span class="settings-preference-icon" aria-hidden="true">
-                            <Icon name="checklist" size="small" />
-                          </span>
-                          <span class="min-w-0 flex-1 text-12-regular text-text-weak">
-                            No standing approvals yet. Conversation-scoped approvals end with their session and are
-                            never listed here.
-                          </span>
-                        </div>
+                        <p class="settings-card-empty" role="status">
+                          No standing approvals yet. Conversation-scoped approvals end with their session.
+                        </p>
                       }
                     >
                       <For each={standing()}>
                         {(approval) => (
                           <div class="settings-row settings-preference-row justify-between">
-                            <span class="settings-preference-icon" aria-hidden="true">
-                              <Icon name="checklist" size="small" />
-                            </span>
                             <div class="settings-row-copy">
                               <strong class="break-all">
                                 {approval.permission}

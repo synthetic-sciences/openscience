@@ -1,4 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
+import { Button } from "@synsci/ui/button"
+import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
 import { Icon } from "@synsci/ui/icon"
 import { IconButton } from "@synsci/ui/icon-button"
@@ -19,7 +21,6 @@ import {
   Toolbar,
   SearchInput,
   AddMenu,
-  SectionLabel,
   EmptyState,
   FormField,
   FormButton,
@@ -49,6 +50,12 @@ type AuthenticationStart = ({ state: "pending" } & PendingAuthorization) | { sta
 function isConfigured(value: McpConfig | undefined): value is ConfiguredMcp {
   return !!value && typeof value === "object" && "type" in value
 }
+
+const OAUTH_OPTIONS: Array<{ value: OAuthMode; label: string }> = [
+  { value: "auto", label: "Automatic registration" },
+  { value: "client", label: "Pre-registered client" },
+  { value: "off", label: "No OAuth" },
+]
 
 export default function Connectors() {
   const sync = useGlobalSync()
@@ -528,9 +535,10 @@ export default function Connectors() {
           <Show when={problem()}>
             <div role="alert" class="settings-alert mb-4" data-tone="critical">
               <span class="text-12-regular">Connector status unavailable. {problem()}</span>
-              <button
-                type="button"
-                class="text-12-medium"
+              <Button
+                size="small"
+                variant="secondary"
+                class="settings-panel-action"
                 disabled={busy("refresh")}
                 onClick={() => {
                   setBusy("refresh", true)
@@ -540,7 +548,7 @@ export default function Connectors() {
                 }}
               >
                 Retry
-              </button>
+              </Button>
             </div>
           </Show>
           <Show when={!form()}>
@@ -587,33 +595,42 @@ export default function Connectors() {
             <Show when={catalogProblem()}>
               <div role="alert" class="settings-alert mb-4" data-tone="critical">
                 <span class="text-12-regular">Connector catalog unavailable. {catalogProblem()}</span>
-                <button
-                  type="button"
-                  class="connectors-detail-action"
+                <Button
+                  size="small"
+                  variant="secondary"
+                  class="settings-panel-action"
                   disabled={catalogLoading()}
                   onClick={() => void loadCatalog(true)}
                 >
                   Retry
-                </button>
+                </Button>
               </div>
             </Show>
 
             <Show when={catalogLoading() && !catalogProblem() && configuredEntries().length === 0}>
-              <section class="settings-section connectors-loading" aria-label="Loading connectors">
-                <SectionLabel label="Available connectors" />
-                <div class="settings-card">
-                  <div class="connectors-loading__row" role="status">
-                    <Icon name="mcp" size="small" />
-                    <span>Loading reviewed setups…</span>
+              <section class="settings-section" aria-label="Loading connectors">
+                <div class="settings-section-heading">
+                  <div>
+                    <h3>Available connectors</h3>
                   </div>
+                </div>
+                <div class="settings-panel-loading__rows" role="status" aria-label="Loading connectors">
+                  <span />
+                  <span />
+                  <span />
                 </div>
               </section>
             </Show>
 
             <Show when={entries().length > 0}>
               <section class="settings-section connectors-section" aria-label="Configured connectors">
-                <SectionLabel label="Your connectors" count={entries().length} />
-                <p class="connectors-section__lead">Connected and saved servers appear here first.</p>
+                <div class="settings-section-heading">
+                  <div>
+                    <h3>Your connectors</h3>
+                    <p>Connected and saved servers appear here first.</p>
+                  </div>
+                  <span>{entries().length}</span>
+                </div>
                 <div class="settings-card connectors-list" role="list">
                   <For each={entries()}>
                     {(entry) => {
@@ -676,13 +693,6 @@ export default function Connectors() {
                                   {pendingAuthorizations()[name] ? "Waiting…" : "Connect"}
                                 </button>
                               </Show>
-                              <IconButton
-                                icon="edit"
-                                variant="ghost"
-                                disabled={busy(`row:${name}`)}
-                                aria-label={`Edit ${name}`}
-                                onClick={() => editConnector(name, config)}
-                              />
                               <Switch
                                 checked={config.enabled !== false}
                                 disabled={busy(`row:${name}`)}
@@ -818,11 +828,13 @@ export default function Connectors() {
 
             <Show when={catalogEntries().length > 0}>
               <section class="settings-section connectors-catalog" aria-label="Available connectors">
-                <SectionLabel label="Available connectors" count={catalogEntries().length} />
-                <p class="connectors-catalog__lead">
-                  Start from a reviewed official setup. OpenScience uses your account and keeps each server under MCP
-                  permissions.
-                </p>
+                <div class="settings-section-heading">
+                  <div>
+                    <h3>Available connectors</h3>
+                    <p>Reviewed official setups that use your account and stay under MCP permissions.</p>
+                  </div>
+                  <span>{catalogEntries().length}</span>
+                </div>
                 <div class="settings-card connectors-catalog__list" role="list">
                   <For each={catalogEntries()}>
                     {(entry) => (
@@ -960,13 +972,11 @@ export default function Connectors() {
                 }
               >
                 <div class="connectors-empty">
-                  <div class="connectors-empty__icon">
-                    <Icon name="mcp" size="normal" />
-                  </div>
-                  <div class="connectors-empty__copy">
-                    <strong>Connect your research tools</strong>
-                    <p>Add your own remote MCP endpoint or run a trusted MCP command on this machine.</p>
-                  </div>
+                  <EmptyState
+                    icon="mcp"
+                    title="Connect your research tools"
+                    hint="Add a remote MCP endpoint or run a trusted MCP command on this machine."
+                  />
                   <div class="connectors-empty__actions">
                     <FormButton label="Remote server" onClick={() => openForm("remote")} />
                     <FormButton label="Local process" variant="ghost" onClick={() => openForm("local")} />
@@ -992,8 +1002,12 @@ function ConnectorForm(props: {
   const set = <K extends keyof ConnectorFormState>(key: K, value: ConnectorFormState[K]) =>
     props.onChange({ ...props.state, [key]: value })
   return (
-    <section class="settings-section connectors-form-section">
-      <SectionLabel label={props.editing ? "Edit connector" : `Add ${props.state.type} connector`} />
+    <section class="settings-section">
+      <div class="settings-section-heading">
+        <div>
+          <h3>{props.editing ? "Edit connector" : `Add ${props.state.type} connector`}</h3>
+        </div>
+      </div>
       <div class="connectors-form">
         <div class="connectors-form__lead">
           <div class="connectors-identity" data-kind={props.state.type === "remote" ? "cloud" : "console"}>
@@ -1067,18 +1081,20 @@ function ConnectorForm(props: {
                 placeholder="https://mcp.example.com/mcp"
               />
             </div>
-            <label class="connectors-form__field connectors-form__select">
+            <div class="connectors-form__field connectors-form__select">
               <span>OAuth</span>
-              <select
-                value={props.state.oauth}
-                class="settings-field"
-                onInput={(e) => set("oauth", e.currentTarget.value as OAuthMode)}
-              >
-                <option value="auto">Automatic registration</option>
-                <option value="client">Pre-registered client</option>
-                <option value="off">No OAuth</option>
-              </select>
-            </label>
+              <Select
+                aria-label="OAuth"
+                options={OAUTH_OPTIONS}
+                current={OAUTH_OPTIONS.find((option) => option.value === props.state.oauth)}
+                value={(option) => option.value}
+                label={(option) => option.label}
+                onSelect={(option) => option && set("oauth", option.value)}
+                variant="secondary"
+                size="small"
+                triggerVariant="settings"
+              />
+            </div>
             <div class="connectors-form__field" data-span="full">
               <FormField
                 label="Headers (JSON)"
