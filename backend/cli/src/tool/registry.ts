@@ -267,11 +267,10 @@ export namespace ToolRegistry {
           return true
         })
         .map(async (t) => {
-          using _ = log.time(t.id)
-          return {
-            id: t.id,
-            ...(await t.init({ agent, model, request })),
-          }
+          const started = Date.now()
+          const init = await t.init({ agent, model, request })
+          log.debug("init", { tool: t.id, duration: Date.now() - started })
+          return { id: t.id, ...init }
         }),
     )
     return result
