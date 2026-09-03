@@ -1,4 +1,12 @@
-export function createCoalescer<T>(flush: (key: string, value: T) => Promise<void> | void, delayMs: number) {
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "coalescer" })
+
+export function createCoalescer<T>(
+  flush: (key: string, value: T) => Promise<void> | void,
+  delayMs: number,
+  onError: (key: string, error: unknown) => void = (key, error) => log.error("flush failed", { key, error }),
+) {
   const pending = new Map<string, { value: T; timer: ReturnType<typeof setTimeout> }>()
 
   const run = async (key: string) => {
@@ -16,7 +24,9 @@ export function createCoalescer<T>(flush: (key: string, value: T) => Promise<voi
         existing.value = value
         return
       }
-      const timer = setTimeout(() => void run(key), delayMs)
+      // A timer-driven flush has no awaiting caller, so its rejection would
+      // otherwise be dropped on the floor as an unhandled promise.
+      const timer = setTimeout(() => run(key).catch((error) => onError(key, error)), delayMs)
       pending.set(key, { value, timer })
     },
     flushNow: run,
