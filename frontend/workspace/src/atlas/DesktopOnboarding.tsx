@@ -24,6 +24,22 @@ type DesktopOnboardingOperation = {
   operation_id: string
 }
 
+const VERSION_KEY = "openscience.desktop_onboarding_version"
+
+function cachedVersion() {
+  try {
+    return Number(localStorage.getItem(VERSION_KEY)) || 0
+  } catch {
+    return 0
+  }
+}
+
+function rememberVersion(version: number) {
+  try {
+    localStorage.setItem(VERSION_KEY, String(version))
+  } catch {}
+}
+
 const providers = [
   { id: "anthropic", label: "Anthropic" },
   { id: "openai", label: "OpenAI" },
@@ -128,8 +144,12 @@ export function DesktopOnboardingController(
   props: ParentProps & { server: OnboardingServer; platform: Platform; desktop?: boolean },
 ) {
   const desktop = props.desktop ?? new URLSearchParams(window.location.search).get("desktop") === "1"
-  const [complete, setComplete] = createSignal(!desktop)
-  const [ready, setReady] = createSignal(!desktop)
+  // A completed onboarding is remembered on this device so the shell paints
+  // before the preferences round trip; the fetch still verifies it below and
+  // brings onboarding back if the server says it is incomplete.
+  const seen = desktop && cachedVersion() >= 1
+  const [complete, setComplete] = createSignal(!desktop || seen)
+  const [ready, setReady] = createSignal(!desktop || seen)
   const [provider, setProvider] = createSignal("anthropic")
   const [key, setKey] = createSignal("")
   const [configured, setConfigured] = createSignal<Configured>()
@@ -145,6 +165,7 @@ export function DesktopOnboardingController(
     void settingsApi<DesktopPreferences>(server.url, fetcher(), "/settings/preferences")
       .then((value) => {
         setComplete(value.desktop_onboarding_version >= 1)
+        rememberVersion(value.desktop_onboarding_version)
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
       .finally(() => setReady(true))
@@ -193,6 +214,7 @@ export function DesktopOnboardingController(
 
   const createProject = async (draft: ProjectCreateInput) => {
     await projectFlow(draft)
+    rememberVersion(1)
     setComplete(true)
   }
 

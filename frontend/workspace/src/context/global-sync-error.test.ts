@@ -26,6 +26,17 @@ describe("instance disposal", () => {
   })
 })
 
+describe("global bootstrap", () => {
+  test("issues one path lookup and shares it with the provider catalog task", async () => {
+    const component = await source
+    const start = component.indexOf("async function bootstrap()")
+    const bootstrap = component.slice(start, component.indexOf("onMount(() => {", start))
+
+    expect(bootstrap).toContain("const path = retry(() => globalSDK.client.path.get()")
+    expect(bootstrap.match(/path\.get\(\)/g)).toHaveLength(1)
+  })
+})
+
 describe("event stream recovery", () => {
   test("rebuilds root and project state when a replacement stream connects", async () => {
     const component = await source

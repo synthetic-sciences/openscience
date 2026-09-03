@@ -1275,28 +1275,28 @@ function createGlobalSync() {
       return
     }
 
+    // One path lookup feeds both the store and the provider catalog; the
+    // catalog task used to issue its own path.get before the first resolved.
+    const path = retry(() => globalSDK.client.path.get().then((x) => x.data!))
     const tasks = [
-      retry(() =>
-        globalSDK.client.path.get().then((x) => {
-          setGlobalStore("path", x.data!)
-        }),
-      ),
+      path.then((value) => {
+        setGlobalStore("path", value)
+      }),
       retry(() =>
         globalSDK.client.global.config.get().then((x) => {
           setGlobalStore("config", x.data!)
         }),
       ),
       retry(() => projectCatalog.refresh()),
-      retry(async () => {
-        // The root catalog belongs to the server worktree. Loading it through
-        // the same directory-keyed helper lets a direct project route share the
-        // in-flight response instead of parsing the catalog twice.
-        const path = globalStore.path.worktree
-          ? globalStore.path
-          : await globalSDK.client.path.get().then((x) => x.data!)
-        const directory = path.worktree || path.directory
-        setGlobalStore("provider", reconcile(await loadProvider(directory)))
-      }),
+      path.then((value) =>
+        retry(async () => {
+          // The root catalog belongs to the server worktree. Loading it through
+          // the same directory-keyed helper lets a direct project route share the
+          // in-flight response instead of parsing the catalog twice.
+          const directory = value.worktree || value.directory
+          setGlobalStore("provider", reconcile(await loadProvider(directory)))
+        }),
+      ),
       retry(() =>
         globalSDK.client.provider.auth().then((x) => {
           setGlobalStore("provider_auth", x.data ?? {})
