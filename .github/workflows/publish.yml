@@ -628,6 +628,7 @@ jobs:
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2016 # the template literal belongs to node, not bash
           node -e '
             const { execFileSync } = require("node:child_process")
             const value = execFileSync(process.env.OPENSCIENCE_DESKTOP_SIDECAR, ["--version"], {
