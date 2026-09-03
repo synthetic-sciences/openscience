@@ -29,8 +29,16 @@ function writeProjects(list: Project[]) {
   } catch {}
 }
 
+function readActive() {
+  try {
+    return localStorage.getItem(ACTIVE_KEY)
+  } catch {
+    return null
+  }
+}
+
 const [projects, setProjects] = createSignal<Project[]>(readProjects())
-const [activeId, setActiveId] = createSignal<string | null>(localStorage.getItem(ACTIVE_KEY))
+const [activeId, setActiveId] = createSignal<string | null>(readActive())
 
 createEffect(() => writeProjects(projects()))
 createEffect(() => {
