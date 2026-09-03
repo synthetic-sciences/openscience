@@ -127,6 +127,43 @@ describe("OpenScienceRuntime", () => {
     assert.equal(requests[1]?.headers.get("Last-Event-ID"), "1")
   })
 
+  test("backs off after empty clean closes and resets once events arrive", async () => {
+    const times: number[] = []
+    const controller = new AbortController()
+    const event = {
+      sequence: 1,
+      sessionID: "ses_empty",
+      runID: "run_empty",
+      type: "runtime.accepted",
+      properties: { effort: "normal" },
+      time: 1,
+    }
+    const runtime = createOpenScienceRuntime({
+      baseUrl: "http://runtime.test",
+      runtimeReconnectDelayMs: 20,
+      fetch: async () => {
+        times.push(Date.now())
+        if (times.length === 6) controller.abort()
+        const body = times.length === 5 ? `id: 1\nevent: runtime.accepted\ndata: ${JSON.stringify(event)}\n\n` : ""
+        return new Response(body, { headers: { "content-type": "text/event-stream" } })
+      },
+    })
+
+    const received: RuntimeEvent[] = []
+    for await (const item of runtime.events({ sessionID: "ses_empty", signal: controller.signal })) {
+      received.push(item)
+    }
+
+    assert.equal(received.length, 1)
+    assert.equal(times.length, 6)
+    const gaps = times.slice(1).map((time, index) => time - (times[index] ?? time))
+    // Four empty closes wait 20, 40, 80, and 160 ms; the delivered event on
+    // the fifth connection resets the next wait to the 20 ms base.
+    assert.ok((gaps[3] ?? 0) >= 150, `fourth reconnect waited ${gaps[3]}ms`)
+    assert.ok((gaps[0] ?? 0) + (gaps[1] ?? 0) + (gaps[2] ?? 0) + (gaps[3] ?? 0) >= 280, `empty closes waited ${gaps}`)
+    assert.ok((gaps[4] ?? 0) < 200, `reconnect after a delivered event waited ${gaps[4]}ms`)
+  })
+
   test("surfaces a retained-window conflict without retrying forever", async () => {
     let calls = 0
     const runtime = createOpenScienceRuntime({

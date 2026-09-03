@@ -23,7 +23,11 @@ export type OpenScienceRuntimeConfig = OpenScienceClientConfig & {
   directory?: string
   projectID?: string
   project?: string
-  /** Delay before reconnecting an event stream that ended without an error. */
+  /**
+   * Base delay before reconnecting an event stream. It doubles (capped at
+   * 30 s) while connections fail or close without delivering any event, and
+   * resets once events arrive.
+   */
   runtimeReconnectDelayMs?: number
 }
 
@@ -87,6 +91,7 @@ export class OpenScienceRuntime {
 
     while (!signal?.aborted) {
       let connectionError: unknown
+      let delivered = false
       const result = await this.#client.runtime.subscribe(parameters, {
         signal,
         throwOnError: true,
@@ -102,6 +107,7 @@ export class OpenScienceRuntime {
       for await (const event of result.stream) {
         lastSequence = event.sequence
         failures = 0
+        delivered = true
         yield event
       }
       if (signal?.aborted) return
@@ -110,12 +116,13 @@ export class OpenScienceRuntime {
         const status = statusFromSseError(connectionError)
         if (status === 409) throw new RuntimeEventCursorError((connectionError as Error).message)
         if (status !== undefined && status >= 400 && status < 500) throw connectionError
-        failures += 1
       }
+      // A clean close that delivered nothing looks exactly like a server that
+      // keeps dropping the stream, so it backs off like an error instead of
+      // reconnecting at the base delay forever.
+      if (connectionError || !delivered) failures += 1
 
-      const delay = connectionError
-        ? Math.min(this.#reconnectDelay * 2 ** Math.max(0, failures - 1), 30_000)
-        : this.#reconnectDelay
+      const delay = Math.min(this.#reconnectDelay * 2 ** Math.max(0, failures - 1), 30_000)
       await waitForReconnect(delay, signal)
     }
   }
