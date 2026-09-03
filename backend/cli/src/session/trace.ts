@@ -395,10 +395,12 @@ export namespace SessionTrace {
     return values.filter((value): value is number => value !== undefined).toSorted((a, b) => a - b)[0]
   }
 
-  export async function build(sessionID: string): Promise<Info> {
+  /** `messages` lets a caller that already holds the complete, oldest-first
+   * transcript skip a second read of the session. */
+  export async function build(sessionID: string, options?: { messages?: MessageV2.WithParts[] }): Promise<Info> {
     const [session, messages, stored, allJobs, contract, storedVersions] = await Promise.all([
       Session.get(sessionID),
-      Session.messages({ sessionID }),
+      options?.messages ?? Session.messages({ sessionID }),
       SessionTraceStore.read(sessionID),
       ComputeJobs.list().catch(() => [] as ComputeJobs.Job[]),
       SessionResearch.read(sessionID),

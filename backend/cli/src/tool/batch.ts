@@ -5,6 +5,26 @@ import { InvalidCall } from "./invalid-call"
 import { InvalidTool } from "./invalid"
 
 const DISALLOWED = new Set(["batch"])
+// Legacy call names still accepted inside a batch, keyed to the canonical tool
+// they stand in for so the turn's gate applies to them as well.
+const ALIASES = new Map([
+  ["notebook", "python"],
+  ["rkernel", "r"],
+  ["websearch", "research_search"],
+])
+
+type Gated = { id: string } & Awaited<ReturnType<Tool.Info["init"]>>
+
+/**
+ * Tools the enclosing turn resolved for the model: selection, permission and
+ * delegation gating already applied and plugin hooks attached. The prompt loop
+ * stashes them on the execute context so a batched child call cannot reach a
+ * tool the direct path withheld (a subagent's `task`, a config-disabled tool).
+ */
+function gated(ctx: Tool.Context): Gated[] | undefined {
+  const tools = ctx.extra?.tools
+  return Array.isArray(tools) ? (tools as Gated[]) : undefined
+}
 
 const BatchParameters = z.object({
   tool_calls: z
@@ -41,9 +61,9 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
 
       const { ToolRegistry } = await import("./registry")
       const model = initCtx?.model ?? { modelID: "", providerID: "" }
-      const availableTools = await ToolRegistry.tools(model, initCtx?.agent)
+      const scoped = gated(ctx)
+      const availableTools: Gated[] = scoped ?? (await ToolRegistry.tools(model, initCtx?.agent))
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
-      const aliases = new Set(["notebook", "rkernel", "websearch"])
 
       const prepared = await Promise.all(
         toolCalls.map(async (call) => {
@@ -56,10 +76,13 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
               payload: InvalidCall.payload("batch", "invalid_input"),
             }
           }
+          const canonical = ALIASES.get(name)
           const tool =
             toolMap.get(call.tool) ??
             toolMap.get(name) ??
-            (aliases.has(name) ? await ToolRegistry.resolve(name, model, initCtx?.agent) : undefined)
+            (canonical && (!scoped || toolMap.has(canonical))
+              ? await ToolRegistry.resolve(name, model, initCtx?.agent)
+              : undefined)
           if (!tool) {
             return {
               type: "invalid" as const,

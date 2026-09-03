@@ -94,6 +94,11 @@ export namespace SessionPrompt {
   export const CONTEXT_PREFLIGHT_MARGIN = 0.9
   const LOOP_LEASE_TIMEOUT = 24 * 60 * 60 * 1_000
   const ATTACHMENT_LIMIT = 32 * 1024 * 1024
+  // Interactive shell output retained in memory and published to the part
+  // store: keep the newest tail, and coalesce part updates while streaming.
+  const SHELL_OUTPUT_MAX = 256 * 1024
+  const SHELL_PUBLISH_MS = 100
+  const SHELL_TRUNCATED = ["<metadata>", "Output truncated: only the last 256 KB is retained", "</metadata>"].join("\n")
   // Scientific agents can still consume session-scoped artifact references.
   const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
 
@@ -990,7 +995,12 @@ export namespace SessionPrompt {
           ? undefined
           : await SessionResearch.read(sessionID)
         if (contract) {
-          const trace = await import("./trace").then((mod) => mod.SessionTrace.build(sessionID))
+          // Reuse this step's transcript unless compaction trimmed it: the
+          // contract gates need every tool call, not only the retained tail.
+          const compacted = msgs.some((message) => message.parts.some((part) => part.type === "compaction"))
+          const trace = await import("./trace").then((mod) =>
+            mod.SessionTrace.build(sessionID, compacted ? undefined : { messages: msgs }),
+          )
           const pending = trace.research.gates.filter((gate) => gate.id !== "runtime" && gate.status !== "passed")
           const progress = ContractProgress.fingerprint(trace)
           const prior = SessionLoopState.contractMarker(msgs)
@@ -1606,7 +1616,7 @@ export namespace SessionPrompt {
         SessionSummary.summarize({
           sessionID,
           messageID: lastUser.id,
-        })
+        }).catch((error) => log.error("failed to summarize session", { error }))
       }
 
       // P0.1 telemetry: record what the working context is made of, by content type,
@@ -1761,30 +1771,28 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
+  /** Newest user message, read once so a caller can derive every per-turn
+   * setting (effort, delegation, model) from a single transcript scan. */
+  async function lastUser(sessionID: string) {
+    for await (const item of MessageV2.stream(sessionID)) {
+      if (item.info.role === "user") return item.info
+    }
+  }
+
+  function userEffort(user?: MessageV2.User) {
+    return MessageV2.resolveResearchEffort(user?.effort)
+  }
+
+  function userDelegation(user?: MessageV2.User) {
+    if (!user) return MessageV2.resolveDelegationSettings(undefined)
+    return MessageV2.resolveDelegationSettings(user.delegationSettings, {
+      effort: user.effort,
+      enabled: user.delegation,
+    })
+  }
+
   async function lastResearchEffort(sessionID: string) {
-    for await (const item of MessageV2.stream(sessionID)) {
-      if (item.info.role !== "user") continue
-      return MessageV2.resolveResearchEffort(item.info.effort)
-    }
-    return "normal" as const
-  }
-
-  async function lastDelegation(sessionID: string) {
-    for await (const item of MessageV2.stream(sessionID)) {
-      if (item.info.role !== "user") continue
-      return item.info.delegation
-    }
-  }
-
-  async function lastDelegationSettings(sessionID: string) {
-    for await (const item of MessageV2.stream(sessionID)) {
-      if (item.info.role !== "user") continue
-      return MessageV2.resolveDelegationSettings(item.info.delegationSettings, {
-        effort: item.info.effort,
-        enabled: item.info.delegation,
-      })
-    }
-    return MessageV2.resolveDelegationSettings(undefined)
+    return userEffort(await lastUser(sessionID))
   }
 
   function request(messages: MessageV2.WithParts[], agent: string) {
@@ -1885,6 +1893,9 @@ export namespace SessionPrompt {
         bypassAgentCheck: input.bypassAgentCheck,
         effort: input.effort,
         delegationSettings: input.delegationSettings,
+        // Batched child calls resolve against the same gated, hook-wrapped
+        // set the model was offered instead of the unfiltered registry.
+        tools: gated,
       },
       agent: input.agent.name,
       messages: input.messages,
@@ -1941,6 +1952,10 @@ export namespace SessionPrompt {
       (id) =>
         (id !== TaskTool.id || (input.delegation && !input.session.parentID)) &&
         ToolSelection.enabled(id, { permission, tools: input.tools }) &&
+        // The provider boundary (LLM.modelTools) prunes with the agent ruleset
+        // alone. Apply it here as well so the set batched calls resolve
+        // against is exactly the set the model was offered.
+        ToolSelection.enabled(id, { permission: input.agent.permission, tools: input.tools }) &&
         ToolSelection.relevant(id, {
           agent: input.agent.name,
           message: selectionRequest || input.request,
@@ -1951,7 +1966,38 @@ export namespace SessionPrompt {
         }),
       input.request,
     )
-    for (const item of native) {
+    // One execution envelope for direct and batched calls: the Plan mode gate
+    // and both plugin hooks wrap every tool the model was offered.
+    const gated = native.map((item) => ({
+      ...item,
+      async execute(args: unknown, ctx: Tool.Context) {
+        return PlanMode.run(item.id, ctx.agent, async () => {
+          await Plugin.trigger(
+            "tool.execute.before",
+            {
+              tool: item.id,
+              sessionID: ctx.sessionID,
+              callID: ctx.callID,
+            },
+            {
+              args,
+            },
+          )
+          const result = await item.execute(args, ctx)
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: item.id,
+              sessionID: ctx.sessionID,
+              callID: ctx.callID,
+            },
+            result,
+          )
+          return result
+        })
+      },
+    }))
+    for (const item of gated) {
       tools[item.id] = tool({
         id: item.id as any,
         description: ToolSelection.description(item.id, item.description, input.inspection),
@@ -1964,32 +2010,7 @@ export namespace SessionPrompt {
         inputSchema: toolInputSchema(input.model, item),
         async execute(args, options) {
           const ctx = context(args, options)
-          return input.processor.executeTool(options.toolCallId, args, async () => {
-            return PlanMode.run(item.id, ctx.agent, async () => {
-              await Plugin.trigger(
-                "tool.execute.before",
-                {
-                  tool: item.id,
-                  sessionID: ctx.sessionID,
-                  callID: ctx.callID,
-                },
-                {
-                  args,
-                },
-              )
-              const result = await item.execute(args, ctx)
-              await Plugin.trigger(
-                "tool.execute.after",
-                {
-                  tool: item.id,
-                  sessionID: ctx.sessionID,
-                  callID: ctx.callID,
-                },
-                result,
-              )
-              return result
-            })
-          })
+          return input.processor.executeTool(options.toolCallId, args, () => item.execute(args, ctx))
         },
       })
     }
@@ -3002,8 +3023,27 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     const args = matchingInvocation?.args
 
     let output = ""
+    let truncated = false
     let aborted = false
     let exited = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const text = () => (truncated ? `${SHELL_TRUNCATED}\n\n${output}` : output)
+    const append = (chunk: Buffer | string) => {
+      output += chunk.toString()
+      if (output.length <= SHELL_OUTPUT_MAX) return
+      output = output.slice(-SHELL_OUTPUT_MAX)
+      truncated = true
+    }
+    const publish = () => {
+      timer = undefined
+      if (part.state.status !== "running") return
+      part.state.metadata = { output: text(), description: "" }
+      Session.updatePart(part).catch((error) => log.error("failed to publish shell output", { error }))
+    }
+    const schedule = () => {
+      if (timer) return
+      timer = setTimeout(publish, SHELL_PUBLISH_MS)
+    }
     const { proc, command, kill, sandbox, completion } = await AuthoritySignal.exclusive(async () => {
       const current = await ExecutionAuthority.require({
         projectID: Instance.project.id,
@@ -3072,25 +3112,13 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       })
     })
     proc.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        Session.updatePart(part)
-      }
+      append(chunk)
+      schedule()
     })
 
     proc.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        Session.updatePart(part)
-      }
+      append(chunk)
+      schedule()
     })
 
     if (abort.aborted) {
@@ -3106,6 +3134,8 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     abort.addEventListener("abort", abortHandler, { once: true })
 
     await completion.finally(() => {
+      if (timer) clearTimeout(timer)
+      timer = undefined
       abort.removeEventListener("abort", abortHandler)
       CommandRuntime.finish(command.id)
       Sandbox.cleanup(sandbox)
@@ -3126,10 +3156,10 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         input: part.state.input,
         title: "",
         metadata: {
-          output,
+          output: text(),
           description: "",
         },
-        output,
+        output: text(),
       }
       await Session.updatePart(part)
     }
@@ -3178,16 +3208,15 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     return value
   }
 
-  async function commandModel(input: CommandInput) {
+  async function commandModel(input: CommandInput, prior?: MessageV2.User) {
     if (input.model) return Provider.parseModel(input.model)
-    for await (const message of MessageV2.stream(input.sessionID)) {
-      if (message.info.role === "user") return message.info.model
-    }
-    return { providerID: "openscience", modelID: "local" }
+    const user = prior ?? (await lastUser(input.sessionID))
+    return user?.model ?? { providerID: "openscience", modelID: "local" }
   }
 
   async function notice(input: CommandInput, text: string): Promise<MessageV2.WithParts> {
-    const model = await commandModel(input)
+    const prior = await lastUser(input.sessionID)
+    const model = await commandModel(input, prior)
     const agent = input.agent ?? (await Agent.defaultAgent())
     const cwd = await SessionFilesystem.workspace(input.sessionID)
     const user: MessageV2.User = {
@@ -3196,9 +3225,9 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       time: { created: Date.now() },
       role: "user",
       agent,
-      effort: input.effort ?? (await lastResearchEffort(input.sessionID)),
-      delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
-      delegationSettings: input.delegationSettings ?? (await lastDelegationSettings(input.sessionID)),
+      effort: input.effort ?? userEffort(prior),
+      delegation: input.delegation ?? prior?.delegation,
+      delegationSettings: input.delegationSettings ?? userDelegation(prior),
       model: { providerID: model.providerID, modelID: model.modelID },
     }
     const line = `/${input.command}${input.arguments.trim() ? ` ${input.arguments.trim()}` : ""}`
@@ -3370,7 +3399,8 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     log.info("command", input)
     await Session.assertDirectory(input.sessionID)
 
-    const configured = (await Config.get()).command?.[input.command]
+    const config = await Config.get()
+    const configured = config.command?.[input.command]
     if (!configured && input.command === Command.Default.GOAL) {
       const objective = input.arguments.trim()
       if (!objective) return notice(input, "Describe the objective after `/goal`.")
@@ -3395,19 +3425,20 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     // the command (input.arguments) is the optional focus topic.
     // A user-defined `compact` command in config takes precedence over the
     // built-in action, so don't shadow it.
-    const userDefinedCompact = (await Config.get()).command?.[Command.Default.COMPACT]
+    const userDefinedCompact = config.command?.[Command.Default.COMPACT]
     if (input.command === Command.Default.COMPACT && !userDefinedCompact) {
       const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
       const agentName = input.agent ?? (await Agent.defaultAgent())
       const focus = input.arguments.trim()
-      const effort = input.effort ?? (await lastResearchEffort(input.sessionID))
+      const prior = await lastUser(input.sessionID)
+      const effort = input.effort ?? userEffort(prior)
       await SessionCompaction.create({
         sessionID: input.sessionID,
         agent: agentName,
         model: { providerID: model.providerID, modelID: model.modelID },
         effort,
-        delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
-        delegationSettings: input.delegationSettings ?? (await lastDelegationSettings(input.sessionID)),
+        delegation: input.delegation ?? prior?.delegation,
+        delegationSettings: input.delegationSettings ?? userDelegation(prior),
         auto: false,
         focus: focus || undefined,
         trigger: "manual",
@@ -3426,17 +3457,18 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     // the given path) for another agent to pick up, then compact. Same summary as
     // /compact — the only difference is where the doc lands and that it doesn't
     // auto-resume (the point is a fresh agent continues from the file).
-    const userDefinedHandoff = (await Config.get()).command?.[Command.Default.HANDOFF]
+    const userDefinedHandoff = config.command?.[Command.Default.HANDOFF]
     if (input.command === Command.Default.HANDOFF && !userDefinedHandoff) {
       const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
       const agentName = input.agent ?? (await Agent.defaultAgent())
-      const effort = input.effort ?? (await lastResearchEffort(input.sessionID))
+      const prior = await lastUser(input.sessionID)
+      const effort = input.effort ?? userEffort(prior)
       await SessionCompaction.create({
         sessionID: input.sessionID,
         agent: agentName,
         model: { providerID: model.providerID, modelID: model.modelID },
         effort,
-        delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
+        delegation: input.delegation ?? prior?.delegation,
         auto: false,
         // Keep the empty string: it is the explicit `/handoff` marker for the
         // managed per-session path. `undefined` is reserved for compaction that
@@ -3609,15 +3641,16 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       { parts },
     )
 
+    const prior = await lastUser(input.sessionID)
     const result = (await prompt({
       sessionID: input.sessionID,
       messageID: commandMessageID,
       model: userModel,
       agent: userAgent,
       parts,
-      effort: input.effort ?? (await lastResearchEffort(input.sessionID)),
-      delegation: input.delegation ?? (await lastDelegation(input.sessionID)),
-      delegationSettings: input.delegationSettings ?? (await lastDelegationSettings(input.sessionID)),
+      effort: input.effort ?? userEffort(prior),
+      delegation: input.delegation ?? prior?.delegation,
+      delegationSettings: input.delegationSettings ?? userDelegation(prior),
       variant: input.variant,
       tier: modelTier(input.tier, selectedModel, userModel),
       context:
