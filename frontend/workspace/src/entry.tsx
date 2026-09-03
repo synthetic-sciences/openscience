@@ -24,8 +24,10 @@ const desktopUpdateAvailable = Boolean(desktopUrl && hasDesktopUpdateCapability(
 
 const stored = () => {
   if (desktopUrl) return
-  if (typeof localStorage === "undefined") return
+  // Reading `localStorage` itself can throw (storage access denied), so the
+  // existence check has to sit inside the guard too.
   try {
+    if (typeof localStorage === "undefined") return
     return normalizeServerUrl(localStorage.getItem(DEFAULT_SERVER_URL_KEY) ?? "")
   } catch {
     return
@@ -79,7 +81,7 @@ const platform: Platform = {
   platform: desktopUrl ? "desktop" : "web",
   version: import.meta.env.VITE_OPENSCIENCE_VERSION || pkg.version,
   openLink(url: string) {
-    window.open(url, "_blank")
+    window.open(url, "_blank", "noopener,noreferrer")
   },
   back() {
     window.history.back()
@@ -187,8 +189,8 @@ const platform: Platform = {
   getDefaultServerUrl: () => stored() ?? null,
   setDefaultServerUrl: (url) => {
     if (desktopUrl) return
-    if (typeof localStorage === "undefined") return
     try {
+      if (typeof localStorage === "undefined") return
       if (url) {
         localStorage.setItem(DEFAULT_SERVER_URL_KEY, url)
         return

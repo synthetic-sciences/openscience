@@ -50,6 +50,7 @@ export function createProjectRequest(input: {
     const headers = new Headers(init?.headers)
     headers.set("x-openscience-project", projectID(input.projectID()))
     const root = input.directory()
+    headers.delete("x-openscience-directory")
     if (root) headers.set("x-openscience-directory", directory(root))
     return input.fetch()(target(path, query), {
       ...init,

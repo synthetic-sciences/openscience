@@ -16,8 +16,8 @@ type PersistTarget = {
 
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "openscience.global.dat"
-const LOCAL_PREFIX = "openscience."
 const fallback = { disabled: false }
+const FLUSH_CAP_MS = 250
 
 const CACHE_MAX_ENTRIES = 500
 const CACHE_MAX_BYTES = 8 * 1024 * 1024
@@ -90,7 +90,12 @@ function quota(error: unknown) {
 
 type Evict = { key: string; size: number }
 
-function evict(storage: Storage, keep: string, value: string) {
+/**
+ * Make room for `keep` by dropping its siblings, largest first. Only keys in
+ * the same store family (sharing `family`, the store's own prefix) qualify:
+ * one bloated store must never erase another store's data.
+ */
+function evict(storage: Storage, family: string, keep: string, value: string) {
   const total = storage.length
   const indexes = Array.from({ length: total }, (_, index) => index)
   const items: Evict[] = []
@@ -98,7 +103,7 @@ function evict(storage: Storage, keep: string, value: string) {
   for (const index of indexes) {
     const name = storage.key(index)
     if (!name) continue
-    if (!name.startsWith(LOCAL_PREFIX)) continue
+    if (!name.startsWith(family)) continue
     if (name === keep) continue
     const stored = storage.getItem(name)
     items.push({ key: name, size: stored?.length ?? 0 })
@@ -122,7 +127,7 @@ function evict(storage: Storage, keep: string, value: string) {
   return false
 }
 
-function write(storage: Storage, key: string, value: string) {
+function write(storage: Storage, key: string, value: string, family?: string) {
   try {
     storage.setItem(key, value)
     cacheSet(key, value)
@@ -141,9 +146,101 @@ function write(storage: Storage, key: string, value: string) {
     if (!quota(error)) throw error
   }
 
-  const ok = evict(storage, key, value)
+  const ok = family ? evict(storage, family, key, value) : false
   if (!ok) cacheSet(key, value)
   return ok
+}
+
+type Pending = { value: string; family?: string }
+const pending = new Map<string, Pending>()
+const queue = { cancel: undefined as (() => void) | undefined }
+
+/**
+ * Write every queued value now. Runs from idle time (capped so a burst never
+ * waits long), and synchronously before the page is hidden or unloaded.
+ */
+export function flushPersisted() {
+  queue.cancel?.()
+  queue.cancel = undefined
+  if (pending.size === 0) return
+
+  const items = Array.from(pending.entries())
+  pending.clear()
+  if (fallback.disabled) return
+
+  for (const [key, item] of items) {
+    try {
+      if (write(localStorage, key, item.value, item.family)) continue
+    } catch {
+      fallback.disabled = true
+      return
+    }
+    fallback.disabled = true
+    return
+  }
+}
+
+function schedule() {
+  if (queue.cancel) return
+  if (typeof requestIdleCallback === "function") {
+    const id = requestIdleCallback(flushPersisted, { timeout: FLUSH_CAP_MS })
+    queue.cancel = () => cancelIdleCallback(id)
+    return
+  }
+  const id = setTimeout(flushPersisted, FLUSH_CAP_MS)
+  queue.cancel = () => clearTimeout(id)
+}
+
+if (typeof window !== "undefined" && typeof document !== "undefined") {
+  window.addEventListener("pagehide", flushPersisted)
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPersisted()
+  })
+}
+
+function read(key: string) {
+  const queued = pending.get(key)
+  if (queued) return queued.value
+
+  const cached = cacheGet(key)
+  if (fallback.disabled && cached !== undefined) return cached
+
+  const stored = (() => {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      fallback.disabled = true
+      return null
+    }
+  })()
+  if (stored === null) return cached ?? null
+  cacheSet(key, stored)
+  return stored
+}
+
+/**
+ * Stores serialize on every mutation, so bootstrap and reconnect bursts used
+ * to trigger many small synchronous localStorage writes. Skip values that
+ * match what is already cached (hence stored or queued) and coalesce the rest
+ * into one deferred write per key.
+ */
+function enqueue(key: string, value: string, family?: string) {
+  if (cacheGet(key) === value) return
+  cacheSet(key, value)
+  if (fallback.disabled) return
+  pending.set(key, { value, family })
+  schedule()
+}
+
+function remove(key: string) {
+  pending.delete(key)
+  cacheDelete(key)
+  if (fallback.disabled) return
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    fallback.disabled = true
+  }
 }
 
 function snapshot(value: unknown) {
@@ -198,86 +295,19 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
   const base = `${prefix}:`
   const item = (key: string) => base + key
   return {
-    getItem: (key) => {
-      const name = item(key)
-      const cached = cacheGet(name)
-      if (fallback.disabled && cached !== undefined) return cached
-
-      const stored = (() => {
-        try {
-          return localStorage.getItem(name)
-        } catch {
-          fallback.disabled = true
-          return null
-        }
-      })()
-      if (stored === null) return cached ?? null
-      cacheSet(name, stored)
-      return stored
-    },
-    setItem: (key, value) => {
-      const name = item(key)
-      cacheSet(name, value)
-      if (fallback.disabled) return
-      try {
-        if (write(localStorage, name, value)) return
-      } catch {
-        fallback.disabled = true
-        return
-      }
-      fallback.disabled = true
-    },
-    removeItem: (key) => {
-      const name = item(key)
-      cacheDelete(name)
-      if (fallback.disabled) return
-      try {
-        localStorage.removeItem(name)
-      } catch {
-        fallback.disabled = true
-      }
-    },
+    getItem: (key) => read(item(key)),
+    setItem: (key, value) => enqueue(item(key), value, base),
+    removeItem: (key) => remove(item(key)),
   }
 }
 
+// Direct keys belong to no store family, so a quota failure on one of them
+// never evicts anything.
 function localStorageDirect(): SyncStorage {
   return {
-    getItem: (key) => {
-      const cached = cacheGet(key)
-      if (fallback.disabled && cached !== undefined) return cached
-
-      const stored = (() => {
-        try {
-          return localStorage.getItem(key)
-        } catch {
-          fallback.disabled = true
-          return null
-        }
-      })()
-      if (stored === null) return cached ?? null
-      cacheSet(key, stored)
-      return stored
-    },
-    setItem: (key, value) => {
-      cacheSet(key, value)
-      if (fallback.disabled) return
-      try {
-        if (write(localStorage, key, value)) return
-      } catch {
-        fallback.disabled = true
-        return
-      }
-      fallback.disabled = true
-    },
-    removeItem: (key) => {
-      cacheDelete(key)
-      if (fallback.disabled) return
-      try {
-        localStorage.removeItem(key)
-      } catch {
-        fallback.disabled = true
-      }
-    },
+    getItem: read,
+    setItem: (key, value) => enqueue(key, value),
+    removeItem: remove,
   }
 }
 

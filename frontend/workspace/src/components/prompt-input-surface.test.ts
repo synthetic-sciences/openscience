@@ -173,6 +173,20 @@ describe("floating prompt surface", () => {
     expect(source).toContain("canRestoreFailedSubmission(prompt.current(), store.mode)")
   })
 
+  test("keeps image data out of persisted prompt history and restores only sendable parts", () => {
+    expect(source).toContain('{ ...Persist.global("prompt-history", ["prompt-history.v1"]), migrate: stripHistory }')
+    expect(source).toContain(
+      '{ ...Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]), migrate: stripHistory }',
+    )
+    expect(source).toContain("const entry = stripImages(clonePromptParts(prompt))")
+    expect(source).toContain('part.type !== "image" || !!part.dataUrl')
+  })
+
+  test("shares one submit acknowledgement between native commands and prompts", () => {
+    expect(source.match(/acknowledgeSubmit\(\)/g)).toHaveLength(2)
+    expect(source.match(/setSubmitting\(true\)/g)).toHaveLength(1)
+  })
+
   test("uses measured composer geometry for message and jump-to-latest clearance", () => {
     const session = Bun.file(new URL("../pages/session.tsx", import.meta.url)).text()
 

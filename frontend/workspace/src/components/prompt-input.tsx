@@ -543,8 +543,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const MAX_HISTORY = 100
+  // History exists to recall text, not to re-send screenshots: image parts
+  // are persisted without their data (a single attachment can be 20 MB and
+  // the store holds 100 entries). Entries written before this are stripped
+  // when they load.
+  const stripImages = (entry: Prompt): Prompt =>
+    entry.map((part) => (part.type === "image" ? { ...part, dataUrl: "" } : part))
+  const stripHistory = (value: unknown) => {
+    if (!value || typeof value !== "object") return value
+    const entries = (value as { entries?: unknown }).entries
+    if (!Array.isArray(entries)) return value
+    return { ...value, entries: entries.map((entry) => (Array.isArray(entry) ? stripImages(entry as Prompt) : entry)) }
+  }
   const [history, setHistory] = persisted(
-    Persist.global("prompt-history", ["prompt-history.v1"]),
+    { ...Persist.global("prompt-history", ["prompt-history.v1"]), migrate: stripHistory },
     createStore<{
       entries: Prompt[]
     }>({
@@ -552,7 +564,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }),
   )
   const [shellHistory, setShellHistory] = persisted(
-    Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]),
+    { ...Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]), migrate: stripHistory },
     createStore<{
       entries: Prompt[]
     }>({
@@ -575,7 +587,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const promptLength = (prompt: Prompt) =>
     prompt.reduce((len, part) => len + ("content" in part ? part.content.length : 0), 0)
 
-  const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
+  // Persisted history carries image parts without their data; those cannot
+  // be re-sent, so restore only the parts that still have content.
+  const restorable = (p: Prompt): Prompt => {
+    const parts = p.filter((part) => part.type !== "image" || !!part.dataUrl)
+    return parts.length ? parts : DEFAULT_PROMPT
+  }
+
+  const applyHistoryPrompt = (entry: Prompt, position: "start" | "end") => {
+    const p = restorable(entry)
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
     prompt.set(p, length)
@@ -1584,7 +1604,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const hasImages = prompt.some((part) => part.type === "image")
     if (!text && !hasImages) return
 
-    const entry = clonePromptParts(prompt)
+    const entry = stripImages(clonePromptParts(prompt))
     const currentHistory = mode === "shell" ? shellHistory : history
     const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
     const lastEntry = currentHistory.entries[0]
@@ -1839,6 +1859,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return true
     }
 
+    // Acknowledge Enter before the first network boundary. Persisting up to
+    // 100 history entries can synchronously serialize several megabytes, so
+    // keep that work off the input event's critical path.
+    const acknowledgeSubmit = () => {
+      setSubmitting(true)
+      clearInput()
+      if (!action) window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
+      setStore("historyIndex", -1)
+      setStore("savedPrompt", null)
+    }
+
     const researchEffort = "normal" as const
     const delegationConfig = delegation()
     const delegationEnabled = delegationConfig.level !== "off"
@@ -1848,11 +1879,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const native = command?.source === "builtin" && command.menu
     const active = info()
     if (native && active && mode === "normal" && images.length === 0) {
-      setSubmitting(true)
-      clearInput()
-      if (!action) window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
-      setStore("historyIndex", -1)
-      setStore("savedPrompt", null)
+      acknowledgeSubmit()
       props.onSubmit?.()
       const request = {
         sessionID: active.id,
@@ -1901,14 +1928,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       restoreInput()
     }
 
-    // Acknowledge Enter before the first network boundary. Persisting up to
-    // 100 history entries can synchronously serialize several megabytes, so
-    // keep that work off the input event's critical path.
-    setSubmitting(true)
-    clearInput()
-    if (!action) window.setTimeout(() => addToHistory(currentPrompt, mode), 0)
-    setStore("historyIndex", -1)
-    setStore("savedPrompt", null)
+    acknowledgeSubmit()
 
     const projectDirectory = sdk.directory
     const isNewSession = !params.id || params.id === "new"

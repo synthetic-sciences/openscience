@@ -34,7 +34,6 @@ import { decode64, setCurrentDirectory } from "@/utils/base64"
 import { assetUrl, workspaceAssetPath } from "@/utils/markdown-assets"
 import { rawFileQuery } from "@/utils/project-file"
 import { projectPrefs } from "@/atlas/store/projectPrefs"
-import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
 import { missingProject, ProjectUnavailable } from "./project-availability"
 import {
   looksLikeProjectSegment,
@@ -85,6 +84,9 @@ export default function Layout(props: ParentProps) {
     return resolveProjectRoute(params.dir, [current.project])
   })
   const active = createMemo(() => route() ?? recovered() ?? recoveredLegacy())
+  // A route that resolves against the catalog (seeded from the persisted
+  // cache) renders straight away; this round trip only demotes it to the
+  // recovery surface once the server confirms the folder is gone.
   const availabilityID = createMemo(() => route()?.projectID)
   const [availability] = createResource(availabilityID, async (projectID) => ({
     projectID,
@@ -98,11 +100,6 @@ export default function Layout(props: ParentProps) {
     const result = availability.latest
     if (!current || result?.projectID !== current.projectID || !result.missing) return
     return { directory: result.missing.directory ?? current.directory }
-  })
-  const available = createMemo(() => {
-    const current = route()
-    if (!current) return true
-    return availability.latest?.projectID === current.projectID
   })
   // A legacy base64 route carries only a directory. Resolve its opaque project
   // capability before mounting project-scoped providers; otherwise children
@@ -123,7 +120,7 @@ export default function Layout(props: ParentProps) {
 
   createEffect(() => {
     const value = directory()
-    if (!value || !available() || unavailable()) return
+    if (!value || unavailable()) return
     const clear = setCurrentDirectory(value, projectID())
     onCleanup(clear)
   })
@@ -163,20 +160,7 @@ export default function Layout(props: ParentProps) {
     <Show
       when={unavailable()}
       fallback={
-        <Show
-          when={available() && directory()}
-          fallback={
-            <Show when={directory()}>
-              <div
-                class="project-availability__loading"
-                role="status"
-                aria-label="Checking project folder availability"
-              >
-                <AsciiSpinner label="checking folder…" color="var(--color-text-faint)" />
-              </div>
-            </Show>
-          }
-        >
+        <Show when={directory()}>
           <SDKProvider directory={directory()} projectID={projectID()} scope={scope()}>
             <SyncProvider>
               {iife(() => {
