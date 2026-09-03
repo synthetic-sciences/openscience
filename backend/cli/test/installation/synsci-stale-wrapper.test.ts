@@ -64,6 +64,7 @@ async function fixture(options: {
   const standaloneMarker = path.join(scope, "standalone-ran")
   const overrideMarker = path.join(scope, "override-ran")
   const pathMarker = path.join(scope, "path-candidate-ran")
+  const recursionMarker = path.join(scope, "launcher-guard-leaked")
   const override = path.join(scope, "override")
   const pathCandidate = path.join(tools, "openscience")
   const calls = path.join(scope, "cli-calls.jsonl")
@@ -80,6 +81,7 @@ if (process.argv[2] === "--version") console.log(${JSON.stringify(version)})
 const fs = require("node:fs")
 fs.appendFileSync(process.env.FAKE_CLI_CALLS, JSON.stringify(process.argv.slice(2)) + "\\n")
 if (process.argv[2] === "--version") console.log("2.0.66")
+if (process.argv[2] === "web" && process.env.__SYNSCI_LAUNCHER_PID) fs.writeFileSync(process.env.FAKE_RECURSION_MARKER, "leaked\\n")
 `
   const nativeSource = `#!/usr/bin/env node
 const fs = require("node:fs")
@@ -254,6 +256,7 @@ process.stdout.write(map[file])
     FAKE_STANDALONE_MARKER: standaloneMarker,
     FAKE_OVERRIDE_MARKER: overrideMarker,
     FAKE_PATH_MARKER: pathMarker,
+    FAKE_RECURSION_MARKER: recursionMarker,
     FAKE_CLI_CALLS: calls,
     FAKE_CODESIGN_MAP: mapFile,
     FAKE_CODESIGN_CALLS: codesignCalls,
@@ -271,6 +274,7 @@ process.stdout.write(map[file])
     standaloneMarker,
     overrideMarker,
     pathMarker,
+    recursionMarker,
     calls,
     npmCalls,
     codesignCalls,
@@ -305,6 +309,7 @@ describe("synsci unsafe candidate recovery", () => {
     expect(await Bun.file(setup.globalMarker).exists()).toBe(false)
     expect(await Bun.file(setup.calls).text()).toContain('["web"]')
     expect(await Bun.file(setup.npmCalls).text()).not.toContain('["i","-g"')
+    expect(await Bun.file(setup.recursionMarker).exists()).toBe(false)
   })
 
   posix("repairs npm before executing a pre-2.0.2 wrapper when no standalone binary exists", async () => {
@@ -420,7 +425,20 @@ describe("synsci unsafe candidate recovery", () => {
     expect(await Bun.file(setup.calls).text()).toContain('["web"]')
   })
 
-  posix("does not let installer recovery execute a rejected command already on PATH", async () => {
+  posix("does not let installer recovery execute an unverified command already on PATH", async () => {
+    const setup = await fixture({ manifest: "missing", npmInstall: "fail", pathCandidate: true })
+    const result = await launch(setup.env)
+
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain("refusing to execute an existing unverified openscience command")
+    expect(await Bun.file(setup.globalMarker).exists()).toBe(false)
+    expect(await Bun.file(setup.pathMarker).exists()).toBe(false)
+    expect(await Bun.file(setup.npmCalls).text()).toContain('["i","-g","@synsci/openscience@latest"]')
+  })
+
+  // The standalone binary is only "rejected" by the macOS entitlement gate;
+  // elsewhere its `--version` probe succeeds and it is a valid install.
+  mac("does not let installer recovery execute a rejected command already on PATH", async () => {
     const setup = await fixture({
       manifest: "missing",
       standalone: "rejected",
