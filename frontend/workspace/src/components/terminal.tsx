@@ -32,6 +32,10 @@ export type TerminalController = {
 }
 
 const REPLAY_REQUEST = "\0"
+// SGR reset, erase the screen, erase the scrollback, home the cursor. Sent through the VT stream
+// rather than Terminal.reset(): ghostty-web 0.3.0 frees and reallocates the wasm terminal there while
+// the selection manager keeps the freed handle, which silently breaks copy after every reconnect.
+const ERASE = "\x1b[0m\x1b[2J\x1b[3J\x1b[H"
 const RECONNECT_LIMIT = 5
 
 // Mirrors reconnectDelay in @/context/reconnecting-event-stream: 250 ms doubling to a 5 s cap.
@@ -404,11 +408,13 @@ export const Terminal = (props: TerminalProps) => {
       const connect = () => {
         if (disposed) return
         link.timer = undefined
+        // A superseded socket is closed and silent; drop its listeners anyway rather than leak them.
+        link.detach()
         const socket = new WebSocket(url)
         const handleOpen = () => {
-          // The server replays its whole buffer to every fresh subscriber, so drop the
-          // stale copy first or the scrollback doubles on each reconnect.
-          if (link.failures) t.reset()
+          // The server replays its whole buffer to every fresh subscriber, so erase the stale
+          // screen and scrollback first or the scrollback doubles on each reconnect.
+          if (link.failures) t.write(ERASE)
           local.onConnect?.()
           fitTerminal()
           socket.send(REPLAY_REQUEST)

@@ -108,11 +108,17 @@ describe("contextual project terminal", () => {
     )
     expect(terminal.indexOf("const connect = () =>")).toBeLessThan(terminal.indexOf("socket.send(REPLAY_REQUEST)"))
     expect(terminal).toMatch(/^\s*connect\(\)$/m)
-    // every open drops the stale buffer before the server replays it, so scrollback never doubles
-    expect(terminal).toContain("if (link.failures) t.reset()")
-    expect(terminal.indexOf("if (link.failures) t.reset()")).toBeLessThan(
+    // every reconnect erases the stale screen and scrollback through the VT stream before the server
+    // replays, so scrollback never doubles; Terminal.reset() would free the wasm handle the selection
+    // manager still holds and silently break copy
+    expect(terminal).toContain('const ERASE = "\\x1b[0m\\x1b[2J\\x1b[3J\\x1b[H"')
+    expect(terminal).not.toContain("t.reset()")
+    expect(terminal).toContain("if (link.failures) t.write(ERASE)")
+    expect(terminal.indexOf("if (link.failures) t.write(ERASE)")).toBeLessThan(
       terminal.indexOf("socket.send(REPLAY_REQUEST)"),
     )
+    // a retry drops the listeners of the socket it supersedes before opening the next one
+    expect(terminal.indexOf("link.detach()")).toBeLessThan(terminal.indexOf("const socket = new WebSocket(url)"))
     // an abnormal close retries; the error is reported once, only after the budget is spent
     expect(terminal).toContain("if (event.code === 1000) return")
     expect(terminal).toContain("link.failures += 1")
