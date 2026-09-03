@@ -1374,10 +1374,22 @@ export namespace OpenScience {
   const BALANCE_STALE_MAX_MS = 5 * 60_000
   const BALANCE_FETCH_TIMEOUT_MS = 3_000
 
+  /** Expire the cached balance after a spend or credential change. A positive
+   * value is kept past its TTL so the next check serves it while a refresh runs
+   * in the background (see getBalance); a non-positive value is dropped so the
+   * next check blocks. The revision bump discards any in-flight result that
+   * predates the spend. */
   export function invalidateBalance(): void {
     balanceRevision++
-    cachedBalance = null
     pendingBalance = undefined
+    if (!cachedBalance) return
+    if (cachedBalance.value <= 0) {
+      cachedBalance = null
+      return
+    }
+    // Anchor to the original fetch so BALANCE_STALE_MAX_MS still bounds the
+    // age of a served value when background refreshes keep failing.
+    cachedBalance = { ...cachedBalance, at: Math.min(cachedBalance.at, Date.now() - BALANCE_CACHE_TTL_MS) }
   }
 
   export function invalidateBalanceCache(): void {
