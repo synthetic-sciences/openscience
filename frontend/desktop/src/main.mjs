@@ -7,7 +7,7 @@ import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
-import { app, BrowserWindow, dialog, Menu, shell } from "electron"
+import { app, BrowserWindow, dialog, Menu, session, shell } from "electron"
 import {
   apply as applyUpdate,
   current as currentUpdate,
@@ -25,6 +25,9 @@ import {
 const execute = promisify(execFile)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
 const windows = new Set()
+// The only web permissions the workspace uses; every other request (camera,
+// microphone, geolocation, MIDI, ...) is denied without prompting.
+const permissions = new Set(["clipboard-read", "clipboard-sanitized-write", "fullscreen", "notifications"])
 const state = {
   service: undefined,
   serviceExecutable: undefined,
@@ -336,11 +339,11 @@ async function start() {
     appendFileSync(output, value)
     if (!app.isPackaged) process.stderr.write(`[openscience] ${value}`)
   })
-  state.service.on("exit", (code) => {
+  state.service.on("exit", (code, signal) => {
     if (state.exiting) return
-    for (const window of windows) {
-      window.webContents.send("openscience:service-exit", code)
-    }
+    // The sandboxed renderer has no preload, so there is no IPC receiver;
+    // record the unexpected exit next to the sidecar's own output instead.
+    appendFileSync(output, `[desktop] OpenScience runtime exited unexpectedly (${signal ?? `code ${code}`})\n`)
   })
   await ready(state.address)
 }
@@ -813,9 +816,7 @@ function applicationMenu() {
     {
       label: "View",
       submenu: [
-        { role: "reload" },
-        { role: "toggleDevTools" },
-        { type: "separator" },
+        ...(app.isPackaged ? [] : [{ role: "reload" }, { role: "toggleDevTools" }, { type: "separator" }]),
         { role: "resetZoom" },
         { role: "zoomIn" },
         { role: "zoomOut" },
@@ -861,6 +862,11 @@ async function createWindow() {
     event.preventDefault()
     external(url)
   })
+  window.webContents.on("will-redirect", (event, url) => {
+    if (localNavigation(url)) return
+    event.preventDefault()
+    external(url)
+  })
   await window.loadURL(`${state.address}/?desktop=1${state.updateAddress ? "&desktop-update=1" : ""}`)
   const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
@@ -889,6 +895,9 @@ app
     let splash
     try {
       app.name = "OpenScience"
+      session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => {
+        callback(permissions.has(permission) && localNavigation(contents.getURL()))
+      })
       if (app.isPackaged && process.platform === "darwin") {
         state.updateCache = path.join(app.getPath("userData"), "updates")
         mkdirSync(state.updateCache, { recursive: true, mode: 0o700 })

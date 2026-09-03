@@ -18,8 +18,9 @@ process.env.__SYNSCI_LAUNCHER_PID = String(process.pid)
 
 import { execFileSync, execSync, spawn } from "node:child_process"
 import { existsSync, readFileSync, realpathSync } from "node:fs"
-import { homedir } from "node:os"
+import { constants, homedir } from "node:os"
 import { join, resolve } from "node:path"
+import { createInterface } from "node:readline/promises"
 import { fileURLToPath } from "node:url"
 import { npmDistTag, opensciencePackageSpec } from "../lib/channel.mjs"
 
@@ -43,6 +44,12 @@ if (process.argv.includes("--version") || process.argv.includes("-v")) {
 }
 const OPENSCIENCE_NPM_TAG = npmDistTag(LAUNCHER_VERSION)
 const OPENSCIENCE_NPM_SPEC = opensciencePackageSpec(LAUNCHER_VERSION)
+// `--allow-installer` is consumed here (consent to pipe the remote standalone
+// installer into bash); everything else is forwarded to `openscience web`.
+const ALLOW_INSTALLER = process.argv.includes("--allow-installer")
+const ARGS = process.argv.slice(2).filter((arg) => arg !== "--allow-installer")
+const STANDALONE_INSTALL =
+  "PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c '/usr/bin/curl -fsSL https://openscience.sh/install | /bin/bash'"
 const SAFE_GLOBAL_WRAPPER_VERSION = [2, 0, 2]
 const MACOS_ENTITLEMENTS = [
   "com.apple.security.cs.allow-jit",
@@ -128,11 +135,26 @@ function runQuiet(cmd) {
 }
 
 // Windows global installs expose a .cmd shim, which can't be exec'd
-// directly — it needs a shell (and the path quoted for it).
+// directly — it needs cmd.exe. cmd parses the command token once for `/c`,
+// but the shim's `%*` expansion parses the arguments a second time, so each
+// argument is quoted per https://qntm.org/cmd and caret-escaped twice.
 const isCmdShim = (p) => process.platform === "win32" && p.toLowerCase().endsWith(".cmd")
+const CMD_META = /([()\][%!^"`<>&|;, *?])/g
+const cmdEscape = (value) => value.replace(CMD_META, "^$1")
+
+function cmdQuote(arg) {
+  const quoted = `"${String(arg)
+    .replace(/(\\*)"/g, '$1$1\\"')
+    .replace(/(\\*)$/, "$1$1")}"`
+  return cmdEscape(cmdEscape(quoted))
+}
+
+function cmdLine(file, args) {
+  return [cmdEscape(file), ...args.map(cmdQuote)].join(" ")
+}
 
 function execCli(file, args = [], opts = {}) {
-  if (isCmdShim(file)) return execSync(['"' + file + '"', ...args].join(" "), opts)
+  if (isCmdShim(file)) return execSync(cmdLine(file, args), opts)
   return execFileSync(file, args, opts)
 }
 
@@ -152,6 +174,32 @@ function isLauncherPath(p) {
     return false
   } catch {
     return false
+  }
+}
+
+// The recursion guard is process-local: the CLI (and every terminal or tool
+// the workspace spawns from it) must not inherit it, or a nested `synsci`
+// would exit with the recursion error. Self-recursion is caught instead by
+// comparing the resolved CLI's realpath with the launcher before spawning.
+function cliEnv() {
+  const env = { ...process.env }
+  delete env.__SYNSCI_LAUNCHER_PID
+  return env
+}
+
+// Never pipe a remote script into bash without consent: an explicit
+// `--allow-installer` flag, or a yes on an interactive terminal.
+async function installerConsent() {
+  if (ALLOW_INSTALLER) return true
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    const answer = await rl.question(
+      `  Run the standalone installer (${CYAN}curl -fsSL https://openscience.sh/install | bash${RESET})? [y/N] `,
+    )
+    return /^y(es)?$/i.test(answer.trim())
+  } finally {
+    rl.close()
   }
 }
 
@@ -467,10 +515,19 @@ async function main() {
         console.log(`\n  Try manually: ${CYAN}npm i -g ${OPENSCIENCE_NPM_SPEC}${RESET}\n`)
         process.exit(1)
       }
-      // Global npm installs commonly fail on permissions. Fall back to the
-      // standalone installer, which lands in ~/.openscience/bin without sudo
-      // (resolveCli already checks that location).
-      s.update("npm -g failed, trying the standalone installer...")
+      // Global npm installs commonly fail on permissions. The standalone
+      // installer lands in ~/.openscience/bin without sudo (resolveCli already
+      // checks that location), but it is a remote script piped into bash, so
+      // it only runs with explicit consent. Otherwise print the manual
+      // commands and stop.
+      s.warn("npm -g install failed")
+      if (!(await installerConsent())) {
+        console.log(`\n  Try manually: ${CYAN}npm i -g ${OPENSCIENCE_NPM_SPEC}${RESET}`)
+        console.log(`  or:           ${CYAN}${STANDALONE_INSTALL}${RESET}`)
+        console.log(`  or rerun with ${CYAN}--allow-installer${RESET} to let synsci run the standalone installer\n`)
+        process.exit(1)
+      }
+      const t = spinner("Running the standalone installer...")
       try {
         execSync("/usr/bin/curl -fsSL https://openscience.sh/install | /bin/bash", {
           stdio: "pipe",
@@ -478,16 +535,18 @@ async function main() {
         })
         cliPath = resolveCli()
         if (!cliPath) throw new Error("openscience not found after install")
-        s.ok("Installed OpenScience")
+        t.ok("Installed OpenScience")
       } catch (e2) {
-        s.fail(`Install failed${e2 && e2.message ? ": " + e2.message : ""}`)
+        t.fail(`Install failed${e2 && e2.message ? ": " + e2.message : ""}`)
         console.log(`\n  Try manually: ${CYAN}npm i -g ${OPENSCIENCE_NPM_SPEC}${RESET}`)
-        console.log(
-          `  or:           ${CYAN}PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -c '/usr/bin/curl -fsSL https://openscience.sh/install | /bin/bash'${RESET}\n`,
-        )
+        console.log(`  or:           ${CYAN}${STANDALONE_INSTALL}${RESET}\n`)
         process.exit(1)
       }
     }
+  }
+  if (isLauncherPath(cliPath)) {
+    console.error("synsci: the resolved openscience command is the launcher itself; refusing to recurse")
+    process.exit(2)
   }
 
   // --- Step 2: Connect this device ---
@@ -496,7 +555,7 @@ async function main() {
   } else {
     console.log()
     try {
-      execCli(cliPath, ["login"], { stdio: "inherit" })
+      execCli(cliPath, ["login"], { stdio: "inherit", env: cliEnv() })
     } catch {
       warn("Synthetic Sciences sign-in did not finish")
       process.exit(1)
@@ -513,11 +572,19 @@ async function main() {
   console.log(`  ${DIM}Opening the workspace in your browser…${RESET}`)
   console.log()
 
-  const webArgs = ["web", ...process.argv.slice(2)]
+  const webArgs = ["web", ...ARGS]
   const child = isCmdShim(cliPath)
-    ? spawn(['"' + cliPath + '"', ...webArgs].join(" "), { stdio: "inherit", shell: true })
-    : spawn(cliPath, webArgs, { stdio: "inherit" })
-  child.on("close", (code) => process.exit(code ?? 0))
+    ? spawn(cmdLine(cliPath, webArgs), { stdio: "inherit", shell: true, env: cliEnv() })
+    : spawn(cliPath, webArgs, { stdio: "inherit", env: cliEnv() })
+  child.on("close", (code, signal) => {
+    // A child killed by a signal has no exit code; report it as the shell
+    // would (128 + signal number) instead of a silent success.
+    if (signal) {
+      console.error(`synsci: openscience exited on ${signal}`)
+      process.exit(128 + (constants.signals[signal] ?? 0))
+    }
+    process.exit(code ?? 1)
+  })
 }
 
 main().catch((err) => {

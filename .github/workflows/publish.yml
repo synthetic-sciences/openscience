@@ -743,7 +743,7 @@ jobs:
               gh release upload "$OPENSCIENCE_TAG" "$artifact#$name (v$OPENSCIENCE_VERSION, source $source_label)"
               continue
             fi
-            actual="sha256:$(node -e 'const fs=require(\"fs\"),c=require(\"crypto\");const h=c.createHash(\"sha256\");h.update(fs.readFileSync(process.argv[1]));process.stdout.write(h.digest(\"hex\"))' "$artifact")"
+            actual="sha256:$(node -e 'const fs=require("fs"),c=require("crypto");const h=c.createHash("sha256");h.update(fs.readFileSync(process.argv[1]));process.stdout.write(h.digest("hex"))' "$artifact")"
             [[ "$actual" == "$remote" ]] || { echo "::error::$name already exists with different bytes"; exit 1; }
           done
 

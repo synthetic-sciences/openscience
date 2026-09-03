@@ -172,7 +172,6 @@ else
     fi
 
     if [ -z "$requested_version" ]; then
-        url="https://github.com/synthetic-sciences/OpenScience/releases/latest/download/$filename"
         # The || fallback keeps set -e from killing the script inside the
         # assignment when curl fails, so the message below can print.
         specific_version=$(curl -fsS https://api.github.com/repos/synthetic-sciences/OpenScience/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p') || specific_version=""
@@ -184,7 +183,6 @@ else
     else
         # Strip leading 'v' if present
         requested_version="${requested_version#v}"
-        url="https://github.com/synthetic-sciences/OpenScience/releases/download/v${requested_version}/$filename"
         specific_version=$requested_version
 
         # Verify the release exists before downloading
@@ -195,6 +193,9 @@ else
             exit 1
         fi
     fi
+    # Download from the resolved release, never releases/latest, so the
+    # archive and its checksums.txt always come from the same release.
+    url="https://github.com/synthetic-sciences/OpenScience/releases/download/v${specific_version}/$filename"
 fi
 
 print_message() {
@@ -336,30 +337,43 @@ download_and_install() {
         exit 1
     fi
 
-    # Verify against the release's checksums.txt when a sha256 tool exists.
-    # Releases published before checksums.txt simply skip verification.
-    local shatool=""
-    if command -v sha256sum >/dev/null 2>&1; then
-        shatool="sha256sum"
-    elif command -v shasum >/dev/null 2>&1; then
-        shatool="shasum -a 256"
-    fi
-    if [ -n "$shatool" ]; then
+    # Verify against the release's checksums.txt. A missing sha256 tool or a
+    # missing checksum entry fails the install unless OPENSCIENCE_SKIP_CHECKSUM=1
+    # explicitly opts out (e.g. releases published before checksums.txt).
+    if [ "${OPENSCIENCE_SKIP_CHECKSUM:-}" = "1" ]; then
+        print_message warning "${ORANGE}Skipping checksum verification (OPENSCIENCE_SKIP_CHECKSUM=1)${NC}"
+    else
+        local shatool=""
+        if command -v sha256sum >/dev/null 2>&1; then
+            shatool="sha256sum"
+        elif command -v shasum >/dev/null 2>&1; then
+            shatool="shasum -a 256"
+        fi
+        if [ -z "$shatool" ]; then
+            echo -e "${RED}Error: sha256sum or shasum is required to verify the download${NC}"
+            echo -e "${MUTED}Set OPENSCIENCE_SKIP_CHECKSUM=1 to install without verification.${NC}"
+            rm -rf "$tmp_dir"
+            exit 1
+        fi
         local checksums_url="${url%/*}/checksums.txt"
         local expected
         expected=$(curl -fsSL "$checksums_url" 2>/dev/null | awk -v f="$filename" '$2 == f {print $1}') || expected=""
-        if [ -n "$expected" ]; then
-            local actual
-            actual=$($shatool "$tmp_dir/$filename" | awk '{print $1}')
-            if [ "$actual" != "$expected" ]; then
-                echo -e "${RED}Checksum mismatch for ${filename}${NC}"
-                echo -e "${MUTED}expected: ${expected}${NC}"
-                echo -e "${MUTED}actual:   ${actual}${NC}"
-                rm -rf "$tmp_dir"
-                exit 1
-            fi
-            print_message info "${MUTED}Checksum verified${NC}"
+        if [ -z "$expected" ]; then
+            echo -e "${RED}Error: no checksum for ${filename} at ${checksums_url}${NC}"
+            echo -e "${MUTED}Set OPENSCIENCE_SKIP_CHECKSUM=1 to install without verification.${NC}"
+            rm -rf "$tmp_dir"
+            exit 1
         fi
+        local actual
+        actual=$($shatool "$tmp_dir/$filename" | awk '{print $1}')
+        if [ "$actual" != "$expected" ]; then
+            echo -e "${RED}Checksum mismatch for ${filename}${NC}"
+            echo -e "${MUTED}expected: ${expected}${NC}"
+            echo -e "${MUTED}actual:   ${actual}${NC}"
+            rm -rf "$tmp_dir"
+            exit 1
+        fi
+        print_message info "${MUTED}Checksum verified${NC}"
     fi
 
     if [ "$os" = "linux" ]; then

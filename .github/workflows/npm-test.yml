@@ -28,7 +28,6 @@ concurrency: npm-test-publish
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   test-source:
@@ -195,6 +194,10 @@ jobs:
       - prepare-npm
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # The only job that publishes with npm provenance, which needs an OIDC token.
+    permissions:
+      contents: read
+      id-token: write
     outputs:
       version: ${{ needs.version.outputs.version }}
       source: ${{ needs.version.outputs.source }}
@@ -496,7 +499,8 @@ jobs:
     if: inputs.run_os_smoke
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    container: node:24-alpine
+    # node:24-alpine multi-arch index as of 2026-09-03
+    container: node:24-alpine@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf
     steps:
       - name: Install Alpine smoke dependencies
         shell: sh
