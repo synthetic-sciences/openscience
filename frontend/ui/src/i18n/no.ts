@@ -2,14 +2,7 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict: Record<Keys, string> = {
-  "ui.sessionReview.title": "Sesjonsendringer",
-  "ui.sessionReview.diffStyle.unified": "Samlet",
-  "ui.sessionReview.diffStyle.split": "Delt",
-  "ui.sessionReview.expandAll": "Utvid alle",
-  "ui.sessionReview.collapseAll": "Fold sammen alle",
 
-  "ui.sessionReview.change.added": "Lagt til",
-  "ui.sessionReview.change.removed": "Fjernet",
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommenterer på ",

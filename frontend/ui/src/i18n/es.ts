@@ -1,12 +1,5 @@
 export const dict = {
-  "ui.sessionReview.title": "Cambios de la sesión",
-  "ui.sessionReview.diffStyle.unified": "Unificado",
-  "ui.sessionReview.diffStyle.split": "Dividido",
-  "ui.sessionReview.expandAll": "Expandir todo",
-  "ui.sessionReview.collapseAll": "Colapsar todo",
 
-  "ui.sessionReview.change.added": "Añadido",
-  "ui.sessionReview.change.removed": "Eliminado",
   "ui.lineComment.label.prefix": "Comentar en ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Comentando en ",

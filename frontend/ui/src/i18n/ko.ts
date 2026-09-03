@@ -1,12 +1,5 @@
 export const dict = {
-  "ui.sessionReview.title": "세션 변경 사항",
-  "ui.sessionReview.diffStyle.unified": "통합 보기",
-  "ui.sessionReview.diffStyle.split": "분할 보기",
-  "ui.sessionReview.expandAll": "모두 펼치기",
-  "ui.sessionReview.collapseAll": "모두 접기",
 
-  "ui.sessionReview.change.added": "추가됨",
-  "ui.sessionReview.change.removed": "삭제됨",
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "에 댓글 달기",
   "ui.lineComment.editorLabel.prefix": "",

@@ -1,12 +1,5 @@
 export const dict = {
-  "ui.sessionReview.title": "セッションの変更",
-  "ui.sessionReview.diffStyle.unified": "Unified",
-  "ui.sessionReview.diffStyle.split": "Split",
-  "ui.sessionReview.expandAll": "すべて展開",
-  "ui.sessionReview.collapseAll": "すべて折りたたむ",
 
-  "ui.sessionReview.change.added": "追加",
-  "ui.sessionReview.change.removed": "削除",
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "へのコメント",
   "ui.lineComment.editorLabel.prefix": "",
