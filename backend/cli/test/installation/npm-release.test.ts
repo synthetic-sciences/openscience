@@ -38,6 +38,8 @@ type FakeState = {
   packages: Record<string, { integrity: string; visibilityReads?: number }>
   publishCalls: number
   publishFailures?: Record<string, number>
+  publishGhosts?: Record<string, number>
+  publishIntegrities?: string[]
   publishMode?: "already" | "ghost" | "permission" | "success"
   publishSpecs?: string[]
   publishVisibilityReads?: number
@@ -334,7 +336,7 @@ test("release artifacts persist exact packed bytes and reject a different source
   await expect(loadReleaseArtifacts({ directory, source, version: "2.0.32" })).rejects.toThrow("expected 2.0.32")
 })
 
-test("stage-only verifies the complete immutable release without promoting latest", async () => {
+test("stage-only repairs one accepted-but-absent package once without promoting latest", async () => {
   const artifacts: PackedPackage[] = []
   for (const name of releasePackageNames()) artifacts.push(await fixturePackage(name))
   const source = (await Bun.$`git rev-parse HEAD`.cwd(releaseRoot).text()).trim()
@@ -345,43 +347,51 @@ test("stage-only verifies the complete immutable release without promoting lates
     packages: Object.fromEntries(
       artifacts.slice(1).map((artifact) => [`${artifact.name}@${artifact.version}`, { integrity: artifact.integrity }]),
     ),
+    publishGhosts: { [`${artifacts[0].name}@2.0.32`]: 1 },
     tags: Object.fromEntries(artifacts.map((artifact) => [artifact.name, { latest: "2.0.31" }])),
   })
   const command = path.join(root, "npm-fixture")
   await Bun.write(command, `#!${process.execPath}\nawait import(${JSON.stringify(fake)})\n`)
   await chmod(command, 0o755)
-  const proc = Bun.spawn([process.execPath, path.join(releaseRoot, "tooling/repo/publish.ts"), "--stage-only"], {
-    cwd: releaseRoot,
-    env: {
-      ...Bun.env,
-      ...fastOptions(file).env,
-      OPENSCIENCE_CHANNEL: "latest",
-      OPENSCIENCE_VERSION: "2.0.32",
-      // Never authorize Git/GitHub writes, even if the stage-only exit regresses.
-      OPENSCIENCE_RELEASE: "",
-      OPENSCIENCE_RELEASE_SOURCE: source,
-      OPENSCIENCE_ARTIFACT_SOURCE: source,
-      OPENSCIENCE_NPM_ARTIFACT_DIR: directory,
-      OPENSCIENCE_NPM_COMMAND: command,
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ])
-  expect({ code, stderr }).toEqual({ code: 0, stderr: "" })
-  expect(stdout).toContain("staging complete; latest tags and the GitHub draft are unchanged")
-  expect(stdout).not.toContain("promoting npm latest")
+  const run = async () => {
+    const proc = Bun.spawn([process.execPath, path.join(releaseRoot, "tooling/repo/publish.ts"), "--stage-only"], {
+      cwd: releaseRoot,
+      env: {
+        ...Bun.env,
+        ...fastOptions(file).env,
+        OPENSCIENCE_CHANNEL: "latest",
+        OPENSCIENCE_VERSION: "2.0.32",
+        // Never authorize Git/GitHub writes, even if the stage-only exit regresses.
+        OPENSCIENCE_RELEASE: "",
+        OPENSCIENCE_RELEASE_SOURCE: source,
+        OPENSCIENCE_ARTIFACT_SOURCE: source,
+        OPENSCIENCE_NPM_ARTIFACT_DIR: directory,
+        OPENSCIENCE_NPM_COMMAND: command,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ])
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" })
+    expect(stdout).toContain("staging complete; latest tags and the GitHub draft are unchanged")
+    expect(stdout).not.toContain("promoting npm latest")
+  }
+  await run()
   const state = await readState(file)
-  expect(state.publishCalls).toBe(1)
-  expect(state.publishSpecs).toEqual([`${artifacts[0].name}@2.0.32`])
+  expect(state.publishCalls).toBe(2)
+  expect(state.publishSpecs).toEqual([`${artifacts[0].name}@2.0.32`, `${artifacts[0].name}@2.0.32`])
+  expect(state.publishIntegrities).toEqual([artifacts[0].integrity, artifacts[0].integrity])
   for (const artifact of artifacts) {
     expect(state.packages[`${artifact.name}@2.0.32`].integrity).toBe(artifact.integrity)
     expect(state.tags[artifact.name]).toEqual({ latest: "2.0.31", [releaseStagingTag("2.0.32")]: "2.0.32" })
   }
+
+  await run()
+  expect((await readState(file)).publishCalls).toBe(2)
 }, 30_000)
 
 test("a missing artifact cache fails closed when any package version already exists", async () => {

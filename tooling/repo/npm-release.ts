@@ -528,7 +528,7 @@ export async function verifyPublishedPackageIntegrities(inputs: PackedPackage[],
   }
 }
 
-async function submitCandidatePackageOnce(
+async function submitPackageOnce(
   input: PackedPackage,
   tag: string,
   options: NpmCommandOptions,
@@ -550,6 +550,23 @@ async function submitCandidatePackageOnce(
   // authoritative result and the only input to the single repair round.
   console.warn(`  ${phase} submission uncertain for ${input.name}@${input.version}: ${failure(result)}`)
   return false
+}
+
+async function repairSubmittedRelease(
+  artifacts: PackedPackage[],
+  tag: string,
+  label: "npm candidate" | "npm release",
+  options: NpmCommandOptions,
+) {
+  const repair = await waitForPublishedSet(artifacts, options)
+  for (const artifact of repair) await submitPackageOnce(artifact, tag, options, "repair")
+  const unresolved = repair.length > 0 ? await waitForPublishedSet(artifacts, options) : []
+  if (unresolved.length > 0) {
+    throw new Error(
+      `${label} remains incomplete after one repair round: ${unresolved.map((item) => item.name).join(", ")}`,
+    )
+  }
+  return repair
 }
 
 function exactReleaseArtifacts(inputs: PackedPackage[]) {
@@ -630,20 +647,25 @@ export async function stageCandidateRelease(artifacts: PackedPackage[], options:
   const inspected = await Promise.all(ordered.map((artifact) => inspectPublishedPackage(artifact, options)))
   const absent = ordered.filter((_, index) => !inspected[index])
 
-  for (const artifact of absent) await submitCandidatePackageOnce(artifact, tag, options, "initial")
-  const repair = await waitForPublishedSet(ordered, options)
-  for (const artifact of repair) await submitCandidatePackageOnce(artifact, tag, options, "repair")
-  const unresolved = repair.length > 0 ? await waitForPublishedSet(ordered, options) : []
-  if (unresolved.length > 0) {
-    throw new Error(
-      `npm candidate remains incomplete after one repair round: ${unresolved.map((item) => item.name).join(", ")}`,
-    )
-  }
+  for (const artifact of absent) await submitPackageOnce(artifact, tag, options, "initial")
+  await repairSubmittedRelease(ordered, tag, "npm candidate", options)
 
   await verifyPublishedPackageIntegrities(ordered, options)
   await verifyReleaseOptionalDependencies(ordered, options)
   await ensureReleaseStagingTags(ordered, tag, options)
   return { tag, version }
+}
+
+/** Stable staging may receive a successful npm response without the version
+ * becoming visible. After one complete registry visibility window, resubmit
+ * only genuinely absent packages from their already-validated cached tgz,
+ * once, under the isolated per-version tag. */
+export async function repairStagedRelease(artifacts: PackedPackage[], options: NpmCommandOptions = {}) {
+  const ordered = exactReleaseArtifacts(artifacts)
+  const version = ordered[0].version
+  const tag = releaseStagingTag(version)
+  const repaired = await repairSubmittedRelease(ordered, tag, "npm release", options)
+  return { repaired: repaired.map((artifact) => artifact.name), tag, version }
 }
 
 export async function publishPackage(

@@ -8,6 +8,7 @@ import {
   preflightRelease,
   promoteRelease,
   publishPackage,
+  repairStagedRelease,
   releasePromotionNames,
   releaseStagingTag,
   verifyPublishedPackages,
@@ -54,6 +55,7 @@ if (Script.preview) {
         batch.map((artifact) => publishPackage({ ...artifact, deferVerification: true, tag: stagingTag })),
       )
     }
+    if (stageOnly) await repairStagedRelease(ordered)
   } else {
     console.log(`\n=== promotion-only resume from ${source}; no npm package writes are allowed ===\n`)
   }

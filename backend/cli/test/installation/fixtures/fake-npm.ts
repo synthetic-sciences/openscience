@@ -8,6 +8,8 @@ type State = {
   packages: Record<string, { integrity: string; visibilityReads?: number }>
   publishCalls: number
   publishFailures?: Record<string, number>
+  publishGhosts?: Record<string, number>
+  publishIntegrities?: string[]
   publishMode?: "already" | "ghost" | "permission" | "success"
   publishSpecs?: string[]
   publishVisibilityReads?: number
@@ -72,10 +74,20 @@ if (args[0] === "publish") {
   const spec = process.env.FAKE_NPM_SPEC ?? `${manifest.name}@${manifest.version}`
   state.publishSpecs ??= []
   state.publishSpecs.push(spec)
+  const bytes = await Bun.file(args[1]).arrayBuffer()
+  const digest = new Bun.CryptoHasher("sha512").update(bytes).digest("base64")
+  state.publishIntegrities ??= []
+  state.publishIntegrities.push(`sha512-${digest}`)
   if ((state.publishFailures?.[spec] ?? 0) > 0) {
     state.publishFailures![spec]--
     await save()
     fail("npm error code E500\ntransient publish failure")
+  }
+  if ((state.publishGhosts?.[spec] ?? 0) > 0) {
+    state.publishGhosts![spec]--
+    await save()
+    console.log(`+ ${spec}`)
+    process.exit(0)
   }
   if (state.publishMode === "ghost") {
     await save()
@@ -86,8 +98,6 @@ if (args[0] === "publish") {
     await save()
     fail("npm error code E403\nYou do not have permission to publish this package")
   }
-  const bytes = await Bun.file(args[1]).arrayBuffer()
-  const digest = new Bun.CryptoHasher("sha512").update(bytes).digest("base64")
   state.packages[spec] = {
     integrity: `sha512-${digest}`,
     visibilityReads: state.publishVisibilityReads ?? 0,
