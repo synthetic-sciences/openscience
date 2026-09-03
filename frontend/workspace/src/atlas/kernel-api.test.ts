@@ -86,6 +86,26 @@ describe("kernel API compatibility", () => {
     ])
   })
 
+  test("re-probes the canonical discovery route once the remembered miss expires", async () => {
+    const calls: string[] = []
+    const clock = { now: 0 }
+    const request = createKernelRouteRequester(
+      async (path) => {
+        calls.push(path)
+        return path.startsWith("/notebook/") ? response(200, "legacy") : response(404, "Not Found")
+      },
+      { ttl: 1_000, now: () => clock.now },
+    )
+
+    await request(kernelAPI.inventory)
+    clock.now = 999
+    await request(kernelAPI.inventory)
+    clock.now = 1_000
+    await request(kernelAPI.inventory)
+
+    expect(calls).toEqual(["/kernels", "/notebook/kernels", "/notebook/kernels", "/kernels", "/notebook/kernels"])
+  })
+
   test("does not cache a missing runtime control as backend version evidence", async () => {
     const calls: string[] = []
     const request = createKernelRouteRequester(async (path) => {

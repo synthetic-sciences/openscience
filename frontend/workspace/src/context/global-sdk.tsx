@@ -29,6 +29,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const coalesced = new Map<string, number>()
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
+    let disposed = false
 
     const key = (directory: string, payload: Event) => {
       if (payload.type === "session.status") return `session.status:${directory}:${payload.properties.sessionID}`
@@ -43,6 +44,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       if (timer) clearTimeout(timer)
       timer = undefined
 
+      if (disposed) return
       if (queue.length === 0) return
 
       const events = queue
@@ -92,9 +94,12 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       },
     }).finally(flush)
 
+    // Deliver what is already queued while the owner is still alive; anything
+    // that arrives after this point must not be emitted into a disposed tree.
     onCleanup(() => {
-      abort.abort()
       flush()
+      disposed = true
+      abort.abort()
     })
 
     const sdk = createOpenScienceClient({
