@@ -26,7 +26,7 @@ It is model-agnostic, open source, and built to do real work in machine learning
 
 - **Runs the whole loop.** Literature review, hypothesis, code, experiment, analysis, and write-up, in one continuous session.
 - **One adaptive Research agent.** A single user-facing collaborator handles the task end to end, loads domain skills when useful, and delegates independent Explore or Execute work when it helps. Off, Auto, and High delegation guide how readily it parallelizes without imposing a per-turn worker quota; plan mode stays read-only.
-- **309 bundled skills.** Training (DeepSpeed, PEFT, TRL), evaluation, dataset work, molecular and clinical biology, cheminformatics, papers and LaTeX, figures, and user-configured scientific runtimes.
+- **312 bundled skills.** Training (DeepSpeed, PEFT, TRL), evaluation, dataset work, molecular and clinical biology, cheminformatics, papers and LaTeX, figures, and user-configured scientific runtimes.
 - **Scientific databases as tools.** 42 built-in connectors, including UniProt, PDB, Ensembl, ChEMBL, PubChem, arXiv, OpenAlex, and Semantic Scholar, queryable directly by the agent.
 - **Governed scientific capabilities.** A truthful 54-entry inventory sits behind one lifecycle tool. Five experimental Python capabilities run through exact, hashed local or Modal environments; ten experimental BioNeMo capabilities use strict bring-your-own-key NVIDIA NIM adapters. No capability is labeled verified until a release-artifact canary passes.
 - **A real workspace.** A browser UI with a file tree, an editor, a terminal, session history, and inline rendering for molecules, structures, genomes, and plots.
@@ -74,7 +74,7 @@ OpenScience runs a local server that hosts the workspace UI, the agent runtime, 
 | -------------------- | ------------------------------------------------------------ |
 | `backend/cli`        | The CLI, server, provider integrations, sessions, and skills |
 | `frontend/workspace` | The browser workspace UI, served by the CLI                  |
-| `frontend/docs`      | The documentation and session-share site                     |
+| `frontend/docs`      | The documentation site                                       |
 | `tooling/sdk/js`     | The TypeScript SDK                                           |
 | `tooling/plugin`     | The plugin runtime                                           |
 

@@ -27,7 +27,7 @@ The server binds to `127.0.0.1` and enforces a Host and Origin allowlist. There 
 backend/cli          The CLI, server, agent runtime, tools, and skills
 frontend/workspace   The workspace UI (SolidJS), served by the CLI
 frontend/ui          Shared UI components, themes, and fonts
-frontend/docs        The documentation site (Astro)
+frontend/docs        The documentation site (Vite + React)
 frontend/landing     The marketing site (openscience.sh)
 tooling/sdk/js       The TypeScript SDK, generated from the server contract
 tooling/plugin       The plugin runtime (@synsci/plugin)
@@ -63,7 +63,7 @@ Skills are instruction bundles the agent loads on demand (`src/skill`). The cano
 
 - `frontend/workspace` is the workspace UI. It talks to the local server over the same API the SDK exposes, and renders sessions, files, a terminal, and inline scientific views (molecules, structures, genomes, plots). The CLI build embeds the compiled UI into the binary.
 - `frontend/ui` is the shared component and theme library used by the app and the docs site.
-- `frontend/docs` is the Astro documentation site.
+- `frontend/docs` is the Vite + React documentation site.
 
 ## SDK and plugins
 
