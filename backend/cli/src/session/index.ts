@@ -410,13 +410,20 @@ export namespace Session {
     },
   )
 
+  // Session files are independent: read them in bounded parallel windows and
+  // yield in directory order.
+  const LIST_WINDOW = 32
+
   export async function* list() {
     const project = Instance.project
-    for (const item of await Storage.list(["session", project.id])) {
-      const session = await loadOptional(item)
-      if (!session) continue
-      if (!current(session)) continue
-      yield session
+    const keys = await Storage.list(["session", project.id])
+    for (let i = 0; i < keys.length; i += LIST_WINDOW) {
+      const loaded = await Promise.all(keys.slice(i, i + LIST_WINDOW).map((key) => loadOptional(key)))
+      for (const session of loaded) {
+        if (!session) continue
+        if (!current(session)) continue
+        yield session
+      }
     }
   }
 

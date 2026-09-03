@@ -11,7 +11,7 @@ import { DataRootBarrier } from "@/global/data-root-barrier"
 import { ToolOutputPath } from "@/tool/tool-output-path"
 import { Lock } from "@/util/lock"
 import { Log } from "@/util/log"
-import { BILLING_URL, DEFAULT_MANAGED_API_BASE, MANAGED_API_BASE, managedApiBase } from "@/endpoints"
+import { BILLING_URL, managedApiBase } from "@/endpoints"
 import {
   BYOK_LLM_BASE_URL_KEYS,
   BYOK_LLM_ENV_KEYS,
@@ -21,7 +21,6 @@ import {
 import { WorkspaceCredentials } from "./workspace-credentials"
 
 const log = Log.create({ service: "openscience" })
-export const API_BASE = MANAGED_API_BASE
 
 function apiBase(): string {
   return managedApiBase()
@@ -218,7 +217,11 @@ const FUNDING_PROTOCOL_HEADER = "OpenScience-Funding-Protocol"
 const FUNDING_CONTEXT_HEADER = "OpenScience-Funding-Context"
 const ATLAS_FETCH_TIMEOUT_MS = Number(process.env.OPENSCIENCE_ATLAS_TIMEOUT_MS) || 60_000
 const DEVICE_REVOKE_TIMEOUT_MS = 5_000
-const VERIFICATION_PAGE = process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || `${DEFAULT_MANAGED_API_BASE}/cli`
+// Resolved per call so `SYNSC_AUTH_URL` and the managed-base overrides apply as
+// the process environment stands, not as it stood at import.
+function verificationPage(): string {
+  return process.env.SYNSC_AUTH_URL?.replace(/\/+$/, "") || `${apiBase()}/cli`
+}
 
 interface WorkspaceScope {
   protocol: 1
@@ -582,7 +585,7 @@ export namespace OpenScience {
   }
 
   export function authPageUrl(): string {
-    return VERIFICATION_PAGE
+    return verificationPage()
   }
 
   export async function getFundingSnapshot(): Promise<FundingSnapshot | null> {
@@ -1365,11 +1368,28 @@ export namespace OpenScience {
   let pendingBalance: { context: string; promise: Promise<number | null> } | undefined
   let balanceRevision = 0
   const BALANCE_CACHE_TTL_MS = 30_000
+  // A positive balance past the TTL is still served while a refresh runs in
+  // the background, up to this age. A missing, non-positive or older value
+  // blocks on the fetch so an empty wallet is noticed promptly.
+  const BALANCE_STALE_MAX_MS = 5 * 60_000
+  const BALANCE_FETCH_TIMEOUT_MS = 3_000
 
+  /** Expire the cached balance after a spend or credential change. A positive
+   * value is kept past its TTL so the next check serves it while a refresh runs
+   * in the background (see getBalance); a non-positive value is dropped so the
+   * next check blocks. The revision bump discards any in-flight result that
+   * predates the spend. */
   export function invalidateBalance(): void {
     balanceRevision++
-    cachedBalance = null
     pendingBalance = undefined
+    if (!cachedBalance) return
+    if (cachedBalance.value <= 0) {
+      cachedBalance = null
+      return
+    }
+    // Anchor to the original fetch so BALANCE_STALE_MAX_MS still bounds the
+    // age of a served value when background refreshes keep failing.
+    cachedBalance = { ...cachedBalance, at: Math.min(cachedBalance.at, Date.now() - BALANCE_CACHE_TTL_MS) }
   }
 
   export function invalidateBalanceCache(): void {
@@ -1380,14 +1400,20 @@ export namespace OpenScience {
     const session = snapshot ?? (await getReconciledFundingState())?.snapshot
     if (!session) return null
     const context = contextTag(session)
-    if (cachedBalance?.context === context && Date.now() - cachedBalance.at < BALANCE_CACHE_TTL_MS) {
-      return cachedBalance.value
-    }
-    if (pendingBalance?.context === context) return pendingBalance.promise
+    const cached = cachedBalance?.context === context ? cachedBalance : null
+    const age = cached ? Date.now() - cached.at : Infinity
+    if (cached && age < BALANCE_CACHE_TTL_MS) return cached.value
+    const stale = cached && cached.value > 0 && age < BALANCE_STALE_MAX_MS ? cached.value : undefined
+    const request = pendingBalance?.context === context ? pendingBalance.promise : refreshBalance(session, context)
+    if (stale !== undefined) return stale
+    return request
+  }
+
+  function refreshBalance(session: FundingSnapshot, context: string) {
     const revision = balanceRevision
     const request = (async () => {
       try {
-        const response = await fundedAtlasFetch(session, `${apiBase()}/api/cli/balance`)
+        const response = await fundedAtlasFetch(session, `${apiBase()}/api/cli/balance`, {}, BALANCE_FETCH_TIMEOUT_MS)
         if (!response.ok) return null
         const body = (await response.json()) as Record<string, unknown>
         const value =

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto"
 import z from "zod"
 import { GlobalBus } from "@/bus/global"
-import { API_BASE, OpenScience, type FundingSnapshot } from "@/openscience"
+import { managedApiBase } from "@/endpoints"
+import { OpenScience, type FundingSnapshot } from "@/openscience"
 import { MANAGED_OPENROUTER_MODEL_SET } from "./managed-catalog"
 
 const Rate = z.number().finite().nonnegative().max(100_000)
@@ -170,7 +171,7 @@ export namespace ManagedPricing {
       const selected = await OpenScience.managedRequestSnapshot(snapshot.api_key, snapshot)
       if (fingerprint(selected) !== key) return
       // Device keys deliberately cannot read the browser administration API.
-      const endpoint = `${API_BASE}/api/cli/model-catalog?provider=openrouter`
+      const endpoint = `${managedApiBase()}/api/cli/model-catalog?provider=openrouter`
       const response = await fetch(endpoint, {
         headers: { Authorization: `Bearer ${selected.api_key}`, ...OpenScience.fundingHeaders(selected) },
         signal: controller.signal,

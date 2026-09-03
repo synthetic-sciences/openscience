@@ -5,6 +5,25 @@ import { InvalidCall } from "./invalid-call"
 import { InvalidTool } from "./invalid"
 
 const DISALLOWED = new Set(["batch"])
+// Legacy call names accepted only when batch runs outside a prompt turn (no
+// gated set on the context). Inside a turn the model was offered canonical
+// names alone, so an alias is unknown exactly as it is on the direct path
+// (LLM.repairToolCall) instead of reaching a tool without the turn's envelope.
+const ALIASES = new Set(["notebook", "rkernel", "websearch"])
+
+type Gated = { id: string } & Awaited<ReturnType<Tool.Info["init"]>>
+
+/**
+ * Tools the enclosing turn resolved for the model: selection, permission and
+ * delegation gating already applied and plugin hooks attached. The prompt loop
+ * stashes them on the execute context so a batched child call cannot reach a
+ * tool the direct path withheld (a subagent's `task`, a config-disabled tool,
+ * a legacy alias name).
+ */
+function gated(ctx: Tool.Context): Gated[] | undefined {
+  const tools = ctx.extra?.tools
+  return Array.isArray(tools) ? (tools as Gated[]) : undefined
+}
 
 const BatchParameters = z.object({
   tool_calls: z
@@ -41,9 +60,9 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
 
       const { ToolRegistry } = await import("./registry")
       const model = initCtx?.model ?? { modelID: "", providerID: "" }
-      const availableTools = await ToolRegistry.tools(model, initCtx?.agent)
+      const scoped = gated(ctx)
+      const availableTools: Gated[] = scoped ?? (await ToolRegistry.tools(model, initCtx?.agent))
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
-      const aliases = new Set(["notebook", "rkernel", "websearch"])
 
       const prepared = await Promise.all(
         toolCalls.map(async (call) => {
@@ -59,7 +78,7 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
           const tool =
             toolMap.get(call.tool) ??
             toolMap.get(name) ??
-            (aliases.has(name) ? await ToolRegistry.resolve(name, model, initCtx?.agent) : undefined)
+            (!scoped && ALIASES.has(name) ? await ToolRegistry.resolve(name, model, initCtx?.agent) : undefined)
           if (!tool) {
             return {
               type: "invalid" as const,
