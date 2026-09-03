@@ -476,6 +476,14 @@ export namespace ComputeJobs {
   const terminal = new Set<Status>(["succeeded", "failed", "cancelled", "interrupted"])
   const recoveryDelay = 15_000
 
+  /** Test-only crash point. The process exits only inside the isolated test
+   *  harness (OPENSCIENCE_TEST_HOME) when the named kill point is armed. */
+  function testKillpoint(name: string) {
+    if (!process.env.OPENSCIENCE_TEST_HOME) return
+    if (process.env.OPENSCIENCE_SSH_TEST_KILLPOINT !== name) return
+    process.exit(86)
+  }
+
   /** Process-wide in-flight runtimes and recovery claims. Desktop update
    *  quiescence uses this conservative count so a restart never tears down a
    *  local process or loses ownership of a remote lifecycle mid-transition. */
@@ -733,13 +741,16 @@ export namespace ComputeJobs {
           return result
         })
       })
-    locks.set(
-      root,
-      task.then(
-        () => undefined,
-        () => undefined,
-      ),
+    const settled = task.then(
+      () => undefined,
+      () => undefined,
     )
+    locks.set(root, settled)
+    // Prune the entry once the chain is idle so the map does not retain a
+    // promise for every root ever touched.
+    void settled.then(() => {
+      if (locks.get(root) === settled) locks.delete(root)
+    })
     return task
   }
 
@@ -760,7 +771,9 @@ export namespace ComputeJobs {
 
   async function recoverLocal(job: Job, scope: Scope): Promise<void> {
     if (!job.pid) return
-    for (;;) {
+    // Each ownership poll captures the OS process identity, so back off from
+    // 50 ms to a 1 s cap instead of polling 20 times a second for job lifetime.
+    for (let attempt = 0; ; attempt++) {
       const exit = await localExit(scope.root, job.id)
       if (exit !== undefined) {
         const captured = await capture(job)
@@ -786,7 +799,7 @@ export namespace ComputeJobs {
         return
       }
       if (await owns(job.pid, job.process_identity)) {
-        await Bun.sleep(50)
+        await Bun.sleep(Math.min(50 * 2 ** attempt, 1_000))
         continue
       }
       const reported = await localExit(scope.root, job.id)
@@ -1129,339 +1142,329 @@ export namespace ComputeJobs {
   async function sync(scope: Scope, options: Options): Promise<void> {
     const root = scope.root
     const jobs = await read(root)
-    const updates = (
-      await Promise.all(
-        jobs.map(
-          async (job): Promise<{ id: string; event: ComputeLifecycle.Event; value: Partial<Job> } | undefined> => {
-            const lifecycle = job.lifecycle ?? ComputeLifecycle.from(job.status)
-            const key = keyOf(root, job.id)
-            const settled =
-              terminal.has(job.status) &&
-              (job.target.kind === "local" ||
-                lifecycle.recoverable ||
-                (lifecycle.delivery !== "pending" && lifecycle.resource === "closed"))
-            if (settled || active.has(key) || claims.has(key)) return
-            if (job.status === "queued" && Date.now() - Date.parse(job.created_at) < 5_000) return
-            if (job.target.kind === "modal") {
-              claims.add(key)
-              let lease: FileLease.Lease | undefined
-              let handedOff = false
-              try {
-                lease = await FileLease.acquire(modalLeaseOf(root, job.id), 25).catch((error) => {
-                  if (leaseBusy(error)) return undefined
+    // Every branch below settles the record itself while holding its durable
+    // lease, so the map produces no deferred updates to apply afterwards.
+    await Promise.all(
+      jobs.map(async (job): Promise<void> => {
+        const lifecycle = job.lifecycle ?? ComputeLifecycle.from(job.status)
+        const key = keyOf(root, job.id)
+        const settled =
+          terminal.has(job.status) &&
+          (job.target.kind === "local" ||
+            lifecycle.recoverable ||
+            (lifecycle.delivery !== "pending" && lifecycle.resource === "closed"))
+        if (settled || active.has(key) || claims.has(key)) return
+        if (job.status === "queued" && Date.now() - Date.parse(job.created_at) < 5_000) return
+        if (job.target.kind === "modal") {
+          claims.add(key)
+          let lease: FileLease.Lease | undefined
+          let handedOff = false
+          try {
+            lease = await FileLease.acquire(modalLeaseOf(root, job.id), 25).catch((error) => {
+              if (leaseBusy(error)) return undefined
+              throw error
+            })
+            if (!lease) return
+            const setup = Promise.withResolvers<void>()
+            const ready = Promise.withResolvers<void>()
+            let cleanup = false
+            let activated = false
+            const managed = lease
+              .during(async () => {
+                try {
+                  const prior = await recovery(root, job)
+                  if (prior.retry > Date.now()) return
+                  const credentials =
+                    options.credentials ?? (await options.resolveCredentials?.().catch(() => undefined))
+                  if (!credentials || !job.authority) return
+                  const provider = options.provider ?? ModalAdapter
+                  const authorized = await currentAuthority(job.authority).then(
+                    () => true,
+                    async () => {
+                      await cancel(job.id, {
+                        ...options,
+                        root,
+                        workspace: scope.workspace,
+                        credentials,
+                        provider,
+                      }).catch(() => undefined)
+                      return false
+                    },
+                  )
+                  if (!authorized) return
+                  const current = await get(job.id, { root, workspace: scope.workspace })
+                  if (!current || current.status === "cancelled") return
+                  await activate(key, {
+                    detached: false,
+                    authority: job.authority,
+                    root,
+                    workspace: scope.workspace,
+                    id: job.id,
+                    modal: credentials,
+                    provider: options.provider,
+                  })
+                  activated = true
+                  cleanup = terminal.has(job.status) && lifecycle.delivery !== "pending"
+                  setup.resolve()
+                  return await (
+                    cleanup
+                      ? cleanupModal(job, scope, credentials, provider)
+                      : recoverModal(job, scope, credentials, provider, ready.resolve)
+                  ).catch(async (error) => {
+                    const current = await get(job.id, { root, workspace: scope.workspace })
+                    if (error instanceof ModalAdapter.HarvestError && current && !terminal.has(current.status)) {
+                      await deferModal(job, scope, error)
+                      return
+                    }
+                    const failure = ModalAdapter.recoveryFailure(error)
+                    if (current && terminal.has(current.status) && current.lifecycle?.delivery === "pending") {
+                      await failModal(
+                        current,
+                        scope,
+                        credentials,
+                        error,
+                        provider,
+                        false,
+                        failure.retryable ? undefined : failure.kind,
+                      )
+                      return
+                    }
+                    if (!current || terminal.has(current.status)) return
+                    if (!failure.retryable) {
+                      await event(
+                        root,
+                        job.id,
+                        `Modal recovery stopped after a permanent ${failure.kind.replaceAll("_", " ")} error; retry after correcting the provider state`,
+                      )
+                      await failModal(current, scope, credentials, error, provider, true, failure.kind)
+                      return
+                    }
+                    const message = OpenScience.redactSecrets(error instanceof Error ? error.message : String(error))
+                    const attempt = prior.attempt + 1
+                    const delay = Math.min(5 * 60_000, recoveryDelay * 2 ** Math.min(attempt - 1, 5))
+                    await change(root, (jobs) => {
+                      const stored = jobs.find((item) => item.id === job.id)
+                      if (!stored) return
+                      stored.recovery_attempts = attempt
+                      stored.recovery_retry_at = new Date(Date.now() + delay).toISOString()
+                    })
+                    await event(
+                      root,
+                      job.id,
+                      `Modal recovery attempt ${attempt} deferred for ${delay / 1000} seconds: ${message}`,
+                    )
+                  })
+                } catch (error) {
+                  setup.reject(error)
                   throw error
-                })
-                if (!lease) return
-                const setup = Promise.withResolvers<void>()
-                const ready = Promise.withResolvers<void>()
-                let cleanup = false
-                let activated = false
-                const managed = lease
-                  .during(async () => {
-                    try {
-                      const prior = await recovery(root, job)
-                      if (prior.retry > Date.now()) return
-                      const credentials =
-                        options.credentials ?? (await options.resolveCredentials?.().catch(() => undefined))
-                      if (!credentials || !job.authority) return
-                      const provider = options.provider ?? ModalAdapter
-                      const authorized = await currentAuthority(job.authority).then(
-                        () => true,
-                        async () => {
-                          await cancel(job.id, {
-                            ...options,
-                            root,
-                            workspace: scope.workspace,
-                            credentials,
-                            provider,
-                          }).catch(() => undefined)
-                          return false
+                } finally {
+                  setup.resolve()
+                  if (activated) await deactivate(key)
+                }
+              })
+              .finally(() => releaseLease(lease!))
+            handedOff = true
+            void managed.catch(() => undefined)
+            await setup.promise
+            if (!cleanup)
+              await Promise.race([
+                ready.promise,
+                Bun.sleep(250),
+                managed.then(
+                  () => undefined,
+                  () => undefined,
+                ),
+              ])
+          } finally {
+            if (lease && !handedOff) await releaseLease(lease)
+            claims.delete(key)
+          }
+          return
+        }
+        if (job.target.kind === "ssh") {
+          claims.add(key)
+          let lease: FileLease.Lease | undefined
+          let handedOff = false
+          try {
+            lease = await FileLease.acquire(sshLeaseOf(root, job.id), 25).catch((error) => {
+              if (leaseBusy(error)) return undefined
+              throw error
+            })
+            if (!lease) return
+            const setup = Promise.withResolvers<void>()
+            let activated = false
+            const managed = lease
+              .during(async () => {
+                try {
+                  const prior = await recovery(root, job)
+                  if (prior.retry > Date.now()) return
+                  const deferred = async (error: unknown) => {
+                    const attempt = prior.attempt + 1
+                    const delay = Math.min(5 * 60_000, recoveryDelay * 2 ** Math.min(attempt - 1, 5))
+                    await change(root, (jobs) => {
+                      const stored = jobs.find((item) => item.id === job.id)
+                      if (!stored) return
+                      stored.recovery_attempts = attempt
+                      stored.recovery_retry_at = new Date(Date.now() + delay).toISOString()
+                    })
+                    await event(
+                      root,
+                      job.id,
+                      `SSH recovery attempt ${attempt} deferred for ${delay / 1000} seconds: ${error instanceof Error ? error.message : String(error)}`,
+                    )
+                  }
+                  // A record without authority can never be recovered, so
+                  // settle it once instead of deferring retries that cannot
+                  // succeed.
+                  const authority = job.authority
+                  if (!authority) return await orphanSsh(job, scope)
+                  await activate(key, {
+                    detached: false,
+                    authority,
+                    root,
+                    workspace: scope.workspace,
+                    id: job.id,
+                    host: job.ssh?.host,
+                  })
+                  activated = true
+                  setup.resolve()
+                  return await recoverSsh(job, scope)
+                    .then(async () => {
+                      if (!job.recovery_attempts && !job.recovery_retry_at) return
+                      await change(root, (jobs) => {
+                        const stored = jobs.find((item) => item.id === job.id)
+                        if (!stored) return
+                        stored.recovery_attempts = undefined
+                        stored.recovery_retry_at = undefined
+                      })
+                    })
+                    .catch(deferred)
+                } catch (error) {
+                  setup.reject(error)
+                  throw error
+                } finally {
+                  setup.resolve()
+                  if (activated) await deactivate(key)
+                }
+              })
+              .finally(() => releaseLease(lease!))
+            handedOff = true
+            void managed.catch(() => undefined)
+            await setup.promise
+          } finally {
+            if (lease && !handedOff) await releaseLease(lease)
+            claims.delete(key)
+          }
+          return
+        }
+        if (job.target.kind === "local") {
+          claims.add(key)
+          let lease: FileLease.Lease | undefined
+          let handedOff = false
+          try {
+            lease = await FileLease.acquire(localLeaseOf(root, job.id), 25).catch((error) => {
+              if (leaseBusy(error)) return undefined
+              throw error
+            })
+            if (!lease) return
+            const setup = Promise.withResolvers<void>()
+            let activated = false
+            const managed = lease
+              .during(async () => {
+                try {
+                  const current = await get(job.id, { root, workspace: scope.workspace })
+                  if (!current || terminal.has(current.status)) return
+                  const exit = await localExit(root, current.id)
+                  if (exit !== undefined) {
+                    await change(root, (jobs) => {
+                      const index = jobs.findIndex((item) => item.id === current.id)
+                      if (index < 0 || terminal.has(jobs[index]!.status)) return
+                      const finished = move(
+                        jobs[index]!,
+                        { type: "finish", outcome: exit === 0 ? "succeeded" : "failed" },
+                        {
+                          completed_at: new Date().toISOString(),
+                          exit_code: exit,
+                          pid: undefined,
+                          process_identity: undefined,
                         },
                       )
-                      if (!authorized) return
-                      const current = await get(job.id, { root, workspace: scope.workspace })
-                      if (!current || current.status === "cancelled") return
-                      await activate(key, {
-                        detached: false,
-                        authority: job.authority,
-                        root,
-                        workspace: scope.workspace,
-                        id: job.id,
-                        modal: credentials,
-                        provider: options.provider,
-                      })
-                      activated = true
-                      cleanup = terminal.has(job.status) && lifecycle.delivery !== "pending"
-                      setup.resolve()
-                      return await (
-                        cleanup
-                          ? cleanupModal(job, scope, credentials, provider)
-                          : recoverModal(job, scope, credentials, provider, ready.resolve)
-                      ).catch(async (error) => {
-                        const current = await get(job.id, { root, workspace: scope.workspace })
-                        if (error instanceof ModalAdapter.HarvestError && current && !terminal.has(current.status)) {
-                          await deferModal(job, scope, error)
-                          return
-                        }
-                        const failure = ModalAdapter.recoveryFailure(error)
-                        if (current && terminal.has(current.status) && current.lifecycle?.delivery === "pending") {
-                          await failModal(
-                            current,
-                            scope,
-                            credentials,
-                            error,
-                            provider,
-                            false,
-                            failure.retryable ? undefined : failure.kind,
-                          )
-                          return
-                        }
-                        if (!current || terminal.has(current.status)) return
-                        if (!failure.retryable) {
-                          await event(
-                            root,
-                            job.id,
-                            `Modal recovery stopped after a permanent ${failure.kind.replaceAll("_", " ")} error; retry after correcting the provider state`,
-                          )
-                          await failModal(current, scope, credentials, error, provider, true, failure.kind)
-                          return
-                        }
-                        const message = OpenScience.redactSecrets(
-                          error instanceof Error ? error.message : String(error),
-                        )
-                        const attempt = prior.attempt + 1
-                        const delay = Math.min(5 * 60_000, recoveryDelay * 2 ** Math.min(attempt - 1, 5))
-                        await change(root, (jobs) => {
-                          const stored = jobs.find((item) => item.id === job.id)
-                          if (!stored) return
-                          stored.recovery_attempts = attempt
-                          stored.recovery_retry_at = new Date(Date.now() + delay).toISOString()
-                        })
-                        await event(
-                          root,
-                          job.id,
-                          `Modal recovery attempt ${attempt} deferred for ${delay / 1000} seconds: ${message}`,
-                        )
-                      })
-                    } catch (error) {
-                      setup.reject(error)
-                      throw error
-                    } finally {
-                      setup.resolve()
-                      if (activated) await deactivate(key)
-                    }
+                      const closed = move(finished, { type: "close" })
+                      jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+                    })
+                    return
+                  }
+                  if (!current.pid || !(await owns(current.pid, current.process_identity))) {
+                    // A normal wrapper writes its exit marker before the owned
+                    // supervisor disappears. Re-read after the identity check,
+                    // then classify a genuinely markerless death while still
+                    // holding the one durable local lifecycle lease.
+                    const reported = await localExit(root, current.id)
+                    await change(root, (jobs) => {
+                      const index = jobs.findIndex((item) => item.id === current.id)
+                      if (index < 0 || terminal.has(jobs[index]!.status)) return
+                      const draft =
+                        reported === undefined
+                          ? move(
+                              jobs[index]!,
+                              { type: "interrupt" },
+                              {
+                                completed_at: new Date().toISOString(),
+                                exit_code: null,
+                                pid: undefined,
+                                process_identity: undefined,
+                                error: "The job process ended before it could report a result.",
+                              },
+                            )
+                          : move(
+                              jobs[index]!,
+                              { type: "finish", outcome: reported === 0 ? "succeeded" : "failed" },
+                              {
+                                completed_at: new Date().toISOString(),
+                                exit_code: reported,
+                                pid: undefined,
+                                process_identity: undefined,
+                              },
+                            )
+                      const closed = reported === undefined ? draft : move(draft, { type: "close" })
+                      jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
+                    })
+                    return
+                  }
+                  if (!current.authority) return
+                  await activate(key, {
+                    dataRootOwner:
+                      process.platform === "win32"
+                        ? undefined
+                        : { pid: current.pid, identity: current.process_identity! },
+                    detached: process.platform !== "win32",
+                    authority: current.authority,
+                    root,
+                    workspace: scope.workspace,
+                    id: current.id,
                   })
-                  .finally(() => releaseLease(lease!))
-                handedOff = true
-                void managed.catch(() => undefined)
-                await setup.promise
-                if (!cleanup)
-                  await Promise.race([
-                    ready.promise,
-                    Bun.sleep(250),
-                    managed.then(
-                      () => undefined,
-                      () => undefined,
-                    ),
-                  ])
-              } finally {
-                if (lease && !handedOff) await releaseLease(lease)
-                claims.delete(key)
-              }
-              return
-            }
-            if (job.target.kind === "ssh") {
-              claims.add(key)
-              let lease: FileLease.Lease | undefined
-              let handedOff = false
-              try {
-                lease = await FileLease.acquire(sshLeaseOf(root, job.id), 25).catch((error) => {
-                  if (leaseBusy(error)) return undefined
+                  activated = true
+                  setup.resolve()
+                  await recoverLocal(current, scope)
+                } catch (error) {
+                  setup.reject(error)
                   throw error
-                })
-                if (!lease) return
-                const setup = Promise.withResolvers<void>()
-                let activated = false
-                const managed = lease
-                  .during(async () => {
-                    try {
-                      const prior = await recovery(root, job)
-                      if (prior.retry > Date.now()) return
-                      await activate(key, {
-                        detached: false,
-                        authority: job.authority!,
-                        root,
-                        workspace: scope.workspace,
-                        id: job.id,
-                        host: job.ssh?.host,
-                      })
-                      activated = true
-                      setup.resolve()
-                      return await recoverSsh(job, scope)
-                        .then(async () => {
-                          if (!job.recovery_attempts && !job.recovery_retry_at) return
-                          await change(root, (jobs) => {
-                            const stored = jobs.find((item) => item.id === job.id)
-                            if (!stored) return
-                            stored.recovery_attempts = undefined
-                            stored.recovery_retry_at = undefined
-                          })
-                        })
-                        .catch(async (error) => {
-                          const attempt = prior.attempt + 1
-                          const delay = Math.min(5 * 60_000, recoveryDelay * 2 ** Math.min(attempt - 1, 5))
-                          await change(root, (jobs) => {
-                            const stored = jobs.find((item) => item.id === job.id)
-                            if (!stored) return
-                            stored.recovery_attempts = attempt
-                            stored.recovery_retry_at = new Date(Date.now() + delay).toISOString()
-                          })
-                          await event(
-                            root,
-                            job.id,
-                            `SSH recovery attempt ${attempt} deferred for ${delay / 1000} seconds: ${error instanceof Error ? error.message : String(error)}`,
-                          )
-                        })
-                    } catch (error) {
-                      setup.reject(error)
-                      throw error
-                    } finally {
-                      setup.resolve()
-                      if (activated) await deactivate(key)
-                    }
-                  })
-                  .finally(() => releaseLease(lease!))
-                handedOff = true
-                void managed.catch(() => undefined)
-                await setup.promise
-              } finally {
-                if (lease && !handedOff) await releaseLease(lease)
-                claims.delete(key)
-              }
-              return
-            }
-            if (job.target.kind === "local") {
-              claims.add(key)
-              let lease: FileLease.Lease | undefined
-              let handedOff = false
-              try {
-                lease = await FileLease.acquire(localLeaseOf(root, job.id), 25).catch((error) => {
-                  if (leaseBusy(error)) return undefined
-                  throw error
-                })
-                if (!lease) return
-                const setup = Promise.withResolvers<void>()
-                let activated = false
-                const managed = lease
-                  .during(async () => {
-                    try {
-                      const current = await get(job.id, { root, workspace: scope.workspace })
-                      if (!current || terminal.has(current.status)) return
-                      const exit = await localExit(root, current.id)
-                      if (exit !== undefined) {
-                        await change(root, (jobs) => {
-                          const index = jobs.findIndex((item) => item.id === current.id)
-                          if (index < 0 || terminal.has(jobs[index]!.status)) return
-                          const finished = move(
-                            jobs[index]!,
-                            { type: "finish", outcome: exit === 0 ? "succeeded" : "failed" },
-                            {
-                              completed_at: new Date().toISOString(),
-                              exit_code: exit,
-                              pid: undefined,
-                              process_identity: undefined,
-                            },
-                          )
-                          const closed = move(finished, { type: "close" })
-                          jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
-                        })
-                        return
-                      }
-                      if (!current.pid || !(await owns(current.pid, current.process_identity))) {
-                        // A normal wrapper writes its exit marker before the owned
-                        // supervisor disappears. Re-read after the identity check,
-                        // then classify a genuinely markerless death while still
-                        // holding the one durable local lifecycle lease.
-                        const reported = await localExit(root, current.id)
-                        await change(root, (jobs) => {
-                          const index = jobs.findIndex((item) => item.id === current.id)
-                          if (index < 0 || terminal.has(jobs[index]!.status)) return
-                          const draft =
-                            reported === undefined
-                              ? move(
-                                  jobs[index]!,
-                                  { type: "interrupt" },
-                                  {
-                                    completed_at: new Date().toISOString(),
-                                    exit_code: null,
-                                    pid: undefined,
-                                    process_identity: undefined,
-                                    error: "The job process ended before it could report a result.",
-                                  },
-                                )
-                              : move(
-                                  jobs[index]!,
-                                  { type: "finish", outcome: reported === 0 ? "succeeded" : "failed" },
-                                  {
-                                    completed_at: new Date().toISOString(),
-                                    exit_code: reported,
-                                    pid: undefined,
-                                    process_identity: undefined,
-                                  },
-                                )
-                          const closed = reported === undefined ? draft : move(draft, { type: "close" })
-                          jobs[index] = Job.parse({ ...closed, provenance: provenance(closed) })
-                        })
-                        return
-                      }
-                      if (!current.authority) return
-                      await activate(key, {
-                        dataRootOwner:
-                          process.platform === "win32"
-                            ? undefined
-                            : { pid: current.pid, identity: current.process_identity! },
-                        detached: process.platform !== "win32",
-                        authority: current.authority,
-                        root,
-                        workspace: scope.workspace,
-                        id: current.id,
-                      })
-                      activated = true
-                      setup.resolve()
-                      await recoverLocal(current, scope)
-                    } catch (error) {
-                      setup.reject(error)
-                      throw error
-                    } finally {
-                      setup.resolve()
-                      if (activated) await deactivate(key)
-                    }
-                  })
-                  .finally(() => releaseLease(lease!))
-                handedOff = true
-                void managed.catch(() => undefined)
-                await setup.promise
-              } finally {
-                claims.delete(key)
-                if (lease && !handedOff) await releaseLease(lease)
-              }
-              return
-            }
-            return
-          },
-        ),
-      )
-    ).filter((item): item is { id: string; event: ComputeLifecycle.Event; value: Partial<Job> } => !!item)
-    if (!updates.length) return
-    await change(root, (current) => {
-      for (const update of updates) {
-        const index = current.findIndex((job) => job.id === update.id)
-        if (index < 0 || terminal.has(current[index]!.status) || active.has(keyOf(root, update.id))) continue
-        const draft = move(current[index]!, update.event, update.value)
-        const closed = update.event.type === "finish" ? move(draft, { type: "close" }) : draft
-        current[index] = Job.parse({ ...closed, provenance: provenance(closed) })
-      }
-    })
+                } finally {
+                  setup.resolve()
+                  if (activated) await deactivate(key)
+                }
+              })
+              .finally(() => releaseLease(lease!))
+            handedOff = true
+            void managed.catch(() => undefined)
+            await setup.promise
+          } finally {
+            claims.delete(key)
+            if (lease && !handedOff) await releaseLease(lease)
+          }
+        }
+      }),
+    )
   }
 
   export function quote(value: string): string {
@@ -2175,8 +2178,7 @@ export namespace ComputeJobs {
     // remote scheduler accepted and durably named the resource, but before
     // this process can publish remote_id into jobs.json. A fresh process must
     // recover through the remote idempotency record without a second launch.
-    if (process.env.OPENSCIENCE_TEST_HOME && process.env.OPENSCIENCE_SSH_TEST_KILLPOINT === "after-accept")
-      process.exit(86)
+    testKillpoint("after-accept")
     const submitted = SshAdapter.parse<{ remote_id: string; reattached: boolean }>(result.stdout)
     if (!/^(?:pid|slurm|pbs):[^\s]+$/.test(submitted.remote_id)) {
       throw new Error("SSH scheduler returned an invalid remote job id")
@@ -2230,6 +2232,35 @@ export namespace ComputeJobs {
       jobs[index] = Job.parse({ ...stopped, provenance: provenance(stopped) })
       return jobs[index]!
     })
+  }
+
+  // A record that carries no submission authority predates the authority
+  // ledger or was edited by hand: nothing in this process can reach its remote
+  // workspace again, so fail and close it rather than retry forever, and leave
+  // that workspace for hand cleanup.
+  async function orphanSsh(job: Job, scope: Scope) {
+    const message = `SSH job ${job.id} has no submission authority; release ${job.ssh?.root ?? "its remote workspace"} by hand`
+    await change(scope.root, (jobs) => {
+      const index = jobs.findIndex((item) => item.id === job.id)
+      if (index < 0) return
+      const stored = jobs[index]!
+      const failed = (() => {
+        if (terminal.has(stored.status)) return stored
+        const lifecycle = stored.lifecycle ?? ComputeLifecycle.from(stored.status)
+        const started = lifecycle.execution === "queued" ? move(stored, { type: "start" }) : stored
+        return move(
+          started,
+          { type: "finish", outcome: "failed", message },
+          { completed_at: new Date().toISOString(), exit_code: null, error: message },
+        )
+      })()
+      const undelivered =
+        failed.lifecycle?.delivery === "pending" ? move(failed, { type: "delivery_fail", message }) : failed
+      const abandoned = undelivered.lifecycle?.recoverable ? move(undelivered, { type: "abandon" }) : undelivered
+      const closed = abandoned.lifecycle?.resource === "closed" ? abandoned : move(abandoned, { type: "close" })
+      jobs[index] = Job.parse({ ...closed, cleanup_error: message, provenance: provenance(closed) })
+    })
+    await event(scope.root, job.id, message)
   }
 
   async function failSshStart(job: Job, scope: Scope, error: unknown) {
@@ -3219,10 +3250,13 @@ export namespace ComputeJobs {
           jobs[index] = updated
           return updated
         })
+        // `change` above already rejects records without authority; keep the
+        // type honest here instead of asserting through it.
+        if (!job.authority) throw new Error(`Compute job ${id} has no recoverable Modal output`)
         const context = await modalContext(options, "Enable Modal before retrying output delivery")
         await activate(key, {
           detached: false,
-          authority: job.authority!,
+          authority: job.authority,
           root: scope.root,
           workspace: scope.workspace,
           id: job.id,
@@ -3787,24 +3821,47 @@ export namespace ComputeJobs {
     return job ? observe(scope.root, job) : undefined
   }
 
+  /** Last `bytes` of a log without reading or decoding the whole file. */
+  async function tail(filepath: string, bytes: number): Promise<string> {
+    const file = Bun.file(filepath)
+    const size = await file
+      .stat()
+      .then((stat) => stat.size)
+      .catch(() => undefined)
+    if (size === undefined) return ""
+    const start = Math.max(0, size - bytes)
+    if (start === 0) return file.text().catch(() => "")
+    // Read one extra byte so a window that begins exactly on a line start is
+    // kept whole, then drop the partial first line (and any split UTF-8).
+    const raw = await file
+      .slice(start - 1)
+      .bytes()
+      .catch(() => new Uint8Array())
+    const decoder = new TextDecoder()
+    const text = decoder.decode(raw)
+    const cut = text.indexOf("\n")
+    // Drop the partial first line only when a complete one follows it, so a
+    // window shorter than the last line still returns that line's tail.
+    if (cut >= 0 && cut < text.length - 1) return text.slice(cut + 1)
+    // No line boundary: skip the extra byte plus any UTF-8 continuation bytes
+    // it split from their lead, so a window opening mid-character leaks no
+    // U+FFFD or lone surrogate.
+    const offset = raw.findIndex((byte, index) => index > 0 && (byte & 0xc0) !== 0x80)
+    return offset < 0 ? "" : decoder.decode(raw.subarray(offset))
+  }
+
   export async function log(id: string, options: Options & { bytes?: number } = {}): Promise<string> {
     const scope = await scoped(options)
     const job = await get(id, options)
     if (!job) throw new Error(`Compute job ${id} was not found`)
-    const text = await Bun.file(path.join(logsOf(scope.root), `${job.id}.log`))
-      .text()
-      .catch(() => "")
-    return text.slice(-Math.max(1, options.bytes ?? 256_000))
+    return tail(path.join(logsOf(scope.root), `${job.id}.log`), Math.max(1, options.bytes ?? 256_000))
   }
 
   export async function events(id: string, options: Options & { bytes?: number } = {}): Promise<string> {
     const scope = await scoped(options)
     const job = await get(id, options)
     if (!job) throw new Error(`Compute job ${id} was not found`)
-    const text = await Bun.file(eventsOf(scope.root, job.id))
-      .text()
-      .catch(() => "")
-    return text.slice(-Math.max(1, options.bytes ?? 256_000))
+    return tail(eventsOf(scope.root, job.id), Math.max(1, options.bytes ?? 256_000))
   }
 
   export async function cancel(id: string, options: Options = {}): Promise<Job> {
@@ -3930,43 +3987,6 @@ export namespace ComputeJobs {
           job.id,
           "Skipped process termination because the persisted PID no longer matched this job",
         )
-      }
-      const hostId = job.target.kind === "ssh" ? job.target.host_id : undefined
-      const host = hostId ? options.hosts?.find((item) => item.id === hostId) : undefined
-      if (host && host.scheduler !== "none") {
-        const action =
-          host.scheduler === "slurm"
-            ? `scancel --name ${quote(`os-${job.id}`)}`
-            : `qselect -N ${quote(name(`os-${job.id}`))} | xargs -r qdel`
-        const spec = command(
-          { id: job.id, name: job.name, command: action, cwd: host.workdir },
-          { ...host, scheduler: "none" },
-        )
-        const planned = job.authority
-          ? Sandbox.wrapArgv({
-              file: spec.argv[0]!,
-              args: spec.argv.slice(1),
-              workspace: job.authority.writable,
-              readable: job.authority.readable,
-              unreadable: OpenScience.kernelSensitivePaths(),
-              options: job.authority.sandbox,
-            })
-          : { file: spec.argv[0]!, args: spec.argv.slice(1), temporary: undefined }
-        let proc: ChildProcess
-        try {
-          proc = spawn(planned.file, planned.args, {
-            cwd: job.authority?.workspace,
-            env: OpenScience.kernelEnv(process.env),
-            windowsHide: true,
-            stdio: "ignore",
-          })
-          await new Promise<void>((resolve) => {
-            proc.once("error", () => resolve())
-            proc.once("exit", () => resolve())
-          })
-        } finally {
-          Sandbox.cleanup(planned)
-        }
       }
       if (job.target.kind === "modal") {
         const expected = [...(job.artifact_patterns ?? []), ...(job.checkpoint_path ? [job.checkpoint_path] : [])]
