@@ -97,6 +97,44 @@ describe("contextual project terminal", () => {
     expect(terminal).toContain("fitFrame = requestAnimationFrame")
   })
 
+  test("reconnects the PTY socket with backoff and replays into a cleared buffer", async () => {
+    const terminal = await read("./terminal.tsx")
+
+    expect(terminal).toContain("const RECONNECT_LIMIT = 5")
+    expect(terminal).toContain("export const backoff = (failures: number) =>")
+    expect(terminal).toContain("const connect = () =>")
+    expect(terminal.indexOf("const connect = () =>")).toBeLessThan(
+      terminal.indexOf("const socket = new WebSocket(url)"),
+    )
+    expect(terminal.indexOf("const connect = () =>")).toBeLessThan(terminal.indexOf("socket.send(REPLAY_REQUEST)"))
+    expect(terminal).toMatch(/^\s*connect\(\)$/m)
+    // every reconnect erases the stale screen and scrollback through the VT stream before the server
+    // replays, so scrollback never doubles; Terminal.reset() would free the wasm handle the selection
+    // manager still holds and silently break copy
+    expect(terminal).toContain('const ERASE = "\\x1b[0m\\x1b[2J\\x1b[3J\\x1b[H"')
+    expect(terminal).not.toContain("t.reset()")
+    expect(terminal).toContain("if (link.failures) t.write(ERASE)")
+    expect(terminal.indexOf("if (link.failures) t.write(ERASE)")).toBeLessThan(
+      terminal.indexOf("socket.send(REPLAY_REQUEST)"),
+    )
+    // a retry drops the listeners of the socket it supersedes before opening the next one
+    expect(terminal.indexOf("link.detach()")).toBeLessThan(terminal.indexOf("const socket = new WebSocket(url)"))
+    // an abnormal close retries; the error is reported once, only after the budget is spent
+    expect(terminal).toContain("if (event.code === 1000) return")
+    expect(terminal).toContain("link.failures += 1")
+    expect(terminal).toContain("const delay = backoff(link.failures)")
+    expect(terminal).toContain("link.timer = window.setTimeout(connect, delay)")
+    expect(terminal.match(/once\.value = true/g)).toHaveLength(1)
+    expect(terminal).not.toContain("local.onConnectError?.(connectionError(error))")
+    // input and resize go through whichever socket is live, not the first one
+    expect(terminal).toContain("const socket = link.socket")
+    expect(terminal).toContain("if (socket?.readyState === WebSocket.OPEN) socket.send(data)")
+    expect(terminal).toContain("if (link.socket?.readyState === WebSocket.OPEN) {")
+    // cleanup cancels a pending retry and closes the live socket
+    expect(terminal).toContain("if (link.timer !== undefined) window.clearTimeout(link.timer)")
+    expect(terminal).toContain("link.detach()")
+  })
+
   test("keeps terminal styling local, semantic, and deliberately light", async () => {
     const [css, globalCss] = await Promise.all([read("../atlas/TerminalSurface.css"), read("../styles/atlas.css")])
 

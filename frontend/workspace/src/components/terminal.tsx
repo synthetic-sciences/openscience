@@ -32,6 +32,16 @@ export type TerminalController = {
 }
 
 const REPLAY_REQUEST = "\0"
+// SGR reset, erase the screen, erase the scrollback, home the cursor. Sent through the VT stream
+// rather than Terminal.reset(): ghostty-web 0.3.0 frees and reallocates the wasm terminal there while
+// the selection manager keeps the freed handle, which silently breaks copy after every reconnect.
+const ERASE = "\x1b[0m\x1b[2J\x1b[3J\x1b[H"
+const RECONNECT_LIMIT = 5
+
+// Mirrors reconnectDelay in @/context/reconnecting-event-stream: 250 ms doubling to a 5 s cap.
+// Returns undefined once the attempt budget is spent so the caller reports the loss instead.
+export const backoff = (failures: number) =>
+  failures > RECONNECT_LIMIT ? undefined : Math.min(250 * 2 ** Math.max(0, failures - 1), 5000)
 
 let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty }> | undefined
 
@@ -377,8 +387,16 @@ export const Terminal = (props: TerminalProps) => {
 
       if (local.pty.rows && local.pty.cols) t.resize(local.pty.cols, local.pty.rows)
 
+      const link = {
+        socket: undefined as WebSocket | undefined,
+        timer: undefined as number | undefined,
+        failures: 0,
+        detach: () => {},
+      }
       const replay = { painted: false }
       const handleMessage = (event: MessageEvent) => {
+        // Data proves the link works, so only now does the retry budget refill.
+        link.failures = 0
         t.write(event.data, () => {
           if (replay.painted) return
           replay.painted = true
@@ -387,52 +405,73 @@ export const Terminal = (props: TerminalProps) => {
         })
       }
       const url = new URL(sdk.request.url(`/pty/${local.pty.id}/connect`))
-      const socket = new WebSocket(url)
-      const handleOpen = () => {
-        local.onConnect?.()
-        fitTerminal()
-        socket.send(REPLAY_REQUEST)
-        sdk.client.pty
-          .update({
-            ptyID: local.pty.id,
-            size: {
-              cols: t.cols,
-              rows: t.rows,
-            },
-          })
-          .catch(() => {})
-      }
-      const handleError = (error: Event) => {
+      const connect = () => {
         if (disposed) return
-        if (once.value) return
-        once.value = true
-        console.error("WebSocket error:", error)
-        local.onConnectError?.(connectionError(error))
-      }
-      const handleClose = (event: CloseEvent) => {
-        if (disposed) return
-        // Normal closure (code 1000) means PTY process exited - server event handles cleanup
-        // For other codes (network issues, server restart), trigger error handler
-        if (event.code !== 1000) {
+        link.timer = undefined
+        // A superseded socket is closed and silent; drop its listeners anyway rather than leak them.
+        link.detach()
+        const socket = new WebSocket(url)
+        const handleOpen = () => {
+          // The server replays its whole buffer to every fresh subscriber, so erase the stale
+          // screen and scrollback first or the scrollback doubles on each reconnect.
+          if (link.failures) t.write(ERASE)
+          local.onConnect?.()
+          fitTerminal()
+          socket.send(REPLAY_REQUEST)
+          sdk.client.pty
+            .update({
+              ptyID: local.pty.id,
+              size: {
+                cols: t.cols,
+                rows: t.rows,
+              },
+            })
+            .catch(() => {})
+        }
+        const handleError = (error: Event) => {
+          if (disposed) return
+          // A socket error is always followed by a close event, which owns the retry.
+          console.error("WebSocket error:", error)
+        }
+        const handleClose = (event: CloseEvent) => {
+          if (disposed) return
+          // Normal closure (code 1000) means PTY process exited - server event handles cleanup
+          if (event.code === 1000) return
+          // For other codes (network issues, server restart), retry with backoff before reporting once
+          link.failures += 1
+          const delay = backoff(link.failures)
+          if (delay !== undefined) {
+            link.timer = window.setTimeout(connect, delay)
+            return
+          }
           if (once.value) return
           once.value = true
           local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))
         }
+        socket.addEventListener("open", handleOpen)
+        socket.addEventListener("message", handleMessage)
+        socket.addEventListener("error", handleError)
+        socket.addEventListener("close", handleClose)
+        link.socket = socket
+        link.detach = () => {
+          socket.removeEventListener("open", handleOpen)
+          socket.removeEventListener("message", handleMessage)
+          socket.removeEventListener("error", handleError)
+          socket.removeEventListener("close", handleClose)
+        }
       }
-      socket.addEventListener("open", handleOpen)
-      socket.addEventListener("message", handleMessage)
-      socket.addEventListener("error", handleError)
-      socket.addEventListener("close", handleClose)
       cleanups.push(() => {
-        socket.removeEventListener("open", handleOpen)
-        socket.removeEventListener("message", handleMessage)
-        socket.removeEventListener("error", handleError)
-        socket.removeEventListener("close", handleClose)
+        if (link.timer !== undefined) window.clearTimeout(link.timer)
+        link.timer = undefined
+        link.detach()
+        const socket = link.socket
+        if (!socket) return
         if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close()
       })
+      connect()
 
       const onResize = t.onResize(async (size) => {
-        if (socket.readyState === WebSocket.OPEN) {
+        if (link.socket?.readyState === WebSocket.OPEN) {
           await sdk.client.pty
             .update({
               ptyID: local.pty.id,
@@ -451,9 +490,8 @@ export const Terminal = (props: TerminalProps) => {
       cleanups.push(() => window.removeEventListener("resize", handleResize))
       fitTerminal()
       const onData = t.onData((data) => {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.send(data)
-        }
+        const socket = link.socket
+        if (socket?.readyState === WebSocket.OPEN) socket.send(data)
       })
       cleanups.push(() => (onData as unknown as { dispose?: VoidFunction }).dispose?.())
       const onKey = t.onKey((key) => {
