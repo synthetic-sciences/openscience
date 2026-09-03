@@ -1,7 +1,13 @@
+import { readFileSync } from "node:fs"
 import path from "node:path"
 
 const source = process.env.OPENSCIENCE_DESKTOP_SIDECAR
 if (!source) throw new Error("OPENSCIENCE_DESKTOP_SIDECAR must point to the native OpenScience runtime")
+// Local builds follow the CLI version instead of a hardcoded fallback that
+// silently goes stale between releases.
+const version =
+  process.env.OPENSCIENCE_VERSION ||
+  JSON.parse(readFileSync(new URL("../../backend/cli/package.json", import.meta.url), "utf8")).version
 
 const name = process.platform === "darwin" ? "mac" : process.platform === "win32" ? "windows" : "linux"
 const signed = process.env.OPENSCIENCE_DESKTOP_SIGNED === "true"
@@ -11,9 +17,7 @@ export default {
   productName: "OpenScience",
   executableName: "openscience",
   artifactName: `OpenScience-${name}-\${arch}.\${ext}`,
-  extraMetadata: {
-    version: process.env.OPENSCIENCE_VERSION || "2.0.47",
-  },
+  extraMetadata: { version },
   directories: { output: "dist" },
   files: ["src/**/*", "package.json"],
   extraResources: [

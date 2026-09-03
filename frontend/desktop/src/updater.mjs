@@ -27,6 +27,9 @@ const exec = (file, args, options = {}) =>
 const api = "https://api.github.com/repos/synthetic-sciences/openscience"
 const id = "ai.syntheticsciences.openscience"
 const MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
+// How long the detached helper may take to verify the handoff and write its
+// receipt before the launch is revoked.
+const HANDOFF_TIMEOUT = 30_000
 
 function valid(version) {
   return /^\d+\.\d+\.\d+$/.test(version)
@@ -425,7 +428,21 @@ export async function reconcileTransactions(cache, options = {}) {
   const requiredTrust = options.trusted
     ? await verify(options.current, options.currentVersion, { trusted: true, current: options.current })
     : undefined
-  const files = (await readdir(cache)).filter((name) => /^transaction-[0-9a-f]{48}\.json$/.test(name)).slice(0, 16)
+  const names = (await readdir(cache)).filter((name) => /^transaction-[0-9a-f]{48}\.json$/.test(name))
+  // Newest journals first, so the bounded pass never drops the most recent
+  // interrupted update in favour of stale ones.
+  const stamped = await Promise.all(
+    names.map((name) =>
+      lstat(path.join(cache, name)).then(
+        (info) => ({ name, updated: info.mtimeMs }),
+        () => ({ name, updated: 0 }),
+      ),
+    ),
+  )
+  const files = stamped
+    .sort((left, right) => right.updated - left.updated)
+    .slice(0, 16)
+    .map((entry) => entry.name)
   let relaunch
   let inProgress = false
   for (const name of files) {
@@ -643,11 +660,18 @@ export async function recover(cache, options = {}) {
       await rm(root, { recursive: true, force: true })
       continue
     }
+    // A candidate that fails verification is discarded regardless of trust.
+    // Untrusted verification still proves identifier, version, and a valid
+    // code signature (it only skips notarization) and resolves without a
+    // publisher identity, so success is tracked separately from its value.
     const verified = await verify(candidate.bundle, candidate.version, {
       trusted: options.trusted,
       current: options.current,
-    }).catch(() => undefined)
-    if (!verified && options.trusted) {
+    }).then(
+      (trust) => ({ trust }),
+      () => undefined,
+    )
+    if (!verified) {
       await rm(root, { recursive: true, force: true })
       continue
     }
@@ -657,7 +681,7 @@ export async function recover(cache, options = {}) {
       version: candidate.version,
       digest: candidate.digest,
       size: candidate.size,
-      trust: verified,
+      trust: verified.trust,
     })
   }
   candidates.sort((left, right) =>
@@ -879,7 +903,8 @@ export async function launch(prepared) {
       child.once("error", reject)
     })
     let confirmed = false
-    for (let attempt = 0; attempt < 50; attempt++) {
+    const deadline = Date.now() + HANDOFF_TIMEOUT
+    while (Date.now() < deadline) {
       if (child.exitCode !== null || child.signalCode !== null) {
         throw new Error("The desktop update helper exited before accepting the safe handoff")
       }
