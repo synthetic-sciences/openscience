@@ -35,7 +35,7 @@ describe("createScrollPersistence", () => {
     restored.dispose()
   })
 
-  test.skip("debounces persisted scroll writes", async () => {
+  test("debounces persisted scroll writes", async () => {
     const key = "layout-scroll.test"
     const data = new Map<string, string>()
     const writes: string[] = []
