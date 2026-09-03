@@ -47,7 +47,7 @@ describe("mobile compose and model sheets", () => {
     expect(css).toContain("grid-template-columns: minmax(0, 1fr) auto")
     expect(css).toContain("@container conversation (max-width: 540px)")
     expect(css).toMatch(/@container conversation \(max-width: 540px\)[\s\S]*grid-template-columns: minmax\(0, 1fr\);/)
-    expect(css).toContain("width: min(292px, calc(100cqw - 20px))")
+    expect(css).toContain("width: min(336px, calc(100cqw - 20px))")
     expect(css).toContain("overflow: visible")
     expect(css).not.toContain("overflow-x: auto")
     expect(css).toContain(".workspace-composer__research-control")

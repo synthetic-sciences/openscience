@@ -95,11 +95,9 @@ describe("model control surface", () => {
     )
     expect(styles).toContain("[data-model-effort-chip] strong")
     expect(styles).toContain("line-height: 20px")
-    expect(styles).toContain(
-      '[data-model-option-group="effort"] [role="radiogroup"] {\n  display: flex;\n  flex-direction: column;',
-    )
+    expect(styles).toContain('[data-model-options-compact] [role="radiogroup"] {\n  display: grid;')
     expect(styles).toMatch(
-      /\[data-model-settings-popover\]\[data-model-popover-kind="effort"\][\s\S]*\[data-model-option="effort"\]\.model-settings-row:hover,[\s\S]*background: var\(--model-control-hover\);/,
+      /\[data-model-settings-popover\] \[data-model-options-compact\] \.model-settings-row:hover,[\s\S]*background: var\(--model-control-hover\);/,
     )
     expect(styles).toContain("min-height: 58px")
     expect(styles).toContain("font-size: 14px")

@@ -8,6 +8,8 @@ const source = () => readFileSync(fileURLToPath(new URL("./SkillsPage.tsx", impo
 const styles = () => readFileSync(fileURLToPath(new URL("./skills-page.css", import.meta.url)), "utf8")
 const settingsStyles = () =>
   readFileSync(fileURLToPath(new URL("../components/settings/skills.css", import.meta.url)), "utf8")
+const shellStyles = () =>
+  readFileSync(fileURLToPath(new URL("../components/dialog-settings.tsx", import.meta.url)), "utf8")
 
 test("skills use a compact searchable list instead of a card dashboard", () => {
   const page = source()
@@ -87,7 +89,11 @@ test("embedded skills use the restrained settings surface stack", () => {
   expect(settings).toContain("background: var(--settings-surface-muted)")
   expect(settings).toContain("background: var(--settings-surface-hover)")
   expect(settings).toContain("border-color: transparent")
-  expect(settings).toContain("outline: 1px solid var(--settings-border-strong)")
+  // Focus rings come from the shared Settings shell rule, not per-panel overrides.
+  expect(shellStyles()).toMatch(
+    /\.settings-dialog :where\(button, input, select, textarea\):focus-visible \{[^}]*outline/s,
+  )
+  expect(settings).not.toContain("outline: 1px solid var(--settings-border-strong)")
   expect(settings).not.toContain("var(--settings-accent)")
   expect(settings).not.toMatch(/(?:background|border-color):\s*(?:#000(?:000)?|black)/)
 })
