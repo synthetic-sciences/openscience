@@ -1601,8 +1601,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .map((p) => ("content" in p ? p.content : ""))
       .join("")
       .trim()
-    const hasImages = prompt.some((part) => part.type === "image")
-    if (!text && !hasImages) return
+    // Image data is stripped from history, so an image-only submission would
+    // restore as an empty, unsendable entry; only text-bearing prompts are kept.
+    if (!text) return
 
     const entry = stripImages(clonePromptParts(prompt))
     const currentHistory = mode === "shell" ? shellHistory : history
