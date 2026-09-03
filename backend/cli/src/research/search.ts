@@ -1,5 +1,6 @@
 import z from "zod"
-import { API_BASE, OpenScience, type FundingSnapshot, type ResearchSearchInput } from "@/openscience"
+import { managedApiBase } from "@/endpoints"
+import { OpenScience, type FundingSnapshot, type ResearchSearchInput } from "@/openscience"
 import { FirecrawlSearch } from "./firecrawl"
 
 export namespace ResearchSearch {
@@ -46,7 +47,7 @@ export namespace ResearchSearch {
     if (!options.snapshot) return undefined
     const snapshot = options.snapshot
     const response = await (options.fetch ?? globalThis.fetch)(
-      `${(options.baseURL ?? API_BASE).replace(/\/+$/, "")}/api/v1/research/search`,
+      `${(options.baseURL ?? managedApiBase()).replace(/\/+$/, "")}/api/v1/research/search`,
       {
         method: "POST",
         redirect: "error",
