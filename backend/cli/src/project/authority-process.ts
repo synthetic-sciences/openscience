@@ -204,7 +204,10 @@ export namespace AuthorityProcessLedger {
         returns: ffi.FFIType.i32,
       },
     })
-    return { pidinfo: lib.symbols.proc_pidinfo, ptr: ffi.ptr }
+    // Keep the Library itself reachable: Bun closes the dlopen handle when the
+    // Library object is collected, which would leave the memoized symbol
+    // pointing into an unloaded image and crash the next call.
+    return { library: lib, ptr: ffi.ptr }
   })
 
   async function darwinProcess(pid: number) {
@@ -218,7 +221,7 @@ export namespace AuthorityProcessLedger {
     // start time with microsecond precision. This avoids ps(1)'s one-second
     // start-time granularity, which is insufficient for PID-reuse safety.
     const info = Buffer.alloc(136)
-    const size = lib.pidinfo(pid, 3, 0n, lib.ptr(info), info.length)
+    const size = lib.library.symbols.proc_pidinfo(pid, 3, 0n, lib.ptr(info), info.length)
     if (size !== info.length || info.readUInt32LE(12) !== pid) return
     return {
       ppid: info.readUInt32LE(16),
