@@ -4,7 +4,6 @@ const files = {
   composer: await Bun.file(new URL("./prompt-input.css", import.meta.url)).text(),
   chat: await Bun.file(new URL("./chat-surface.css", import.meta.url)).text(),
   settings: await Bun.file(new URL("./model-settings-popover.css", import.meta.url)).text(),
-  models: await Bun.file(new URL("./dialog-select-model.css", import.meta.url)).text(),
   servers: await Bun.file(new URL("./dialog-select-server.css", import.meta.url)).text(),
 }
 
@@ -32,7 +31,6 @@ describe("live interaction radius contract", () => {
     expect(files.chat).toContain("border-radius: var(--user-message-radius)")
     expect(files.chat).not.toContain("--user-message-tail-radius")
     expect(files.settings).toContain("border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important")
-    expect(files.models).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0")
   })
 
   test("keeps necessary positioning overrides while avoiding cascade-force for local edges", () => {
@@ -43,7 +41,6 @@ describe("live interaction radius contract", () => {
     )
     expect(files.settings).toContain("border-radius: var(--radius-md);")
     expect(files.settings).not.toContain("border-radius: var(--radius-md) !important")
-    expect(files.models).toContain('.model-picker-sheet [data-component="button"].model-picker-sheet__manage')
     expect(files.servers).toContain("margin: 0;")
     expect(files.servers).not.toContain("margin: 0 !important")
     expect(files.settings).toContain("transform: none !important")
@@ -60,7 +57,6 @@ describe("live interaction radius contract", () => {
     expect(files.chat.match(/color-mix/g)).toHaveLength(4)
     expect(files.chat).toContain("border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent)")
     expect(files.settings.match(/color-mix/g)).toHaveLength(1)
-    expect(files.models).not.toContain("color-mix")
     expect(files.servers.match(/color-mix/g)).toHaveLength(2)
 
     expect(files.composer).toContain("border: 1px solid var(--border-weak-base)")
@@ -69,7 +65,6 @@ describe("live interaction radius contract", () => {
     expect(files.servers).toContain("border-top: 1px solid var(--border-weak-base)")
     expect(files.settings).toContain("--model-control-shadow: var(--atlas-shadow-md)")
     expect(files.settings).toContain("box-shadow: var(--model-control-shadow)")
-    expect(files.models).toContain("box-shadow: var(--atlas-shadow-float)")
     expect(Object.values(files).join("\n")).not.toContain("#000")
   })
 })

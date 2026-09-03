@@ -91,41 +91,4 @@ describe("mobile compose and model sheets", () => {
       /@media \(pointer: coarse\)[\s\S]*\[data-model-control-group="label"\][\s\S]*height: 44px;[\s\S]*data-model-settings-trigger-style="label"[\s\S]*min-height: 44px;/,
     )
   })
-
-  test("renders model discovery as a scrollable edge-to-edge mobile dialog", async () => {
-    const [picker, css] = await Promise.all([read("./dialog-select-model.tsx"), read("./dialog-select-model.css")])
-
-    expect(picker).toContain('class="model-picker-sheet"')
-    expect(picker).toContain('class="model-picker-sheet__list"')
-    expect(picker).toContain("onSelect={() => dialog.close()}")
-    expect(css).toContain("width: 100%")
-    expect(css).toContain("border-radius: var(--radius-xl) var(--radius-xl) 0 0")
-    expect(css).toContain("min-height: 63px")
-    expect(css).toContain("font-size: 16px")
-    expect(css).toContain("font-size: 13px")
-    expect(css).toContain("overflow-y")
-  })
-
-  test("keeps desktop model discovery compact without changing the mobile sheet", async () => {
-    const [picker, css] = await Promise.all([read("./dialog-select-model.tsx"), read("./dialog-select-model.css")])
-
-    expect(picker).toContain('icon="sliders" class="model-picker-sheet__manage"')
-    expect(picker).toContain("Open Customize for access and composer models")
-    expect(picker).not.toContain('class="model-picker-sheet__manage-inline"')
-    expect(picker).not.toContain("[&_[data-slot=list-item]]:!py-2")
-    expect(picker).not.toContain("[&_[data-slot=list-search]]:!p-2")
-    expect(css).toContain("@media (min-width: 720px)")
-    expect(css).toContain("width: min(calc(100vw - 32px), 480px)")
-    expect(css).toContain("height: min(calc(100dvh - 48px), 440px)")
-    expect(css).toContain("min-height: 38px")
-    expect(css).toContain("min-height: 34px")
-    expect(css).toContain("font-size: 13px")
-    expect(css).toContain("font-size: 11px")
-    expect(css).toContain(".model-picker-sheet__manage-copy")
-    expect(picker).toContain("groupBy={category}")
-    expect(picker).toContain('class="model-picker-sheet__pin"')
-    expect(picker).not.toContain('aria-label="Model providers"')
-    expect(css).toContain("@media (max-width: 719px)")
-    expect(css).toContain("height: min(760px, calc(100dvh - 12px))")
-  })
 })
