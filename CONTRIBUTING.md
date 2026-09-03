@@ -77,7 +77,7 @@ bun dev serve
 bun run --cwd frontend/workspace dev
 ```
 
-The UI dev server prints its local URL (usually http://localhost:5173). The API server must be running for full functionality.
+The UI dev server prints its local URL (usually http://localhost:3000). The API server must be running for full functionality.
 
 If you change the API or SDK (for example `backend/cli/src/server/server.ts`), run `./tooling/repo/generate.ts` to regenerate the SDK and related files.
 

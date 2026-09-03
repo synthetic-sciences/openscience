@@ -16,7 +16,7 @@
 Single git repo organized by runtime boundary.
 
 ```text
-frontend/          workspace (browser UI), docs/share site, and shared UI
+frontend/          workspace (browser UI), docs site, and shared UI
 backend/           CLI/server, skills, sessions, and provider integrations
 tooling/           SDK, plugin runtime, repo automation, launcher, utilities, and patches
 ```

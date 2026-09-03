@@ -12,7 +12,6 @@ dist/
 *.mdx
 # curated skill content consumed verbatim by agents
 backend/cli/skills/
-.astro/
 
 # recorded live-API responses, replayed verbatim by the connector conformance
 # suite (regenerate with: bun run script/record-fetch-fixtures.ts)
