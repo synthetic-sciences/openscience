@@ -1758,19 +1758,26 @@ export namespace SessionPrompt {
     })
   })
 
-  async function lastModel(sessionID: string) {
+  /** A historical model can reference a provider that is no longer available
+   * (e.g. its API key was removed) — validate before reusing it. */
+  async function usableModel(model: NonNullable<MessageV2.User["model"]>) {
+    const resolved = await Provider.getModel(model.providerID, model.modelID).catch((e) => {
+      if (Provider.ModelNotFoundError.isInstance(e)) return undefined
+      throw e
+    })
+    if (resolved) return { providerID: resolved.providerID, modelID: resolved.id }
+    log.warn("last used model is no longer available, falling back to default", model)
+    return Provider.defaultModel()
+  }
+
+  /** Model recorded on the newest user message. Pass the already-read newest
+   * user message (see newestUser) to skip the transcript scan; the scan only
+   * runs when that message carries no model. */
+  async function lastModel(sessionID: string, prior?: MessageV2.User) {
+    if (prior?.model) return usableModel(prior.model)
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role !== "user" || !item.info.model) continue
-      // A historical model can reference a provider that is no longer available
-      // (e.g. its API key was removed) — validate before reusing it.
-      const model = item.info.model
-      const resolved = await Provider.getModel(model.providerID, model.modelID).catch((e) => {
-        if (Provider.ModelNotFoundError.isInstance(e)) return undefined
-        throw e
-      })
-      if (resolved) return { providerID: resolved.providerID, modelID: resolved.id }
-      log.warn("last used model is no longer available, falling back to default", model)
-      break
+      return usableModel(item.info.model)
     }
     return Provider.defaultModel()
   }
@@ -3026,27 +3033,29 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     const matchingInvocation = invocations[shellName] ?? invocations[""]
     const args = matchingInvocation?.args
 
-    let output = ""
-    let truncated = false
-    let aborted = false
-    let exited = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const text = () => (truncated ? `${SHELL_TRUNCATED}\n\n${output}` : output)
+    const state: {
+      output: string
+      truncated: boolean
+      aborted: boolean
+      exited: boolean
+      timer: ReturnType<typeof setTimeout> | undefined
+    } = { output: "", truncated: false, aborted: false, exited: false, timer: undefined }
+    const text = () => (state.truncated ? `${SHELL_TRUNCATED}\n\n${state.output}` : state.output)
     const append = (chunk: Buffer | string) => {
-      output += chunk.toString()
-      if (output.length <= SHELL_OUTPUT_MAX) return
-      output = output.slice(-SHELL_OUTPUT_MAX)
-      truncated = true
+      state.output += chunk.toString()
+      if (state.output.length <= SHELL_OUTPUT_MAX) return
+      state.output = state.output.slice(-SHELL_OUTPUT_MAX)
+      state.truncated = true
     }
     const publish = () => {
-      timer = undefined
+      state.timer = undefined
       if (part.state.status !== "running") return
       part.state.metadata = { output: text(), description: "" }
       Session.updatePart(part).catch((error) => log.error("failed to publish shell output", { error }))
     }
     const schedule = () => {
-      if (timer) return
-      timer = setTimeout(publish, SHELL_PUBLISH_MS)
+      if (state.timer) return
+      state.timer = setTimeout(publish, SHELL_PUBLISH_MS)
     }
     const { proc, command, kill, sandbox, completion } = await AuthoritySignal.exclusive(async () => {
       const current = await ExecutionAuthority.require({
@@ -3078,15 +3087,15 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         })
         const completion = new Promise<void>((resolve, reject) => {
           child.once("close", () => {
-            exited = true
+            state.exited = true
             resolve()
           })
           child.once("error", (error) => {
-            exited = true
+            state.exited = true
             reject(error)
           })
         })
-        const stop = () => Shell.killTree(child, { exited: () => exited, detached: process.platform !== "win32" })
+        const stop = () => Shell.killTree(child, { exited: () => state.exited, detached: process.platform !== "win32" })
         try {
           const registered = await CommandRuntime.start(
             {
@@ -3099,7 +3108,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
             },
             child,
             async () => {
-              aborted = true
+              state.aborted = true
               await stop()
             },
             { authorityGeneration: current.generation, windowsRelease: wrapped.release },
@@ -3126,27 +3135,27 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     })
 
     if (abort.aborted) {
-      aborted = true
+      state.aborted = true
       await kill()
     }
 
     const abortHandler = () => {
-      aborted = true
+      state.aborted = true
       void kill()
     }
 
     abort.addEventListener("abort", abortHandler, { once: true })
 
     await completion.finally(() => {
-      if (timer) clearTimeout(timer)
-      timer = undefined
+      if (state.timer) clearTimeout(state.timer)
+      state.timer = undefined
       abort.removeEventListener("abort", abortHandler)
       CommandRuntime.finish(command.id)
       Sandbox.cleanup(sandbox)
     })
 
-    if (aborted) {
-      output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+    if (state.aborted) {
+      state.output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
     }
     msg.time.completed = Date.now()
     await Session.updateMessage(msg)
@@ -3431,10 +3440,10 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     // built-in action, so don't shadow it.
     const userDefinedCompact = config.command?.[Command.Default.COMPACT]
     if (input.command === Command.Default.COMPACT && !userDefinedCompact) {
-      const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
+      const prior = await newestUser(input.sessionID)
+      const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID, prior)
       const agentName = input.agent ?? (await Agent.defaultAgent())
       const focus = input.arguments.trim()
-      const prior = await newestUser(input.sessionID)
       const effort = input.effort ?? userEffort(prior)
       await SessionCompaction.create({
         sessionID: input.sessionID,
@@ -3463,9 +3472,9 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     // auto-resume (the point is a fresh agent continues from the file).
     const userDefinedHandoff = config.command?.[Command.Default.HANDOFF]
     if (input.command === Command.Default.HANDOFF && !userDefinedHandoff) {
-      const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
-      const agentName = input.agent ?? (await Agent.defaultAgent())
       const prior = await newestUser(input.sessionID)
+      const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID, prior)
+      const agentName = input.agent ?? (await Agent.defaultAgent())
       const effort = input.effort ?? userEffort(prior)
       await SessionCompaction.create({
         sessionID: input.sessionID,
@@ -3492,7 +3501,8 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
 
     const command = await Command.get(input.command)
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
-    const selectedModel = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
+    const prior = await newestUser(input.sessionID)
+    const selectedModel = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID, prior)
 
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -3645,7 +3655,6 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       { parts },
     )
 
-    const prior = await newestUser(input.sessionID)
     const result = (await prompt({
       sessionID: input.sessionID,
       messageID: commandMessageID,
