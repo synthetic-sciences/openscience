@@ -5,13 +5,11 @@ import { InvalidCall } from "./invalid-call"
 import { InvalidTool } from "./invalid"
 
 const DISALLOWED = new Set(["batch"])
-// Legacy call names still accepted inside a batch, keyed to the canonical tool
-// they stand in for so the turn's gate applies to them as well.
-const ALIASES = new Map([
-  ["notebook", "python"],
-  ["rkernel", "r"],
-  ["websearch", "research_search"],
-])
+// Legacy call names accepted only when batch runs outside a prompt turn (no
+// gated set on the context). Inside a turn the model was offered canonical
+// names alone, so an alias is unknown exactly as it is on the direct path
+// (LLM.repairToolCall) instead of reaching a tool without the turn's envelope.
+const ALIASES = new Set(["notebook", "rkernel", "websearch"])
 
 type Gated = { id: string } & Awaited<ReturnType<Tool.Info["init"]>>
 
@@ -19,7 +17,8 @@ type Gated = { id: string } & Awaited<ReturnType<Tool.Info["init"]>>
  * Tools the enclosing turn resolved for the model: selection, permission and
  * delegation gating already applied and plugin hooks attached. The prompt loop
  * stashes them on the execute context so a batched child call cannot reach a
- * tool the direct path withheld (a subagent's `task`, a config-disabled tool).
+ * tool the direct path withheld (a subagent's `task`, a config-disabled tool,
+ * a legacy alias name).
  */
 function gated(ctx: Tool.Context): Gated[] | undefined {
   const tools = ctx.extra?.tools
@@ -76,13 +75,10 @@ export const BatchTool = Tool.define<typeof BatchParameters, Record<string, unkn
               payload: InvalidCall.payload("batch", "invalid_input"),
             }
           }
-          const canonical = ALIASES.get(name)
           const tool =
             toolMap.get(call.tool) ??
             toolMap.get(name) ??
-            (canonical && (!scoped || toolMap.has(canonical))
-              ? await ToolRegistry.resolve(name, model, initCtx?.agent)
-              : undefined)
+            (!scoped && ALIASES.has(name) ? await ToolRegistry.resolve(name, model, initCtx?.agent) : undefined)
           if (!tool) {
             return {
               type: "invalid" as const,

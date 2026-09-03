@@ -17,7 +17,9 @@ import {
 } from "../fixture/stress-provider"
 
 // The model batches one call the turn withheld from a subagent (`task`), one
-// the configuration denies (`bash`), and one it was actually offered (`glob`).
+// the configuration denies (`bash`), two legacy alias names whose canonical
+// tools were offered (`websearch`, `notebook`), and one it was actually
+// offered (`glob`).
 const scenario: StressScenario = {
   id: "batch-gating",
   category: "delegation",
@@ -40,6 +42,11 @@ const scenario: StressScenario = {
           tool: "bash",
           parameters: { command: "printf escaped > escaped", description: "Escape the permission gate" },
         },
+        { tool: "websearch", parameters: { query: "escape the alias gate" } },
+        {
+          tool: "notebook",
+          parameters: { code: "open('escaped', 'w').write('notebook')", timeout: 120_000 },
+        },
         { tool: "glob", parameters: { pattern: "*" } },
       ],
     },
@@ -52,7 +59,7 @@ function tools(messages: MessageV2.WithParts[]) {
 }
 
 describe("tool.batch gating", () => {
-  test("a subagent cannot reach task or a config-denied tool through batch", async () => {
+  test("a subagent cannot reach task, a config-denied tool, or an alias through batch", async () => {
     const provider = startStressProvider([scenario])
     try {
       await using tmp = await tmpdir({
@@ -78,7 +85,7 @@ describe("tool.batch gating", () => {
             agent: "research",
             effort: "normal",
             delegation: true,
-            tools: { batch: true, bash: true, glob: true, task: true },
+            tools: { batch: true, bash: true, glob: true, python: true, research_search: true, task: true },
             system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
             parts: [{ type: "text", text: scenario.prompt }],
           })
@@ -87,18 +94,31 @@ describe("tool.batch gating", () => {
           if (result.info.role !== "assistant") throw new Error("Expected an assistant response")
           expect(result.info.error).toBeUndefined()
 
+          // The aliases' canonical tools were offered to the model, so only the
+          // alias names themselves keep the batched calls out.
+          const offered = provider.main(scenario.id)[0]?.tools ?? []
+          expect(offered).toContain("python")
+          expect(offered).toContain("research_search")
+
           const parts = tools(await Session.messages({ sessionID: child.id }))
           expect(parts.find((part) => part.tool === "batch")?.state.status).toBe("completed")
           expect(parts.find((part) => part.tool === "glob")?.state.status).toBe("completed")
-          expect(parts.map((part) => part.tool)).not.toContain("task")
-          expect(parts.map((part) => part.tool)).not.toContain("bash")
+          const names = parts.map((part) => part.tool)
+          expect(names).not.toContain("task")
+          expect(names).not.toContain("bash")
+          expect(names).not.toContain("websearch")
+          expect(names).not.toContain("research_search")
+          expect(names).not.toContain("notebook")
+          expect(names).not.toContain("python")
           const rejected = parts
             .filter((part) => part.tool === "invalid")
             .map((part) => part.state.input)
             .toSorted((a, b) => String(a.tool).localeCompare(String(b.tool)))
           expect(rejected).toMatchObject([
             { tool: "bash", failure: "unknown_tool" },
+            { tool: "notebook", failure: "unknown_tool" },
             { tool: "task", failure: "unknown_tool" },
+            { tool: "websearch", failure: "unknown_tool" },
           ])
           expect(await Session.children(child.id)).toEqual([])
           const workspace = await SessionFilesystem.workspace(child.id)

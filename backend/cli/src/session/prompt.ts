@@ -98,7 +98,11 @@ export namespace SessionPrompt {
   // store: keep the newest tail, and coalesce part updates while streaming.
   const SHELL_OUTPUT_MAX = 256 * 1024
   const SHELL_PUBLISH_MS = 100
-  const SHELL_TRUNCATED = ["<metadata>", "Output truncated: only the last 256 KB is retained", "</metadata>"].join("\n")
+  const SHELL_TRUNCATED = [
+    "<metadata>",
+    `Output truncated: only the last ${SHELL_OUTPUT_MAX} characters are retained`,
+    "</metadata>",
+  ].join("\n")
   // Scientific agents can still consume session-scoped artifact references.
   const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
 
@@ -1773,7 +1777,7 @@ export namespace SessionPrompt {
 
   /** Newest user message, read once so a caller can derive every per-turn
    * setting (effort, delegation, model) from a single transcript scan. */
-  async function lastUser(sessionID: string) {
+  async function newestUser(sessionID: string) {
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") return item.info
     }
@@ -1792,7 +1796,7 @@ export namespace SessionPrompt {
   }
 
   async function lastResearchEffort(sessionID: string) {
-    return userEffort(await lastUser(sessionID))
+    return userEffort(await newestUser(sessionID))
   }
 
   function request(messages: MessageV2.WithParts[], agent: string) {
@@ -3210,12 +3214,12 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
 
   async function commandModel(input: CommandInput, prior?: MessageV2.User) {
     if (input.model) return Provider.parseModel(input.model)
-    const user = prior ?? (await lastUser(input.sessionID))
+    const user = prior ?? (await newestUser(input.sessionID))
     return user?.model ?? { providerID: "openscience", modelID: "local" }
   }
 
   async function notice(input: CommandInput, text: string): Promise<MessageV2.WithParts> {
-    const prior = await lastUser(input.sessionID)
+    const prior = await newestUser(input.sessionID)
     const model = await commandModel(input, prior)
     const agent = input.agent ?? (await Agent.defaultAgent())
     const cwd = await SessionFilesystem.workspace(input.sessionID)
@@ -3430,7 +3434,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
       const agentName = input.agent ?? (await Agent.defaultAgent())
       const focus = input.arguments.trim()
-      const prior = await lastUser(input.sessionID)
+      const prior = await newestUser(input.sessionID)
       const effort = input.effort ?? userEffort(prior)
       await SessionCompaction.create({
         sessionID: input.sessionID,
@@ -3461,7 +3465,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     if (input.command === Command.Default.HANDOFF && !userDefinedHandoff) {
       const model = input.model ? Provider.parseModel(input.model) : await lastModel(input.sessionID)
       const agentName = input.agent ?? (await Agent.defaultAgent())
-      const prior = await lastUser(input.sessionID)
+      const prior = await newestUser(input.sessionID)
       const effort = input.effort ?? userEffort(prior)
       await SessionCompaction.create({
         sessionID: input.sessionID,
@@ -3641,7 +3645,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       { parts },
     )
 
-    const prior = await lastUser(input.sessionID)
+    const prior = await newestUser(input.sessionID)
     const result = (await prompt({
       sessionID: input.sessionID,
       messageID: commandMessageID,
