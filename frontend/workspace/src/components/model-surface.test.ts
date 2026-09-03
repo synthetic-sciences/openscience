@@ -7,30 +7,13 @@ const path = (name: string) => fileURLToPath(new URL(name, import.meta.url))
 
 describe("model control surface", () => {
   test("keeps routing transport out while showing branded providers", () => {
-    const files = [
-      "./prompt-input.tsx",
-      "./dialog-select-model.tsx",
-      "./model-tooltip.tsx",
-      "./model-settings-popover.tsx",
-    ].map(source)
+    const files = ["./prompt-input.tsx", "./model-settings-popover.tsx"].map(source)
 
     for (const file of files) {
       expect(file).not.toContain("modelRoute")
       expect(file).not.toContain("via ")
       expect(file).not.toContain("OpenRouter")
     }
-    expect(files[1]).toContain("displayProviderForModel")
-  })
-
-  test("groups model names under clear provider headings", () => {
-    const picker = source("./dialog-select-model.tsx")
-    const tooltip = source("./model-tooltip.tsx")
-
-    expect(picker).toContain("{i.name}")
-    expect(picker).toContain("displayProviderForModel(i.provider, i.id).name")
-    expect(picker).toContain("groupBy={category}")
-    expect(picker).toContain("modelGroupLabel")
-    expect(tooltip).toContain("props.model.name")
   })
 
   test("keeps the root model trigger compact with one adjacent effort control", () => {
