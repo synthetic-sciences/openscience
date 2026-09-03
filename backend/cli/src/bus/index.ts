@@ -47,7 +47,7 @@ export namespace Bus {
       type: def.type,
       properties,
     }
-    log.info("publishing", {
+    log.debug("publishing", {
       type: def.type,
     })
     // Public runtime streams are journaled before delivery, so a reconnect
