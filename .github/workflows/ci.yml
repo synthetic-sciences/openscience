@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 # Keep the merge loop intentionally small. Platform ownership tests, the full
-# backend suite, formatting, docs, landing, and browser E2E run outside the PR
+# backend suite, docs, landing, and browser E2E run outside the PR
 # critical path in Deep CI / E2E. This lane proves the monorepo still types,
 # the user-facing workspace bundles, and release entrypoints still parse.
 jobs:

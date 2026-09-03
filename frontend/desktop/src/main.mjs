@@ -895,8 +895,10 @@ app
     let splash
     try {
       app.name = "OpenScience"
-      session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => {
-        callback(permissions.has(permission) && localNavigation(contents.getURL()))
+      session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+        // Gate on the requesting frame, not the top-level document: a cross-origin
+        // iframe inside the local workspace page must not inherit its grants.
+        callback(permissions.has(permission) && localNavigation(details?.requestingUrl || contents.getURL()))
       })
       if (app.isPackaged && process.platform === "darwin") {
         state.updateCache = path.join(app.getPath("userData"), "updates")
