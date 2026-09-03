@@ -748,9 +748,224 @@ jobs:
             [[ "$actual" == "$remote" ]] || { echo "::error::$name already exists with different bytes"; exit 1; }
           done
 
+  verify-desktop-updater:
+    name: Verify desktop updater (${{ matrix.arch }})
+    needs: [version, build-desktop]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            machine: arm64
+            dmg: OpenScience-mac-arm64.dmg
+            zip: OpenScience-mac-arm64.zip
+          - runner: macos-15-intel
+            arch: x64
+            machine: x86_64
+            dmg: OpenScience-mac-x64.dmg
+            zip: OpenScience-mac-x64.zip
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      # Draft release assets are hidden from read-only workflow tokens. This
+      # job only downloads and verifies the already immutable payloads.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.source }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Require native updater architecture
+        shell: bash
+        env:
+          OPENSCIENCE_MACHINE: ${{ matrix.machine }}
+          OPENSCIENCE_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          actual="$(uname -m)"
+          if [[ "$actual" != "$OPENSCIENCE_MACHINE" ]]; then
+            echo "::error::The $OPENSCIENCE_ARCH updater lifecycle must run natively on $OPENSCIENCE_MACHINE; runner reported $actual."
+            exit 1
+          fi
+
+      - name: Download the exact stable-channel macOS artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
+          OPENSCIENCE_DMG: ${{ matrix.dmg }}
+          OPENSCIENCE_ZIP: ${{ matrix.zip }}
+        run: |
+          set -euo pipefail
+          gh release download "$OPENSCIENCE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$OPENSCIENCE_DMG" --pattern "$OPENSCIENCE_ZIP"
+          assets="$(gh release view "$OPENSCIENCE_TAG" --repo "$GITHUB_REPOSITORY" --json assets)"
+          source_label="${OPENSCIENCE_ARTIFACT_SOURCE:0:16}"
+          for name in "$OPENSCIENCE_DMG" "$OPENSCIENCE_ZIP"; do
+            asset="$(jq -c --arg name "$name" '.assets[] | select(.name == $name)' <<<"$assets")"
+            [[ -n "$asset" && "$(jq -r .state <<<"$asset")" == "uploaded" ]] || {
+              echo "::error::$name is not a complete release asset"
+              exit 1
+            }
+            size="$(jq -r .size <<<"$asset")"
+            expected="$(jq -r .digest <<<"$asset")"
+            label="$(jq -r .label <<<"$asset")"
+            actual="sha256:$(shasum -a 256 "$name" | awk '{print $1}')"
+            [[ "$size" =~ ^[0-9]+$ && $size -gt 0 && "$expected" =~ ^sha256:[0-9a-f]{64}$ && "$actual" == "$expected" ]] || {
+              echo "::error::$name does not match its immutable GitHub release digest"
+              exit 1
+            }
+            [[ "$label" == "$name (v$OPENSCIENCE_VERSION, source $source_label)" ]] || {
+              echo "::error::$name is not bound to source $OPENSCIENCE_ARTIFACT_SOURCE and version $OPENSCIENCE_VERSION"
+              exit 1
+            }
+          done
+
+      - name: Verify the exact signed ZIP and DMG structure
+        shell: bash
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARCH: ${{ matrix.arch }}
+          OPENSCIENCE_DMG: ${{ matrix.dmg }}
+          OPENSCIENCE_ZIP: ${{ matrix.zip }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          mountpoint="$RUNNER_TEMP/openscience-dmg-$OPENSCIENCE_ARCH"
+          mkdir -p "$mountpoint"
+          cleanup() { hdiutil detach "$mountpoint" -quiet 2>/dev/null || true; }
+          trap cleanup EXIT
+          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
+          dmg_details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
+          grep -Fq 'Authority=Developer ID Application:' <<<"$dmg_details"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$dmg_details" || {
+            echo "::error::$OPENSCIENCE_DMG is not signed by the configured OpenScience team"
+            exit 1
+          }
+          xcrun stapler validate "$OPENSCIENCE_DMG"
+          spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
+          hdiutil attach "$OPENSCIENCE_DMG" -readonly -nobrowse -mountpoint "$mountpoint" -quiet
+          current="$mountpoint/OpenScience.app"
+          [[ -d "$current" && ! -L "$current" ]] || {
+            echo "::error::$OPENSCIENCE_DMG has no real top-level OpenScience.app"
+            exit 1
+          }
+          details="$(codesign -dv --verbose=4 "$current" 2>&1)"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details" || {
+            echo "::error::$OPENSCIENCE_DMG is not signed by the configured OpenScience team"
+            exit 1
+          }
+          bun frontend/desktop/script/update-artifact-canary.mjs \
+            --zip "$OPENSCIENCE_ZIP" \
+            --current "$current" \
+            --version "$OPENSCIENCE_VERSION" \
+            --arch "$OPENSCIENCE_ARCH" \
+            --trusted true
+
+      - name: Resolve an immutable previous signed stable install
+        id: previous
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OPENSCIENCE_ARCH: ${{ matrix.arch }}
+          OPENSCIENCE_MACHINE: ${{ matrix.machine }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ZIP: ${{ matrix.zip }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          pages="$RUNNER_TEMP/openscience-stable-releases.json"
+          candidates="$RUNNER_TEMP/openscience-stable-candidates.jsonl"
+          gh api --paginate --slurp \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$GH_REPO/releases?per_page=100" > "$pages"
+          jq -c '
+            [.[] | .[] | select(
+              .draft == false and
+              .prerelease == false and
+              (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
+            )]
+            | sort_by(.published_at // .created_at)
+            | reverse
+            | .[]
+          ' "$pages" > "$candidates"
+
+          found=false
+          while IFS= read -r release; do
+            tag="$(jq -r .tag_name <<<"$release")"
+            old_version="${tag#v}"
+            if ! OLD_VERSION="$old_version" CURRENT_VERSION="$OPENSCIENCE_VERSION" \
+              bun -e 'import { newer } from "./frontend/desktop/src/updater.mjs"; if (!newer(process.env.OLD_VERSION, process.env.CURRENT_VERSION)) process.exit(1)'; then
+              continue
+            fi
+            expected="$(jq -r --arg name "$OPENSCIENCE_ZIP" '.assets[] | select(.name == $name) | .digest' <<<"$release")"
+            [[ "$expected" =~ ^sha256:[0-9a-f]{64}$ ]] || continue
+            candidate="$RUNNER_TEMP/previous-$old_version"
+            mkdir -p "$candidate"
+            if ! gh release download "$tag" --repo "$GH_REPO" --pattern "$OPENSCIENCE_ZIP" --dir "$candidate"; then
+              continue
+            fi
+            archive="$candidate/$OPENSCIENCE_ZIP"
+            [[ -s "$archive" ]] || continue
+            actual="sha256:$(shasum -a 256 "$archive" | awk '{print $1}')"
+            [[ "$actual" == "$expected" ]] || continue
+            unpack="$candidate/unpacked"
+            mkdir -p "$unpack"
+            if ! ditto -x -k "$archive" "$unpack"; then continue; fi
+            app="$unpack/OpenScience.app"
+            [[ -d "$app" && ! -L "$app" ]] || continue
+            [[ "$(find "$unpack" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' ')" == "1" ]] || continue
+            if ! codesign --verify --deep --strict --verbose=2 "$app"; then continue; fi
+            if ! spctl --assess --type execute --verbose=4 "$app"; then continue; fi
+            details="$(codesign -dv --verbose=4 "$app" 2>&1)"
+            grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details" || continue
+            identifier="$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")"
+            installed="$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")"
+            executable="$(plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")"
+            [[ "$identifier" == "ai.syntheticsciences.openscience" && "$installed" == "$old_version" ]] || continue
+            architectures="$(lipo -archs "$app/Contents/MacOS/$executable")"
+            [[ " $architectures " == *" $OPENSCIENCE_MACHINE "* ]] || continue
+            {
+              echo "zip=$archive"
+              echo "version=$old_version"
+              echo "tag=$tag"
+            } >> "$GITHUB_OUTPUT"
+            found=true
+            break
+          done < "$candidates"
+          if [[ "$found" != "true" ]]; then
+            echo "::error::No older immutable signed/notarized stable $OPENSCIENCE_ARCH updater ZIP exists. Stable publication fails closed until a signed baseline is available."
+            exit 1
+          fi
+
+      - name: Exercise packaged handoff, activation, health, cleanup, and rollback
+        shell: bash
+        env:
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_PREVIOUS_VERSION: ${{ steps.previous.outputs.version }}
+          OPENSCIENCE_PREVIOUS_ZIP: ${{ steps.previous.outputs.zip }}
+          OPENSCIENCE_ARCH: ${{ matrix.arch }}
+          OPENSCIENCE_ZIP: ${{ matrix.zip }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          bun frontend/desktop/script/update-lifecycle-canary.mjs \
+            --zip "$OPENSCIENCE_ZIP" \
+            --previous-zip "$OPENSCIENCE_PREVIOUS_ZIP" \
+            --version "$OPENSCIENCE_VERSION" \
+            --previous-version "$OPENSCIENCE_PREVIOUS_VERSION" \
+            --arch "$OPENSCIENCE_ARCH" \
+            --team "$APPLE_TEAM_ID"
+
   publish:
     name: Publish release
-    needs: [version, sign-macos-cli, prepare-npm, build-desktop]
+    needs: [version, sign-macos-cli, prepare-npm, build-desktop, verify-desktop-updater]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:

@@ -52,10 +52,9 @@ test("production requires an exact artifact-source deep release rehearsal", asyn
   expect(script).toContain("OPENSCIENCE_EXPECTED_ARTIFACT_SOURCE")
   expect(script).toContain("Release artifact source changed after rehearsal")
   expect(script.match(/already exists at \$\{tagged\} without a GitHub release/g)).toHaveLength(2)
-  expect(workflow).toContain("needs: [version, sign-macos-cli, prepare-npm, build-desktop]")
+  expect(workflow).toContain("needs: [version, sign-macos-cli, prepare-npm, build-desktop, verify-desktop-updater]")
   expect(workflow).not.toContain("npm-test-gate")
   expect(workflow).not.toContain("verify-native-cli")
-  expect(workflow).not.toContain("verify-desktop-updater")
 })
 
 test("a stale release tag cannot create or preflight a draft", async () => {
@@ -125,6 +124,26 @@ test("stable macOS artifacts remain entitled, signed, notarized, stapled, and sm
   expect(workflow).toContain("xcrun stapler staple")
   expect(workflow).toContain("spctl -a -t open")
   expect(workflow).toContain("frontend/desktop/script/update-artifact-canary.mjs")
+})
+
+test("stable publication waits for both native updater lifecycle canaries", async () => {
+  const workflow = await read(".github/workflows/publish.yml")
+  const start = workflow.indexOf("  verify-desktop-updater:")
+  const publication = workflow.indexOf("  publish:", start)
+  const updater = workflow.slice(start, publication)
+  const publish = workflow.slice(publication, workflow.indexOf("  deployment:", publication))
+
+  expect(start).toBeGreaterThan(-1)
+  expect(publication).toBeGreaterThan(start)
+  expect(updater).toContain("name: Verify desktop updater (${{ matrix.arch }})")
+  expect(updater).toContain("runner: macos-15\n            arch: arm64\n            machine: arm64")
+  expect(updater).toContain("runner: macos-15-intel\n            arch: x64\n            machine: x86_64")
+  expect(updater).toContain("Resolve an immutable previous signed stable install")
+  expect(updater).toContain("Stable publication fails closed until a signed baseline is available.")
+  expect(updater).toContain("bun frontend/desktop/script/update-lifecycle-canary.mjs")
+  expect(updater).toContain('--previous-zip "$OPENSCIENCE_PREVIOUS_ZIP"')
+  expect(updater).toContain('--previous-version "$OPENSCIENCE_PREVIOUS_VERSION"')
+  expect(publish).toContain("needs: [version, sign-macos-cli, prepare-npm, build-desktop, verify-desktop-updater]")
 })
 
 test("release caches and resumed mac assets are bound and reverified", async () => {
