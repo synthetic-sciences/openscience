@@ -8,7 +8,7 @@ const panels = [
   "Tools",
   "Connectors",
   "Compute",
-  "Security & access",
+  "Permissions",
   "Network",
   "Sandbox",
   "Credentials",
