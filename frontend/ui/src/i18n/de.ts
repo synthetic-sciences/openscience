@@ -3,14 +3,7 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
-  "ui.sessionReview.title": "Sitzungsänderungen",
-  "ui.sessionReview.diffStyle.unified": "Vereinheitlicht",
-  "ui.sessionReview.diffStyle.split": "Geteilt",
-  "ui.sessionReview.expandAll": "Alle erweitern",
-  "ui.sessionReview.collapseAll": "Alle reduzieren",
 
-  "ui.sessionReview.change.added": "Hinzugefügt",
-  "ui.sessionReview.change.removed": "Entfernt",
   "ui.lineComment.label.prefix": "Kommentar zu ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommentiere ",

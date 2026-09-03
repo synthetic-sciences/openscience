@@ -3,14 +3,7 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
-  "ui.sessionReview.title": "工作階段變更",
-  "ui.sessionReview.diffStyle.unified": "整合",
-  "ui.sessionReview.diffStyle.split": "拆分",
-  "ui.sessionReview.expandAll": "全部展開",
-  "ui.sessionReview.collapseAll": "全部收合",
 
-  "ui.sessionReview.change.added": "已新增",
-  "ui.sessionReview.change.removed": "已移除",
   "ui.lineComment.label.prefix": "評論 ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "正在評論 ",
