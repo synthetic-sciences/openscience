@@ -37,11 +37,11 @@ describe("settings registry source contract", () => {
       "Skills",
       "Tools",
       "Connectors",
+      "Credentials",
       "Compute",
-      "Security & access",
+      "Permissions",
       "Network",
       "Sandbox",
-      "Credentials",
       "Storage",
       "General",
     ])

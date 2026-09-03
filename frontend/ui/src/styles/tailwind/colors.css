@@ -86,6 +86,8 @@
   --color-text-on-interactive-weak: var(--text-on-interactive-weak);
   --color-text-on-success-base: var(--text-on-success-base);
   --color-text-on-critical-base: var(--text-on-critical-base);
+  --color-text-danger: var(--icon-critical-base);
+  --color-text-success: var(--icon-success-base);
   --color-text-on-critical-weak: var(--text-on-critical-weak);
   --color-text-on-critical-strong: var(--text-on-critical-strong);
   --color-text-on-warning-base: var(--text-on-warning-base);
