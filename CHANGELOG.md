@@ -40,6 +40,28 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Made the workspace event stream non-blocking: each browser connection drains
+  its own bounded queue, so a stalled tab can no longer back-pressure the agent
+  loop, and per-request and per-event logging moved to debug.
+- Loaded session lists and transcripts in parallel windows and reused the
+  already-loaded transcript for research-contract gating, trimming per-turn
+  latency.
+- Served a recently verified Ace balance while refreshing it in the background
+  under a bounded timeout, so managed turns no longer wait on the account
+  service.
+- Unified loading, empty, alert, and control styling across Customize panels,
+  moved Credentials under Capabilities, renamed Security & access to
+  Permissions, and gave Local models inline errors and skeleton rows.
+- Reconnected the workspace terminal in place with backoff after an abnormal
+  close, replaying scrollback instead of requiring a new PTY.
+- Kept only text-bearing prompts in composer history, stopped persisting
+  attachment data to browser storage, and batched persisted writes off the
+  input path.
+- Removed dead workspace components (the legacy compute jobs view, an unused
+  file tree, the legacy model dialog, and the unused session review) together
+  with their source-text tests.
+- Required explicit consent before the launcher falls back to the standalone
+  installer, and returned the child's real exit status on signals.
 - Reworked the Files workspace into clear Project, Session, and Results tabs,
   with connected folders and recovery locations kept in a non-duplicating More
   menu, and polished file-type identity, preview chrome, and compact controls.
@@ -86,6 +108,34 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Made the batch tool honor the same tool gating and plugin hooks as direct
+  calls, so a child session or a config-disabled tool cannot be reached by
+  batching.
+- Fixed the event stream leaking its heartbeat and subscription when a project
+  instance was disposed.
+- Stopped marking a failed storage migration as complete, surfaced list errors
+  instead of reporting an empty session list, and stopped caching a rejected
+  provider catalog load.
+- Bounded governed shell output at 256 KB with coalesced part updates, and
+  attached error handlers to floating summary and part-flush promises.
+- Read compute job logs by tail instead of whole file, polled recovered local
+  jobs with backoff instead of a 50 ms dlopen loop, removed unreachable sync
+  and cancel branches, and guarded missing job authority.
+- Resolved the managed API base at request time so search, pricing, and the
+  verification page follow the configured endpoint.
+- Opened external links from settings with noopener, guarded storage access
+  that can throw, and stopped the reconnecting event stream from hiding handler
+  errors or resetting its backoff after a single event.
+- Refreshed the kernel route fallback so an upgraded backend is rediscovered
+  instead of pinning the legacy route forever.
+- Gated desktop permission requests to the local workspace origin, blocked
+  off-origin redirects, hid DevTools in packaged builds, and reported a crashed
+  sidecar instead of leaving a frozen window.
+- Split the launcher recovery test so the codesign-rejection case runs only on
+  macOS while every POSIX platform still proves an unverified command on PATH
+  is refused, fixing the nightly Linux CI failure.
+- Verified release checksums loudly, downloaded from the resolved immutable
+  tag, and corrected the release workflow's checksum comparison step.
 - Made runtime restart transfer a cancelled startup's durable lease without a
   closing-handle race, so the replacement incarnation cannot fail or be reaped
   by the superseded boot.
