@@ -81,6 +81,13 @@ test("changed paths map to their test directories, root files always run, and pr
   expect(global.groups[0].paths.split(" ")).toContain("./test/global")
   expect(global.global).toEqual([])
   expect(global.seconds).toBe(weights.global + weights.root)
+
+  // A test inside test/fixture selects the fixture entry; its helpers stay global.
+  const fixture = affected(["backend/cli/test/fixture/spawn.test.ts"], items)
+  expect(fixture.groups).toHaveLength(1)
+  expect(fixture.groups[0].paths.split(" ")).toContain("./test/fixture")
+  expect(fixture.global).toEqual([])
+  expect(fixture.seconds).toBe(weights.fixture + weights.root)
 })
 
 test("owners cover release tooling, workflows, scripts, and aliased source areas", () => {
@@ -101,6 +108,9 @@ test("owners cover release tooling, workflows, scripts, and aliased source areas
   expect(owner("backend/cli/test/bun.test.ts")).toBe("root")
   expect(owner("backend/cli/src/global/data-dir.ts")).toBe("global")
   expect(owner("backend/cli/test/global/data-dir.test.ts")).toBe("global")
+  expect(owner("backend/cli/test/fixture/spawn.test.ts")).toBe("fixture")
+  expect(owner("backend/cli/test/fixture/fixture.ts")).toBe(anyTest)
+  expect(owner("backend/cli/test/fixture/lsp/fake-lsp-server.js")).toBe(anyTest)
   expect(owner("backend/cli/test/preload.ts")).toBe(anyTest)
   expect(owner("backend/cli/package.json")).toBe(anyTest)
   expect(owner("backend/cli/src/mystery/index.ts")).toBe(anyTest)
@@ -118,4 +128,20 @@ test("the CLI prints the deep-ci matrix and the affected groups as JSON", async 
   const changed = "backend/cli/src/tool/bash.ts\nbackend/cli/src/project/instance.ts\n"
   const groups = await Bun.$`printf '%s' ${changed} | ${process.execPath} ${tool} affected`.text()
   expect(JSON.parse(groups)).toEqual(affected(changed.trim().split("\n"), items))
+})
+
+test("the CLI reports a bad plan on stderr, as a GitHub annotation on a runner, and exits non-zero", async () => {
+  const { GITHUB_ACTIONS: _, ...env } = process.env
+  const local = await Bun.$`${process.execPath} ${tool} --shards 0`.env(env).nothrow().quiet()
+  const runner = await Bun.$`${process.execPath} ${tool} --shards 0`
+    .env({ ...env, GITHUB_ACTIONS: "true" })
+    .nothrow()
+    .quiet()
+
+  expect(local.exitCode).toBe(1)
+  expect(local.stdout.toString()).toBe("")
+  expect(local.stderr.toString()).toBe("--shards requires a positive integer\n")
+  expect(runner.exitCode).toBe(1)
+  expect(runner.stdout.toString()).toBe("")
+  expect(runner.stderr.toString()).toBe("::error::--shards requires a positive integer\n")
 })

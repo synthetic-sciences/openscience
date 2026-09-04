@@ -128,7 +128,9 @@ function area(file: string, base: string) {
 /** Map a repo-relative path to the weighted entry that covers it, `anyTest`
  * when any test may be affected, or undefined when no backend test can be. */
 export function owner(file: string) {
-  if (shared.includes(file) || file.startsWith("backend/cli/test/fixture/")) return anyTest
+  if (shared.includes(file)) return anyTest
+  // test/fixture holds helpers every suite loads plus a few tests of its own.
+  if (file.startsWith("backend/cli/test/fixture/")) return file.endsWith(".test.ts") ? "fixture" : anyTest
   if (exact[file]) return exact[file]
   const prefix = prefixes.find(([value]) => file.startsWith(value))
   if (prefix) return prefix[1]
@@ -254,7 +256,16 @@ async function changed() {
 
 if (import.meta.main) {
   const args = process.argv.slice(2)
-  const output =
-    args[0] === "affected" ? affected(await changed(), await entries()) : plan(await entries(), width(args))
-  console.log(JSON.stringify(output))
+  try {
+    const output =
+      args[0] === "affected" ? affected(await changed(), await entries()) : plan(await entries(), width(args))
+    console.log(JSON.stringify(output))
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    // On GitHub, put weight-table drift on the pull request check itself. The
+    // runner reads workflow commands from stderr too, and ci.yml sends stdout
+    // to a file.
+    console.error(process.env.GITHUB_ACTIONS ? `::error::${message}` : message)
+    process.exit(1)
+  }
 }
