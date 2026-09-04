@@ -288,6 +288,28 @@ test("npm staging batches immutable writes but verifies before public promotion"
   expect(publish).toContain("Promotion-only resume expected")
 })
 
+test("the rehearsal builds and packs on one runner, keeps both immutable caches, and caches Playwright", async () => {
+  const workflow = await read(".github/workflows/npm-test.yml")
+  const parsed = Bun.YAML.parse(workflow) as { jobs: Record<string, { needs?: string | string[] }> }
+
+  expect(parsed.jobs["test-source"]).toBeUndefined()
+  expect(parsed.jobs["prepare-npm"]).toBeUndefined()
+  expect(parsed.jobs.version.needs).toBeUndefined()
+  expect(parsed.jobs["build-cli"].needs).toBe("version")
+  expect(parsed.jobs["publish-test"].needs).toEqual(["version", "build-cli"])
+  expect(workflow.indexOf("Require the protected default branch")).toBeLessThan(workflow.indexOf("id: version"))
+  expect(workflow.match(/key: npm-test-cli-v2-/g)).toHaveLength(2)
+  expect(workflow.match(/key: npm-test-artifacts-v2-/g)).toHaveLength(4)
+  expect(workflow).toContain("fail-on-cache-miss: true")
+  for (const file of [".github/workflows/npm-test.yml", ".github/workflows/e2e.yml"]) {
+    const text = await read(file)
+    expect(text).toContain("name: Cache Playwright browsers")
+    expect(text).toContain("playwright-${{ steps.playwright.outputs.version }}-chromium")
+    expect(text).toContain("bunx playwright install --with-deps chromium")
+    expect(text).toContain("bunx playwright install-deps chromium")
+  }
+})
+
 test("deep npm rehearsal gates are explicit opt-ins", async () => {
   const workflow = await read(".github/workflows/npm-test.yml")
 
