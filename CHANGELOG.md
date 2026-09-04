@@ -79,6 +79,12 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   outbound account read. A panel that closes cancels the reads it started,
   a shared read is cancelled only when its last waiter leaves, and the UI
   waits for the server's answer instead of giving up first.
+- Kept the built provider catalog across project switches. The provider
+  state is now keyed on a revision of the inputs that can differ between
+  projects (provider config, enabled/disabled providers, billing routing,
+  plugins, trust) instead of on the project itself, so opening another
+  project with the same provider setup no longer reruns the whole
+  "[provider] init" pass; a config, auth, or trust change still rebuilds it.
 - Unified loading, empty, alert, and control styling across Customize panels,
   moved Credentials under Capabilities, renamed Security & access to
   Permissions, and gave Local models inline errors and skeleton rows.
