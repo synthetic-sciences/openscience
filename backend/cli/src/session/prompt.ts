@@ -1611,6 +1611,8 @@ export namespace SessionPrompt {
       step = nextStep
       await Session.updateMessage(processor.message)
       if (step === 1) {
+        // Both are fire-and-forget; ensureTitle is single-flight per session,
+        // so repeated step-1 iterations never start a second title request.
         ensureTitle({
           session,
           modelID: lastUser.model.modelID,
@@ -3682,7 +3684,20 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     return result
   }
 
-  async function ensureTitle(input: {
+  // The managed proxy seals a streamed idempotency key the moment the upstream
+  // stream starts, so re-sending an identical title request can only collect
+  // 409s. Keep one title request per session in flight, allow one attempt per
+  // session per cooldown window, and bound each attempt so a stalled stream
+  // never pins the session. A re-attempt after the cooldown carries its
+  // attempt number in the request context so it gets a fresh key.
+  const TITLE_COOLDOWN_MS = 10 * 60 * 1_000
+  const TITLE_TIMEOUT_MS = 45_000
+  const titles = {
+    pending: new Map<string, Promise<void>>(),
+    attempts: new Map<string, { at: number; count: number }>(),
+  }
+
+  export async function ensureTitle(input: {
     session: Session.Info
     history: MessageV2.WithParts[]
     providerID: string
@@ -3702,10 +3717,37 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         .length === 1
     if (!isFirst) return
 
+    const pending = titles.pending.get(input.session.id)
+    if (pending) return pending
+    const last = titles.attempts.get(input.session.id)
+    if (last && Date.now() - last.at < TITLE_COOLDOWN_MS) return
+    const attempt = last?.count ?? 0
+    titles.attempts.set(input.session.id, { at: Date.now(), count: attempt + 1 })
     // Gather all messages up to and including the first real user message for context
     // This includes any shell/subtask executions that preceded the user's first prompt
-    const contextMessages = input.history.slice(0, firstRealUserIdx + 1)
-    const firstRealUser = contextMessages[firstRealUserIdx]
+    const run = generateTitle({
+      session: input.session,
+      context: input.history.slice(0, firstRealUserIdx + 1),
+      providerID: input.providerID,
+      modelID: input.modelID,
+      attempt,
+    }).finally(() => titles.pending.delete(input.session.id))
+    titles.pending.set(input.session.id, run)
+    return run
+  }
+
+  async function generateTitle(input: {
+    session: Session.Info
+    context: MessageV2.WithParts[]
+    providerID: string
+    modelID: string
+    attempt: number
+  }) {
+    // The loop keeps one session snapshot for its whole life, so re-read the
+    // title before spending a request on a session that was titled meanwhile.
+    const current = await Session.get(input.session.id).catch(() => undefined)
+    if (!current || !Session.isDefaultTitle(current.title)) return
+    const firstRealUser = input.context[input.context.length - 1]
 
     // For subtask-only messages (from command invocations), extract the prompt directly
     // since toModelMessage converts subtask parts to generic "The following tool was executed by the user"
@@ -3720,42 +3762,49 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
       )
     })
-    const result = await LLM.stream({
-      agent,
-      user: firstRealUser.info as MessageV2.User,
-      system: [],
-      small: true,
-      tools: {},
-      model,
-      abort: new AbortController().signal,
+    const context = {
       sessionID: input.session.id,
-      retries: 2,
-      messages: [
-        {
-          role: "user",
-          content: "Generate a title for this conversation:\n",
-        },
-        ...(hasOnlySubtaskParts
-          ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
-          : MessageV2.toModelMessages(contextMessages, model)),
-      ],
-    })
-    const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
-    if (text)
-      return Session.update(
-        input.session.id,
-        (draft) => {
-          const cleaned = text
-            .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-            .split("\n")
-            .map((line) => line.trim())
-            .find((line) => line.length > 0)
-          if (!cleaned) return
+      messageID: input.attempt ? `title:${firstRealUser.info.id}:${input.attempt}` : `title:${firstRealUser.info.id}`,
+      attempt: input.attempt,
+    }
+    const text = await Provider.withRequestContext(context, async () => {
+      const result = await LLM.stream({
+        agent,
+        user: firstRealUser.info as MessageV2.User,
+        system: [],
+        small: true,
+        tools: {},
+        model,
+        abort: AbortSignal.timeout(TITLE_TIMEOUT_MS),
+        sessionID: input.session.id,
+        retries: 0,
+        messages: [
+          {
+            role: "user",
+            content: "Generate a title for this conversation:\n",
+          },
+          ...(hasOnlySubtaskParts
+            ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
+            : MessageV2.toModelMessages(input.context, model)),
+        ],
+      })
+      return result.text
+    }).catch((err) => log.error("failed to generate title", { error: err }))
+    if (!text) return
+    await Session.update(
+      input.session.id,
+      (draft) => {
+        const cleaned = text
+          .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.length > 0)
+        if (!cleaned) return
 
-          const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-          draft.title = title
-        },
-        { touch: false },
-      )
+        const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+        draft.title = title
+      },
+      { touch: false },
+    )
   }
 }

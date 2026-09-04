@@ -126,6 +126,7 @@ export namespace Skill {
   const USER_SKILL_DIR = path.join(Global.Path.data, "user-skills")
   const UserSkillName = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/)
   const priority = { default: 0, installed: 1, user: 2, project: 3 } as const
+  const duplicates = new Set<string>()
   const recommended = new Set([
     "conducting-scientific-research",
     "literature-review",
@@ -221,7 +222,13 @@ export namespace Skill {
       const origin = skill.origin
       if (existing && priority[existing.origin] > priority[origin]) return
       if (existing) {
-        log.warn("duplicate skill name", {
+        // The catalog is rebuilt on every invalidation; the same collision
+        // warned once per build is log spam, so warn once per process per
+        // pair and demote later builds to debug.
+        const pair = [skill.name, ...[existing.location, skill.location].toSorted()].join("\0")
+        const level = duplicates.has(pair) ? "debug" : "warn"
+        duplicates.add(pair)
+        log[level]("duplicate skill name", {
           name: skill.name,
           existing: existing.location,
           duplicate: skill.location,
