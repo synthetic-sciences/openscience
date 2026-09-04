@@ -338,10 +338,13 @@ test("shared dependency cache is architecture-specific and excludes the Bun runt
   expect(parsed.runs.steps.find((step) => step.name === "Setup Bun")?.if).toBeUndefined()
 })
 
-test("desktop packaging installs only the desktop workspace and caches Electron downloads", async () => {
+test("desktop packaging installs the whole workspace and caches Electron downloads", async () => {
   const workflow = await read(".github/workflows/publish.yml")
 
-  expect(workflow).toContain('filter: "@synsci/desktop"')
+  // electron-builder validates the root package's production dependencies, so
+  // a --filter install fails with "Production dependency @synsci/plugin not
+  // found for package @synsci/monorepo". Desktop jobs install everything.
+  expect(workflow).not.toContain('filter: "@synsci/desktop"')
   expect(workflow).toContain("name: Cache Electron downloads")
   expect(workflow).toContain("electron-${{ hashFiles('frontend/desktop/package.json') }}")
   expect(workflow).not.toContain("Smoke packaged signed macOS app")
