@@ -239,6 +239,15 @@ These are guidelines, not hard rules:
 - Choose concise, descriptive names.
 - Use Bun helpers such as `Bun.file()` when they fit.
 
+## Finding something to work on
+
+Labels mean something specific here:
+
+- `good first issue`: scoped to one file or directory, has a reproduction or the expected diff, names a reviewer, and needs no design decision. If you take one, comment on the issue so nobody duplicates the work.
+- `help wanted`: maintainers agree the change belongs but will not schedule it themselves. Larger than a first issue; ask in the thread before starting if the approach is not spelled out.
+- `needs-triage`: applied by the issue templates; a maintainer replaces it with an `area:*` label (`area:backend`, `area:workspace`, `area:skills`, `area:connectors`, `area:desktop`, `area:release`, `area:docs`) and, where it fits, one of the two labels above. Triage happens weekly.
+- `pinned`, `security`, `on-hold`, `enhancement`, `good first issue`, and `help wanted` are exempt from the stale bot; everything else closes after 90 days without activity and can be reopened.
+
 ## Feature requests
 
 For new functionality, start with a design conversation. Open an issue describing the problem, an optional proposed approach, and why it belongs in OpenScience. Wait for maintainer agreement before opening a feature pull request.
