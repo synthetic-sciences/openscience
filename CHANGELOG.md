@@ -10,6 +10,20 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Added
 
+- Made `openscience run` usable without a terminal: `--auto-approve` (alias
+  `--dangerously-skip-permissions`) and `--deny-prompts` answer permission
+  requests for the session and its delegated children without persisting
+  anything, stray questions are rejected instead of hanging the run, an
+  unknown model exits 2 before anything runs, a prompt that fails before the
+  loop exits 2 instead of waiting forever, and `--format json` adds `user`,
+  `reasoning`, `permission`, and `done` events plus failed tool calls, with
+  exit codes 0/1/2/3. `run` and `--agent` are now visible in `--help`; the
+  dead `--port` flag is gone.
+- Added a Harbor / Terminal-Bench adapter under `tooling/harbor`
+  (`openscience_harbor.agent:OpenScienceAgent`) that installs a pinned release,
+  runs `openscience run --format json --auto-approve` in the task container,
+  and writes an ATIF trajectory, and documented the headless container
+  environment contract on the Sessions docs page.
 - Added strict bring-your-own-key NVIDIA NIM adapters for Boltz-2, DiffDock,
   Evo 2, GenMol, MolMIM, MSA Search, OpenFold2, OpenFold3, ProteinMPNN, and
   RFdiffusion, with typed requests, bounded response capture, restart-safe NVCF

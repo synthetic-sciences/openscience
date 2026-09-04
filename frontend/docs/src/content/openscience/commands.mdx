@@ -25,7 +25,7 @@ The bare `openscience` (no arguments) starts the local server and opens the **br
 | `openscience run [message..]` | One-shot prompt in the terminal; streams, then exits. |
 | `openscience session list` | List recent sessions (`-n`, `--format`). |
 
-`run` flags: `-c/--continue`, `-s/--session <id>`, `-m/--model <provider/model>`, `--variant <high|max|minimal>` (provider-specific reasoning effort), `--effort <normal|ultra>` (Research breadth), `--format <default|json>`, `-f/--file <path>`, `--attach <url>` (attach to a running server, e.g. `http://localhost:4096`), `--port`, `--title <text>`.
+`run` flags: `-c/--continue`, `-s/--session <id>`, `-m/--model <provider/model>`, `--agent <name>`, `--variant <high|max|minimal>` (provider-specific reasoning effort), `--effort <normal|ultra>` (Research breadth), `--format <default|json>`, `-f/--file <path>`, `--auto-approve` / `--deny-prompts` (non-interactive permission policy; deny is the default when stdin is not a terminal), `--attach <url>` (attach to a running server, e.g. `http://localhost:4096`), `--title <text>`. Exit codes, JSON events, and the container environment contract are on [Sessions](/openscience/sessions).
 
 ```bash
 openscience run "Plot the attention entropy across layers for this checkpoint"
