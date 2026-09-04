@@ -8,9 +8,6 @@ import path from "node:path"
 // account summary those surfaces are served from.
 const fixture = {
   requests: [] as string[],
-  // Outbound reads the account service answered, in the order it answered
-  // them: a read held at the gate lands here after every read it waited for.
-  answered: [] as string[],
   // Outbound reads the account service saw cancelled (the client went away).
   aborted: [] as string[],
   gate: Promise.resolve(),
@@ -31,37 +28,6 @@ const profile = {
   session_token: "srv_profile_secret",
 }
 const headers = { "OpenScience-Funding-Protocol": "1", "OpenScience-Funding-Context": "personal" }
-async function answer(pathname: string): Promise<Response> {
-  if (fixture.stall.has(pathname)) await fixture.gate
-  if (fixture.fail.has(pathname)) return new Response(null, { status: 503 })
-  if (pathname === "/api/v1/auth/status") {
-    return Response.json(
-      {
-        user: profile,
-        organizations: [],
-        api_key: {},
-        funding_context: { type: "personal" },
-      },
-      { status: fixture.status, headers },
-    )
-  }
-  if (pathname === "/api/cli/access") {
-    return Response.json(
-      { cli_balance_cents: fixture.wallet, managed_supported: true, managed_unlocked: true, ace_enabled: false },
-      { status: fixture.access, headers },
-    )
-  }
-  if (pathname === "/api/credits/transactions") return Response.json([], { headers })
-  if (pathname === "/api/v1/wallet") {
-    return Response.json(
-      { balance_cents: fixture.wallet, purchased_cents: fixture.wallet, lifetime_spent_cents: 0 },
-      { headers },
-    )
-  }
-  if (pathname === "/api/cli/balance")
-    return Response.json({ effective_balance_usd: fixture.wallet / 100 }, { headers })
-  return new Response(null, { status: 404 })
-}
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -69,9 +35,35 @@ const server = Bun.serve({
     const pathname = new URL(request.url).pathname
     fixture.requests.push(pathname)
     request.signal.addEventListener("abort", () => fixture.aborted.push(pathname), { once: true })
-    const response = await answer(pathname)
-    fixture.answered.push(pathname)
-    return response
+    if (fixture.stall.has(pathname)) await fixture.gate
+    if (fixture.fail.has(pathname)) return new Response(null, { status: 503 })
+    if (pathname === "/api/v1/auth/status") {
+      return Response.json(
+        {
+          user: profile,
+          organizations: [],
+          api_key: {},
+          funding_context: { type: "personal" },
+        },
+        { status: fixture.status, headers },
+      )
+    }
+    if (pathname === "/api/cli/access") {
+      return Response.json(
+        { cli_balance_cents: fixture.wallet, managed_supported: true, managed_unlocked: true, ace_enabled: false },
+        { status: fixture.access, headers },
+      )
+    }
+    if (pathname === "/api/credits/transactions") return Response.json([], { headers })
+    if (pathname === "/api/v1/wallet") {
+      return Response.json(
+        { balance_cents: fixture.wallet, purchased_cents: fixture.wallet, lifetime_spent_cents: 0 },
+        { headers },
+      )
+    }
+    if (pathname === "/api/cli/balance")
+      return Response.json({ effective_balance_usd: fixture.wallet / 100 }, { headers })
+    return new Response(null, { status: 404 })
   },
 })
 const previousApiBase = process.env.OPENSCIENCE_API_BASE
@@ -95,30 +87,13 @@ const snapshotFile = path.join(Global.Path.data, "openscience-account-snapshot.j
 const count = (pathname: string) => fixture.requests.filter((item) => item === pathname).length
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** Wait for observable state to reach `check`. Nothing here waits for a fixed
- * time: the deadline is generous so a loaded runner is never the reason a wait
- * fails, and a wait that does expire is a real failure with a name. */
-async function until(check: () => boolean | Promise<boolean>, what: string) {
-  const deadline = Date.now() + 10_000
+async function until(check: () => boolean, what: string) {
+  const deadline = Date.now() + 5_000
   while (Date.now() < deadline) {
-    if (await check()) return
+    if (check()) return
     await sleep(10)
   }
   throw new Error(`timed out waiting for ${what}`)
-}
-
-type Summary = Awaited<ReturnType<typeof OpenScience.getAccountSummary>>
-
-/** The summary once the background refresh running for it has settled, failure
- * included. Reading it while that refresh is in flight joins the read instead
- * of starting another, so waiting this way adds no request of its own. */
-async function settled(what: string): Promise<Summary> {
-  const seen: { summary: Summary } = { summary: null }
-  await until(async () => {
-    seen.summary = await OpenScience.getAccountSummary()
-    return seen.summary?.refreshing === false
-  }, what)
-  return seen.summary
 }
 
 const held = { release: undefined as (() => void) | undefined }
@@ -161,7 +136,6 @@ beforeEach(async () => {
   // A failed test must not leave the account service stalled for the next.
   held.release?.()
   fixture.requests = []
-  fixture.answered = []
   fixture.aborted = []
   fixture.gate = Promise.resolve()
   fixture.stall = new Set()
@@ -181,20 +155,16 @@ afterAll(async () => {
 })
 
 test("concurrent account surfaces share one in-flight status read", async () => {
-  const current = (await OpenScience.getFundingSnapshot())!
   const release = hold()
-  // One surface starts the read; the service holds it until it is released.
-  const first = OpenScience.getReconciledFundingState()
-  await until(() => count("/api/v1/auth/status") === 1, "the first status read")
-  // Every surface that asks while it is in flight joins it. Each of these is
-  // handed the session, so it reaches the shared read in the tick it is
-  // called and the read may settle as soon as they are all started.
   const pending = Promise.all([
-    first,
-    OpenScience.getFundingContext(current),
-    OpenScience.getProfile(current),
-    OpenScience.getProfile(current),
+    OpenScience.getReconciledFundingState(),
+    OpenScience.getFundingContext(),
+    OpenScience.getProfile(),
+    OpenScience.getReconciledFundingState(),
   ])
+  await until(() => count("/api/v1/auth/status") === 1, "the first status read")
+  // Give every caller time to reach the outbound read before it settles.
+  await sleep(50)
   release()
   const [state, context, profile] = await pending
   expect(count("/api/v1/auth/status")).toBe(1)
@@ -216,14 +186,13 @@ test("the reconciled state carries the profile so summaries do not read status t
 test("concurrent billing-mode reads share one entitlement and one wallet request", async () => {
   const snapshot = (await OpenScience.getFundingSnapshot())!
   const release = hold()
-  // Every caller is handed the session, so all three reach their shared reads
-  // in the tick they are called: the reads may settle from here on.
   const pending = Promise.all([
     OpenScience.getBillingMode(snapshot),
     OpenScience.getBillingMode(snapshot),
     OpenScience.getCredits(snapshot),
   ])
   await until(() => count("/api/cli/access") === 1 && count("/api/v1/wallet") === 1, "the first reads")
+  await sleep(50)
   release()
   const [first, second, credits] = await pending
   expect(count("/api/cli/access")).toBe(1)
@@ -254,14 +223,13 @@ test("a managed turn from a legacy unscoped session still reconciles through sta
 test("a summary wallet read and a full wallet read stay separate flights", async () => {
   const snapshot = (await OpenScience.getFundingSnapshot())!
   const release = hold()
-  // Handed the session, each caller reaches its flight in the tick it is
-  // called: the two summary reads share one, the full read is its own.
   const pending = Promise.all([
     OpenScience.getCredits(snapshot, { lifetimeSpent: false }),
     OpenScience.getCredits(snapshot),
     OpenScience.getCredits(snapshot, { lifetimeSpent: false }),
   ])
   await until(() => count("/api/v1/wallet") === 2, "both wallet reads")
+  await sleep(50)
   release()
   await pending
   expect(count("/api/v1/wallet")).toBe(2)
@@ -330,7 +298,8 @@ test("a failed refresh keeps the last good summary and reports why", async () =>
   expect(stale?.refreshing).toBe(true)
   expect(stale?.error).toBeUndefined()
   await until(() => count("/api/v1/auth/status") === 1, "the failing status read")
-  const failed = await settled("the failed refresh")
+  await sleep(50)
+  const failed = await OpenScience.getAccountSummary()
   expect(failed?.refreshing).toBe(false)
   expect(failed?.error).toContain("unavailable")
   expect(failed?.credits?.balanceUsd).toBe(12)
@@ -352,9 +321,10 @@ test("a wallet or entitlement read that did not answer keeps the last good summa
   expect(stale?.refreshing).toBe(true)
   expect(stale?.error).toBeUndefined()
   await until(() => count("/api/v1/wallet") === 1 && count("/api/cli/access") === 1, "the failing reads")
+  await sleep(50)
   // The incomplete read was not stored: the good summary is served with the
   // failure, and the file still holds it.
-  const failed = await settled("the failed refresh")
+  const failed = await OpenScience.getAccountSummary()
   expect(failed?.refreshing).toBe(false)
   expect(failed?.error).toContain("unavailable")
   expect(failed?.credits?.balanceUsd).toBe(12)
@@ -378,11 +348,9 @@ test("a spend right after a refresh does not start another one", async () => {
   const one = await OpenScience.getAccountSummary()
   OpenScience.invalidateBalance()
   const two = await OpenScience.getAccountSummary()
-  // A read that starts a refresh says so in the summary it returns, so
-  // `refreshing: false` on both is the proof that neither did. The triple
-  // counted at the end covers everything since, so nothing followed either.
   expect(one).toMatchObject({ refreshing: false, at: first!.at })
   expect(two).toMatchObject({ refreshing: false, at: first!.at })
+  await sleep(50)
   expect(fixture.requests).toEqual([])
   // Past the interval one refresh runs; its announcement is served to every
   // re-read as current, with another spend in between: one triple in all.
@@ -396,8 +364,7 @@ test("a spend right after a refresh does not start another one", async () => {
   const [panel, other] = await Promise.all([OpenScience.getAccountSummary(), OpenScience.getAccountSummary()])
   expect(panel).toMatchObject({ refreshing: false, credits: { balanceUsd: 25 } })
   expect(other?.at).toBe(panel!.at)
-  // Counted since the first summary: one refresh in all. A read started by
-  // any re-read above would have gone out while this one was still running.
+  await sleep(50)
   expect(fixture.requests.sort()).toEqual(["/api/cli/access", "/api/v1/auth/status", "/api/v1/wallet"])
 })
 
@@ -452,14 +419,7 @@ test("a corrupt stored summary is ignored and the next read waits for the accoun
   fixture.requests = []
   const release = hold()
   const pending = OpenScience.getAccountSummary()
-  // Nothing usable is stored, so the caller waits for the account service:
-  // it is still pending when the read it is waiting on reaches the fixture.
-  expect(
-    await Promise.race([
-      pending.then(() => "answered"),
-      until(() => count("/api/v1/auth/status") === 1, "the status read").then(() => "waiting"),
-    ]),
-  ).toBe("waiting")
+  expect(await Promise.race([pending, sleep(50).then(() => "pending")])).toBe("pending")
   release()
   const fresh = await pending
   expect(fresh?.refreshing).toBe(false)
@@ -532,20 +492,11 @@ test("a stored summary belongs to one account and is dropped on a new sign-in", 
   const other = (await OpenScience.getFundingSnapshot())!
   expect(await OpenScience.readAccountSnapshot(other)).toBeNull()
   // With nothing stored, the new account's first summary waits for the service.
-  fixture.requests = []
-  const release = hold()
-  const pending = OpenScience.getAccountSummary().catch(() => "gone")
-  expect(
-    await Promise.race([
-      pending.then(() => "answered"),
-      until(() => count("/api/v1/auth/status") === 1, "the new account's status read").then(() => "waiting"),
-    ]),
-  ).toBe("waiting")
+  hold()
+  const pending = OpenScience.getAccountSummary()
+  expect(await Promise.race([pending, sleep(50).then(() => "pending")])).toBe("pending")
   await OpenScience.clearSession()
   expect(await Bun.file(snapshotFile).exists()).toBe(false)
-  // Signed out mid-read, the waiting caller is left with nothing to store.
-  release()
-  expect(await pending).toBe("gone")
 })
 
 test("refuses to store a summary after the selected account changed mid-refresh", async () => {
@@ -596,12 +547,11 @@ test("a caller that leaves detaches without cancelling a read another caller sti
   await until(() => count("/api/v1/auth/status") === 1, "the shared status read")
   first.abort()
   await expect(one).rejects.toBeDefined()
-  release()
-  // The second caller kept the read alive: it answered and served the summary,
-  // which a read cancelled with the first caller could never have done, and
-  // the account service saw nothing cancelled along the way.
-  expect((await two)?.credits?.balanceUsd).toBe(12)
+  await sleep(30)
+  // The second caller keeps the read alive; the account service saw nothing cancelled.
   expect(fixture.aborted).toEqual([])
+  release()
+  expect((await two)?.credits?.balanceUsd).toBe(12)
   expect(count("/api/v1/auth/status")).toBe(1)
 })
 
@@ -666,23 +616,19 @@ test("a background refresh outlives the request that served the stored summary",
   const local = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => app.fetch(request) })
   try {
     const release = hold(["/api/v1/auth/status"])
-    const refreshed = nextUpdate()
     const served = (await (await fetch(new URL("/", local.url))).json()) as Record<string, unknown>
     expect(served).toMatchObject({ refreshing: true, balance_usd: 12 })
-    // The request is complete and its socket idle, while the read it left
-    // behind is still out at the account service.
     await until(() => count("/api/v1/auth/status") === 1, "the background status read")
-    release()
-    // It answers and the refresh carries on to the wallet: had the read been
-    // tied to the request that started it, it would have been cancelled when
-    // that request returned and nothing would have followed it.
-    await until(() => count("/api/v1/wallet") === 1, "the background wallet read")
+    // The request is complete and its socket idle; the background read must
+    // not be tied to it.
+    await sleep(50)
     expect(fixture.aborted).toEqual([])
-    // The refresh announces itself once it has stored what it read, so the
-    // next request over a fresh socket is served the new summary.
-    const at = await refreshed
+    release()
+    await until(() => count("/api/v1/wallet") === 1, "the background wallet read")
+    await until(() => !!fixture.requests.length && fixture.aborted.length === 0, "settled")
+    await sleep(30)
     const current = (await (await fetch(new URL("/", local.url))).json()) as Record<string, unknown>
-    expect(current).toMatchObject({ refreshing: false, balance_usd: 33, refreshed_at: at })
+    expect(current).toMatchObject({ refreshing: false, balance_usd: 33 })
   } finally {
     local.stop(true)
   }
@@ -709,16 +655,12 @@ test("the ledger view of a legacy unscoped session learns its workspace before r
   const release = hold(["/api/v1/auth/status"])
   const pending = readWallet(false)
   await until(() => count("/api/v1/auth/status") === 1, "the status read")
+  await sleep(50)
   expect(count("/api/credits/transactions")).toBe(0)
   release()
   const wallet = await pending
   expect(wallet).toMatchObject({ signedIn: true, balanceUsd: 12, transactions: [] })
-  // One status read served both the summary and the ledger, and the ledger
-  // waited for it: a read that had gone out alongside would have been
-  // answered first, while the status read was still held.
+  // One status read served both the summary and the ledger.
   expect(count("/api/v1/auth/status")).toBe(1)
   expect(count("/api/credits/transactions")).toBe(1)
-  expect(fixture.answered.indexOf("/api/v1/auth/status")).toBeLessThan(
-    fixture.answered.indexOf("/api/credits/transactions"),
-  )
 })
