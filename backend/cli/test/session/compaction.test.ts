@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { existsSync } from "node:fs"
 import { SessionCompaction } from "../../src/session/compaction"
+import { Config } from "../../src/config/config"
 import { Token } from "../../src/util/token"
 import { Instance } from "../../src/project/instance"
 import { Log } from "../../src/util/log"
@@ -224,6 +225,39 @@ describe("session.compaction.isOverflow", () => {
         // usable = 68_000; count = 40_000. Over 0.5*68_000=34_000 (true) but under default 0.75*68_000=51_000.
         const tokens = { input: 35_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
         expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(true)
+      },
+    })
+  })
+
+  test("settings resolve defaults and config overrides from one place", async () => {
+    expect(SessionCompaction.settings({})).toEqual({
+      auto: true,
+      threshold: SessionCompaction.DEFAULT_THRESHOLD,
+      warn_tokens: SessionCompaction.DEFAULT_WARN_TOKENS,
+    })
+    expect(SessionCompaction.DEFAULT_WARN_TOKENS).toBe(120_000)
+    expect(SessionCompaction.settings({ compaction: { auto: false, threshold: 0.5, warn_tokens: 80_000 } })).toEqual({
+      auto: false,
+      threshold: 0.5,
+      warn_tokens: 80_000,
+    })
+  })
+
+  test("config.compaction.warn_tokens is advisory and never changes the overflow trigger", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "openscience.json"), JSON.stringify({ compaction: { warn_tokens: 1_000 } }))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 32_000 })
+        // usable = 68_000; count = 40_000 is under 0.75*68_000=51_000, so no overflow even
+        // though the conversation is far above the 1_000-token warning.
+        const tokens = { input: 35_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(false)
+        expect(SessionCompaction.settings(await Config.get()).warn_tokens).toBe(1_000)
       },
     })
   })

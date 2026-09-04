@@ -1311,6 +1311,14 @@ export namespace Config {
             .max(1)
             .optional()
             .describe("Compact when context exceeds this fraction of the model window (default: 0.75)"),
+          warn_tokens: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              "Show a compact-or-restart notice in the workspace when the conversation context exceeds this many tokens (default: 120000)",
+            ),
           fallbackContext: z
             .number()
             .int()

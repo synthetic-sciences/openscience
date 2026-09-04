@@ -72,6 +72,17 @@ import { publicContextAvailable, sanitizePublicContexts } from "@/pages/public-c
 import { useExecutionAuthority } from "@/atlas/use-execution-authority"
 import { sessionEntryTarget } from "@/pages/session-entry"
 import { shouldConfirmUndo, undoPreview, undoSummary, type UndoPreview } from "@/pages/session-undo"
+import { SessionContextUsage } from "@/components/session-context-usage"
+import type { ContextPreferences } from "@/components/settings/context-preferences"
+import {
+  contextWarning,
+  estimate,
+  formatContextTokens,
+  latestContext,
+  warnTokens,
+  type ContextEstimate,
+  type ContextSample,
+} from "@/pages/session-context"
 import "./session-header.css"
 import "./session-undo.css"
 import "../components/chat-surface.css"
@@ -205,7 +216,10 @@ export default function Page(): JSX.Element {
         const endpoint = `${url.replace(/\/$/, "")}/settings/preferences`
         void (platform.fetch ?? fetch)(endpoint)
           .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Preferences unavailable"))))
-          .then((preferences) => productPreferences.sync(preferences as ProductPreferences))
+          .then((preferences: ProductPreferences & Partial<ContextPreferences>) => {
+            productPreferences.sync(preferences)
+            warnTokens.sync(preferences)
+          })
           .catch(() => productPreferences.sync({ show_trace: false, atlas_enabled: false, show_local_models: true }))
       },
     ),
@@ -570,6 +584,25 @@ export default function Page(): JSX.Element {
     const status = sessionStatus()
     return Boolean(status && status !== "idle")
   }
+  // Live pre-call context estimate per session from `session.context`, so the header
+  // count moves during the first-token wait instead of only after the turn completes.
+  // Each one is anchored to the newest stored message, so a later turn or compaction
+  // summary supersedes it by id rather than by comparing the client's clock to the server's.
+  const [estimates, setEstimates] = createSignal<Record<string, ContextEstimate>>({})
+  const contextSubscription = sdk.event.on("session.context", (event) => {
+    const id = event.properties.sessionID
+    const stored = sync.data.message[id] ?? []
+    setEstimates((current) => ({ ...current, [id]: estimate(stored, event.properties.total) }))
+  })
+  onCleanup(contextSubscription)
+  const contextSample = createMemo(() => {
+    const id = params.id
+    if (!id || id === "new") return undefined
+    return latestContext(messages(), estimates()[id])
+  })
+  const contextAlert = createMemo(() =>
+    contextWarning({ tokens: contextSample()?.total, warn: warnTokens.value(), status: sessionStatus() }),
+  )
   // A message is a compaction boundary when it carries a `compaction` part.
   const compactionPart = (id: string) => (sync.data.part[id] ?? []).find((part) => part.type === "compaction")
   const hasCompactionPart = (id: string) => Boolean(compactionPart(id))
@@ -685,6 +718,25 @@ export default function Page(): JSX.Element {
     if (uiStore.context() === "terminal" && uiStore.open()) return
     openContext("terminal")
   }
+  // Native session commands (/compact, /status, ...) reuse the last turn's effort and
+  // delegation so the palette, the slash menu, and the context notice behave alike.
+  const sessionCommand = (sessionID: string, name: string) => {
+    const last = lastUserMessage()
+    const request = {
+      sessionID,
+      command: name,
+      arguments: "",
+      effort: last?.role === "user" ? (last.effort ?? "normal") : "normal",
+      delegation: last?.role === "user" ? (last.delegation ?? true) : true,
+    } satisfies Parameters<typeof sdk.client.session.command>[0] & {
+      effort: "normal" | "ultra"
+      delegation: boolean
+    }
+    void sdk.client.session.command(request).catch((error: unknown) => {
+      console.error(`${name} failed`, error)
+      toast.error(`Could not run /${name}`, requestError(error))
+    })
+  }
   commands.register(() => {
     const id = params.id
     const list: CommandOption[] = []
@@ -784,23 +836,7 @@ export default function Page(): JSX.Element {
       description,
       category: language.t("command.category.session"),
       slash: name,
-      onSelect: () => {
-        const last = lastUserMessage()
-        const request = {
-          sessionID: id,
-          command: name,
-          arguments: "",
-          effort: last?.role === "user" ? (last.effort ?? "normal") : "normal",
-          delegation: last?.role === "user" ? (last.delegation ?? true) : true,
-        } satisfies Parameters<typeof sdk.client.session.command>[0] & {
-          effort: "normal" | "ultra"
-          delegation: boolean
-        }
-        void sdk.client.session.command(request).catch((error: unknown) => {
-          console.error(`${name} failed`, error)
-          toast.error(`Could not run /${name}`, requestError(error))
-        })
-      },
+      onSelect: () => sessionCommand(id, name),
     })
     list.push(
       action("status", "Session status", "Show live plan, artifact, and workspace state"),
@@ -1090,6 +1126,7 @@ export default function Page(): JSX.Element {
         >
           <Header
             title={chatTitle()}
+            context={contextSample()}
             tabs={openSessions()}
             active={params.id ?? "new"}
             onSelect={(id) => {
@@ -1414,6 +1451,31 @@ export default function Page(): JSX.Element {
                       </button>
                     </div>
                   </Show>
+                  <Show when={contextAlert()}>
+                    <div class="session-context-bar" role="status" aria-live="polite">
+                      <span class="session-context-bar__copy">
+                        <strong>
+                          {language.t("session.context.warning.size", {
+                            tokens: formatContextTokens(contextSample()?.total ?? 0, language.locale()),
+                          })}
+                        </strong>{" "}
+                        {language.t("session.context.warning.copy", {
+                          warn: formatContextTokens(warnTokens.value(), language.locale()),
+                        })}
+                      </span>
+                      <button
+                        type="button"
+                        class="session-context-bar__action"
+                        disabled={sessionBusy()}
+                        onClick={() => params.id && sessionCommand(params.id, "compact")}
+                      >
+                        {language.t("session.context.warning.compact")}
+                      </button>
+                      <button type="button" class="session-context-bar__action" onClick={newSession}>
+                        {language.t("session.context.warning.new")}
+                      </button>
+                    </div>
+                  </Show>
                   <PromptInput />
                 </div>
               </div>
@@ -1492,6 +1554,7 @@ function Header(props: {
   onWarm: (id: string) => void
   onBack: () => void
   onToggleSessions: () => void
+  context?: ContextSample
 }): JSX.Element {
   return (
     <AppHeader class="workspace-header">
@@ -1522,6 +1585,7 @@ function Header(props: {
         onRename={props.onRename}
         onWarm={props.onWarm}
       />
+      <SessionContextUsage variant="header" sample={props.context} />
     </AppHeader>
   )
 }

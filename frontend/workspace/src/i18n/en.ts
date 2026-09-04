@@ -290,6 +290,7 @@ export const dict = {
   "context.usage.cost": "Cost",
   "context.usage.clickToView": "Click to view context",
   "context.usage.view": "View context usage",
+  "context.usage.estimate": "Estimated for the turn in progress",
 
   "language.en": "English",
   "language.zh": "简体中文",
@@ -407,6 +408,11 @@ export const dict = {
   "session.messages.jumpToLatest": "Jump to latest",
 
   "session.context.addToContext": "Add {{selection}} to context",
+  "session.context.warning.size": "{{tokens}} tokens in context.",
+  "session.context.warning.copy":
+    "That is above your {{warn}}-token warning; each turn now re-sends all of it. Compact to keep turns fast, or start fresh.",
+  "session.context.warning.compact": "Compact now",
+  "session.context.warning.new": "Start a new session",
 
   "session.new.worktree.main": "Main branch",
   "session.new.worktree.mainWithBranch": "Main branch ({{branch}})",
@@ -474,6 +480,18 @@ export const dict = {
   "settings.general.section.updates": "Updates",
   "settings.general.section.layout": "Layout",
   "settings.general.section.sounds": "Sound effects",
+  "settings.general.section.context": "Context",
+  "settings.general.section.context.description":
+    "How much conversation history OpenScience carries into each turn. Saved to compaction.threshold and compaction.warn_tokens in openscience.json.",
+  "settings.general.context.threshold.title": "Auto-compact when context exceeds",
+  "settings.general.context.threshold.description":
+    "Share of the model window that triggers automatic compaction. A compaction.threshold set in a project's openscience.json takes precedence inside that project.",
+  "settings.general.context.threshold.off":
+    "Automatic compaction is off (compaction.auto is false). This share applies once it is on.",
+  "settings.general.context.warn.title": "Warn above N tokens",
+  "settings.general.context.warn.description":
+    "Show a compact-or-restart notice when the conversation exceeds this many tokens.",
+  "settings.general.context.warn.unit": "Tokens",
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenScience",

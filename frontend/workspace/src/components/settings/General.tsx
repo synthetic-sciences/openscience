@@ -6,10 +6,14 @@ import { confirmDialog } from "@/atlas/dialogs"
 import { URLS } from "@/config/urls"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { warnTokens } from "@/pages/session-context"
 import { AppearanceSections } from "../settings-general"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { settingsApi } from "./api"
+import { parseWarnTokens, thresholdOptions, type ContextPreferences } from "./context-preferences"
+import { commitPreference } from "./preference-write"
 import { walletBalanceLabel } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
 import { withAccountDeadline } from "./account-deadline"
@@ -213,6 +217,51 @@ export default function General() {
     return walletBalanceLabel({ signedIn: account()!.session, balanceUsd: account()!.balance_usd })
   }
 
+  // Context rows read and write the effective compaction settings the backend serves
+  // from openscience.json through /settings/preferences; a confirmed write is
+  // published to the session page so the warning threshold updates live.
+  const language = useLanguage()
+  const [context, setContext] = createSignal<ContextPreferences>()
+  const [contextBusy, setContextBusy] = createSignal(false)
+  const [warnDraft, setWarnDraft] = createSignal<string>()
+  onMount(() => {
+    void settingsApi<ContextPreferences>(sdk.url, fetchFn, "/settings/preferences")
+      .then((preferences) => {
+        setContext(preferences)
+        warnTokens.sync(preferences)
+      })
+      .catch((cause) => setError(errorMessage(cause)))
+  })
+  const saveContext = async (patch: Partial<ContextPreferences>) => {
+    if (contextBusy()) return
+    setContextBusy(true)
+    setError(undefined)
+    const result = await commitPreference(
+      () =>
+        settingsApi<ContextPreferences>(sdk.url, fetchFn, "/settings/preferences", {
+          method: "PATCH",
+          body: JSON.stringify(patch),
+        }),
+      (saved) => {
+        setContext(saved)
+        warnTokens.sync(saved)
+      },
+    )
+    setContextBusy(false)
+    if (!result.ok) setError(result.error)
+  }
+  const thresholds = createMemo(() => thresholdOptions(context()?.compaction_threshold))
+  const threshold = createMemo(() => thresholds().find((option) => option.value === context()?.compaction_threshold))
+  const warnValue = () => warnDraft() ?? (context() ? String(context()!.compaction_warn_tokens) : "")
+  const commitWarn = () => {
+    const draft = warnDraft()
+    setWarnDraft(undefined)
+    if (draft === undefined) return
+    const parsed = parseWarnTokens(draft)
+    if (parsed === undefined || parsed === context()?.compaction_warn_tokens) return
+    void saveContext({ compaction_warn_tokens: parsed })
+  }
+
   return (
     <PanelScroll>
       <div class="settings-preferences-panel settings-preferences-panel--general">
@@ -335,6 +384,68 @@ export default function General() {
                   </Show>
                 </AccountRow>
               </Show>
+            </div>
+          </Section>
+
+          <Section
+            id="context"
+            title={language.t("settings.general.section.context")}
+            description={language.t("settings.general.section.context.description")}
+          >
+            <div class="settings-card settings-preferences-card">
+              <AccountRow
+                title={language.t("settings.general.context.threshold.title")}
+                description={
+                  context()?.compaction_auto === false
+                    ? language.t("settings.general.context.threshold.off")
+                    : language.t("settings.general.context.threshold.description")
+                }
+              >
+                <Select
+                  aria-label={language.t("settings.general.context.threshold.title")}
+                  options={thresholds()}
+                  current={threshold()}
+                  value={(option) => String(option.value)}
+                  label={(option) => option.label}
+                  disabled={!context() || contextBusy()}
+                  onSelect={(option) => {
+                    if (!option || option.value === context()?.compaction_threshold) return
+                    void saveContext({ compaction_threshold: option.value })
+                  }}
+                  variant="secondary"
+                  size="small"
+                  triggerVariant="settings"
+                />
+              </AccountRow>
+
+              <AccountRow
+                title={language.t("settings.general.context.warn.title")}
+                description={language.t("settings.general.context.warn.description")}
+              >
+                <label class="settings-context-tokens-field">
+                  <span class="sr-only">{language.t("settings.general.context.warn.title")}</span>
+                  {/* A text field with a numeric keypad: parseWarnTokens accepts "120,000" and
+                      "80k", which a number input would refuse before it reached the parser. */}
+                  <input
+                    class="settings-field settings-context-tokens"
+                    type="text"
+                    inputMode="numeric"
+                    autocomplete="off"
+                    value={warnValue()}
+                    disabled={!context() || contextBusy()}
+                    onInput={(event) => setWarnDraft(event.currentTarget.value)}
+                    onBlur={commitWarn}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur()
+                      if (event.key === "Escape") {
+                        setWarnDraft(undefined)
+                        event.currentTarget.blur()
+                      }
+                    }}
+                  />
+                  <span class="settings-context-tokens-unit">{language.t("settings.general.context.warn.unit")}</span>
+                </label>
+              </AccountRow>
             </div>
           </Section>
 

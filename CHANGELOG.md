@@ -10,6 +10,14 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Added
 
+- Added user control over accumulated conversation context: the session header
+  shows the live context size in tokens (moving during the first-token wait via
+  the server's `session.context` estimate), a compact-or-restart notice appears
+  above the composer once the conversation passes the documented
+  `compaction.warn_tokens` (default 120000), and Customize → General exposes
+  "Auto-compact when context exceeds" and "Warn above N tokens" backed by
+  `/settings/preferences`, which now reads and writes the effective
+  `compaction.threshold` / `compaction.warn_tokens` in the global config.
 - Added strict bring-your-own-key NVIDIA NIM adapters for Boltz-2, DiffDock,
   Evo 2, GenMol, MolMIM, MSA Search, OpenFold2, OpenFold3, ProteinMPNN, and
   RFdiffusion, with typed requests, bounded response capture, restart-safe NVCF
