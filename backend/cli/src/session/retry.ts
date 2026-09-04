@@ -187,8 +187,9 @@ export namespace SessionRetry {
   }
 
   // Managed idempotency verdicts the gateway answers identically for this key.
-  // The provider fetch wrapper already waited out a live original request, so a
-  // step-level redispatch of the same body can only reproduce the verdict.
+  // The key is stable across attempts, so a session-level retry of the same
+  // body can only reproduce the verdict; the provider fetch wrapper already
+  // waited out a live original request.
   const MANAGED_TERMINAL_CODES = new Set([
     "managed_outcome_unknown",
     "managed_conflict_timeout",
@@ -198,23 +199,27 @@ export namespace SessionRetry {
     "idempotent_response_not_replayable",
   ])
 
-  // The gateway already dispatched this attempt's body once and cannot replay
-  // its output (a sealed stream: 409 with the replay header from older
-  // gateways, 410 from current ones). The attempt is over, but the next attempt
-  // carries a fresh idempotency key, so one session-level re-dispatch is safe.
-  // managed_outcome_unknown is deliberately absent: the provider may have
-  // accepted that body, so it is never sent again.
-  const MANAGED_REDISPATCH_CODES = new Set(["idempotent_stream_already_started", "idempotent_response_not_replayable"])
-  export const MANAGED_REDISPATCH_MESSAGE =
-    "The gateway already dispatched this attempt and its output is no longer available; re-dispatching once."
+  // The gateway already dispatched this body once and cannot replay its
+  // output (a sealed stream: 409 with the replay header from older gateways,
+  // 410 from current ones). The provider may have billed that dispatch, so the
+  // body is never sent again automatically; the user decides whether to pay
+  // for a second inference by resubmitting.
+  const MANAGED_DISPATCHED_CODES = new Set(["idempotent_stream_already_started", "idempotent_response_not_replayable"])
+  export const MANAGED_DISPATCHED_MESSAGE =
+    "The gateway already dispatched this request and its output is no longer available. It may have been billed; sending it again will be billed again. Resubmit your message to retry."
 
-  /** Status message for a managed verdict that earns exactly one re-dispatch
-   * under the next attempt number; undefined for every other error. Kept
-   * apart from `retryable` so the ordinary transient loop can never pick it
-   * up: the processor consumes it once and then stops. */
-  export function redispatchable(error: ReturnType<NamedError["toObject"]>) {
-    const { code } = normalizeProviderError(error)
-    return MANAGED_REDISPATCH_CODES.has(code) ? MANAGED_REDISPATCH_MESSAGE : undefined
+  /** The error the user sees for a terminal provider failure. A dispatched
+   * verdict carries the gateway's wire message, which explains the key, not
+   * the billing consequence; replace it and pin the error non-retryable so no
+   * client re-sends it. Every other error passes through untouched. */
+  export function terminal<T extends ReturnType<NamedError["toObject"]>>(error: T): T | MessageV2.APIError {
+    if (!MessageV2.APIError.isInstance(error)) return error
+    if (!MANAGED_DISPATCHED_CODES.has(normalizeProviderError(error).code)) return error
+    return new MessageV2.APIError({
+      ...error.data,
+      message: MANAGED_DISPATCHED_MESSAGE,
+      isRetryable: false,
+    }).toObject() as MessageV2.APIError
   }
 
   export function retryable(error: ReturnType<NamedError["toObject"]>) {

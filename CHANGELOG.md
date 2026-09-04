@@ -120,10 +120,12 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Made title and summary generation single-flight with a bounded number of
   attempts per message, so a slow first turn no longer fans out into duplicate
   title requests.
-- Stopped retrying managed gateway conflicts in a loop: idempotency keys are
-  scoped to the request attempt, a stream the gateway already sealed ends the
-  attempt and is re-dispatched exactly once under a fresh key, and an unknown
-  provider outcome is never sent again.
+- Stopped retrying managed gateway conflicts in a loop: the idempotency key
+  is stable across attempts, a duplicate of a stream still in progress waits
+  for the original, a request the gateway already dispatched (its stream is
+  sealed at completion) is never re-sent automatically — the user is told it
+  may have been billed and must resubmit to retry — and an unknown provider
+  outcome is never sent again.
 - Attributed request timing logs to the model named in the request body and
   the agent that issued it, instead of whichever model first created the
   shared SDK instance.

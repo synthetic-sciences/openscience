@@ -214,7 +214,7 @@ describe("managed conflict guard", () => {
     expect(SessionRetry.retryable(MessageV2.fromError(error, { providerID: "openrouter" }))).toBeUndefined()
   })
 
-  test("scopes the idempotency key to the attempt and keeps it stable within one", () => {
+  test("keeps the idempotency key stable across attempts and distinct per body and message", () => {
     const base = {
       endpoint: "https://gateway.test/api/llm/proxy/openrouter/v1/chat/completions",
       body: JSON.stringify({ model: "openai/gpt-5.6-sol", messages: [] }),
@@ -222,44 +222,42 @@ describe("managed conflict guard", () => {
       messageID: "msg_key",
       operation: "model",
     }
-    const first = Provider.managedIdempotencyKey({ ...base, attempt: 1 })
+    const first = Provider.managedIdempotencyKey(base)
     expect(first).toMatch(/^os_[0-9a-f]{64}$/)
-    expect(Provider.managedIdempotencyKey({ ...base, attempt: 1 })).toBe(first)
-    expect(Provider.managedIdempotencyKey({ ...base, attempt: 2 })).not.toBe(first)
-    expect(Provider.managedIdempotencyKey({ ...base, attempt: 1, messageID: "msg_other" })).not.toBe(first)
+    expect(Provider.managedIdempotencyKey({ ...base })).toBe(first)
+    expect(Provider.managedIdempotencyKey({ ...base, body: JSON.stringify({ model: "x", messages: [] }) })).not.toBe(
+      first,
+    )
+    expect(Provider.managedIdempotencyKey({ ...base, messageID: "msg_other" })).not.toBe(first)
+    expect(Provider.managedIdempotencyKey({ ...base, sessionID: "ses_other" })).not.toBe(first)
+    expect(Provider.managedIdempotencyKey({ ...base, operation: "title" })).not.toBe(first)
   })
 
   test.each([
     ["409 with the replay header", sealed, 409],
     ["410 stream already started", () => gone(), 410],
     ["410 response not replayable", () => gone("idempotent_response_not_replayable"), 410],
-  ])(
-    "ends the attempt on an already-dispatched verdict (%s) and allows one re-dispatch",
-    async (_, verdict, status) => {
-      using fixture = gateway([verdict])
-      const { response, timings, elapsed } = settle(fixture.server)
-      const error = await failure(response)
-      expect(elapsed()).toBeLessThan(500)
-      expect(fixture.seen).toHaveLength(1)
-      expect(timings).toHaveLength(0)
-      expect(error.statusCode).toBe(status)
-      expect(error.isRetryable).toBe(false)
-      expect(error.message).toBe("The original managed stream was already started and cannot be dispatched twice")
-      const normalized = MessageV2.fromError(error, { providerID: "openrouter" })
-      expect(SessionRetry.retryable(normalized)).toBeUndefined()
-      expect(SessionRetry.redispatchable(normalized)).toBe(SessionRetry.MANAGED_REDISPATCH_MESSAGE)
-      expect(SessionProcessor.providerFailureAction(error, normalized, false)).toEqual({
-        type: "redispatch",
-        message: SessionRetry.MANAGED_REDISPATCH_MESSAGE,
-      })
-      expect(SessionProcessor.providerFailureAction(error, normalized, true)).toEqual({
-        type: "drain",
-        message: SessionRetry.MANAGED_REDISPATCH_MESSAGE,
-      })
-    },
-  )
+  ])("ends the attempt on an already-dispatched verdict (%s) without re-sending", async (_, verdict, status) => {
+    using fixture = gateway([verdict])
+    const { response, timings, elapsed } = settle(fixture.server)
+    const error = await failure(response)
+    expect(elapsed()).toBeLessThan(500)
+    expect(fixture.seen).toHaveLength(1)
+    expect(timings).toHaveLength(0)
+    expect(error.statusCode).toBe(status)
+    expect(error.isRetryable).toBe(false)
+    expect(error.message).toBe("The original managed stream was already started and cannot be dispatched twice")
+    const normalized = MessageV2.fromError(error, { providerID: "openrouter" })
+    expect(SessionRetry.retryable(normalized)).toBeUndefined()
+    expect(SessionProcessor.providerFailureAction(error, normalized, false)).toEqual({ type: "terminal" })
+    expect(SessionProcessor.providerFailureAction(error, normalized, true)).toEqual({ type: "terminal" })
+    const shown = SessionRetry.terminal(normalized) as MessageV2.APIError
+    expect(shown.data.message).toContain("billed again")
+    expect(shown.data.isRetryable).toBe(false)
+    expect(SessionRetry.retryable(shown)).toBeUndefined()
+  })
 
-  test.each([409, 410] as const)("never re-dispatches a managed_outcome_unknown verdict (%d)", async (status) => {
+  test.each([409, 410] as const)("never re-sends a managed_outcome_unknown verdict (%d)", async (status) => {
     using fixture = gateway([() => unknown(status)])
     const { response, timings, elapsed } = settle(fixture.server)
     const error = await failure(response)
@@ -271,7 +269,7 @@ describe("managed conflict guard", () => {
     expect(error.message).toBe("The provider outcome is unknown and this request cannot be dispatched twice")
     const normalized = MessageV2.fromError(error, { providerID: "openrouter" })
     expect(SessionRetry.retryable(normalized)).toBeUndefined()
-    expect(SessionRetry.redispatchable(normalized)).toBeUndefined()
+    expect(SessionRetry.terminal(normalized)).toBe(normalized)
     expect(SessionProcessor.providerFailureAction(error, normalized, false)).toEqual({ type: "terminal" })
   })
 
@@ -381,38 +379,28 @@ describe("managed conflict guard", () => {
           expect(error.message).toBe("The original managed stream was already started and cannot be dispatched twice")
           expect(SessionRetry.retryable(MessageV2.fromError(error, { providerID: "openrouter" }))).toBeUndefined()
 
-          // A 410 is final for the attempt at the SDK layer (one request despite
-          // maxRetries: 2). The session policy re-dispatches it once under the
-          // next attempt number, whose key differs, then stops.
-          const dispatch = async (state: SessionProcessor.ProviderRetryState): Promise<string[]> => {
+          // A 410 is final at the SDK layer (one request despite maxRetries: 2)
+          // and at the session layer: the verdict is terminal, and a later
+          // attempt of the same body carries the same key, so the gateway's
+          // sealed claim still answers it instead of a second inference.
+          const dispatch = async (attempt: number) => {
             const gone = await failure(
-              Provider.withRequestContext({ ...scope, messageID: "msg_gone", attempt: state.attempt + 1 }, () =>
+              Provider.withRequestContext({ ...scope, messageID: "msg_gone", attempt }, () =>
                 generateText({ model: language, prompt: "Hi", maxRetries: 2 }),
               ),
             )
             expect(gone.statusCode).toBe(410)
             expect(gone.isRetryable).toBe(false)
-            const action = SessionProcessor.providerFailureAction(
-              gone,
-              MessageV2.fromError(gone, { providerID: "openrouter" }),
-              false,
-            )
-            const next =
-              action.type === "redispatch" ? SessionProcessor.consumeProviderRetry(action.type, state) : undefined
-            return [action.type, ...(next ? await dispatch(next) : [])]
+            const normalized = MessageV2.fromError(gone, { providerID: "openrouter" })
+            expect(SessionProcessor.providerFailureAction(gone, normalized, false)).toEqual({ type: "terminal" })
+            expect((SessionRetry.terminal(normalized) as MessageV2.APIError).data.message).toContain("billed again")
           }
-          const outcomes = await dispatch({
-            attempt: 0,
-            transientRetries: 0,
-            idleRetryUsed: false,
-            redispatchUsed: false,
-          })
-          expect(outcomes).toEqual(["redispatch", "redispatch"])
-          expect(fixture.seen).toHaveLength(5)
+          await dispatch(1)
+          expect(fixture.seen).toHaveLength(4)
           expect(fixture.seen[3].key).toStartWith("os_")
-          expect(fixture.seen[4].key).toStartWith("os_")
-          expect(fixture.seen[4].key).not.toBe(fixture.seen[3].key)
-          expect(fixture.seen[4].body).toBe(fixture.seen[3].body)
+          await dispatch(2)
+          expect(fixture.seen).toHaveLength(5)
+          expect(fixture.seen[4]).toEqual(fixture.seen[3])
         },
       })
     } finally {

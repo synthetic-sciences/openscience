@@ -555,16 +555,16 @@ export namespace Provider {
     return headers
   }
 
-  /** The key protects one attempt against duplicate delivery of the same
-   * body. A deliberate session-level retry is a new operation with the next
-   * attempt number, so it never collides with a stream the gateway already
-   * sealed under the previous key. */
+  /** The key is stable across attempts: it names the body, not the try. The
+   * gateway's claim under it stays authoritative for whether that body was
+   * dispatched — in progress means wait for the original, sealed means the
+   * provider already ran it (and may have billed it), so a session-level
+   * retry of the same body can never start a second inference. */
   export function managedIdempotencyKey(input: {
     endpoint: string
     body: string
     sessionID: string
     messageID: string
-    attempt: number
     operation: string
   }): string {
     const hash = new Bun.CryptoHasher("sha256")
@@ -572,7 +572,6 @@ export namespace Provider {
       "openscience-managed-v1",
       input.sessionID,
       input.messageID,
-      String(input.attempt),
       input.operation,
       input.endpoint,
       input.body,
@@ -2618,7 +2617,6 @@ export namespace Provider {
               body: opts.body,
               sessionID,
               messageID,
-              attempt: context?.attempt ?? 0,
               operation: "model",
             }),
           )

@@ -138,7 +138,7 @@ describe("session.retry.retryable", () => {
     ["idempotent_stream_already_started", { detail: { code: "idempotent_stream_already_started" } }],
     ["idempotent_response_not_replayable", { detail: { code: "idempotent_response_not_replayable" } }],
     ["operation_in_progress", { error: "operation_in_progress" }],
-  ])("never redispatches a managed %s verdict even when the SDK marks the 409 retryable", (_code, body) => {
+  ])("never retries a managed %s verdict even when the SDK marks the 409 retryable", (_code, body) => {
     const error = new MessageV2.APIError({
       message: "Conflict",
       statusCode: 409,
@@ -217,42 +217,38 @@ describe("SessionProcessor.providerFailureAction", () => {
   })
 
   test("keeps the idle replay independent from a prior transient retry", () => {
-    const initial = { attempt: 0, transientRetries: 0, idleRetryUsed: false, redispatchUsed: false }
+    const initial = { attempt: 0, transientRetries: 0, idleRetryUsed: false }
     const afterReset = SessionProcessor.consumeProviderRetry("retry", initial)
-    expect(afterReset).toEqual({ attempt: 1, transientRetries: 1, idleRetryUsed: false, redispatchUsed: false })
+    expect(afterReset).toEqual({ attempt: 1, transientRetries: 1, idleRetryUsed: false })
     const afterIdle = SessionProcessor.consumeProviderRetry("retry-idle", afterReset!)
-    expect(afterIdle).toEqual({ attempt: 2, transientRetries: 1, idleRetryUsed: true, redispatchUsed: false })
+    expect(afterIdle).toEqual({ attempt: 2, transientRetries: 1, idleRetryUsed: true })
     expect(SessionProcessor.consumeProviderRetry("retry-idle", afterIdle!)).toBeUndefined()
   })
 
-  test("re-dispatches a sealed managed attempt exactly once, outside the transient budget", () => {
+  test.each([
+    ["409 with the replay header", 409, "idempotent_stream_already_started"],
+    ["410 stream already started", 410, "idempotent_stream_already_started"],
+    ["410 response not replayable", 410, "idempotent_response_not_replayable"],
+  ])("ends the attempt on an already-dispatched verdict (%s) with a billing warning", (_label, statusCode, code) => {
     const error = new MessageV2.APIError({
       message: "The original managed stream was already started and cannot be dispatched twice",
-      statusCode: 410,
-      isRetryable: false,
-      responseBody: JSON.stringify({ detail: { code: "idempotent_stream_already_started" } }),
+      statusCode,
+      isRetryable: true,
+      responseHeaders: statusCode === 409 ? { "x-openscience-idempotent-replay": "true" } : undefined,
+      responseBody: JSON.stringify({ detail: { code } }),
     }).toObject() as MessageV2.APIError
     expect(SessionRetry.retryable(error)).toBeUndefined()
-    expect(SessionRetry.redispatchable(error)).toBe(SessionRetry.MANAGED_REDISPATCH_MESSAGE)
-    expect(SessionProcessor.providerFailureAction(error, error, false)).toEqual({
-      type: "redispatch",
-      message: SessionRetry.MANAGED_REDISPATCH_MESSAGE,
+    expect(SessionProcessor.providerFailureAction(error, error, false)).toEqual({ type: "terminal" })
+    expect(SessionProcessor.providerFailureAction(error, error, true)).toEqual({ type: "terminal" })
+    const shown = SessionRetry.terminal(error)
+    expect(MessageV2.APIError.isInstance(shown)).toBe(true)
+    expect((shown as MessageV2.APIError).data).toMatchObject({
+      message: SessionRetry.MANAGED_DISPATCHED_MESSAGE,
+      statusCode,
+      isRetryable: false,
     })
-    expect(SessionProcessor.providerFailureAction(error, error, true)).toEqual({
-      type: "drain",
-      message: SessionRetry.MANAGED_REDISPATCH_MESSAGE,
-    })
-    const initial = { attempt: 3, transientRetries: 2, idleRetryUsed: false, redispatchUsed: false }
-    const once = SessionProcessor.consumeProviderRetry("redispatch", initial)
-    expect(once).toEqual({ attempt: 4, transientRetries: 2, idleRetryUsed: false, redispatchUsed: true })
-    expect(SessionProcessor.consumeProviderRetry("redispatch", once!)).toBeUndefined()
-    // The consumed re-dispatch leaves the transient and idle budgets untouched.
-    expect(SessionProcessor.consumeProviderRetry("retry", once!)).toEqual({ ...once!, attempt: 5, transientRetries: 3 })
-    expect(SessionProcessor.consumeProviderRetry("retry-idle", once!)).toEqual({
-      ...once!,
-      attempt: 5,
-      idleRetryUsed: true,
-    })
+    expect(SessionRetry.MANAGED_DISPATCHED_MESSAGE).toContain("billed again")
+    expect(SessionRetry.retryable(shown)).toBeUndefined()
   })
 
   test.each([
@@ -261,15 +257,22 @@ describe("SessionProcessor.providerFailureAction", () => {
     "idempotency_conflict",
     "operation_in_progress",
     "temporary_conflict",
-  ])("never re-dispatches a %s verdict", (code) => {
+  ])("keeps the gateway's own message for a %s verdict", (code) => {
     const error = new MessageV2.APIError({
       message: "Conflict",
       statusCode: 409,
       isRetryable: false,
       responseBody: JSON.stringify({ detail: { code } }),
     }).toObject() as MessageV2.APIError
-    expect(SessionRetry.redispatchable(error)).toBeUndefined()
+    expect(SessionRetry.terminal(error)).toBe(error)
     expect(SessionProcessor.providerFailureAction(error, error, false)).toEqual({ type: "terminal" })
+  })
+
+  test("passes transient and non-API errors through terminal unchanged", () => {
+    const transient = apiError()
+    expect(SessionRetry.terminal(transient)).toBe(transient)
+    const unknown = wrap(JSON.stringify({ detail: { code: "idempotent_stream_already_started" } }))
+    expect(SessionRetry.terminal(unknown)).toBe(unknown)
   })
 })
 
