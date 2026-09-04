@@ -66,8 +66,8 @@ body:
       label: Action approval mode
       description: Research tools → Action approval in the composer, or `openscience sandbox` from the terminal
       options:
-        - Approve for me (default)
-        - Ask for approval
+        - Ask risky (default)
+        - Ask always
         - Full access
         - Not sure
     validations:
