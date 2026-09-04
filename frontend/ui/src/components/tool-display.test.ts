@@ -16,6 +16,7 @@ import {
   sessionErrorText,
   skillActivity,
   skillName,
+  stripBashMetadata,
   stripRedactedReasoning,
   toolErrorDisplay,
   toolOutcome,
@@ -440,6 +441,19 @@ describe("toolSummary", () => {
       { key: "ui.tool.summary.exit", params: { code: 2 } },
       { key: "ui.tool.summary.lines.other", params: { count: 2 } },
     ])
+  })
+
+  test("does not count the shell metadata trailer as output", () => {
+    const output =
+      "one\ntwo\n\n<bash_metadata>\nbash tool terminated command after exceeding timeout 5 ms\n</bash_metadata>"
+    expect(stripBashMetadata(output)).toBe("one\ntwo")
+    expect(stripBashMetadata("plain\n")).toBe("plain\n")
+    expect(toolSummary({ tool: "bash", status: "completed", output, metadata: { exit: 124 } })).toEqual([
+      { key: "ui.tool.summary.exit", params: { code: 124 } },
+      { key: "ui.tool.summary.lines.other", params: { count: 2 } },
+    ])
+    const silent = "\n\n<bash_metadata>\nUser aborted the command\n</bash_metadata>"
+    expect(toolSummary({ tool: "bash", status: "completed", output: silent, metadata: { exit: 0 } })).toEqual([])
   })
 
   test("stays silent for live calls and for tools whose body already says it", () => {

@@ -121,6 +121,11 @@ export function lineCount(value: string | undefined) {
   return lines.at(-1) === "" ? lines.length - 1 : lines.length
 }
 
+/** The shell tool appends a metadata trailer on sandbox warnings, timeouts, and aborts; it is not output. */
+export function stripBashMetadata(value?: string) {
+  return (value ?? "").replace(/\s*<bash_metadata>[\s\S]*?<\/bash_metadata>\s*$/g, "")
+}
+
 export type ToolSummary = { key: UiI18nKey; params: UiI18nParams }
 
 const plural = (name: "lines" | "matches" | "files", count: number): ToolSummary => ({
@@ -145,7 +150,7 @@ export function toolSummary(input: {
   switch (input.tool) {
     case "bash": {
       const exit = typeof metadata.exit === "number" && metadata.exit !== 0 ? metadata.exit : undefined
-      const lines = lineCount(output)
+      const lines = lineCount(stripBashMetadata(output))
       return [
         ...(exit === undefined ? [] : [{ key: "ui.tool.summary.exit" as const, params: { code: exit } }]),
         ...(lines > 0 ? [plural("lines", lines)] : []),

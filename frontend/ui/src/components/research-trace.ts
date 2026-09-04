@@ -116,16 +116,35 @@ function foldableCall(entry: ResearchTraceEntry) {
 }
 
 /**
+ * The newest call of each message that is still working. It stays literal so
+ * its glyph, duration, and receipt land on the row the reader is watching,
+ * and a body the reader opened is not unmounted the instant the call ends.
+ * It joins the run once a later call starts or the message completes.
+ */
+function trailing(entries: ResearchTraceEntry[]) {
+  const latest = new Map<string, string>()
+  for (const entry of entries) {
+    if (entry.part.type !== "tool" || entry.message.time?.completed) continue
+    latest.set(entry.message.id, entry.part.id)
+  }
+  return new Set(latest.values())
+}
+
+/**
  * Consecutive completed calls of the same read, search, shell, or edit tool
  * fold behind one counted header. Every original call stays inside `run`, so
  * expanding the header shows the literal rows; a running, failed, or
- * differently-shaped call breaks the run and stays on its own line.
+ * differently-shaped call breaks the run and stays on its own line, and the
+ * newest call of a working message waits for the next call before folding.
+ * A run therefore only ever grows: a streaming update never unfolds one.
  */
 export function foldRuns(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
+  const open = trailing(entries)
+  const settled = (entry: ResearchTraceEntry) => foldableCall(entry) && !open.has(entry.part.id)
   const result: ResearchTraceEntry[] = []
   for (let index = 0; index < entries.length; index++) {
     const first = entries[index]!
-    if (!foldableCall(first)) {
+    if (!settled(first)) {
       result.push(first)
       continue
     }
@@ -133,7 +152,7 @@ export function foldRuns(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
     const run = [first]
     while (index + 1 < entries.length) {
       const next = entries[index + 1]!
-      if (!foldableCall(next) || (next.part as ToolPart).tool !== tool) break
+      if (!settled(next) || (next.part as ToolPart).tool !== tool) break
       run.push(next)
       index++
     }
@@ -147,8 +166,9 @@ export function foldRuns(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
  * state changes must not replace already-visible rows with aggregate summaries.
  * The inline compactions are a run of low-value, successful shell preflights
  * and a run of completed calls to one tool; the original calls remain in
- * `group` or `run` so expansion never hides commands or output. Errors and
- * live calls always remain literal rows.
+ * `group` or `run` so expansion never hides commands or output. Errors, live
+ * calls, and the newest call of a message still working always remain
+ * literal rows, so a row never folds at the moment its receipt appears.
  */
 export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
   // Streaming reconciliation can briefly surface the same durable part twice

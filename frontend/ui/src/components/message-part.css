@@ -838,6 +838,10 @@
     background: color-mix(in srgb, var(--surface-raised-base) 72%, transparent);
   }
 
+  [data-slot="delegation-findings"][data-error="true"] [data-slot="delegation-section-label"] {
+    color: var(--text-on-critical-base);
+  }
+
   [data-slot="delegation-findings"] [data-component="markdown"] {
     margin-top: 0;
     color: var(--text-weak);

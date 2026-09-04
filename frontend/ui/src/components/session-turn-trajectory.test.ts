@@ -173,6 +173,18 @@ describe("reasoning rows", () => {
     expect(again.querySelector('[data-slot="reasoning-part-body"]')).not.toBeNull()
   })
 
+  test("an aborted turn shows a plain Thinking label when reasoning never reported its end", async () => {
+    const message = assistant(Date.now())
+    const part = reasoning("prt_aborted", { start: Date.now() - 40_000 })
+    const host = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
+    await settle()
+    const row = host.querySelector('[data-component="reasoning-part"]')!
+    const toggle = row.querySelector('[data-slot="reasoning-part-toggle"]')!
+    expect(row.getAttribute("data-live")).toBeNull()
+    expect(toggle.querySelector('[data-component="spinner"]')).toBeNull()
+    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Thinking")
+  })
+
   test("a completed turn folds reasoning the reader never opened", async () => {
     const message = assistant(Date.now())
     const part = reasoning("prt_folded", { start: 1_000, end: 1_800 })
@@ -264,6 +276,62 @@ describe("folded runs in a turn", () => {
     expect(live.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Searching")
     expect(live.querySelector('[data-slot="basic-tool-tool-status"]')?.getAttribute("data-outcome")).toBe("running")
     expect(live.querySelector('[data-slot="basic-tool-tool-time"]')?.textContent).toBe("2s")
+  })
+
+  test("a call that just finished keeps its own row and receipt while the turn works", async () => {
+    const message = assistant()
+    const running: ToolPart = {
+      id: "prt_read2",
+      sessionID,
+      messageID: message.id,
+      type: "tool",
+      callID: "call_prt_read2",
+      tool: "read",
+      state: { status: "running", input: { filePath: "analysis.py" }, title: "analysis.py", time: { start: 2_000 } },
+    }
+    const prompt: TextPart = { id: "prt_prompt", sessionID, messageID: user.id, type: "text", text: "Review the paper" }
+    const [store, setStore] = reactive.createStore<Store>({
+      ...empty(),
+      session_status: { [sessionID]: { type: "busy" } },
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [prompt], [message.id]: [read("prt_read1", "paper.tex", 1_000), running] },
+    })
+    const host = mount(
+      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
+      store,
+    )
+    const rows = () => host.querySelectorAll('[data-component="tool-part-wrapper"]')
+    const row = (id: string) =>
+      [...rows()].find((item) => item.querySelector('[data-slot="basic-tool-tool-subtitle"]')?.textContent === id)!
+    await ready(() => rows().length === 2)
+    expect(host.querySelector('[data-component="trace-run-group"]')).toBeNull()
+
+    // The reader opens the first read while the second is still running.
+    const first = row("paper.tex").querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!
+    first.click()
+    await settle()
+    expect(first.getAttribute("aria-expanded")).toBe("true")
+
+    // The second read completes: its own row shows the receipt, and the first stays open and literal.
+    setStore("part", message.id, 1, read("prt_read2", "analysis.py", 2_000))
+    await settle()
+    expect(host.querySelector('[data-component="trace-run-group"]')).toBeNull()
+    expect(rows()).toHaveLength(2)
+    const second = row("analysis.py")
+    expect(second.getAttribute("data-tool-status")).toBe("completed")
+    expect(second.querySelector('[data-slot="basic-tool-tool-status"]')?.getAttribute("data-outcome")).toBe("done")
+    expect(second.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("2 lines")
+    expect(row("paper.tex").querySelector('[data-slot="collapsible-trigger"]')?.getAttribute("aria-expanded")).toBe(
+      "true",
+    )
+
+    // The turn settles: the two reads fold behind one counted header.
+    setStore("message", sessionID, 1, "time", { created: 2, completed: Date.now() })
+    await ready(() => host.querySelector('[data-component="trace-run-group"]') !== null)
+    const run = host.querySelector('[data-component="trace-run-group"]')!
+    expect(run.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("2 calls")
+    expect(run.querySelector('[data-slot="basic-tool-tool-subtitle"]')?.textContent).toBe("paper.tex · analysis.py")
+    expect(host.querySelectorAll('[data-component="tool-part-wrapper"]')).toHaveLength(0)
   })
 })
 

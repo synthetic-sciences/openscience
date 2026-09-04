@@ -773,10 +773,12 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const status = () => (text() ? undefined : reasoningTopic(part.text))
   const live = () => !part.time?.end && !completedAt(props.message)
   const now = useClock(() => live() && !!part.time?.start)
+  // A completed message whose reasoning never reported an end (an aborted
+  // turn) shows the plain label rather than the rest of the turn as thinking.
   const duration = () => {
     const start = part.time?.start
-    if (!start) return ""
-    const end = live() ? now() : (part.time?.end ?? completedAt(props.message) ?? start)
+    const end = live() ? now() : part.time?.end
+    if (!start || !end) return ""
     return end - start >= 1000 ? elapsedLabel(end - start) : ""
   }
   const title = () =>
@@ -1567,8 +1569,10 @@ ToolRegistry.register({
 
                 <Show when={findings()}>
                   {(value) => (
-                    <div data-slot="delegation-findings">
-                      <span data-slot="delegation-section-label">Findings</span>
+                    <div data-slot="delegation-findings" data-error={props.status === "error" ? "true" : undefined}>
+                      <span data-slot="delegation-section-label">
+                        {props.status === "error" ? "Error" : "Findings"}
+                      </span>
                       <Markdown text={value()} />
                     </div>
                   )}
