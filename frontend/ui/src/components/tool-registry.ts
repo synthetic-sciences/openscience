@@ -1,5 +1,6 @@
 import type { Component } from "solid-js"
 import type { FilePart } from "@synsci/sdk/v2"
+import type { ToolSummary } from "./tool-display"
 
 export interface ToolProps {
   input: Record<string, any>
@@ -7,6 +8,12 @@ export interface ToolProps {
   tool: string
   output?: string
   status?: string
+  /** Lifecycle timestamps from the part, so any renderer can show elapsed time or duration. */
+  time?: { start: number; end?: number }
+  /** One-line receipt for the collapsed row (lines, matches, exit code). */
+  summary?: ToolSummary[]
+  /** The failure text when the call errored; the row shows its first line inline. */
+  error?: string
   partID?: string
   attachments?: FilePart[]
   title?: string
