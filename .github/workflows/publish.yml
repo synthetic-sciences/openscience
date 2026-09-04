@@ -516,6 +516,9 @@ jobs:
           }
           [[ "$found" == "$total" ]] && echo "found=true" >> "$GITHUB_OUTPUT" || echo "found=false" >> "$GITHUB_OUTPUT"
 
+      # A resumed x64 job only re-runs the updater canary, whose script imports
+      # node builtins alone, so it checks out the source and installs Bun
+      # without the desktop workspace install.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.existing.outputs.found != 'true' || matrix.arch == 'x64'
         with:
@@ -523,6 +526,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
         if: steps.existing.outputs.found != 'true' || matrix.arch == 'x64'
         with:
+          install: ${{ steps.existing.outputs.found != 'true' }}
           filter: "@synsci/desktop"
 
       - name: Verify resumed macOS assets
