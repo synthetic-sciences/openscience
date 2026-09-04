@@ -62,6 +62,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   funding context, so a managed turn, the settings panels, and credential sync
   that check the account at the same time no longer repeat the request, and
   the account summary no longer reads the profile twice.
+- Stopped loading the full account and workspace summary before every managed
+  turn. A scoped session now starts from the local session file and the
+  cached balance check; only a legacy unscoped session still reconciles its
+  workspace first, and the gateway's funding echo is still verified before
+  anything is charged.
 - Unified loading, empty, alert, and control styling across Customize panels,
   moved Credentials under Capabilities, renamed Security & access to
   Permissions, and gave Local models inline errors and skeleton rows.

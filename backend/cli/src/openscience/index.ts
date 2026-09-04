@@ -629,6 +629,18 @@ export namespace OpenScience {
     })
   }
 
+  /** The funding snapshot a managed request charges against. A scoped session
+   * is served from the local session file with no account read; only a legacy
+   * unscoped session still needs the status read to learn its workspace before
+   * dispatch. Authorization is proved per request instead: the balance check
+   * and every spend-capable response must echo this exact funding context. */
+  export async function getRequestSnapshot(): Promise<FundingSnapshot | null> {
+    const snapshot = await getFundingSnapshot()
+    if (!snapshot) return null
+    if (!isLegacyUnscoped(snapshot)) return snapshot
+    return (await getReconciledFundingState())?.snapshot ?? null
+  }
+
   export async function managedRequestSnapshot(
     apiKey?: string,
     snapshot?: FundingSnapshot | null,

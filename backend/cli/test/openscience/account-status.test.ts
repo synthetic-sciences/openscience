@@ -39,6 +39,7 @@ const server = Bun.serve({
 const previousApiBase = process.env.OPENSCIENCE_API_BASE
 process.env.OPENSCIENCE_API_BASE = server.url.toString()
 const { OpenScience } = await import("../../src/openscience")
+const { SessionProcessor } = await import("../../src/session/processor")
 
 const session = { api_key: "thk_fixture_shared_status", user_id: "user_shared", workspace_locked: true }
 const count = (pathname: string) => fixture.requests.filter((item) => item === pathname).length
@@ -118,6 +119,23 @@ test("concurrent billing-mode reads share one entitlement and one wallet request
   expect(first?.managed_unlocked).toBe(true)
   expect(second?.access_verified).toBe(true)
   expect(credits?.balanceUsd).toBe(12)
+})
+
+test("a managed turn from a scoped session skips the account status read", async () => {
+  const funding = await SessionProcessor.fundingSnapshot("managed")
+  expect(funding).toMatchObject({ api_key: session.api_key, user_id: "user_shared", workspace_locked: true })
+  expect(count("/api/v1/auth/status")).toBe(0)
+  // Authorization is still proved before charging: the balance read carries
+  // the funding headers and the gateway's echo is validated.
+  expect(await OpenScience.getBalance(funding)).toBe(12)
+  expect(fixture.requests).toEqual(["/api/cli/balance"])
+})
+
+test("a managed turn from a legacy unscoped session still reconciles through status", async () => {
+  await OpenScience.saveSession({ api_key: "thk_fixture_legacy_turn", user_id: "" })
+  const funding = await SessionProcessor.fundingSnapshot("managed")
+  expect(funding?.api_key).toBe("thk_fixture_legacy_turn")
+  expect(count("/api/v1/auth/status")).toBe(1)
 })
 
 test("a summary wallet read and a full wallet read stay separate flights", async () => {
