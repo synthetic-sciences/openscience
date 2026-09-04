@@ -227,9 +227,7 @@ export namespace Network {
     .strict()
 
   type StoredState =
-    | { kind: "current"; state: State }
-    | { kind: "migrate"; state: State }
-    | { kind: "invalid"; reason: unknown }
+    { kind: "current"; state: State } | { kind: "migrate"; state: State } | { kind: "invalid"; reason: unknown }
 
   type StoredFile = { kind: "missing" } | { kind: "found"; text: string } | { kind: "unreadable"; error: unknown }
 

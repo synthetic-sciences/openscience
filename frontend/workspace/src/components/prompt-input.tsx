@@ -775,8 +775,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   type AtOption =
-    | { type: "agent"; name: string; display: string }
-    | { type: "file"; path: string; display: string; recent?: boolean }
+    { type: "agent"; name: string; display: string } | { type: "file"; path: string; display: string; recent?: boolean }
 
   // Research is the only user-facing agent. Existing transcripts can still
   // render legacy agent parts, but the composer advertises capabilities and
@@ -946,8 +945,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         usage: usage[name],
         source: "builtin" as const,
         category: ((["compact", "context", "status"] as string[]).includes(name) ? "session" : "research") as
-          | "session"
-          | "research",
+          "session" | "research",
         type: slashMode({ trigger: name }) ? ("mode" as const) : ("action" as const),
       }
     })

@@ -14,8 +14,7 @@ import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
 
 export interface PopoverProps<T extends ValidComponent = "div">
-  extends ParentProps,
-    Omit<ComponentProps<typeof Kobalte>, "children"> {
+  extends ParentProps, Omit<ComponentProps<typeof Kobalte>, "children"> {
   trigger?: JSXElement
   triggerAs?: T
   triggerProps?: ComponentProps<T>

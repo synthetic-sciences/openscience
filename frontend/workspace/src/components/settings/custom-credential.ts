@@ -1,6 +1,5 @@
 export type CustomCredentialIdentity =
-  | { ok: true; id: string; field: string; label: string }
-  | { ok: false; error: string }
+  { ok: true; id: string; field: string; label: string } | { ok: false; error: string }
 
 export function customCredentialIdentity(labelInput: string, fieldInput: string): CustomCredentialIdentity {
   const label = labelInput.trim()

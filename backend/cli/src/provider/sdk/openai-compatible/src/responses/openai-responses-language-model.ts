@@ -1531,7 +1531,7 @@ const openaiResponsesChunkSchema = z.union([
   z.object({ type: z.string() }).loose(), // fallback for unknown chunks
 ])
 
-type ExtractByType<T, K extends T extends { type: infer U } ? U : never> = T extends { type: K } ? T : never
+type ExtractByType<T, K extends (T extends { type: infer U } ? U : never)> = T extends { type: K } ? T : never
 
 function isTextDeltaChunk(
   chunk: z.infer<typeof openaiResponsesChunkSchema>,

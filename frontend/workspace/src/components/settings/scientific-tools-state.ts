@@ -1,11 +1,6 @@
 export type CapabilityMaturity = "verified" | "experimental" | "blocked"
 export type CapabilityAvailability =
-  | "ready"
-  | "configured"
-  | "setup_needed"
-  | "degraded"
-  | "unavailable"
-  | "not_applicable"
+  "ready" | "configured" | "setup_needed" | "degraded" | "unavailable" | "not_applicable"
 
 export interface ScientificCapabilityRecord {
   schema_version: 2

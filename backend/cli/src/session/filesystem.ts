@@ -410,16 +410,14 @@ export namespace SessionFilesystem {
         time: { created: Date.now() },
       },
       ...(roots.length
-        ? roots.map(
-            (value): Grant => ({
-              id: `fsg_${crypto.randomUUID()}`,
-              path: value,
-              access: "write",
-              scope: "session",
-              source: "api",
-              time: { created: Date.now() },
-            }),
-          )
+        ? roots.map((value): Grant => ({
+            id: `fsg_${crypto.randomUUID()}`,
+            path: value,
+            access: "write",
+            scope: "session",
+            source: "api",
+            time: { created: Date.now() },
+          }))
         : []),
     ]
     const record: State = {

@@ -44,11 +44,11 @@ export namespace CapabilityValidationTesting {
 const bound = (left: JobBroker.CapabilityBinding | undefined, right: JobBroker.CapabilityBinding) =>
   Boolean(
     left &&
-      left.id === right.id &&
-      left.version === right.version &&
-      left.manifest_sha256 === right.manifest_sha256 &&
-      left.profile === right.profile &&
-      left.runtime_digest === right.runtime_digest,
+    left.id === right.id &&
+    left.version === right.version &&
+    left.manifest_sha256 === right.manifest_sha256 &&
+    left.profile === right.profile &&
+    left.runtime_digest === right.runtime_digest,
   )
 
 function sameIdentity(left: Stats, right: Stats) {

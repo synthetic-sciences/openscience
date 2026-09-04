@@ -1601,10 +1601,10 @@ export namespace ManagedEnvironments {
     const exactRequested = Object.values(expected).some((value) => value !== undefined)
     const completeExact = Boolean(
       expected.conda_lock &&
-        expected.lock_digest &&
-        expected.python &&
-        expected.pip_packages &&
-        expected.pip_requirements !== undefined,
+      expected.lock_digest &&
+      expected.python &&
+      expected.pip_packages &&
+      expected.pip_requirements !== undefined,
     )
     const expectedManifest =
       completeExact && expected.conda_lock && expected.lock_digest && expected.python && expected.pip_packages
@@ -1624,11 +1624,11 @@ export namespace ManagedEnvironments {
     )
     const receiptMatches = Boolean(
       expectedManifest &&
-        receipt.success &&
-        receipt.data.name === parsed &&
-        receipt.data.spec === expectedManifest.spec &&
-        receipt.data.conda_lock_sha256 === expectedManifest.conda_lock_sha256 &&
-        receipt.data.manifest_sha256 === digestBytes(JSON.stringify(expectedManifest, null, 2)),
+      receipt.success &&
+      receipt.data.name === parsed &&
+      receipt.data.spec === expectedManifest.spec &&
+      receipt.data.conda_lock_sha256 === expectedManifest.conda_lock_sha256 &&
+      receipt.data.manifest_sha256 === digestBytes(JSON.stringify(expectedManifest, null, 2)),
     )
     if (options.verification === "status") {
       const manifestMatches = Boolean(
@@ -1655,21 +1655,21 @@ export namespace ManagedEnvironments {
     }
     const exact = Boolean(
       completeExact &&
-        selected &&
-        manifest.success &&
-        expectedManifest &&
-        sameManifest(manifest.data, expectedManifest) &&
-        (await attestExact(
-          target,
-          binary,
-          expected.lock_digest!,
-          selected,
-          expected.conda_lock!,
-          expected.python!,
-          expected.pip_packages!,
-          expected.pip_requirements!,
-          expectedManifest,
-        )),
+      selected &&
+      manifest.success &&
+      expectedManifest &&
+      sameManifest(manifest.data, expectedManifest) &&
+      (await attestExact(
+        target,
+        binary,
+        expected.lock_digest!,
+        selected,
+        expected.conda_lock!,
+        expected.python!,
+        expected.pip_packages!,
+        expected.pip_requirements!,
+        expectedManifest,
+      )),
     )
     return {
       name: parsed,

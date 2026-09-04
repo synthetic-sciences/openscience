@@ -4,9 +4,7 @@ import { resolveViewer, viewerUsesText } from "@/atlas/files/viewer-registry"
 export type ArtifactTransport = (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
 
 export type StoredArtifactPreview =
-  | { kind: "text"; data: string }
-  | { kind: "image"; data: string }
-  | { kind: "pdf"; data: Uint8Array }
+  { kind: "text"; data: string } | { kind: "image"; data: string } | { kind: "pdf"; data: Uint8Array }
 
 /** A preview is read into browser memory, so keep it deliberately bounded. */
 export const STORED_ARTIFACT_PREVIEW_LIMIT = 8 * 1024 * 1024

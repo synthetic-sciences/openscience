@@ -60,13 +60,7 @@ export interface InspectorData {
 }
 
 export type PublicationReviewKind =
-  | "not-applicable"
-  | "not-run"
-  | "blocked"
-  | "warnings"
-  | "ready"
-  | "finalized"
-  | "stale"
+  "not-applicable" | "not-run" | "blocked" | "warnings" | "ready" | "finalized" | "stale"
 export type PublicationReviewCheck = "citation" | "numeric" | "figure" | "provenance"
 export type PublicationReviewSeverity = "blocking" | "major" | "minor" | "info"
 export type PublicationReviewFindingStatus = "open" | "resolved" | "overridden"

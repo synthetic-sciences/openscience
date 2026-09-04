@@ -18,12 +18,12 @@ const localReady = (runtime: Runtime, state: Awaited<ReturnType<typeof ManagedEn
   const lock = localLock(runtime)
   return Boolean(
     lock &&
-      state.ready &&
-      state.manifest &&
-      state.manifest.spec === runtime.lock_digest &&
-      state.manifest.conda_lock_sha256 === lock &&
-      same(state.manifest.packages, [`python=${runtime.python}`, "pip=25.1.1"]) &&
-      same(state.manifest.pip_packages, runtime.packages),
+    state.ready &&
+    state.manifest &&
+    state.manifest.spec === runtime.lock_digest &&
+    state.manifest.conda_lock_sha256 === lock &&
+    same(state.manifest.packages, [`python=${runtime.python}`, "pip=25.1.1"]) &&
+    same(state.manifest.pip_packages, runtime.packages),
   )
 }
 const localSupported = (runtime: Runtime) => {
@@ -31,9 +31,9 @@ const localSupported = (runtime: Runtime) => {
   const lock = condaLock()
   return Boolean(
     current &&
-      lock &&
-      runtime.local_platforms.includes(current) &&
-      runtime.local_locks[current] === condaLockSha256(lock),
+    lock &&
+    runtime.local_platforms.includes(current) &&
+    runtime.local_locks[current] === condaLockSha256(lock),
   )
 }
 async function modal(runtime: Runtime) {

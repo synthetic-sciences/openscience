@@ -258,8 +258,7 @@ export namespace McpOAuthCallback {
     }).catch(() => undefined)
     if (!response?.ok) return "none"
     const body = (await response.json().catch(() => undefined)) as
-      | { service?: unknown; version?: unknown; root?: unknown }
-      | undefined
+      { service?: unknown; version?: unknown; root?: unknown } | undefined
     if (body?.service !== "openscience-mcp-oauth-callback" || body.version !== 1) return "none"
     return body.root === expectedRoot ? "same" : "different"
   }

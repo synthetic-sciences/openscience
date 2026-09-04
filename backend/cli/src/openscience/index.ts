@@ -1782,8 +1782,7 @@ export namespace OpenScience {
       const response = await fundedAtlasFetch(session, `${apiBase()}/api/credits/transactions`, { signal })
       if (!response.ok) return null
       const body = (await response.json()) as
-        | Array<Record<string, unknown>>
-        | { transactions?: Array<Record<string, unknown>> }
+        Array<Record<string, unknown>> | { transactions?: Array<Record<string, unknown>> }
       const rows = Array.isArray(body) ? body : (body.transactions ?? [])
       return rows.slice(0, Math.max(0, limit)).map((row) => ({
         id: String(row.id ?? ""),

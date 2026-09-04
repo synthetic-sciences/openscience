@@ -32,17 +32,7 @@ export interface DesktopTheme {
 }
 
 export type TokenCategory =
-  | "background"
-  | "surface"
-  | "text"
-  | "border"
-  | "icon"
-  | "input"
-  | "button"
-  | "syntax"
-  | "markdown"
-  | "diff"
-  | "avatar"
+  "background" | "surface" | "text" | "border" | "icon" | "input" | "button" | "syntax" | "markdown" | "diff" | "avatar"
 
 export type ThemeToken = string
 

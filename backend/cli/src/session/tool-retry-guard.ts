@@ -27,8 +27,7 @@ type KernelFailure = {
 type Failure = WebFetchFailure | KernelFailure
 
 type RetryGuardMetadata =
-  | { version: 1; kind: "failure"; failure: Failure }
-  | { version: 1; kind: "blocked"; details: Record<string, unknown> }
+  { version: 1; kind: "failure"; failure: Failure } | { version: 1; kind: "blocked"; details: Record<string, unknown> }
 
 const METADATA_KEY = "openscienceRetryGuard"
 

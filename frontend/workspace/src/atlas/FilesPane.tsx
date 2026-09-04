@@ -938,11 +938,11 @@ export function FilesPane(
     const kind = current().kind
     return Boolean(
       !busy() &&
-        !entries.loading &&
-        !listingError() &&
-        sessionID() &&
-        !current().readonly &&
-        (kind === "project" || kind === "session" || kind === "connected"),
+      !entries.loading &&
+      !listingError() &&
+      sessionID() &&
+      !current().readonly &&
+      (kind === "project" || kind === "session" || kind === "connected"),
     )
   })
 

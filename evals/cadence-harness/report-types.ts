@@ -1,15 +1,7 @@
 export type JsonRecord = Record<string, unknown>
 
 export type CampaignRunStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "partial"
-  | "blocked"
-  | "inconclusive"
-  | "failed"
-  | "cancelled"
-  | "unknown"
+  "pending" | "running" | "completed" | "partial" | "blocked" | "inconclusive" | "failed" | "cancelled" | "unknown"
 
 export type CampaignFileLink = {
   label: string

@@ -275,24 +275,24 @@ function supervisedTransaction(transaction, options) {
   const supervised = options.supervised
   return Boolean(
     supervised &&
-      (transaction.state === "activated" || transaction.state === "committed") &&
-      transaction.token === supervised.token &&
-      transaction.version === supervised.version &&
-      transaction.health === supervised.receipt &&
-      transaction.runtime === supervised.runtime &&
-      transaction.target === options.current,
+    (transaction.state === "activated" || transaction.state === "committed") &&
+    transaction.token === supervised.token &&
+    transaction.version === supervised.version &&
+    transaction.health === supervised.receipt &&
+    transaction.runtime === supervised.runtime &&
+    transaction.target === options.current,
   )
 }
 
 export function trustedTransaction(value, required) {
   return Boolean(
     value?.trusted === true &&
-      typeof required?.team === "string" &&
-      required.team &&
-      typeof required?.designated === "string" &&
-      required.designated &&
-      value.trust?.team === required.team &&
-      value.trust?.designated === required.designated,
+    typeof required?.team === "string" &&
+    required.team &&
+    typeof required?.designated === "string" &&
+    required.designated &&
+    value.trust?.team === required.team &&
+    value.trust?.designated === required.designated,
   )
 }
 

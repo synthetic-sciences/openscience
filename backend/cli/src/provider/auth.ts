@@ -38,12 +38,10 @@ export namespace ProviderAuth {
   export async function methods() {
     const s = await state().then((x) => x.methods)
     return mapValues(s, (x) =>
-      x.methods.map(
-        (y): Method => ({
-          type: y.type,
-          label: y.label,
-        }),
-      ),
+      x.methods.map((y): Method => ({
+        type: y.type,
+        label: y.label,
+      })),
     )
   }
 

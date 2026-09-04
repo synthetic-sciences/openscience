@@ -71,13 +71,11 @@ export function prepareProjects(
         !hidden.has(project.id) &&
         !hidden.has(project.worktree),
     )
-    .map(
-      (project): PreparedProject => ({
-        ...project,
-        updatedAt: timestamp(project),
-        pinned: favorites.has(project.id) || favorites.has(project.worktree),
-      }),
-    )
+    .map((project): PreparedProject => ({
+      ...project,
+      updatedAt: timestamp(project),
+      pinned: favorites.has(project.id) || favorites.has(project.worktree),
+    }))
     .sort(
       (left, right) =>
         Number(right.pinned) - Number(left.pinned) ||
@@ -90,13 +88,11 @@ export function prepareProjects(
 export function prepareArchivedProjects(projects: ProjectRecord[]) {
   return uniqueProjects(projects)
     .filter((project) => project.origin === "openscience" && Boolean(project.time.archived))
-    .map(
-      (project): PreparedProject => ({
-        ...project,
-        updatedAt: project.time.archived ?? timestamp(project),
-        pinned: false,
-      }),
-    )
+    .map((project): PreparedProject => ({
+      ...project,
+      updatedAt: project.time.archived ?? timestamp(project),
+      pinned: false,
+    }))
     .sort(
       (left, right) =>
         right.updatedAt - left.updatedAt ||

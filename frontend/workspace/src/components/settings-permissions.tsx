@@ -142,12 +142,11 @@ export const PermissionToolDefaults: Component = () => {
   const language = useLanguage()
   const [busy, setBusy] = createSignal(false)
 
-  const actions = createMemo(
-    (): Array<{ value: PermissionAction; label: string }> =>
-      ACTIONS.map((action) => ({
-        value: action.value,
-        label: language.t(action.label),
-      })),
+  const actions = createMemo((): Array<{ value: PermissionAction; label: string }> =>
+    ACTIONS.map((action) => ({
+      value: action.value,
+      label: language.t(action.label),
+    })),
   )
 
   const setPermission = async (id: string, action: PermissionAction) => {

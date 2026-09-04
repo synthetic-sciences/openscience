@@ -272,12 +272,10 @@ export namespace LLM {
               content: system.join("\n\n"),
             },
           ]
-        : system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          )),
+        : system.map((x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }))),
       ...input.messages,
     ]
     const result = streamText({

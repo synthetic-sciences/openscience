@@ -8,10 +8,10 @@ export const DARWIN_UPDATE_SWAP_ARG = "--desktop-update-swap"
 function validIdentity(entry: unknown): entry is SafeDirectoryIO.Entry {
   return Boolean(
     Number.isSafeInteger((entry as SafeDirectoryIO.Entry | undefined)?.dev) &&
-      (entry as SafeDirectoryIO.Entry).dev >= 0 &&
-      Number.isSafeInteger((entry as SafeDirectoryIO.Entry | undefined)?.ino) &&
-      (entry as SafeDirectoryIO.Entry).ino > 0 &&
-      ["file", "directory"].includes((entry as SafeDirectoryIO.Entry | undefined)?.type ?? ""),
+    (entry as SafeDirectoryIO.Entry).dev >= 0 &&
+    Number.isSafeInteger((entry as SafeDirectoryIO.Entry | undefined)?.ino) &&
+    (entry as SafeDirectoryIO.Entry).ino > 0 &&
+    ["file", "directory"].includes((entry as SafeDirectoryIO.Entry | undefined)?.type ?? ""),
   )
 }
 

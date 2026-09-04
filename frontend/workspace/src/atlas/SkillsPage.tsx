@@ -149,8 +149,7 @@ export default function SkillsPage(props: { embedded?: boolean; services?: Skill
           const current = (await sdk.client.global.config.get()).data as SelectionConfig
           const disabled = skillSelection(current.skills?.disabled ?? [], names, enabled)
           const saved = (await sync.updateConfig({ skills: { disabled } } as SelectionConfig)).data as
-            | SelectionConfig
-            | undefined
+            SelectionConfig | undefined
           if (
             !saved?.skills?.disabled ||
             JSON.stringify([...saved.skills.disabled].sort()) !== JSON.stringify([...disabled].sort())

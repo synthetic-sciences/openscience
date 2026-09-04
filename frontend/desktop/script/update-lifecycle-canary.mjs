@@ -295,11 +295,11 @@ async function waitForExit(identity, timeout, inspect = observed) {
 function validExactIdentity(identity) {
   return Boolean(
     Number.isSafeInteger(identity?.pid) &&
-      identity.pid > 1 &&
-      typeof identity.started === "string" &&
-      identity.started &&
-      typeof identity.command === "string" &&
-      identity.command,
+    identity.pid > 1 &&
+    typeof identity.started === "string" &&
+    identity.started &&
+    typeof identity.command === "string" &&
+    identity.command,
   )
 }
 

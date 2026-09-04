@@ -43,8 +43,7 @@ export namespace ManagedProject {
   export type Operation = z.infer<typeof Operation>
 
   export type IdempotentCreateResult =
-    | { status: "created" | "replayed"; project: Project.Info }
-    | { status: "conflict" }
+    { status: "created" | "replayed"; project: Project.Info } | { status: "conflict" }
 
   function operationDigest(operationID: string) {
     return crypto.createHash("sha256").update(`managed-project-operation\0${operationID}`).digest("hex")
