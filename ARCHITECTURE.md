@@ -24,18 +24,22 @@ The server binds to `127.0.0.1` and enforces a Host and Origin allowlist. There 
 ## Repository layout
 
 ```
-backend/cli          The CLI, server, agent runtime, tools, and skills
+backend/cli          The CLI, server, agent runtime, tools, connectors, and skills
 frontend/workspace   The workspace UI (SolidJS), served by the CLI
+frontend/desktop     The Electron shell that wraps the packaged runtime
 frontend/ui          Shared UI components, themes, and fonts
 frontend/docs        The documentation site (Vite + React)
-frontend/landing     The marketing site (openscience.sh)
+frontend/landing     The marketing site (openscience.sh); has its own lockfile
 tooling/sdk/js       The TypeScript SDK, generated from the server contract
 tooling/plugin       The plugin runtime (@synsci/plugin)
 tooling/launcher     The `npx synsci` installer
-tooling/repo         Release automation
+tooling/repo         Repo automation: contributor setup, SDK regeneration, release scripts
 tooling/script       Build helper used across packages
 tooling/util         Shared TypeScript utilities (@synsci/util)
 tooling/patches      Dependency patches applied at install time
+evals                Launch evals and the cadence dev lab for the research harness
+docs                 Engineering notes (docs/notes), ADRs, specs, and historical plans
+.openscience         Repo-local agent config (commands, a skill, a theme) used by `bun dev .`
 ```
 
 ## Backend (`backend/cli`)
@@ -53,7 +57,7 @@ The backend is a Bun and TypeScript application compiled to a single native bina
 
 ### Prompt architecture
 
-Prompts are assembled in two layers: a provider-level system prompt selected by model (`src/session/system.ts`), and an agent-level workflow prompt injected by agent name (`src/session/prompt.ts`). See [CLAUDE.md](CLAUDE.md) for the routing details.
+Prompts are assembled in two layers: a provider-neutral system prompt (`src/session/system.ts` supplies the same product contract to every model), and an agent-level workflow prompt injected by agent name (`src/session/prompt.ts`). See [CLAUDE.md](CLAUDE.md) for the routing details.
 
 ### Skills
 
@@ -63,12 +67,17 @@ Skills are instruction bundles the agent loads on demand (`src/skill`). The cano
 
 - `frontend/workspace` is the workspace UI. It talks to the local server over the same API the SDK exposes, and renders sessions, files, a terminal, and inline scientific views (molecules, structures, genomes, plots). The CLI build embeds the compiled UI into the binary.
 - `frontend/ui` is the shared component and theme library used by the app and the docs site.
+- `frontend/desktop` is the Electron shell. It starts the packaged native runtime on a random loopback port and opens the same workspace in a native window; it never exposes Node APIs to the page.
 - `frontend/docs` is the Vite + React documentation site.
 
 ## SDK and plugins
 
 - `tooling/sdk/js` is generated from the server's OpenAPI contract. Run `./tooling/repo/generate.ts` after changing the server API to regenerate it.
 - `tooling/plugin` is the plugin runtime. Plugins receive a typed client and can add tools, providers, and hooks.
+
+## Generated files and the dev loop
+
+Three files the backend imports are gitignored and produced by scripts: `backend/cli/src/web/assets.generated.ts` (the embedded workspace UI, from a `frontend/workspace` build plus `backend/cli/script/generate-web-assets.ts`), `backend/cli/src/provider/models-snapshot.ts` (the models.dev catalog snapshot), and `backend/cli/src/skill/bundled.generated.ts` (the compressed skill archive, release builds only). `bun run setup` (`tooling/repo/setup.ts`) creates the first two so `bun dev` serves the workspace on a fresh clone; `bun dev serve` plus `bun run dev:ui` is the hot-reload loop for UI work. Tests never need them. [CONTRIBUTING.md](CONTRIBUTING.md) has the details.
 
 ## Configuration and state
 

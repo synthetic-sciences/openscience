@@ -1,33 +1,22 @@
-## Usage
+# OpenScience workspace
 
-Dependencies for these templates are managed with [pnpm](https://pnpm.io) using `pnpm up -Lri`.
-
-This is the reason you see a `pnpm-lock.yaml`. That said, any package manager will work. This file can safely be removed once you clone a template.
+The browser workspace UI, written in SolidJS. The CLI embeds a production
+build of this package and serves it; in development you can run it against a
+source server with hot reload.
 
 ```bash
-$ npm install # or pnpm install or yarn install
+bun dev serve        # from the repo root: API server on http://localhost:4096
+bun run dev:ui       # from the repo root: this package on http://localhost:3000
 ```
 
-### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
+The dev build calls port 4096 unless `VITE_OPENSCIENCE_SERVER_PORT` (or
+`VITE_OPENSCIENCE_SERVER_HOST` / `VITE_OPENSCIENCE_SERVER`) says otherwise.
+`bun run build` writes `dist/`, which `backend/cli/script/generate-web-assets.ts`
+embeds; `bun run setup --web` at the repo root does both. Unit tests run with
+`bun test` in this directory (happy-dom); `bun run typecheck` uses tsgo.
 
-## Available Scripts
-
-In the project directory, you can run:
-
-### `npm run dev` or `npm start`
-
-Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
-
-The page will reload if you make edits.<br>
-
-### `npm run build`
-
-Builds the app for production to the `dist` folder.<br>
-It correctly bundles Solid in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
+Setup, checks, and pull-request expectations are in
+[CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ## E2E Testing
 
@@ -61,7 +50,3 @@ Environment options for explicit external runs:
 
 If the bundled browser cannot be installed on the host, set
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to a compatible Chromium executable.
-
-## Deployment
-
-You can deploy the `dist` folder to any static host provider (netlify, surge, now, etc.)

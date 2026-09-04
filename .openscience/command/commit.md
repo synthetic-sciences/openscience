@@ -6,17 +6,22 @@ subtask: true
 
 commit and push
 
-make sure it includes a prefix like
+use a conventional commit prefix with an optional scope, matching CONTRIBUTING.md:
+feat:
+fix:
 docs:
-web:
-core:
+refactor:
+perf:
+chore:
+test:
 ci:
-ignore:
-wip:
 
-For anything in the frontend/docs use the docs: prefix.
+For anything in frontend/docs use the docs: prefix.
 
-For anything in the frontend/workspace use the ignore: prefix.
+For anything in frontend/workspace use feat(app): or fix(app):.
+
+feat, fix, docs, refactor, and perf commits appear in the generated release
+notes; chore, test, and ci do not.
 
 prefer to explain WHY something was done from an end user perspective instead of
 WHAT was done.
