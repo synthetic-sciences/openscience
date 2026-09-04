@@ -27,9 +27,10 @@ source's structured fields in `extra` rather than inventing a schema.
 Use the shared HTTP helper (`../http`: `getJSON`, `getText`, `request`) for
 every call. It adds the timeout, a polite User-Agent, retry with backoff on
 429/5xx, a five-minute GET cache, and per-host rate limiting through the
-`rateLimit: { minIntervalMs, maxConcurrent }` option. Every bundled source is
-keyless; a connector that needs a key must read it explicitly and degrade to
-an empty result without one.
+`rateLimit: { minIntervalMs, maxConcurrent }` option. Every bundled source
+works without a key. Optional keys (Semantic Scholar, OpenAlex) are read from
+`process.env` as injected by the credential store and only raise rate limits;
+never make a key required or return empty results without one.
 
 ## Where it goes
 
