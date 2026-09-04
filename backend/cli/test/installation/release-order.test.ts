@@ -44,8 +44,8 @@ test("production requires an exact artifact-source deep release rehearsal", asyn
   expect(workflow).toContain("SOURCE: ${{ steps.rehearsal.outputs.rehearsal_source }}")
   expect(workflow).toContain("OPENSCIENCE_EXPECTED_ARTIFACT_SOURCE: ${{ steps.rehearsal.outputs.rehearsal_source }}")
   expect(workflow).toContain("head_sha: process.env.SOURCE")
-  expect(workflow).toContain('const exact = ["publish-test", "packaged-e2e", "musl-baseline-smoke", "promote-test"]')
-  expect(workflow).toContain("os === 4 && science === 3")
+  expect(workflow).toContain("const missing = expected.filter((name) => !passed.has(name))")
+  expect(workflow).toContain("if (missing.length === 0) {")
   expect(workflow).not.toContain("SOURCE: ${{ github.sha }}")
   expect(script).toContain('process.env.OPENSCIENCE_SOURCE_PREFLIGHT === "true"')
   expect(script).toContain("rehearsal_source=${source}")
@@ -55,6 +55,40 @@ test("production requires an exact artifact-source deep release rehearsal", asyn
   expect(workflow).toContain("needs: [version, sign-macos-cli, prepare-npm, build-desktop, verify-desktop-updater]")
   expect(workflow).not.toContain("npm-test-gate")
   expect(workflow).not.toContain("verify-native-cli")
+})
+
+test("the release gate expects every rehearsal gate job by exact name", async () => {
+  const publish = await read(".github/workflows/publish.yml")
+  const rehearsal = Bun.YAML.parse(await read(".github/workflows/npm-test.yml")) as {
+    jobs: Record<
+      string,
+      { name?: string; strategy?: { matrix: { os?: string[]; capability?: string[]; include?: { name: string }[] } } }
+    >
+  }
+  const list = (source: string, name: string) => {
+    const match = source.match(new RegExp(`const ${name} = \\[([^\\]]+)\\]`))
+    if (!match) throw new Error(`publish.yml no longer derives ${name}`)
+    return match[1].split(",").map((value) => value.trim().replace(/^"|"$/g, ""))
+  }
+  const canary = rehearsal.jobs["scientific-capability-canary"]
+  const smoke = rehearsal.jobs["os-smoke"]
+
+  expect(canary.name).toBe("scientific capability canary (${{ matrix.os }}, ${{ matrix.capability }})")
+  expect(smoke.name).toBe("os-smoke (${{ matrix.name }})")
+  expect(canary.strategy?.matrix.os).toEqual(list(publish, "runners"))
+  expect(canary.strategy?.matrix.capability).toEqual(list(publish, "capabilities"))
+  expect(smoke.strategy?.matrix.include?.map((item) => item.name)).toEqual(list(publish, "smokes"))
+  expect(canary.strategy?.matrix.capability).toHaveLength(5)
+  expect(canary.strategy?.matrix.os).toHaveLength(3)
+  expect(publish).toContain(
+    '"publish-test",\n              "packaged-e2e",\n              "musl-baseline-smoke",\n              "promote-test",',
+  )
+  expect(publish).toContain("`scientific capability canary (${os}, ${capability})`")
+  expect(publish).toContain("`os-smoke (${os})`")
+  for (const name of ["publish-test", "packaged-e2e", "musl-baseline-smoke", "promote-test"]) {
+    expect(rehearsal.jobs[name]).toBeDefined()
+    expect(rehearsal.jobs[name].name).toBeUndefined()
+  }
 })
 
 test("a stale release tag cannot create or preflight a draft", async () => {

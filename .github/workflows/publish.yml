@@ -90,6 +90,22 @@ jobs:
             const candidates = runs
               .filter((run) => run.conclusion === "success")
               .sort((a, b) => b.id - a.id)
+            // Every gate job of npm-test.yml by exact name: the os-smoke runner
+            // set and the capability x native-runner canary matrix must match
+            // that workflow's matrices. Change both files together.
+            const smokes = ["linux-x64", "linux-arm64", "macos", "windows"]
+            const runners = ["linux-x64", "linux-arm64", "macos-arm64"]
+            const capabilities = ["scipy", "matplotlib", "scikit-learn", "biopython", "rdkit"]
+            const expected = [
+              "publish-test",
+              "packaged-e2e",
+              "musl-baseline-smoke",
+              "promote-test",
+              ...smokes.map((os) => `os-smoke (${os})`),
+              ...runners.flatMap((os) =>
+                capabilities.map((capability) => `scientific capability canary (${os}, ${capability})`),
+              ),
+            ]
             for (const run of candidates) {
               const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
                 ...context.repo,
@@ -97,15 +113,13 @@ jobs:
                 filter: "latest",
                 per_page: 100,
               })
-              const passed = jobs.filter((job) => job.conclusion === "success")
-              const names = new Set(passed.map((job) => job.name))
-              const exact = ["publish-test", "packaged-e2e", "musl-baseline-smoke", "promote-test"]
-              const os = passed.filter((job) => job.name.startsWith("os-smoke (")).length
-              const science = passed.filter((job) => job.name.startsWith("scientific capability canary (")).length
-              if (exact.every((name) => names.has(name)) && os === 4 && science === 3) {
+              const passed = new Set(jobs.filter((job) => job.conclusion === "success").map((job) => job.name))
+              const missing = expected.filter((name) => !passed.has(name))
+              if (missing.length === 0) {
                 core.info(`Verified artifact-source release rehearsal ${run.html_url}`)
                 return
               }
+              core.info(`${run.html_url} did not pass ${missing.length}/${expected.length} gate jobs: ${missing.join(", ")}`)
             }
             core.setFailed(
               `No successful fully gated npm-test.yml rehearsal exists for artifact source ${process.env.SOURCE}. ` +

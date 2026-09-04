@@ -45,9 +45,11 @@ branch.
 
    Production preflight independently queries the GitHub Actions API for that
    exact artifact-source SHA. It accepts only a completed `test publish` run
-   whose packaged E2E, four native OS smokes, musl smoke, three scientific
-   capability canaries, and `promote-test` job all succeeded. A run with either
-   optional gate disabled, or with any required job skipped, cannot publish.
+   whose packaged E2E, four native OS smokes, musl smoke, all fifteen
+   scientific capability canaries (five capabilities on each of the three
+   native runners, one job per pair), and `promote-test` job all succeeded. A
+   run with either optional gate disabled, or with any required job skipped,
+   cannot publish.
    Exact-version resumes remain bound to the immutable source marker in the
    existing draft release; the workflow rejects any mismatch before building.
 
@@ -121,8 +123,9 @@ push to `main`.
 The `test publish` workflow uses registry credentials and therefore runs only
 from the protected `main` branch. Validate a candidate branch with the local
 pack/build and browser gates first; after it lands on `main`, dispatch the test
-workflow and require packaged E2E, operating-system smoke, and all three native
-scientific-capability canary jobs to pass before starting production publish.
+workflow and require packaged E2E, operating-system smoke, and every native
+scientific-capability canary job (one per capability and runner) to pass before
+starting production publish.
 
 Every npm test build must use separate binary, config, data, cache, and state
 roots. Use the exact prerelease version being validated; do not rely on a
