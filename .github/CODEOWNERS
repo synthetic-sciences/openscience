@@ -1,2 +1,33 @@
-# web package
-frontend/workspace/      @synthetic-sciences/maintainers
+# Review requests are assigned automatically from these patterns. Later lines
+# win. `@synthetic-sciences/maintainers` does not exist as a team (the org has
+# `developers` only), so owners are listed by handle; switch to a team slug once
+# one with write access exists.
+
+*                           @ishaan1124 @aayambansal
+
+# Backend: CLI, server, agent runtime, tools, providers
+backend/cli/                @ishaan1124 @aayambansal
+
+# Scientific connectors and the bundled skill library
+backend/cli/src/science/    @ishaan1124 @aayambansal
+backend/cli/skills/         @ishaan1124 @aayambansal
+
+# Server API contract and the SDK generated from it
+backend/cli/src/server/     @ishaan1124
+tooling/sdk/                @ishaan1124
+
+# Workspace UI, shared components, desktop shell
+frontend/workspace/         @ishaan1124 @aayambansal
+frontend/ui/                @ishaan1124 @aayambansal
+frontend/desktop/           @ishaan1124
+
+# Documentation and landing site
+frontend/docs/              @ishaan1124 @aayambansal
+frontend/landing/           @ishaan1124 @aayambansal
+docs/                       @ishaan1124 @aayambansal
+
+# CI, release automation, and repo tooling
+.github/                    @ishaan1124
+tooling/repo/               @ishaan1124
+tooling/launcher/           @ishaan1124
+install                     @ishaan1124
