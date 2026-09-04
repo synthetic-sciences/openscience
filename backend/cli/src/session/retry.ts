@@ -147,7 +147,10 @@ export namespace SessionRetry {
           (typeof json.code === "number" ? json.code : undefined),
       )
       if (!statusCode && Number.isFinite(nestedStatus)) statusCode = nestedStatus
-      code = asString(err.code) || asString(json.code) || code
+      // The managed gateway's idempotency guard answers with a bare
+      // {"error":"operation_in_progress"} token rather than an error object.
+      const token = typeof json.error === "string" && /^[a-z0-9_]+$/.test(json.error) ? json.error : ""
+      code = asString(err.code) || asString(json.code) || token || code
       type =
         asString(err.type) ||
         asString(json.type) ||
@@ -183,12 +186,25 @@ export namespace SessionRetry {
     return false
   }
 
+  // Managed idempotency verdicts the gateway answers identically for this key.
+  // The provider fetch wrapper already waited out a live original request, so a
+  // step-level redispatch of the same body can only reproduce the verdict.
+  const MANAGED_TERMINAL_CODES = new Set([
+    "managed_outcome_unknown",
+    "managed_conflict_timeout",
+    "operation_in_progress",
+    "idempotency_conflict",
+    "idempotent_stream_already_started",
+    "idempotent_response_not_replayable",
+  ])
+
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
     if (isContextOverflow(error)) return undefined
     const normalized = normalizeProviderError(error)
-    // The gateway cannot prove whether the provider accepted this request.
-    // Never redispatch it, even if the SDK's generic classification allows it.
-    if (normalized.code === "managed_outcome_unknown") return undefined
+    // The gateway cannot prove whether the provider accepted this request, or
+    // has sealed its answer. Never redispatch it, even if the SDK's generic
+    // status-code classification allows it.
+    if (MANAGED_TERMINAL_CODES.has(normalized.code)) return undefined
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message

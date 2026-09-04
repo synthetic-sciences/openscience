@@ -129,6 +129,26 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBe("Retryable conflict")
   })
 
+  test.each([
+    [
+      "managed_conflict_timeout",
+      { error: "operation_in_progress", detail: { code: "managed_conflict_timeout", message: "still processing" } },
+    ],
+    ["idempotency_conflict", { detail: { code: "idempotency_conflict", message: "different body" } }],
+    ["idempotent_stream_already_started", { detail: { code: "idempotent_stream_already_started" } }],
+    ["idempotent_response_not_replayable", { detail: { code: "idempotent_response_not_replayable" } }],
+    ["operation_in_progress", { error: "operation_in_progress" }],
+  ])("never redispatches a managed %s verdict even when the SDK marks the 409 retryable", (_code, body) => {
+    const error = new MessageV2.APIError({
+      message: "Conflict",
+      statusCode: 409,
+      isRetryable: true,
+      responseBody: JSON.stringify(body),
+    }).toObject() as MessageV2.APIError
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
   test("maps too_many_requests json messages", () => {
     const error = wrap(JSON.stringify({ type: "error", error: { type: "too_many_requests" } }))
     expect(SessionRetry.retryable(error)).toBe("Too Many Requests")

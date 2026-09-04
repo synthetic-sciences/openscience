@@ -592,6 +592,8 @@ export namespace SessionProcessor {
               sessionID: input.sessionID,
               messageID: input.assistantMessage.id,
               attempt: attempt + 1,
+              agent: streamInput.agent.name,
+              modelID: input.model.id,
               ...(credentialSource === "managed" && funding ? { funding } : {}),
             }
             // The conversation-first Research agent does not create or require
