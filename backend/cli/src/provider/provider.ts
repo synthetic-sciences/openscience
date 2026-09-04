@@ -539,11 +539,16 @@ export namespace Provider {
     return headers
   }
 
+  /** The key protects one attempt against duplicate delivery of the same
+   * body. A deliberate session-level retry is a new operation with the next
+   * attempt number, so it never collides with a stream the gateway already
+   * sealed under the previous key. */
   export function managedIdempotencyKey(input: {
     endpoint: string
     body: string
     sessionID: string
     messageID: string
+    attempt: number
     operation: string
   }): string {
     const hash = new Bun.CryptoHasher("sha256")
@@ -551,6 +556,7 @@ export namespace Provider {
       "openscience-managed-v1",
       input.sessionID,
       input.messageID,
+      String(input.attempt),
       input.operation,
       input.endpoint,
       input.body,
@@ -630,12 +636,24 @@ export namespace Provider {
     "The managed gateway already dispatched this request once and cannot replay it; the body was not sent again."
   const MANAGED_CONFLICT_KEY_MESSAGE =
     "The managed gateway already holds a different request under this idempotency key; the body was not sent again."
+  const MANAGED_OUTCOME_UNKNOWN_MESSAGE =
+    "The managed gateway cannot prove whether the provider accepted this request; the body was not sent again."
+  /** Verdicts that end the attempt: the gateway dispatched this body once and
+   * cannot replay its output, or cannot prove the provider's outcome. Gateways
+   * from the 2.0.67 era answer them as a 409 carrying the replay header; later
+   * ones answer 410. Either way the same key can never succeed again. */
+  const MANAGED_FINAL_CODES = new Set([
+    "idempotent_stream_already_started",
+    "idempotent_response_not_replayable",
+    "managed_outcome_unknown",
+  ])
+  const MANAGED_CONFLICT_STATUSES = new Set([409, 410])
 
-  /** Read the gateway's idempotency verdict from a managed 409. Sealed rows
-   * replay with x-openscience-idempotent-replay; live claims answer
+  /** Read the gateway's idempotency verdict from a managed 409 or 410. Sealed
+   * rows replay with x-openscience-idempotent-replay; live claims answer
    * operation_in_progress with retry-after. */
   async function managedConflict(response: Response) {
-    if (response.status !== 409) return
+    if (!MANAGED_CONFLICT_STATUSES.has(response.status)) return
     const declared = Number(response.headers.get("content-length"))
     if (Number.isFinite(declared) && declared > MANAGED_CONFLICT_RESPONSE_MAX_BYTES) return
     const body = await response
@@ -678,8 +696,9 @@ export namespace Provider {
   }
 
   /** Wait for the gateway's original copy of this request instead of sending
-   * the same body again. Sealed or conflicting keys are terminal: the gateway
-   * answers them identically forever, so they surface without any retry. */
+   * the same body again. Sealed, final or conflicting keys are terminal for
+   * this attempt: the gateway answers them identically forever, so they
+   * surface without any retry. Only operation_in_progress is waited out. */
   export async function retryManagedConflict(input: {
     response: Response
     managed: boolean
@@ -698,12 +717,16 @@ export namespace Provider {
     const poll = async (response: Response, retries: number): Promise<Response> => {
       const conflict = await managedConflict(response)
       if (!conflict) return response
-      if (conflict.sealed)
+      if (conflict.code === "managed_outcome_unknown") {
+        throw managedConflictError(response, conflict.body, conflict.message || MANAGED_OUTCOME_UNKNOWN_MESSAGE)
+      }
+      if (conflict.sealed || (conflict.code !== undefined && MANAGED_FINAL_CODES.has(conflict.code))) {
         throw managedConflictError(response, conflict.body, conflict.message || MANAGED_CONFLICT_SEALED_MESSAGE)
+      }
       if (conflict.code === "idempotency_conflict") {
         throw managedConflictError(response, conflict.body, conflict.message || MANAGED_CONFLICT_KEY_MESSAGE)
       }
-      if (conflict.code !== undefined && conflict.code !== "operation_in_progress") return response
+      if (conflict.code !== "operation_in_progress") return response
       const elapsedMs = Date.now() - started
       if (elapsedMs >= limit) {
         const span = limit >= 60_000 ? `${Math.round(limit / 60_000)} minutes` : `${Math.ceil(limit / 1000)} seconds`
@@ -2574,7 +2597,14 @@ export namespace Provider {
           const endpoint = input instanceof Request ? input.url : input instanceof URL ? input.href : String(input)
           opts.headers.set(
             "Idempotency-Key",
-            managedIdempotencyKey({ endpoint, body: opts.body, sessionID, messageID, operation: "model" }),
+            managedIdempotencyKey({
+              endpoint,
+              body: opts.body,
+              sessionID,
+              messageID,
+              attempt: context?.attempt ?? 0,
+              operation: "model",
+            }),
           )
         }
 

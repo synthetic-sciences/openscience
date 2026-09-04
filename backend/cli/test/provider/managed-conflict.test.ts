@@ -6,6 +6,7 @@ import { Instance } from "../../src/project/instance"
 import { MANAGED_MODEL_DETAILS, MANAGED_OPENROUTER_MODELS } from "../../src/provider/managed-catalog"
 import { Provider } from "../../src/provider/provider"
 import { MessageV2 } from "../../src/session/message-v2"
+import { SessionProcessor } from "../../src/session/processor"
 import { SessionRetry } from "../../src/session/retry"
 import { tmpdir } from "../fixture/fixture"
 
@@ -62,6 +63,22 @@ const sealed = () =>
       },
     },
     { status: 409, headers: { "x-openscience-idempotent-replay": "true" } },
+  )
+/** The current gateway answers a sealed key with 410 and no replay header. */
+const gone = (code = "idempotent_stream_already_started") =>
+  Response.json(
+    { detail: { code, message: "The original managed stream was already started and cannot be dispatched twice" } },
+    { status: 410 },
+  )
+const unknown = (status: 409 | 410) =>
+  Response.json(
+    {
+      detail: {
+        code: "managed_outcome_unknown",
+        message: "The provider outcome is unknown and this request cannot be dispatched twice",
+      },
+    },
+    { status, headers: status === 409 ? { "x-openscience-idempotent-replay": "true" } : {} },
   )
 const upstream = () =>
   Response.json({ error: { message: "upstream conflict", code: "temporary_conflict" } }, { status: 409 })
@@ -187,6 +204,67 @@ describe("managed conflict guard", () => {
     expect(SessionRetry.retryable(MessageV2.fromError(error, { providerID: "openrouter" }))).toBeUndefined()
   })
 
+  test("scopes the idempotency key to the attempt and keeps it stable within one", () => {
+    const base = {
+      endpoint: "https://gateway.test/api/llm/proxy/openrouter/v1/chat/completions",
+      body: JSON.stringify({ model: "openai/gpt-5.6-sol", messages: [] }),
+      sessionID: "ses_key",
+      messageID: "msg_key",
+      operation: "model",
+    }
+    const first = Provider.managedIdempotencyKey({ ...base, attempt: 1 })
+    expect(first).toMatch(/^os_[0-9a-f]{64}$/)
+    expect(Provider.managedIdempotencyKey({ ...base, attempt: 1 })).toBe(first)
+    expect(Provider.managedIdempotencyKey({ ...base, attempt: 2 })).not.toBe(first)
+    expect(Provider.managedIdempotencyKey({ ...base, attempt: 1, messageID: "msg_other" })).not.toBe(first)
+  })
+
+  test.each([
+    ["409 with the replay header", sealed, 409],
+    ["410 stream already started", () => gone(), 410],
+    ["410 response not replayable", () => gone("idempotent_response_not_replayable"), 410],
+  ])(
+    "ends the attempt on an already-dispatched verdict (%s) and allows one re-dispatch",
+    async (_, verdict, status) => {
+      using fixture = gateway([verdict])
+      const { response, timings, elapsed } = settle(fixture.server)
+      const error = await failure(response)
+      expect(elapsed()).toBeLessThan(500)
+      expect(fixture.seen).toHaveLength(1)
+      expect(timings).toHaveLength(0)
+      expect(error.statusCode).toBe(status)
+      expect(error.isRetryable).toBe(false)
+      expect(error.message).toBe("The original managed stream was already started and cannot be dispatched twice")
+      const normalized = MessageV2.fromError(error, { providerID: "openrouter" })
+      expect(SessionRetry.retryable(normalized)).toBeUndefined()
+      expect(SessionRetry.redispatchable(normalized)).toBe(SessionRetry.MANAGED_REDISPATCH_MESSAGE)
+      expect(SessionProcessor.providerFailureAction(error, normalized, false)).toEqual({
+        type: "redispatch",
+        message: SessionRetry.MANAGED_REDISPATCH_MESSAGE,
+      })
+      expect(SessionProcessor.providerFailureAction(error, normalized, true)).toEqual({
+        type: "drain",
+        message: SessionRetry.MANAGED_REDISPATCH_MESSAGE,
+      })
+    },
+  )
+
+  test.each([409, 410] as const)("never re-dispatches a managed_outcome_unknown verdict (%d)", async (status) => {
+    using fixture = gateway([() => unknown(status)])
+    const { response, timings, elapsed } = settle(fixture.server)
+    const error = await failure(response)
+    expect(elapsed()).toBeLessThan(500)
+    expect(fixture.seen).toHaveLength(1)
+    expect(timings).toHaveLength(0)
+    expect(error.statusCode).toBe(status)
+    expect(error.isRetryable).toBe(false)
+    expect(error.message).toBe("The provider outcome is unknown and this request cannot be dispatched twice")
+    const normalized = MessageV2.fromError(error, { providerID: "openrouter" })
+    expect(SessionRetry.retryable(normalized)).toBeUndefined()
+    expect(SessionRetry.redispatchable(normalized)).toBeUndefined()
+    expect(SessionProcessor.providerFailureAction(error, normalized, false)).toEqual({ type: "terminal" })
+  })
+
   test("backs off exponentially and gives up with managed_conflict_timeout at the wait cap", async () => {
     using fixture = gateway([progress, progress, progress, progress])
     const { response, timings, elapsed } = settle(fixture.server, { limitMs: 3200 })
@@ -245,7 +323,7 @@ describe("managed conflict guard", () => {
   })
 
   test("the AI SDK never sees an in-progress 409 and never re-sends a sealed key", async () => {
-    using fixture = gateway([progress, replay, sealed])
+    using fixture = gateway([progress, replay, sealed, gone, gone])
     const base = process.env["OPENSCIENCE_API_BASE"]
     process.env["OPENSCIENCE_API_BASE"] = fixture.server.url.origin
     try {
@@ -292,6 +370,39 @@ describe("managed conflict guard", () => {
           expect(error.isRetryable).toBe(false)
           expect(error.message).toBe("The original managed stream was already started and cannot be dispatched twice")
           expect(SessionRetry.retryable(MessageV2.fromError(error, { providerID: "openrouter" }))).toBeUndefined()
+
+          // A 410 is final for the attempt at the SDK layer (one request despite
+          // maxRetries: 2). The session policy re-dispatches it once under the
+          // next attempt number, whose key differs, then stops.
+          const dispatch = async (state: SessionProcessor.ProviderRetryState): Promise<string[]> => {
+            const gone = await failure(
+              Provider.withRequestContext({ ...scope, messageID: "msg_gone", attempt: state.attempt + 1 }, () =>
+                generateText({ model: language, prompt: "Hi", maxRetries: 2 }),
+              ),
+            )
+            expect(gone.statusCode).toBe(410)
+            expect(gone.isRetryable).toBe(false)
+            const action = SessionProcessor.providerFailureAction(
+              gone,
+              MessageV2.fromError(gone, { providerID: "openrouter" }),
+              false,
+            )
+            const next =
+              action.type === "redispatch" ? SessionProcessor.consumeProviderRetry(action.type, state) : undefined
+            return [action.type, ...(next ? await dispatch(next) : [])]
+          }
+          const outcomes = await dispatch({
+            attempt: 0,
+            transientRetries: 0,
+            idleRetryUsed: false,
+            redispatchUsed: false,
+          })
+          expect(outcomes).toEqual(["redispatch", "redispatch"])
+          expect(fixture.seen).toHaveLength(5)
+          expect(fixture.seen[3].key).toStartWith("os_")
+          expect(fixture.seen[4].key).toStartWith("os_")
+          expect(fixture.seen[4].key).not.toBe(fixture.seen[3].key)
+          expect(fixture.seen[4].body).toBe(fixture.seen[3].body)
         },
       })
     } finally {
