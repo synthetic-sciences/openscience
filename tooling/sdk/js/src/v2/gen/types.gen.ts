@@ -111,6 +111,13 @@ export type EventProjectTrustChanged = {
   }
 }
 
+export type EventAccountUpdated = {
+  type: "account.updated"
+  properties: {
+    refreshed_at: number
+  }
+}
+
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -1142,6 +1149,7 @@ export type Event =
   | EventProjectUpdated
   | EventServerInstanceDisposed
   | EventProjectTrustChanged
+  | EventAccountUpdated
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileWatcherUpdated
@@ -2840,6 +2848,9 @@ export type AccountGetResponses = {
    */
   200: {
     session: boolean
+    refreshing: boolean
+    refreshed_at: number | null
+    error?: string
     user?: unknown
     balance_usd: number | null
     billing_mode: {
@@ -9437,6 +9448,9 @@ export type SettingsWalletGetResponses = {
       description: string
       createdAt: string
     }>
+    refreshing: boolean
+    refreshedAt: number | null
+    error?: string
   }
 }
 

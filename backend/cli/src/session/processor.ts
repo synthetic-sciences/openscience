@@ -51,9 +51,12 @@ export namespace SessionProcessor {
     })
   }
 
+  /** The funding choice for one managed turn. A scoped session needs no
+   * account read here; the balance check and the gateway's funding echo prove
+   * authorization before anything is charged. */
   export async function fundingSnapshot(source: CredentialSource) {
     if (!requiresWalletBalance(source)) return
-    return (await OpenScience.getReconciledFundingState())?.snapshot
+    return (await OpenScience.getRequestSnapshot()) ?? undefined
   }
 
   /** True when the last `threshold` TOOL calls are the same tool with the same

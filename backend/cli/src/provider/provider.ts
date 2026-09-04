@@ -1,6 +1,11 @@
 import z from "zod"
 import fuzzysort from "fuzzysort"
+import { createHash } from "node:crypto"
+import { stat } from "node:fs/promises"
+import path from "node:path"
 import { Config } from "../config/config"
+import { Global } from "../global"
+import { WorkspaceCredentials } from "../openscience/workspace-credentials"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { APICallError, NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
@@ -1871,15 +1876,62 @@ export namespace Provider {
   // `invalidate()` clears the cache so the next `state()` call rebuilds
   // from the current process.env (picks up env vars written by a
   // background BYOK sync). We bypass Instance.state here so we can
-  // control the lifecycle independently.
+  // control the lifecycle independently, and key the cache on a revision
+  // of the inputs that differ between projects rather than on the project
+  // itself: opening another project with the same provider config keeps the
+  // built state instead of running the whole "[provider] init" pass again.
   let _stateCache: Promise<{
     models: Map<string, LanguageModelV2>
     providers: { [providerID: string]: Info }
     sdk: Map<number, SDK>
     modelLoaders: { [providerID: string]: CustomModelLoader }
   }> | null = null
-  let _stateCacheDirectory: string | undefined
-  let _stateCacheTrust: boolean | undefined
+  let _stateCacheRevision: string | undefined
+
+  /** Env the loaders themselves set while building: Bedrock and AI Core mirror
+   * their stored key into the process env. The key they mirror is already
+   * covered by auth.json, and hashing the mirror would make every build change
+   * the inputs it was keyed on, so the next read would build once more. */
+  const LOADER_ENV = new Set(["AWS_BEARER_TOKEN_BEDROCK", "AICORE_SERVICE_KEY"])
+
+  /** A fingerprint of what `_loadState` consumes: the provider-relevant config
+   * (project config merges in), trust, the credential files and the process
+   * env. The files are covered by a stat (every writer replaces them) and the
+   * env is small, so this is far cheaper than a rebuild; models.dev and
+   * managed pricing are process-wide and call `invalidate()` themselves.
+   * Plugin instances are per project (they receive the project directory), so
+   * a project that declares plugins keys its own state. Per-request project
+   * boundaries (token minting, module loading) are still re-checked at use. */
+  async function stateRevision() {
+    const config = await Config.get()
+    const trusted = await ProjectTrust.allowed(Instance.project)
+    const files = await Promise.all(
+      [path.join(Global.Path.data, "auth.json"), WorkspaceCredentials.filepath].map((file) =>
+        stat(file).then(
+          (info) => `${info.mtimeMs}:${info.size}`,
+          () => "absent",
+        ),
+      ),
+    )
+    const env = Object.entries(Env.all())
+      .filter(([key]) => !LOADER_ENV.has(key))
+      .sort(([a], [b]) => a.localeCompare(b))
+    return createHash("sha256")
+      .update(
+        JSON.stringify({
+          provider: config.provider ?? null,
+          disabled: config.disabled_providers ?? null,
+          enabled: config.enabled_providers ?? null,
+          billing: config.billing?.llm ?? null,
+          plugin: config.plugin ?? null,
+          directory: config.plugin?.length ? Instance.directory : null,
+          trusted,
+          files,
+          env,
+        }),
+      )
+      .digest("hex")
+  }
 
   async function _loadState() {
     using _ = log.time("state")
@@ -2351,15 +2403,14 @@ export namespace Provider {
     }
   }
 
-  // Returns the memoised state, creating it on first call or after invalidate().
+  // Returns the memoised state, creating it on first call, after invalidate(),
+  // or when the provider-relevant inputs changed since it was built.
   async function state() {
     await CredentialLifecycle.ensureFresh()
-    const directory = Instance.directory
-    const trusted = await ProjectTrust.allowed(Instance.project)
-    if (_stateCacheDirectory !== directory || _stateCacheTrust !== trusted) {
+    const revision = await stateRevision()
+    if (_stateCacheRevision !== revision) {
       _stateCache = null
-      _stateCacheDirectory = directory
-      _stateCacheTrust = trusted
+      _stateCacheRevision = revision
     }
     if (_stateCache === null) {
       // A rejected load must not be memoised forever; drop it so the next
@@ -2381,8 +2432,7 @@ export namespace Provider {
    */
   export function invalidate(): void {
     _stateCache = null
-    _stateCacheDirectory = undefined
-    _stateCacheTrust = undefined
+    _stateCacheRevision = undefined
   }
 
   function resolveOpenRouterAlias(s: Awaited<ReturnType<typeof state>>, providerID: string, modelID: string) {

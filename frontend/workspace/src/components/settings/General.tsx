@@ -15,7 +15,7 @@ import { thresholdOptions, type ContextPreferences } from "./context-preferences
 import { commitPreference } from "./preference-write"
 import { walletBalanceLabel } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
-import { withAccountDeadline } from "./account-deadline"
+import { ACCOUNT_DEADLINE_MS, withAccountDeadline } from "./account-deadline"
 import "./preference-panels.css"
 
 type FundingOrganization = {
@@ -38,6 +38,11 @@ type FundingContext = {
 
 type Account = {
   session: boolean
+  /** True when these are the stored values and the server is reading newer ones. */
+  refreshing?: boolean
+  refreshed_at?: number | null
+  /** Why the server's latest refresh failed while stored values are shown. */
+  error?: string
   user?: Record<string, unknown> & { email?: string }
   balance_usd: number | null
   funding_context: FundingContext
@@ -62,7 +67,7 @@ export default function General() {
   const [busy, setBusy] = createSignal<"login" | "logout" | "workspace" | "sync">()
 
   const loadAccount = () =>
-    withAccountDeadline((signal) => settingsApi<Account>(sdk.url, fetchFn, "/account", { signal }), 12_000)
+    withAccountDeadline((signal) => settingsApi<Account>(sdk.url, fetchFn, "/account", { signal }), ACCOUNT_DEADLINE_MS)
       .then(setAccount)
       .catch((cause) => setError(errorMessage(cause)))
 
@@ -78,7 +83,7 @@ export default function General() {
     try {
       const result = await withAccountDeadline(
         (signal) => settingsApi<SyncStatus>(sdk.url, fetchFn, "/account/sync", { method: "POST", signal }),
-        12_000,
+        ACCOUNT_DEADLINE_MS,
       )
       setAccount((current) => current && { ...current, credential_sync: result })
       if (result.state !== "ready") throw new Error(result.error ?? "Sign in to sync workspace credentials.")
@@ -196,6 +201,9 @@ export default function General() {
     }
   }
 
+  // The server stored a newer summary after serving the previous one; the
+  // re-read keeps the current values on screen until the new ones land.
+  const unsubscribeAccount = sync.onAccountRefreshed(refreshAccount)
   onMount(() => {
     refreshAccount()
     window.addEventListener("focus", refreshAccount)
@@ -204,6 +212,7 @@ export default function General() {
   onCleanup(() => {
     window.removeEventListener("focus", refreshAccount)
     window.removeEventListener("openscience:account-changed", refreshAccount)
+    unsubscribeAccount()
   })
 
   const email = () => {
@@ -213,7 +222,8 @@ export default function General() {
   }
   const wallet = () => {
     if (!account()) return error() ? "Unavailable" : "Checking…"
-    return walletBalanceLabel({ signedIn: account()!.session, balanceUsd: account()!.balance_usd })
+    const label = walletBalanceLabel({ signedIn: account()!.session, balanceUsd: account()!.balance_usd })
+    return account()!.refreshing ? `${label} · Refreshing…` : label
   }
 
   // The context row reads and writes the effective compaction settings the backend

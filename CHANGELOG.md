@@ -71,6 +71,36 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Served a recently verified Ace balance while refreshing it in the background
   under a bounded timeout, so managed turns no longer wait on the account
   service.
+- Shared one in-flight Ace account status, entitlement, and wallet read per
+  funding context, so a managed turn, the settings panels, and credential sync
+  that check the account at the same time no longer repeat the request, and
+  the account summary no longer reads the profile twice.
+- Stopped loading the full account and workspace summary before every managed
+  turn. A scoped session now starts from the local session file and the
+  cached balance check; only a legacy unscoped session still reconciles its
+  workspace first, and the gateway's funding echo is still verified before
+  anything is charged.
+- Persisted the last good Ace account summary (the shown profile fields,
+  funding context, wallet and entitlement; never the key) in the data
+  directory and served it to the Ace and account panels at once, marked
+  `refreshing` while a newer one is read in the background and announced as
+  `account.updated`. A panel no longer shows a spinner for the account
+  service when a summary exists, a refresh that failed or did not fully
+  answer keeps the last good values with the reason, a refusal from the
+  gateway is shown but never stored, and a spend right after a refresh does
+  not start another one.
+- Replaced the Ace panel's 6-second timeout racing 60 seconds of server work
+  with one bounded 15-second account deadline owned by the server and
+  propagated, together with the request's own abort signal, to every
+  outbound account read. A panel that closes cancels the reads it started,
+  a shared read is cancelled only when its last waiter leaves, and the UI
+  waits for the server's answer instead of giving up first.
+- Kept the built provider catalog across project switches. The provider
+  state is now keyed on a revision of the inputs that can differ between
+  projects (provider config, enabled/disabled providers, billing routing,
+  plugins, trust) instead of on the project itself, so opening another
+  project with the same provider setup no longer reruns the whole
+  "[provider] init" pass; a config, auth, or trust change still rebuilds it.
 - Unified loading, empty, alert, and control styling across Customize panels,
   moved Credentials under Capabilities, renamed Security & access to
   Permissions, and gave Local models inline errors and skeleton rows.
