@@ -104,7 +104,7 @@ test("a structured lease admits a nested writer after relocation intent without 
   const config = path.join(tmp.path, "config")
   const data = path.join(tmp.path, "data")
   const managed = await DataRoot.ensure(config, data, false)
-  DataRootBarrier.configure({ root: managed.path, config })
+  using _ = DataRootBarrier.configure({ root: managed.path, config })
   const lease = await FileLease.acquire(path.join(managed.path, "leases", "writer.lock"), 2_000)
   const scopeReady = Promise.withResolvers<void>()
   const startNested = Promise.withResolvers<void>()
