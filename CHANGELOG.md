@@ -130,10 +130,12 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   disposing every project instance and aborting the active model request
   mid-turn. Language servers, the SSH broker, and credential helpers never
   receive the overlay and are left alone; ledger entries written by earlier
-  builds, which carry no stamp, are still revoked. A grant that lapses before
-  its expiry is published still stamps every child spawned in that window,
-  and a failed expiry is retried with backoff. Expired grants remain unusable
-  for new requests.
+  builds, which carry no stamp, are still revoked for the command, compute,
+  MCP, credential-helper and Modal volume kinds, including MCP transports
+  whose owner server has since died. A grant that lapses before its expiry is
+  published still stamps every child spawned in that window, and a failed
+  expiry is retried with backoff. Expired grants remain unusable for new
+  requests.
 - Named the cause when a credential change other than an overlay expiry
   cancels a turn or a tool call ("Interrupted: credentials changed (...)"),
   and recorded an overlay expiry on the commands it stops. A tool call that is

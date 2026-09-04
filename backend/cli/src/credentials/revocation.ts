@@ -57,4 +57,16 @@ export namespace CredentialRevocation {
   export function interruption(value: unknown): Interruption | undefined {
     return value instanceof Interruption ? value : undefined
   }
+
+  /** The interruption that cancelled `error`: `signal` was aborted by a
+   * credential revision and `error` is that abort, either the reason itself
+   * (thrown by throwIfAborted) or the AbortError a cancelled request surfaces.
+   * An unrelated failure that happened to be thrown after the abort is not
+   * attributed to the revision. */
+  export function cancelled(error: unknown, signal: AbortSignal): Interruption | undefined {
+    const cause = interruption(signal.reason)
+    if (!cause) return undefined
+    if (error === cause) return cause
+    return error instanceof Error && error.name === "AbortError" ? cause : undefined
+  }
 }

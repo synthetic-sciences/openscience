@@ -40,3 +40,25 @@ test("a revocation names its cause on the recorded turn error", () => {
   const rotated = CredentialRevocation.message("workspace-sync.update")
   expect(rotated).toStartWith("Interrupted: credentials changed (workspace-sync.update)")
 })
+
+test("only the abort itself is attributed to the revocation that cancelled a turn", () => {
+  const expired = new CredentialRevocation.Interruption("workspace-sync.expired")
+  const unrelated = new Error("provider returned 500")
+  const aborted = () => new DOMException("The operation was aborted", "AbortError")
+  const controller = new AbortController()
+  // Nothing is attributed while the controller is live.
+  expect(CredentialRevocation.cancelled(unrelated, controller.signal)).toBeUndefined()
+  expect(CredentialRevocation.cancelled(aborted(), controller.signal)).toBeUndefined()
+
+  controller.abort(expired)
+  // The reason itself (throwIfAborted) and the AbortError a cancelled request
+  // surfaces are the revocation; an unrelated failure thrown afterwards is not.
+  expect(CredentialRevocation.cancelled(expired, controller.signal)).toBe(expired)
+  expect(CredentialRevocation.cancelled(aborted(), controller.signal)).toBe(expired)
+  expect(CredentialRevocation.cancelled(unrelated, controller.signal)).toBeUndefined()
+
+  // A user abort carries no revocation to attribute.
+  const user = new AbortController()
+  user.abort()
+  expect(CredentialRevocation.cancelled(user.signal.reason, user.signal)).toBeUndefined()
+})

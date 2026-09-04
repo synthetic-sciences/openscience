@@ -940,6 +940,102 @@ describe("workspace credential sync", () => {
     }
   })
 
+  /** A grant written directly with exactly the provider auth under test and
+   * no services: nothing enters process.env, so a child can be stamped only
+   * through a synced provider key that mergeByokEnv placed in its env. */
+  async function grant(auth: Record<string, { type: "api"; key: string }>) {
+    await WorkspaceCredentials.write(session, { organization_id: "org_a", auth, services: {} })
+    expect(await WorkspaceCredentials.read()).toBeDefined()
+  }
+
+  test("a grant carrying no provider auth never stamps a child holding only device-owned keys", async () => {
+    const { CommandRuntime } = await import("../../src/science/command/registry")
+    const { CredentialOverlay } = await import("../../src/credentials/overlay")
+    const { CredentialTeardown } = await import("../../src/credentials/teardown")
+    delete process.env.ANTHROPIC_API_KEY
+    expect(CredentialOverlay.keys()).toEqual([])
+    await grant({})
+    await Auth.set("anthropic", { type: "api", key: "fixture-local-anthropic" })
+
+    // The grant is readable, but every resolved provider is this device's.
+    expect((await Auth.resolve()).overlay).toBeUndefined()
+    const snapshot = await OpenScience.subprocessSnapshot(process.env)
+    expect(snapshot.env.ANTHROPIC_API_KEY).toBe("fixture-local-anthropic")
+    expect(snapshot.overlay).toBeUndefined()
+
+    const child = await launchCommand("device_owned")
+    const off = CredentialLifecycle.onRevoke(CredentialTeardown.apply)
+    try {
+      expect(child.overlay).toBeUndefined()
+      expect(child.env.ANTHROPIC_API_KEY).toBe("fixture-local-anthropic")
+      expect(await ledgerEntry(child.entry.id)).toMatchObject({ version: 2 })
+      expect(await ledgerEntry(child.entry.id)).not.toHaveProperty("overlay")
+
+      await JsonStore.update(WorkspaceCredentials.filepath, (store) => ({ ...store, expires_at: Date.now() - 1 }))
+      await WorkspaceCredentials.expire()
+      expect(await WorkspaceCredentials.read()).toBeUndefined()
+
+      // The child holds only the device's key and outlives the grant.
+      expect(child.state.exited).toBe(false)
+      expect(child.state.reason).toBeUndefined()
+      expect(CommandRuntime.list("project_device_owned", "session_device_owned")).toHaveLength(1)
+      expect(await Auth.get("anthropic")).toEqual({ type: "api", key: "fixture-local-anthropic" })
+    } finally {
+      off()
+      await CommandRuntime.stopAll().catch(() => undefined)
+    }
+  })
+
+  test("a synced provider key replaced by a local entry leaves the child unstamped", async () => {
+    delete process.env.OPENAI_API_KEY
+    await grant({ openai: { type: "api", key: "fixture-cloud-openai" } })
+    await Auth.set("openai", { type: "api", key: "fixture-local-openai" })
+
+    const resolved = await Auth.resolve()
+    expect(resolved.auth.openai).toEqual({ type: "api", key: "fixture-local-openai" })
+    expect(resolved.overlay).toBeUndefined()
+    const snapshot = await OpenScience.subprocessSnapshot(process.env)
+    expect(snapshot.env.OPENAI_API_KEY).toBe("fixture-local-openai")
+    expect(snapshot.overlay).toBeUndefined()
+  })
+
+  test("a synced provider key no local entry replaces stamps the child, which expiry then stops", async () => {
+    const { CommandRuntime } = await import("../../src/science/command/registry")
+    const { CredentialRevocation } = await import("../../src/credentials/revocation")
+    const { CredentialTeardown } = await import("../../src/credentials/teardown")
+    delete process.env.OPENAI_API_KEY
+    await grant({ openai: { type: "api", key: "fixture-cloud-openai" } })
+
+    const resolved = await Auth.resolve()
+    expect(resolved.auth.openai).toEqual({ type: "api", key: "fixture-cloud-openai" })
+    expect(resolved.overlay?.organization).toBe("org_a")
+    expect([...(resolved.overlay?.providers ?? [])]).toEqual(["openai"])
+    const snapshot = await OpenScience.subprocessSnapshot(process.env)
+    expect(snapshot.env.OPENAI_API_KEY).toBe("fixture-cloud-openai")
+    expect(snapshot.overlay).toBe("org_a")
+
+    // No synced service value is in process.env here: the stamp comes from
+    // the provider key alone.
+    const child = await launchCommand("synced_provider")
+    const off = CredentialLifecycle.onRevoke(CredentialTeardown.apply)
+    try {
+      expect(child.overlay).toBe("org_a")
+      expect(child.env.OPENAI_API_KEY).toBe("fixture-cloud-openai")
+      expect(await ledgerEntry(child.entry.id)).toMatchObject({ version: 2, overlay: "org_a" })
+
+      await JsonStore.update(WorkspaceCredentials.filepath, (store) => ({ ...store, expires_at: Date.now() - 1 }))
+      await WorkspaceCredentials.expire()
+
+      expect(await settle(child.state)).toBe(true)
+      expect(child.state.reason).toBe(CredentialRevocation.EXPIRED)
+      expect(CommandRuntime.list("project_synced_provider", "session_synced_provider")).toEqual([])
+      expect(await Auth.get("openai")).toBeUndefined()
+    } finally {
+      off()
+      await CommandRuntime.stopAll().catch(() => undefined)
+    }
+  })
+
   const unprivilegedPosixTest = process.platform === "win32" || process.getuid?.() === 0 ? test.skip : test
 
   unprivilegedPosixTest(

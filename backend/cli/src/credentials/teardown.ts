@@ -28,10 +28,17 @@ export namespace CredentialTeardown {
       // every other child spawned without the overlay keep running. See
       // CredentialRevocation for why the previous global disposal was wrong.
       const reason = CredentialRevocation.message(event.reason)
+      // Live MCP clients are closed through their instance, which revokes
+      // their ledger entries by id. A stamped (or legacy) transport whose
+      // owner server died has no client left to close and would otherwise
+      // keep running with the expired token: the ledger revoke reaps it, as
+      // the other branches do for their kinds. The ledger is lease-serialized,
+      // and a client whose group the ledger already killed closes cleanly.
       await Promise.all([
         ComputeJobs.cancelOverlayProcesses(),
         CommandRuntime.stopOverlay(reason),
         Instance.each(() => MCP.disposeOverlay()),
+        CredentialProcessLedger.revoke({ kind: "mcp", overlay: true }),
       ])
       return
     }

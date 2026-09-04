@@ -971,10 +971,12 @@ export namespace SessionProcessor {
           } catch (e: any) {
             // A credential revision that cancelled this turn carries its cause
             // on the controller. Record that cause, not the SDK's generic
-            // "operation was aborted".
-            const cause = CredentialRevocation.interruption(input.abort.reason) ?? e
+            // "operation was aborted", but only when `e` is that abort: an
+            // unrelated failure thrown after the abort keeps its own identity.
+            const cause = CredentialRevocation.cancelled(e, input.abort) ?? e
             log.error("process", {
               error: cause,
+              ...(cause !== e ? { thrown: e } : {}),
               stack: JSON.stringify(e.stack),
             })
             const error = MessageV2.fromError(cause, { providerID: input.model.providerID })

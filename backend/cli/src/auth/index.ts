@@ -87,7 +87,11 @@ export namespace Auth {
           }),
       ),
     )
-    const auth = Object.entries(data).reduce(
+    // This device's own entries, kept apart from the synced ones: provenance
+    // is decided by which store an id came from, never by object identity on
+    // a shared accumulator (seeding the reduce with `synced` made every id
+    // look synced, so children holding only device-owned keys were stamped).
+    const local = Object.entries(data).reduce(
       (acc, [key, value]) => {
         const parsed = Info.safeParse(value)
         if (!parsed.success) return acc
@@ -95,12 +99,12 @@ export namespace Auth {
         acc[key] = parsed.data
         return acc
       },
-      synced as Record<string, Info>,
+      {} as Record<string, Info>,
     )
     // A local auth.json entry replaces the synced one under the same id, so
-    // only ids whose resolved entry is still the synced object came from the
-    // overlay.
-    const providers = new Set(Object.keys(synced).filter((id) => auth[id] === synced[id]))
+    // only synced ids without a local entry came from the overlay.
+    const auth = { ...synced, ...local }
+    const providers = new Set(Object.keys(synced).filter((id) => !Object.hasOwn(local, id)))
     if (!workspace || !providers.size) return { auth }
     return { auth, overlay: { organization: workspace.organization_id, providers } }
   }
