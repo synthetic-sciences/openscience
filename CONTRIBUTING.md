@@ -14,12 +14,14 @@ Any UI or core product feature should go through a design discussion with the ma
 
 ## Development
 
-You need Bun 1.3 or newer. Install dependencies and run the CLI from source:
+You need Bun 1.3.14 (the `packageManager` pin in `package.json`) and Node 18 or newer. Set up the checkout and run the CLI from source:
 
 ```bash
-bun install
+bun run setup
 bun dev
 ```
+
+`bun run setup` verifies your Bun version, installs dependencies with the frozen lockfile, downloads the model catalog snapshot, and builds the workspace UI into the gitignored `backend/cli/src/web/assets.generated.ts` that `bun dev` serves. Without that file every workspace route 404s on a fresh clone. Rerun `bun run setup --web` to rebuild the embedded UI, or `--skip-web` to skip the build.
 
 `bun dev` is the local equivalent of the built `openscience` command. It runs against the `backend/cli` directory by default. To run it elsewhere:
 
@@ -38,13 +40,14 @@ bun dev web             # start the server and open the workspace
 
 ### Checks
 
-Before pushing, run the same gates CI enforces — formatting, typecheck, and the backend tests:
+Before pushing, run the same gates CI enforces — formatting, typecheck, and the unit tests:
 
 ```bash
-bun run format:check
-bun run typecheck
-bun run --cwd backend/cli test
+bun run check         # format:check + typecheck + backend, frontend/ui, and SDK tests
+bun run check:fast    # format:check + backend typecheck only, for the inner loop
 ```
+
+The individual gates are `bun run format:check`, `bun run typecheck`, `bun run --cwd backend/cli test`, `bun run test:ui`, and `bun run test:sdk`.
 
 Always start the backend tests through the `test` script (or `bun run test` inside `backend/cli`). It adds `--timeout 15000`; bare `bun test` uses Bun's 5 s default and fails spuriously. Bun ignores a `timeout` key in `bunfig.toml`, so pass the flag yourself when you run a subset:
 

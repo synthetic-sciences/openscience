@@ -84,17 +84,16 @@ Global config lives in `~/.config/openscience/openscience.json`. Project config 
 
 ## Development
 
-You need [Bun](https://bun.sh) 1.3 or newer.
+You need [Bun](https://bun.sh) 1.3.14 (the `packageManager` pin) and Node 18 or newer.
 
 ```bash
-bun install
-bun dev
-bun run typecheck
-bun run --cwd backend/cli test
-bun run --cwd backend/cli build
+bun run setup                      # verify Bun, install dependencies, embed the workspace UI
+bun dev                            # open the workspace from source
+bun run check                      # format, typecheck, and unit tests (what CI runs)
+bun run --cwd backend/cli build    # platform binaries
 ```
 
-`bun dev` runs the workspace from source, and `bun run --cwd backend/cli build` produces the platform binaries.
+`bun run setup` builds the workspace UI once so `bun dev` can serve it; rerun it with `--web` after UI changes, or use the live UI dev loop in CONTRIBUTING.md.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how the system fits together, [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute, [AGENTS.md](AGENTS.md) for the style guide, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards.
 

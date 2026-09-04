@@ -6,7 +6,9 @@
   "type": "module",
   "packageManager": "bun@1.3.14",
   "scripts": {
+    "setup": "bun run tooling/repo/setup.ts",
     "dev": "bun --no-env-file run --cwd backend/cli --conditions=browser src/index.ts",
+    "dev:ui": "bun run --cwd frontend/workspace dev",
     "typecheck": "turbo typecheck",
     "test": "bun run --cwd backend/cli test",
     "eval:launch:validate": "bun evals/launch/validate.ts",
@@ -15,7 +17,10 @@
     "build": "bun run --cwd backend/cli build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "bun run typecheck && bun run test",
+    "test:ui": "cd frontend/ui && bun test",
+    "test:sdk": "cd tooling/sdk/js && bun test",
+    "check": "bun run format:check && bun run typecheck && bun run test && bun run test:ui && bun run test:sdk",
+    "check:fast": "bun run format:check && turbo typecheck --filter=@synsci/openscience",
     "prepare": "husky"
   },
   "workspaces": {
