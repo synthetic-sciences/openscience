@@ -554,8 +554,7 @@ export namespace Agent {
     const selected = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(selected.providerID, selected.modelID)
     const credentialSource = await resolveCredentialSource(model.providerID, model.id)
-    const funding =
-      credentialSource === "managed" ? (await OpenScience.getReconciledFundingState())?.snapshot : undefined
+    const funding = credentialSource === "managed" ? ((await OpenScience.getRequestSnapshot()) ?? undefined) : undefined
     if (requiresWalletBalance(credentialSource)) {
       if (!funding) throw new Error("Ace could not snapshot the connected funding account. Sign in again.")
       const balance = await OpenScience.getBalance(funding)

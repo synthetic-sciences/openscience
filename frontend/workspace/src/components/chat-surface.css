@@ -413,6 +413,36 @@
   line-height: var(--chat-meta-line-height);
 }
 
+/* Every trajectory row is one 32px line: a live call, the placeholder a
+   write shows before its diff exists, a folded reasoning clock. Rows then
+   swap state without moving anything below them. */
+.session-scroller [data-component="tool-progress"] {
+  min-height: 32px;
+  padding: 0 6px;
+}
+
+.session-scroller [data-slot="basic-tool-tool-status"] {
+  font-size: var(--chat-meta-font-size);
+  line-height: var(--chat-meta-line-height);
+}
+
+.session-scroller [data-component="reasoning-part"] [data-slot="reasoning-part-toggle"] {
+  min-height: 32px;
+  padding: 4px 6px;
+  font-size: var(--chat-meta-font-size);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--chat-meta-line-height);
+}
+
+.session-scroller [data-component="reasoning-part"] [data-slot="reasoning-part-body"] {
+  margin-left: 13px;
+  padding: 0 0 0 10px;
+}
+
+.session-scroller [data-component="collapsible"] [data-slot="basic-tool-failure"] {
+  margin: 2px 6px 8px;
+}
+
 .session-scroller [data-component="todos"] [data-slot="checkbox-checkbox-label"],
 .session-scroller [data-component="task-tools"] [data-slot="task-tool-title"] {
   font-size: var(--chat-operation-font-size);

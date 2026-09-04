@@ -11,16 +11,10 @@ export namespace CompactionSettings {
   // config.compaction.threshold.
   export const DEFAULT_THRESHOLD = 0.75
 
-  // Conversation size (provider-reported tokens) above which the workspace shows a
-  // compact-or-restart notice. Purely advisory: it never triggers compaction.
-  // Overridable via config.compaction.warn_tokens.
-  export const DEFAULT_WARN_TOKENS = 120_000
-
   export function resolve(config: Pick<Config.Info, "compaction">) {
     return {
       auto: config.compaction?.auto !== false,
       threshold: config.compaction?.threshold ?? DEFAULT_THRESHOLD,
-      warn_tokens: config.compaction?.warn_tokens ?? DEFAULT_WARN_TOKENS,
     }
   }
 }

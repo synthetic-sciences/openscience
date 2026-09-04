@@ -59,6 +59,28 @@ export function handleInstanceDisposed(clearSessionStatus: () => void, scheduleS
   clearSessionStatus()
   scheduleSync()
 }
+
+/**
+ * The project the user worked in most recently: substantive activity first,
+ * creation time as the fallback, archived projects never. Home warms this one
+ * after first paint so opening it does not pay the instance bootstrap.
+ */
+export function recentProject<T extends { time: { created: number; activity?: number; archived?: number } }>(
+  projects: readonly T[],
+) {
+  return projects.reduce<T | undefined>((best, project) => {
+    if (project.time.archived) return best
+    if (!best) return project
+    const stamp = (item: T) => item.time.activity ?? item.time.created
+    return stamp(project) > stamp(best) ? project : best
+  }, undefined)
+}
+
+/** Delay before Home warms the most recent project, past the launch paint. */
+export const PREFETCH_DELAY_MS = 250
+
+/** Delay after a project's essential state before its catalogs are fetched. */
+export const CATALOG_DELAY_MS = 250
 import {
   batch,
   createContext,
@@ -452,6 +474,8 @@ function createGlobalSync() {
 
   /** Notify settings surfaces after any local provider credential changes. */
   const providerRefresh = createListeners()
+  /** Notify account surfaces once the server stored a newer Ace account summary. */
+  const accountRefresh = createListeners()
 
   /**
    * Re-read the provider catalog into every store that shows it. Bootstrap
@@ -475,14 +499,78 @@ function createGlobalSync() {
         reload(globalStore.path.worktree || globalStore.path.directory, undefined, (value) =>
           setGlobalStore("provider", reconcile(value)),
         ),
-        ...Object.entries(children).map(([directory, [store, setStore]]) =>
-          reload(directory, store.project || undefined, (value) => setStore("provider", reconcile(value))),
-        ),
+        // Only projects whose runtime was asked for. Every Home card owns a
+        // child store, and a catalog read against a card's directory mints
+        // a server instance for it; on launch that was one instance per
+        // known project the moment managed pricing arrived.
+        ...Object.entries(children)
+          .filter(([directory]) => requested.has(directory))
+          .map(([directory, [store, setStore]]) =>
+            reload(directory, store.project || undefined, (value) => setStore("provider", reconcile(value))),
+          ),
       ])
     })
   }
 
   const booting = new Map<string, Promise<void>>()
+  // Scopes being warmed for a project nobody opened. A failure there is
+  // logged, never shown: the launch screen must not toast about a folder the
+  // user did not ask for, and the project stays untouched for an explicit open.
+  const warming = new Set<string>()
+  // Directories whose runtime was actually bootstrapped. Child stores also
+  // exist for Home cards, sidebar entries and notification lookups; those never
+  // issue a project-scoped request and must stay metadata-only.
+  const requested = new Set<string>()
+  // Directories the user explicitly opened. A warmed project has its runtime
+  // but not its catalogs: listing commands and MCP status launches every
+  // configured MCP server, and the skill catalog scans each skill root, so
+  // those wait for the first open.
+  const opened = new Set<string>()
+  // Directories whose catalogs the current bootstrap already fetched, so an
+  // open landing while the non-blocking requests are in flight fetches once.
+  const catalogued = new Set<string>()
+  const timers = new Set<ReturnType<typeof setTimeout>>()
+  const defer = (fn: () => void, delay: number) => {
+    const timer = setTimeout(() => {
+      timers.delete(timer)
+      fn()
+    }, delay)
+    timers.add(timer)
+  }
+  onCleanup(() => {
+    for (const timer of timers) clearTimeout(timer)
+    timers.clear()
+  })
+
+  // One report per page load closes the server's startup timing line
+  // (listening, first instance, interactive) in the sidecar log.
+  const startup = { reported: false, warmed: false }
+  function interactive(phase: "home" | "project") {
+    if (startup.reported) return
+    startup.reported = true
+    void globalSDK.client.app
+      .log({
+        service: "startup",
+        level: "info",
+        message: "interactive",
+        extra: { phase, page: Math.round(performance.now()) },
+      })
+      .catch(() => {})
+  }
+
+  // The Home route bootstraps nothing. Warm the project the user last worked
+  // in once the launch screen has painted so opening it does not wait on the
+  // server instance; a project route already owns its own bootstrap. Once per
+  // page load: a reconnect re-pushes whatever was opened, and a warmup that
+  // failed must not be retried on every reconnect.
+  function prefetch() {
+    if (startup.warmed) return
+    startup.warmed = true
+    if (requested.size !== 0) return
+    const project = recentProject(globalStore.project)
+    if (!project) return
+    void bootstrapInstance(project.worktree, project.id, "warm")
+  }
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
 
@@ -633,10 +721,16 @@ function createGlobalSync() {
 
   function child(directory: string, options: ChildOptions = {}) {
     const childStore = ensureChild(directory, options.projectID)
-    const shouldBootstrap = options.bootstrap ?? true
-    if (shouldBootstrap && childStore[0].status === "loading") {
+    if (!(options.bootstrap ?? true)) return childStore
+    const first = !opened.has(directory)
+    opened.add(directory)
+    if (childStore[0].status === "loading") {
       void bootstrapInstance(directory, options.projectID)
+      return childStore
     }
+    // Bootstrapped before anyone opened it, by the Home warmup: the runtime
+    // is live and only the catalogs were left for this moment.
+    if (first) void loadCatalogs(directory, options.projectID)
     return childStore
   }
 
@@ -696,11 +790,37 @@ function createGlobalSync() {
     return promise
   }
 
-  async function bootstrapInstance(directory: string, projectID?: string) {
+  // Catalogs the first paint does not show; they load once the session list
+  // is on screen, and only for a project somebody opened.
+  function loadCatalogs(directory: string, projectID?: string) {
+    if (catalogued.has(directory)) return Promise.resolve()
+    catalogued.add(directory)
+    const [, setStore] = ensureChild(directory, projectID)
+    const sdk = sdkFor(directory, projectID)
+    return Promise.all([
+      sdk.command.list().then((x) => setStore("command", x.data ?? [])),
+      sdk.app
+        .skills()
+        .then((x) => setStore("skill", x.data ?? []))
+        .catch(() => {}),
+      sdk.mcp.status().then((x) => setStore("mcp", x.data!)),
+      sdk.lsp.status().then((x) => setStore("lsp", x.data!)),
+    ]).catch((error) => console.warn("Failed to load project catalogs", { directory, error }))
+  }
+
+  async function bootstrapInstance(directory: string, projectID?: string, mode: "open" | "warm" = "open") {
     if (!directory) return
+    requested.add(directory)
     const key = scopeFor(directory, projectID)
     const pending = booting.get(key)
-    if (pending) return pending
+    if (pending) {
+      // An explicit open joining a warmup owns its failure from here on.
+      if (mode === "open") warming.delete(key)
+      return pending
+    }
+    if (mode === "warm") warming.add(key)
+    // A fresh bootstrap, first or re-pushed, fetches the catalogs again.
+    catalogued.delete(directory)
 
     const promise = (async () => {
       const [store, setStore] = ensureChild(directory, projectID)
@@ -725,6 +845,14 @@ function createGlobalSync() {
       try {
         await Promise.all(Object.values(blockingRequests).map((p) => retry(p)))
       } catch (err) {
+        if (warming.has(key)) {
+          console.warn("Failed to warm project", { directory, error: err })
+          // Back to untouched: an explicit open bootstraps again, and the
+          // reconnect and catalog fan-outs skip this directory until it does.
+          setStore("status", "loading")
+          requested.delete(directory)
+          return
+        }
         console.error("Failed to bootstrap instance", err)
         const project = getFilename(directory)
         const message = syncErrorMessage(err)
@@ -734,18 +862,12 @@ function createGlobalSync() {
       }
 
       if (store.status !== "complete") setStore("status", "partial")
+      interactive("project")
 
       Promise.all([
         sdk.path.get().then((x) => setStore("path", x.data!)),
-        sdk.command.list().then((x) => setStore("command", x.data ?? [])),
-        sdk.app
-          .skills()
-          .then((x) => setStore("skill", x.data ?? []))
-          .catch(() => {}),
         sdk.session.status().then((x) => setStore("session_status", x.data!)),
         loadSessions(directory, projectID),
-        sdk.mcp.status().then((x) => setStore("mcp", x.data!)),
-        sdk.lsp.status().then((x) => setStore("lsp", x.data!)),
         sdk.vcs.get().then((x) => {
           const next = x.data ?? store.vcs
           setStore("vcs", next)
@@ -811,12 +933,15 @@ function createGlobalSync() {
         }),
       ]).then(() => {
         setStore("status", "complete")
+        // A warmed project keeps its MCP servers down until its first open.
+        if (opened.has(directory)) defer(() => void loadCatalogs(directory, projectID), CATALOG_DELAY_MS)
       })
     })()
 
     booting.set(key, promise)
     promise.finally(() => {
       booting.delete(key)
+      warming.delete(key)
     })
     return promise
   }
@@ -919,7 +1044,7 @@ function createGlobalSync() {
         case "server.connected": {
           if (!globalStore.ready) return
           refresh()
-          for (const directory of Object.keys(children)) {
+          for (const directory of requested) {
             push(directory)
             void refreshLoadedMessages(directory).catch((error) =>
               console.warn("Failed to backfill loaded transcripts after reconnect", { directory, error }),
@@ -934,6 +1059,12 @@ function createGlobalSync() {
           void refreshProviders().catch((error) => console.error("Failed to refresh providers", { error }))
           return
         }
+        case "account.updated": {
+          // A background refresh stored a newer account summary. Surfaces that
+          // showed the previous one re-read it; nothing here is awaited.
+          void accountRefresh.notifyAfter(() => Promise.resolve())
+          return
+        }
         case "skill.updated": {
           const version = ++skillRefreshVersion
           void globalSDK.client.global.config
@@ -943,6 +1074,7 @@ function createGlobalSync() {
             })
             .catch(() => {})
           for (const [directory, [store, setStore]] of Object.entries(children)) {
+            if (!requested.has(directory)) continue
             void sdkFor(directory, store.project || undefined)
               .app.skills()
               .then((response) => {
@@ -1011,7 +1143,9 @@ function createGlobalSync() {
             setStore("session_status", reconcile({}))
             setStore("session_progress", reconcile({}))
           },
-          () => push(directory),
+          () => {
+            if (requested.has(directory)) push(directory)
+          },
         )
         return
       }
@@ -1336,6 +1470,8 @@ function createGlobalSync() {
     }
 
     setGlobalStore("ready", true)
+    if (requested.size === 0) interactive("home")
+    defer(prefetch, PREFETCH_DELAY_MS)
   }
 
   onMount(() => {
@@ -1403,6 +1539,7 @@ function createGlobalSync() {
     },
     refreshProviders,
     onProvidersRefreshed: providerRefresh.add,
+    onAccountRefreshed: accountRefresh.add,
     project: {
       loadSessions,
       resolve: resolveProject,

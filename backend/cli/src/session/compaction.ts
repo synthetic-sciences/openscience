@@ -34,11 +34,10 @@ export namespace SessionCompaction {
     ),
   }
 
-  // User-facing compaction settings (auto, threshold, warn_tokens) and their defaults
-  // live in the import-free CompactionSettings leaf so the settings route can share
-  // them without a module cycle. Re-exported here for existing callers.
+  // User-facing compaction settings (auto, threshold) and their defaults live in the
+  // import-free CompactionSettings leaf so the settings route can share them without
+  // a module cycle. Re-exported here for existing callers.
   export const DEFAULT_THRESHOLD = CompactionSettings.DEFAULT_THRESHOLD
-  export const DEFAULT_WARN_TOKENS = CompactionSettings.DEFAULT_WARN_TOKENS
   export const settings = CompactionSettings.resolve
 
   // Assumed context window when a provider reports 0 (local / OpenAI-compatible

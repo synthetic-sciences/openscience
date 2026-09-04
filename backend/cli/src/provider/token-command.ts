@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { Config } from "../config/config"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { CredentialProcessLedger } from "../credentials/process-ledger"
+import { CredentialRevocation } from "../credentials/revocation"
 import { OpenScience } from "../openscience"
 import { ProcessIdentity } from "../process/process-identity"
 import { WindowsJobLauncher } from "../process/windows-job-launcher"
@@ -353,7 +354,8 @@ export namespace ProviderTokenCommand {
 }
 
 // Credential rotations from this or another server revoke an in-flight helper
-// before any new helper is admitted against the refreshed snapshot.
-CredentialLifecycle.onRevoke(async () => {
-  await ProviderTokenCommand.revoke()
+// before any new helper is admitted against the refreshed snapshot. An expired
+// synced overlay reaches only helpers that inherited it.
+CredentialLifecycle.onRevoke(async ({ reason }) => {
+  await CredentialProcessLedger.revoke({ kind: "provider", ...CredentialRevocation.scope(reason) })
 })

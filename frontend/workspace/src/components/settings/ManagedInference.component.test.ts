@@ -45,7 +45,12 @@ const funded = {
   aceEnabled: true,
   aceContract: contract,
 }
-type Wallet = Omit<typeof funded, "balanceUsd"> & { balanceUsd: number | null }
+type Wallet = Omit<typeof funded, "balanceUsd"> & {
+  balanceUsd: number | null
+  refreshing?: boolean
+  refreshedAt?: number | null
+  error?: string
+}
 type Services = NonNullable<Parameters<typeof ManagedInference>[0]["services"]>
 
 // Exercise the real component, recovery controller and JSON transport against
@@ -57,9 +62,12 @@ const mount = async (wallet: Wallet = funded) => {
     unavailable: false,
     rejectWrite: false,
     refreshes: 0,
+    reads: 0,
     writes: [] as unknown[],
     links: [] as string[],
     errors: [] as Array<string | undefined>,
+    // Subscribers to the server's `account.updated` announcement.
+    updated: new Set<() => void>(),
   }
   // Node's HTTP response avoids HappyDOM's replacement of global Response,
   // while preserving an actual streamed request/response through settingsApi.
@@ -76,6 +84,7 @@ const mount = async (wallet: Wallet = funded) => {
     if (request.method === "OPTIONS") return json(null, 204)
     const path = new URL(request.url!, "http://127.0.0.1").pathname
     if (path === "/settings/wallet") {
+      state.reads++
       if (state.unavailable) return json({ message: "Temporarily unavailable" }, 503)
       return json({ ...state.wallet, billingMode: state.mode })
     }
@@ -104,6 +113,10 @@ const mount = async (wallet: Wallet = funded) => {
         state.refreshes++
       },
       onProvidersRefreshed: () => () => {},
+      onAccountRefreshed: (callback) => {
+        state.updated.add(callback)
+        return () => state.updated.delete(callback)
+      },
     },
     platform: { fetch, openLink: (url) => state.links.push(url) },
   }
@@ -203,6 +216,41 @@ describe("Ace account surface", () => {
     expect(button(host, "Ace").disabled).toBe(true)
     expect(host.querySelector("details")?.open).toBe(false)
     expect(state.writes).toEqual([])
+  })
+
+  test("shows the stored account summary at once and swaps in the background refresh when announced", async () => {
+    const { host, state } = await mount({ ...funded, balanceUsd: 50, refreshing: true, refreshedAt: 1_700_000_000_000 })
+    // The stored values render immediately, marked as refreshing; nothing is
+    // blanked and Ace stays selectable on the last verified entitlement.
+    await ready(() => host.querySelector("dd")?.textContent?.includes("$50.00") === true)
+    expect(host.querySelector("dd")?.getAttribute("data-refreshing")).toBe("true")
+    expect(host.querySelector("dd")?.textContent).toContain("Refreshing…")
+    expect(host.querySelector('[role="status"]')?.textContent).toBe("On")
+    expect(button(host, "Ace").disabled).toBe(false)
+    expect(state.reads).toBe(1)
+    expect(state.updated.size).toBe(1)
+
+    // The server announces the newer summary; the surface re-reads it and
+    // keeps the previous values on screen until the new ones land.
+    state.wallet = { ...funded, balanceUsd: 60, refreshing: false, refreshedAt: 1_700_000_005_000 }
+    for (const notify of state.updated) notify()
+    await ready(() => host.querySelector("dd")?.textContent === "$60.00")
+    expect(host.querySelector("dd")?.getAttribute("data-refreshing")).toBeNull()
+    expect(state.reads).toBe(2)
+    expect(state.errors.filter(Boolean)).toEqual([])
+  })
+
+  test("keeps the stored values on screen when the server reports a failed refresh", async () => {
+    const { host, state } = await mount({
+      ...funded,
+      balanceUsd: 50,
+      refreshing: false,
+      error: "The Ace account service is unavailable. Retry when connected.",
+    })
+    await ready(() => host.querySelector("dd")?.textContent === "$50.00")
+    expect(state.errors.at(-1)).toContain("Showing the last known account state.")
+    expect(state.errors.at(-1)).toContain("unavailable")
+    expect(button(host, "Ace").disabled).toBe(false)
   })
 
   test("a failed account refresh clears the displayed balance and Retry restores current truth", async () => {

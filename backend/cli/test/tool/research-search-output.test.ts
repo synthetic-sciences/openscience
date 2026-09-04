@@ -210,7 +210,9 @@ test("research_search exposes the hosted empty free fallback as a typed partial 
         truncated: false,
       },
     })
-    expect(routes).toEqual(["/api/v1/auth/status", "/api/v1/research/search"])
+    // A workspace-scoped session no longer reconciles account status before a
+    // managed search; the gateway still validates the funding echo on the reply.
+    expect(routes).toEqual(["/api/v1/research/search"])
   } finally {
     globalThis.fetch = original
     server.stop(true)

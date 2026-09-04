@@ -23,6 +23,34 @@ export function observableToolStatus(part: MessageV2.ToolPart): ObservableToolSt
   return "completed"
 }
 
+/** Close a tool wrapper whose executor will never report. A call that never
+ * left `pending` did nothing: its record must say so and carry the cause,
+ * rather than read as a failed execution with empty arguments. `explain`
+ * appends that clause for never-started calls when `reason` does not already
+ * state it. */
+export function abortedToolPart(
+  part: MessageV2.ToolPart,
+  reason: string,
+  options: { now?: number; explain?: boolean } = {},
+): MessageV2.ToolPart {
+  const now = options.now ?? Date.now()
+  const running = part.state.status === "running" ? part.state : undefined
+  const start = running ? running.time.start : now
+  const detail =
+    options.explain === false || running ? "" : `. The ${part.tool} call had not started; no action was taken.`
+  return {
+    ...part,
+    state: {
+      status: "error",
+      input: part.state.input,
+      raw: part.state.raw,
+      metadata: { ...running?.metadata, cancelled: true, started: !!running },
+      error: `${reason}${detail}`,
+      time: { start, end: Math.max(start, now) },
+    },
+  }
+}
+
 export function observableToolFailure(part: MessageV2.ToolPart) {
   if (part.state.status === "error") return part.state.error
   if (part.state.status !== "completed") return

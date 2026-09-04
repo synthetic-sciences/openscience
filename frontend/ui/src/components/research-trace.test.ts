@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
+  elapsedLabel,
+  foldRuns,
   formatTaskDuration,
   stripTaskMetadata,
   summarizeTaskActivity,
@@ -9,7 +11,7 @@ import {
 
 const entry = (id: string, tool: string, title: string, status = "completed", message = "msg") =>
   ({
-    message: { id: message, role: "assistant" },
+    message: { id: message, role: "assistant", time: { created: 1, completed: 2 } },
     part: {
       id,
       type: "tool",
@@ -17,6 +19,12 @@ const entry = (id: string, tool: string, title: string, status = "completed", me
       state: { status, input: {}, title, output: "" },
     },
   }) as ResearchTraceEntry
+
+/** The same call inside a message that has not completed yet. */
+const working = (id: string, tool: string, title: string, status = "completed", message = "msg") => {
+  const item = entry(id, tool, title, status, message)
+  return { ...item, message: { ...item.message, time: { created: 1 } } } as ResearchTraceEntry
+}
 
 const narrative = (id: string, type: "reasoning" | "text", text: string, message: string) =>
   ({
@@ -217,6 +225,141 @@ describe("research trace presentation", () => {
     hidden.hidden = true
     const trace = visibleResearchTrace([entry("read", "read", "Read data"), hidden])
     expect(trace.map((item) => item.part.id)).toEqual(["read"])
+  })
+})
+
+describe("folded tool runs", () => {
+  test("folds consecutive completed calls of one tool behind a counted header that keeps every call", () => {
+    const trace = visibleResearchTrace([
+      entry("read-1", "read", "Read paper.tex"),
+      entry("read-2", "read", "Read analysis.py"),
+      entry("read-3", "read", "Read results.csv"),
+      entry("grep", "grep", "Find citations"),
+    ])
+
+    expect(trace.map((item) => item.part.id)).toEqual(["read-1", "grep"])
+    expect(trace[0]?.run?.map((item) => item.part.id)).toEqual(["read-1", "read-2", "read-3"])
+    expect(trace[1]?.run).toBeUndefined()
+  })
+
+  test("a live or failed call breaks the run and stays on its own line", () => {
+    const trace = foldRuns([
+      entry("read-1", "read", "Read paper.tex"),
+      entry("read-2", "read", "Read analysis.py"),
+      entry("read-3", "read", "Read results.csv", "running"),
+      entry("read-4", "read", "Read missing.csv", "error"),
+      entry("read-5", "read", "Read notes.md"),
+    ])
+
+    expect(trace.map((item) => item.part.id)).toEqual(["read-1", "read-3", "read-4", "read-5"])
+    expect(trace[0]?.run?.map((item) => item.part.id)).toEqual(["read-1", "read-2"])
+    expect(trace.slice(1).some((item) => item.run)).toBe(false)
+  })
+
+  test("leaves delegation, kernels, questions, and preflight groups literal", () => {
+    const first = entry("shell-1", "bash", "Check Python runtime")
+    const second = entry("shell-2", "bash", "Inspect workspace status")
+    if (first.part.type === "tool") first.part.state.input = { command: "python --version" }
+    if (second.part.type === "tool") second.part.state.input = { command: "git status --short" }
+    const trace = visibleResearchTrace([
+      first,
+      second,
+      entry("task-1", "task", "Delegate literature review"),
+      entry("task-2", "task", "Delegate replication"),
+      entry("py-1", "python", "Fit model"),
+      entry("py-2", "python", "Plot ROC"),
+      entry("ask-1", "question", "Confirm scope"),
+      entry("ask-2", "question", "Confirm budget"),
+    ])
+
+    expect(trace.map((item) => item.part.id)).toEqual(["shell-1", "task-1", "task-2", "py-1", "py-2", "ask-1", "ask-2"])
+    expect(trace[0]?.group?.map((item) => item.part.id)).toEqual(["shell-1", "shell-2"])
+    expect(trace.some((item) => item.run)).toBe(false)
+  })
+
+  test("keeps the newest call of a working message literal until a later call starts", () => {
+    // read-2 just completed: its receipt stays on its own row rather than vanishing into a header.
+    const settled = foldRuns([
+      working("read-1", "read", "Read paper.tex"),
+      working("read-2", "read", "Read analysis.py"),
+    ])
+    expect(settled.map((item) => item.part.id)).toEqual(["read-1", "read-2"])
+    expect(settled.some((item) => item.run)).toBe(false)
+
+    // The next call starts: the earlier reads fold while the live call and the newest call stay literal.
+    const next = foldRuns([
+      working("read-1", "read", "Read paper.tex"),
+      working("read-2", "read", "Read analysis.py"),
+      working("read-3", "read", "Read results.csv", "running"),
+    ])
+    expect(next.map((item) => item.part.id)).toEqual(["read-1", "read-3"])
+    expect(next[0]?.run?.map((item) => item.part.id)).toEqual(["read-1", "read-2"])
+
+    // read-3 completes: the folded run neither grows nor unfolds, so nothing on screen moves.
+    const done = foldRuns([
+      working("read-1", "read", "Read paper.tex"),
+      working("read-2", "read", "Read analysis.py"),
+      working("read-3", "read", "Read results.csv"),
+    ])
+    expect(done.map((item) => item.part.id)).toEqual(["read-1", "read-3"])
+    expect(done[0]?.run?.map((item) => item.part.id)).toEqual(["read-1", "read-2"])
+    expect(done[1]?.run).toBeUndefined()
+
+    // Prose after the newest call does not settle it; only the message completing does.
+    const prose = foldRuns([
+      working("read-1", "read", "Read paper.tex"),
+      working("read-2", "read", "Read analysis.py"),
+      working("read-3", "read", "Read results.csv"),
+      {
+        ...narrative("answer", "text", "Findings so far", "msg"),
+        message: { id: "msg", time: { created: 1 } },
+      } as ResearchTraceEntry,
+    ])
+    expect(prose.map((item) => item.part.id)).toEqual(["read-1", "read-3", "answer"])
+
+    const complete = foldRuns([
+      entry("read-1", "read", "Read paper.tex"),
+      entry("read-2", "read", "Read analysis.py"),
+      entry("read-3", "read", "Read results.csv"),
+    ])
+    expect(complete.map((item) => item.part.id)).toEqual(["read-1"])
+    expect(complete[0]?.run).toHaveLength(3)
+  })
+
+  test("settles the newest call per message, so an earlier completed step folds fully", () => {
+    const trace = foldRuns([
+      entry("read-1", "read", "Read paper.tex", "completed", "step-1"),
+      entry("read-2", "read", "Read analysis.py", "completed", "step-1"),
+      working("read-3", "read", "Read results.csv", "completed", "step-2"),
+    ])
+    expect(trace.map((item) => item.part.id)).toEqual(["read-1", "read-3"])
+    expect(trace[0]?.run?.map((item) => item.part.id)).toEqual(["read-1", "read-2"])
+    expect(trace[1]?.run).toBeUndefined()
+  })
+
+  test("folds edits and shell work while keeping a single call unfolded", () => {
+    const trace = foldRuns([
+      entry("edit-1", "edit", "Update report"),
+      entry("edit-2", "edit", "Update figure"),
+      entry("shell-1", "bash", "Run tests"),
+      entry("shell-2", "bash", "Run lint"),
+      entry("write", "write", "Write summary"),
+    ])
+
+    expect(trace.map((item) => item.part.id)).toEqual(["edit-1", "shell-1", "write"])
+    expect(trace[0]?.run).toHaveLength(2)
+    expect(trace[1]?.run).toHaveLength(2)
+    expect(trace[2]?.run).toBeUndefined()
+  })
+})
+
+describe("elapsedLabel", () => {
+  test("counts whole seconds and never goes negative", () => {
+    expect(elapsedLabel(0)).toBe("0s")
+    expect(elapsedLabel(999)).toBe("0s")
+    expect(elapsedLabel(12_400)).toBe("12s")
+    expect(elapsedLabel(65_000)).toBe("1m 5s")
+    expect(elapsedLabel(-3_000)).toBe("0s")
   })
 })
 

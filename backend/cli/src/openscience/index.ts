@@ -3,9 +3,13 @@ import path from "node:path"
 import fs from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { createHash, randomUUID } from "node:crypto"
+import z from "zod"
 import { Auth } from "@/auth"
+import { BusEvent } from "@/bus/bus-event"
+import { GlobalBus } from "@/bus/global"
 import { CredentialLifecycle } from "@/credentials/lifecycle"
 import { isAtlasManagedKey, isWorkspaceKey } from "@/credentials/managed-key"
+import { CredentialOverlay } from "@/credentials/overlay"
 import { Global } from "@/global"
 import { DataRootBarrier } from "@/global/data-root-barrier"
 import { ToolOutputPath } from "@/tool/tool-output-path"
@@ -212,6 +216,18 @@ export class InsufficientCreditsError extends Error {
 
 const SESSION_PATH = path.join(Global.Path.data, "openscience-session.json")
 const SCOPE_PATH = path.join(Global.Path.data, "openscience-workspace-scope.json")
+const SNAPSHOT_PATH = path.join(Global.Path.data, "openscience-account-snapshot.json")
+// A persisted account summary younger than this is served as current; an
+// older one is served at once and refreshed in the background.
+const ACCOUNT_SNAPSHOT_TTL_MS = 30_000
+// After a failed refresh the stored summary is served without a new attempt
+// for this long, so a down account service is not hammered by every open panel.
+const ACCOUNT_RETRY_MS = 5_000
+// A stale summary younger than this is served as it is instead of starting
+// another refresh. A spend marks the summary stale, and with a settings panel
+// open every managed response would otherwise become three account reads
+// (status, entitlement, wallet); the next read after the interval refreshes it.
+const ACCOUNT_REFRESH_MIN_MS = 5_000
 const FUNDING_PROTOCOL = "1"
 const FUNDING_PROTOCOL_HEADER = "OpenScience-Funding-Protocol"
 const FUNDING_CONTEXT_HEADER = "OpenScience-Funding-Context"
@@ -274,6 +290,72 @@ function accountTag(session: Pick<OpenScienceSession, "api_key" | "user_id">): s
 
 function contextTag(session: Pick<OpenScienceSession, "api_key" | "user_id" | "organization_id">): string {
   return `${accountTag(session)}\0${session.organization_id ? `organization:${session.organization_id}` : "personal"}`
+}
+
+// One outbound account read per (kind, key, funding context) at a time. A
+// managed turn, the settings panels and credential sync all check the same
+// account; while one read is in flight the others join it instead of
+// repeating the request.
+interface Flight<T> {
+  promise: Promise<T>
+  controller: AbortController
+  waiting: number
+  settled: boolean
+}
+const flights = new Map<string, Flight<unknown>>()
+
+function flightKey(
+  kind: string,
+  session: Pick<OpenScienceSession, "api_key" | "user_id" | "organization_id" | "workspace_locked">,
+): string {
+  return [
+    kind,
+    keyFingerprint(session.api_key),
+    session.user_id,
+    session.organization_id ?? "personal",
+    session.workspace_locked ? "locked" : "open",
+  ].join("\0")
+}
+
+/** Join the in-flight read for `key`, starting it when there is none. The
+ * read runs under its own signal; a caller's signal only detaches that
+ * caller, and the read is cancelled once every caller has detached, so an
+ * abandoned panel never leaves account requests running. */
+function share<T>(key: string, start: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) return Promise.reject(signal.reason)
+  const flight = (flights.get(key) as Flight<T> | undefined) ?? launch(key, start)
+  flight.waiting++
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => {
+      flight.waiting--
+      if (flight.waiting === 0 && !flight.settled) {
+        flight.controller.abort(signal?.reason)
+        // A caller arriving before the cancelled read settles starts its
+        // own instead of inheriting this cancellation.
+        if (flights.get(key) === flight) flights.delete(key)
+      }
+      reject(signal?.reason)
+    }
+    signal?.addEventListener("abort", abort, { once: true })
+    flight.promise.then(resolve, reject).finally(() => {
+      if (signal?.aborted) return
+      signal?.removeEventListener("abort", abort)
+      flight.waiting--
+    })
+  })
+}
+
+function launch<T>(key: string, start: (signal: AbortSignal) => Promise<T>): Flight<T> {
+  const controller = new AbortController()
+  const flight: Flight<T> = { controller, waiting: 0, settled: false, promise: start(controller.signal) }
+  flight.promise
+    .finally(() => {
+      flight.settled = true
+      if (flights.get(key) === flight) flights.delete(key)
+    })
+    .catch(() => undefined)
+  flights.set(key, flight)
+  return flight
 }
 
 async function atomicWrite(filepath: string, content: string, mode = 0o600): Promise<void> {
@@ -478,6 +560,9 @@ export namespace OpenScience {
       using _ = await Lock.write(SESSION_PATH)
       await writeWorkspaceScope(session)
       await atomicWrite(SESSION_PATH, JSON.stringify(session, null, 2))
+      // A summary belongs to one account and funding context; never let a
+      // newly connected account inherit the previous one's stored profile.
+      await fs.rm(SNAPSHOT_PATH, { force: true }).catch(() => undefined)
     })
     invalidateBalance()
     const { Provider } = await import("@/provider/provider")
@@ -544,6 +629,9 @@ export namespace OpenScience {
         if (!matches(current)) return null
         await writeWorkspaceScope(next)
         await atomicWrite(SESSION_PATH, JSON.stringify(next, null, 2))
+        // The stored summary is bound to the funding context this rewrite
+        // changes; drop it like saveSession does.
+        await fs.rm(SNAPSHOT_PATH, { force: true }).catch(() => undefined)
         return next
       },
     )
@@ -560,6 +648,7 @@ export namespace OpenScience {
       if (expectedApiKey && (await getSession())?.api_key !== expectedApiKey) return false
       await fs.rm(SESSION_PATH, { force: true })
       await fs.rm(SCOPE_PATH, { force: true })
+      await fs.rm(SNAPSHOT_PATH, { force: true })
       await WorkspaceCredentials.clear()
       return true
     }
@@ -598,6 +687,18 @@ export namespace OpenScience {
       ...(session.organization_id ? { organization_id: session.organization_id } : {}),
       ...(session.workspace_locked ? { workspace_locked: true } : {}),
     })
+  }
+
+  /** The funding snapshot a managed request charges against. A scoped session
+   * is served from the local session file with no account read; only a legacy
+   * unscoped session still needs the status read to learn its workspace before
+   * dispatch. Authorization is proved per request instead: the balance check
+   * and every spend-capable response must echo this exact funding context. */
+  export async function getRequestSnapshot(): Promise<FundingSnapshot | null> {
+    const snapshot = await getFundingSnapshot()
+    if (!snapshot) return null
+    if (!isLegacyUnscoped(snapshot)) return snapshot
+    return (await getReconciledFundingState())?.snapshot ?? null
   }
 
   export async function managedRequestSnapshot(
@@ -671,6 +772,13 @@ export namespace OpenScience {
   const attempts = new Map<string, number>()
   let synced: SyncStatus = { state: "disconnected" }
   let syncTimer: ReturnType<typeof setInterval> | undefined
+  /** Renewal cadence for the synced overlay. The grant lives
+   * WorkspaceCredentials.TTL (5 min); a refresh every 4 min meant one failed
+   * attempt (a saturated link during a large download, a transient 5xx) let
+   * the grant lapse before the next tick. Refresh at under a third of the TTL
+   * and retry a failure with short backoff, all inside one TTL. */
+  export const SYNC_INTERVAL = 90_000
+  export const SYNC_BACKOFF: readonly number[] = [5_000, 15_000, 30_000]
 
   export function credentialSyncStatus(): SyncStatus {
     return synced
@@ -689,6 +797,7 @@ export namespace OpenScience {
       synced = { state: "syncing" }
       const controller = new AbortController()
       let timer: ReturnType<typeof setTimeout> | undefined
+      const seen: { status?: number } = {}
       const request = (async () => {
         const response = await fetch(`${apiBase()}/api/cli/sync`, {
           headers: { Authorization: `Bearer ${session.api_key}`, ...fundingHeaders(session) },
@@ -707,6 +816,7 @@ export namespace OpenScience {
             }, options.timeoutMs ?? 8_000)
           }),
         ])
+        seen.status = result.response.status
         if (result.response.status === 401) {
           await clearSession(session.api_key)
           throw new Error("This device was disconnected. Sign in again.")
@@ -766,6 +876,14 @@ export namespace OpenScience {
         if (!(await matches())) return synced
         return (synced = { state: "ready", organization_id: data.snapshot.organization_id, synced_at: Date.now() })
       } catch (error) {
+        // A silent failure here is how a grant lapses unnoticed: name the
+        // status and error class so the next expiry is diagnosable.
+        log.warn("workspace credential sync failed", {
+          status: seen.status,
+          error: error instanceof Error ? error.name : typeof error,
+          message: error instanceof Error ? error.message : String(error),
+          expires_at: WorkspaceCredentials.expiresAt(),
+        })
         const current = await getSession()
         if (current && !identities.has(WorkspaceCredentials.identity(current))) return synced
         return (synced = {
@@ -781,14 +899,49 @@ export namespace OpenScience {
     return task
   }
 
-  export async function scheduleRefresh(): Promise<void> {
-    await syncCredentials()
+  function pause(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms).unref())
+  }
+
+  /** Refresh the synced overlay, retrying a failed attempt with short backoff
+   * so one transient failure is retried well before the grant's TTL elapses.
+   * An unforced first attempt inside syncCredentials' one-minute dedupe
+   * window does not request anything and returns the current status; when
+   * that status is a prior error, the forced retry chain starts from it.
+   * Retries are always forced. */
+  export async function scheduleRefresh(
+    options: { backoff?: readonly number[]; force?: boolean } = {},
+  ): Promise<SyncStatus> {
+    const backoff = options.backoff ?? SYNC_BACKOFF
+    const attempt = async (index: number, force: boolean): Promise<SyncStatus> => {
+      const result = await syncCredentials({ force })
+      if (result.state !== "error") return result
+      const delay = backoff[index]
+      const expires = WorkspaceCredentials.expiresAt()
+      if (delay === undefined) {
+        log.error("workspace credential refresh exhausted its retries", {
+          error: result.error,
+          attempts: index + 1,
+          expires_at: expires,
+        })
+        return result
+      }
+      log.warn("workspace credential refresh failed; retrying", {
+        error: result.error,
+        retry_ms: delay,
+        remaining: backoff.length - index - 1,
+        expires_at: expires,
+      })
+      await pause(delay)
+      return attempt(index + 1, true)
+    }
+    return attempt(0, options.force ?? false)
   }
 
   export function startCredentialSync(): void {
     if (syncTimer) return
     void scheduleRefresh()
-    syncTimer = setInterval(() => void scheduleRefresh(), 4 * 60_000)
+    syncTimer = setInterval(() => void scheduleRefresh(), SYNC_INTERVAL)
     syncTimer.unref()
   }
 
@@ -906,7 +1059,17 @@ export namespace OpenScience {
     }
   }
 
-  async function readAuthStatus(session: FundingSnapshot | OpenScienceSession): Promise<AuthStatus | null> {
+  function readAuthStatus(
+    session: FundingSnapshot | OpenScienceSession,
+    signal?: AbortSignal,
+  ): Promise<AuthStatus | null> {
+    return share(flightKey("status", session), (flight) => fetchAuthStatus(session, flight), signal)
+  }
+
+  async function fetchAuthStatus(
+    session: FundingSnapshot | OpenScienceSession,
+    signal: AbortSignal,
+  ): Promise<AuthStatus | null> {
     try {
       // Auth status is the sole legacy reconciliation read allowed to accept an
       // organization echo before the old unscoped session has been repaired.
@@ -914,7 +1077,7 @@ export namespace OpenScience {
       const response = await accountAtlasFetch(
         session,
         `${apiBase()}/api/v1/auth/status`,
-        { headers: { Accept: "application/json" } },
+        { headers: { Accept: "application/json" }, signal },
         true,
       )
       if (!response.ok) return null
@@ -991,10 +1154,15 @@ export namespace OpenScience {
     return activateSession(session)
   }
 
-  export async function getProfile(snapshot?: FundingSnapshot): Promise<AccountProfile | null> {
+  export async function getProfile(
+    snapshot?: FundingSnapshot,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<AccountProfile | null> {
     const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
-    return (await readAuthStatus(session))?.user ?? (session.user_id ? { user_id: session.user_id } : null)
+    return (
+      (await readAuthStatus(session, options.signal))?.user ?? (session.user_id ? { user_id: session.user_id } : null)
+    )
   }
 
   async function fundingContext(snapshot: FundingSnapshot, status: AuthStatus | null): Promise<FundingContext> {
@@ -1055,21 +1223,29 @@ export namespace OpenScience {
     }
   }
 
-  export async function getFundingContext(operation?: FundingSnapshot): Promise<FundingContext> {
+  export async function getFundingContext(
+    operation?: FundingSnapshot,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<FundingContext> {
     const snapshot = operation ?? (await getFundingSnapshot())
     if (!snapshot) return { type: "personal", available: true, locked: false, organizations: [] }
-    return fundingContext(snapshot, await readAuthStatus(snapshot))
+    return fundingContext(snapshot, await readAuthStatus(snapshot, options.signal))
   }
 
-  export async function getReconciledFundingState(): Promise<{
+  export interface FundingState {
     snapshot: FundingSnapshot
     context: FundingContext
-  } | null> {
-    const read = async (
-      snapshot: FundingSnapshot,
-      retries: number,
-    ): Promise<{ snapshot: FundingSnapshot; context: FundingContext } | null> => {
-      const status = await readAuthStatus(snapshot)
+    /** The profile the status read returned, so summaries do not read it twice. */
+    user?: AccountProfile
+    /** Whether the status read succeeded and matched this session. */
+    verified: boolean
+  }
+
+  export async function getReconciledFundingState(
+    options: { signal?: AbortSignal } = {},
+  ): Promise<FundingState | null> {
+    const read = async (snapshot: FundingSnapshot, retries: number): Promise<FundingState | null> => {
+      const status = await readAuthStatus(snapshot, options.signal)
       if (isLegacyUnscoped(snapshot) && !status) return null
       const context = await fundingContext(snapshot, status)
       const current = await getFundingSnapshot()
@@ -1080,7 +1256,12 @@ export namespace OpenScience {
         current.organization_id === snapshot.organization_id &&
         current.workspace_locked === snapshot.workspace_locked
       ) {
-        return { snapshot: current, context }
+        return {
+          snapshot: current,
+          context,
+          verified: status !== null,
+          ...(status?.user ? { user: status.user } : {}),
+        }
       }
       if (!retries) return null
       return read(current, retries - 1)
@@ -1278,6 +1459,12 @@ export namespace OpenScience {
     return result
   }
 
+  /** Runtime-only environment for kernels, language servers, formatters, and
+   * git helpers. filterEnvForKernel admits no provider or service credential
+   * key, so a kernelEnv child never inherits the synchronized workspace
+   * overlay and is registered in the credential process ledger without an
+   * overlay stamp. Callers that need the overlay use withSubprocessEnv, which
+   * reports it. */
   export function kernelEnv(env: NodeJS.ProcessEnv = process.env, overlay: NodeJS.ProcessEnv = {}) {
     return filterControlPlaneEnv({
       ...filterEnvForKernel(env),
@@ -1293,6 +1480,7 @@ export namespace OpenScience {
     return [
       path.join(Global.Path.data, "openscience-session.json"),
       path.join(Global.Path.data, "openscience-workspace-scope.json"),
+      SNAPSHOT_PATH,
       path.join(Global.Path.data, "auth.json"),
       path.join(Global.Path.data, "credentials.json"),
       path.join(Global.Path.data, "credentials.key"),
@@ -1332,22 +1520,61 @@ export namespace OpenScience {
     return normalizeByokRouting(result)
   }
 
-  export async function subprocessEnv(env: NodeJS.ProcessEnv = process.env): Promise<Record<string, string>> {
+  export interface SubprocessSnapshot {
+    env: Record<string, string>
+    /** Workspace whose synchronized credential overlay contributed at least
+     * one value to `env`: a synced provider key merged from Auth, or a synced
+     * service value that applyCredentialEnv injected into process.env. A
+     * child spawned with this env inherits that overlay and must be stamped
+     * with it in the credential process ledger. */
+    overlay?: string
+  }
+
+  export async function subprocessSnapshot(env: NodeJS.ProcessEnv = process.env): Promise<SubprocessSnapshot> {
     await CredentialLifecycle.ensureFresh()
-    const auth = await Auth.all().catch(() => ({}) as Record<string, Auth.Info>)
-    return {
-      ...mergeByokEnv(filterEnvForSubprocess(env), auth),
+    const resolved = await Auth.resolve().catch((): Auth.Resolved => ({ auth: {} }))
+    const merged = {
+      ...mergeByokEnv(filterEnvForSubprocess(env), resolved.auth),
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: os.devNull,
       GIT_TERMINAL_PROMPT: "0",
     }
+    return { env: merged, overlay: inheritedOverlay(merged, resolved) }
   }
 
+  /** Provenance, not value matching: a provider key counts only when Auth
+   * resolved it from the workspace overlay and mergeByokEnv placed that exact
+   * entry; a service value only when applyCredentialEnv recorded it as
+   * account-sourced and it is still present verbatim. */
+  function inheritedOverlay(env: Record<string, string>, resolved: Auth.Resolved): string | undefined {
+    const service = CredentialOverlay.inherited(env)
+    if (service) return service
+    const synced = resolved.overlay
+    if (!synced) return undefined
+    const provider = [...synced.providers].some((id) => {
+      const info = resolved.auth[id]
+      const spec = BYOK_SUBPROCESS_PROVIDERS[id]
+      return info?.type === "api" && !!spec && spec.keys.some((key) => env[key] === info.key)
+    })
+    return provider ? synced.organization : undefined
+  }
+
+  export async function subprocessEnv(env: NodeJS.ProcessEnv = process.env): Promise<Record<string, string>> {
+    return (await subprocessSnapshot(env)).env
+  }
+
+  /** Build the admitted subprocess environment and hand it to `action`
+   * together with the overlay it carries. Every spawn site passes that
+   * overlay explicitly to its ledger registration; nothing infers it from
+   * process-wide state. */
   export function withSubprocessEnv<T>(
     env: NodeJS.ProcessEnv,
-    action: (snapshot: Record<string, string>) => T | Promise<T>,
+    action: (snapshot: Record<string, string>, overlay: string | undefined) => T | Promise<T>,
   ): Promise<T> {
-    return CredentialLifecycle.admit(async () => action(await subprocessEnv(env)))
+    return CredentialLifecycle.admit(async () => {
+      const snapshot = await subprocessSnapshot(env)
+      return action(snapshot.env, snapshot.overlay)
+    })
   }
 
   export function pythonThreadCapEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
@@ -1382,6 +1609,9 @@ export namespace OpenScience {
   export function invalidateBalance(): void {
     balanceRevision++
     pendingBalance = undefined
+    // The stored account summary carries the same balance, so it is served
+    // as stale (and refreshed in the background) from here on.
+    accountStale = Date.now()
     if (!cachedBalance) return
     if (cachedBalance.value <= 0) {
       cachedBalance = null
@@ -1463,17 +1693,31 @@ export namespace OpenScience {
 
   export async function getCredits(
     snapshot?: FundingSnapshot,
-    options: { timeoutMs?: number; lifetimeSpent?: boolean } = {},
+    options: { timeoutMs?: number; lifetimeSpent?: boolean; signal?: AbortSignal } = {},
   ): Promise<Credits | null> {
-    const session = snapshot ?? (await getReconciledFundingState())?.snapshot
+    const session = snapshot ?? (await getReconciledFundingState({ signal: options.signal }))?.snapshot
     if (!session) return null
+    // The ledger metadata follow-up is part of the read's shape, so a summary
+    // read and a full read are separate flights.
+    return share(
+      flightKey(`wallet:${options.lifetimeSpent === false ? "summary" : "full"}`, session),
+      (flight) => fetchCredits(session, { ...options, signal: flight }),
+      options.signal,
+    )
+  }
+
+  async function fetchCredits(
+    session: FundingSnapshot,
+    options: { timeoutMs?: number; lifetimeSpent?: boolean; signal: AbortSignal },
+  ): Promise<Credits | null> {
     const timeoutMs = options.timeoutMs ?? ATLAS_FETCH_TIMEOUT_MS
+    const init = { signal: options.signal }
     try {
       let currentWallet = true
-      let response = await fundedAtlasFetch(session, `${apiBase()}/api/v1/wallet`, {}, timeoutMs)
+      let response = await fundedAtlasFetch(session, `${apiBase()}/api/v1/wallet`, init, timeoutMs)
       if (response.status === 404 || response.status === 405) {
         currentWallet = false
-        response = await fundedAtlasFetch(session, `${apiBase()}/api/credits`, {}, timeoutMs)
+        response = await fundedAtlasFetch(session, `${apiBase()}/api/credits`, init, timeoutMs)
       }
       if (!response.ok) return null
       const body = (await response.json()) as {
@@ -1489,7 +1733,7 @@ export namespace OpenScience {
       }
       let lifetimeSpent = body.lifetime_spent_cents ?? null
       if (currentWallet && lifetimeSpent === null && options.lifetimeSpent !== false) {
-        const metadata = await fundedAtlasFetch(session, `${apiBase()}/api/credits`, {}, timeoutMs).catch(
+        const metadata = await fundedAtlasFetch(session, `${apiBase()}/api/credits`, init, timeoutMs).catch(
           () => undefined,
         )
         if (metadata?.ok) {
@@ -1524,11 +1768,18 @@ export namespace OpenScience {
     createdAt: string
   }
 
-  export async function getTransactions(limit = 20, snapshot?: FundingSnapshot): Promise<Transaction[] | null> {
-    const session = snapshot ?? (await getReconciledFundingState())?.snapshot
-    if (!session) return null
+  export async function getTransactions(
+    limit = 20,
+    snapshot?: FundingSnapshot,
+    signal?: AbortSignal,
+  ): Promise<Transaction[] | null> {
+    // A legacy unscoped session learns its workspace from the status read
+    // (joining one already in flight) before any wallet endpoint sees it.
+    const session =
+      snapshot && !isLegacyUnscoped(snapshot) ? snapshot : (await getReconciledFundingState({ signal }))?.snapshot
+    if (!session || (snapshot && session.api_key !== snapshot.api_key)) return null
     try {
-      const response = await fundedAtlasFetch(session, `${apiBase()}/api/credits/transactions`)
+      const response = await fundedAtlasFetch(session, `${apiBase()}/api/credits/transactions`, { signal })
       if (!response.ok) return null
       const body = (await response.json()) as
         | Array<Record<string, unknown>>
@@ -1546,6 +1797,55 @@ export namespace OpenScience {
     }
   }
 
+  interface AccessRead {
+    ok: boolean
+    status?: number
+    body?: {
+      cli_balance_cents?: number
+      managed_supported?: boolean
+      managed_unlocked?: boolean
+      ace_enabled?: boolean
+      balance_redacted?: boolean
+    }
+  }
+
+  /** The routing preference is local (config, stored keys, env), so it is
+   * computed at read time and never taken from a stored account summary. */
+  async function localBillingMode(
+    config: Pick<typeof import("@/config/config").Config, "getGlobal">,
+  ): Promise<BillingMode["mode"]> {
+    const configured = (await config.getGlobal()).billing?.llm
+    if (configured === "managed") return "managed"
+    if (configured === "byok") return "byok"
+    const openrouterAuth = await Auth.get("openrouter").catch(() => undefined)
+    const storedOwnKey = openrouterAuth?.type === "api" && !isAtlasManagedKey(openrouterAuth.key)
+    const envOpenRouterKey = process.env.OPENROUTER_API_KEY
+    const envOwnKey = !!envOpenRouterKey && !isAtlasManagedKey(envOpenRouterKey)
+    return storedOwnKey || envOwnKey ? "byok" : "managed"
+  }
+
+  /** The entitlement check, shared by every concurrent caller in one context. */
+  function readAccess(session: FundingSnapshot, timeoutMs: number, signal?: AbortSignal): Promise<AccessRead> {
+    return share(
+      flightKey("access", session),
+      async (flight) => {
+        const response = await fundedAtlasFetch(
+          session,
+          `${apiBase()}/api/cli/access`,
+          { signal: flight },
+          timeoutMs,
+        ).catch(() => undefined)
+        if (!response) return { ok: false }
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => undefined)
+          return { ok: false, status: response.status }
+        }
+        return { ok: true, status: response.status, body: (await response.json()) as AccessRead["body"] }
+      },
+      signal,
+    )
+  }
+
   export interface BillingMode {
     mode: "byok" | "managed"
     balance_cents: number
@@ -1558,43 +1858,23 @@ export namespace OpenScience {
     access_verified?: boolean
   }
 
-  export async function getBillingMode(
-    snapshot?: FundingSnapshot,
-    knownCredits?: Credits | null | Promise<Credits | null>,
-    timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
-  ): Promise<BillingMode | null> {
-    const session = snapshot ?? (await getReconciledFundingState())?.snapshot
-    if (!session) return null
-    const [configModule, accessResponse, credits] = await Promise.all([
-      import("@/config/config"),
-      fundedAtlasFetch(session, `${apiBase()}/api/cli/access`, {}, timeoutMs).catch(() => undefined),
-      knownCredits === undefined ? getCredits(session).catch(() => null) : Promise.resolve(knownCredits),
-    ])
-    const access = accessResponse?.ok
-      ? ((await accessResponse.json()) as {
-          cli_balance_cents?: number
-          managed_supported?: boolean
-          managed_unlocked?: boolean
-          ace_enabled?: boolean
-          balance_redacted?: boolean
-        })
-      : undefined
-    const configured = (await configModule.Config.getGlobal()).billing?.llm
-    const openrouterAuth = await Auth.get("openrouter").catch(() => undefined)
-    const storedOwnKey = openrouterAuth?.type === "api" && !isAtlasManagedKey(openrouterAuth.key)
-    const envOpenRouterKey = process.env.OPENROUTER_API_KEY
-    const envOwnKey = !!envOpenRouterKey && !isAtlasManagedKey(envOpenRouterKey)
+  /** An explicit entitlement verdict: the gateway answered and refused. */
+  function accessDenied(read: AccessRead): boolean {
+    return read.status === 401 || read.status === 403
+  }
+
+  /** The billing mode one entitlement read and one wallet read describe. */
+  async function billingFromReads(read: AccessRead, credits: Credits | null): Promise<BillingMode> {
+    const { Config } = await import("@/config/config")
+    const access = read.body
     const balance = credits?.balanceCents ?? access?.cli_balance_cents ?? 0
-    const denied = accessResponse?.status === 401 || accessResponse?.status === 403
+    const denied = accessDenied(read)
     const verified =
       denied ||
-      (accessResponse?.ok === true &&
-        typeof access?.managed_unlocked === "boolean" &&
-        typeof access.managed_supported === "boolean")
+      (read.ok && typeof access?.managed_unlocked === "boolean" && typeof access.managed_supported === "boolean")
     const supported = !denied && access?.managed_supported === true
     return {
-      mode:
-        configured === "managed" ? "managed" : configured === "byok" || storedOwnKey || envOwnKey ? "byok" : "managed",
+      mode: await localBillingMode(Config),
       balance_cents: balance,
       balance_usd: balance / 100,
       managed_supported: supported,
@@ -1604,6 +1884,22 @@ export namespace OpenScience {
       balance_redacted: access?.balance_redacted ?? credits?.balanceRedacted ?? false,
       balance_verified: typeof access?.cli_balance_cents === "number" && access.balance_redacted !== true,
     }
+  }
+
+  export async function getBillingMode(
+    snapshot?: FundingSnapshot,
+    knownCredits?: Credits | null | Promise<Credits | null>,
+    options: { timeoutMs?: number; signal?: AbortSignal } = {},
+  ): Promise<BillingMode | null> {
+    const session = snapshot ?? (await getReconciledFundingState({ signal: options.signal }))?.snapshot
+    if (!session) return null
+    const [accessRead, credits] = await Promise.all([
+      readAccess(session, options.timeoutMs ?? ATLAS_FETCH_TIMEOUT_MS, options.signal),
+      knownCredits === undefined
+        ? getCredits(session, { signal: options.signal }).catch(() => null)
+        : Promise.resolve(knownCredits),
+    ])
+    return billingFromReads(accessRead, credits)
   }
 
   export async function setBillingMode(
@@ -1618,6 +1914,332 @@ export namespace OpenScience {
   }
 
   export async function waitForBillingModeMirror(): Promise<void> {}
+
+  // ---- Stored account summary ----------------------------------------------
+  // The last good account summary is persisted (data dir, mode 0600) so the UI
+  // can show it at once and refresh it in the background. It holds the
+  // profile, funding context, wallet and entitlement the account service
+  // returned; never the API key, which is bound by fingerprint only.
+
+  export interface AccountSnapshot {
+    /** When the summary was read from the account service (ms since epoch). */
+    at: number
+    user?: AccountProfile
+    context: FundingContext
+    credits: Credits | null
+    billing: BillingMode | null
+  }
+
+  export interface AccountSummary extends AccountSnapshot {
+    /** True while a newer summary is being read in the background. */
+    refreshing: boolean
+    /** Why the latest refresh failed, when the stored summary is served instead. */
+    error?: string
+  }
+
+  /** Published when a refresh stored a newer summary, or dropped the stored one after a refusal. */
+  export const AccountUpdatedEvent = BusEvent.define("account.updated", z.object({ refreshed_at: z.number() }))
+
+  /** The one bound on account reads the UI waits for. It replaces the old
+   * pair of a short UI timeout racing a long server timeout: the route's
+   * request signal (aborted when the client leaves) and this budget are
+   * combined once and propagated to every outbound fetch, so abandoned work
+   * is cancelled and the UI's answer is the server's. */
+  // Resolved per call, like the managed base, so the override applies as the
+  // process environment stands rather than as it stood at import.
+  export function accountDeadlineMs(): number {
+    return Number(process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS) || 15_000
+  }
+
+  function accountDeadlineMessage(): string {
+    return `The Ace account service did not answer within ${Math.round(accountDeadlineMs() / 1000)} seconds.`
+  }
+
+  /** The deadline's own reason says what happened, so a caller it cuts off,
+   * the failure it records and the UI all report the same thing. */
+  export function accountDeadline(signal?: AbortSignal): AbortSignal {
+    const controller = new AbortController()
+    const timer = setTimeout(
+      () => controller.abort(new DOMException(accountDeadlineMessage(), "TimeoutError")),
+      accountDeadlineMs(),
+    )
+    timer.unref()
+    const deadline = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+    if (deadline.aborted) clearTimeout(timer)
+    else deadline.addEventListener("abort", () => clearTimeout(timer), { once: true })
+    return deadline
+  }
+
+  const StoredOrganization = z.object({
+    organization_id: z.string(),
+    name: z.string(),
+    slug: z.string(),
+    is_personal: z.boolean(),
+    status: z.string(),
+    role: z.string(),
+    membership_status: z.string(),
+    funding_available: z.boolean(),
+    effective_permissions: z.array(z.string()),
+  })
+  const StoredContext = z.object({
+    type: z.enum(["personal", "organization"]),
+    organization_id: z.string().optional(),
+    available: z.boolean(),
+    locked: z.boolean(),
+    organizations: z.array(StoredOrganization),
+  })
+  const StoredCredits = z.object({
+    balanceUsd: z.number(),
+    balanceRedacted: z.boolean().optional(),
+    balanceCents: z.number(),
+    cliBalanceCents: z.number(),
+    spendableBalanceCents: z.number(),
+    promotionalBalanceCents: z.number(),
+    cycleCreditsRemainingCents: z.number(),
+    lifetimeSpentCents: z.number().nullable(),
+  })
+  const StoredBilling = z.object({
+    mode: z.enum(["byok", "managed"]),
+    balance_cents: z.number(),
+    balance_usd: z.number(),
+    managed_supported: z.boolean(),
+    managed_unlocked: z.boolean(),
+    ace_enabled: z.boolean().optional(),
+    balance_redacted: z.boolean().optional(),
+    balance_verified: z.boolean().optional(),
+    access_verified: z.boolean().optional(),
+  })
+  // Only the profile fields the UI shows are stored. Whatever else the
+  // account service returns with the profile is never written to disk.
+  const StoredProfile = z.object({
+    user_id: z.string().optional(),
+    email: z.string().nullable().optional(),
+    display_name: z.string().nullable().optional(),
+    github_username: z.string().nullable().optional(),
+  })
+  const StoredSnapshot = z.object({
+    protocol: z.literal(1),
+    key_fingerprint: z.string(),
+    user_id: z.string(),
+    organization_id: z.string().optional(),
+    workspace_locked: z.boolean().optional(),
+    at: z.number(),
+    user: StoredProfile.optional(),
+    context: StoredContext,
+    credits: StoredCredits.nullable(),
+    billing: StoredBilling.nullable(),
+  })
+
+  // Summaries read before this instant are served as stale (a spend or a
+  // credential change happened since).
+  let accountStale = 0
+  let accountFailure: { context: string; at: number; error: string } | undefined
+
+  /** The profile a summary carries: the stored fields, picked from what the
+   * account service returned, so memory and disk hold the same shape. */
+  function storedProfile(user: AccountProfile): z.infer<typeof StoredProfile> {
+    const text = (value: unknown) => (typeof value === "string" || value === null ? value : undefined)
+    const picked = {
+      user_id: typeof user.user_id === "string" ? user.user_id : undefined,
+      email: text(user.email),
+      display_name: text(user.display_name),
+      github_username: text(user.github_username),
+    }
+    return Object.fromEntries(Object.entries(picked).filter(([, value]) => value !== undefined))
+  }
+
+  function sameSnapshot(a: FundingSnapshot, b: FundingSnapshot): boolean {
+    return (
+      a.api_key === b.api_key &&
+      a.user_id === b.user_id &&
+      a.organization_id === b.organization_id &&
+      a.workspace_locked === b.workspace_locked
+    )
+  }
+
+  /** The stored summary, only when it belongs to this exact account, funding
+   * context and lock state (what flightKey and sameSnapshot bind on). */
+  export async function readAccountSnapshot(session: FundingSnapshot): Promise<AccountSnapshot | null> {
+    if (!existsSync(SNAPSHOT_PATH)) return null
+    const parsed = StoredSnapshot.safeParse(
+      await Bun.file(SNAPSHOT_PATH)
+        .json()
+        .catch(() => undefined),
+    )
+    if (!parsed.success) return null
+    const stored = parsed.data
+    if (stored.key_fingerprint !== keyFingerprint(session.api_key)) return null
+    if (stored.user_id !== session.user_id || stored.organization_id !== session.organization_id) return null
+    if ((stored.workspace_locked === true) !== (session.workspace_locked === true)) return null
+    // A clock that moved backwards after the write leaves `at` in the future,
+    // where it would pass every freshness check; such a summary is stale.
+    const now = Date.now()
+    return {
+      at: stored.at > now ? now - ACCOUNT_SNAPSHOT_TTL_MS : stored.at,
+      ...(stored.user ? { user: stored.user } : {}),
+      context: stored.context,
+      credits: stored.credits,
+      billing: stored.billing,
+    }
+  }
+
+  async function writeAccountSnapshot(session: FundingSnapshot, snapshot: AccountSnapshot): Promise<void> {
+    await atomicWrite(
+      SNAPSHOT_PATH,
+      JSON.stringify({
+        protocol: 1,
+        key_fingerprint: keyFingerprint(session.api_key),
+        user_id: session.user_id,
+        ...(session.organization_id ? { organization_id: session.organization_id } : {}),
+        ...(session.workspace_locked ? { workspace_locked: true } : {}),
+        at: snapshot.at,
+        ...(snapshot.user ? { user: storedProfile(snapshot.user) } : {}),
+        context: snapshot.context,
+        credits: snapshot.credits,
+        billing: snapshot.billing,
+      } satisfies z.input<typeof StoredSnapshot>),
+    )
+  }
+
+  /** Read a fresh summary from the account service, store it and announce it.
+   * Shared by every concurrent caller in one funding context. Throws when the
+   * account status is unavailable or the selected account changed meanwhile,
+   * so a stored summary is never overwritten by an incomplete read. */
+  export function refreshAccount(
+    session: FundingSnapshot,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<AccountSnapshot> {
+    return share(flightKey("account", session), (flight) => fetchAccount(session, flight), options.signal)
+  }
+
+  function refreshFailure(error: unknown): string {
+    if (error instanceof DOMException && error.name === "TimeoutError") return accountDeadlineMessage()
+    if (error instanceof DOMException && error.name === "AbortError") return "The account refresh was cancelled."
+    return error instanceof Error ? error.message : "Account refresh failed. Try again."
+  }
+
+  /** Store `snapshot` for `expected`'s account, or with `null` drop whatever
+   * is stored. The re-check and the write hold the session file's lock like
+   * the session mutators do, so nothing lands after a sign-out or a new
+   * sign-in removed the file. Returns whether the next summary read now
+   * serves something different. */
+  async function commitSummary(expected: FundingSnapshot, snapshot: AccountSnapshot | null): Promise<boolean> {
+    using _ = await Lock.write(SESSION_PATH)
+    const current = await getFundingSnapshot()
+    if (!current || !sameSnapshot(current, expected)) {
+      throw new Error("The selected account changed while refreshing. Retry.")
+    }
+    if (snapshot) {
+      await writeAccountSnapshot(current, snapshot)
+      return true
+    }
+    const stored = existsSync(SNAPSHOT_PATH)
+    await fs.rm(SNAPSHOT_PATH, { force: true })
+    return stored
+  }
+
+  async function fetchAccount(session: FundingSnapshot, signal: AbortSignal): Promise<AccountSnapshot> {
+    const context = contextTag(session)
+    const unavailable = () => new Error("The Ace account service is unavailable. Retry when connected.")
+    try {
+      // Reads only (status, entitlement, wallet): a refresh, in the
+      // background or not, never calls anything that spends.
+      const state = await getReconciledFundingState({ signal })
+      if (!state) throw new Error("Sign in again to refresh the Ace account.")
+      if (!state.verified) throw unavailable()
+      const [credits, access] = await Promise.all([
+        getCredits(state.snapshot, { signal }),
+        readAccess(state.snapshot, ATLAS_FETCH_TIMEOUT_MS, signal),
+      ])
+      if (access.status === 401) {
+        // The gateway rejected the key. accountAtlasFetch has begun clearing
+        // the session; finish that here so a caller that waited finds
+        // neither a session nor a stored summary.
+        await clearSession(state.snapshot.api_key)
+        throw new Error("This device was disconnected. Sign in again.")
+      }
+      const billing = await billingFromReads(access, credits)
+      const denied = accessDenied(access)
+      // A wallet or entitlement read that did not answer (a timeout, a 5xx)
+      // is not a summary: the last good one stays stored and is served with
+      // the failure.
+      if (!denied && (credits === null || billing.access_verified !== true)) throw unavailable()
+      const snapshot: AccountSnapshot = {
+        at: Date.now(),
+        ...(state.user ? { user: storedProfile(state.user) } : {}),
+        context: state.context,
+        credits,
+        billing,
+      }
+      // A refusal is answered to whoever asked but never stored: the next
+      // read asks the gateway again instead of trusting a refusal for a
+      // summary's lifetime, and the last good summary is dropped so it
+      // cannot outrank the refusal.
+      const changed = await commitSummary(state.snapshot, denied ? null : snapshot)
+      if (accountFailure?.context === context) accountFailure = undefined
+      if (changed) {
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: { type: AccountUpdatedEvent.type, properties: { refreshed_at: snapshot.at } },
+        })
+      }
+      return snapshot
+    } catch (error) {
+      // The read is cancelled once its last caller left; that caller's own
+      // cancellation is not an account failure, while the deadline is.
+      const reason = signal.aborted ? signal.reason : error
+      if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+        accountFailure = { context, at: Date.now(), error: refreshFailure(reason) }
+      }
+      throw error
+    }
+  }
+
+  async function accountSummary(
+    snapshot: AccountSnapshot,
+    refreshing: boolean,
+    error?: string,
+  ): Promise<AccountSummary> {
+    const { Config } = await import("@/config/config")
+    const mode = await localBillingMode(Config)
+    return {
+      ...snapshot,
+      billing: snapshot.billing ? { ...snapshot.billing, mode } : null,
+      refreshing,
+      ...(error ? { error } : {}),
+    }
+  }
+
+  /** The account summary the UI shows. Null when signed out. A stored summary
+   * is returned at once: as current while it is recent, otherwise marked
+   * `refreshing` while a background read replaces it. Only the first read of
+   * an account, with nothing stored yet, waits for the account service. */
+  export async function getAccountSummary(options: { signal?: AbortSignal } = {}): Promise<AccountSummary | null> {
+    const session = await getFundingSnapshot()
+    if (!session) return null
+    const cached = await readAccountSnapshot(session)
+    const now = Date.now()
+    // A recent summary is current. Strict: one stored in the same millisecond
+    // as a spend is stale, which costs one background read instead of a wrong
+    // verdict. A stale one younger than the refresh interval is served as it
+    // is: the refresh that stored it just ran, and the next read after the
+    // interval starts another. Nothing here asks the account service.
+    const lifetime = cached && cached.at > accountStale ? ACCOUNT_SNAPSHOT_TTL_MS : ACCOUNT_REFRESH_MIN_MS
+    if (cached && now - cached.at < lifetime) return accountSummary(cached, false)
+    const failure = accountFailure?.context === contextTag(session) ? accountFailure : undefined
+    if (cached && failure && failure.at > cached.at && now - failure.at < ACCOUNT_RETRY_MS) {
+      return accountSummary(cached, false, failure.error)
+    }
+    // The only read that waits: the caller's own signal (a route's request,
+    // aborted when the client leaves) bounds it together with the deadline.
+    if (!cached)
+      return accountSummary(await refreshAccount(session, { signal: accountDeadline(options.signal) }), false)
+    // Nobody waits on the background read here, so it runs under the
+    // deadline alone; the result is announced on the global bus and the next
+    // summary read serves it.
+    refreshAccount(session, { signal: accountDeadline() }).catch(() => undefined)
+    return accountSummary(cached, true, failure?.error)
+  }
 
   export async function reportUsage(
     _params: Record<string, unknown>,

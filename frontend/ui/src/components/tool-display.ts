@@ -1,3 +1,5 @@
+import type { UiI18nKey, UiI18nParams } from "../context/i18n"
+
 const titlecase = (s: string) =>
   s
     .split(/[\s_-]+/)
@@ -72,6 +74,106 @@ export function reasoningTopic(text: string): string | undefined {
   }
   if (topic) return topic
   return statusOnlyReasoning(visible) ? visible.trim() : undefined
+}
+
+export type ToolOutcome = "pending" | "running" | "done" | "error" | "cancelled"
+
+/** Where a call is in its life. An abort is a cancellation, not a failure of the tool. */
+export function toolOutcome(status: string | undefined, error?: string): ToolOutcome {
+  if (status === "completed") return "done"
+  if (status === "error") return /\b(?:aborted|cancel+ed)\b/i.test(error ?? "") ? "cancelled" : "error"
+  if (status === "running") return "running"
+  return "pending"
+}
+
+const running: Record<string, UiI18nKey> = {
+  read: "ui.tool.running.read",
+  list: "ui.tool.running.list",
+  glob: "ui.tool.running.glob",
+  grep: "ui.tool.running.grep",
+  codesearch: "ui.tool.running.codesearch",
+  webfetch: "ui.tool.running.webfetch",
+  websearch: "ui.tool.running.websearch",
+  bash: "ui.tool.running.bash",
+  edit: "ui.tool.running.edit",
+  multiedit: "ui.tool.running.edit",
+  write: "ui.tool.running.write",
+  apply_patch: "ui.tool.running.patch",
+}
+
+/** The present-tense label a live call shows in place of its noun title. */
+export function runningLabel(tool: string): UiI18nKey | undefined {
+  return running[tool]
+}
+
+/** The first line of a failure, for the collapsed row. */
+export function errorLine(value: string | undefined) {
+  const line = (value ?? "")
+    .replace(/^Error:\s*/, "")
+    .split(/\r?\n/)
+    .find((item) => item.trim())
+  return line?.trim() ?? ""
+}
+
+export function lineCount(value: string | undefined) {
+  if (!value) return 0
+  const lines = value.split(/\r?\n/)
+  return lines.at(-1) === "" ? lines.length - 1 : lines.length
+}
+
+/** The shell tool appends a metadata trailer on sandbox warnings, timeouts, and aborts; it is not output. */
+export function stripBashMetadata(value?: string) {
+  return (value ?? "").replace(/\s*<bash_metadata>[\s\S]*?<\/bash_metadata>\s*$/g, "")
+}
+
+export type ToolSummary = { key: UiI18nKey; params: UiI18nParams }
+
+const plural = (name: "lines" | "matches" | "files", count: number): ToolSummary => ({
+  key: `ui.tool.summary.${name}.${count === 1 ? "one" : "other"}`,
+  params: { count },
+})
+
+/**
+ * One quiet receipt for a finished call: what it produced, in the units the
+ * tool itself reports (exit code, matches, files, lines). Nothing is guessed
+ * for tools whose body already says it (diffs, kernels, delegation).
+ */
+export function toolSummary(input: {
+  tool: string
+  status?: string
+  output?: string
+  metadata?: Record<string, unknown>
+}): ToolSummary[] {
+  if (input.status !== "completed") return []
+  const metadata = input.metadata ?? {}
+  const output = input.output ?? ""
+  switch (input.tool) {
+    case "bash": {
+      const exit = typeof metadata.exit === "number" && metadata.exit !== 0 ? metadata.exit : undefined
+      const lines = lineCount(stripBashMetadata(output))
+      return [
+        ...(exit === undefined ? [] : [{ key: "ui.tool.summary.exit" as const, params: { code: exit } }]),
+        ...(lines > 0 ? [plural("lines", lines)] : []),
+      ]
+    }
+    case "grep":
+      return typeof metadata.matches === "number" ? [plural("matches", metadata.matches)] : []
+    case "glob":
+    case "list":
+      return typeof metadata.count === "number" ? [plural("files", metadata.count)] : []
+    case "read": {
+      const lines = output.match(/^\d{5}\| /gm)?.length ?? 0
+      return lines > 0 ? [plural("lines", lines)] : []
+    }
+    case "webfetch":
+    case "websearch":
+    case "codesearch": {
+      const lines = lineCount(output)
+      return lines > 0 ? [plural("lines", lines)] : []
+    }
+    default:
+      return []
+  }
 }
 
 export function toolErrorDisplay(tool: string, value: string) {

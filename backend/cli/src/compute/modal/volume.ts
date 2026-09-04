@@ -6,6 +6,7 @@ import { Global } from "../../global"
 import { DataRootBarrier } from "../../global/data-root-barrier"
 import { CredentialLifecycle } from "../../credentials/lifecycle"
 import { CredentialProcessLedger } from "../../credentials/process-ledger"
+import { CredentialRevocation } from "../../credentials/revocation"
 import { ProcessIdentity } from "../../process/process-identity"
 import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "../../process/darwin-responsibility-launcher"
 import { WindowsJobLauncher } from "../../process/windows-job-launcher"
@@ -653,6 +654,7 @@ export namespace ModalVolume {
 
 // A credential rotation in this or another server must revoke any helper that
 // inherited the prior Modal token pair before the new revision is acknowledged.
-CredentialLifecycle.onRevoke(async () => {
-  await CredentialProcessLedger.revoke("modal-volume")
+// An expired synced overlay reaches only helpers that inherited it.
+CredentialLifecycle.onRevoke(async ({ reason }) => {
+  await CredentialProcessLedger.revoke({ kind: "modal-volume", ...CredentialRevocation.scope(reason) })
 })
