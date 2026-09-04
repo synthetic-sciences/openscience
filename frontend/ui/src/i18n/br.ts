@@ -26,6 +26,14 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "Pensando - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Organizando pensamentos",
   "ui.sessionTurn.status.consideringNextSteps": "Considerando próximos passos",
+  "ui.sessionTurn.progress.connecting": "Conectando a {{model}}…",
+  "ui.sessionTurn.progress.stillConnecting": "Ainda conectando a {{model}} ({{seconds}}s)",
+  "ui.sessionTurn.progress.waitingFirstToken": "Aguardando {{model}} começar ({{seconds}}s)",
+  "ui.sessionTurn.progress.streaming": "Recebendo de {{model}}…",
+  "ui.sessionTurn.progress.conflictWait":
+    "Uma tentativa anterior ainda está em execução no gateway; aguardando ({{seconds}}s)",
+  "ui.sessionTurn.progress.retryWait": "Tentando novamente em {{seconds}}s",
+  "ui.sessionTurn.progress.stillOpen": "O provedor ainda não começou a responder; a solicitação continua aberta.",
 
   "ui.messagePart.diagnostic.error": "Erro",
   "ui.messagePart.reasoning.providerSummary": "Resumo do modelo",

@@ -29,6 +29,13 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.thinkingWithTopic": "Tenker - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
+  "ui.sessionTurn.progress.connecting": "Kobler til {{model}}…",
+  "ui.sessionTurn.progress.stillConnecting": "Kobler fortsatt til {{model}} ({{seconds}}s)",
+  "ui.sessionTurn.progress.waitingFirstToken": "Venter på at {{model}} starter ({{seconds}}s)",
+  "ui.sessionTurn.progress.streaming": "Mottar fra {{model}}…",
+  "ui.sessionTurn.progress.conflictWait": "Et tidligere forsøk kjører fortsatt på gatewayen; venter ({{seconds}}s)",
+  "ui.sessionTurn.progress.retryWait": "Prøver igjen om {{seconds}}s",
+  "ui.sessionTurn.progress.stillOpen": "Leverandøren har ikke begynt å svare ennå; forespørselen er fortsatt åpen.",
 
   "ui.messagePart.diagnostic.error": "Feil",
   "ui.messagePart.reasoning.providerSummary": "Modellsammendrag",

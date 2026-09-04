@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Instance } from "@/project/instance"
+import { SessionTelemetry } from "./telemetry"
 import z from "zod"
 
 export namespace SessionStatus {
@@ -66,6 +67,22 @@ export namespace SessionStatus {
       sessionID,
       status,
     })
+    // A retry countdown is the "retry_wait" request phase of the message that
+    // is currently in flight; mirror it so the phase record stays honest
+    // without the retry path having to know about telemetry.
+    if (status.type === "retry") {
+      const current = SessionTelemetry.progress(sessionID)
+      if (current) {
+        SessionTelemetry.recordProgress({
+          sessionID,
+          messageID: current.messageID,
+          attempt: status.attempt,
+          phase: "retry_wait",
+          retryAfterMs: status.next - Date.now(),
+          detail: status.message,
+        })
+      }
+    }
     if (status.type === "idle") {
       // deprecated
       Bus.publish(Event.Idle, {

@@ -84,3 +84,39 @@ describe("session.telemetry.recordCompaction", () => {
     })
   })
 })
+
+describe("session.telemetry.recordProgress", () => {
+  test("evicts finished requests first and the least recently updated one after that", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // Matches LATEST_LIMIT in telemetry.ts.
+        const limit = 256
+        const record = (n: number, phase: SessionTelemetry.RequestPhase) =>
+          SessionTelemetry.recordProgress({
+            sessionID: `ses_evict_${n}`,
+            messageID: `msg_evict_${n}`,
+            attempt: 1,
+            agent: "research",
+            providerID: "stress",
+            modelID: "fixture-model",
+            phase,
+          })
+        Array.from({ length: limit }, (_, n) => record(n, "connecting"))
+        // Updating the oldest record makes it the most recent, so the next
+        // insert evicts its neighbour instead of cutting it off mid-request.
+        record(0, "waiting_first_token")
+        record(limit, "connecting")
+        expect(SessionTelemetry.progress("ses_evict_0")?.phase).toBe("waiting_first_token")
+        expect(SessionTelemetry.progress("ses_evict_1")).toBeUndefined()
+        // A finished request goes before any in-flight one, however old.
+        record(5, "done")
+        record(limit + 1, "connecting")
+        expect(SessionTelemetry.progress("ses_evict_5")).toBeUndefined()
+        expect(SessionTelemetry.progress("ses_evict_2")?.phase).toBe("connecting")
+        expect(SessionTelemetry.progress(`ses_evict_${limit + 1}`)?.phase).toBe("connecting")
+      },
+    })
+  })
+})

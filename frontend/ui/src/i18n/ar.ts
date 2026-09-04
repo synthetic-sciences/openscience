@@ -26,6 +26,13 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "تفكير - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "جمع الأفكار",
   "ui.sessionTurn.status.consideringNextSteps": "النظر في الخطوات التالية",
+  "ui.sessionTurn.progress.connecting": "جارٍ الاتصال بـ {{model}}…",
+  "ui.sessionTurn.progress.stillConnecting": "لا يزال الاتصال بـ {{model}} جارياً ({{seconds}} ث)",
+  "ui.sessionTurn.progress.waitingFirstToken": "في انتظار بدء {{model}} ({{seconds}} ث)",
+  "ui.sessionTurn.progress.streaming": "جارٍ الاستلام من {{model}}…",
+  "ui.sessionTurn.progress.conflictWait": "لا تزال محاولة سابقة قيد التشغيل على البوابة؛ في الانتظار ({{seconds}} ث)",
+  "ui.sessionTurn.progress.retryWait": "إعادة المحاولة خلال {{seconds}} ث",
+  "ui.sessionTurn.progress.stillOpen": "لم يبدأ المزوّد بالرد بعد؛ الطلب لا يزال مفتوحًا.",
 
   "ui.messagePart.diagnostic.error": "خطأ",
   "ui.messagePart.reasoning.providerSummary": "ملخص النموذج",

@@ -8,6 +8,7 @@ import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
+import { SessionTelemetry } from "./telemetry"
 import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
@@ -564,6 +565,16 @@ export namespace SessionProcessor {
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         shouldBreakOnDeny = shouldBreak
         let traceRoute = "custom"
+        const progress = (phase: SessionTelemetry.RequestPhase) =>
+          SessionTelemetry.recordProgress({
+            sessionID: input.sessionID,
+            messageID: input.assistantMessage.id,
+            attempt: attempt + 1,
+            agent: input.assistantMessage.agent,
+            providerID: input.model.providerID,
+            modelID: input.model.id,
+            phase,
+          })
         while (true) {
           try {
             traceRoute = accessRoute(credentialSource, input.model)
@@ -629,11 +640,13 @@ export namespace SessionProcessor {
                   ],
                 }
               : streamInput
+            progress("connecting")
             const stream = await Provider.withRequestContext(requestContext, () =>
               LLM.stream({
                 ...request,
                 route: traceRoute,
                 trace: { messageID: input.assistantMessage.id, attempt: attempt + 1 },
+                onResponse: () => progress("waiting_first_token"),
                 onReasoningEffortResolved: async (effort) => {
                   if (input.assistantMessage.reasoningEffort === effort) return
                   input.assistantMessage.reasoningEffort = effort
@@ -646,6 +659,16 @@ export namespace SessionProcessor {
 
             for await (const value of Provider.withRequestContextIterable(requestContext, stream.fullStream)) {
               input.abort.throwIfAborted()
+              // First content is the honest first-output timestamp. A role-only
+              // delta or an SSE keepalive comment never reaches this branch, and
+              // the record ignores the repeat on every later delta.
+              if (
+                ((value.type === "text-delta" || value.type === "reasoning-delta") && value.text.length > 0) ||
+                value.type === "tool-input-start" ||
+                value.type === "tool-call"
+              ) {
+                progress("streaming")
+              }
               switch (value.type) {
                 case "start":
                   SessionStatus.set(input.sessionID, { type: input.busyStatus ?? "busy" })
@@ -1087,6 +1110,7 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+          progress(input.assistantMessage.error ? "error" : "done")
           if (overflow) return "overflow"
           if (needsCompaction) return "compact"
           if (blocked) return "stop"

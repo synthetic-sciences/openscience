@@ -30,6 +30,13 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "思考：{{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "正在整理思路",
   "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
+  "ui.sessionTurn.progress.connecting": "正在连接 {{model}}…",
+  "ui.sessionTurn.progress.stillConnecting": "仍在连接 {{model}}（{{seconds}}秒）",
+  "ui.sessionTurn.progress.waitingFirstToken": "等待 {{model}} 开始响应（{{seconds}}秒）",
+  "ui.sessionTurn.progress.streaming": "正在接收来自 {{model}} 的响应…",
+  "ui.sessionTurn.progress.conflictWait": "先前的尝试仍在网关上运行；等待中（{{seconds}}秒）",
+  "ui.sessionTurn.progress.retryWait": "{{seconds}}秒后重试",
+  "ui.sessionTurn.progress.stillOpen": "提供方尚未开始响应；请求仍处于打开状态。",
 
   "ui.messagePart.diagnostic.error": "错误",
   "ui.messagePart.reasoning.providerSummary": "模型摘要",

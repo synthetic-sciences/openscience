@@ -26,6 +26,13 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "Размышление - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Сбор мыслей",
   "ui.sessionTurn.status.consideringNextSteps": "Рассмотрение следующих шагов",
+  "ui.sessionTurn.progress.connecting": "Подключение к {{model}}…",
+  "ui.sessionTurn.progress.stillConnecting": "Подключение к {{model}} всё ещё выполняется ({{seconds}}с)",
+  "ui.sessionTurn.progress.waitingFirstToken": "Ожидание начала ответа {{model}} ({{seconds}}с)",
+  "ui.sessionTurn.progress.streaming": "Получение ответа от {{model}}…",
+  "ui.sessionTurn.progress.conflictWait": "Предыдущая попытка всё ещё выполняется на шлюзе; ожидание ({{seconds}}с)",
+  "ui.sessionTurn.progress.retryWait": "Повторная попытка через {{seconds}}с",
+  "ui.sessionTurn.progress.stillOpen": "Провайдер ещё не начал отвечать; запрос всё ещё открыт.",
 
   "ui.messagePart.diagnostic.error": "Ошибка",
   "ui.messagePart.reasoning.providerSummary": "Сводка модели",

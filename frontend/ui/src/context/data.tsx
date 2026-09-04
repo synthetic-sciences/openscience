@@ -4,6 +4,7 @@ import type {
   Part,
   FileDiff,
   SessionStatus,
+  SessionRequestProgress,
   PermissionRequest,
   QuestionRequest,
   QuestionAnswer,
@@ -15,6 +16,11 @@ type Data = {
   session: Session[]
   session_status: {
     [sessionID: string]: SessionStatus
+  }
+  // Live provider request phase per session. Optional: older backends never
+  // publish it and the status line falls back to its generic copy.
+  session_progress?: {
+    [sessionID: string]: SessionRequestProgress
   }
   session_diff: {
     [sessionID: string]: FileDiff[]

@@ -41,6 +41,7 @@ import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
+import { progressStatus } from "./session-turn-progress"
 import { visibleResearchTrace } from "./research-trace"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
@@ -437,6 +438,14 @@ export function SessionTurn(
     if (s.type !== "retry") return
     return s
   })
+  // Live provider request phase for this turn's in-flight assistant message.
+  // Older backends never publish it, so it is optional end to end.
+  const progress = createMemo(() => {
+    const item = data.store.session_progress?.[props.sessionID]
+    if (!item) return
+    if (!assistantMessages().some((message) => message.id === item.messageID)) return
+    return item
+  })
 
   // Files this turn wrote (completed write/edit/multiedit/apply_patch parts).
   // Feeds the end-of-response "Save as artifact…" affordance on the last
@@ -541,6 +550,7 @@ export function SessionTurn(
 
   const [store, setStore] = createStore({
     retrySeconds: 0,
+    now: Date.now(),
     diffsOpen: [] as string[],
     diffPreviewsExpanded: [] as string[],
     diffLimit: diffInit,
@@ -594,6 +604,7 @@ export function SessionTurn(
   createEffect(() => {
     const update = () => {
       setStore("duration", duration())
+      setStore("now", Date.now())
     }
 
     update()
@@ -609,6 +620,16 @@ export function SessionTurn(
     const newStatus = rawStatus()
     if (newStatus === store.status || !newStatus) return
     setStore("status", newStatus)
+  })
+
+  // Part-derived status wins; before the first part exists the request phase
+  // says what the wait actually is, and the generic copy is the last resort.
+  const phase = createMemo(() => (store.status ? undefined : progressStatus(progress(), store.now)))
+  const statusText = createMemo(() => {
+    if (store.status) return store.status
+    const live = phase()
+    if (live) return i18n.t(live.key, live.params)
+    return i18n.t("ui.sessionTurn.status.consideringNextSteps")
   })
 
   return (
@@ -699,9 +720,7 @@ export function SessionTurn(
                                 <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                               </Match>
                               <Match when={working()}>
-                                <span data-slot="session-turn-status-text">
-                                  {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
-                                </span>
+                                <span data-slot="session-turn-status-text">{statusText()}</span>
                               </Match>
                               <Match when={props.stepsExpanded}>
                                 <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.hide")}</span>
@@ -713,6 +732,13 @@ export function SessionTurn(
                             <span aria-hidden="true">·</span>
                             <span aria-live="off">{store.duration}</span>
                           </Button>
+                          <Show when={working() && phase()?.hint}>
+                            {(hint) => (
+                              <div data-slot="session-turn-progress-hint" role="status" aria-live="polite">
+                                {i18n.t(hint())}
+                              </div>
+                            )}
+                          </Show>
                         </div>
                       </Show>
                     </div>

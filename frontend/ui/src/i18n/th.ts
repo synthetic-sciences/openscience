@@ -27,6 +27,13 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "กำลังคิด - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "รวบรวมความคิด",
   "ui.sessionTurn.status.consideringNextSteps": "พิจารณาขั้นตอนถัดไป",
+  "ui.sessionTurn.progress.connecting": "กำลังเชื่อมต่อกับ {{model}}…",
+  "ui.sessionTurn.progress.stillConnecting": "ยังคงเชื่อมต่อกับ {{model}} ({{seconds}} วินาที)",
+  "ui.sessionTurn.progress.waitingFirstToken": "กำลังรอให้ {{model}} เริ่มตอบ ({{seconds}} วินาที)",
+  "ui.sessionTurn.progress.streaming": "กำลังรับข้อมูลจาก {{model}}…",
+  "ui.sessionTurn.progress.conflictWait": "ความพยายามก่อนหน้ายังทำงานอยู่บนเกตเวย์ กำลังรอ ({{seconds}} วินาที)",
+  "ui.sessionTurn.progress.retryWait": "จะลองใหม่ใน {{seconds}} วินาที",
+  "ui.sessionTurn.progress.stillOpen": "ผู้ให้บริการยังไม่เริ่มตอบกลับ คำขอยังเปิดอยู่",
 
   "ui.messagePart.diagnostic.error": "ข้อผิดพลาด",
   "ui.messagePart.reasoning.providerSummary": "สรุปของโมเดล",

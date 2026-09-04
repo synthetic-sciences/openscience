@@ -634,6 +634,13 @@
     text-overflow: ellipsis;
   }
 
+  [data-slot="session-turn-progress-hint"] {
+    margin-top: 6px;
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+    color: var(--text-weak);
+  }
+
   [data-slot="session-turn-details-text"] {
     font-size: 13px;
     /* text-12-medium */
