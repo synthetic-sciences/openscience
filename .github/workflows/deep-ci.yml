@@ -13,29 +13,19 @@ permissions:
   contents: read
 
 # Expensive and platform-specific coverage lives here rather than delaying
-# every small pull request. One Linux job shares a single checkout/install;
-# native ownership tests share a two-entry platform matrix.
+# every small pull request. Static checks and the web builds share one Linux
+# job; the backend suite runs as directory shards planned by
+# tooling/repo/test-shards.ts (Bun has no multi-process runner, so a matrix is
+# the only parallelism available); native ownership tests share a two-entry
+# platform matrix.
 jobs:
-  linux:
-    name: Full Linux + web
+  static:
+    name: Static checks + web
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-bun
-      - name: Configure fixtures
-        shell: bash
-        run: |
-          git config --global user.email "ci@openscience.dev"
-          git config --global user.name "OpenScience CI"
-          git config --global init.defaultBranch main
-          sudo apt-get update
-          sudo apt-get install --yes bubblewrap openssh-server
-          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
-            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
-          fi
-          bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
-          sudo install -d -m 0755 /run/sshd
       - name: Static checks
         run: |
           bun run format:check
@@ -52,9 +42,6 @@ jobs:
           bun install --frozen-lockfile
           bunx tsc -b
           bun run build
-      - name: Full backend suite
-        working-directory: backend/cli
-        run: bun run test
       - name: Release script syntax
         shell: bash
         run: |
@@ -62,6 +49,88 @@ jobs:
             bun -e "new Bun.Transpiler({ loader: 'ts' }).transformSync(await Bun.file('$file').text())"
           done
       - uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2
+
+  plan:
+    name: Plan backend shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+        with:
+          install: "false"
+      - name: Balance test directories into shards
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix="$(bun tooling/repo/test-shards.ts)"
+          jq -r '.[] | "\(.name): \(.seconds)s, \(.files) files: \(.paths)"' <<<"$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  backend:
+    name: Backend (${{ matrix.shard.name }})
+    needs: [plan]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - name: Configure fixtures
+        shell: bash
+        run: |
+          git config --global user.email "ci@openscience.dev"
+          git config --global user.name "OpenScience CI"
+          git config --global init.defaultBranch main
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap openssh-server
+          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
+          sudo install -d -m 0755 /run/sshd
+      # test/server/spa-fallback.test.ts serves the gitignored web asset
+      # manifest that the old single job built before the suite and fails in
+      # CI without it; only the shard running ./test/server pays for the build.
+      - name: Build web assets
+        if: contains(matrix.shard.paths, './test/server')
+        shell: bash
+        run: |
+          bun run --cwd frontend/workspace build
+          bun run --cwd backend/cli script/generate-web-assets.ts
+      - name: Run backend shard
+        shell: bash
+        working-directory: backend/cli
+        env:
+          SHARD_PATHS: ${{ matrix.shard.paths }}
+        run: |
+          set -euo pipefail
+          read -ra paths <<<"$SHARD_PATHS"
+          bun test --timeout 15000 "${paths[@]}"
+
+  # Single status for the whole sharded suite, so dashboards and any future
+  # required check have one name to watch.
+  suite:
+    name: Full backend suite
+    needs: [plan, backend]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every shard to pass
+        shell: bash
+        env:
+          PLAN: ${{ needs.plan.result }}
+          BACKEND: ${{ needs.backend.result }}
+        run: |
+          echo "plan=$PLAN backend=$BACKEND"
+          [[ "$PLAN" == "success" && "$BACKEND" == "success" ]]
 
   native:
     name: Native ownership (${{ matrix.name }})

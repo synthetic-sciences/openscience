@@ -90,6 +90,22 @@ jobs:
             const candidates = runs
               .filter((run) => run.conclusion === "success")
               .sort((a, b) => b.id - a.id)
+            // Every gate job of npm-test.yml by exact name: the os-smoke runner
+            // set and the capability x native-runner canary matrix must match
+            // that workflow's matrices. Change both files together.
+            const smokes = ["linux-x64", "linux-arm64", "macos", "windows"]
+            const runners = ["linux-x64", "linux-arm64", "macos-arm64"]
+            const capabilities = ["scipy", "matplotlib", "scikit-learn", "biopython", "rdkit"]
+            const expected = [
+              "publish-test",
+              "packaged-e2e",
+              "musl-baseline-smoke",
+              "promote-test",
+              ...smokes.map((os) => `os-smoke (${os})`),
+              ...runners.flatMap((os) =>
+                capabilities.map((capability) => `scientific capability canary (${os}, ${capability})`),
+              ),
+            ]
             for (const run of candidates) {
               const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
                 ...context.repo,
@@ -97,15 +113,13 @@ jobs:
                 filter: "latest",
                 per_page: 100,
               })
-              const passed = jobs.filter((job) => job.conclusion === "success")
-              const names = new Set(passed.map((job) => job.name))
-              const exact = ["publish-test", "packaged-e2e", "musl-baseline-smoke", "promote-test"]
-              const os = passed.filter((job) => job.name.startsWith("os-smoke (")).length
-              const science = passed.filter((job) => job.name.startsWith("scientific capability canary (")).length
-              if (exact.every((name) => names.has(name)) && os === 4 && science === 3) {
+              const passed = new Set(jobs.filter((job) => job.conclusion === "success").map((job) => job.name))
+              const missing = expected.filter((name) => !passed.has(name))
+              if (missing.length === 0) {
                 core.info(`Verified artifact-source release rehearsal ${run.html_url}`)
                 return
               }
+              core.info(`${run.html_url} did not pass ${missing.length}/${expected.length} gate jobs: ${missing.join(", ")}`)
             }
             core.setFailed(
               `No successful fully gated npm-test.yml rehearsal exists for artifact source ${process.env.SOURCE}. ` +
@@ -438,48 +452,26 @@ jobs:
           NPM_CONFIG_PROVENANCE: "true"
           OPENSCIENCE_REQUIRE_LAUNCHER_PUBLISH: "true"
 
-  build-desktop:
-    name: Desktop (${{ matrix.target }}-${{ matrix.arch }})
+  # macOS packaging is the release's longest leg and the only input to the
+  # updater lifecycle gate, so it runs apart from the Windows/Linux builds:
+  # verify-desktop-updater starts as soon as both signed Mac apps exist.
+  build-desktop-mac:
+    name: Desktop (mac-${{ matrix.arch }})
     needs: [version, sign-macos-cli]
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: macos-15
-            target: mac
             arch: arm64
             sidecar: backend/cli/dist/@synsci/openscience-darwin-arm64/bin/openscience
             asset: OpenScience-mac-arm64.dmg
             assets: OpenScience-mac-arm64.dmg OpenScience-mac-arm64.zip
-            signing: mac
           - runner: macos-15-intel
-            target: mac
             arch: x64
             sidecar: backend/cli/dist/@synsci/openscience-darwin-x64/bin/openscience
             asset: OpenScience-mac-x64.dmg
             assets: OpenScience-mac-x64.dmg OpenScience-mac-x64.zip
-            signing: mac
-          - runner: windows-2025
-            target: win
-            arch: x64
-            sidecar: backend/cli/dist/@synsci/openscience-windows-x64/bin/openscience.exe
-            asset: OpenScience-windows-x64.exe
-            assets: OpenScience-windows-x64.exe
-            signing: windows
-          - runner: ubuntu-24.04
-            target: linux
-            arch: x64
-            sidecar: backend/cli/dist/@synsci/openscience-linux-x64/bin/openscience
-            asset: OpenScience-linux-x64.AppImage
-            assets: OpenScience-linux-x64.AppImage
-            signing: none
-          - runner: ubuntu-24.04-arm
-            target: linux
-            arch: arm64
-            sidecar: backend/cli/dist/@synsci/openscience-linux-arm64/bin/openscience
-            asset: OpenScience-linux-arm64.AppImage
-            assets: OpenScience-linux-arm64.AppImage
-            signing: none
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
     permissions:
@@ -524,15 +516,21 @@ jobs:
           }
           [[ "$found" == "$total" ]] && echo "found=true" >> "$GITHUB_OUTPUT" || echo "found=false" >> "$GITHUB_OUTPUT"
 
+      # A resumed x64 job only re-runs the updater canary, whose script imports
+      # node builtins alone, so it checks out the source and installs Bun
+      # without the desktop workspace install.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.existing.outputs.found != 'true' || (matrix.signing == 'mac' && matrix.arch == 'x64')
+        if: steps.existing.outputs.found != 'true' || matrix.arch == 'x64'
         with:
           ref: ${{ needs.version.outputs.source }}
       - uses: ./.github/actions/setup-bun
-        if: steps.existing.outputs.found != 'true' || (matrix.signing == 'mac' && matrix.arch == 'x64')
+        if: steps.existing.outputs.found != 'true' || matrix.arch == 'x64'
+        with:
+          install: ${{ steps.existing.outputs.found != 'true' }}
+          filter: "@synsci/desktop"
 
       - name: Verify resumed macOS assets
-        if: steps.existing.outputs.found == 'true' && matrix.signing == 'mac'
+        if: steps.existing.outputs.found == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -606,22 +604,20 @@ jobs:
             git show "$WORKFLOW_SOURCE:tooling/repo/desktop-sidecar.ts" > tooling/repo/desktop-sidecar.ts
           fi
           bun tooling/repo/desktop-sidecar.ts
-          if [[ "${{ matrix.signing }}" == "mac" ]]; then
-            codesign --verify --strict --verbose=2 "$OPENSCIENCE_DESKTOP_SIDECAR"
-            details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DESKTOP_SIDECAR" 2>&1)"
-            grep -Fxq 'Identifier=ai.syntheticsciences.openscience' <<<"$details"
-            grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details"
-            for key in \
-              com.apple.security.cs.allow-jit \
-              com.apple.security.cs.allow-unsigned-executable-memory \
-              com.apple.security.cs.disable-library-validation; do
-              keypath="${key//./\\.}"
-              value="$(codesign -d --entitlements :- "$OPENSCIENCE_DESKTOP_SIDECAR" 2>/dev/null | /usr/bin/plutil -extract "$keypath" raw -o - -)"
-              [[ "$value" == "true" ]] || { echo "::error::$OPENSCIENCE_DESKTOP_SIDECAR is missing $key"; exit 1; }
-            done
-          fi
+          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DESKTOP_SIDECAR"
+          details="$(codesign -dv --verbose=4 "$OPENSCIENCE_DESKTOP_SIDECAR" 2>&1)"
+          grep -Fxq 'Identifier=ai.syntheticsciences.openscience' <<<"$details"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$details"
+          for key in \
+            com.apple.security.cs.allow-jit \
+            com.apple.security.cs.allow-unsigned-executable-memory \
+            com.apple.security.cs.disable-library-validation; do
+            keypath="${key//./\\.}"
+            value="$(codesign -d --entitlements :- "$OPENSCIENCE_DESKTOP_SIDECAR" 2>/dev/null | /usr/bin/plutil -extract "$keypath" raw -o - -)"
+            [[ "$value" == "true" ]] || { echo "::error::$OPENSCIENCE_DESKTOP_SIDECAR is missing $key"; exit 1; }
+          done
       - name: Smoke native macOS desktop sidecar
-        if: steps.existing.outputs.found != 'true' && matrix.signing == 'mac'
+        if: steps.existing.outputs.found != 'true'
         shell: bash
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ matrix.sidecar }}
@@ -639,6 +635,186 @@ jobs:
               throw new Error(`Expected OpenScience ${process.env.OPENSCIENCE_VERSION}, received ${value}`)
             }
           '
+      - name: Make sidecar executable
+        if: steps.existing.outputs.found != 'true'
+        shell: bash
+        run: chmod +x "$OPENSCIENCE_DESKTOP_SIDECAR"
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
+      - name: Cache Electron downloads
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('frontend/desktop/package.json') }}
+      - name: Build desktop installer
+        if: steps.existing.outputs.found != 'true'
+        shell: bash
+        run: bun run --cwd frontend/desktop dist -- --mac --${{ matrix.arch }}
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_DESKTOP_SIGNED: "true"
+          CSC_IDENTITY_AUTO_DISCOVERY: "true"
+          CSC_LINK: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Notarize and staple macOS DMG
+        if: steps.existing.outputs.found != 'true'
+        shell: bash
+        env:
+          OPENSCIENCE_DMG: frontend/desktop/dist/${{ matrix.asset }}
+          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
+          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
+          xcrun notarytool submit "$OPENSCIENCE_DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait
+          xcrun stapler staple "$OPENSCIENCE_DMG"
+          xcrun stapler validate "$OPENSCIENCE_DMG"
+          spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
+      - name: Upload immutable desktop assets
+        if: steps.existing.outputs.found != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
+          DESKTOP_ASSETS: ${{ matrix.assets }}
+        run: |
+          set -euo pipefail
+          release="$(gh release view "$OPENSCIENCE_TAG" --json assets)"
+          for name in $DESKTOP_ASSETS; do
+            artifact="frontend/desktop/dist/$name"
+            [[ -s "$artifact" ]] || { echo "::error::Missing $name"; exit 1; }
+            if [[ "$name" == *.zip ]]; then
+              roots="$(unzip -Z1 "$artifact" | sed -E 's#^([^/]+).*$#\1#' | sort -u)"
+              [[ "$roots" == "OpenScience.app" ]] || { echo "::error::$name has an invalid root"; exit 1; }
+            fi
+            remote="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest' <<<"$release")"
+            if [[ -z "$remote" ]]; then
+              source_label="${OPENSCIENCE_ARTIFACT_SOURCE:0:16}"
+              gh release upload "$OPENSCIENCE_TAG" "$artifact#$name (v$OPENSCIENCE_VERSION, source $source_label)"
+              continue
+            fi
+            actual="sha256:$(node -e 'const fs=require("fs"),c=require("crypto");const h=c.createHash("sha256");h.update(fs.readFileSync(process.argv[1]));process.stdout.write(h.digest("hex"))' "$artifact")"
+            [[ "$actual" == "$remote" ]] || { echo "::error::$name already exists with different bytes"; exit 1; }
+          done
+
+  build-desktop-other:
+    name: Desktop (${{ matrix.target }}-${{ matrix.arch }})
+    needs: [version, sign-macos-cli]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: win
+            arch: x64
+            sidecar: backend/cli/dist/@synsci/openscience-windows-x64/bin/openscience.exe
+            asset: OpenScience-windows-x64.exe
+            assets: OpenScience-windows-x64.exe
+            signing: windows
+          - runner: ubuntu-24.04
+            target: linux
+            arch: x64
+            sidecar: backend/cli/dist/@synsci/openscience-linux-x64/bin/openscience
+            asset: OpenScience-linux-x64.AppImage
+            assets: OpenScience-linux-x64.AppImage
+            signing: none
+          - runner: ubuntu-24.04-arm
+            target: linux
+            arch: arm64
+            sidecar: backend/cli/dist/@synsci/openscience-linux-arm64/bin/openscience
+            asset: OpenScience-linux-arm64.AppImage
+            assets: OpenScience-linux-arm64.AppImage
+            signing: none
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    permissions:
+      contents: write
+    steps:
+      - name: Check for resumable assets
+        id: existing
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
+          DESKTOP_ASSETS: ${{ matrix.assets }}
+        run: |
+          set -euo pipefail
+          release="$(gh release view "$OPENSCIENCE_TAG" --repo "$GITHUB_REPOSITORY" --json assets)"
+          source_label="${OPENSCIENCE_ARTIFACT_SOURCE:0:16}"
+          found=0
+          total=0
+          for name in $DESKTOP_ASSETS; do
+            ((total += 1))
+            asset="$(jq -c --arg name "$name" '.assets[] | select(.name == $name)' <<<"$release")"
+            [[ -n "$asset" ]] || continue
+            [[ "$(jq -r .state <<<"$asset")" == "uploaded" ]]
+            size="$(jq -r .size <<<"$asset")"
+            digest="$(jq -r .digest <<<"$asset")"
+            [[ "$size" =~ ^[0-9]+$ && $size -gt 0 && "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+              echo "::error::$name is incomplete"
+              exit 1
+            }
+            expected_label="$name (v$OPENSCIENCE_VERSION, source $source_label)"
+            [[ "$(jq -r .label <<<"$asset")" == "$expected_label" ]] || {
+              echo "::error::$name is not bound to source $OPENSCIENCE_ARTIFACT_SOURCE and version $OPENSCIENCE_VERSION"
+              exit 1
+            }
+            ((found += 1))
+          done
+          [[ "$found" == "0" || "$found" == "$total" ]] || {
+            echo "::error::Resume requires a complete architecture asset set"
+            exit 1
+          }
+          [[ "$found" == "$total" ]] && echo "found=true" >> "$GITHUB_OUTPUT" || echo "found=false" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.existing.outputs.found != 'true'
+        with:
+          ref: ${{ needs.version.outputs.source }}
+      - uses: ./.github/actions/setup-bun
+        if: steps.existing.outputs.found != 'true'
+        with:
+          filter: "@synsci/desktop"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.existing.outputs.found != 'true'
+        with:
+          node-version: "24"
+      - name: Download source-bound desktop sidecar
+        if: steps.existing.outputs.found != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ matrix.sidecar }}
+          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
+          OPENSCIENCE_ARTIFACT_SOURCE: ${{ needs.version.outputs.artifact_source }}
+          OPENSCIENCE_SIDECAR_MANIFEST: ${{ needs.sign-macos-cli.outputs.sidecar_manifest }}
+          RELEASE_SOURCE: ${{ needs.version.outputs.source }}
+          WORKFLOW_SOURCE: ${{ needs.version.outputs.workflow_source }}
+        run: |
+          set -euo pipefail
+          if [[ "$WORKFLOW_SOURCE" != "$RELEASE_SOURCE" ]]; then
+            git fetch origin "$WORKFLOW_SOURCE" --depth=1
+            git show "$WORKFLOW_SOURCE:tooling/repo/desktop-sidecar.ts" > tooling/repo/desktop-sidecar.ts
+          fi
+          bun tooling/repo/desktop-sidecar.ts
       - name: Detect Windows signing
         id: windows
         if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows'
@@ -654,6 +830,18 @@ jobs:
         run: chmod +x "$OPENSCIENCE_DESKTOP_SIDECAR"
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
+      - name: Cache Electron downloads
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('frontend/desktop/package.json') }}
       - name: Build desktop installer
         if: steps.existing.outputs.found != 'true' && (matrix.signing != 'windows' || steps.windows.outputs.enabled == 'true')
         shell: bash
@@ -661,13 +849,10 @@ jobs:
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_DESKTOP_SIGNED: ${{ matrix.signing != 'none' && (matrix.signing != 'windows' || steps.windows.outputs.enabled == 'true') }}
+          OPENSCIENCE_DESKTOP_SIGNED: ${{ matrix.signing == 'windows' && steps.windows.outputs.enabled == 'true' }}
           CSC_IDENTITY_AUTO_DISCOVERY: "true"
-          CSC_LINK: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_BASE64 || matrix.signing == 'windows' && secrets.WINDOWS_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.signing == 'mac' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD || matrix.signing == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
-          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ matrix.signing == 'windows' && secrets.WINDOWS_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.signing == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
       - name: Build unsigned Windows installer
         if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows' && steps.windows.outputs.enabled != 'true'
         shell: bash
@@ -677,42 +862,6 @@ jobs:
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
           OPENSCIENCE_DESKTOP_SIGNED: "false"
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: Notarize and staple macOS DMG
-        if: steps.existing.outputs.found != 'true' && matrix.signing == 'mac'
-        shell: bash
-        env:
-          OPENSCIENCE_DMG: frontend/desktop/dist/${{ matrix.asset }}
-          APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          codesign --verify --strict --verbose=2 "$OPENSCIENCE_DMG"
-          grep -Fxq "TeamIdentifier=$APPLE_TEAM_ID" <<<"$(codesign -dv --verbose=4 "$OPENSCIENCE_DMG" 2>&1)"
-          xcrun notarytool submit "$OPENSCIENCE_DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait
-          xcrun stapler staple "$OPENSCIENCE_DMG"
-          xcrun stapler validate "$OPENSCIENCE_DMG"
-          spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
-      - name: Smoke packaged signed macOS app
-        if: steps.existing.outputs.found != 'true' && matrix.target == 'mac' && matrix.arch == 'x64'
-        shell: bash
-        env:
-          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          dmg="frontend/desktop/dist/OpenScience-mac-x64.dmg"
-          zip="frontend/desktop/dist/OpenScience-mac-x64.zip"
-          mountpoint="$RUNNER_TEMP/openscience-smoke"
-          mkdir -p "$mountpoint"
-          cleanup() { hdiutil detach "$mountpoint" -quiet 2>/dev/null || true; }
-          trap cleanup EXIT
-          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mountpoint" -quiet
-          bun frontend/desktop/script/update-artifact-canary.mjs \
-            --zip "$zip" \
-            --current "$mountpoint/OpenScience.app" \
-            --version "$OPENSCIENCE_VERSION" \
-            --arch x64 \
-            --trusted true
       - name: Upload immutable desktop assets
         if: steps.existing.outputs.found != 'true'
         shell: bash
@@ -750,7 +899,7 @@ jobs:
 
   verify-desktop-updater:
     name: Verify desktop updater (${{ matrix.arch }})
-    needs: [version, build-desktop]
+    needs: [version, build-desktop-mac]
     strategy:
       fail-fast: false
       matrix:
@@ -777,7 +926,10 @@ jobs:
           ref: ${{ needs.version.outputs.source }}
           persist-credentials: false
 
+      # The updater scripts import only node builtins; no workspace install.
       - uses: ./.github/actions/setup-bun
+        with:
+          install: "false"
 
       - name: Require native updater architecture
         shell: bash
@@ -965,7 +1117,7 @@ jobs:
 
   publish:
     name: Publish release
-    needs: [version, sign-macos-cli, prepare-npm, build-desktop, verify-desktop-updater]
+    needs: [version, sign-macos-cli, prepare-npm, build-desktop-mac, build-desktop-other, verify-desktop-updater]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:

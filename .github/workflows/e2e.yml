@@ -19,7 +19,6 @@ jobs:
         settings:
           - name: linux
             host: ubuntu-latest
-            playwright: bunx playwright install --with-deps
             workdir: frontend/workspace
             # Use the same hermetic runner developers use locally. It owns a
             # disposable data root, fake model, backend, Vite server, ports,
@@ -62,9 +61,24 @@ jobs:
           fi
           bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
 
-      - name: Install Playwright browsers
+      - name: Resolve Playwright version
+        id: playwright
         working-directory: frontend/workspace
-        run: ${{ matrix.settings.playwright }}
+        run: echo "version=$(bun -e 'console.log(require("@playwright/test/package.json").version)')" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright.outputs.version }}-chromium
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: frontend/workspace
+        run: bunx playwright install --with-deps chromium
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: frontend/workspace
+        run: bunx playwright install-deps chromium
 
       - name: run
         working-directory: ${{ matrix.settings.workdir }}

@@ -20,10 +20,12 @@ import {
   saveReleaseArtifacts,
   sanitizeNpmDiagnostic,
   stageCandidateRelease,
+  ensureReleaseStagingTags,
   verifyPackedModuleExports,
   verifyPublishedPackageIntegrities,
   verifyPublishedPackages,
   verifyReleaseOptionalDependencies,
+  verifyReleaseTags,
   type NpmCommandOptions,
   type PackedPackage,
 } from "../../../../tooling/repo/npm-release"
@@ -40,6 +42,7 @@ type FakeState = {
   publishFailures?: Record<string, number>
   publishGhosts?: Record<string, number>
   publishIntegrities?: string[]
+  publishMaxInflight?: number
   publishMode?: "already" | "ghost" | "permission" | "success"
   publishSpecs?: string[]
   publishVisibilityReads?: number
@@ -112,13 +115,14 @@ async function readState(file: string) {
   return (await Bun.file(file).json()) as FakeState
 }
 
-// A single local registry serializes state mutations while npm command
-// processes overlap. The shared-file fixture cannot safely model concurrency.
+// A single local registry observes how many dist-tag writes and reads
+// overlap. The shared-file fixture serializes its own mutations behind a lock
+// but cannot see overlap, so concurrency assertions use this server instead.
 async function tagRegistry(file: string) {
   const state = await readState(file)
   const failure = state.failTagReadAfterAdd
   const failed = new Set<string>()
-  const activity = { current: 0, maximum: 0, rollbackWhileActive: false }
+  const activity = { current: 0, maximum: 0, rollbackWhileActive: false, reads: { current: 0, maximum: 0 } }
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -126,6 +130,11 @@ async function tagRegistry(file: string) {
       const args = (await request.json()) as string[]
       if (args[0] === "view" && args[2] === "dist-tags") {
         if (failed.delete(args[1])) return Response.json({ exitCode: 1, stderr: "transient dist-tag read failure" })
+        activity.reads.current++
+        activity.reads.maximum = Math.max(activity.reads.maximum, activity.reads.current)
+        // Hold the read long enough for sibling processes to overlap it.
+        await Bun.sleep(40)
+        activity.reads.current--
         return Response.json({ exitCode: 0, stdout: JSON.stringify(state.tags[args[1]] ?? {}) })
       }
       if (args[0] === "dist-tag" && args[1] === "add") {
@@ -343,7 +352,6 @@ test("stage-only repairs one accepted-but-absent package once without promoting 
   const directory = path.join(root, "artifacts")
   await saveReleaseArtifacts({ artifacts, directory, source, version: "2.0.32" })
   const file = await stateFile({
-    // Only one missing package keeps the shared-file registry's write serial.
     packages: Object.fromEntries(
       artifacts.slice(1).map((artifact) => [`${artifact.name}@${artifact.version}`, { integrity: artifact.integrity }]),
     ),
@@ -560,7 +568,7 @@ test("genuine owner E403 fails immediately", async () => {
   expect((await readState(denied)).publishCalls).toBe(1)
 })
 
-test("latest promotion runs at most three platforms together and keeps dependencies and launcher last", async () => {
+test("latest promotion runs at most five platforms together and keeps dependencies and launcher last", async () => {
   const base = await fixturePackage()
   const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
   const tags = Object.fromEntries(artifacts.map((artifact) => [artifact.name, { latest: "2.0.31" }]))
@@ -575,22 +583,30 @@ test("latest promotion runs at most three platforms together and keeps dependenc
   expect(state.tagAdds?.slice(-4)).toEqual(expected.slice(-4))
   expect(state.tagAdds?.at(-1)).toBe("synsci@2.0.32:latest")
   expect(registry.activity.maximum).toBeGreaterThan(1)
-  expect(registry.activity.maximum).toBeLessThanOrEqual(3)
+  expect(registry.activity.maximum).toBeLessThanOrEqual(5)
   for (const name of releasePackageNames()) expect(state.tags[name].latest).toBe("2.0.32")
 })
 
-test("test promotion moves the full snapshot in release order without changing latest", async () => {
+test("test promotion batches platforms, keeps dependencies and launcher last, and leaves latest alone", async () => {
   const base = await fixturePackage()
   const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
   const tags = Object.fromEntries(
     artifacts.map((artifact) => [artifact.name, { latest: "2.0.31", test: "2.0.30-test.1" }]),
   )
   const file = await stateFile({ tags })
+  await using registry = await tagRegistry(file)
 
-  await promoteReleaseToTag(artifacts, "test", options(file))
+  await promoteReleaseToTag(artifacts, "test", registry.options)
 
-  const state = await readState(file)
-  expect(state.tagAdds).toEqual(releasePromotionNames().map((name) => `${name}@2.0.32:test`))
+  const state = registry.state
+  const expected = releasePromotionNames().map((name) => `${name}@2.0.32:test`)
+  expect(state.tagAdds?.toSorted()).toEqual(expected.toSorted())
+  expect(state.tagAdds?.slice(-4)).toEqual(expected.slice(-4))
+  expect(state.tagAdds?.at(-1)).toBe("synsci@2.0.32:test")
+  expect(registry.activity.maximum).toBeGreaterThan(1)
+  expect(registry.activity.maximum).toBeLessThanOrEqual(5)
+  expect(registry.activity.reads.maximum).toBeGreaterThan(1)
+  expect(registry.activity.reads.maximum).toBeLessThanOrEqual(5)
   for (const name of releasePackageNames()) {
     expect(state.tags[name].test).toBe("2.0.32")
     expect(state.tags[name].latest).toBe("2.0.31")
@@ -613,7 +629,7 @@ test("promotion rolls the full snapshot back when mutation succeeds but verifica
   expect(registry.activity.rollbackWhileActive).toBe(false)
   expect(restored.tagAdds?.filter((value) => value.endsWith("@2.0.32:latest")).toSorted()).toEqual(
     releasePromotionNames()
-      .slice(0, 3)
+      .slice(0, 5)
       .map((name) => `${name}@2.0.32:latest`)
       .toSorted(),
   )
@@ -638,9 +654,88 @@ test("test promotion rolls the full snapshot back on a verified tag-write failur
   const tags = Object.fromEntries(artifacts.map((artifact) => [artifact.name, { test: "2.0.30-test.1" }]))
   const first = releasePromotionNames()[0]
   const file = await stateFile({ failTagReadAfterAdd: first, tags })
+  await using registry = await tagRegistry(file)
 
-  await expect(promoteReleaseToTag(artifacts, "test", options(file))).rejects.toThrow("transient dist-tag read failure")
+  await expect(promoteReleaseToTag(artifacts, "test", registry.options)).rejects.toThrow(
+    "transient dist-tag read failure",
+  )
 
-  const restored = await readState(file)
-  for (const name of releasePackageNames()) expect(restored.tags[name].test).toBe("2.0.30-test.1")
+  expect(registry.activity.current).toBe(0)
+  expect(registry.activity.rollbackWhileActive).toBe(false)
+  for (const name of releasePackageNames()) expect(registry.state.tags[name].test).toBe("2.0.30-test.1")
+})
+
+test("candidate staging submits absent packages in bounded parallel batches", async () => {
+  const version = "2.0.32-test.777"
+  const artifacts: PackedPackage[] = []
+  for (const name of releasePackageNames()) artifacts.push(await fixturePackage(name, version))
+  const native = releasePackageNames().filter((name) => name.startsWith("@synsci/openscience-"))
+  const file = await stateFile({
+    optionalDependencies: {
+      [`@synsci/openscience@${version}`]: Object.fromEntries(native.map((name) => [name, version])),
+    },
+  })
+
+  const result = await stageCandidateRelease(artifacts, fastOptions(file))
+
+  expect(result).toEqual({ tag: releaseCandidateTag(version), version })
+  const state = await readState(file)
+  expect(state.publishCalls).toBe(15)
+  expect(state.publishSpecs?.toSorted()).toEqual(artifacts.map((artifact) => `${artifact.name}@${version}`).toSorted())
+  expect(state.publishMaxInflight).toBeGreaterThan(1)
+  expect(state.publishMaxInflight).toBeLessThanOrEqual(5)
+  for (const artifact of artifacts) {
+    expect(state.packages[`${artifact.name}@${version}`].integrity).toBe(artifact.integrity)
+    expect(state.tags[artifact.name][releaseCandidateTag(version)]).toBe(version)
+  }
+})
+
+test("staging tags read and write in bounded batches and reject a conflict before writing", async () => {
+  const base = await fixturePackage()
+  const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
+  const tag = releaseStagingTag("2.0.32")
+  const conflicted = releasePromotionNames().at(-1)!
+  const conflict = await stateFile({ tags: { [conflicted]: { [tag]: "2.0.31" } } })
+  await using blocked = await tagRegistry(conflict)
+
+  await expect(ensureReleaseStagingTags(artifacts, tag, blocked.options)).rejects.toThrow(
+    `${conflicted}'s ${tag} dist-tag already points to 2.0.31`,
+  )
+  expect(blocked.state.tagAdds).toBeUndefined()
+  expect(blocked.activity.reads.maximum).toBeGreaterThan(1)
+  expect(blocked.activity.reads.maximum).toBeLessThanOrEqual(5)
+
+  const file = await stateFile({ tags: { [artifacts[0].name]: { [tag]: "2.0.32" } } })
+  await using registry = await tagRegistry(file)
+
+  await ensureReleaseStagingTags(artifacts, tag, registry.options)
+
+  expect(registry.state.tagAdds?.toSorted()).toEqual(
+    releasePackageNames()
+      .filter((name) => name !== artifacts[0].name)
+      .map((name) => `${name}@2.0.32:${tag}`)
+      .toSorted(),
+  )
+  expect(registry.activity.maximum).toBeGreaterThan(1)
+  expect(registry.activity.maximum).toBeLessThanOrEqual(5)
+  expect(registry.activity.reads.maximum).toBeLessThanOrEqual(5)
+  for (const name of releasePackageNames()) expect(registry.state.tags[name][tag]).toBe("2.0.32")
+  registry.activity.reads.maximum = 0
+  await verifyReleaseTags(artifacts, tag, registry.options)
+  expect(registry.activity.reads.maximum).toBeGreaterThan(1)
+  expect(registry.activity.reads.maximum).toBeLessThanOrEqual(5)
+})
+
+test("tag verification names every package whose snapshot drifted", async () => {
+  const base = await fixturePackage()
+  const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
+  const [stale, unset] = releasePromotionNames()
+  const tags: FakeState["tags"] = Object.fromEntries(artifacts.map((artifact) => [artifact.name, { test: "2.0.32" }]))
+  tags[stale] = { test: "2.0.31" }
+  tags[unset] = {}
+  const file = await stateFile({ tags })
+
+  await expect(verifyReleaseTags(artifacts, "test", options(file))).rejects.toThrow(
+    `npm test snapshot does not match the candidate: ${stale}=2.0.31, ${unset}=unset`,
+  )
 })

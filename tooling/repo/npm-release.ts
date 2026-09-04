@@ -45,6 +45,8 @@ export class NpmPermissionError extends Error {}
 
 const publishAttempts = [1, 2, 3, 4, 5] as const
 const defaultVisibilityAttempts = 180
+/** Registry writes run this many at a time, matching tooling/repo/publish.ts. */
+const batchSize = 5
 
 async function run(args: string[], options: NpmCommandOptions = {}): Promise<Result> {
   const configured = options.command ?? process.env.OPENSCIENCE_NPM_COMMAND ?? "npm"
@@ -106,6 +108,25 @@ function visibilityRetryDelay(options: NpmCommandOptions) {
     options.env?.OPENSCIENCE_NPM_VISIBILITY_RETRY_MS ?? process.env.OPENSCIENCE_NPM_VISIBILITY_RETRY_MS ?? 2_000,
   )
   return Number.isFinite(value) && value >= 0 ? value : 2_000
+}
+
+/** Run registry calls, reads and writes alike, in bounded batches so the
+ * release runner never fans out wider than batchSize npm processes. Every
+ * batch settles before the first rejection is rethrown, so no in-flight write
+ * can race a caller's rollback or land after its diagnostics. Results keep
+ * the input order. */
+async function inBatches<T, R>(items: T[], work: (item: T) => Promise<R>) {
+  const batches = Array.from({ length: Math.ceil(items.length / batchSize) }, (_, index) =>
+    items.slice(index * batchSize, index * batchSize + batchSize),
+  )
+  const results: R[] = []
+  for (const batch of batches) {
+    const settled = await Promise.allSettled(batch.map(work))
+    const failure = settled.find((result) => result.status === "rejected")
+    if (failure?.status === "rejected") throw failure.reason
+    results.push(...settled.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])))
+  }
+  return results
 }
 
 function isAlreadyPublished(detail: string) {
@@ -559,7 +580,7 @@ async function repairSubmittedRelease(
   options: NpmCommandOptions,
 ) {
   const repair = await waitForPublishedSet(artifacts, options)
-  for (const artifact of repair) await submitPackageOnce(artifact, tag, options, "repair")
+  await inBatches(repair, (artifact) => submitPackageOnce(artifact, tag, options, "repair"))
   const unresolved = repair.length > 0 ? await waitForPublishedSet(artifacts, options) : []
   if (unresolved.length > 0) {
     throw new Error(
@@ -647,7 +668,7 @@ export async function stageCandidateRelease(artifacts: PackedPackage[], options:
   const inspected = await Promise.all(ordered.map((artifact) => inspectPublishedPackage(artifact, options)))
   const absent = ordered.filter((_, index) => !inspected[index])
 
-  for (const artifact of absent) await submitPackageOnce(artifact, tag, options, "initial")
+  await inBatches(absent, (artifact) => submitPackageOnce(artifact, tag, options, "initial"))
   await repairSubmittedRelease(ordered, tag, "npm candidate", options)
 
   await verifyPublishedPackageIntegrities(ordered, options)
@@ -749,29 +770,29 @@ async function removeDistTag(name: string, tag: string, options: NpmCommandOptio
   throw new Error(`Could not remove ${name}'s ${tag} dist-tag: ${failure(result)}`)
 }
 
+/** Read every package's dist-tags and reject any conflict before a single
+ * tag is written; reads and writes both run in bounded batches. */
 export async function ensureReleaseStagingTags(
   artifacts: PackedPackage[],
   tag: string,
   options: NpmCommandOptions = {},
 ) {
-  for (const artifact of artifacts) {
-    const tags = await distTags(artifact.name, options)
-    if (tags[tag] && tags[tag] !== artifact.version) {
-      throw new Error(`${artifact.name}'s ${tag} dist-tag already points to ${tags[tag]}, not ${artifact.version}`)
+  const current = await inBatches(artifacts, (artifact) => distTags(artifact.name, options))
+  for (const [index, artifact] of artifacts.entries()) {
+    const existing = current[index][tag]
+    if (existing && existing !== artifact.version) {
+      throw new Error(`${artifact.name}'s ${tag} dist-tag already points to ${existing}, not ${artifact.version}`)
     }
-    await addDistTag(artifact.name, artifact.version, tag, options)
   }
+  await inBatches(artifacts, (artifact) => addDistTag(artifact.name, artifact.version, tag, options))
 }
 
 export async function verifyReleaseTags(artifacts: PackedPackage[], tag: string, options: NpmCommandOptions = {}) {
   const ordered = exactReleaseArtifacts(artifacts)
-  const failures: string[] = []
-  for (const artifact of ordered) {
-    const tags = await distTags(artifact.name, options)
-    if (tags[tag] !== artifact.version) {
-      failures.push(`${artifact.name}=${tags[tag] ?? "unset"}`)
-    }
-  }
+  const current = await inBatches(ordered, (artifact) => distTags(artifact.name, options))
+  const failures = ordered.flatMap((artifact, index) =>
+    current[index][tag] === artifact.version ? [] : [`${artifact.name}=${current[index][tag] ?? "unset"}`],
+  )
   if (failures.length > 0) {
     throw new Error(`npm ${tag} snapshot does not match the candidate: ${failures.join(", ")}`)
   }
@@ -780,27 +801,24 @@ export async function verifyReleaseTags(artifacts: PackedPackage[], tag: string,
 export async function promoteReleaseToTag(artifacts: PackedPackage[], tag: string, options: NpmCommandOptions = {}) {
   if (!/^[a-z][a-z0-9._-]*$/i.test(tag)) throw new Error(`Invalid npm promotion tag: ${tag}`)
   const ordered = exactReleaseArtifacts(artifacts)
-  const previous = new Map<string, string | undefined>()
-  for (const artifact of ordered) previous.set(artifact.name, (await distTags(artifact.name, options))[tag])
+  const snapshot = await inBatches(
+    ordered,
+    async (artifact) => [artifact.name, (await distTags(artifact.name, options))[tag]] as const,
+  )
+  const previous = new Map(snapshot)
   const native = new Set(nativeReleasePackageNames())
-  const parallel = tag === "latest" ? ordered.filter((artifact) => native.has(artifact.name)) : []
-  const serial = ordered.filter((artifact) => !parallel.includes(artifact))
+  const parallel = ordered.filter((artifact) => native.has(artifact.name))
+  const serial = ordered.filter((artifact) => !native.has(artifact.name))
   const promote = async (artifact: PackedPackage) => {
     if (previous.get(artifact.name) === artifact.version) return
     await addDistTag(artifact.name, artifact.version, tag, options)
     console.log(`  promoted ${artifact.name}@${artifact.version} to ${tag}`)
   }
   try {
-    const batches = Array.from({ length: Math.ceil(parallel.length / 3) }, (_, index) =>
-      parallel.slice(index * 3, index * 3 + 3),
-    )
-    for (const batch of batches) {
-      // Drain every in-flight write/verification before rollback; a rejected
-      // Promise.all could otherwise let a late tag write undo the rollback.
-      const results = await Promise.allSettled(batch.map(promote))
-      const failure = results.find((result) => result.status === "rejected")
-      if (failure?.status === "rejected") throw failure.reason
-    }
+    // Native platform packages have no dependents; they move in bounded
+    // batches for every tag. inBatches drains each batch before rethrowing so
+    // no late tag write can undo the rollback below.
+    await inBatches(parallel, promote)
     // SDK, plugin, CLI, then launcher retain their dependency/public-entry order.
     for (const artifact of serial) await promote(artifact)
   } catch (error) {

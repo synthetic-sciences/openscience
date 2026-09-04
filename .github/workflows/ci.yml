@@ -14,9 +14,11 @@ permissions:
   contents: read
 
 # Keep the merge loop intentionally small. Platform ownership tests, the full
-# backend suite, docs, landing, and browser E2E run outside the PR
-# critical path in Deep CI / E2E. This lane proves the monorepo still types,
-# the user-facing workspace bundles, and release entrypoints still parse.
+# backend suite, docs, landing, and browser E2E run outside the PR critical
+# path in Deep CI / E2E. This lane proves the monorepo still types, release
+# entrypoints still parse, the user-facing workspace bundles, and the backend
+# tests a change can affect still pass. Branch protection requires the job
+# names Typecheck, Test, and Build (web).
 jobs:
   typecheck:
     name: Typecheck
@@ -27,6 +29,14 @@ jobs:
       - uses: ./.github/actions/setup-bun
       - name: Typecheck monorepo
         run: bun run typecheck
+      - name: Smoke release entrypoints
+        shell: bash
+        run: |
+          node --check tooling/launcher/bin/synsci.mjs
+          node --check backend/cli/bin/openscience
+          bash -n install
+          bash -n frontend/landing/public/install
+          diff -q install frontend/landing/public/install
 
   format:
     name: Format
@@ -35,8 +45,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-bun
+      # Prettier's content-hash cache skips files that were already clean. The
+      # key ends in the SHA so every run saves a fresh cache and the next run
+      # restores the newest one through the prefix.
+      - name: Restore Prettier cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/prettier-cache
+          key: ${{ runner.os }}-prettier-${{ hashFiles('bun.lock') }}-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-prettier-${{ hashFiles('bun.lock') }}-
       - name: Check formatting
-        run: bun run format:check
+        run: bun run format:check --cache --cache-strategy content --cache-location "$RUNNER_TEMP/prettier-cache"
 
   build:
     name: Build (web)
@@ -48,17 +67,88 @@ jobs:
       - name: Build workspace
         run: bun run --cwd frontend/workspace build
 
+  # Backend tests the change can affect, selected by tooling/repo/test-shards.ts
+  # from the diff against the pull request base (or the previous main tip on
+  # push). The root test files always run and test/project runs in its own bun
+  # process. Changes that can affect every test (fixtures, lockfile, preload)
+  # are reported here and covered by Deep CI. A new backend/cli/test directory
+  # must be added to the weight table in tooling/repo/test-shards.ts; until it
+  # is, the selection step fails with an annotation saying so. Test is a
+  # required check, so the timeout covers the worst case rather than the
+  # typical selection: a cross-cutting change can select the whole weight
+  # table (~14 min of tests in one bun process, the same shape as the
+  # 838-920 s single-process Deep CI baseline) on top of ~2 min of checkout,
+  # install, fixture setup, and the web build the server tests need.
   test:
     name: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Smoke release entrypoints
+      - uses: ./.github/actions/setup-bun
+      - name: Select affected backend tests
+        id: select
+        shell: bash
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          changed="$RUNNER_TEMP/changed.txt"
+          : > "$changed"
+          if [[ "$BASE" =~ ^[0-9a-f]{40}$ && ! "$BASE" =~ ^0+$ ]] && git fetch --no-tags --depth=1 origin "$BASE"; then
+            git diff --name-only "$BASE" HEAD > "$changed"
+          else
+            echo "::notice::No comparable base commit; running only the root backend tests (Deep CI covers the rest)"
+          fi
+          bun tooling/repo/test-shards.ts affected < "$changed" > "$RUNNER_TEMP/affected.json"
+          jq -r '.groups[] | "\(.name): \(.seconds)s, \(.files) files: \(.paths)"' "$RUNNER_TEMP/affected.json"
+          global="$(jq -r '.global | join(", ")' "$RUNNER_TEMP/affected.json")"
+          if [[ -n "$global" ]]; then
+            echo "::notice::Changes to $global can affect any backend test; the full suite runs in Deep CI"
+          fi
+          echo "groups=$(jq -c '.groups' "$RUNNER_TEMP/affected.json")" >> "$GITHUB_OUTPUT"
+      - name: Configure fixtures
         shell: bash
         run: |
-          node --check tooling/launcher/bin/synsci.mjs
-          node --check backend/cli/bin/openscience
-          bash -n install
-          bash -n frontend/landing/public/install
-          diff -q install frontend/landing/public/install
+          git config --global user.email "ci@openscience.dev"
+          git config --global user.name "OpenScience CI"
+          git config --global init.defaultBranch main
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap openssh-server
+          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
+          sudo install -d -m 0755 /run/sshd
+      # test/server/spa-fallback.test.ts serves the gitignored web asset
+      # manifest and fails in CI without it; build it only when the selection
+      # runs ./test/server.
+      - name: Build web assets
+        if: contains(steps.select.outputs.groups, './test/server')
+        shell: bash
+        run: |
+          bun run --cwd frontend/workspace build
+          bun run --cwd backend/cli script/generate-web-assets.ts
+      - name: Run affected backend tests
+        shell: bash
+        working-directory: backend/cli
+        env:
+          # Not GROUPS: bash reserves that name for its group-id array.
+          AFFECTED: ${{ steps.select.outputs.groups }}
+        run: |
+          set -euo pipefail
+          groups=()
+          while IFS= read -r group; do groups+=("$group"); done < <(jq -r '.[].paths' <<<"$AFFECTED")
+          expected="$(jq length <<<"$AFFECTED")"
+          if [[ ${#groups[@]} -ne $expected ]]; then
+            echo "::error::Read ${#groups[@]} of $expected test groups"
+            exit 1
+          fi
+          for group in "${groups[@]}"; do
+            read -ra paths <<<"$group"
+            echo "::group::bun test ${paths[*]}"
+            # Tests spawn children that inherit stdin; give bun none so no
+            # child can swallow input meant for this shell.
+            bun test --timeout 15000 "${paths[@]}" </dev/null
+            echo "::endgroup::"
+          done

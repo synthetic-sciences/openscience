@@ -30,11 +30,14 @@ permissions:
   contents: read
 
 jobs:
-  test-source:
+  version:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      source: ${{ steps.version.outputs.source }}
     steps:
       - name: Require the protected default branch
         shell: bash
@@ -44,15 +47,6 @@ jobs:
             echo "::error::npm test publishing uses registry credentials and must be dispatched from synthetic-sciences/OpenScience main; received $GITHUB_REPOSITORY at $GITHUB_REF."
             exit 1
           fi
-
-  version:
-    needs: test-source
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      source: ${{ steps.version.outputs.source }}
-    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: version
         shell: bash
@@ -86,6 +80,9 @@ jobs:
           echo "source=$source" >> "$GITHUB_OUTPUT"
           echo "Preparing immutable npm test version $version from $source"
 
+  # Builds the CLI and packs the 15-package candidate on one runner. Both
+  # immutable caches keep their keys, so resumes of a version and
+  # publish-test's fail-on-cache-miss restore are unchanged.
   build-cli:
     needs: version
     runs-on: ubuntu-latest
@@ -93,15 +90,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           ref: ${{ needs.version.outputs.source }}
       - uses: ./.github/actions/setup-bun
-      - name: Look up immutable npm test artifacts
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Restore immutable npm test artifacts
         id: npm-artifacts-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .release/npm-test/${{ needs.version.outputs.version }}
           key: npm-test-artifacts-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
-          lookup-only: true
       - name: Restore immutable CLI build
         id: cli-build-cache
         if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
@@ -127,37 +127,6 @@ jobs:
             backend/cli/dist
             frontend/workspace/dist/version.json
           key: npm-test-cli-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
-
-  prepare-npm:
-    needs:
-      - version
-      - build-cli
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.version.outputs.source }}
-      - uses: ./.github/actions/setup-bun
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-      - name: Restore immutable npm test artifacts
-        id: npm-artifacts-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .release/npm-test/${{ needs.version.outputs.version }}
-          key: npm-test-artifacts-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
-      - name: Restore immutable CLI build
-        if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            backend/cli/dist
-            frontend/workspace/dist/version.json
-          key: npm-test-cli-v2-${{ needs.version.outputs.source }}-${{ needs.version.outputs.version }}
-          fail-on-cache-miss: true
       - name: Fail closed if an uncached version is occupied
         if: steps.npm-artifacts-cache.outputs.cache-hit != 'true'
         run: ./tooling/repo/npm-test-release.ts assert-empty
@@ -191,7 +160,7 @@ jobs:
   publish-test:
     needs:
       - version
-      - prepare-npm
+      - build-cli
     runs-on: ubuntu-latest
     timeout-minutes: 60
     # The only job that publishes with npm provenance, which needs an OIDC token.
@@ -245,9 +214,24 @@ jobs:
           node-version: "24"
       - name: Set Playwright browser path
         run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/ms-playwright" >> "$GITHUB_ENV"
-      - name: Install Playwright browsers
+      - name: Resolve Playwright version
+        id: playwright
         working-directory: frontend/workspace
-        run: bunx playwright install --with-deps
+        run: echo "version=$(bun -e 'console.log(require("@playwright/test/package.json").version)')" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright.outputs.version }}-chromium
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: frontend/workspace
+        run: bunx playwright install --with-deps chromium
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: frontend/workspace
+        run: bunx playwright install-deps chromium
       - name: Install and verify Linux sandbox
         run: |
           sudo apt-get update
@@ -428,6 +412,8 @@ jobs:
             runner: macos-latest
           - name: windows
             runner: windows-latest
+    # publish.yml's rehearsal gate matches these names exactly.
+    name: os-smoke (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     steps:
@@ -533,22 +519,28 @@ jobs:
           sed -n '1,200p' "$RUNNER_TEMP/openscience-musl-smoke.log" >&2 || true
           exit 1
 
+  # One job per capability x native runner. Each packaged lifecycle takes about
+  # three minutes, so fanning out cuts the rehearsal's critical path by ten to
+  # fifteen minutes. publish.yml's rehearsal gate expects every combination
+  # below by exact job name; change both files together.
   scientific-capability-canary:
     needs: publish-test
     if: inputs.run_scientific_canary
     strategy:
       fail-fast: false
       matrix:
+        os: [linux-x64, linux-arm64, macos-arm64]
+        capability: [scipy, matplotlib, scikit-learn, biopython, rdkit]
         include:
-          - name: linux-x64
+          - os: linux-x64
             runner: ubuntu-latest
-          - name: linux-arm64
+          - os: linux-arm64
             runner: ubuntu-24.04-arm
-          - name: macos-arm64
+          - os: macos-arm64
             runner: macos-latest
-    name: scientific capability canary (${{ matrix.name }})
+    name: scientific capability canary (${{ matrix.os }}, ${{ matrix.capability }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -574,9 +566,10 @@ jobs:
           echo "$prefix/bin" >> "$GITHUB_PATH"
           "$prefix/bin/openscience" --version | tee "$RUNNER_TEMP/openscience-capability-version.txt"
           grep -Fx "${{ needs.publish-test.outputs.version }}" "$RUNNER_TEMP/openscience-capability-version.txt"
-      - name: Run every packaged scientific capability lifecycle
+      - name: Run the packaged scientific capability lifecycle
         shell: bash
         env:
+          CANARY_CAPABILITY: ${{ matrix.capability }}
           HOME: ${{ runner.temp }}/openscience-capability/home
           XDG_DATA_HOME: ${{ runner.temp }}/openscience-capability/share
           XDG_CACHE_HOME: ${{ runner.temp }}/openscience-capability/cache
@@ -594,43 +587,42 @@ jobs:
           project="$RUNNER_TEMP/openscience-capability/project"
           mkdir -p "$HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$OPENSCIENCE_DATA_DIR" "$project"
           cd "$project"
-          openscience debug capability-canary --all --target local --timeout 900 \
+          openscience debug capability-canary "$CANARY_CAPABILITY" --target local --timeout 900 \
             | tee "$RUNNER_TEMP/scientific-capability-canary.json"
           CANARY_RESULT="$RUNNER_TEMP/scientific-capability-canary.json" \
+          EXPECTED_CAPABILITY="$CANARY_CAPABILITY" \
           EXPECTED_SOURCE="${{ needs.publish-test.outputs.source }}" \
           EXPECTED_VERSION="${{ needs.publish-test.outputs.version }}" \
           node --input-type=module - <<'NODE'
           import fs from "node:fs"
           const report = JSON.parse(fs.readFileSync(process.env.CANARY_RESULT, "utf8"))
           if (report.schema_version !== 1 || report.target !== "local") throw new Error("invalid canary report")
-          if (!Array.isArray(report.results) || report.results.length !== 5) {
-            throw new Error(`expected five packaged capability results, received ${report.results?.length}`)
+          if (!Array.isArray(report.results) || report.results.length !== 1) {
+            throw new Error(`expected exactly one packaged capability result, received ${report.results?.length}`)
           }
-          const ids = new Set(report.results.map((item) => item.capability))
-          for (const expected of ["scipy", "matplotlib", "scikit-learn", "biopython", "rdkit"]) {
-            if (!ids.has(expected)) throw new Error(`missing ${expected} release canary`)
+          const item = report.results[0]
+          if (item.capability !== process.env.EXPECTED_CAPABILITY) {
+            throw new Error(`expected the ${process.env.EXPECTED_CAPABILITY} release canary, received ${item.capability}`)
           }
-          for (const item of report.results) {
-            if (item.status !== "succeeded") throw new Error(`${item.capability} ended ${item.status}`)
-            if (item.doctor?.availability?.local !== "ready") {
-              throw new Error(`${item.capability} doctor did not report the exact local pack ready`)
-            }
-            const evidence = item.verification?.evidence
-            if (evidence?.release_sha !== process.env.EXPECTED_SOURCE) {
-              throw new Error(`${item.capability} recorded the wrong release source`)
-            }
-            if (evidence?.app_version !== process.env.EXPECTED_VERSION) {
-              throw new Error(`${item.capability} recorded the wrong candidate version`)
-            }
-            if (!item.verification?.validation?.ok) throw new Error(`${item.capability} failed semantic validation`)
+          if (item.status !== "succeeded") throw new Error(`${item.capability} ended ${item.status}`)
+          if (item.doctor?.availability?.local !== "ready") {
+            throw new Error(`${item.capability} doctor did not report the exact local pack ready`)
           }
-          console.log(`verified ${report.results.length} exact packaged capability lifecycles`)
+          const evidence = item.verification?.evidence
+          if (evidence?.release_sha !== process.env.EXPECTED_SOURCE) {
+            throw new Error(`${item.capability} recorded the wrong release source`)
+          }
+          if (evidence?.app_version !== process.env.EXPECTED_VERSION) {
+            throw new Error(`${item.capability} recorded the wrong candidate version`)
+          }
+          if (!item.verification?.validation?.ok) throw new Error(`${item.capability} failed semantic validation`)
+          console.log(`verified the exact packaged ${item.capability} lifecycle`)
           NODE
       - name: Upload scientific capability evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: npm-test-scientific-capability-${{ matrix.name }}-${{ github.run_attempt }}
+          name: npm-test-scientific-capability-${{ matrix.os }}-${{ matrix.capability }}-${{ github.run_attempt }}
           if-no-files-found: ignore
           retention-days: 30
           path: |

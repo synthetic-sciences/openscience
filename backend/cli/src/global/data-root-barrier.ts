@@ -60,8 +60,19 @@ export namespace DataRootBarrier {
   const replacePause = 10
   const replaceMaxPause = 100
 
-  export function configure(value: Configuration) {
+  /** Point the barrier at a data root. Boot configures the process once;
+   * callers that swap the root temporarily (a relocation rehearsal, a test
+   * against a throwaway root) must dispose the returned scope, because an
+   * anchor matches its configuration by identity and every operation on the
+   * real root silently becomes a no-op while a foreign root is installed. */
+  export function configure(value: Configuration): Disposable {
+    const previous = configuration
     configuration = value
+    return {
+      [Symbol.dispose]() {
+        configuration = previous
+      },
+    }
   }
 
   function paths(config: string) {

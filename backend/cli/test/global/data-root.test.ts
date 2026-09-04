@@ -84,7 +84,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const active = await DataRootBarrier.enter(path.join(managed.path, "record.json"))
     let exclusive = false
     const switching = DataRootBarrier.exclusive().then(async (lease) => {
@@ -115,7 +115,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const started = Promise.withResolvers<void>()
     const delayed = Promise.withResolvers<void>()
     const request = DataRootBarrier.during(managed.path, async () => {
@@ -155,7 +155,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const intent = path.join(config, "data-root-switch.intent")
     const outerReady = Promise.withResolvers<void>()
     const startChild = Promise.withResolvers<void>()
@@ -210,7 +210,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const operations = path.join(config, "data-root-operations")
     const outerReady = Promise.withResolvers<void>()
     const startChild = Promise.withResolvers<void>()
@@ -284,7 +284,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const start = Promise.withResolvers<void>()
     const entered = Promise.withResolvers<void>()
     const finish = Promise.withResolvers<void>()
@@ -318,7 +318,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const operation = await DataRootBarrier.enter(managed.path, 2_000)
     const start = Promise.withResolvers<void>()
     const entered = Promise.withResolvers<void>()
@@ -362,7 +362,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const firstReady = Promise.withResolvers<void>()
     const secondReady = Promise.withResolvers<void>()
     const releaseFirst = Promise.withResolvers<void>()
@@ -396,7 +396,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const first = await DataRootBarrier.enter(path.join(managed.path, "first.json"), 2_000)
     let switching: Promise<AsyncDisposable> | undefined
     let sibling: Promise<DataRootBarrier.Operation> | undefined
@@ -427,7 +427,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
 
     await DataRootBarrier.during(managed.path, async () => {
       await expect(DataRootBarrier.exclusive()).rejects.toThrow(
@@ -442,7 +442,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const identity = await ProcessIdentity.capture(process.pid)
     if (!identity) throw new Error("Current process identity is unavailable")
     const outer = await DataRootBarrier.enter(managed.path, 2_000)
@@ -496,7 +496,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const parent = await DataRootBarrier.enter(managed.path, 2_000)
     const childReady = Promise.withResolvers<void>()
     const startNested = Promise.withResolvers<void>()
@@ -547,7 +547,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const identity = await ProcessIdentity.capture(process.pid)
     if (!identity) throw new Error("Current process identity is unavailable")
     const operation = await DataRootBarrier.enter(managed.path, 2_000)
@@ -609,7 +609,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const identity = await ProcessIdentity.capture(process.pid)
     if (!identity) throw new Error("Current process identity is unavailable")
     const operation = await DataRootBarrier.enter(managed.path, 2_000)
@@ -669,7 +669,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const identity = await ProcessIdentity.capture(process.pid)
     if (!identity) throw new Error("Current process identity is unavailable")
     const operation = await DataRootBarrier.enter(managed.path, 2_000)
@@ -715,7 +715,7 @@ describe("managed data root", () => {
     const config = path.join(base, "config")
     const data = path.join(base, "data")
     const managed = await DataRoot.ensure(config, data, false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const identity = await ProcessIdentity.capture(process.pid)
     if (!identity) throw new Error("Current process identity is unavailable")
     const startNested = Promise.withResolvers<void>()
@@ -816,7 +816,7 @@ describe("managed data root", () => {
         ].join("\n"),
       )
       const managed = await DataRoot.ensure(config, data, false)
-      DataRootBarrier.configure({ root: managed.path, config })
+      using _ = DataRootBarrier.configure({ root: managed.path, config })
       const owner = Bun.spawn([process.execPath, helper, config, data, ready], {
         stdout: "ignore",
         stderr: "pipe",

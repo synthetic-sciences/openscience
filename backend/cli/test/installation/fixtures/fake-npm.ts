@@ -8,6 +8,7 @@ type State = {
   packages: Record<string, { integrity: string; visibilityReads?: number }>
   publishCalls: number
   publishFailures?: Record<string, number>
+  publishMaxInflight?: number
   publishGhosts?: Record<string, number>
   publishIntegrities?: string[]
   publishMode?: "already" | "ghost" | "permission" | "success"
@@ -17,10 +18,40 @@ type State = {
   tags: Record<string, Record<string, string>>
 }
 
+import { mkdir, readdir, rm } from "node:fs/promises"
+import { rmSync } from "node:fs"
+
 const file = process.env.FAKE_NPM_STATE
 if (!file) throw new Error("FAKE_NPM_STATE is required")
-const state = (await Bun.file(file).json()) as State
 const args = process.argv.slice(2)
+
+// Release tooling now overlaps registry writes, so several fake npm processes
+// can share one state file. A mkdir lock serializes every read-modify-write;
+// per-process markers count how many publishes overlapped for the tests.
+const lock = `${file}.lock`
+const inflight = `${file}.inflight`
+await mkdir(inflight, { recursive: true })
+const marker = `${inflight}/${process.pid}`
+await Bun.write(marker, "")
+process.on("exit", () => rmSync(marker, { force: true }))
+if (args[0] === "publish") await Bun.sleep(30)
+for (let attempt = 0; ; attempt++) {
+  const acquired = await mkdir(lock).then(
+    () => true,
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error
+      return false
+    },
+  )
+  if (acquired) break
+  if (attempt > 5_000) throw new Error("fake npm registry lock timed out")
+  await Bun.sleep(2)
+}
+// Only the holder releases the lock: a process that timed out above must not
+// free another process's lock and let two read-modify-writes overlap.
+process.on("exit", () => rmSync(lock, { force: true, recursive: true }))
+const overlapping = (await readdir(inflight)).length
+const state = (await Bun.file(file).json()) as State
 
 async function save() {
   await Bun.write(file!, `${JSON.stringify(state, null, 2)}\n`)
@@ -65,6 +96,7 @@ if (args[0] === "diff") {
 
 if (args[0] === "publish") {
   state.publishCalls++
+  state.publishMaxInflight = Math.max(state.publishMaxInflight ?? 0, overlapping)
   const archive = Bun.spawn(["tar", "-xOzf", args[1], "package/package.json"], {
     stdout: "pipe",
     stderr: "pipe",

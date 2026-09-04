@@ -1,9 +1,19 @@
 name: "Setup Bun"
 description: "Setup Bun with caching and install dependencies"
+inputs:
+  install:
+    description: "Install workspace dependencies; set to false for jobs that only need the Bun runtime"
+    required: false
+    default: "true"
+  filter:
+    description: "Restrict the install to one workspace package (bun install --filter), for example @synsci/desktop"
+    required: false
+    default: ""
 runs:
   using: "composite"
   steps:
     - name: Cache Bun
+      if: inputs.install == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ hashFiles('bun.lock') }}
@@ -18,5 +28,13 @@ runs:
         bun-version-file: package.json
 
     - name: Install dependencies
-      run: bun install --frozen-lockfile
+      if: inputs.install == 'true'
       shell: bash
+      env:
+        FILTER: ${{ inputs.filter }}
+      run: |
+        if [[ -n "$FILTER" ]]; then
+          bun install --frozen-lockfile --filter "$FILTER"
+        else
+          bun install --frozen-lockfile
+        fi

@@ -27,7 +27,7 @@ test("a string option before the command still scopes parsed middleware and the 
   await using tmp = await tmpdir()
   const config = path.join(tmp.path, "config")
   const managed = await DataRoot.ensure(config, path.join(tmp.path, "data"), false)
-  DataRootBarrier.configure({ root: managed.path, config })
+  using _ = DataRootBarrier.configure({ root: managed.path, config })
   const handlerReady = Promise.withResolvers<void>()
   const startNested = Promise.withResolvers<void>()
   const nestedReady = Promise.withResolvers<void>()
@@ -81,7 +81,7 @@ test("shell completion is classified as a short-lived data-root command", async 
   await using tmp = await tmpdir()
   const config = path.join(tmp.path, "config")
   const managed = await DataRoot.ensure(config, path.join(tmp.path, "data"), false)
-  DataRootBarrier.configure({ root: managed.path, config })
+  using _ = DataRootBarrier.configure({ root: managed.path, config })
 
   await runDataRootMiddleware("completion", managed.path, async () => {
     expect(await markers(config)).toHaveLength(1)
@@ -100,7 +100,7 @@ for (const [canonical, alias] of [
     await using tmp = await tmpdir()
     const config = path.join(tmp.path, "config")
     const managed = await DataRoot.ensure(config, path.join(tmp.path, "data"), false)
-    DataRootBarrier.configure({ root: managed.path, config })
+    using _ = DataRootBarrier.configure({ root: managed.path, config })
     const handlerReady = Promise.withResolvers<void>()
     const startNested = Promise.withResolvers<void>()
     const nestedReady = Promise.withResolvers<void>()
