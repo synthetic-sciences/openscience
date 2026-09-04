@@ -3,8 +3,12 @@ import { Log } from "@/util/log"
 /**
  * Connect-path milestones, in milliseconds since process start. One INFO line
  * is written when the workspace reports that it became interactive, so a
- * regression on any leg (listening, first project instance, interactive) is
- * visible in the sidecar log without a profiler.
+ * regression on any leg is visible in the sidecar log without a profiler.
+ *
+ * `instance` is the first Instance.provide of any directory; on the desktop
+ * that is the server-cwd instance the global routes mint. `project` is the
+ * first instance for any other directory, the leg that used to dominate the
+ * connect path, and stays unset while only the cwd instance exists.
  */
 export namespace Startup {
   const log = Log.create({ service: "startup" })
@@ -12,6 +16,7 @@ export namespace Startup {
   const marks = {
     listening: undefined as number | undefined,
     instance: undefined as number | undefined,
+    project: undefined as number | undefined,
     interactive: undefined as number | undefined,
   }
 
@@ -22,9 +27,10 @@ export namespace Startup {
     marks.listening = now()
   }
 
-  export function instance() {
-    if (marks.instance !== undefined) return
-    marks.instance = now()
+  export function instance(kind: "cwd" | "project") {
+    if (marks.instance === undefined) marks.instance = now()
+    if (kind === "cwd" || marks.project !== undefined) return
+    marks.project = now()
   }
 
   export function interactive(extra: Record<string, unknown> = {}) {
@@ -33,6 +39,7 @@ export namespace Startup {
     log.info("timing", {
       listening: marks.listening,
       instance: marks.instance,
+      project: marks.project,
       interactive: marks.interactive,
       ...extra,
     })
@@ -45,6 +52,7 @@ export namespace Startup {
   export function reset() {
     marks.listening = undefined
     marks.instance = undefined
+    marks.project = undefined
     marks.interactive = undefined
   }
 }
