@@ -17,7 +17,7 @@ import { getDirectory, getFilename } from "@synsci/util/path"
 import { Binary } from "@synsci/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
-import { Message, Part, QuestionPrompt } from "./message-part"
+import { getToolInfo, Message, Part, QuestionPrompt } from "./message-part"
 import { BasicTool } from "./basic-tool"
 import {
   artifactTypeLabel,
@@ -42,7 +42,7 @@ import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
 import { progressStatus } from "./session-turn-progress"
-import { visibleResearchTrace } from "./research-trace"
+import { compact, visibleResearchTrace, type ResearchTraceEntry } from "./research-trace"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
 
@@ -122,6 +122,49 @@ function isGeneratedTool(part: PartType | undefined): part is ToolPart {
   return part?.type === "tool" && part.tool === "artifact" && part.state.status === "completed"
 }
 
+function traceTitles(entries: ResearchTraceEntry[]) {
+  return entries
+    .map((item) => (item.part.type === "tool" && "title" in item.part.state ? item.part.state.title : undefined))
+    .filter((title): title is string => !!title)
+}
+
+/** The span of a folded run, so its header carries one honest duration. */
+function traceTime(entries: ResearchTraceEntry[]) {
+  const times = entries.flatMap((item) => {
+    if (item.part.type !== "tool" || !("time" in item.part.state)) return []
+    const time = item.part.state.time
+    return [{ start: time.start, end: "end" in time ? time.end : time.start }]
+  })
+  if (times.length === 0) return undefined
+  return {
+    start: Math.min(...times.map((time) => time.start)),
+    end: Math.max(...times.map((time) => time.end)),
+  }
+}
+
+/** Consecutive completed calls of one tool behind a counted header; every call stays literal inside. */
+function TraceRun(props: { entries: ResearchTraceEntry[] }) {
+  const tool = () => (props.entries[0]!.part as ToolPart).tool
+  const info = () => getToolInfo(tool())
+  const count = () => props.entries.length
+  return (
+    <div data-component="trace-run-group">
+      <BasicTool
+        icon={info().icon}
+        tool={tool()}
+        status="completed"
+        time={traceTime(props.entries)}
+        summary={[{ key: count() === 1 ? "ui.tool.calls.one" : "ui.tool.calls.other", params: { count: count() } }]}
+        trigger={{ title: info().title, subtitle: compact(traceTitles(props.entries)) }}
+      >
+        <div data-slot="trace-run-items">
+          <For each={props.entries}>{(item) => <Part part={item.part} message={item.message} hideCopy />}</For>
+        </div>
+      </BasicTool>
+    </div>
+  )
+}
+
 function AssistantTrace(props: {
   messages: AssistantMessage[]
   hideReasoning: boolean
@@ -153,29 +196,32 @@ function AssistantTrace(props: {
       {(partID) => (
         <Show when={traceByID().get(partID)}>
           {(entry) => (
-            <Show when={entry().group} fallback={<Part part={entry().part} message={entry().message} hideCopy />}>
-              {(group) => (
-                <div data-component="trace-preflight-group">
-                  <BasicTool
-                    icon="console"
-                    trigger={{
-                      title: `Checked environment · ${group().length} steps`,
-                      subtitle: group()
-                        .map((item) =>
-                          item.part.type === "tool" && "title" in item.part.state ? item.part.state.title : undefined,
-                        )
-                        .filter((title): title is string => !!title)
-                        .slice(0, 2)
-                        .join(" · "),
-                    }}
-                  >
-                    <div data-slot="trace-preflight-items">
-                      <For each={group()}>{(item) => <Part part={item.part} message={item.message} hideCopy />}</For>
-                    </div>
-                  </BasicTool>
-                </div>
-              )}
-            </Show>
+            <Switch>
+              <Match when={entry().group}>
+                {(group) => (
+                  <div data-component="trace-preflight-group">
+                    <BasicTool
+                      icon="console"
+                      tool="bash"
+                      status="completed"
+                      time={traceTime(group())}
+                      trigger={{
+                        title: `Checked environment · ${group().length} steps`,
+                        subtitle: compact(traceTitles(group()), 2),
+                      }}
+                    >
+                      <div data-slot="trace-preflight-items">
+                        <For each={group()}>{(item) => <Part part={item.part} message={item.message} hideCopy />}</For>
+                      </div>
+                    </BasicTool>
+                  </div>
+                )}
+              </Match>
+              <Match when={entry().run}>{(run) => <TraceRun entries={run()} />}</Match>
+              <Match when={true}>
+                <Part part={entry().part} message={entry().message} hideCopy />
+              </Match>
+            </Switch>
           )}
         </Show>
       )}

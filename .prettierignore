@@ -23,3 +23,4 @@ frontend/workspace/e2e/test-results/
 
 # built docs, embedded so openscience.sh/docs serves them (regenerate with: bun run --cwd frontend/landing sync:docs)
 frontend/landing/public/docs/
+tooling/harbor/.venv/

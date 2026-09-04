@@ -1,25 +1,6 @@
-import { createSignal } from "solid-js"
 import type { AssistantMessage, Message } from "@synsci/sdk/v2/client"
 import { findLast } from "@synsci/util/array"
 import { TokenUsage } from "@synsci/util/token-usage"
-
-// Mirrors CompactionSettings.DEFAULT_WARN_TOKENS on the server; the effective value
-// arrives through /settings/preferences and this only covers the window before it loads.
-export const DEFAULT_WARN_TOKENS = 120_000
-
-const [warn, setWarn] = createSignal(DEFAULT_WARN_TOKENS)
-
-// Effective `compaction.warn_tokens`. The session page compares the live conversation
-// size against it, and Customize → General publishes each confirmed write here so an
-// open session re-evaluates its notice without a reload.
-export const warnTokens = {
-  value: warn,
-  sync(preferences: { compaction_warn_tokens?: number }) {
-    const value = preferences.compaction_warn_tokens
-    if (value === undefined || !(value > 0)) return
-    setWarn(value)
-  },
-}
 
 // One measurement of the conversation's size in tokens: provider-reported usage on a
 // finished assistant turn, or the pre-call composition estimate the server publishes as
@@ -62,13 +43,6 @@ export function latestContext(messages: Message[], live?: ContextEstimate): Cont
   const last = settled(messages)
   if (live && (!last || last.id < live.after)) return { total: live.total, source: "estimate" }
   return sample(last)
-}
-
-// The notice is advisory and must never stack on top of a compaction already running.
-export function contextWarning(input: { tokens?: number; warn: number; status?: string }) {
-  if (input.tokens === undefined) return false
-  if (input.status === "compacting") return false
-  return input.tokens > input.warn
 }
 
 export function formatContextTokens(total: number, locale: string) {

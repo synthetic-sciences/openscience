@@ -60,14 +60,13 @@ import { UpdatesSettingsRoutes, desktopUpdateShutdownAuthorized } from "./routes
 import { ScientificToolsSettingsRoutes } from "./routes/settings/scientific-tools"
 import { projectSelection } from "./project-selection"
 import { CredentialLifecycle } from "../credentials/lifecycle"
-import { ComputeJobs } from "../compute/jobs"
-import { CommandRuntime } from "../science/command/registry"
-import { CredentialProcessLedger } from "../credentials/process-ledger"
+import { CredentialTeardown } from "../credentials/teardown"
 import { DataRootBarrier } from "../global/data-root-barrier"
 import { OnboardingAuthRoutes } from "./routes/onboarding-auth"
 import { AccountRoutes } from "./routes/account"
 import { BillingSettingsRoutes } from "./routes/settings/billing"
 import { WalletSettingsRoutes } from "./routes/settings/wallet"
+import { Startup } from "../util/startup"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -97,29 +96,10 @@ export namespace Server {
   function startCredentialLifecycle() {
     if (credentialLifecycleReady) return
     credentialLifecycleReady = true
-    CredentialLifecycle.onRevoke(async ({ reason }) => {
-      if (reason === "mcp-auth.migrate") return
-      const mcpAuthority =
-        reason.startsWith("mcp-config.") ||
-        ["mcp-auth.set:", "mcp-auth.remove:", "mcp-auth.tokens:", "mcp-auth.tokens.refresh:", "mcp-auth.client:"].some(
-          (prefix) => reason.startsWith(prefix),
-        )
-      if (mcpAuthority) {
-        // MCP authority is scoped to MCP transports. Do not stop unrelated
-        // notebooks, compute, or shell commands when an OAuth token refreshes.
-        await Promise.all([CredentialProcessLedger.revoke("mcp"), Instance.disposeAll({ strict: true })])
-        return
-      }
-      // Compute jobs and long-running Bash commands do not live in Instance
-      // state. MCP and LSP do, and their disposal callbacks close the
-      // underlying transports/processes.
-      await Promise.all([
-        ComputeJobs.cancelCredentialProcesses(),
-        CommandRuntime.stopAll(),
-        CredentialProcessLedger.revoke("mcp"),
-        Instance.disposeAll({ strict: true }),
-      ])
-    })
+    // Which runtimes a revision reaches is decided by its reason; see
+    // CredentialRevocation for why an expired synced overlay must not dispose
+    // every project instance.
+    CredentialLifecycle.onRevoke(CredentialTeardown.apply)
     credentialLifecycleBaseline = CredentialLifecycle.ensureFresh().then(() => {
       CredentialLifecycle.watch()
     })
@@ -582,6 +562,12 @@ export namespace Server {
           ),
           async (c) => {
             const { service, level, message, extra } = c.req.valid("json")
+            // The workspace reports the moment it became usable; that closes
+            // the startup timing line instead of adding a second entry.
+            if (service === "startup" && message === "interactive") {
+              Startup.interactive(extra)
+              return c.json(true)
+            }
             const logger = Log.create({ service })
 
             switch (level) {
@@ -915,6 +901,7 @@ export namespace Server {
 
     _url = server.url
     _server = server
+    Startup.listening()
 
     return server
   }

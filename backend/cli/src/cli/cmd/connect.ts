@@ -183,8 +183,8 @@ export const StatusCommand = cmd({
     if (!state.context.available) prompts.log.warn("The selected workspace cannot currently fund Ace requests.")
 
     const creditsRequest = OpenScience.getCredits(state.snapshot).catch(() => null)
-    const [profile, mode, credits, transactions] = await Promise.all([
-      OpenScience.getProfile(state.snapshot).catch(() => null),
+    const profile = state.user ?? null
+    const [mode, credits, transactions] = await Promise.all([
       OpenScience.getBillingMode(state.snapshot, creditsRequest).catch(() => null),
       creditsRequest,
       OpenScience.getTransactions(5, state.snapshot).catch(() => null),

@@ -7,6 +7,8 @@ export type ResearchTraceEntry = {
   hidden?: boolean
   /** Adjacent, low-value successful preflights kept behind one disclosure. */
   group?: ResearchTraceEntry[]
+  /** Consecutive completed calls of one tool, folded behind a counted header. */
+  run?: ResearchTraceEntry[]
 }
 
 export type TaskActivity = {
@@ -56,7 +58,7 @@ export function traceLabel(family: TraceFamily, count: number) {
   return `Completed ${count} research ${count === 1 ? "operation" : "operations"}`
 }
 
-function compact(values: string[], limit = 3) {
+export function compact(values: string[], limit = 3) {
   const unique = [...new Set(values)]
   const visible = unique.slice(0, limit)
   const hidden = unique.length - visible.length
@@ -106,12 +108,67 @@ function completedShellPreflight(entry: ResearchTraceEntry) {
   ].some((pattern) => pattern.test(command))
 }
 
+const foldable = new Set([...context, ...sources, ...changes, "bash"])
+
+function foldableCall(entry: ResearchTraceEntry) {
+  if (entry.group || entry.part.type !== "tool") return false
+  return entry.part.state.status === "completed" && foldable.has(entry.part.tool)
+}
+
+/**
+ * The newest call of each message that is still working. It stays literal so
+ * its glyph, duration, and receipt land on the row the reader is watching,
+ * and a body the reader opened is not unmounted the instant the call ends.
+ * It joins the run once a later call starts or the message completes.
+ */
+function trailing(entries: ResearchTraceEntry[]) {
+  const latest = new Map<string, string>()
+  for (const entry of entries) {
+    if (entry.part.type !== "tool" || entry.message.time?.completed) continue
+    latest.set(entry.message.id, entry.part.id)
+  }
+  return new Set(latest.values())
+}
+
+/**
+ * Consecutive completed calls of the same read, search, shell, or edit tool
+ * fold behind one counted header. Every original call stays inside `run`, so
+ * expanding the header shows the literal rows; a running, failed, or
+ * differently-shaped call breaks the run and stays on its own line, and the
+ * newest call of a working message waits for the next call before folding.
+ * A run therefore only ever grows: a streaming update never unfolds one.
+ */
+export function foldRuns(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
+  const open = trailing(entries)
+  const settled = (entry: ResearchTraceEntry) => foldableCall(entry) && !open.has(entry.part.id)
+  const result: ResearchTraceEntry[] = []
+  for (let index = 0; index < entries.length; index++) {
+    const first = entries[index]!
+    if (!settled(first)) {
+      result.push(first)
+      continue
+    }
+    const tool = (first.part as ToolPart).tool
+    const run = [first]
+    while (index + 1 < entries.length) {
+      const next = entries[index + 1]!
+      if (!settled(next) || (next.part as ToolPart).tool !== tool) break
+      run.push(next)
+      index++
+    }
+    result.push(run.length > 1 ? { ...first, run } : first)
+  }
+  return result
+}
+
 /**
  * Keep the primary activity transcript literal and chronological. Streaming
- * state changes must not replace already-visible rows with aggregate summaries;
- * The sole inline compaction is a run of low-value, successful shell
- * preflights. The original calls remain in `group` so expansion never hides
- * commands or output; errors and substantive work always remain literal.
+ * state changes must not replace already-visible rows with aggregate summaries.
+ * The inline compactions are a run of low-value, successful shell preflights
+ * and a run of completed calls to one tool; the original calls remain in
+ * `group` or `run` so expansion never hides commands or output. Errors, live
+ * calls, and the newest call of a message still working always remain
+ * literal rows, so a row never folds at the moment its receipt appears.
  */
 export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
   // Streaming reconciliation can briefly surface the same durable part twice
@@ -225,7 +282,7 @@ export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTra
       },
     })
   }
-  return result
+  return foldRuns(result)
 }
 
 export function summarizeTaskActivity(items: TaskActivity[]): TaskActivityGroup[] {
@@ -257,6 +314,13 @@ export function summarizeTaskActivity(items: TaskActivity[]): TaskActivityGroup[
 
 export function stripTaskMetadata(value?: string) {
   return (value ?? "").replace(/\s*<task_metadata>[\s\S]*?<\/task_metadata>\s*/g, "").trim()
+}
+
+/** Whole seconds for a counter that is still ticking. */
+export function elapsedLabel(value: number) {
+  const seconds = Math.max(0, Math.floor(value / 1000))
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 }
 
 export function formatTaskDuration(value?: number) {

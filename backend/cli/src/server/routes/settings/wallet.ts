@@ -4,9 +4,6 @@ import z from "zod"
 import { OpenScience } from "../../../openscience"
 import { ACE_CONTRACT } from "../../../openscience/ace-contract"
 import { lazy } from "../../../util/lazy"
-import { withTimeout } from "../../../util/timeout"
-
-export const WALLET_BUDGET_MS = 5_000
 
 export const WalletState = z.object({
   signedIn: z.boolean(),
@@ -35,6 +32,12 @@ export const WalletState = z.object({
       createdAt: z.string(),
     }),
   ),
+  /** True while the served values come from the stored summary and a newer one is being read. */
+  refreshing: z.boolean(),
+  /** When the served values were read from the account service. */
+  refreshedAt: z.number().nullable(),
+  /** Why the latest refresh failed, when stored values are served instead. */
+  error: z.string().optional(),
 })
 export type WalletState = z.infer<typeof WalletState>
 
@@ -48,45 +51,28 @@ const SIGNED_OUT: WalletState = {
   aceContract: { ...ACE_CONTRACT },
   lifetimeSpentUsd: null,
   transactions: [],
+  refreshing: false,
+  refreshedAt: null,
 }
 
-export async function readWallet(
-  summary: boolean,
-  account: Pick<
-    typeof OpenScience,
-    "getFundingSnapshot" | "getReconciledFundingState" | "getCredits" | "getBillingMode" | "getTransactions"
-  > = OpenScience,
-): Promise<WalletState> {
-  // Reconcile a legacy unscoped device before any Wallet endpoint sees it.
-  // The resulting immutable snapshot plus each gateway response proof is the
-  // authorization boundary for every parallel read below.
-  const snapshot = (await account.getReconciledFundingState().catch(() => null))?.snapshot
-  if (!snapshot) return SIGNED_OUT
-  const creditsRequest = summary
-    ? withTimeout(
-        account.getCredits(snapshot, { timeoutMs: WALLET_BUDGET_MS, lifetimeSpent: false }),
-        WALLET_BUDGET_MS,
-      ).catch(() => null)
-    : account.getCredits(snapshot).catch(() => null)
-  const [credits, mode, transactions] = await Promise.all([
-    creditsRequest,
-    summary
-      ? withTimeout(account.getBillingMode(snapshot, creditsRequest, WALLET_BUDGET_MS), WALLET_BUDGET_MS).catch(
-          () => null,
-        )
-      : account.getBillingMode(snapshot, creditsRequest).catch(() => null),
-    summary ? Promise.resolve([]) : account.getTransactions(20, snapshot).catch(() => null),
-  ])
-  const current = await account.getFundingSnapshot()
-  if (!current) return SIGNED_OUT
-  if (
-    current.api_key !== snapshot.api_key ||
-    current.user_id !== snapshot.user_id ||
-    current.organization_id !== snapshot.organization_id ||
-    current.workspace_locked !== snapshot.workspace_locked
-  ) {
-    throw new Error("The selected account changed while refreshing the Wallet. Retry.")
-  }
+type Read<T> = { value: T } | { error: string }
+
+const settle = <T>(promise: Promise<T>): Promise<Read<T>> =>
+  promise.then(
+    (value) => ({ value }),
+    (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),
+  )
+
+/** Project one signed-in account summary onto the Wallet contract. */
+export function walletState(input: {
+  snapshot: OpenScience.AccountSnapshot | null
+  refreshing: boolean
+  error?: string
+  summary: boolean
+  transactions: OpenScience.Transaction[]
+}): WalletState {
+  const credits = input.snapshot?.credits ?? null
+  const mode = input.snapshot?.billing ?? null
   const redacted = Boolean(credits?.balanceRedacted || mode?.balance_redacted)
   const balance = redacted ? null : (credits?.balanceUsd ?? (mode?.balance_verified ? mode.balance_usd : null))
   return {
@@ -95,15 +81,61 @@ export async function readWallet(
     balanceRedacted: redacted,
     accessVerified: mode?.access_verified === true,
     billingMode: mode?.mode ?? null,
-    managedSupported: mode?.managed_supported ?? summary,
+    managedSupported: mode?.managed_supported ?? input.summary,
     // Explicit access denials outrank cash or reload consent. Neither implies
     // permission to spend from a workspace with a revoked role or usage limit.
     managedUnlocked: mode?.access_verified === true && mode.managed_supported && mode.managed_unlocked,
     aceEnabled: mode?.ace_enabled ?? false,
     aceContract: { ...ACE_CONTRACT },
     lifetimeSpentUsd: credits?.lifetimeSpentCents == null ? null : credits.lifetimeSpentCents / 100,
-    transactions: transactions ?? [],
+    transactions: input.transactions,
+    refreshing: input.refreshing,
+    refreshedAt: input.snapshot?.at ?? null,
+    ...(input.error ? { error: input.error } : {}),
   }
+}
+
+export async function readWallet(
+  summary: boolean,
+  account: Pick<
+    typeof OpenScience,
+    "getAccountSummary" | "getFundingSnapshot" | "refreshAccount" | "getTransactions"
+  > = OpenScience,
+  signal?: AbortSignal,
+): Promise<WalletState> {
+  if (summary) {
+    // The stored summary is served at once; a stale one is refreshed in the
+    // background and announced as `account.updated`. A first read waits under
+    // the account deadline and the request's own signal.
+    const read = await settle(account.getAccountSummary({ signal }))
+    if ("error" in read) {
+      return walletState({ snapshot: null, refreshing: false, error: read.error, summary: true, transactions: [] })
+    }
+    if (!read.value) return SIGNED_OUT
+    return walletState({
+      snapshot: read.value,
+      refreshing: read.value.refreshing,
+      error: read.value.error,
+      summary: true,
+      transactions: [],
+    })
+  }
+  // The ledger view is always a fresh read; the summary it fetches is stored
+  // for the next quick open. Both reads share the one account deadline.
+  const session = await account.getFundingSnapshot()
+  if (!session) return SIGNED_OUT
+  const deadline = OpenScience.accountDeadline(signal)
+  const [snapshot, transactions] = await Promise.all([
+    settle(account.refreshAccount(session, { signal: deadline })),
+    account.getTransactions(20, session, deadline).catch(() => null),
+  ])
+  return walletState({
+    snapshot: "value" in snapshot ? snapshot.value : null,
+    refreshing: false,
+    error: "error" in snapshot ? snapshot.error : undefined,
+    summary: false,
+    transactions: transactions ?? [],
+  })
 }
 
 export const WalletSettingsRoutes = lazy(() =>
@@ -122,6 +154,6 @@ export const WalletSettingsRoutes = lazy(() =>
         summary: z.enum(["true", "false"]).optional().describe("Return a fast account summary without ledger history"),
       }),
     ),
-    async (c) => c.json(await readWallet(c.req.valid("query").summary === "true")),
+    async (c) => c.json(await readWallet(c.req.valid("query").summary === "true", OpenScience, c.req.raw.signal)),
   ),
 )

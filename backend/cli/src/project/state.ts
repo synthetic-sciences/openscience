@@ -10,7 +10,7 @@ export namespace State {
   const recordsByKey = new Map<string, Map<any, Entry>>()
 
   export function create<S>(root: () => string, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
-    return () => {
+    const get = () => {
       const key = root()
       let entries = recordsByKey.get(key)
       if (!entries) {
@@ -26,6 +26,14 @@ export namespace State {
       })
       return state
     }
+    /** Whether the state exists for the current root, without creating it. */
+    const created = () => !!recordsByKey.get(root())?.has(init)
+    return Object.assign(get, { created })
+  }
+
+  /** Number of runtimes registered for one project root. */
+  export function size(key: string) {
+    return recordsByKey.get(key)?.size ?? 0
   }
 
   export function clear(key: string, init: Function) {

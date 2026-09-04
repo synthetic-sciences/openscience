@@ -29,17 +29,84 @@ Piped stdin is appended to the message. `openscience run` supports:
 | --- | --- |
 | `-c, --continue` | Continue the most recent session. |
 | `-s, --session <id>` | Continue a specific session by id. |
-| `-m, --model <provider/model>` | Model for this run, e.g. `anthropic/claude-opus-4-8`. See [Models](/openscience/models). |
+| `-m, --model <provider/model>` | Model for this run, e.g. `anthropic/claude-opus-4-8`. An unknown or disconnected model exits 2 before anything runs; there is no silent fallback. See [Models](/openscience/models). |
+| `--agent <name>` | Primary agent to run (default `research`). |
 | `--variant <tier>` | Reasoning-effort tier (`high`, `max`, `minimal`; model-dependent). |
 | `--effort <normal\|ultra>` | Research breadth. Normal is focused; Ultra permits a wider bounded investigation. |
 | `--command <name>` | Run a custom command, with the message as its arguments. |
 | `-f, --file <path>` | Attach a local file to the message (repeatable). |
 | `--title <text>` | Title for the session in `session list`. |
-| `--format <default\|json>` | `json` emits one JSON event per line (`tool_use`, `step_start`, `step_finish`, `text`, `error`), tagged with the session id — pipe it to a file and parse line by line. |
+| `--format <default\|json>` | `json` emits one JSON event per line, tagged with the session id; see [JSON events](#json-events). |
+| `--auto-approve` | Approve every permission request for this run (alias `--dangerously-skip-permissions`). Replies are per request and never persisted; delegation is off so the whole run is one visible session. |
+| `--deny-prompts` | Reject every permission request for this run. This is the default whenever stdin is not a terminal. |
 | `--attach <url>` | Send the prompt to a running server instead of starting one. |
-| `--port <n>` | Port for the throwaway local server (random by default). |
 
 To pick up a file, always use `-f`; `--attach` targets a server, it does not fetch documents.
+
+`--auto-approve` and `--deny-prompts` are mutually exclusive. Without either, `run` prompts in the terminal when stdin is a TTY and rejects when it is not, so `git diff | openscience run ...` never blocks. Either way `run` never answers the agent's questions: the session denies the `question` tool, and a stray question is rejected instead of hanging the run. A rejection ends the turn unless `experimental.continue_loop_on_deny` is set in your config.
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | The turn completed. |
+| `1` | The session reported an error (provider, tool, or agent failure). |
+| `2` | Usage or configuration error: unknown model or command, no provider available, missing message or file. |
+| `3` | Stopped by a rejected permission or question. |
+
+### JSON events
+
+With `--format json`, stdout carries only events, one JSON object per line, each with `type`, `timestamp` (ms), and `sessionID`. Warnings and logs go to stderr. The schema lives in `backend/cli/src/cli/run-events.ts`.
+
+| Event | Payload | When |
+| --- | --- | --- |
+| `user` | `parts` (text and file parts), `command` | Once, before the session starts. |
+| `step_start` / `step_finish` | `part` | Around each model call; `step_finish.part` carries `tokens` and `cost`. |
+| `text` | `part` | One per finished text part. |
+| `reasoning` | `part` | One per finished reasoning part. |
+| `tool_use` | `part` | One per tool call once it completes or fails (`part.state.status`). |
+| `permission` | `request` (`id`, `sessionID`, `permission`, `patterns`), `reply` | Each time `run` answers a permission request, including from delegated sessions. |
+| `error` | `error` (`name`, `data`) | A session error. |
+| `done` | `status` (`completed`, `error`, `rejected`), `exitCode`, `tokens` summed over steps, `cost` | Last event, always. |
+
+## Headless and container runs
+
+`openscience run` is the entrypoint for benchmark harnesses and containers (the [Harbor adapter](https://github.com/synthetic-sciences/openscience/tree/main/tooling/harbor) is built on it). Nothing in it needs a browser, a terminal, or an account: with a provider key in the environment and `--auto-approve`, a fresh data directory never contacts Synthetic Sciences. The knobs below already exist; set them in the container's environment.
+
+| Variable | Use |
+| --- | --- |
+| `OPENSCIENCE_DATA_DIR` | Sessions, snapshots, and user skills. Point it at a collected log directory. |
+| `OPENSCIENCE_CONFIG_DIR` | Location of `openscience.json` (see below). |
+| `OPENSCIENCE_SKIP_ENVIRONMENT_BOOTSTRAP=1` | Do not provision the app-owned Python and R environments (a micromamba download) on startup. |
+| `OPENSCIENCE_DISABLE_AUTOUPDATE=1` | No release checks. |
+| `OPENSCIENCE_DISABLE_LSP_DOWNLOAD=1` | No language-server downloads. |
+| `OPENSCIENCE_DISABLE_PROJECT_CONFIG=1` | Ignore `openscience.json` files inside the task directory, so a task repository cannot inject configuration. |
+| `OPENSCIENCE_DISABLE_MODELS_FETCH=1` | Only when models.dev is unreachable and the model is in the bundled snapshot; otherwise leave it unset. |
+| `OPENSCIENCE_PERMISSION` | JSON permission rules merged into the config, an alternative to the file below. |
+
+Do not set `OPENSCIENCE_FAKE_VCS`: it makes every step snapshot the whole working tree for the workspace's undo and diff views, which a headless run does not use.
+
+Write `$OPENSCIENCE_CONFIG_DIR/openscience.json` to turn containment off (task containers rarely have bubblewrap, and `sandbox.onUnavailable` defaults to `error`) and to keep the agent away from tools that need a Synthetic Sciences account or paid remote compute:
+
+```jsonc
+{
+  "sandbox": { "enabled": false },
+  "permission": {
+    "*": "allow",
+    "research_search": "deny",
+    "atlas": "deny",
+    "atlas_write": "deny",
+    "remote_compute": "deny",
+    "modal": "deny",
+    "provider_compute": "deny",
+    "compute_job": "deny"
+  },
+  // With --deny-prompts, keep the turn going after a rejection instead of ending it.
+  "experimental": { "continue_loop_on_deny": true }
+}
+```
+
+The sandbox policy is read only from that file (or a managed config directory): `OPENSCIENCE_CONFIG_CONTENT` merges into the rest of the configuration but cannot change `sandbox`.
 
 ## Continue or resume
 

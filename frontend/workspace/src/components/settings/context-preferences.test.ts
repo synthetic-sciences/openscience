@@ -1,11 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  THRESHOLD_OPTIONS,
-  WARN_TOKENS_MIN,
-  parseWarnTokens,
-  thresholdLabel,
-  thresholdOptions,
-} from "./context-preferences"
+import { THRESHOLD_OPTIONS, thresholdLabel, thresholdOptions } from "./context-preferences"
 
 describe("General context preferences", () => {
   test("offers the four auto-compact percentages and keeps a hand-edited value selectable", () => {
@@ -20,18 +14,5 @@ describe("General context preferences", () => {
       { value: 0.9, label: "90%" },
     ])
     expect(thresholdLabel(0.6)).toBe("60%")
-  })
-
-  test("parses the warning token count leniently and rejects anything the backend would refuse", () => {
-    expect(WARN_TOKENS_MIN).toBe(1_000)
-    expect(parseWarnTokens("120000")).toBe(120_000)
-    expect(parseWarnTokens(" 120,000 ")).toBe(120_000)
-    expect(parseWarnTokens("120 000")).toBe(120_000)
-    expect(parseWarnTokens("80k")).toBe(80_000)
-    expect(parseWarnTokens("")).toBeUndefined()
-    expect(parseWarnTokens("1.5")).toBeUndefined()
-    expect(parseWarnTokens("-5")).toBeUndefined()
-    expect(parseWarnTokens("999")).toBeUndefined()
-    expect(parseWarnTokens("many")).toBeUndefined()
   })
 })

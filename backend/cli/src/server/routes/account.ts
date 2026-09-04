@@ -94,6 +94,9 @@ export const AccountRoutes = lazy(() =>
                 schema: resolver(
                   z.object({
                     session: z.boolean(),
+                    refreshing: z.boolean(),
+                    refreshed_at: z.number().nullable(),
+                    error: z.string().optional(),
                     user: z.unknown().optional(),
                     balance_usd: z.number().nullable(),
                     billing_mode: BillingMode.nullable(),
@@ -109,32 +112,42 @@ export const AccountRoutes = lazy(() =>
       }),
       async (c) => {
         void OpenScience.scheduleRefresh()
-        const state = await OpenScience.getReconciledFundingState().catch(() => null)
-        if (!state) {
-          const session = await OpenScience.getSession()
-          return c.json({
+        const session = await OpenScience.getSession()
+        const fallback = (error?: string) =>
+          c.json({
             session: !!session,
+            refreshing: false,
+            refreshed_at: null,
+            ...(error ? { error } : {}),
             credential_sync: OpenScience.credentialSyncStatus(),
             balance_usd: null,
             billing_mode: null,
             credential: credential(session),
             funding_context: { type: "personal" as const, available: !session, locked: false, organizations: [] },
           })
-        }
-        const creditsRequest = OpenScience.getCredits(state.snapshot)
-        const [user, credits, billing] = await Promise.all([
-          OpenScience.getProfile(state.snapshot),
-          creditsRequest,
-          OpenScience.getBillingMode(state.snapshot, creditsRequest),
-        ])
+        if (!session) return fallback()
+        // The stored summary is served at once; a stale one is refreshed in
+        // the background and announced as `account.updated`. A first read
+        // waits under the account deadline and the request's own signal, so
+        // a client that leaves cancels the outbound reads.
+        const read = await OpenScience.getAccountSummary({ signal: c.req.raw.signal }).then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),
+        )
+        if ("error" in read) return fallback(read.error)
+        if (!read.value) return fallback()
+        const summary = read.value
         return c.json({
           session: true,
+          refreshing: summary.refreshing,
+          refreshed_at: summary.at,
+          ...(summary.error ? { error: summary.error } : {}),
           credential_sync: OpenScience.credentialSyncStatus(),
-          user: user ?? (state.snapshot.user_id ? { user_id: state.snapshot.user_id } : undefined),
-          balance_usd: credits?.balanceUsd ?? null,
-          billing_mode: billing,
-          funding_context: state.context,
-          credential: credential(state.snapshot),
+          user: summary.user ?? (session.user_id ? { user_id: session.user_id } : undefined),
+          balance_usd: summary.credits?.balanceUsd ?? null,
+          billing_mode: summary.billing,
+          funding_context: summary.context,
+          credential: credential(session),
         })
       },
     )

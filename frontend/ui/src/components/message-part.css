@@ -207,19 +207,107 @@
   }
 }
 
+/* While a text part is still growing, its last line ends in a quiet block
+   rather than a blinking cursor: no animation, so it never competes with the
+   words arriving beside it. */
+[data-component="text-part"][data-streaming="true"]
+  [data-component="markdown"]
+  > :is(p, h1, h2, h3, h4, h5, h6, blockquote):last-child::after,
+[data-component="text-part"][data-streaming="true"]
+  [data-component="markdown"]
+  > :is(ul, ol):last-child
+  > li:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 0.45em;
+  height: 1em;
+  margin-left: 0.15em;
+  vertical-align: -0.15em;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+/* Reasoning folds to one row that reads like a tool call: a glyph, the
+   "Thinking (12s)" clock, a chevron. The body only mounts once a reader opens
+   it, and an opened body stays open for the rest of the page session. */
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--text-base);
   font-size: 13px;
   line-height: 20px;
 
-  [data-slot="reasoning-part-label"] {
-    display: block;
-    margin-bottom: 4px;
-    color: var(--text-weaker);
+  [data-slot="reasoning-part-toggle"] {
+    width: 100%;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px 8px 12px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-weak);
+    font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-weight: var(--font-weight-medium);
-    letter-spacing: 0.01em;
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color var(--duration-fast) var(--ease-standard),
+      color var(--duration-fast) var(--ease-standard);
+
+    &:hover {
+      background: var(--surface-base-hover);
+      color: var(--text-base);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-focus, var(--border-focus));
+      outline-offset: -2px;
+    }
+  }
+
+  [data-slot="reasoning-part-glyph"] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--icon-weak);
+
+    [data-component="spinner"] {
+      width: 12px;
+      height: 12px;
+    }
+  }
+
+  [data-slot="reasoning-part-title"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot="reasoning-part-chevron"] {
+    flex-shrink: 0;
+    color: var(--icon-weak);
+    transition: transform var(--duration-fast) var(--ease-standard);
+  }
+
+  &[data-expanded="true"] [data-slot="reasoning-part-chevron"] {
+    transform: rotate(180deg);
+  }
+
+  [data-slot="reasoning-part-body"] {
+    margin: 0 0 6px 19px;
+    padding: 2px 10px 2px 12px;
+    border-left: 1px solid var(--border-weaker-base);
+    color: var(--text-weak);
   }
 
   [data-component="markdown"] {
@@ -236,6 +324,13 @@
     > :last-child {
       margin-bottom: 0;
     }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="reasoning-part"] [data-slot="reasoning-part-toggle"],
+  [data-component="reasoning-part"] [data-slot="reasoning-part-chevron"] {
+    transition: none;
   }
 }
 
@@ -306,6 +401,12 @@
     overflow-y: auto;
     word-break: break-word;
   }
+}
+
+/* A failed call keeps its own row; the failure detail lives in the body. */
+[data-component="collapsible"] [data-slot="basic-tool-failure"] {
+  width: auto;
+  margin: 2px 10px 10px 12px;
 }
 
 [data-component="tool-output"] {
@@ -735,6 +836,10 @@
     border: 1px solid var(--border-weaker-base);
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--surface-raised-base) 72%, transparent);
+  }
+
+  [data-slot="delegation-findings"][data-error="true"] [data-slot="delegation-section-label"] {
+    color: var(--text-on-critical-base);
   }
 
   [data-slot="delegation-findings"] [data-component="markdown"] {
@@ -1717,6 +1822,10 @@
 /* Compact spinner + label shown while a write/edit/apply_patch tool is running,
    before its diff/content exists — revealed as the full card on completion. */
 [data-component="tool-progress"] {
+  /* Same height and left edge as the trigger row that replaces it, so the
+     swap from "writing" to the finished card never moves the rows below. */
+  min-height: 40px;
+  padding: 0 10px 0 12px;
   display: flex;
   align-items: center;
   gap: 8px;

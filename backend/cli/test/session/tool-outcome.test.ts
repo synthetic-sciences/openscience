@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import type { MessageV2 } from "../../src/session/message-v2"
-import { observableToolFailure, observableToolStatus } from "../../src/session/tool-outcome"
+import { CredentialRevocation } from "../../src/credentials/revocation"
+import { abortedToolPart, observableToolFailure, observableToolStatus } from "../../src/session/tool-outcome"
 
 function completed(tool: string, metadata: Record<string, unknown>, title = `${tool} execution`): MessageV2.ToolPart {
   return {
@@ -123,4 +124,43 @@ test("counts terminal Task failures while keeping partial checkpoints non-failin
   expect(observableToolFailure(failed)).toBe("Analyze cohort failed")
   expect(observableToolStatus(partial)).toBe("partial")
   expect(observableToolFailure(partial)).toBeUndefined()
+})
+
+test("a call cancelled by a credential revocation records the cause, not a fake failure", () => {
+  const pending: MessageV2.ToolPart = {
+    id: "part_pending",
+    sessionID: "ses_outcome",
+    messageID: "msg_outcome",
+    type: "tool",
+    callID: "call_pending",
+    tool: "bash",
+    state: { status: "pending", input: {}, raw: "" },
+  }
+  const closed = abortedToolPart(pending, CredentialRevocation.EXPIRED, { now: 50 })
+  if (closed.state.status !== "error") throw new Error("Expected the pending call to be closed")
+  expect(closed.state.error).toBe(
+    "Interrupted: synchronized workspace credentials expired before they could be renewed. The bash call had not started; no action was taken.",
+  )
+  expect(closed.state.metadata).toEqual({ cancelled: true, started: false })
+  expect(closed.state.time).toEqual({ start: 50, end: 50 })
+  expect(closed.state.input).toEqual({})
+  expect(observableToolFailure(closed)).toStartWith(CredentialRevocation.EXPIRED)
+  expect(observableToolFailure(closed)).not.toContain("failed")
+
+  const running: MessageV2.ToolPart = {
+    ...pending,
+    id: "part_running",
+    callID: "call_running",
+    state: { status: "running", input: { command: "sleep 30" }, metadata: { output: "" }, time: { start: 10 } },
+  }
+  const stopped = abortedToolPart(running, CredentialRevocation.EXPIRED, { now: 40 })
+  if (stopped.state.status !== "error") throw new Error("Expected the running call to be closed")
+  expect(stopped.state.error).toBe(CredentialRevocation.EXPIRED)
+  expect(stopped.state.metadata).toEqual({ output: "", cancelled: true, started: true })
+  expect(stopped.state.time).toEqual({ start: 10, end: 40 })
+  expect(stopped.state.input).toEqual({ command: "sleep 30" })
+
+  const truncated = abortedToolPart(pending, "Model output was truncated; no action was taken.", { explain: false })
+  if (truncated.state.status !== "error") throw new Error("Expected the truncated call to be closed")
+  expect(truncated.state.error).toBe("Model output was truncated; no action was taken.")
 })

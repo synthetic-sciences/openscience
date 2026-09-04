@@ -144,7 +144,7 @@ export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, R
       try {
         const credential = await resolveCredentialFields("firecrawl", { required: ["api_key"] })
         const key = credential?.api_key
-        const snapshot = key ? undefined : (await OpenScience.getReconciledFundingState())?.snapshot
+        const snapshot = key ? undefined : ((await OpenScience.getRequestSnapshot()) ?? undefined)
         const operationID = createHash("sha256")
           .update(JSON.stringify([ctx.sessionID, ctx.messageID, ctx.callID, input]))
           .digest("hex")
