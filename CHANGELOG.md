@@ -67,12 +67,13 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   cached balance check; only a legacy unscoped session still reconciles its
   workspace first, and the gateway's funding echo is still verified before
   anything is charged.
-- Persisted the last good Ace account summary (profile, funding context,
-  wallet and entitlement; never the key) in the data directory and served it
-  to the Ace and account panels at once, marked `refreshing` while a newer
-  one is read in the background and announced as `account.updated`. A panel
-  no longer shows a spinner for the account service when a summary exists,
-  and a failed refresh keeps the last good values with the reason.
+- Persisted the last good Ace account summary (the shown profile fields,
+  funding context, wallet and entitlement; never the key) in the data
+  directory and served it to the Ace and account panels at once, marked
+  `refreshing` while a newer one is read in the background and announced as
+  `account.updated`. A panel no longer shows a spinner for the account
+  service when a summary exists, and a refresh that failed or did not fully
+  answer keeps the last good values with the reason.
 - Replaced the Ace panel's 6-second timeout racing 60 seconds of server work
   with one bounded 15-second account deadline owned by the server and
   propagated, together with the request's own abort signal, to every

@@ -1888,13 +1888,20 @@ export namespace Provider {
   }> | null = null
   let _stateCacheRevision: string | undefined
 
+  /** Env the loaders themselves set while building: Bedrock and AI Core mirror
+   * their stored key into the process env. The key they mirror is already
+   * covered by auth.json, and hashing the mirror would make every build change
+   * the inputs it was keyed on, so the next read would build once more. */
+  const LOADER_ENV = new Set(["AWS_BEARER_TOKEN_BEDROCK", "AICORE_SERVICE_KEY"])
+
   /** A fingerprint of what `_loadState` consumes: the provider-relevant config
    * (project config merges in), trust, the credential files and the process
    * env. The files are covered by a stat (every writer replaces them) and the
    * env is small, so this is far cheaper than a rebuild; models.dev and
    * managed pricing are process-wide and call `invalidate()` themselves.
-   * Per-request project boundaries (token minting, module loading) are still
-   * re-checked at use. */
+   * Plugin instances are per project (they receive the project directory), so
+   * a project that declares plugins keys its own state. Per-request project
+   * boundaries (token minting, module loading) are still re-checked at use. */
   async function stateRevision() {
     const config = await Config.get()
     const trusted = await ProjectTrust.allowed(Instance.project)
@@ -1906,7 +1913,9 @@ export namespace Provider {
         ),
       ),
     )
-    const env = Object.entries(Env.all()).sort(([a], [b]) => a.localeCompare(b))
+    const env = Object.entries(Env.all())
+      .filter(([key]) => !LOADER_ENV.has(key))
+      .sort(([a], [b]) => a.localeCompare(b))
     return createHash("sha256")
       .update(
         JSON.stringify({
@@ -1915,6 +1924,7 @@ export namespace Provider {
           enabled: config.enabled_providers ?? null,
           billing: config.billing?.llm ?? null,
           plugin: config.plugin ?? null,
+          directory: config.plugin?.length ? Instance.directory : null,
           trusted,
           files,
           env,

@@ -1744,29 +1744,23 @@ export namespace OpenScience {
     access_verified?: boolean
   }
 
-  export async function getBillingMode(
-    snapshot?: FundingSnapshot,
-    knownCredits?: Credits | null | Promise<Credits | null>,
-    options: { timeoutMs?: number; signal?: AbortSignal } = {},
-  ): Promise<BillingMode | null> {
-    const session = snapshot ?? (await getReconciledFundingState({ signal: options.signal }))?.snapshot
-    if (!session) return null
-    const [configModule, accessRead, credits] = await Promise.all([
-      import("@/config/config"),
-      readAccess(session, options.timeoutMs ?? ATLAS_FETCH_TIMEOUT_MS, options.signal),
-      knownCredits === undefined
-        ? getCredits(session, { signal: options.signal }).catch(() => null)
-        : Promise.resolve(knownCredits),
-    ])
-    const access = accessRead.body
+  /** An explicit entitlement verdict: the gateway answered and refused. */
+  function accessDenied(read: AccessRead): boolean {
+    return read.status === 401 || read.status === 403
+  }
+
+  /** The billing mode one entitlement read and one wallet read describe. */
+  async function billingFromReads(read: AccessRead, credits: Credits | null): Promise<BillingMode> {
+    const { Config } = await import("@/config/config")
+    const access = read.body
     const balance = credits?.balanceCents ?? access?.cli_balance_cents ?? 0
-    const denied = accessRead.status === 401 || accessRead.status === 403
+    const denied = accessDenied(read)
     const verified =
       denied ||
-      (accessRead.ok && typeof access?.managed_unlocked === "boolean" && typeof access.managed_supported === "boolean")
+      (read.ok && typeof access?.managed_unlocked === "boolean" && typeof access.managed_supported === "boolean")
     const supported = !denied && access?.managed_supported === true
     return {
-      mode: await localBillingMode(configModule.Config),
+      mode: await localBillingMode(Config),
       balance_cents: balance,
       balance_usd: balance / 100,
       managed_supported: supported,
@@ -1776,6 +1770,22 @@ export namespace OpenScience {
       balance_redacted: access?.balance_redacted ?? credits?.balanceRedacted ?? false,
       balance_verified: typeof access?.cli_balance_cents === "number" && access.balance_redacted !== true,
     }
+  }
+
+  export async function getBillingMode(
+    snapshot?: FundingSnapshot,
+    knownCredits?: Credits | null | Promise<Credits | null>,
+    options: { timeoutMs?: number; signal?: AbortSignal } = {},
+  ): Promise<BillingMode | null> {
+    const session = snapshot ?? (await getReconciledFundingState({ signal: options.signal }))?.snapshot
+    if (!session) return null
+    const [accessRead, credits] = await Promise.all([
+      readAccess(session, options.timeoutMs ?? ATLAS_FETCH_TIMEOUT_MS, options.signal),
+      knownCredits === undefined
+        ? getCredits(session, { signal: options.signal }).catch(() => null)
+        : Promise.resolve(knownCredits),
+    ])
+    return billingFromReads(accessRead, credits)
   }
 
   export async function setBillingMode(
@@ -1871,13 +1881,21 @@ export namespace OpenScience {
     balance_verified: z.boolean().optional(),
     access_verified: z.boolean().optional(),
   })
+  // Only the profile fields the UI shows are stored. Whatever else the
+  // account service returns with the profile is never written to disk.
+  const StoredProfile = z.object({
+    user_id: z.string().optional(),
+    email: z.string().nullable().optional(),
+    display_name: z.string().nullable().optional(),
+    github_username: z.string().nullable().optional(),
+  })
   const StoredSnapshot = z.object({
     protocol: z.literal(1),
     key_fingerprint: z.string(),
     user_id: z.string(),
     organization_id: z.string().optional(),
     at: z.number(),
-    user: z.record(z.string(), z.unknown()).optional(),
+    user: StoredProfile.optional(),
     context: StoredContext,
     credits: StoredCredits.nullable(),
     billing: StoredBilling.nullable(),
@@ -1887,6 +1905,19 @@ export namespace OpenScience {
   // credential change happened since).
   let accountStale = 0
   let accountFailure: { context: string; at: number; error: string } | undefined
+
+  /** The profile a summary carries: the stored fields, picked from what the
+   * account service returned, so memory and disk hold the same shape. */
+  function storedProfile(user: AccountProfile): z.infer<typeof StoredProfile> {
+    const text = (value: unknown) => (typeof value === "string" || value === null ? value : undefined)
+    const picked = {
+      user_id: typeof user.user_id === "string" ? user.user_id : undefined,
+      email: text(user.email),
+      display_name: text(user.display_name),
+      github_username: text(user.github_username),
+    }
+    return Object.fromEntries(Object.entries(picked).filter(([, value]) => value !== undefined))
+  }
 
   function sameSnapshot(a: FundingSnapshot, b: FundingSnapshot): boolean {
     return (
@@ -1909,9 +1940,12 @@ export namespace OpenScience {
     const stored = parsed.data
     if (stored.key_fingerprint !== keyFingerprint(session.api_key)) return null
     if (stored.user_id !== session.user_id || stored.organization_id !== session.organization_id) return null
+    // A clock that moved backwards after the write leaves `at` in the future,
+    // where it would pass every freshness check; such a summary is stale.
+    const now = Date.now()
     return {
-      at: stored.at,
-      ...(stored.user ? { user: stored.user as AccountProfile } : {}),
+      at: stored.at > now ? now - ACCOUNT_SNAPSHOT_TTL_MS : stored.at,
+      ...(stored.user ? { user: stored.user } : {}),
       context: stored.context,
       credits: stored.credits,
       billing: stored.billing,
@@ -1926,7 +1960,11 @@ export namespace OpenScience {
         key_fingerprint: keyFingerprint(session.api_key),
         user_id: session.user_id,
         ...(session.organization_id ? { organization_id: session.organization_id } : {}),
-        ...snapshot,
+        at: snapshot.at,
+        ...(snapshot.user ? { user: storedProfile(snapshot.user) } : {}),
+        context: snapshot.context,
+        credits: snapshot.credits,
+        billing: snapshot.billing,
       } satisfies z.input<typeof StoredSnapshot>),
     )
   }
@@ -1952,27 +1990,38 @@ export namespace OpenScience {
 
   async function fetchAccount(session: FundingSnapshot, signal: AbortSignal): Promise<AccountSnapshot> {
     const context = contextTag(session)
+    const unavailable = () => new Error("The Ace account service is unavailable. Retry when connected.")
     try {
       const state = await getReconciledFundingState({ signal })
       if (!state) throw new Error("Sign in again to refresh the Ace account.")
-      if (!state.verified) throw new Error("The Ace account service is unavailable. Retry when connected.")
-      const creditsRequest = getCredits(state.snapshot, { signal })
-      const [credits, billing] = await Promise.all([
-        creditsRequest,
-        getBillingMode(state.snapshot, creditsRequest, { signal }),
+      if (!state.verified) throw unavailable()
+      const [credits, access] = await Promise.all([
+        getCredits(state.snapshot, { signal }),
+        readAccess(state.snapshot, ATLAS_FETCH_TIMEOUT_MS, signal),
       ])
-      const current = await getFundingSnapshot()
-      if (!current || !sameSnapshot(current, state.snapshot)) {
-        throw new Error("The selected account changed while refreshing. Retry.")
-      }
+      const billing = await billingFromReads(access, credits)
+      // A wallet or entitlement read that did not answer (a timeout, a 5xx)
+      // is not a summary: the last good one stays stored and is served with
+      // the failure. Only an explicit denial is a verdict worth keeping.
+      if (!accessDenied(access) && (credits === null || billing.access_verified !== true)) throw unavailable()
       const snapshot: AccountSnapshot = {
         at: Date.now(),
-        ...(state.user ? { user: state.user } : {}),
+        ...(state.user ? { user: storedProfile(state.user) } : {}),
         context: state.context,
         credits,
         billing,
       }
-      await writeAccountSnapshot(current, snapshot)
+      {
+        // The re-check and the write hold the session file's lock like the
+        // session mutators do, so a summary cannot land after a sign-out or
+        // a new sign-in removed the file.
+        using _ = await Lock.write(SESSION_PATH)
+        const current = await getFundingSnapshot()
+        if (!current || !sameSnapshot(current, state.snapshot)) {
+          throw new Error("The selected account changed while refreshing. Retry.")
+        }
+        await writeAccountSnapshot(current, snapshot)
+      }
       if (accountFailure?.context === context) accountFailure = undefined
       GlobalBus.emit("event", {
         directory: "global",
@@ -1980,7 +2029,12 @@ export namespace OpenScience {
       })
       return snapshot
     } catch (error) {
-      accountFailure = { context, at: Date.now(), error: refreshFailure(error) }
+      // The read is cancelled once its last caller left; that caller's own
+      // cancellation is not an account failure, while the deadline is.
+      const reason = signal.aborted ? signal.reason : error
+      if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+        accountFailure = { context, at: Date.now(), error: refreshFailure(reason) }
+      }
       throw error
     }
   }

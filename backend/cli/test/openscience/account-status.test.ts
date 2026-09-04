@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import path from "node:path"
 
 // Every account surface reads the same status, entitlement and wallet
@@ -11,8 +12,18 @@ const fixture = {
   aborted: [] as string[],
   gate: Promise.resolve(),
   stall: new Set<string>(),
+  // Endpoints that answer 503, the way a transient outage does.
+  fail: new Set<string>(),
   status: 200,
   wallet: 1200,
+}
+// The profile the account service returns carries more than the UI shows;
+// only the shown fields may reach the stored summary.
+const profile = {
+  user_id: "user_shared",
+  email: "shared@example.com",
+  display_name: "Shared User",
+  session_token: "srv_profile_secret",
 }
 const headers = { "OpenScience-Funding-Protocol": "1", "OpenScience-Funding-Context": "personal" }
 const server = Bun.serve({
@@ -23,10 +34,11 @@ const server = Bun.serve({
     fixture.requests.push(pathname)
     request.signal.addEventListener("abort", () => fixture.aborted.push(pathname), { once: true })
     if (fixture.stall.has(pathname)) await fixture.gate
+    if (fixture.fail.has(pathname)) return new Response(null, { status: 503 })
     if (pathname === "/api/v1/auth/status") {
       return Response.json(
         {
-          user: { user_id: "user_shared", email: "shared@example.com" },
+          user: profile,
           organizations: [],
           api_key: {},
           funding_context: { type: "personal" },
@@ -82,6 +94,18 @@ async function until(check: () => boolean, what: string) {
 
 const held = { release: undefined as (() => void) | undefined }
 
+/** Resolves with the next `account.updated` announcement's refreshed_at. */
+function nextUpdate(): Promise<number> {
+  return new Promise((resolve) => {
+    const listener = (event: { payload: { type: string; properties: { refreshed_at?: number } } }) => {
+      if (event.payload.type !== "account.updated") return
+      GlobalBus.off("event", listener)
+      resolve(event.payload.properties.refreshed_at ?? 0)
+    }
+    GlobalBus.on("event", listener)
+  })
+}
+
 /** Stall the given endpoints until the returned release runs. */
 function hold(paths = ALL) {
   const { promise, resolve } = Promise.withResolvers<void>()
@@ -102,6 +126,7 @@ beforeEach(async () => {
   fixture.aborted = []
   fixture.gate = Promise.resolve()
   fixture.stall = new Set()
+  fixture.fail = new Set()
   fixture.status = 200
   fixture.wallet = 1200
   await OpenScience.saveSession(session)
@@ -139,7 +164,7 @@ test("concurrent account surfaces share one in-flight status read", async () => 
 
 test("the reconciled state carries the profile so summaries do not read status twice", async () => {
   const state = await OpenScience.getReconciledFundingState()
-  expect(state?.user).toEqual({ user_id: "user_shared", email: "shared@example.com" })
+  expect(state?.user).toEqual(profile)
   expect(state?.verified).toBe(true)
   expect(count("/api/v1/auth/status")).toBe(1)
 })
@@ -205,7 +230,8 @@ test("stores the first summary, serves it at once and refreshes a stale one in t
   try {
     // Nothing is stored yet, so the first read waits for the account service.
     const first = await OpenScience.getAccountSummary()
-    expect(first).toMatchObject({ refreshing: false, user: { email: "shared@example.com" } })
+    expect(first).toMatchObject({ refreshing: false })
+    expect(first?.user).toEqual({ user_id: "user_shared", email: "shared@example.com", display_name: "Shared User" })
     expect(first?.credits?.balanceUsd).toBe(12)
     expect(first?.billing?.managed_unlocked).toBe(true)
     expect(updates).toHaveLength(1)
@@ -213,6 +239,11 @@ test("stores the first summary, serves it at once and refreshes a stale one in t
     const stored = await Bun.file(snapshotFile).json()
     expect(stored.key_fingerprint).toHaveLength(64)
     expect(JSON.stringify(stored)).not.toContain(session.api_key)
+    // The stored profile holds exactly the shown fields; nothing else the
+    // account service sent with it is persisted. The file is private.
+    expect(Object.keys(stored.user).sort()).toEqual(["display_name", "email", "user_id"])
+    expect(JSON.stringify(stored)).not.toContain(profile.session_token)
+    if (process.platform !== "win32") expect((await fs.stat(snapshotFile)).mode & 0o777).toBe(0o600)
 
     // A recent summary is current: served with no account read at all.
     fixture.requests = []
@@ -260,6 +291,100 @@ test("a failed refresh keeps the last good summary and reports why", async () =>
   await OpenScience.getAccountSummary()
   expect(count("/api/v1/auth/status")).toBe(1)
   expect(await Bun.file(snapshotFile).exists()).toBe(true)
+})
+
+test("a wallet or entitlement read that did not answer keeps the last good summary", async () => {
+  const good = await OpenScience.getAccountSummary()
+  expect(good?.credits?.balanceUsd).toBe(12)
+  OpenScience.invalidateBalance()
+  fixture.fail = new Set(["/api/v1/wallet", "/api/cli/access"])
+  fixture.requests = []
+  const stale = await OpenScience.getAccountSummary()
+  expect(stale?.refreshing).toBe(true)
+  expect(stale?.error).toBeUndefined()
+  await until(() => count("/api/v1/wallet") === 1 && count("/api/cli/access") === 1, "the failing reads")
+  await sleep(50)
+  // The incomplete read was not stored: the good summary is served with the
+  // failure, and the file still holds it.
+  const failed = await OpenScience.getAccountSummary()
+  expect(failed?.refreshing).toBe(false)
+  expect(failed?.error).toContain("unavailable")
+  expect(failed?.credits?.balanceUsd).toBe(12)
+  expect(failed?.billing).toMatchObject({ access_verified: true, managed_unlocked: true })
+  expect(failed?.at).toBe(good!.at)
+  const stored = await Bun.file(snapshotFile).json()
+  expect(stored.at).toBe(good!.at)
+  expect(stored.credits.balanceUsd).toBe(12)
+  expect(stored.billing.access_verified).toBe(true)
+  // The failure backs off like any other.
+  expect(count("/api/v1/auth/status")).toBe(1)
+})
+
+test("a corrupt stored summary is ignored and the next read waits for the account service", async () => {
+  await OpenScience.getAccountSummary()
+  await Bun.write(snapshotFile, "{not a summary")
+  const current = (await OpenScience.getFundingSnapshot())!
+  expect(await OpenScience.readAccountSnapshot(current)).toBeNull()
+  fixture.requests = []
+  const release = hold()
+  const pending = OpenScience.getAccountSummary()
+  expect(await Promise.race([pending, sleep(50).then(() => "pending")])).toBe("pending")
+  release()
+  const fresh = await pending
+  expect(fresh?.refreshing).toBe(false)
+  expect(fresh?.credits?.balanceUsd).toBe(12)
+  expect((await Bun.file(snapshotFile).json()).credits.balanceUsd).toBe(12)
+})
+
+test("a stored summary is bound to the session's account and funding context", async () => {
+  await OpenScience.getAccountSummary()
+  const current = (await OpenScience.getFundingSnapshot())!
+  expect(await OpenScience.readAccountSnapshot(current)).not.toBeNull()
+  expect(await OpenScience.readAccountSnapshot({ ...current, organization_id: "org_other" })).toBeNull()
+  expect(await OpenScience.readAccountSnapshot({ ...current, user_id: "user_other" })).toBeNull()
+})
+
+test("a stored summary dated in the future is served as stale and replaced", async () => {
+  const first = await OpenScience.getAccountSummary()
+  const stored = await Bun.file(snapshotFile).json()
+  await Bun.write(snapshotFile, JSON.stringify({ ...stored, at: Date.now() + 3_600_000 }))
+  fixture.requests = []
+  const updated = nextUpdate()
+  const served = await OpenScience.getAccountSummary()
+  expect(served?.refreshing).toBe(true)
+  expect(served?.at).toBeLessThanOrEqual(Date.now())
+  expect(served?.credits?.balanceUsd).toBe(12)
+  await updated
+  const current = await OpenScience.getAccountSummary()
+  expect(current?.refreshing).toBe(false)
+  expect(current?.at).toBeGreaterThanOrEqual(first!.at)
+  expect(current?.at).toBeLessThanOrEqual(Date.now())
+  expect(count("/api/v1/auth/status")).toBe(1)
+})
+
+test("a caller's own cancellation is not recorded as an account failure", async () => {
+  await OpenScience.getAccountSummary()
+  OpenScience.invalidateBalance()
+  fixture.requests = []
+  const current = (await OpenScience.getFundingSnapshot())!
+  hold(["/api/v1/wallet"])
+  const controller = new AbortController()
+  const pending = OpenScience.refreshAccount(current, { signal: controller.signal })
+  await until(() => count("/api/v1/wallet") === 1, "the stalled wallet read")
+  controller.abort()
+  await expect(pending).rejects.toBeDefined()
+  await until(() => fixture.aborted.includes("/api/v1/wallet"), "the upstream cancellation")
+  held.release?.()
+  // The stored summary is stale, so the next read starts a new refresh
+  // instead of serving the cancellation as a failure under the backoff.
+  fixture.requests = []
+  const updated = nextUpdate()
+  const next = await OpenScience.getAccountSummary()
+  expect(next?.error).toBeUndefined()
+  expect(next?.refreshing).toBe(true)
+  await updated
+  expect(count("/api/v1/wallet")).toBe(1)
+  expect((await OpenScience.getAccountSummary())?.refreshing).toBe(false)
 })
 
 test("a stored summary belongs to one account and is dropped on a new sign-in", async () => {
