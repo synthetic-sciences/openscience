@@ -117,6 +117,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- `openscience <directory>` and `openscience web <directory>` open the workspace
+  in that directory again. The project argument was declared only on the
+  default-command alias, which yargs ignores, so every directory argument was
+  rejected with the usage text.
 - Made title and summary generation single-flight with a bounded number of
   attempts per message, so a slow first turn no longer fans out into duplicate
   title requests.

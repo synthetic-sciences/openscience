@@ -37,7 +37,10 @@ async function announceFdaIfNeeded() {
 export const WebCommand = cmd({
   // Default command: bare `openscience` and `openscience web` both open the
   // workspace in the browser. An optional [project] path runs it in that dir.
-  command: ["web", "$0 [project]"],
+  // yargs reads positionals only from the first command string and reduces
+  // aliases to their bare name, so [project] must be declared on "web" or
+  // strict mode rejects every directory argument with the usage text.
+  command: ["web [project]", "$0 [project]"],
   builder: (yargs) =>
     withNetworkOptions(yargs).positional("project", {
       type: "string",
