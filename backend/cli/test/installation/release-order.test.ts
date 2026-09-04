@@ -52,7 +52,9 @@ test("production requires an exact artifact-source deep release rehearsal", asyn
   expect(script).toContain("OPENSCIENCE_EXPECTED_ARTIFACT_SOURCE")
   expect(script).toContain("Release artifact source changed after rehearsal")
   expect(script.match(/already exists at \$\{tagged\} without a GitHub release/g)).toHaveLength(2)
-  expect(workflow).toContain("needs: [version, sign-macos-cli, prepare-npm, build-desktop, verify-desktop-updater]")
+  expect(workflow).toContain(
+    "needs: [version, sign-macos-cli, prepare-npm, build-desktop-mac, build-desktop-other, verify-desktop-updater]",
+  )
   expect(workflow).not.toContain("npm-test-gate")
   expect(workflow).not.toContain("verify-native-cli")
 })
@@ -143,8 +145,9 @@ test("stable macOS artifacts remain entitled, signed, notarized, stapled, and sm
   expect(workflow).toContain("timeout: 15_000")
   const smoke = workflow.slice(
     workflow.indexOf("- name: Smoke native macOS desktop sidecar"),
-    workflow.indexOf("- name: Detect Windows signing"),
+    workflow.indexOf("- name: Make sidecar executable"),
   )
+  expect(smoke).toContain("execFileSync")
   expect(smoke).not.toContain("GH_TOKEN")
   for (const key of [
     "com.apple.security.cs.allow-jit",
@@ -172,12 +175,42 @@ test("stable publication waits for both native updater lifecycle canaries", asyn
   expect(updater).toContain("name: Verify desktop updater (${{ matrix.arch }})")
   expect(updater).toContain("runner: macos-15\n            arch: arm64\n            machine: arm64")
   expect(updater).toContain("runner: macos-15-intel\n            arch: x64\n            machine: x86_64")
+  expect(updater).toContain("needs: [version, build-desktop-mac]")
+  expect(updater).toContain('install: "false"')
   expect(updater).toContain("Resolve an immutable previous signed stable install")
   expect(updater).toContain("Stable publication fails closed until a signed baseline is available.")
   expect(updater).toContain("bun frontend/desktop/script/update-lifecycle-canary.mjs")
   expect(updater).toContain('--previous-zip "$OPENSCIENCE_PREVIOUS_ZIP"')
   expect(updater).toContain('--previous-version "$OPENSCIENCE_PREVIOUS_VERSION"')
-  expect(publish).toContain("needs: [version, sign-macos-cli, prepare-npm, build-desktop, verify-desktop-updater]")
+  expect(publish).toContain(
+    "needs: [version, sign-macos-cli, prepare-npm, build-desktop-mac, build-desktop-other, verify-desktop-updater]",
+  )
+})
+
+test("both desktop packaging jobs keep the resumable-asset and Electron cache contract", async () => {
+  const workflow = await read(".github/workflows/publish.yml")
+  const parsed = Bun.YAML.parse(workflow) as {
+    jobs: Record<string, { needs?: string[]; strategy?: { matrix: { include: { runner: string; arch: string }[] } } }>
+  }
+  const mac = parsed.jobs["build-desktop-mac"]
+  const other = parsed.jobs["build-desktop-other"]
+
+  expect(mac.strategy?.matrix.include.map((item) => `${item.runner}/${item.arch}`)).toEqual([
+    "macos-15/arm64",
+    "macos-15-intel/x64",
+  ])
+  expect(other.strategy?.matrix.include.map((item) => item.runner)).toEqual([
+    "windows-2025",
+    "ubuntu-24.04",
+    "ubuntu-24.04-arm",
+  ])
+  expect(parsed.jobs["verify-desktop-updater"].needs).toEqual(["version", "build-desktop-mac"])
+  expect(parsed.jobs.publish.needs).toContain("build-desktop-mac")
+  expect(parsed.jobs.publish.needs).toContain("build-desktop-other")
+  expect(workflow.match(/- name: Check for resumable assets/g)).toHaveLength(2)
+  expect(workflow.match(/- name: Cache Electron downloads/g)).toHaveLength(2)
+  expect(workflow.match(/- name: Notarize and staple macOS DMG/g)).toHaveLength(1)
+  expect(workflow.match(/- name: Build unsigned Windows installer/g)).toHaveLength(1)
 })
 
 test("release caches and resumed mac assets are bound and reverified", async () => {
