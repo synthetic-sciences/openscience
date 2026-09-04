@@ -157,20 +157,58 @@ export namespace SessionSummary {
     userMsg = updated
 
     const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
-    if (textPart && !userMsg.summary?.title) {
-      const agent = await Agent.get("title")
-      if (!agent) return
+    if (!textPart || userMsg.summary?.title) return
+    const pending = titles.pending.get(userMsg.id)
+    if (pending) return pending
+    const last = titles.attempts.get(userMsg.id)
+    if (last && Date.now() - last.at < TITLE_COOLDOWN_MS) return
+    const attempt = last?.count ?? 0
+    titles.attempts.set(userMsg.id, { at: Date.now(), count: attempt + 1 })
+    const run = titleMessage({ user: userMsg, text: textPart.text, diffs, attempt }).finally(() =>
+      titles.pending.delete(userMsg.id),
+    )
+    titles.pending.set(userMsg.id, run)
+    return run
+  }
+
+  // The managed proxy seals a streamed idempotency key the moment the upstream
+  // stream starts, so re-sending an identical title request can only collect
+  // 409s. Keep one title request per message in flight, allow one attempt per
+  // message per cooldown window, and bound each attempt so a stalled stream is
+  // abandoned instead of pinning the summary forever.
+  const TITLE_COOLDOWN_MS = 10 * 60 * 1_000
+  const TITLE_TIMEOUT_MS = 45_000
+  const titles = {
+    pending: new Map<string, Promise<void>>(),
+    attempts: new Map<string, { at: number; count: number }>(),
+  }
+
+  async function titleMessage(input: {
+    user: MessageV2.User
+    text: string
+    diffs: Snapshot.FileDiff[]
+    attempt: number
+  }) {
+    const agent = await Agent.get("title")
+    if (!agent) return
+    const model = agent.model
+      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+      : ((await Provider.getSmallModel(input.user.model.providerID)) ??
+        (await Provider.getModel(input.user.model.providerID, input.user.model.modelID)))
+    const context = {
+      sessionID: input.user.sessionID,
+      messageID: input.attempt ? `summary:${input.user.id}:${input.attempt}` : `summary:${input.user.id}`,
+      attempt: input.attempt,
+    }
+    const result = await Provider.withRequestContext(context, async () => {
       const stream = await LLM.stream({
         agent,
         // Title generation is an isolated internal call over the visible user
         // text. Replaying the source turn's custom/child system guidance here
         // can conflict with the title agent and needlessly duplicate context.
-        user: { ...userMsg, system: undefined },
+        user: { ...input.user, system: undefined },
         tools: {},
-        model: agent.model
-          ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
-          : ((await Provider.getSmallModel(userMsg.model.providerID)) ??
-            (await Provider.getModel(userMsg.model.providerID, userMsg.model.modelID))),
+        model,
         small: true,
         messages: [
           {
@@ -178,26 +216,26 @@ export namespace SessionSummary {
             content: `
               The following is the text to summarize:
               <text>
-              ${textPart?.text ?? ""}
+              ${input.text}
               </text>
             `,
           },
         ],
-        abort: new AbortController().signal,
-        sessionID: userMsg.sessionID,
+        abort: AbortSignal.timeout(TITLE_TIMEOUT_MS),
+        sessionID: input.user.sessionID,
         system: [],
-        retries: 3,
+        retries: 0,
       })
-      const result = await stream.text
-      log.info("title", { title: result })
-      await updateUserMessage(userMsg, (draft) => {
-        draft.summary = {
-          ...draft.summary,
-          diffs: draft.summary?.diffs ?? diffs,
-          title: result,
-        }
-      })
-    }
+      return stream.text
+    })
+    log.info("title", { title: result })
+    await updateUserMessage(input.user, (draft) => {
+      draft.summary = {
+        ...draft.summary,
+        diffs: draft.summary?.diffs ?? input.diffs,
+        title: result,
+      }
+    })
   }
 
   async function updateUserMessage(message: MessageV2.User, editor: (draft: MessageV2.User) => void) {
