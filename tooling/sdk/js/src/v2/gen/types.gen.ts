@@ -2086,10 +2086,6 @@ export type Config = {
      */
     threshold?: number
     /**
-     * Show a compact-or-restart notice in the workspace when the conversation context exceeds this many tokens (default: 120000)
-     */
-    warn_tokens?: number
-    /**
      * Assumed context window (tokens) when a provider reports 0 (default: 128000)
      */
     fallbackContext?: number
@@ -8676,10 +8672,6 @@ export type SettingsPreferencesGetResponses = {
      * Fraction of the model window that triggers automatic compaction (compaction.threshold)
      */
     compaction_threshold?: number
-    /**
-     * Conversation size in tokens above which the workspace warns (compaction.warn_tokens)
-     */
-    compaction_warn_tokens?: number
   }
 }
 
@@ -8705,7 +8697,6 @@ export type SettingsPreferencesUpdateData = {
     delegation_diversity?: "focused" | "balanced" | "exploratory"
     compaction_auto?: boolean
     compaction_threshold?: number
-    compaction_warn_tokens?: number
   }
   path?: never
   query?: never
@@ -8747,10 +8738,6 @@ export type SettingsPreferencesUpdateResponses = {
      * Fraction of the model window that triggers automatic compaction (compaction.threshold)
      */
     compaction_threshold?: number
-    /**
-     * Conversation size in tokens above which the workspace warns (compaction.warn_tokens)
-     */
-    compaction_warn_tokens?: number
   }
 }
 
