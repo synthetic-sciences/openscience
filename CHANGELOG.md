@@ -44,11 +44,13 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   phase (connecting, waiting for the first token, receiving, waiting on the
   gateway, or retrying) and its elapsed time, so a stalled turn is visible as
   such.
-- Showed the live context size in the session header with a warning once the
-  conversation passes `compaction.warn_tokens` (default 120000), a one-click
-  "Compact now" notice above the composer, and Customize → General rows for
-  the auto-compact threshold and the warning threshold, backed by
-  `/settings/preferences`.
+- Showed the live context size as a quiet token count in the session header
+  and added a Customize → General row for the auto-compact threshold, backed
+  by `/settings/preferences`.
+- Removed the over-budget context warning bar above the composer with its
+  "Compact now" and "Start a new session" actions, the "Warn above N tokens"
+  row, and the `compaction.warn_tokens` config key. A stale key left in
+  `openscience.json` is ignored.
 - Made the workspace event stream non-blocking: each browser connection drains
   its own bounded queue, so a stalled tab can no longer back-pressure the agent
   loop, and per-request and per-event logging moved to debug.

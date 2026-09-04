@@ -396,92 +396,14 @@
   color: var(--color-text-weaker);
 }
 
-/* Compact-or-restart notice above the composer once the conversation passes
-   compaction.warn_tokens. Same bar treatment as the undo bar. */
-.session-context-bar {
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-  padding: 2px 4px 2px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--atlas-radius-sm);
-  background: var(--surface-base);
-  color: var(--color-text-muted);
-  font-family: var(--font-sans);
-  font-size: 12px;
-}
-
-.session-context-bar__copy {
-  min-width: 0;
-  flex: 1;
-  text-wrap: pretty;
-}
-
-.session-context-bar__copy strong {
-  color: var(--color-text);
-  font-weight: var(--font-weight-medium);
-  font-variant-numeric: tabular-nums;
-}
-
-.session-context-bar__action {
-  all: unset;
-  box-sizing: border-box;
-  min-width: 32px;
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  border-radius: var(--atlas-radius-xs);
-  color: var(--color-text);
-  font-weight: var(--font-weight-medium);
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background-color 150ms var(--agent-ease),
-    color 150ms var(--agent-ease),
-    opacity 150ms var(--agent-ease);
-}
-
-.session-context-bar__action:hover,
-.session-context-bar__action:focus-visible {
-  background: var(--surface-base-hover);
-}
-
-.session-context-bar__action:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
-}
-
-.session-context-bar__action:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-@media (max-width: 719px) {
-  .session-context-bar {
-    flex-wrap: wrap;
-    padding: 8px 10px;
-  }
-
-  .session-context-bar__copy {
-    flex-basis: 100%;
-  }
-}
-
 @media (pointer: coarse) {
-  .workspace-header__context,
-  .session-context-bar__action {
+  .workspace-header__context {
     min-height: 44px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workspace-header__context,
-  .session-context-bar__action {
+  .workspace-header__context {
     transition: none;
   }
 }

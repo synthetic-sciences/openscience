@@ -1773,12 +1773,9 @@ describe("global config writes are visible to the next Config.get()", () => {
 })
 
 describe("compaction.warn_tokens", () => {
-  test("is documented in the schema, optional, and must be a positive integer", () => {
-    const shape = Config.Info.shape.compaction.unwrap().shape.warn_tokens
-    expect(shape.description).toContain("compact-or-restart notice")
-    expect(Config.Info.parse({}).compaction?.warn_tokens).toBeUndefined()
-    expect(Config.Info.parse({ compaction: { warn_tokens: 80_000 } }).compaction?.warn_tokens).toBe(80_000)
-    expect(Config.Info.safeParse({ compaction: { warn_tokens: 0 } }).success).toBe(false)
-    expect(Config.Info.safeParse({ compaction: { warn_tokens: 1.5 } }).success).toBe(false)
+  test("is no longer part of the schema; a stale value is dropped rather than rejected", () => {
+    expect("warn_tokens" in Config.Info.shape.compaction.unwrap().shape).toBe(false)
+    const parsed = Config.Info.parse({ compaction: { threshold: 0.5, warn_tokens: 80_000 } })
+    expect(parsed.compaction).toEqual({ threshold: 0.5 })
   })
 })

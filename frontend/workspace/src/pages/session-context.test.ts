@@ -1,15 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AssistantMessage, Message, UserMessage } from "@synsci/sdk/v2/client"
-import {
-  DEFAULT_WARN_TOKENS,
-  compactContextTokens,
-  contextWarning,
-  estimate,
-  formatContextTokens,
-  latestContext,
-  usageSample,
-  warnTokens,
-} from "./session-context"
+import { compactContextTokens, estimate, formatContextTokens, latestContext, usageSample } from "./session-context"
 
 const user = (id: string): UserMessage =>
   ({
@@ -72,7 +63,6 @@ describe("session context samples", () => {
     ]
     expect(usageSample(compacted)).toBeUndefined()
     expect(latestContext(compacted, { total: 151_000, after: "msg_02" })).toBeUndefined()
-    expect(contextWarning({ tokens: latestContext(compacted)?.total, warn: 120_000, status: "idle" })).toBe(false)
     // Nothing is known until the next turn: first its estimate, then its reported usage.
     const resumed: Message[] = [...compacted, user("msg_05"), assistant("msg_06", pending)]
     expect(latestContext(resumed)).toBeUndefined()
@@ -100,26 +90,6 @@ describe("session context samples", () => {
     expect(latestContext([], live)).toEqual({ total: 130_000, source: "estimate" })
     expect(latestContext([])).toBeUndefined()
     expect(estimate([], 10)).toEqual({ total: 10, after: "" })
-  })
-
-  test("warn_tokens follows /settings/preferences and ignores values the backend would refuse", () => {
-    expect(DEFAULT_WARN_TOKENS).toBe(120_000)
-    expect(warnTokens.value()).toBe(DEFAULT_WARN_TOKENS)
-    warnTokens.sync({ compaction_warn_tokens: 80_000 })
-    expect(warnTokens.value()).toBe(80_000)
-    warnTokens.sync({})
-    warnTokens.sync({ compaction_warn_tokens: 0 })
-    expect(warnTokens.value()).toBe(80_000)
-    warnTokens.sync({ compaction_warn_tokens: DEFAULT_WARN_TOKENS })
-    expect(warnTokens.value()).toBe(DEFAULT_WARN_TOKENS)
-  })
-
-  test("the warning fires strictly above warn_tokens and never while compacting", () => {
-    expect(contextWarning({ tokens: undefined, warn: 120_000 })).toBe(false)
-    expect(contextWarning({ tokens: 120_000, warn: 120_000 })).toBe(false)
-    expect(contextWarning({ tokens: 120_001, warn: 120_000, status: "busy" })).toBe(true)
-    expect(contextWarning({ tokens: 120_001, warn: 120_000, status: "compacting" })).toBe(false)
-    expect(contextWarning({ tokens: 20_001, warn: 20_000, status: "idle" })).toBe(true)
   })
 
   test("token labels are locale formatted", () => {
