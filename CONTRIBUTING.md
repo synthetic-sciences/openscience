@@ -96,7 +96,7 @@ Three gitignored files matter. None of them is needed for the test suite (`backe
 
 ## Tests
 
-Backend tests live in `backend/cli/test` (365 files) and run with Bun's test runner. Always start them through the `test` script, which adds `--timeout 15000`; bare `bun test` uses Bun's 5 s default and fails spuriously, and Bun ignores a `timeout` key in `bunfig.toml`, so pass the flag yourself when you run a subset:
+Backend tests live in `backend/cli/test` and run with Bun's test runner. Always start them through the `test` script, which adds `--timeout 15000`; bare `bun test` uses Bun's 5 s default and fails spuriously, and Bun ignores a `timeout` key in `bunfig.toml`, so pass the flag yourself when you run a subset:
 
 ```bash
 bun run --cwd backend/cli test                        # full backend suite
@@ -114,7 +114,7 @@ Other suites:
 ```bash
 bun run test:ui                              # frontend/ui unit tests (~8 s)
 bun run test:sdk                             # tooling/sdk/js unit tests (<1 s)
-cd frontend/workspace && bun test            # workspace unit tests (happy-dom); not yet part of `check`
+cd frontend/workspace && bun test            # workspace unit tests (happy-dom); has known failures on main and is not a gate yet
 bun run --cwd frontend/workspace test:e2e    # Playwright E2E; run `bunx playwright install` first
 ```
 
@@ -129,7 +129,7 @@ bun run check         # format:check + typecheck + backend, frontend/ui, and SDK
 bun run check:fast    # format:check + backend typecheck only, for the inner loop
 ```
 
-The individual gates are `bun run format:check` (Prettier, `printWidth: 120`), `bun run typecheck` (tsgo across every workspace; `turbo typecheck --filter=@synsci/openscience` for the backend only), `bun run --cwd backend/cli test`, `bun run test:ui`, and `bun run test:sdk`. Run `bun run format` to fix formatting. There is no linter; the style rules in [AGENTS.md](./AGENTS.md) are enforced in review.
+The individual gates are `bun run format:check` (Prettier, `printWidth: 120`), `bun run typecheck` (TypeScript across every workspace: tsgo, or `tsc --noEmit` in tooling/util and frontend/docs; `turbo typecheck --filter=@synsci/openscience` for the backend only), `bun run --cwd backend/cli test`, `bun run test:ui`, and `bun run test:sdk`. Run `bun run format` to fix formatting. There is no linter; the style rules in [AGENTS.md](./AGENTS.md) are enforced in review.
 
 Fast CI (`.github/workflows/ci.yml`) runs on every pull request and checks formatting, typecheck, the workspace build, and a syntax smoke of the release entrypoints. The backend suite, docs build, landing build, and workflow lint run in Deep CI (`.github/workflows/deep-ci.yml`) nightly and on manual dispatch, so a green pull request does not prove the tests pass — run them locally. [docs/notes/verification.md](docs/notes/verification.md) has the full list.
 

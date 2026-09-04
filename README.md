@@ -93,7 +93,7 @@ You need [Bun](https://bun.sh) 1.3.14 (the `packageManager` pin) and Node 18 or 
 ```bash
 bun run setup                      # verify Bun, install dependencies, embed the workspace UI
 bun dev                            # open the workspace from source
-bun run check                      # format, typecheck, and unit tests (what CI runs)
+bun run check                      # format, typecheck, and unit tests (the local gates)
 bun run --cwd backend/cli build    # platform binaries
 ```
 
