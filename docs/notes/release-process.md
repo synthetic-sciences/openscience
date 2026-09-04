@@ -2,7 +2,10 @@
 
 OpenScience ships as native binaries and an npm package
 (`@synsci/openscience`). Releases are cut from `main` — never from a feature
-branch.
+branch. This note is the maintainer procedure; contributors only need the
+"Releases and versioning" section of [CONTRIBUTING.md](../../CONTRIBUTING.md):
+never bump a version in a pull request, and add user-visible changes to the
+**Unreleased** section of `CHANGELOG.md`.
 
 ## Cutting a release
 

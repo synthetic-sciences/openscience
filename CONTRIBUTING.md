@@ -239,6 +239,14 @@ These are guidelines, not hard rules:
 - Choose concise, descriptive names.
 - Use Bun helpers such as `Bun.file()` when they fit.
 
+## Releases and versioning
+
+Versions and tags are produced by the release workflow, never by hand. A maintainer dispatches `.github/workflows/publish.yml` from a green `main` commit (`gh workflow run publish.yml --ref main -f bump=patch`, or `minor` / `major`); it computes the next version, commits `release: vX.Y.Z`, tags it, and publishes the npm packages, binaries, and desktop installers. Do not edit any `package.json` `version` field in a pull request, and do not open version-bump pull requests.
+
+`CHANGELOG.md` has one **Unreleased** section. Add a bullet there in the same pull request when your change is user-visible (a new skill or connector, a behavior change, a fix a user would notice); skip it for refactors, tests, and CI. Release notes are generated from commit messages by `tooling/repo/changelog.ts` and the maintainer curates the changelog from both at release time, so the bullet only needs to say what changed for the user.
+
+The full procedure, including the rehearsal workflow, the packaged canaries, and signing requirements, is in [docs/notes/release-process.md](docs/notes/release-process.md); [docs/notes/verification.md](docs/notes/verification.md) lists the gates a release commit must pass.
+
 ## Finding something to work on
 
 Labels mean something specific here:
