@@ -65,27 +65,24 @@ describe("General Ace account", () => {
 })
 
 describe("General context rows", () => {
-  test("exposes auto-compact and warn-above rows backed by /settings/preferences", async () => {
+  test("exposes the auto-compact threshold row backed by /settings/preferences", async () => {
     const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
-    const css = await Bun.file(new URL("./preference-panels.css", import.meta.url)).text()
     expect(source).toContain('language.t("settings.general.section.context")')
     expect(source).toContain('language.t("settings.general.context.threshold.title")')
-    expect(source).toContain('language.t("settings.general.context.warn.title")')
     expect(source).toContain("thresholdOptions(context()?.compaction_threshold)")
     expect(source).toContain("saveContext({ compaction_threshold: option.value })")
-    expect(source).toContain("saveContext({ compaction_warn_tokens: parsed })")
     expect(source).toContain('settingsApi<ContextPreferences>(sdk.url, fetchFn, "/settings/preferences", {')
     expect(source).toContain("commitPreference(")
-    expect(source).toContain("warnTokens.sync(saved)")
-    expect(source).toContain('import { warnTokens } from "@/pages/session-context"')
     expect(source).not.toContain("product-preferences")
-    expect(source).toContain('type="text"')
-    expect(source).toContain('inputMode="numeric"')
-    expect(source).toContain('class="settings-field settings-context-tokens"')
     expect(source).toContain("<AccountRow")
-    const mobile = css.slice(css.indexOf("@media (max-width: 719px), (pointer: coarse)"))
-    expect(mobile).toContain(".settings-preferences-panel .settings-context-tokens {")
-    expect(mobile).toContain("min-height: 44px;")
-    expect(mobile).toContain("font-size: 16px;")
+  })
+
+  test("carries no warn-above-N-tokens row or its field styling", async () => {
+    const source = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
+    const css = await Bun.file(new URL("./preference-panels.css", import.meta.url)).text()
+    expect(source).not.toContain("compaction_warn_tokens")
+    expect(source).not.toContain("settings.general.context.warn")
+    expect(source).not.toContain("@/pages/session-context")
+    expect(css).not.toContain("settings-context-tokens")
   })
 })

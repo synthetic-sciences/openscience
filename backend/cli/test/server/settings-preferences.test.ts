@@ -198,43 +198,40 @@ test("compaction preferences expose effective config values and persist to the g
   expect(defaults).toMatchObject({
     compaction_auto: CompactionSettings.resolve(before).auto,
     compaction_threshold: CompactionSettings.resolve(before).threshold,
-    compaction_warn_tokens: CompactionSettings.resolve(before).warn_tokens,
   })
   expect(Preferences.parse({})).toMatchObject({
     compaction_auto: true,
     compaction_threshold: 0.75,
-    compaction_warn_tokens: 120_000,
   })
+  expect("compaction_warn_tokens" in Preferences.shape).toBe(false)
 
   try {
     const update = await app.request("/", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ compaction_threshold: 0.5, compaction_warn_tokens: 80_000, show_trace: true }),
+      body: JSON.stringify({ compaction_threshold: 0.5, show_trace: true }),
     })
     expect(update.status).toBe(200)
     expect((await update.json()) as Preferences).toMatchObject({
       compaction_auto: true,
       compaction_threshold: 0.5,
-      compaction_warn_tokens: 80_000,
       show_trace: true,
     })
 
     // The values the UI shows are the values the loop acts on: they land in the
     // global openscience config, not in settings.json.
     const config = await Config.getGlobal()
-    expect(CompactionSettings.resolve(config)).toEqual({ auto: true, threshold: 0.5, warn_tokens: 80_000 })
+    expect(CompactionSettings.resolve(config)).toEqual({ auto: true, threshold: 0.5 })
     const settings = JSON.parse(await fs.readFile(path.join(Global.Path.config, "settings.json"), "utf8")) as Record<
       string,
       unknown
     >
     expect(settings.compaction_threshold).toBeUndefined()
-    expect(settings.compaction_warn_tokens).toBeUndefined()
     expect(settings.show_trace).toBe(true)
 
     const read = (await (await app.request("/")).json()) as Preferences
     expect(read.compaction_threshold).toBe(0.5)
-    expect(read.compaction_warn_tokens).toBe(80_000)
+    expect(read).not.toHaveProperty("compaction_warn_tokens")
 
     const invalid = await app.request("/", {
       method: "PATCH",
@@ -242,12 +239,23 @@ test("compaction preferences expose effective config values and persist to the g
       body: JSON.stringify({ compaction_threshold: 1.5 }),
     })
     expect(invalid.status).toBe(400)
-    const fractional = await app.request("/", {
+
+    // An older client may still send the retired warn-above row; it is dropped rather
+    // than persisted to either store, and the response never echoes it back.
+    const stale = await app.request("/", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ compaction_warn_tokens: 0 }),
+      body: JSON.stringify({ compaction_warn_tokens: 80_000 }),
     })
-    expect(fractional.status).toBe(400)
+    expect(stale.status).toBe(200)
+    expect(await stale.json()).not.toHaveProperty("compaction_warn_tokens")
+    expect(CompactionSettings.resolve(await Config.getGlobal())).toEqual({ auto: true, threshold: 0.5 })
+    expect((await Config.getGlobal()).compaction).not.toHaveProperty("warn_tokens")
+    const after = JSON.parse(await fs.readFile(path.join(Global.Path.config, "settings.json"), "utf8")) as Record<
+      string,
+      unknown
+    >
+    expect(after.compaction_warn_tokens).toBeUndefined()
   } finally {
     await Promise.all(
       files.map((file, index) => {

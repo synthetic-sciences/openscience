@@ -8,11 +8,10 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { warnTokens } from "@/pages/session-context"
 import { AppearanceSections } from "../settings-general"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { settingsApi } from "./api"
-import { parseWarnTokens, thresholdOptions, type ContextPreferences } from "./context-preferences"
+import { thresholdOptions, type ContextPreferences } from "./context-preferences"
 import { commitPreference } from "./preference-write"
 import { walletBalanceLabel } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
@@ -217,19 +216,14 @@ export default function General() {
     return walletBalanceLabel({ signedIn: account()!.session, balanceUsd: account()!.balance_usd })
   }
 
-  // Context rows read and write the effective compaction settings the backend serves
-  // from openscience.json through /settings/preferences; a confirmed write is
-  // published to the session page so the warning threshold updates live.
+  // The context row reads and writes the effective compaction settings the backend
+  // serves from openscience.json through /settings/preferences.
   const language = useLanguage()
   const [context, setContext] = createSignal<ContextPreferences>()
   const [contextBusy, setContextBusy] = createSignal(false)
-  const [warnDraft, setWarnDraft] = createSignal<string>()
   onMount(() => {
     void settingsApi<ContextPreferences>(sdk.url, fetchFn, "/settings/preferences")
-      .then((preferences) => {
-        setContext(preferences)
-        warnTokens.sync(preferences)
-      })
+      .then((preferences) => setContext(preferences))
       .catch((cause) => setError(errorMessage(cause)))
   })
   const saveContext = async (patch: Partial<ContextPreferences>) => {
@@ -242,25 +236,13 @@ export default function General() {
           method: "PATCH",
           body: JSON.stringify(patch),
         }),
-      (saved) => {
-        setContext(saved)
-        warnTokens.sync(saved)
-      },
+      (saved) => setContext(saved),
     )
     setContextBusy(false)
     if (!result.ok) setError(result.error)
   }
   const thresholds = createMemo(() => thresholdOptions(context()?.compaction_threshold))
   const threshold = createMemo(() => thresholds().find((option) => option.value === context()?.compaction_threshold))
-  const warnValue = () => warnDraft() ?? (context() ? String(context()!.compaction_warn_tokens) : "")
-  const commitWarn = () => {
-    const draft = warnDraft()
-    setWarnDraft(undefined)
-    if (draft === undefined) return
-    const parsed = parseWarnTokens(draft)
-    if (parsed === undefined || parsed === context()?.compaction_warn_tokens) return
-    void saveContext({ compaction_warn_tokens: parsed })
-  }
 
   return (
     <PanelScroll>
@@ -416,35 +398,6 @@ export default function General() {
                   size="small"
                   triggerVariant="settings"
                 />
-              </AccountRow>
-
-              <AccountRow
-                title={language.t("settings.general.context.warn.title")}
-                description={language.t("settings.general.context.warn.description")}
-              >
-                <label class="settings-context-tokens-field">
-                  <span class="sr-only">{language.t("settings.general.context.warn.title")}</span>
-                  {/* A text field with a numeric keypad: parseWarnTokens accepts "120,000" and
-                      "80k", which a number input would refuse before it reached the parser. */}
-                  <input
-                    class="settings-field settings-context-tokens"
-                    type="text"
-                    inputMode="numeric"
-                    autocomplete="off"
-                    value={warnValue()}
-                    disabled={!context() || contextBusy()}
-                    onInput={(event) => setWarnDraft(event.currentTarget.value)}
-                    onBlur={commitWarn}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur()
-                      if (event.key === "Escape") {
-                        setWarnDraft(undefined)
-                        event.currentTarget.blur()
-                      }
-                    }}
-                  />
-                  <span class="settings-context-tokens-unit">{language.t("settings.general.context.warn.unit")}</span>
-                </label>
               </AccountRow>
             </div>
           </Section>

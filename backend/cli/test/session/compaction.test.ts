@@ -233,17 +233,14 @@ describe("session.compaction.isOverflow", () => {
     expect(SessionCompaction.settings({})).toEqual({
       auto: true,
       threshold: SessionCompaction.DEFAULT_THRESHOLD,
-      warn_tokens: SessionCompaction.DEFAULT_WARN_TOKENS,
     })
-    expect(SessionCompaction.DEFAULT_WARN_TOKENS).toBe(120_000)
-    expect(SessionCompaction.settings({ compaction: { auto: false, threshold: 0.5, warn_tokens: 80_000 } })).toEqual({
+    expect(SessionCompaction.settings({ compaction: { auto: false, threshold: 0.5 } })).toEqual({
       auto: false,
       threshold: 0.5,
-      warn_tokens: 80_000,
     })
   })
 
-  test("config.compaction.warn_tokens is advisory and never changes the overflow trigger", async () => {
+  test("a stale config.compaction.warn_tokens is ignored and never changes the overflow trigger", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(path.join(dir, "openscience.json"), JSON.stringify({ compaction: { warn_tokens: 1_000 } }))
@@ -254,10 +251,13 @@ describe("session.compaction.isOverflow", () => {
       fn: async () => {
         const model = createModel({ context: 100_000, output: 32_000 })
         // usable = 68_000; count = 40_000 is under 0.75*68_000=51_000, so no overflow even
-        // though the conversation is far above the 1_000-token warning.
+        // though the retired key names a far smaller number.
         const tokens = { input: 35_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
         expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(false)
-        expect(SessionCompaction.settings(await Config.get()).warn_tokens).toBe(1_000)
+        expect(SessionCompaction.settings(await Config.get())).toEqual({
+          auto: true,
+          threshold: SessionCompaction.DEFAULT_THRESHOLD,
+        })
       },
     })
   })

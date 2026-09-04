@@ -21148,13 +21148,6 @@
                       "type": "number",
                       "minimum": 0,
                       "maximum": 1
-                    },
-                    "compaction_warn_tokens": {
-                      "description": "Conversation size in tokens above which the workspace warns (compaction.warn_tokens)",
-                      "default": 120000,
-                      "type": "integer",
-                      "exclusiveMinimum": 0,
-                      "maximum": 9007199254740991
                     }
                   }
                 }
@@ -21313,13 +21306,6 @@
                       "type": "number",
                       "minimum": 0,
                       "maximum": 1
-                    },
-                    "compaction_warn_tokens": {
-                      "description": "Conversation size in tokens above which the workspace warns (compaction.warn_tokens)",
-                      "default": 120000,
-                      "type": "integer",
-                      "exclusiveMinimum": 0,
-                      "maximum": 9007199254740991
                     }
                   }
                 }
@@ -21434,11 +21420,6 @@
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1
-                  },
-                  "compaction_warn_tokens": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
                   }
                 }
               }
@@ -57842,12 +57823,6 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1
-              },
-              "warn_tokens": {
-                "description": "Show a compact-or-restart notice in the workspace when the conversation context exceeds this many tokens (default: 120000)",
-                "type": "integer",
-                "exclusiveMinimum": 0,
-                "maximum": 9007199254740991
               },
               "fallbackContext": {
                 "description": "Assumed context window (tokens) when a provider reports 0 (default: 128000)",
