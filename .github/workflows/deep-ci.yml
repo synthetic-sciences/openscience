@@ -95,6 +95,15 @@ jobs:
           fi
           bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
           sudo install -d -m 0755 /run/sshd
+      # test/server/spa-fallback.test.ts serves the gitignored web asset
+      # manifest that the old single job built before the suite and fails in
+      # CI without it; only the shard running ./test/server pays for the build.
+      - name: Build web assets
+        if: contains(matrix.shard.paths, './test/server')
+        shell: bash
+        run: |
+          bun run --cwd frontend/workspace build
+          bun run --cwd backend/cli script/generate-web-assets.ts
       - name: Run backend shard
         shell: bash
         working-directory: backend/cli

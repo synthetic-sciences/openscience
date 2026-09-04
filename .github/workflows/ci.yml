@@ -71,11 +71,14 @@ jobs:
   # from the diff against the pull request base (or the previous main tip on
   # push). The root test files always run and test/project runs in its own bun
   # process. Changes that can affect every test (fixtures, lockfile, preload)
-  # are reported here and covered by Deep CI. Test is a required check, so the
-  # timeout covers the worst case rather than the typical selection: a
-  # cross-cutting change can select the whole weight table (~14 min of tests
-  # in one bun process, the same shape as the 838-920 s single-process Deep CI
-  # baseline) on top of ~2 min of checkout, install, and fixture setup.
+  # are reported here and covered by Deep CI. A new backend/cli/test directory
+  # must be added to the weight table in tooling/repo/test-shards.ts; until it
+  # is, the selection step fails with an annotation saying so. Test is a
+  # required check, so the timeout covers the worst case rather than the
+  # typical selection: a cross-cutting change can select the whole weight
+  # table (~14 min of tests in one bun process, the same shape as the
+  # 838-920 s single-process Deep CI baseline) on top of ~2 min of checkout,
+  # install, fixture setup, and the web build the server tests need.
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -83,8 +86,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-bun
-        with:
-          install: "false"
       - name: Select affected backend tests
         id: select
         shell: bash
@@ -106,7 +107,6 @@ jobs:
             echo "::notice::Changes to $global can affect any backend test; the full suite runs in Deep CI"
           fi
           echo "groups=$(jq -c '.groups' "$RUNNER_TEMP/affected.json")" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/setup-bun
       - name: Configure fixtures
         shell: bash
         run: |
@@ -120,6 +120,15 @@ jobs:
           fi
           bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
           sudo install -d -m 0755 /run/sshd
+      # test/server/spa-fallback.test.ts serves the gitignored web asset
+      # manifest and fails in CI without it; build it only when the selection
+      # runs ./test/server.
+      - name: Build web assets
+        if: contains(steps.select.outputs.groups, './test/server')
+        shell: bash
+        run: |
+          bun run --cwd frontend/workspace build
+          bun run --cwd backend/cli script/generate-web-assets.ts
       - name: Run affected backend tests
         shell: bash
         working-directory: backend/cli
@@ -128,9 +137,18 @@ jobs:
           AFFECTED: ${{ steps.select.outputs.groups }}
         run: |
           set -euo pipefail
-          while IFS= read -r line; do
-            read -ra paths <<<"$line"
+          groups=()
+          while IFS= read -r group; do groups+=("$group"); done < <(jq -r '.[].paths' <<<"$AFFECTED")
+          expected="$(jq length <<<"$AFFECTED")"
+          if [[ ${#groups[@]} -ne $expected ]]; then
+            echo "::error::Read ${#groups[@]} of $expected test groups"
+            exit 1
+          fi
+          for group in "${groups[@]}"; do
+            read -ra paths <<<"$group"
             echo "::group::bun test ${paths[*]}"
-            bun test --timeout 15000 "${paths[@]}"
+            # Tests spawn children that inherit stdin; give bun none so no
+            # child can swallow input meant for this shell.
+            bun test --timeout 15000 "${paths[@]}" </dev/null
             echo "::endgroup::"
-          done < <(jq -r '.[].paths' <<<"$AFFECTED")
+          done

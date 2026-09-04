@@ -8,6 +8,11 @@ import { WEB_INDEX } from "../../src/web/assets"
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
+// The manifest is gitignored, so a fresh clone has none and the SPA test
+// skips. CI builds frontend/workspace before this suite runs, and a skip there
+// would hide a workflow that stopped building it, so fail instead.
+const spa = process.env.CI ? test : test.skipIf(!WEB_INDEX)
+
 describe("spa fallback", () => {
   test("unmatched API-shaped request under /settings gets a JSON 404, not SPA HTML", async () => {
     await Instance.provide({
@@ -28,7 +33,12 @@ describe("spa fallback", () => {
     })
   })
 
-  test.skipIf(!WEB_INDEX)("browser navigation to an unmatched route still gets the SPA index.html", async () => {
+  spa("browser navigation to an unmatched route still gets the SPA index.html", async () => {
+    if (!WEB_INDEX) {
+      throw new Error(
+        "src/web/assets.generated.ts is missing: build frontend/workspace, then run script/generate-web-assets.ts",
+      )
+    }
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
