@@ -5,6 +5,7 @@ import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
+import { Startup } from "@/util/startup"
 
 interface Context {
   directory: string
@@ -38,6 +39,7 @@ export const Instance = {
       existing = cache.get(directory)
       if (!existing) {
         Log.Default.info("creating instance", { directory })
+        Startup.instance(directory === Project.canonicalize(process.cwd()) ? "cwd" : "project")
         existing = iife(async () => {
           // A selected parent already owns the cwd. Resolving a non-git child
           // must not register another project before checking that authority.
@@ -63,6 +65,10 @@ export const Instance = {
     return context.provide(ctx, async () => {
       return input.fn()
     })
+  },
+  /** Whether an instance, live or still initialising, is registered for the directory. */
+  has(directory: string) {
+    return cache.has(Project.canonicalize(directory))
   },
   get directory() {
     return context.use().directory

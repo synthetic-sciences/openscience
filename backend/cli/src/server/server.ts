@@ -66,6 +66,7 @@ import { OnboardingAuthRoutes } from "./routes/onboarding-auth"
 import { AccountRoutes } from "./routes/account"
 import { BillingSettingsRoutes } from "./routes/settings/billing"
 import { WalletSettingsRoutes } from "./routes/settings/wallet"
+import { Startup } from "../util/startup"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -561,6 +562,12 @@ export namespace Server {
           ),
           async (c) => {
             const { service, level, message, extra } = c.req.valid("json")
+            // The workspace reports the moment it became usable; that closes
+            // the startup timing line instead of adding a second entry.
+            if (service === "startup" && message === "interactive") {
+              Startup.interactive(extra)
+              return c.json(true)
+            }
             const logger = Log.create({ service })
 
             switch (level) {
@@ -894,6 +901,7 @@ export namespace Server {
 
     _url = server.url
     _server = server
+    Startup.listening()
 
     return server
   }
