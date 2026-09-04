@@ -422,7 +422,7 @@ export const BashTool = Tool.define("bash", async () => {
           },
           options: current.sandbox,
         })
-        return OpenScience.withSubprocessEnv(process.env, async (env) => {
+        return OpenScience.withSubprocessEnv(process.env, async (env, overlay) => {
           const cache = sandbox.sandboxed ? Sandbox.cacheEnvironment(current.workspace) : {}
           let child: ReturnType<typeof spawn>
           const wrapped = await CommandRuntime.wrap({
@@ -486,7 +486,10 @@ export const BashTool = Tool.define("bash", async () => {
                 stopped.reason = reason
                 await stop()
               },
-              { authorityGeneration: current.generation, windowsRelease: wrapped.release },
+              // The runtime and cache overlays above never restore a synced
+              // key that `env` lacked, so the snapshot's overlay is the one
+              // this child can carry.
+              { authorityGeneration: current.generation, windowsRelease: wrapped.release, overlay },
             )
             const kill = async () => {
               await CommandRuntime.stop(registered.id, registered.projectID, registered.sessionID)

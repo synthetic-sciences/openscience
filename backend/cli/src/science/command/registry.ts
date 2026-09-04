@@ -1,6 +1,5 @@
 import type { ChildProcess } from "node:child_process"
 import z from "zod"
-import { CredentialOverlay } from "../../credentials/overlay"
 import { CredentialProcessLedger } from "../../credentials/process-ledger"
 import { ProcessIdentity } from "../../process/process-identity"
 import { WindowsJobLauncher } from "../../process/windows-job-launcher"
@@ -32,7 +31,8 @@ type Entry = CommandStatus & {
    * a user abort. */
   stop: (reason?: string) => Promise<void>
   linuxSubreaper: boolean
-  /** Synced workspace overlay the command inherited at spawn, if any. */
+  /** Synced workspace overlay the command's environment carried at spawn,
+   * as reported by OpenScience.withSubprocessEnv. */
   overlay?: string
 }
 
@@ -68,7 +68,7 @@ export namespace CommandRuntime {
     input: Omit<CommandStatus, "id" | "state" | "process_id" | "started_at" | "resources">,
     process: ChildProcess,
     stop: (reason?: string) => Promise<void>,
-    options: { authorityGeneration?: string; windowsRelease?: string } = {},
+    options: { authorityGeneration?: string; windowsRelease?: string; overlay?: string } = {},
   ) {
     if (!process.pid) throw new Error("Shell command started without a process id")
     const bound = WindowsJobLauncher.bind(process, options.windowsRelease)
@@ -77,7 +77,6 @@ export namespace CommandRuntime {
       await stop()
       throw new Error("Linux command was not launched behind the verified child-subreaper registration gate")
     }
-    const overlay = CredentialOverlay.current()
     const value: Entry = {
       ...input,
       id: `command-${crypto.randomUUID()}`,
@@ -87,7 +86,7 @@ export namespace CommandRuntime {
       process,
       stop,
       linuxSubreaper: subreaper,
-      ...(overlay ? { overlay } : {}),
+      ...(options.overlay ? { overlay: options.overlay } : {}),
     }
     let completed = false
     const complete = () => {
@@ -116,7 +115,7 @@ export namespace CommandRuntime {
       projectID: value.projectID,
       sessionID: value.sessionID,
       authorityGeneration: options.authorityGeneration,
-      overlay,
+      overlay: options.overlay,
       windowsRelease: options.windowsRelease,
       ...(value.linuxSubreaper ? { subreaper: process } : {}),
     })

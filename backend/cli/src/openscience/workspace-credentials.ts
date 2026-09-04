@@ -7,7 +7,6 @@ import { SecretBox } from "../util/secret-box"
 import { SecretFile } from "../util/secret-file"
 import { isAtlasManagedKey } from "../credentials/managed-key"
 import { CredentialLifecycle } from "../credentials/lifecycle"
-import { CredentialOverlay } from "../credentials/overlay"
 import { Log } from "../util/log"
 import { isDeepStrictEqual } from "node:util"
 
@@ -20,6 +19,10 @@ export namespace WorkspaceCredentials {
    * inside it, with retries, so only a genuinely unreachable workspace lets
    * a grant lapse. */
   export const TTL = 5 * 60_000
+  /** Retry cadence when publishing an expiry fails (an unwritable data root,
+   * a wedged lease). A lapsed grant must be revoked, so retries continue at
+   * the last interval until one succeeds or a newer grant replaces it. */
+  export const EXPIRE_BACKOFF: readonly number[] = [1_000, 5_000, 15_000, 30_000]
   export const filepath = path.join(Global.Path.data, "workspace-credentials.json")
   let expiry: ReturnType<typeof setTimeout> | undefined
   let deadline = 0
@@ -182,7 +185,6 @@ export namespace WorkspaceCredentials {
 
   export async function clear(): Promise<void> {
     await JsonStore.update(filepath, () => ({}))
-    CredentialOverlay.clear()
     if (expiry) clearTimeout(expiry)
     deadline = 0
   }
@@ -217,23 +219,33 @@ export namespace WorkspaceCredentials {
 
   function arm(expires: number): void {
     if (deadline === expires) return
+    schedule(expires, Math.max(0, expires - Date.now()), 0)
+  }
+
+  /** A failed expiry is re-armed with backoff rather than swallowed: until
+   * the revision is published, process.env still carries the lapsed values
+   * and every child spawned inherits them. */
+  function schedule(expires: number, delay: number, attempt: number): void {
     if (expiry) clearTimeout(expiry)
     deadline = expires
-    expiry = setTimeout(() => void expire().catch(() => undefined), Math.max(0, expires - Date.now()))
+    expiry = setTimeout(() => {
+      void expire().catch((error) => {
+        // A newer grant was armed meanwhile; its own timer owns expiry now.
+        if (deadline !== expires) return
+        const retry = EXPIRE_BACKOFF[Math.min(attempt, EXPIRE_BACKOFF.length - 1)] ?? 30_000
+        log.error("workspace credential expiry failed; retrying", {
+          error: error instanceof Error ? error.message : String(error),
+          attempt: attempt + 1,
+          retry_ms: retry,
+          expires_at: new Date(expires).toISOString(),
+        })
+        schedule(expires, retry, attempt + 1)
+      })
+    }, delay)
     expiry.unref()
   }
 
-  /** Every consumer that hands the overlay to a child (subprocess env, service
-   * env injection) reads through here, so the process-local overlay marker is
-   * kept current at the last read before a spawn. */
   export async function read(options: { strict?: boolean } = {}): Promise<Snapshot | undefined> {
-    const snapshot = await load(options)
-    if (snapshot) CredentialOverlay.mark(snapshot.organization_id)
-    else CredentialOverlay.clear()
-    return snapshot
-  }
-
-  async function load(options: { strict?: boolean }): Promise<Snapshot | undefined> {
     const unreadable = () => {
       if (options.strict) throw new Error("Saved workspace credentials could not be read")
       return undefined

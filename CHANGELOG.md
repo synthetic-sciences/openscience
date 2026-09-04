@@ -125,15 +125,21 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Scoped the expiry of a synchronized workspace credential grant to the
   runtimes that actually inherited it. The synced provider and service keys are
   a separate overlay from Ace's managed access and from locally owned keys, so
-  their expiry now revokes only children stamped with that overlay in the
-  credential process ledger instead of disposing every project instance and
-  aborting the active model request mid-turn. Expired grants remain unusable
+  their expiry now revokes only children whose spawn environment carried that
+  overlay, as stamped in the credential process ledger at spawn, instead of
+  disposing every project instance and aborting the active model request
+  mid-turn. Language servers, the SSH broker, and credential helpers never
+  receive the overlay and are left alone; ledger entries written by earlier
+  builds, which carry no stamp, are still revoked. A grant that lapses before
+  its expiry is published still stamps every child spawned in that window,
+  and a failed expiry is retried with backoff. Expired grants remain unusable
   for new requests.
-- Recorded the real cause when a credential revocation cancels a turn or a
-  tool call ("Interrupted: synchronized workspace credentials expired before
-  they could be renewed"), and marked a tool call that never started as
-  cancelled with no action taken, instead of a failed call with empty
-  arguments.
+- Named the cause when a credential change other than an overlay expiry
+  cancels a turn or a tool call ("Interrupted: credentials changed (...)"),
+  and recorded an overlay expiry on the commands it stops. A tool call that is
+  cancelled before it started, by a credential change or by the user, is now
+  marked cancelled with "had not started; no action was taken" instead of a
+  failed call with empty arguments.
 - Made title and summary generation single-flight with a bounded number of
   attempts per message, so a slow first turn no longer fans out into duplicate
   title requests.

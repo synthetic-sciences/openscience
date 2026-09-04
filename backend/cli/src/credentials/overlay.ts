@@ -1,27 +1,40 @@
 /**
- * Process-local marker for the synchronized workspace credential overlay.
+ * Process-local record of which `process.env` values came from the
+ * synchronized workspace credential overlay.
  *
- * Children spawned from this process inherit whatever overlay values were live
- * at spawn time: service env such as GITHUB_TOKEN or HF_TOKEN through
- * applyCredentialEnv, and portable provider keys through
- * OpenScience.subprocessEnv. The durable credential-process ledger stamps every
- * registration with the overlay that was live, so an overlay-only revocation
- * (its grant expired while offline) can reach exactly those children and leave
- * every runtime that never held the grant alone.
+ * applyCredentialEnv is the only writer: it records a key when it injects an
+ * account-sourced service value (GITHUB_TOKEN, HF_TOKEN, ...) and forgets it
+ * when that value is removed or replaced by a device-owned one. The subprocess
+ * env builder asks whether the env it produced still carries any of those
+ * exact values, so a child's overlay stamp in the credential process ledger
+ * reflects what the child actually inherited rather than whether the cached
+ * grant happened to be readable at spawn time. In particular, a grant that
+ * lapsed before the expiry revision removed its values from `process.env`
+ * still stamps every child spawned in that window.
  */
 export namespace CredentialOverlay {
-  const state: { organization?: string } = {}
+  const injected = new Map<string, { organization: string; value: string }>()
 
-  export function mark(organization: string): void {
-    state.organization = organization
+  /** `key` in `process.env` now carries `value` from `organization`'s overlay. */
+  export function inject(key: string, value: string, organization: string): void {
+    injected.set(key, { organization, value })
   }
 
-  export function clear(): void {
-    state.organization = undefined
+  /** `key` no longer carries an overlay value. */
+  export function release(key: string): void {
+    injected.delete(key)
   }
 
-  /** The workspace whose synced overlay is currently live in this process. */
-  export function current(): string | undefined {
-    return state.organization
+  /** The workspace whose synced service values `env` carries verbatim, if any. */
+  export function inherited(env: Record<string, string | undefined>): string | undefined {
+    for (const [key, entry] of injected) {
+      if (env[key] === entry.value) return entry.organization
+    }
+    return undefined
+  }
+
+  /** Env keys currently carrying overlay values, for diagnostics. */
+  export function keys(): string[] {
+    return [...injected.keys()]
   }
 }

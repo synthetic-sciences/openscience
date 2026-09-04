@@ -35,6 +35,7 @@ import { Global } from "@/global"
 import { Env } from "@/env"
 import { OpenScience } from "@/openscience"
 import { CredentialLifecycle } from "@/credentials/lifecycle"
+import { CredentialOverlay } from "@/credentials/overlay"
 import { lazy } from "@/util/lazy"
 import { JsonStore } from "@/util/jsonstore"
 import { SecretFile } from "@/util/secret-file"
@@ -404,6 +405,9 @@ function mapServiceEnv(id: string, f: Record<string, string>): Record<string, st
 interface CredentialEnv {
   env: Record<string, string>
   secrets: string[]
+  /** Env keys whose value came from an account-sourced (synced workspace)
+   * entry, mapped to the workspace that granted it. */
+  account: Map<string, string>
   materializationError?: unknown
 }
 
@@ -489,6 +493,7 @@ async function readDecryptedEnv(): Promise<CredentialEnv> {
   const store = await readStore()
   const env: Record<string, string> = {}
   const secrets: string[] = []
+  const account = new Map<string, string>()
   let gcp: string | undefined
   let materializationError: unknown
   for (const [id, entry] of Object.entries(store)) {
@@ -497,8 +502,11 @@ async function readDecryptedEnv(): Promise<CredentialEnv> {
     if (specFor(id)?.trusted) secrets.push(...Object.values(fields))
     if (id === "gcp") gcp = fields.service_account_json
     const mapped = mapServiceEnv(id, fields)
+    const organization = entry.source === "account" ? entry.organization_id : undefined
     for (const [key, value] of Object.entries(mapped)) {
       env[key] = value
+      if (organization) account.set(key, organization)
+      else account.delete(key)
       if (!NON_SECRET_ENV.test(key)) secrets.push(value)
     }
   }
@@ -518,7 +526,7 @@ async function readDecryptedEnv(): Promise<CredentialEnv> {
     // Remove the materialized plaintext before dropping the environment path.
     await fs.rm(gcpPath, { force: true }).catch(() => undefined)
   }
-  return { env, secrets, materializationError }
+  return { env, secrets, account, materializationError }
 }
 
 // Env keys this module has set, so a re-apply after save can update our own
@@ -528,10 +536,15 @@ const ownedKeys = new Set<string>()
 /** Decrypt stored service credentials and inject them into the process
  *  environment so the real consumers use them (see the module header). Explicit
  *  shell exports always win. Registers secret values for redaction. Best-effort;
- *  never throws. Call at boot and after every save/delete. */
+ *  never throws. Call at boot and after every save/delete.
+ *
+ *  Account-sourced values are recorded in CredentialOverlay as they enter
+ *  process.env and forgotten only when they actually leave it, so the
+ *  subprocess env builder stamps a child with the overlay exactly when the
+ *  child inherits one of these values. */
 export async function applyCredentialEnv(options: { strict?: boolean } = {}): Promise<boolean> {
   try {
-    const { env, secrets, materializationError } = await readDecryptedEnv()
+    const { env, secrets, account, materializationError } = await readDecryptedEnv()
     const state = { staleChildSnapshot: false }
     // Drop vars we previously injected that are gone now (credential removed) —
     // but never touch a key the user exported in their own shell.
@@ -539,6 +552,7 @@ export async function applyCredentialEnv(options: { strict?: boolean } = {}): Pr
       if (key in env) continue
       state.staleChildSnapshot = true
       delete process.env[key]
+      CredentialOverlay.release(key)
       try {
         Env.remove(key)
       } catch {
@@ -551,6 +565,9 @@ export async function applyCredentialEnv(options: { strict?: boolean } = {}): Pr
       if (ownedKeys.has(key) && process.env[key] !== value) state.staleChildSnapshot = true
       process.env[key] = value
       ownedKeys.add(key)
+      const organization = account.get(key)
+      if (organization) CredentialOverlay.inject(key, value, organization)
+      else CredentialOverlay.release(key)
       try {
         Env.set(key, value)
       } catch {

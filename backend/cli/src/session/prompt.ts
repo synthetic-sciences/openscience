@@ -3089,7 +3089,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         unreadable: OpenScience.kernelSensitivePaths(),
         options: current.sandbox,
       })
-      return OpenScience.withSubprocessEnv(process.env, async (env) => {
+      return OpenScience.withSubprocessEnv(process.env, async (env, overlay) => {
         const wrapped = await CommandRuntime.wrap({
           file: sandbox.file,
           args: sandbox.args,
@@ -3127,7 +3127,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
               state.interruption = reason
               await stop()
             },
-            { authorityGeneration: current.generation, windowsRelease: wrapped.release },
+            { authorityGeneration: current.generation, windowsRelease: wrapped.release, overlay },
           )
           const kill = async () => {
             await CommandRuntime.stop(registered.id, registered.projectID, registered.sessionID)

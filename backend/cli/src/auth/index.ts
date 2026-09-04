@@ -59,14 +59,27 @@ export namespace Auth {
     return auth[providerID]
   }
 
+  export interface Resolved {
+    auth: Record<string, Info>
+    /** Providers whose entry came from the synchronized workspace overlay
+     * rather than this device's auth.json, and the workspace that granted it.
+     * A subprocess that receives one of these keys inherits that overlay. */
+    overlay?: { organization: string; providers: ReadonlySet<string> }
+  }
+
   export async function all(): Promise<Record<string, Info>> {
+    return (await resolve()).auth
+  }
+
+  export async function resolve(): Promise<Resolved> {
     const data = await JsonStore.read(filepath)
+    const workspace = await WorkspaceCredentials.read()
     // Synced model keys stay in the encrypted overlay, never process.env.
     // These reviewed provider env names therefore belong to the local user,
     // not the separately allowlisted cloud service env. Compare provenance,
     // not secret values: even an equal local key remains locally owned.
     const synced = Object.fromEntries(
-      Object.entries((await WorkspaceCredentials.read())?.auth ?? {}).filter(
+      Object.entries(workspace?.auth ?? {}).filter(
         ([id]) =>
           !WorkspaceCredentials.providerEnv(id).some((name) => {
             const key = process.env[name]
@@ -74,7 +87,7 @@ export namespace Auth {
           }),
       ),
     )
-    return Object.entries(data).reduce(
+    const auth = Object.entries(data).reduce(
       (acc, [key, value]) => {
         const parsed = Info.safeParse(value)
         if (!parsed.success) return acc
@@ -84,6 +97,12 @@ export namespace Auth {
       },
       synced as Record<string, Info>,
     )
+    // A local auth.json entry replaces the synced one under the same id, so
+    // only ids whose resolved entry is still the synced object came from the
+    // overlay.
+    const providers = new Set(Object.keys(synced).filter((id) => auth[id] === synced[id]))
+    if (!workspace || !providers.size) return { auth }
+    return { auth, overlay: { organization: workspace.organization_id, providers } }
   }
 
   export async function set(key: string, info: Info) {

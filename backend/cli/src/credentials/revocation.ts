@@ -37,6 +37,9 @@ export namespace CredentialRevocation {
 
   export function message(reason: string): string {
     if (reason === "workspace-sync.expired") return EXPIRED
+    if (target(reason) === "mcp") {
+      return `Interrupted: MCP credentials changed (${reason}) and the MCP transports that inherited the previous snapshot were stopped`
+    }
     return `Interrupted: credentials changed (${reason}) and every runtime that inherited the previous snapshot was stopped`
   }
 

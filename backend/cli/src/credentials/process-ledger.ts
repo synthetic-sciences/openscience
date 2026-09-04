@@ -10,13 +10,17 @@ import { WindowsJob } from "../process/windows-job"
 import { WindowsJobLauncher } from "../process/windows-job-launcher"
 import { AuthorityProcessLedger } from "../project/authority-process"
 import { FileLease } from "../util/file-lease"
-import { CredentialOverlay } from "./overlay"
 
 export namespace CredentialProcessLedger {
   export type Kind = "command" | "compute" | "lsp" | "mcp" | "provider" | "modal-volume" | "local-runtime"
 
+  /** Version 2 entries record whether the child inherited the synchronized
+   * workspace overlay. Version 1 entries predate that stamp, so an
+   * overlay-scoped revoke treats them as stamped (fail closed). */
+  const VERSION = 2
+
   interface Entry {
-    version: 1
+    version: 1 | 2
     id: string
     kind: Kind
     pid: number
@@ -30,8 +34,9 @@ export namespace CredentialProcessLedger {
     project_id?: string
     session_id?: string
     authority_generation?: string
-    /** Workspace whose synchronized credential overlay was live in the owner
-     * process when this child was spawned, i.e. which the child inherited. */
+    /** Workspace whose synchronized credential overlay the child's environment
+     * carried at spawn. Absent on a version 2 entry means the child was built
+     * from kernelEnv or an allowlist and never held the overlay. */
     overlay?: string
   }
 
@@ -60,7 +65,7 @@ export namespace CredentialProcessLedger {
     if (!value || typeof value !== "object") return false
     const item = value as Partial<Entry>
     return (
-      item.version === 1 &&
+      (item.version === 1 || item.version === VERSION) &&
       typeof item.id === "string" &&
       !!item.id &&
       (item.kind === "command" ||
@@ -447,12 +452,13 @@ export namespace CredentialProcessLedger {
     projectID?: string
     sessionID?: string
     authorityGeneration?: string
-    /** Defaults to the overlay currently live in this process. */
+    /** Workspace whose synchronized overlay the child's environment carries,
+     * as reported by OpenScience.withSubprocessEnv. Never inferred here: a
+     * child built from kernelEnv or an allowlist registers without it. */
     overlay?: string
     windowsRelease?: string
     subreaper?: ChildProcess
   }): Promise<boolean> {
-    const overlay = input.overlay ?? CredentialOverlay.current()
     if ((process.platform === "win32" || process.platform === "darwin") && !input.windowsRelease) {
       throw new Error(
         `Credential-bearing ${input.kind} child ${input.pid} was not launched behind the ${process.platform === "win32" ? "Windows Job Object" : "macOS responsibility"} registration gate`,
@@ -513,7 +519,7 @@ export namespace CredentialProcessLedger {
           ? WindowsJob.assign({ id: input.id, pid: input.pid, expectedIdentity: processIdentity })
           : undefined
       const next: Entry = {
-        version: 1,
+        version: VERSION,
         id: input.id,
         kind: input.kind,
         pid: input.pid,
@@ -526,7 +532,7 @@ export namespace CredentialProcessLedger {
         ...(input.projectID ? { project_id: input.projectID } : {}),
         ...(input.sessionID ? { session_id: input.sessionID } : {}),
         ...(input.authorityGeneration ? { authority_generation: input.authorityGeneration } : {}),
-        ...(overlay ? { overlay } : {}),
+        ...(input.overlay ? { overlay: input.overlay } : {}),
       }
       if (index < 0) entries.push(next)
       else entries[index] = next
@@ -665,12 +671,19 @@ export namespace CredentialProcessLedger {
     detached: boolean
   }): Promise<boolean> {
     return teardown({
-      version: 1,
+      version: VERSION,
       ...input,
       ...(process.platform === "win32" ? { windows_job: undefined } : {}),
       owner_pid: 0,
       created_at: new Date(0).toISOString(),
     })
+  }
+
+  /** Whether an overlay-scoped revoke reaches `entry`. A version 1 entry was
+   * written before the stamp existed and may have inherited the overlay, so
+   * it is treated as stamped. */
+  function stamped(entry: Entry): boolean {
+    return entry.version < VERSION || !!entry.overlay
   }
 
   /** Kill exact, identity-matched children even when their owner server died. */
@@ -688,7 +701,7 @@ export namespace CredentialProcessLedger {
               (!scope?.kind || entry.kind === scope.kind) &&
               (!scope?.projectID || !entry.project_id || entry.project_id === scope.projectID) &&
               (!scope?.sessionID || !entry.session_id || entry.session_id === scope.sessionID) &&
-              (!scope?.overlay || !!entry.overlay)
+              (!scope?.overlay || stamped(entry))
         if (!match) {
           retained.push(entry)
           continue

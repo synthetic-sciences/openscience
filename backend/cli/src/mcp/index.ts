@@ -24,7 +24,6 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import open from "open"
 import { OpenScience } from "@/openscience"
-import { CredentialOverlay } from "@/credentials/overlay"
 import { CredentialProcessLedger } from "@/credentials/process-ledger"
 import { CredentialRevocation } from "@/credentials/revocation"
 import { ProjectTrust } from "@/project/trust"
@@ -94,7 +93,8 @@ export namespace MCP {
   type MCPClient = Client
   type ToolList = Awaited<ReturnType<MCPClient["listTools"]>>
   const credentialProcesses = new WeakMap<MCPClient, string>()
-  /** Local transports that inherited a synced workspace overlay at spawn. */
+  /** Local transports whose spawn environment carried a synced workspace
+   * overlay, as reported by OpenScience.withSubprocessEnv at launch. */
   const credentialOverlays = new WeakMap<MCPClient, string>()
   const localClients = new WeakSet<MCPClient>()
   const localSandboxes = new WeakMap<MCPClient, Sandbox.Wrapped>()
@@ -869,7 +869,7 @@ export namespace MCP {
       const cwd = Instance.directory
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       try {
-        const launched = await OpenScience.withSubprocessEnv(process.env, async (base) =>
+        const launched = await OpenScience.withSubprocessEnv(process.env, async (base, overlay) =>
           AuthoritySignal.exclusive(async () => {
             const releaseUpdate = UpdateQuiescence.enter("mcp")
             try {
@@ -920,7 +920,9 @@ export namespace MCP {
                   if (!pid) throw new Error("Local MCP transport started without a process id")
                   await withTimeout(waitForOwnedGroup(ready, pid), connectTimeout)
                   const id = `mcp-${crypto.randomUUID()}`
-                  const overlay = CredentialOverlay.current()
+                  // localEnv layers the server's own config over `base`; it
+                  // cannot add a synced value `base` lacked, so the snapshot's
+                  // overlay is the one this transport can carry.
                   const registered = await CredentialProcessLedger.register({
                     id,
                     kind: "mcp",

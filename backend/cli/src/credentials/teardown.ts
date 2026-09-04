@@ -20,17 +20,18 @@ export namespace CredentialTeardown {
       return
     }
     if (target === "overlay") {
-      // The synced overlay lapsed. Only children stamped with that overlay
-      // inherited its secrets; the ledger targets them exactly. Project
-      // instances, active model turns, and every child spawned without the
-      // overlay keep running. See CredentialRevocation for why the previous
-      // global disposal was wrong here.
+      // The synced overlay lapsed. Only children whose spawn environment
+      // carried that overlay inherited its secrets; the ledger targets them
+      // exactly (and, failing closed, any entry written before the stamp
+      // existed). Project instances, active model turns, language servers
+      // (kernelEnv), the SSH broker and credential helpers (allowlists), and
+      // every other child spawned without the overlay keep running. See
+      // CredentialRevocation for why the previous global disposal was wrong.
       const reason = CredentialRevocation.message(event.reason)
       await Promise.all([
         ComputeJobs.cancelOverlayProcesses(),
         CommandRuntime.stopOverlay(reason),
         Instance.each(() => MCP.disposeOverlay()),
-        CredentialProcessLedger.revoke({ kind: "lsp", overlay: true }),
       ])
       return
     }

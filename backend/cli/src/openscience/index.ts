@@ -6,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { Auth } from "@/auth"
 import { CredentialLifecycle } from "@/credentials/lifecycle"
 import { isAtlasManagedKey, isWorkspaceKey } from "@/credentials/managed-key"
+import { CredentialOverlay } from "@/credentials/overlay"
 import { Global } from "@/global"
 import { DataRootBarrier } from "@/global/data-root-barrier"
 import { ToolOutputPath } from "@/tool/tool-output-path"
@@ -804,8 +805,10 @@ export namespace OpenScience {
 
   /** Refresh the synced overlay, retrying a failed attempt with short backoff
    * so one transient failure is retried well before the grant's TTL elapses.
-   * The first attempt honours the one-minute dedupe unless forced; retries
-   * always go out. */
+   * An unforced first attempt inside syncCredentials' one-minute dedupe
+   * window does not request anything and returns the current status; when
+   * that status is a prior error, the forced retry chain starts from it.
+   * Retries are always forced. */
   export async function scheduleRefresh(
     options: { backoff?: readonly number[]; force?: boolean } = {},
   ): Promise<SyncStatus> {
@@ -1328,6 +1331,12 @@ export namespace OpenScience {
     return result
   }
 
+  /** Runtime-only environment for kernels, language servers, formatters, and
+   * git helpers. filterEnvForKernel admits no provider or service credential
+   * key, so a kernelEnv child never inherits the synchronized workspace
+   * overlay and is registered in the credential process ledger without an
+   * overlay stamp. Callers that need the overlay use withSubprocessEnv, which
+   * reports it. */
   export function kernelEnv(env: NodeJS.ProcessEnv = process.env, overlay: NodeJS.ProcessEnv = {}) {
     return filterControlPlaneEnv({
       ...filterEnvForKernel(env),
@@ -1382,22 +1391,61 @@ export namespace OpenScience {
     return normalizeByokRouting(result)
   }
 
-  export async function subprocessEnv(env: NodeJS.ProcessEnv = process.env): Promise<Record<string, string>> {
+  export interface SubprocessSnapshot {
+    env: Record<string, string>
+    /** Workspace whose synchronized credential overlay contributed at least
+     * one value to `env`: a synced provider key merged from Auth, or a synced
+     * service value that applyCredentialEnv injected into process.env. A
+     * child spawned with this env inherits that overlay and must be stamped
+     * with it in the credential process ledger. */
+    overlay?: string
+  }
+
+  export async function subprocessSnapshot(env: NodeJS.ProcessEnv = process.env): Promise<SubprocessSnapshot> {
     await CredentialLifecycle.ensureFresh()
-    const auth = await Auth.all().catch(() => ({}) as Record<string, Auth.Info>)
-    return {
-      ...mergeByokEnv(filterEnvForSubprocess(env), auth),
+    const resolved = await Auth.resolve().catch((): Auth.Resolved => ({ auth: {} }))
+    const merged = {
+      ...mergeByokEnv(filterEnvForSubprocess(env), resolved.auth),
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: os.devNull,
       GIT_TERMINAL_PROMPT: "0",
     }
+    return { env: merged, overlay: inheritedOverlay(merged, resolved) }
   }
 
+  /** Provenance, not value matching: a provider key counts only when Auth
+   * resolved it from the workspace overlay and mergeByokEnv placed that exact
+   * entry; a service value only when applyCredentialEnv recorded it as
+   * account-sourced and it is still present verbatim. */
+  function inheritedOverlay(env: Record<string, string>, resolved: Auth.Resolved): string | undefined {
+    const service = CredentialOverlay.inherited(env)
+    if (service) return service
+    const synced = resolved.overlay
+    if (!synced) return undefined
+    const provider = [...synced.providers].some((id) => {
+      const info = resolved.auth[id]
+      const spec = BYOK_SUBPROCESS_PROVIDERS[id]
+      return info?.type === "api" && !!spec && spec.keys.some((key) => env[key] === info.key)
+    })
+    return provider ? synced.organization : undefined
+  }
+
+  export async function subprocessEnv(env: NodeJS.ProcessEnv = process.env): Promise<Record<string, string>> {
+    return (await subprocessSnapshot(env)).env
+  }
+
+  /** Build the admitted subprocess environment and hand it to `action`
+   * together with the overlay it carries. Every spawn site passes that
+   * overlay explicitly to its ledger registration; nothing infers it from
+   * process-wide state. */
   export function withSubprocessEnv<T>(
     env: NodeJS.ProcessEnv,
-    action: (snapshot: Record<string, string>) => T | Promise<T>,
+    action: (snapshot: Record<string, string>, overlay: string | undefined) => T | Promise<T>,
   ): Promise<T> {
-    return CredentialLifecycle.admit(async () => action(await subprocessEnv(env)))
+    return CredentialLifecycle.admit(async () => {
+      const snapshot = await subprocessSnapshot(env)
+      return action(snapshot.env, snapshot.overlay)
+    })
   }
 
   export function pythonThreadCapEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
