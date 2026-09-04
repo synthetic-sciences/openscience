@@ -1836,6 +1836,9 @@ export class Preferences extends HeyApiClient {
       } | null
       delegation_autonomy?: "interactive" | "balanced" | "autonomous"
       delegation_diversity?: "focused" | "balanced" | "exploratory"
+      compaction_auto?: boolean
+      compaction_threshold?: number
+      compaction_warn_tokens?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1857,6 +1860,9 @@ export class Preferences extends HeyApiClient {
             { in: "body", key: "delegation_worker_model" },
             { in: "body", key: "delegation_autonomy" },
             { in: "body", key: "delegation_diversity" },
+            { in: "body", key: "compaction_auto" },
+            { in: "body", key: "compaction_threshold" },
+            { in: "body", key: "compaction_warn_tokens" },
           ],
         },
       ],

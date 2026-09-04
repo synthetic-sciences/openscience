@@ -21136,6 +21136,25 @@
                         "balanced",
                         "exploratory"
                       ]
+                    },
+                    "compaction_auto": {
+                      "description": "Automatic compaction when context is full (compaction.auto)",
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "compaction_threshold": {
+                      "description": "Fraction of the model window that triggers automatic compaction (compaction.threshold)",
+                      "default": 0.75,
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "compaction_warn_tokens": {
+                      "description": "Conversation size in tokens above which the workspace warns (compaction.warn_tokens)",
+                      "default": 120000,
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
                     }
                   }
                 }
@@ -21282,6 +21301,25 @@
                         "balanced",
                         "exploratory"
                       ]
+                    },
+                    "compaction_auto": {
+                      "description": "Automatic compaction when context is full (compaction.auto)",
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "compaction_threshold": {
+                      "description": "Fraction of the model window that triggers automatic compaction (compaction.threshold)",
+                      "default": 0.75,
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "compaction_warn_tokens": {
+                      "description": "Conversation size in tokens above which the workspace warns (compaction.warn_tokens)",
+                      "default": 120000,
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
                     }
                   }
                 }
@@ -21388,6 +21426,19 @@
                       "balanced",
                       "exploratory"
                     ]
+                  },
+                  "compaction_auto": {
+                    "type": "boolean"
+                  },
+                  "compaction_threshold": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "compaction_warn_tokens": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
                   }
                 }
               }
@@ -54498,6 +54549,233 @@
           "properties"
         ]
       },
+      "Event.session.context": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "session.context"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "tokens": {
+                "type": "object",
+                "properties": {
+                  "system": {
+                    "type": "number"
+                  },
+                  "text": {
+                    "type": "number"
+                  },
+                  "reasoning": {
+                    "type": "number"
+                  },
+                  "tool": {
+                    "type": "number"
+                  },
+                  "skills": {
+                    "type": "number"
+                  },
+                  "image": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "system",
+                  "text",
+                  "reasoning",
+                  "tool",
+                  "skills",
+                  "image"
+                ]
+              },
+              "images": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              },
+              "budget": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "type": "number"
+                  },
+                  "newest": {
+                    "type": "number"
+                  },
+                  "history": {
+                    "type": "number"
+                  },
+                  "usable": {
+                    "type": "number"
+                  },
+                  "soft": {
+                    "type": "number"
+                  },
+                  "hard": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "total",
+                  "newest",
+                  "history",
+                  "usable",
+                  "soft",
+                  "hard"
+                ]
+              }
+            },
+            "required": [
+              "sessionID",
+              "tokens",
+              "images",
+              "total"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "Event.session.compaction": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "session.compaction"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "trigger": {
+                "type": "string",
+                "enum": [
+                  "proactive",
+                  "overflow",
+                  "manual"
+                ]
+              },
+              "mechanism": {
+                "type": "string",
+                "enum": [
+                  "prune",
+                  "summary"
+                ]
+              },
+              "before": {
+                "type": "number"
+              },
+              "after": {
+                "type": "number"
+              },
+              "reclaimed": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "sessionID",
+              "trigger",
+              "mechanism",
+              "reclaimed"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "SessionRequestProgress": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "attempt": {
+            "type": "number"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "providerID": {
+            "type": "string"
+          },
+          "modelID": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "connecting",
+              "waiting_first_token",
+              "streaming",
+              "conflict_wait",
+              "retry_wait",
+              "done",
+              "error"
+            ]
+          },
+          "since": {
+            "type": "number"
+          },
+          "elapsedMs": {
+            "type": "number"
+          },
+          "retryAfterMs": {
+            "type": "number"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "firstOutputMs": {
+            "type": "number"
+          },
+          "stalls": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "sessionID",
+          "messageID",
+          "attempt",
+          "agent",
+          "providerID",
+          "modelID",
+          "phase",
+          "since",
+          "elapsedMs",
+          "stalls"
+        ]
+      },
+      "Event.session.request.progress": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "session.request.progress"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/SessionRequestProgress"
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "SessionStatus": {
         "anyOf": [
           {
@@ -54781,152 +55059,6 @@
             "required": [
               "sessionID",
               "requestID"
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
-      "Event.session.context": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "session.context"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string"
-              },
-              "tokens": {
-                "type": "object",
-                "properties": {
-                  "system": {
-                    "type": "number"
-                  },
-                  "text": {
-                    "type": "number"
-                  },
-                  "reasoning": {
-                    "type": "number"
-                  },
-                  "tool": {
-                    "type": "number"
-                  },
-                  "skills": {
-                    "type": "number"
-                  },
-                  "image": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "system",
-                  "text",
-                  "reasoning",
-                  "tool",
-                  "skills",
-                  "image"
-                ]
-              },
-              "images": {
-                "type": "number"
-              },
-              "total": {
-                "type": "number"
-              },
-              "budget": {
-                "type": "object",
-                "properties": {
-                  "total": {
-                    "type": "number"
-                  },
-                  "newest": {
-                    "type": "number"
-                  },
-                  "history": {
-                    "type": "number"
-                  },
-                  "usable": {
-                    "type": "number"
-                  },
-                  "soft": {
-                    "type": "number"
-                  },
-                  "hard": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "total",
-                  "newest",
-                  "history",
-                  "usable",
-                  "soft",
-                  "hard"
-                ]
-              }
-            },
-            "required": [
-              "sessionID",
-              "tokens",
-              "images",
-              "total"
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
-      "Event.session.compaction": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "session.compaction"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string"
-              },
-              "trigger": {
-                "type": "string",
-                "enum": [
-                  "proactive",
-                  "overflow",
-                  "manual"
-                ]
-              },
-              "mechanism": {
-                "type": "string",
-                "enum": [
-                  "prune",
-                  "summary"
-                ]
-              },
-              "before": {
-                "type": "number"
-              },
-              "after": {
-                "type": "number"
-              },
-              "reclaimed": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "sessionID",
-              "trigger",
-              "mechanism",
-              "reclaimed"
             ]
           }
         },
@@ -55901,6 +56033,15 @@
             "$ref": "#/components/schemas/Event.permission.replied"
           },
           {
+            "$ref": "#/components/schemas/Event.session.context"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.compaction"
+          },
+          {
+            "$ref": "#/components/schemas/Event.session.request.progress"
+          },
+          {
             "$ref": "#/components/schemas/Event.session.status"
           },
           {
@@ -55914,12 +56055,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.question.rejected"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.context"
-          },
-          {
-            "$ref": "#/components/schemas/Event.session.compaction"
           },
           {
             "$ref": "#/components/schemas/Event.session.compacted"
@@ -57707,6 +57842,12 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1
+              },
+              "warn_tokens": {
+                "description": "Show a compact-or-restart notice in the workspace when the conversation context exceeds this many tokens (default: 120000)",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
               "fallbackContext": {
                 "description": "Assumed context window (tokens) when a provider reports 0 (default: 128000)",
