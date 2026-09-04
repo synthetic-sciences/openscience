@@ -5,7 +5,7 @@
 ### Checklist
 
 - [ ] `bun run typecheck` passes
-- [ ] `bun test` (in `backend/cli`) passes
-- [ ] `bunx prettier --check .` is clean
+- [ ] `bun run --cwd backend/cli test` passes
+- [ ] `bun run format:check` is clean
 - [ ] Linked an issue (e.g. `Fixes #123`)
 - [ ] Screenshots or a short video for UI changes

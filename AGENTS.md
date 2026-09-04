@@ -81,4 +81,4 @@ const bazFoo = 3
 You MUST avoid using `mocks` as much as possible.
 Tests MUST test actual implementation, do not duplicate logic into a test.
 
-Run the suite with `bun test` from `backend/cli`.
+Run the suite with `bun run test` from `backend/cli`. The script adds `--timeout 15000`; bare `bun test` uses Bun's 5 s default and fails spuriously. Run one file with `bun test --timeout 15000 ./test/<dir>/<file>.test.ts` and one case with `-t "<name>"`.

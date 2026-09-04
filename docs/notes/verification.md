@@ -4,13 +4,20 @@ Before pushing to `main` (or opening a PR), run the same gates CI enforces, so a
 red build never reaches the default branch.
 
 ```bash
-bun run typecheck                        # all workspaces (tsgo), matches CI "Typecheck"
-bun run format:check                     # matches CI "Format"
-bun run --cwd frontend/workspace build   # first half of CI "Build (web)"
-bun run --cwd frontend/docs build        # second half of CI "Build (web)"
+bun run format:check                     # Fast CI "Format"
+bun run typecheck                        # all workspaces (tsgo), Fast CI "Typecheck"
+bun run --cwd frontend/workspace build   # Fast CI "Build (web)"
 bun run --cwd backend/cli script/generate-web-assets.ts
-bun test --cwd backend/cli               # CLI unit + integration suite, matches CI "Test"
+bun run --cwd frontend/docs build        # Deep CI only
+bun run --cwd backend/cli test           # CLI unit + integration suite, Deep CI only
 ```
+
+Fast CI (`.github/workflows/ci.yml`) runs on every pull request but is
+intentionally small: its "Test" job only syntax-checks the release
+entrypoints. The backend suite and the docs build run in Deep CI
+(`.github/workflows/deep-ci.yml`, nightly and on manual dispatch), so run them
+locally before you push. Start the suite through the `test` script: it passes
+`--timeout 15000`, and bare `bun test` fails spuriously at Bun's 5 s default.
 
 The landing site has its own lockfile and is not a root-workspace package:
 

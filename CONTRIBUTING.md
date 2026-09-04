@@ -38,12 +38,22 @@ bun dev web             # start the server and open the workspace
 
 ### Checks
 
-Before pushing, run the same gates CI enforces — typecheck, tests, and formatting:
+Before pushing, run the same gates CI enforces — formatting, typecheck, and the backend tests:
 
 ```bash
+bun run format:check
 bun run typecheck
-bun test --cwd backend/cli
-bunx prettier --check .
+bun run --cwd backend/cli test
+```
+
+Always start the backend tests through the `test` script (or `bun run test` inside `backend/cli`). It adds `--timeout 15000`; bare `bun test` uses Bun's 5 s default and fails spuriously. Bun ignores a `timeout` key in `bunfig.toml`, so pass the flag yourself when you run a subset:
+
+```bash
+cd backend/cli
+bun test --timeout 15000 ./test/skill/skill.test.ts   # one file
+bun test --timeout 15000 ./test/skill                 # one directory
+bun test --timeout 15000 -t "resolves"                # cases whose name matches
+bun test --timeout 15000 --watch ./test/skill         # rerun on change
 ```
 
 See [docs/notes/verification.md](docs/notes/verification.md) for the full list, including the workspace build.
