@@ -499,13 +499,16 @@ export namespace SessionPrompt {
     return path.join(Global.Path.data, "session-loop", `${digest}.lock`)
   }
 
-  export function cancel(sessionID: string, owner?: AbortSignal) {
+  /** `reason` rides on the controller's signal so the processor can record
+   * why the turn stopped (e.g. a credential revocation) instead of a generic
+   * abort. */
+  export function cancel(sessionID: string, owner?: AbortSignal, reason?: unknown) {
     log.info("cancel", { sessionID })
     const s = state()
     const match = s[sessionID]
     if (!match) return
     if (owner && match.abort.signal !== owner) return
-    match.abort.abort()
+    match.abort.abort(reason)
     for (const item of match.callbacks) {
       item.reject()
     }
@@ -518,6 +521,15 @@ export namespace SessionPrompt {
     void Session.flushPendingParts(sessionID).catch((e) => log.error("flushPendingParts failed", { error: e }))
     SessionStatus.set(sessionID, { type: "idle" })
     return
+  }
+
+  /** Cancel every active turn in this project with an explicit cause. Used
+   * before a credential revision disposes the instance, so the transcript
+   * names the revocation rather than an anonymous abort. */
+  export function interrupt(reason: unknown): number {
+    const ids = Object.keys(state())
+    for (const sessionID of ids) cancel(sessionID, undefined, reason)
+    return ids.length
   }
 
   /** Snapshot the exact local controller currently owning a session. Callers
@@ -3039,6 +3051,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
       output: string
       truncated: boolean
       aborted: boolean
+      interruption?: string
       exited: boolean
       timer: ReturnType<typeof setTimeout> | undefined
     } = { output: "", truncated: false, aborted: false, exited: false, timer: undefined }
@@ -3076,7 +3089,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         unreadable: OpenScience.kernelSensitivePaths(),
         options: current.sandbox,
       })
-      return OpenScience.withSubprocessEnv(process.env, async (env) => {
+      return OpenScience.withSubprocessEnv(process.env, async (env, overlay) => {
         const wrapped = await CommandRuntime.wrap({
           file: sandbox.file,
           args: sandbox.args,
@@ -3109,11 +3122,12 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
               command: input.command,
             },
             child,
-            async () => {
+            async (reason) => {
               state.aborted = true
+              state.interruption = reason
               await stop()
             },
-            { authorityGeneration: current.generation, windowsRelease: wrapped.release },
+            { authorityGeneration: current.generation, windowsRelease: wrapped.release, overlay },
           )
           const kill = async () => {
             await CommandRuntime.stop(registered.id, registered.projectID, registered.sessionID)
@@ -3157,7 +3171,8 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     })
 
     if (state.aborted) {
-      state.output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+      state.output +=
+        "\n\n" + ["<metadata>", state.interruption ?? "User aborted the command", "</metadata>"].join("\n")
     }
     msg.time.completed = Date.now()
     await Session.updateMessage(msg)

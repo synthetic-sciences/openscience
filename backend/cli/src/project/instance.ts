@@ -92,8 +92,20 @@ export const Instance = {
     if (Instance.worktree === "/") return false
     return Filesystem.containsCanonical(Instance.worktree, filepath)
   },
-  state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
+  state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
     return State.create(() => Instance.directory, init, dispose)
+  },
+  /** Run `fn` inside every live project instance without creating any. An
+   * instance still bootstrapping is awaited; a failed bootstrap is skipped. */
+  async each(fn: () => unknown) {
+    for (const [key, value] of [...cache.entries()]) {
+      if (cache.get(key) !== value) continue
+      const ctx = await value.catch(() => undefined)
+      if (!ctx) continue
+      await context.provide(ctx, async () => {
+        await fn()
+      })
+    }
   },
   async dispose(options: { strict?: boolean } = {}) {
     Log.Default.info("disposing instance", { directory: Instance.directory })

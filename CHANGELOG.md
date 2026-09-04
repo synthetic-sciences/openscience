@@ -120,6 +120,31 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Renewed synchronized workspace credentials every 90 seconds instead of every
+  4 minutes against their 5-minute grant, and retried a failed refresh with
+  short backoff (5 s, 15 s, 30 s) inside that grant, logging the HTTP status
+  and error class of each failure. One refresh lost to a saturated link or a
+  transient gateway error no longer lets the grant lapse unnoticed.
+- Scoped the expiry of a synchronized workspace credential grant to the
+  runtimes that actually inherited it. The synced provider and service keys are
+  a separate overlay from Ace's managed access and from locally owned keys, so
+  their expiry now revokes only children whose spawn environment carried that
+  overlay, as stamped in the credential process ledger at spawn, instead of
+  disposing every project instance and aborting the active model request
+  mid-turn. Language servers, the SSH broker, and credential helpers never
+  receive the overlay and are left alone; ledger entries written by earlier
+  builds, which carry no stamp, are still revoked for the command, compute,
+  MCP, credential-helper and Modal volume kinds, including MCP transports
+  whose owner server has since died. A grant that lapses before its expiry is
+  published still stamps every child spawned in that window, and a failed
+  expiry is retried with backoff. Expired grants remain unusable for new
+  requests.
+- Named the cause when a credential change other than an overlay expiry
+  cancels a turn or a tool call ("Interrupted: credentials changed (...)"),
+  and recorded an overlay expiry on the commands it stops. A tool call that is
+  cancelled before it started, by a credential change or by the user, is now
+  marked cancelled with "had not started; no action was taken" instead of a
+  failed call with empty arguments.
 - Made title and summary generation single-flight with a bounded number of
   attempts per message, so a slow first turn no longer fans out into duplicate
   title requests.

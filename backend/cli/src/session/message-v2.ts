@@ -16,6 +16,7 @@ import { correctImageMimeFromBase64 } from "@/util/image"
 import { Lock } from "@/util/lock"
 import { Token } from "@/util/token"
 import { Inference } from "@/provider/inference"
+import { CredentialRevocation } from "@/credentials/revocation"
 
 export namespace MessageV2 {
   export const ResearchEffort = z.enum(["normal", "ultra"]).meta({
@@ -1348,6 +1349,10 @@ export namespace MessageV2 {
 
   export function fromError(e: unknown, ctx: { providerID: string }) {
     switch (true) {
+      // A credential revision cancelled the turn: a clean abort whose message
+      // names the cause.
+      case CredentialRevocation.interruption(e) !== undefined:
+        return new MessageV2.AbortedError({ message: (e as Error).message }, { cause: e }).toObject()
       case e instanceof DOMException && e.name === "AbortError":
         return new MessageV2.AbortedError(
           { message: e.message },

@@ -938,6 +938,9 @@ export namespace ComputeJobs {
       const launched = await AuthoritySignal.exclusive(() =>
         OpenScience.withSubprocessEnv(process.env, async (env) => {
           if (options.authorize !== false) await currentAuthority(authority)
+          // The broker receives only this transport allowlist, never a
+          // provider or service credential, so it registers without an
+          // overlay stamp regardless of what `env` carried.
           const transport = Object.fromEntries(
             [
               "PATH",
@@ -2734,7 +2737,7 @@ export namespace ComputeJobs {
       | undefined
     try {
       launched = await AuthoritySignal.exclusive(() =>
-        OpenScience.withSubprocessEnv(process.env, async (env) => {
+        OpenScience.withSubprocessEnv(process.env, async (env, overlay) => {
           await currentAuthority(authority)
           const queued = (await read(scope.root)).find((item) => item.id === job.id)
           if (!queued || terminal.has(queued.status)) return
@@ -2783,6 +2786,7 @@ export namespace ComputeJobs {
                 projectID: authority.projectID,
                 sessionID: authority.sessionID,
                 authorityGeneration: authority.generation,
+                overlay,
                 windowsRelease: wrapped.release,
               })
               if (!registered) {
@@ -4089,7 +4093,16 @@ export namespace ComputeJobs {
     })
   }
 
-  async function revokeActive(scope: { projectID?: string; sessionID?: string }): Promise<number> {
+  /** Job children spawned with the full subprocess environment are stamped
+   * with the synchronized workspace overlay it carried. When that overlay's
+   * grant lapses, revoke only the ledger entries stamped with it; jobs spawned
+   * without the overlay, and the allowlisted SSH broker, never held the
+   * expired secrets and keep running. */
+  export async function cancelOverlayProcesses(): Promise<number> {
+    return revokeActive({ overlay: true })
+  }
+
+  async function revokeActive(scope: { projectID?: string; sessionID?: string; overlay?: boolean }): Promise<number> {
     const runtimes = [...active.values()].filter(
       (runtime) =>
         (!scope.projectID || runtime.authority.projectID === scope.projectID) &&

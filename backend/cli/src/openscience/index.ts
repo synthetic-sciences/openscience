@@ -6,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { Auth } from "@/auth"
 import { CredentialLifecycle } from "@/credentials/lifecycle"
 import { isAtlasManagedKey, isWorkspaceKey } from "@/credentials/managed-key"
+import { CredentialOverlay } from "@/credentials/overlay"
 import { Global } from "@/global"
 import { DataRootBarrier } from "@/global/data-root-barrier"
 import { ToolOutputPath } from "@/tool/tool-output-path"
@@ -671,6 +672,13 @@ export namespace OpenScience {
   const attempts = new Map<string, number>()
   let synced: SyncStatus = { state: "disconnected" }
   let syncTimer: ReturnType<typeof setInterval> | undefined
+  /** Renewal cadence for the synced overlay. The grant lives
+   * WorkspaceCredentials.TTL (5 min); a refresh every 4 min meant one failed
+   * attempt (a saturated link during a large download, a transient 5xx) let
+   * the grant lapse before the next tick. Refresh at under a third of the TTL
+   * and retry a failure with short backoff, all inside one TTL. */
+  export const SYNC_INTERVAL = 90_000
+  export const SYNC_BACKOFF: readonly number[] = [5_000, 15_000, 30_000]
 
   export function credentialSyncStatus(): SyncStatus {
     return synced
@@ -689,6 +697,7 @@ export namespace OpenScience {
       synced = { state: "syncing" }
       const controller = new AbortController()
       let timer: ReturnType<typeof setTimeout> | undefined
+      const seen: { status?: number } = {}
       const request = (async () => {
         const response = await fetch(`${apiBase()}/api/cli/sync`, {
           headers: { Authorization: `Bearer ${session.api_key}`, ...fundingHeaders(session) },
@@ -707,6 +716,7 @@ export namespace OpenScience {
             }, options.timeoutMs ?? 8_000)
           }),
         ])
+        seen.status = result.response.status
         if (result.response.status === 401) {
           await clearSession(session.api_key)
           throw new Error("This device was disconnected. Sign in again.")
@@ -766,6 +776,14 @@ export namespace OpenScience {
         if (!(await matches())) return synced
         return (synced = { state: "ready", organization_id: data.snapshot.organization_id, synced_at: Date.now() })
       } catch (error) {
+        // A silent failure here is how a grant lapses unnoticed: name the
+        // status and error class so the next expiry is diagnosable.
+        log.warn("workspace credential sync failed", {
+          status: seen.status,
+          error: error instanceof Error ? error.name : typeof error,
+          message: error instanceof Error ? error.message : String(error),
+          expires_at: WorkspaceCredentials.expiresAt(),
+        })
         const current = await getSession()
         if (current && !identities.has(WorkspaceCredentials.identity(current))) return synced
         return (synced = {
@@ -781,14 +799,49 @@ export namespace OpenScience {
     return task
   }
 
-  export async function scheduleRefresh(): Promise<void> {
-    await syncCredentials()
+  function pause(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms).unref())
+  }
+
+  /** Refresh the synced overlay, retrying a failed attempt with short backoff
+   * so one transient failure is retried well before the grant's TTL elapses.
+   * An unforced first attempt inside syncCredentials' one-minute dedupe
+   * window does not request anything and returns the current status; when
+   * that status is a prior error, the forced retry chain starts from it.
+   * Retries are always forced. */
+  export async function scheduleRefresh(
+    options: { backoff?: readonly number[]; force?: boolean } = {},
+  ): Promise<SyncStatus> {
+    const backoff = options.backoff ?? SYNC_BACKOFF
+    const attempt = async (index: number, force: boolean): Promise<SyncStatus> => {
+      const result = await syncCredentials({ force })
+      if (result.state !== "error") return result
+      const delay = backoff[index]
+      const expires = WorkspaceCredentials.expiresAt()
+      if (delay === undefined) {
+        log.error("workspace credential refresh exhausted its retries", {
+          error: result.error,
+          attempts: index + 1,
+          expires_at: expires,
+        })
+        return result
+      }
+      log.warn("workspace credential refresh failed; retrying", {
+        error: result.error,
+        retry_ms: delay,
+        remaining: backoff.length - index - 1,
+        expires_at: expires,
+      })
+      await pause(delay)
+      return attempt(index + 1, true)
+    }
+    return attempt(0, options.force ?? false)
   }
 
   export function startCredentialSync(): void {
     if (syncTimer) return
     void scheduleRefresh()
-    syncTimer = setInterval(() => void scheduleRefresh(), 4 * 60_000)
+    syncTimer = setInterval(() => void scheduleRefresh(), SYNC_INTERVAL)
     syncTimer.unref()
   }
 
@@ -1278,6 +1331,12 @@ export namespace OpenScience {
     return result
   }
 
+  /** Runtime-only environment for kernels, language servers, formatters, and
+   * git helpers. filterEnvForKernel admits no provider or service credential
+   * key, so a kernelEnv child never inherits the synchronized workspace
+   * overlay and is registered in the credential process ledger without an
+   * overlay stamp. Callers that need the overlay use withSubprocessEnv, which
+   * reports it. */
   export function kernelEnv(env: NodeJS.ProcessEnv = process.env, overlay: NodeJS.ProcessEnv = {}) {
     return filterControlPlaneEnv({
       ...filterEnvForKernel(env),
@@ -1332,22 +1391,61 @@ export namespace OpenScience {
     return normalizeByokRouting(result)
   }
 
-  export async function subprocessEnv(env: NodeJS.ProcessEnv = process.env): Promise<Record<string, string>> {
+  export interface SubprocessSnapshot {
+    env: Record<string, string>
+    /** Workspace whose synchronized credential overlay contributed at least
+     * one value to `env`: a synced provider key merged from Auth, or a synced
+     * service value that applyCredentialEnv injected into process.env. A
+     * child spawned with this env inherits that overlay and must be stamped
+     * with it in the credential process ledger. */
+    overlay?: string
+  }
+
+  export async function subprocessSnapshot(env: NodeJS.ProcessEnv = process.env): Promise<SubprocessSnapshot> {
     await CredentialLifecycle.ensureFresh()
-    const auth = await Auth.all().catch(() => ({}) as Record<string, Auth.Info>)
-    return {
-      ...mergeByokEnv(filterEnvForSubprocess(env), auth),
+    const resolved = await Auth.resolve().catch((): Auth.Resolved => ({ auth: {} }))
+    const merged = {
+      ...mergeByokEnv(filterEnvForSubprocess(env), resolved.auth),
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: os.devNull,
       GIT_TERMINAL_PROMPT: "0",
     }
+    return { env: merged, overlay: inheritedOverlay(merged, resolved) }
   }
 
+  /** Provenance, not value matching: a provider key counts only when Auth
+   * resolved it from the workspace overlay and mergeByokEnv placed that exact
+   * entry; a service value only when applyCredentialEnv recorded it as
+   * account-sourced and it is still present verbatim. */
+  function inheritedOverlay(env: Record<string, string>, resolved: Auth.Resolved): string | undefined {
+    const service = CredentialOverlay.inherited(env)
+    if (service) return service
+    const synced = resolved.overlay
+    if (!synced) return undefined
+    const provider = [...synced.providers].some((id) => {
+      const info = resolved.auth[id]
+      const spec = BYOK_SUBPROCESS_PROVIDERS[id]
+      return info?.type === "api" && !!spec && spec.keys.some((key) => env[key] === info.key)
+    })
+    return provider ? synced.organization : undefined
+  }
+
+  export async function subprocessEnv(env: NodeJS.ProcessEnv = process.env): Promise<Record<string, string>> {
+    return (await subprocessSnapshot(env)).env
+  }
+
+  /** Build the admitted subprocess environment and hand it to `action`
+   * together with the overlay it carries. Every spawn site passes that
+   * overlay explicitly to its ledger registration; nothing infers it from
+   * process-wide state. */
   export function withSubprocessEnv<T>(
     env: NodeJS.ProcessEnv,
-    action: (snapshot: Record<string, string>) => T | Promise<T>,
+    action: (snapshot: Record<string, string>, overlay: string | undefined) => T | Promise<T>,
   ): Promise<T> {
-    return CredentialLifecycle.admit(async () => action(await subprocessEnv(env)))
+    return CredentialLifecycle.admit(async () => {
+      const snapshot = await subprocessSnapshot(env)
+      return action(snapshot.env, snapshot.overlay)
+    })
   }
 
   export function pythonThreadCapEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {

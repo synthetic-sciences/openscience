@@ -7,16 +7,30 @@ import { SecretBox } from "../util/secret-box"
 import { SecretFile } from "../util/secret-file"
 import { isAtlasManagedKey } from "../credentials/managed-key"
 import { CredentialLifecycle } from "../credentials/lifecycle"
+import { Log } from "../util/log"
 import { isDeepStrictEqual } from "node:util"
 
 /** A revocable overlay, never a replacement for this device's own credentials.
  * No dashboard config, executable code, arbitrary environment, or billing
  * preference crosses this boundary. Cached grants expire when offline. */
 export namespace WorkspaceCredentials {
+  const log = Log.create({ service: "workspace-credentials" })
+  /** Hard bound on a cached grant. OpenScience.SYNC_INTERVAL renews well
+   * inside it, with retries, so only a genuinely unreachable workspace lets
+   * a grant lapse. */
   export const TTL = 5 * 60_000
+  /** Retry cadence when publishing an expiry fails (an unwritable data root,
+   * a wedged lease). A lapsed grant must be revoked, so retries continue at
+   * the last interval until one succeeds or a newer grant replaces it. */
+  export const EXPIRE_BACKOFF: readonly number[] = [1_000, 5_000, 15_000, 30_000]
   export const filepath = path.join(Global.Path.data, "workspace-credentials.json")
   let expiry: ReturnType<typeof setTimeout> | undefined
   let deadline = 0
+
+  /** When the cached grant lapses, for refresh diagnostics. */
+  export function expiresAt(): number | undefined {
+    return deadline || undefined
+  }
   type Session = { api_key: string; organization_id?: string }
   const Renewal = z
     .object({
@@ -176,13 +190,28 @@ export namespace WorkspaceCredentials {
   }
 
   /** Publish expiry as a real credential revocation so running SDK caches and
-   * child processes cannot retain a cloud grant indefinitely while offline. */
+   * child processes cannot retain a cloud grant indefinitely while offline.
+   *
+   * The revision reason is `workspace-sync.expired`, which CredentialTeardown
+   * treats as overlay-scoped: the grant is cleared here before the revision is
+   * published (no new request can use it), and only children stamped with the
+   * overlay are revoked. Disposing every project instance for this reason was
+   * wrong: it aborted active model turns that ran on Ace or on the device's
+   * own keys and never used the lapsed overlay. */
   export async function expire(): Promise<void> {
     await CredentialLifecycle.mutateIf(
       "workspace-sync.expired",
       async () => {
         const store = await JsonStore.read(filepath)
-        return typeof store.expires_at === "number" && store.expires_at <= Date.now()
+        const lapsed = typeof store.expires_at === "number" && store.expires_at <= Date.now()
+        if (lapsed) {
+          const { OpenScience } = await import("./index")
+          log.warn("synchronized workspace credentials expired before they could be renewed", {
+            expires_at: new Date(store.expires_at as number).toISOString(),
+            sync: OpenScience.credentialSyncStatus(),
+          })
+        }
+        return lapsed
       },
       clear,
     )
@@ -190,9 +219,29 @@ export namespace WorkspaceCredentials {
 
   function arm(expires: number): void {
     if (deadline === expires) return
+    schedule(expires, Math.max(0, expires - Date.now()), 0)
+  }
+
+  /** A failed expiry is re-armed with backoff rather than swallowed: until
+   * the revision is published, process.env still carries the lapsed values
+   * and every child spawned inherits them. */
+  function schedule(expires: number, delay: number, attempt: number): void {
     if (expiry) clearTimeout(expiry)
     deadline = expires
-    expiry = setTimeout(() => void expire().catch(() => undefined), Math.max(0, expires - Date.now()))
+    expiry = setTimeout(() => {
+      void expire().catch((error) => {
+        // A newer grant was armed meanwhile; its own timer owns expiry now.
+        if (deadline !== expires) return
+        const retry = EXPIRE_BACKOFF[Math.min(attempt, EXPIRE_BACKOFF.length - 1)] ?? 30_000
+        log.error("workspace credential expiry failed; retrying", {
+          error: error instanceof Error ? error.message : String(error),
+          attempt: attempt + 1,
+          retry_ms: retry,
+          expires_at: new Date(expires).toISOString(),
+        })
+        schedule(expires, retry, attempt + 1)
+      })
+    }, delay)
     expiry.unref()
   }
 
