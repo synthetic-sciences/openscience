@@ -127,8 +127,10 @@ export const AccountRoutes = lazy(() =>
           })
         if (!session) return fallback()
         // The stored summary is served at once; a stale one is refreshed in
-        // the background and announced as `account.updated`.
-        const read = await OpenScience.getAccountSummary().then(
+        // the background and announced as `account.updated`. A first read
+        // waits under the account deadline and the request's own signal, so
+        // a client that leaves cancels the outbound reads.
+        const read = await OpenScience.getAccountSummary({ signal: c.req.raw.signal }).then(
           (value) => ({ value }),
           (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),
         )

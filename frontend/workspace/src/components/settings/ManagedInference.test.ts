@@ -22,6 +22,19 @@ describe("Ace model access", () => {
     expect(source).not.toContain("setInterval")
   })
 
+  test("waits for the server's one account deadline instead of racing its own short timeout", async () => {
+    const deadline = await import("./account-deadline")
+    // The server bounds account reads at 15 s and propagates that to its
+    // outbound fetches; the UI must never give up before that answer lands.
+    expect(deadline.ACCOUNT_DEADLINE_MS).toBeGreaterThanOrEqual(15_000)
+    expect(source).toContain("timeoutMs: ACCOUNT_DEADLINE_MS")
+    expect(source).not.toMatch(/ACCOUNT_TIMEOUT_MS|6_000/)
+    const general = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
+    expect(general).not.toContain("12_000")
+    // The import plus the account load and the credential sync.
+    expect(general.match(/ACCOUNT_DEADLINE_MS/g)).toHaveLength(3)
+  })
+
   test("shows only exact purchased-Wallet dollars", () => {
     expect(formatCreditBalance(984)).toBe("$984.00")
     expect(formatCreditBalance(984.6)).toBe("$984.60")

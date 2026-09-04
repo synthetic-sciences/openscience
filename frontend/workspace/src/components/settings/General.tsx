@@ -16,7 +16,7 @@ import { parseWarnTokens, thresholdOptions, type ContextPreferences } from "./co
 import { commitPreference } from "./preference-write"
 import { walletBalanceLabel } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
-import { withAccountDeadline } from "./account-deadline"
+import { ACCOUNT_DEADLINE_MS, withAccountDeadline } from "./account-deadline"
 import "./preference-panels.css"
 
 type FundingOrganization = {
@@ -68,7 +68,7 @@ export default function General() {
   const [busy, setBusy] = createSignal<"login" | "logout" | "workspace" | "sync">()
 
   const loadAccount = () =>
-    withAccountDeadline((signal) => settingsApi<Account>(sdk.url, fetchFn, "/account", { signal }), 12_000)
+    withAccountDeadline((signal) => settingsApi<Account>(sdk.url, fetchFn, "/account", { signal }), ACCOUNT_DEADLINE_MS)
       .then(setAccount)
       .catch((cause) => setError(errorMessage(cause)))
 
@@ -84,7 +84,7 @@ export default function General() {
     try {
       const result = await withAccountDeadline(
         (signal) => settingsApi<SyncStatus>(sdk.url, fetchFn, "/account/sync", { method: "POST", signal }),
-        12_000,
+        ACCOUNT_DEADLINE_MS,
       )
       setAccount((current) => current && { ...current, credential_sync: result })
       if (result.state !== "ready") throw new Error(result.error ?? "Sign in to sync workspace credentials.")

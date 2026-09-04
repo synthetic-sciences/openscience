@@ -101,11 +101,13 @@ export async function readWallet(
     typeof OpenScience,
     "getAccountSummary" | "getFundingSnapshot" | "refreshAccount" | "getTransactions"
   > = OpenScience,
+  signal?: AbortSignal,
 ): Promise<WalletState> {
   if (summary) {
     // The stored summary is served at once; a stale one is refreshed in the
-    // background and announced as `account.updated`.
-    const read = await settle(account.getAccountSummary())
+    // background and announced as `account.updated`. A first read waits under
+    // the account deadline and the request's own signal.
+    const read = await settle(account.getAccountSummary({ signal }))
     if ("error" in read) {
       return walletState({ snapshot: null, refreshing: false, error: read.error, summary: true, transactions: [] })
     }
@@ -119,12 +121,13 @@ export async function readWallet(
     })
   }
   // The ledger view is always a fresh read; the summary it fetches is stored
-  // for the next quick open.
+  // for the next quick open. Both reads share the one account deadline.
   const session = await account.getFundingSnapshot()
   if (!session) return SIGNED_OUT
+  const deadline = OpenScience.accountDeadline(signal)
   const [snapshot, transactions] = await Promise.all([
-    settle(account.refreshAccount(session)),
-    account.getTransactions(20, session).catch(() => null),
+    settle(account.refreshAccount(session, { signal: deadline })),
+    account.getTransactions(20, session, deadline).catch(() => null),
   ])
   return walletState({
     snapshot: "value" in snapshot ? snapshot.value : null,
@@ -151,6 +154,6 @@ export const WalletSettingsRoutes = lazy(() =>
         summary: z.enum(["true", "false"]).optional().describe("Return a fast account summary without ledger history"),
       }),
     ),
-    async (c) => c.json(await readWallet(c.req.valid("query").summary === "true")),
+    async (c) => c.json(await readWallet(c.req.valid("query").summary === "true", OpenScience, c.req.raw.signal)),
   ),
 )

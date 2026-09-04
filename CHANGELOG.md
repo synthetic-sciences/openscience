@@ -73,6 +73,12 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   one is read in the background and announced as `account.updated`. A panel
   no longer shows a spinner for the account service when a summary exists,
   and a failed refresh keeps the last good values with the reason.
+- Replaced the Ace panel's 6-second timeout racing 60 seconds of server work
+  with one bounded 15-second account deadline owned by the server and
+  propagated, together with the request's own abort signal, to every
+  outbound account read. A panel that closes cancels the reads it started,
+  a shared read is cancelled only when its last waiter leaves, and the UI
+  waits for the server's answer instead of giving up first.
 - Unified loading, empty, alert, and control styling across Customize panels,
   moved Credentials under Capabilities, renamed Security & access to
   Permissions, and gave Local models inline errors and skeleton rows.

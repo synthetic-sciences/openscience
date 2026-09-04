@@ -290,7 +290,13 @@ function contextTag(session: Pick<OpenScienceSession, "api_key" | "user_id" | "o
 // managed turn, the settings panels and credential sync all check the same
 // account; while one read is in flight the others join it instead of
 // repeating the request.
-const flights = new Map<string, Promise<unknown>>()
+interface Flight<T> {
+  promise: Promise<T>
+  controller: AbortController
+  waiting: number
+  settled: boolean
+}
+const flights = new Map<string, Flight<unknown>>()
 
 function flightKey(
   kind: string,
@@ -305,12 +311,38 @@ function flightKey(
   ].join("\0")
 }
 
-function share<T>(key: string, start: () => Promise<T>): Promise<T> {
-  const pending = flights.get(key) as Promise<T> | undefined
-  if (pending) return pending
-  const flight = start().finally(() => {
-    if (flights.get(key) === flight) flights.delete(key)
+/** Join the in-flight read for `key`, starting it when there is none. The
+ * read runs under its own signal; a caller's signal only detaches that
+ * caller, and the read is cancelled once every caller has detached, so an
+ * abandoned panel never leaves account requests running. */
+function share<T>(key: string, start: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) return Promise.reject(signal.reason)
+  const flight = (flights.get(key) as Flight<T> | undefined) ?? launch(key, start)
+  flight.waiting++
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => {
+      flight.waiting--
+      if (flight.waiting === 0 && !flight.settled) flight.controller.abort(signal?.reason)
+      reject(signal?.reason)
+    }
+    signal?.addEventListener("abort", abort, { once: true })
+    flight.promise.then(resolve, reject).finally(() => {
+      if (signal?.aborted) return
+      signal?.removeEventListener("abort", abort)
+      flight.waiting--
+    })
   })
+}
+
+function launch<T>(key: string, start: (signal: AbortSignal) => Promise<T>): Flight<T> {
+  const controller = new AbortController()
+  const flight: Flight<T> = { controller, waiting: 0, settled: false, promise: start(controller.signal) }
+  flight.promise
+    .finally(() => {
+      flight.settled = true
+      if (flights.get(key) === flight) flights.delete(key)
+    })
+    .catch(() => undefined)
   flights.set(key, flight)
   return flight
 }
@@ -961,11 +993,17 @@ export namespace OpenScience {
     }
   }
 
-  function readAuthStatus(session: FundingSnapshot | OpenScienceSession): Promise<AuthStatus | null> {
-    return share(flightKey("status", session), () => fetchAuthStatus(session))
+  function readAuthStatus(
+    session: FundingSnapshot | OpenScienceSession,
+    signal?: AbortSignal,
+  ): Promise<AuthStatus | null> {
+    return share(flightKey("status", session), (flight) => fetchAuthStatus(session, flight), signal)
   }
 
-  async function fetchAuthStatus(session: FundingSnapshot | OpenScienceSession): Promise<AuthStatus | null> {
+  async function fetchAuthStatus(
+    session: FundingSnapshot | OpenScienceSession,
+    signal: AbortSignal,
+  ): Promise<AuthStatus | null> {
     try {
       // Auth status is the sole legacy reconciliation read allowed to accept an
       // organization echo before the old unscoped session has been repaired.
@@ -973,7 +1011,7 @@ export namespace OpenScience {
       const response = await accountAtlasFetch(
         session,
         `${apiBase()}/api/v1/auth/status`,
-        { headers: { Accept: "application/json" } },
+        { headers: { Accept: "application/json" }, signal },
         true,
       )
       if (!response.ok) return null
@@ -1050,10 +1088,15 @@ export namespace OpenScience {
     return activateSession(session)
   }
 
-  export async function getProfile(snapshot?: FundingSnapshot): Promise<AccountProfile | null> {
+  export async function getProfile(
+    snapshot?: FundingSnapshot,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<AccountProfile | null> {
     const session = snapshot ?? (await getFundingSnapshot())
     if (!session) return null
-    return (await readAuthStatus(session))?.user ?? (session.user_id ? { user_id: session.user_id } : null)
+    return (
+      (await readAuthStatus(session, options.signal))?.user ?? (session.user_id ? { user_id: session.user_id } : null)
+    )
   }
 
   async function fundingContext(snapshot: FundingSnapshot, status: AuthStatus | null): Promise<FundingContext> {
@@ -1114,10 +1157,13 @@ export namespace OpenScience {
     }
   }
 
-  export async function getFundingContext(operation?: FundingSnapshot): Promise<FundingContext> {
+  export async function getFundingContext(
+    operation?: FundingSnapshot,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<FundingContext> {
     const snapshot = operation ?? (await getFundingSnapshot())
     if (!snapshot) return { type: "personal", available: true, locked: false, organizations: [] }
-    return fundingContext(snapshot, await readAuthStatus(snapshot))
+    return fundingContext(snapshot, await readAuthStatus(snapshot, options.signal))
   }
 
   export interface FundingState {
@@ -1129,9 +1175,11 @@ export namespace OpenScience {
     verified: boolean
   }
 
-  export async function getReconciledFundingState(): Promise<FundingState | null> {
+  export async function getReconciledFundingState(
+    options: { signal?: AbortSignal } = {},
+  ): Promise<FundingState | null> {
     const read = async (snapshot: FundingSnapshot, retries: number): Promise<FundingState | null> => {
-      const status = await readAuthStatus(snapshot)
+      const status = await readAuthStatus(snapshot, options.signal)
       if (isLegacyUnscoped(snapshot) && !status) return null
       const context = await fundingContext(snapshot, status)
       const current = await getFundingSnapshot()
@@ -1534,28 +1582,31 @@ export namespace OpenScience {
 
   export async function getCredits(
     snapshot?: FundingSnapshot,
-    options: { timeoutMs?: number; lifetimeSpent?: boolean } = {},
+    options: { timeoutMs?: number; lifetimeSpent?: boolean; signal?: AbortSignal } = {},
   ): Promise<Credits | null> {
-    const session = snapshot ?? (await getReconciledFundingState())?.snapshot
+    const session = snapshot ?? (await getReconciledFundingState({ signal: options.signal }))?.snapshot
     if (!session) return null
     // The ledger metadata follow-up is part of the read's shape, so a summary
     // read and a full read are separate flights.
-    return share(flightKey(`wallet:${options.lifetimeSpent === false ? "summary" : "full"}`, session), () =>
-      fetchCredits(session, options),
+    return share(
+      flightKey(`wallet:${options.lifetimeSpent === false ? "summary" : "full"}`, session),
+      (flight) => fetchCredits(session, { ...options, signal: flight }),
+      options.signal,
     )
   }
 
   async function fetchCredits(
     session: FundingSnapshot,
-    options: { timeoutMs?: number; lifetimeSpent?: boolean },
+    options: { timeoutMs?: number; lifetimeSpent?: boolean; signal: AbortSignal },
   ): Promise<Credits | null> {
     const timeoutMs = options.timeoutMs ?? ATLAS_FETCH_TIMEOUT_MS
+    const init = { signal: options.signal }
     try {
       let currentWallet = true
-      let response = await fundedAtlasFetch(session, `${apiBase()}/api/v1/wallet`, {}, timeoutMs)
+      let response = await fundedAtlasFetch(session, `${apiBase()}/api/v1/wallet`, init, timeoutMs)
       if (response.status === 404 || response.status === 405) {
         currentWallet = false
-        response = await fundedAtlasFetch(session, `${apiBase()}/api/credits`, {}, timeoutMs)
+        response = await fundedAtlasFetch(session, `${apiBase()}/api/credits`, init, timeoutMs)
       }
       if (!response.ok) return null
       const body = (await response.json()) as {
@@ -1571,7 +1622,7 @@ export namespace OpenScience {
       }
       let lifetimeSpent = body.lifetime_spent_cents ?? null
       if (currentWallet && lifetimeSpent === null && options.lifetimeSpent !== false) {
-        const metadata = await fundedAtlasFetch(session, `${apiBase()}/api/credits`, {}, timeoutMs).catch(
+        const metadata = await fundedAtlasFetch(session, `${apiBase()}/api/credits`, init, timeoutMs).catch(
           () => undefined,
         )
         if (metadata?.ok) {
@@ -1606,11 +1657,15 @@ export namespace OpenScience {
     createdAt: string
   }
 
-  export async function getTransactions(limit = 20, snapshot?: FundingSnapshot): Promise<Transaction[] | null> {
-    const session = snapshot ?? (await getReconciledFundingState())?.snapshot
+  export async function getTransactions(
+    limit = 20,
+    snapshot?: FundingSnapshot,
+    signal?: AbortSignal,
+  ): Promise<Transaction[] | null> {
+    const session = snapshot ?? (await getReconciledFundingState({ signal }))?.snapshot
     if (!session) return null
     try {
-      const response = await fundedAtlasFetch(session, `${apiBase()}/api/credits/transactions`)
+      const response = await fundedAtlasFetch(session, `${apiBase()}/api/credits/transactions`, { signal })
       if (!response.ok) return null
       const body = (await response.json()) as
         | Array<Record<string, unknown>>
@@ -1656,18 +1711,25 @@ export namespace OpenScience {
   }
 
   /** The entitlement check, shared by every concurrent caller in one context. */
-  function readAccess(session: FundingSnapshot, timeoutMs: number): Promise<AccessRead> {
-    return share(flightKey("access", session), async () => {
-      const response = await fundedAtlasFetch(session, `${apiBase()}/api/cli/access`, {}, timeoutMs).catch(
-        () => undefined,
-      )
-      if (!response) return { ok: false }
-      if (!response.ok) {
-        await response.body?.cancel().catch(() => undefined)
-        return { ok: false, status: response.status }
-      }
-      return { ok: true, status: response.status, body: (await response.json()) as AccessRead["body"] }
-    })
+  function readAccess(session: FundingSnapshot, timeoutMs: number, signal?: AbortSignal): Promise<AccessRead> {
+    return share(
+      flightKey("access", session),
+      async (flight) => {
+        const response = await fundedAtlasFetch(
+          session,
+          `${apiBase()}/api/cli/access`,
+          { signal: flight },
+          timeoutMs,
+        ).catch(() => undefined)
+        if (!response) return { ok: false }
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => undefined)
+          return { ok: false, status: response.status }
+        }
+        return { ok: true, status: response.status, body: (await response.json()) as AccessRead["body"] }
+      },
+      signal,
+    )
   }
 
   export interface BillingMode {
@@ -1685,14 +1747,16 @@ export namespace OpenScience {
   export async function getBillingMode(
     snapshot?: FundingSnapshot,
     knownCredits?: Credits | null | Promise<Credits | null>,
-    timeoutMs = ATLAS_FETCH_TIMEOUT_MS,
+    options: { timeoutMs?: number; signal?: AbortSignal } = {},
   ): Promise<BillingMode | null> {
-    const session = snapshot ?? (await getReconciledFundingState())?.snapshot
+    const session = snapshot ?? (await getReconciledFundingState({ signal: options.signal }))?.snapshot
     if (!session) return null
     const [configModule, accessRead, credits] = await Promise.all([
       import("@/config/config"),
-      readAccess(session, timeoutMs),
-      knownCredits === undefined ? getCredits(session).catch(() => null) : Promise.resolve(knownCredits),
+      readAccess(session, options.timeoutMs ?? ATLAS_FETCH_TIMEOUT_MS, options.signal),
+      knownCredits === undefined
+        ? getCredits(session, { signal: options.signal }).catch(() => null)
+        : Promise.resolve(knownCredits),
     ])
     const access = accessRead.body
     const balance = credits?.balanceCents ?? access?.cli_balance_cents ?? 0
@@ -1751,6 +1815,18 @@ export namespace OpenScience {
 
   /** Published when a background refresh stored a newer summary. */
   export const AccountUpdatedEvent = BusEvent.define("account.updated", z.object({ refreshed_at: z.number() }))
+
+  /** The one bound on account reads the UI waits for. It replaces the old
+   * pair of a short UI timeout racing a long server timeout: the route's
+   * request signal (aborted when the client leaves) and this budget are
+   * combined once and propagated to every outbound fetch, so abandoned work
+   * is cancelled and the UI's answer is the server's. */
+  export const ACCOUNT_DEADLINE_MS = Number(process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS) || 15_000
+
+  export function accountDeadline(signal?: AbortSignal): AbortSignal {
+    const timeout = AbortSignal.timeout(ACCOUNT_DEADLINE_MS)
+    return signal ? AbortSignal.any([signal, timeout]) : timeout
+  }
 
   const StoredOrganization = z.object({
     organization_id: z.string(),
@@ -1855,18 +1931,32 @@ export namespace OpenScience {
    * Shared by every concurrent caller in one funding context. Throws when the
    * account status is unavailable or the selected account changed meanwhile,
    * so a stored summary is never overwritten by an incomplete read. */
-  export function refreshAccount(session: FundingSnapshot): Promise<AccountSnapshot> {
-    return share(flightKey("account", session), () => fetchAccount(session))
+  export function refreshAccount(
+    session: FundingSnapshot,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<AccountSnapshot> {
+    return share(flightKey("account", session), (flight) => fetchAccount(session, flight), options.signal)
   }
 
-  async function fetchAccount(session: FundingSnapshot): Promise<AccountSnapshot> {
+  function refreshFailure(error: unknown): string {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      return `The Ace account service did not answer within ${Math.round(ACCOUNT_DEADLINE_MS / 1000)} seconds.`
+    }
+    if (error instanceof DOMException && error.name === "AbortError") return "The account refresh was cancelled."
+    return error instanceof Error ? error.message : "Account refresh failed. Try again."
+  }
+
+  async function fetchAccount(session: FundingSnapshot, signal: AbortSignal): Promise<AccountSnapshot> {
     const context = contextTag(session)
     try {
-      const state = await getReconciledFundingState()
+      const state = await getReconciledFundingState({ signal })
       if (!state) throw new Error("Sign in again to refresh the Ace account.")
       if (!state.verified) throw new Error("The Ace account service is unavailable. Retry when connected.")
-      const creditsRequest = getCredits(state.snapshot)
-      const [credits, billing] = await Promise.all([creditsRequest, getBillingMode(state.snapshot, creditsRequest)])
+      const creditsRequest = getCredits(state.snapshot, { signal })
+      const [credits, billing] = await Promise.all([
+        creditsRequest,
+        getBillingMode(state.snapshot, creditsRequest, { signal }),
+      ])
       const current = await getFundingSnapshot()
       if (!current || !sameSnapshot(current, state.snapshot)) {
         throw new Error("The selected account changed while refreshing. Retry.")
@@ -1886,11 +1976,7 @@ export namespace OpenScience {
       })
       return snapshot
     } catch (error) {
-      accountFailure = {
-        context,
-        at: Date.now(),
-        error: error instanceof Error ? error.message : "Account refresh failed. Try again.",
-      }
+      accountFailure = { context, at: Date.now(), error: refreshFailure(error) }
       throw error
     }
   }
@@ -1914,7 +2000,7 @@ export namespace OpenScience {
    * is returned at once: as current while it is recent, otherwise marked
    * `refreshing` while a background read replaces it. Only the first read of
    * an account, with nothing stored yet, waits for the account service. */
-  export async function getAccountSummary(): Promise<AccountSummary | null> {
+  export async function getAccountSummary(options: { signal?: AbortSignal } = {}): Promise<AccountSummary | null> {
     const session = await getFundingSnapshot()
     if (!session) return null
     const cached = await readAccountSnapshot(session)
@@ -1928,11 +2014,14 @@ export namespace OpenScience {
     if (cached && failure && failure.at > cached.at && now - failure.at < ACCOUNT_RETRY_MS) {
       return accountSummary(cached, false, failure.error)
     }
-    const refresh = refreshAccount(session)
-    if (!cached) return accountSummary(await refresh, false)
-    // Nobody waits on the background read here; the result is announced on
-    // the global bus and the next summary read serves it.
-    refresh.catch(() => undefined)
+    // The only read that waits: the caller's own signal (a route's request,
+    // aborted when the client leaves) bounds it together with the deadline.
+    if (!cached)
+      return accountSummary(await refreshAccount(session, { signal: accountDeadline(options.signal) }), false)
+    // Nobody waits on the background read here, so it runs under the
+    // deadline alone; the result is announced on the global bus and the next
+    // summary read serves it.
+    refreshAccount(session, { signal: accountDeadline() }).catch(() => undefined)
     return accountSummary(cached, true, failure?.error)
   }
 

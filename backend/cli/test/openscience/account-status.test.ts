@@ -7,6 +7,8 @@ import path from "node:path"
 // account summary those surfaces are served from.
 const fixture = {
   requests: [] as string[],
+  // Outbound reads the account service saw cancelled (the client went away).
+  aborted: [] as string[],
   gate: Promise.resolve(),
   stall: new Set<string>(),
   status: 200,
@@ -19,6 +21,7 @@ const server = Bun.serve({
   async fetch(request) {
     const pathname = new URL(request.url).pathname
     fixture.requests.push(pathname)
+    request.signal.addEventListener("abort", () => fixture.aborted.push(pathname), { once: true })
     if (fixture.stall.has(pathname)) await fixture.gate
     if (pathname === "/api/v1/auth/status") {
       return Response.json(
@@ -49,7 +52,10 @@ const server = Bun.serve({
   },
 })
 const previousApiBase = process.env.OPENSCIENCE_API_BASE
+const previousDeadline = process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS
 process.env.OPENSCIENCE_API_BASE = server.url.toString()
+// A short deadline keeps the hung-service case fast; the module reads it once.
+process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = "400"
 const { OpenScience } = await import("../../src/openscience")
 const { SessionProcessor } = await import("../../src/session/processor")
 const { GlobalBus } = await import("../../src/bus/global")
@@ -85,6 +91,7 @@ function hold(paths = ALL) {
 
 beforeEach(async () => {
   fixture.requests = []
+  fixture.aborted = []
   fixture.gate = Promise.resolve()
   fixture.stall = new Set()
   fixture.status = 200
@@ -96,6 +103,8 @@ afterAll(async () => {
   server.stop(true)
   if (previousApiBase === undefined) delete process.env.OPENSCIENCE_API_BASE
   else process.env.OPENSCIENCE_API_BASE = previousApiBase
+  if (previousDeadline === undefined) delete process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS
+  else process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = previousDeadline
 })
 
 test("concurrent account surfaces share one in-flight status read", async () => {
@@ -300,4 +309,88 @@ test("the account and wallet routes serve the stored summary with its refresh st
   await OpenScience.clearSession()
   const out = (await (await account.request("/")).json()) as Record<string, unknown>
   expect(out).toMatchObject({ session: false, refreshing: false, refreshed_at: null, balance_usd: null })
+})
+
+test("a caller that leaves detaches without cancelling a read another caller still waits on", async () => {
+  const release = hold(["/api/v1/auth/status"])
+  const first = new AbortController()
+  const second = new AbortController()
+  const one = OpenScience.getAccountSummary({ signal: first.signal })
+  const two = OpenScience.getAccountSummary({ signal: second.signal })
+  await until(() => count("/api/v1/auth/status") === 1, "the shared status read")
+  first.abort()
+  await expect(one).rejects.toBeDefined()
+  await sleep(30)
+  // The second caller keeps the read alive; the account service saw nothing cancelled.
+  expect(fixture.aborted).toEqual([])
+  release()
+  expect((await two)?.credits?.balanceUsd).toBe(12)
+  expect(count("/api/v1/auth/status")).toBe(1)
+})
+
+test("the last caller to leave cancels the outbound account reads", async () => {
+  hold(["/api/v1/auth/status"])
+  const controller = new AbortController()
+  const pending = OpenScience.getAccountSummary({ signal: controller.signal })
+  await until(() => count("/api/v1/auth/status") === 1, "the stalled status read")
+  controller.abort()
+  await expect(pending).rejects.toBeDefined()
+  await until(() => fixture.aborted.includes("/api/v1/auth/status"), "the upstream cancellation")
+  expect(await Bun.file(snapshotFile).exists()).toBe(false)
+})
+
+test("one bounded deadline ends a hung account service and cancels its read", async () => {
+  hold(["/api/v1/auth/status"])
+  const started = Date.now()
+  await expect(OpenScience.getAccountSummary()).rejects.toBeDefined()
+  expect(Date.now() - started).toBeLessThan(OpenScience.ACCOUNT_DEADLINE_MS * 4)
+  await until(() => fixture.aborted.includes("/api/v1/auth/status"), "the upstream cancellation")
+  // Nothing was stored; the failure is recorded with its reason for the UI.
+  expect(await Bun.file(snapshotFile).exists()).toBe(false)
+  fixture.stall = new Set()
+  const recovered = await OpenScience.getAccountSummary()
+  expect(recovered?.credits?.balanceUsd).toBe(12)
+})
+
+test("a client leaving the account route cancels the outbound reads through the request signal", async () => {
+  const app = AccountRoutes()
+  const local = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => app.fetch(request) })
+  try {
+    hold(["/api/v1/auth/status"])
+    const controller = new AbortController()
+    const pending = fetch(new URL("/", local.url), { signal: controller.signal }).catch((error: Error) => error.name)
+    await until(() => count("/api/v1/auth/status") === 1, "the route's status read")
+    controller.abort()
+    expect(await pending).toBe("AbortError")
+    await until(() => fixture.aborted.includes("/api/v1/auth/status"), "the upstream cancellation")
+  } finally {
+    local.stop(true)
+  }
+})
+
+test("a background refresh outlives the request that served the stored summary", async () => {
+  await OpenScience.getAccountSummary()
+  OpenScience.invalidateBalance()
+  fixture.wallet = 3300
+  fixture.requests = []
+  const app = AccountRoutes()
+  const local = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => app.fetch(request) })
+  try {
+    const release = hold(["/api/v1/auth/status"])
+    const served = (await (await fetch(new URL("/", local.url))).json()) as Record<string, unknown>
+    expect(served).toMatchObject({ refreshing: true, balance_usd: 12 })
+    await until(() => count("/api/v1/auth/status") === 1, "the background status read")
+    // The request is complete and its socket idle; the background read must
+    // not be tied to it.
+    await sleep(50)
+    expect(fixture.aborted).toEqual([])
+    release()
+    await until(() => count("/api/v1/wallet") === 1, "the background wallet read")
+    await until(() => !!fixture.requests.length && fixture.aborted.length === 0, "settled")
+    await sleep(30)
+    const current = (await (await fetch(new URL("/", local.url))).json()) as Record<string, unknown>
+    expect(current).toMatchObject({ refreshing: false, balance_usd: 33 })
+  } finally {
+    local.stop(true)
+  }
 })

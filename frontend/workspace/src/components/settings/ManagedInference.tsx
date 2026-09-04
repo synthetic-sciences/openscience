@@ -9,6 +9,7 @@ import { settingsApi } from "./api"
 import { formatCreditBalance } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
 import { createAccountRecovery } from "./account-recovery"
+import { ACCOUNT_DEADLINE_MS } from "./account-deadline"
 
 export { formatCreditBalance, walletBalanceLabel } from "./credit-balance"
 
@@ -49,8 +50,6 @@ type Services = {
   }
   platform: Pick<ReturnType<typeof usePlatform>, "fetch" | "openLink">
 }
-
-const ACCOUNT_TIMEOUT_MS = 6_000
 
 export const canSelectManaged = (wallet: Wallet | undefined) =>
   Boolean(wallet?.signedIn && wallet.accessVerified === true && wallet.managedSupported && wallet.managedUnlocked)
@@ -122,7 +121,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   const fail = (error: unknown) => props.onError?.(reason(error))
   const recovery = createAccountRecovery<Wallet>({
     read: (signal) => settingsApi<Wallet>(sdk.url, fetchFn, "/settings/wallet?summary=true", { signal }),
-    timeoutMs: ACCOUNT_TIMEOUT_MS,
+    timeoutMs: ACCOUNT_DEADLINE_MS,
     active: () => document.visibilityState !== "hidden",
     loading: () => setState("account", "loading"),
     apply: (next) => {
