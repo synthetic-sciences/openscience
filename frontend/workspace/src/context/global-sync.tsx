@@ -452,6 +452,8 @@ function createGlobalSync() {
 
   /** Notify settings surfaces after any local provider credential changes. */
   const providerRefresh = createListeners()
+  /** Notify account surfaces once the server stored a newer Ace account summary. */
+  const accountRefresh = createListeners()
 
   /**
    * Re-read the provider catalog into every store that shows it. Bootstrap
@@ -934,6 +936,12 @@ function createGlobalSync() {
           void refreshProviders().catch((error) => console.error("Failed to refresh providers", { error }))
           return
         }
+        case "account.updated": {
+          // A background refresh stored a newer account summary. Surfaces that
+          // showed the previous one re-read it; nothing here is awaited.
+          void accountRefresh.notifyAfter(() => Promise.resolve())
+          return
+        }
         case "skill.updated": {
           const version = ++skillRefreshVersion
           void globalSDK.client.global.config
@@ -1403,6 +1411,7 @@ function createGlobalSync() {
     },
     refreshProviders,
     onProvidersRefreshed: providerRefresh.add,
+    onAccountRefreshed: accountRefresh.add,
     project: {
       loadSessions,
       resolve: resolveProject,

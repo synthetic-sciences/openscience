@@ -39,6 +39,11 @@ type FundingContext = {
 
 type Account = {
   session: boolean
+  /** True when these are the stored values and the server is reading newer ones. */
+  refreshing?: boolean
+  refreshed_at?: number | null
+  /** Why the server's latest refresh failed while stored values are shown. */
+  error?: string
   user?: Record<string, unknown> & { email?: string }
   balance_usd: number | null
   funding_context: FundingContext
@@ -197,6 +202,9 @@ export default function General() {
     }
   }
 
+  // The server stored a newer summary after serving the previous one; the
+  // re-read keeps the current values on screen until the new ones land.
+  const unsubscribeAccount = sync.onAccountRefreshed(refreshAccount)
   onMount(() => {
     refreshAccount()
     window.addEventListener("focus", refreshAccount)
@@ -205,6 +213,7 @@ export default function General() {
   onCleanup(() => {
     window.removeEventListener("focus", refreshAccount)
     window.removeEventListener("openscience:account-changed", refreshAccount)
+    unsubscribeAccount()
   })
 
   const email = () => {
@@ -214,7 +223,8 @@ export default function General() {
   }
   const wallet = () => {
     if (!account()) return error() ? "Unavailable" : "Checking…"
-    return walletBalanceLabel({ signedIn: account()!.session, balanceUsd: account()!.balance_usd })
+    const label = walletBalanceLabel({ signedIn: account()!.session, balanceUsd: account()!.balance_usd })
+    return account()!.refreshing ? `${label} · Refreshing…` : label
   }
 
   // Context rows read and write the effective compaction settings the backend serves

@@ -32,6 +32,11 @@ type Wallet = {
     processingFeeDisclosedSeparately: boolean
     reloadControlledByAce: boolean
   }
+  /** True when these are the stored values and the server is reading newer ones. */
+  refreshing?: boolean
+  refreshedAt?: number | null
+  /** Why the server's latest refresh failed while stored values are shown. */
+  error?: string
 }
 type AccountStatus = "idle" | "loading" | "ready" | "error"
 type Services = {
@@ -40,6 +45,7 @@ type Services = {
     data: { config: { billing?: { llm?: Mode | null } } }
     refreshProviders: () => Promise<void>
     onProvidersRefreshed: (callback: () => void) => () => void
+    onAccountRefreshed: (callback: () => void) => () => void
   }
   platform: Pick<ReturnType<typeof usePlatform>, "fetch" | "openLink">
 }
@@ -120,11 +126,17 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     active: () => document.visibilityState !== "hidden",
     loading: () => setState("account", "loading"),
     apply: (next) => {
+      // Stored values arrive at once (possibly marked `refreshing`); the
+      // server announces the newer summary and this surface re-reads it.
       setState("wallet", next)
       setState("account", accountUnavailable(next) ? "error" : "ready")
       if (!state.saving && next.billingMode) setState("mode", normalizeMode(next.billingMode))
       props.onError?.(
-        accountUnavailable(next) ? "Account refresh temporarily unavailable. Retrying automatically." : undefined,
+        accountUnavailable(next)
+          ? "Account refresh temporarily unavailable. Retrying automatically."
+          : next.error
+            ? `Showing the last known account state. ${next.error}`
+            : undefined,
       )
     },
     failed: (error) => {
@@ -133,7 +145,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
       setState("wallet", undefined)
       fail(error)
     },
-    retry: accountUnavailable,
+    retry: (next) => accountUnavailable(next) || next.error !== undefined,
   })
   const loadWallet = recovery.load
   const loadBilling = () => {
@@ -224,6 +236,9 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   }
 
   const unsubscribe = globalSync.onProvidersRefreshed(() => void loadBilling())
+  // The server stored a newer summary after serving the previous one; the
+  // re-read keeps the current values on screen until the new ones land.
+  const unsubscribeAccount = globalSync.onAccountRefreshed(() => void loadWallet())
   onMount(() => {
     refresh()
     window.addEventListener("focus", refresh)
@@ -239,6 +254,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     document.removeEventListener("visibilitychange", resumed)
     window.removeEventListener("openscience:account-changed", accountChanged)
     unsubscribe()
+    unsubscribeAccount()
   })
 
   const managedUnavailable = () => state.wallet !== undefined && !canSelectManaged(state.wallet)
@@ -312,8 +328,15 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
           <div class="models-routing__account">
             <dl class="models-routing__wallet">
               <dt>Purchased Wallet</dt>
-              <dd aria-live="polite" class="models-account-summary__balance">
+              <dd
+                aria-live="polite"
+                class="models-account-summary__balance"
+                data-refreshing={state.wallet?.refreshing ? "true" : undefined}
+              >
                 {balanceLabel()}
+                <Show when={state.wallet?.refreshing}>
+                  <span class="models-routing__sync"> Refreshing…</span>
+                </Show>
               </dd>
             </dl>
             <Button

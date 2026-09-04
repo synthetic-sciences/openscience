@@ -1,9 +1,17 @@
 import { afterAll, beforeEach, expect, test } from "bun:test"
+import path from "node:path"
 
 // Every account surface reads the same status, entitlement and wallet
 // endpoints. These tests count the outbound requests one real session
-// produces while several surfaces ask at once.
-const fixture = { requests: [] as string[], gate: Promise.resolve() }
+// produces while several surfaces ask at once, and exercise the stored
+// account summary those surfaces are served from.
+const fixture = {
+  requests: [] as string[],
+  gate: Promise.resolve(),
+  stall: new Set<string>(),
+  status: 200,
+  wallet: 1200,
+}
 const headers = { "OpenScience-Funding-Protocol": "1", "OpenScience-Funding-Context": "personal" }
 const server = Bun.serve({
   hostname: "127.0.0.1",
@@ -11,7 +19,7 @@ const server = Bun.serve({
   async fetch(request) {
     const pathname = new URL(request.url).pathname
     fixture.requests.push(pathname)
-    await fixture.gate
+    if (fixture.stall.has(pathname)) await fixture.gate
     if (pathname === "/api/v1/auth/status") {
       return Response.json(
         {
@@ -20,19 +28,23 @@ const server = Bun.serve({
           api_key: {},
           funding_context: { type: "personal" },
         },
-        { headers },
+        { status: fixture.status, headers },
       )
     }
     if (pathname === "/api/cli/access") {
       return Response.json(
-        { cli_balance_cents: 1200, managed_supported: true, managed_unlocked: true, ace_enabled: false },
+        { cli_balance_cents: fixture.wallet, managed_supported: true, managed_unlocked: true, ace_enabled: false },
         { headers },
       )
     }
     if (pathname === "/api/v1/wallet") {
-      return Response.json({ balance_cents: 1200, purchased_cents: 1200, lifetime_spent_cents: 0 }, { headers })
+      return Response.json(
+        { balance_cents: fixture.wallet, purchased_cents: fixture.wallet, lifetime_spent_cents: 0 },
+        { headers },
+      )
     }
-    if (pathname === "/api/cli/balance") return Response.json({ effective_balance_usd: 12 }, { headers })
+    if (pathname === "/api/cli/balance")
+      return Response.json({ effective_balance_usd: fixture.wallet / 100 }, { headers })
     return new Response(null, { status: 404 })
   },
 })
@@ -40,8 +52,14 @@ const previousApiBase = process.env.OPENSCIENCE_API_BASE
 process.env.OPENSCIENCE_API_BASE = server.url.toString()
 const { OpenScience } = await import("../../src/openscience")
 const { SessionProcessor } = await import("../../src/session/processor")
+const { GlobalBus } = await import("../../src/bus/global")
+const { Global } = await import("../../src/global")
+const { AccountRoutes } = await import("../../src/server/routes/account")
+const { WalletSettingsRoutes } = await import("../../src/server/routes/settings/wallet")
 
+const ALL = ["/api/v1/auth/status", "/api/cli/access", "/api/v1/wallet", "/api/cli/balance"]
 const session = { api_key: "thk_fixture_shared_status", user_id: "user_shared", workspace_locked: true }
+const snapshotFile = path.join(Global.Path.data, "openscience-account-snapshot.json")
 const count = (pathname: string) => fixture.requests.filter((item) => item === pathname).length
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -54,16 +72,23 @@ async function until(check: () => boolean, what: string) {
   throw new Error(`timed out waiting for ${what}`)
 }
 
-/** Stall every response until the returned release runs. */
-function hold() {
+/** Stall the given endpoints until the returned release runs. */
+function hold(paths = ALL) {
   const { promise, resolve } = Promise.withResolvers<void>()
   fixture.gate = promise
-  return resolve
+  fixture.stall = new Set(paths)
+  return () => {
+    fixture.stall = new Set()
+    resolve()
+  }
 }
 
 beforeEach(async () => {
   fixture.requests = []
   fixture.gate = Promise.resolve()
+  fixture.stall = new Set()
+  fixture.status = 200
+  fixture.wallet = 1200
   await OpenScience.saveSession(session)
 })
 afterAll(async () => {
@@ -98,6 +123,7 @@ test("concurrent account surfaces share one in-flight status read", async () => 
 test("the reconciled state carries the profile so summaries do not read status twice", async () => {
   const state = await OpenScience.getReconciledFundingState()
   expect(state?.user).toEqual({ user_id: "user_shared", email: "shared@example.com" })
+  expect(state?.verified).toBe(true)
   expect(count("/api/v1/auth/status")).toBe(1)
 })
 
@@ -151,4 +177,127 @@ test("a summary wallet read and a full wallet read stay separate flights", async
   release()
   await pending
   expect(count("/api/v1/wallet")).toBe(2)
+})
+
+test("stores the first summary, serves it at once and refreshes a stale one in the background", async () => {
+  const updates: number[] = []
+  const listener = (event: { payload: { type: string; properties: { refreshed_at?: number } } }) => {
+    if (event.payload.type === "account.updated") updates.push(event.payload.properties.refreshed_at ?? 0)
+  }
+  GlobalBus.on("event", listener)
+  try {
+    // Nothing is stored yet, so the first read waits for the account service.
+    const first = await OpenScience.getAccountSummary()
+    expect(first).toMatchObject({ refreshing: false, user: { email: "shared@example.com" } })
+    expect(first?.credits?.balanceUsd).toBe(12)
+    expect(first?.billing?.managed_unlocked).toBe(true)
+    expect(updates).toHaveLength(1)
+    expect(fixture.requests.sort()).toEqual(["/api/cli/access", "/api/v1/auth/status", "/api/v1/wallet"])
+    const stored = await Bun.file(snapshotFile).json()
+    expect(stored.key_fingerprint).toHaveLength(64)
+    expect(JSON.stringify(stored)).not.toContain(session.api_key)
+
+    // A recent summary is current: served with no account read at all.
+    fixture.requests = []
+    expect((await OpenScience.getAccountSummary())?.refreshing).toBe(false)
+    expect(fixture.requests).toEqual([])
+
+    // A spend makes it stale: it is still served at once, while the account
+    // service is slow, and replaced in the background.
+    OpenScience.invalidateBalance()
+    fixture.wallet = 2500
+    const release = hold()
+    const stale = await OpenScience.getAccountSummary()
+    expect(stale?.refreshing).toBe(true)
+    expect(stale?.credits?.balanceUsd).toBe(12)
+    expect((await OpenScience.getAccountSummary())?.refreshing).toBe(true)
+    await until(() => count("/api/v1/auth/status") === 1, "the background status read")
+    release()
+    await until(() => updates.length === 2, "the account.updated announcement")
+    const current = await OpenScience.getAccountSummary()
+    expect(current?.refreshing).toBe(false)
+    expect(current?.credits?.balanceUsd).toBe(25)
+    expect(current?.at).toBe(updates[1])
+  } finally {
+    GlobalBus.off("event", listener)
+  }
+})
+
+test("a failed refresh keeps the last good summary and reports why", async () => {
+  const good = await OpenScience.getAccountSummary()
+  expect(good?.credits?.balanceUsd).toBe(12)
+  OpenScience.invalidateBalance()
+  fixture.status = 503
+  fixture.requests = []
+  const stale = await OpenScience.getAccountSummary()
+  expect(stale?.refreshing).toBe(true)
+  expect(stale?.error).toBeUndefined()
+  await until(() => count("/api/v1/auth/status") === 1, "the failing status read")
+  await sleep(50)
+  const failed = await OpenScience.getAccountSummary()
+  expect(failed?.refreshing).toBe(false)
+  expect(failed?.error).toContain("unavailable")
+  expect(failed?.credits?.balanceUsd).toBe(12)
+  expect(failed?.user?.email).toBe("shared@example.com")
+  // The failure backs off: another open panel does not hammer the service.
+  await OpenScience.getAccountSummary()
+  expect(count("/api/v1/auth/status")).toBe(1)
+  expect(await Bun.file(snapshotFile).exists()).toBe(true)
+})
+
+test("a stored summary belongs to one account and is dropped on a new sign-in", async () => {
+  await OpenScience.getAccountSummary()
+  expect(await Bun.file(snapshotFile).exists()).toBe(true)
+  await OpenScience.saveSession({
+    api_key: "thk_fixture_other_account",
+    user_id: "user_shared",
+    workspace_locked: true,
+  })
+  expect(await Bun.file(snapshotFile).exists()).toBe(false)
+  const other = (await OpenScience.getFundingSnapshot())!
+  expect(await OpenScience.readAccountSnapshot(other)).toBeNull()
+  // With nothing stored, the new account's first summary waits for the service.
+  hold()
+  const pending = OpenScience.getAccountSummary()
+  expect(await Promise.race([pending, sleep(50).then(() => "pending")])).toBe("pending")
+  await OpenScience.clearSession()
+  expect(await Bun.file(snapshotFile).exists()).toBe(false)
+})
+
+test("refuses to store a summary after the selected account changed mid-refresh", async () => {
+  const before = (await OpenScience.getFundingSnapshot())!
+  const release = hold(["/api/v1/wallet"])
+  const pending = OpenScience.refreshAccount(before)
+  await until(() => count("/api/v1/wallet") === 1, "the stalled wallet read")
+  await OpenScience.saveSession({ ...session, user_id: "user_switched" })
+  release()
+  await expect(pending).rejects.toThrow("selected account changed")
+  expect(await Bun.file(snapshotFile).exists()).toBe(false)
+})
+
+test("the account and wallet routes serve the stored summary with its refresh state", async () => {
+  const account = AccountRoutes()
+  const wallet = WalletSettingsRoutes()
+  const first = (await (await account.request("/")).json()) as Record<string, unknown>
+  expect(first).toMatchObject({
+    session: true,
+    refreshing: false,
+    balance_usd: 12,
+    user: { email: "shared@example.com" },
+    funding_context: { type: "personal", available: true },
+  })
+  expect(typeof first.refreshed_at).toBe("number")
+
+  OpenScience.invalidateBalance()
+  fixture.requests = []
+  const release = hold()
+  const summary = (await (await wallet.request("/?summary=true")).json()) as Record<string, unknown>
+  expect(summary).toMatchObject({ signedIn: true, refreshing: true, balanceUsd: 12, managedUnlocked: true })
+  expect(summary.refreshedAt).toBe(first.refreshed_at)
+  release()
+  await until(() => count("/api/v1/wallet") === 1, "the background refresh")
+
+  await OpenScience.clearSession()
+  const out = (await (await account.request("/")).json()) as Record<string, unknown>
+  expect(out).toMatchObject({ session: false, refreshing: false, refreshed_at: null, balance_usd: null })
 })

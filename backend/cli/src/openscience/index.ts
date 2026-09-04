@@ -3,7 +3,10 @@ import path from "node:path"
 import fs from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { createHash, randomUUID } from "node:crypto"
+import z from "zod"
 import { Auth } from "@/auth"
+import { BusEvent } from "@/bus/bus-event"
+import { GlobalBus } from "@/bus/global"
 import { CredentialLifecycle } from "@/credentials/lifecycle"
 import { isAtlasManagedKey, isWorkspaceKey } from "@/credentials/managed-key"
 import { Global } from "@/global"
@@ -212,6 +215,13 @@ export class InsufficientCreditsError extends Error {
 
 const SESSION_PATH = path.join(Global.Path.data, "openscience-session.json")
 const SCOPE_PATH = path.join(Global.Path.data, "openscience-workspace-scope.json")
+const SNAPSHOT_PATH = path.join(Global.Path.data, "openscience-account-snapshot.json")
+// A persisted account summary younger than this is served as current; an
+// older one is served at once and refreshed in the background.
+const ACCOUNT_SNAPSHOT_TTL_MS = 30_000
+// After a failed refresh the stored summary is served without a new attempt
+// for this long, so a down account service is not hammered by every open panel.
+const ACCOUNT_RETRY_MS = 5_000
 const FUNDING_PROTOCOL = "1"
 const FUNDING_PROTOCOL_HEADER = "OpenScience-Funding-Protocol"
 const FUNDING_CONTEXT_HEADER = "OpenScience-Funding-Context"
@@ -507,6 +517,9 @@ export namespace OpenScience {
       using _ = await Lock.write(SESSION_PATH)
       await writeWorkspaceScope(session)
       await atomicWrite(SESSION_PATH, JSON.stringify(session, null, 2))
+      // A summary belongs to one account and funding context; never let a
+      // newly connected account inherit the previous one's stored profile.
+      await fs.rm(SNAPSHOT_PATH, { force: true }).catch(() => undefined)
     })
     invalidateBalance()
     const { Provider } = await import("@/provider/provider")
@@ -589,6 +602,7 @@ export namespace OpenScience {
       if (expectedApiKey && (await getSession())?.api_key !== expectedApiKey) return false
       await fs.rm(SESSION_PATH, { force: true })
       await fs.rm(SCOPE_PATH, { force: true })
+      await fs.rm(SNAPSHOT_PATH, { force: true })
       await WorkspaceCredentials.clear()
       return true
     }
@@ -1111,6 +1125,8 @@ export namespace OpenScience {
     context: FundingContext
     /** The profile the status read returned, so summaries do not read it twice. */
     user?: AccountProfile
+    /** Whether the status read succeeded and matched this session. */
+    verified: boolean
   }
 
   export async function getReconciledFundingState(): Promise<FundingState | null> {
@@ -1126,7 +1142,12 @@ export namespace OpenScience {
         current.organization_id === snapshot.organization_id &&
         current.workspace_locked === snapshot.workspace_locked
       ) {
-        return { snapshot: current, context, ...(status?.user ? { user: status.user } : {}) }
+        return {
+          snapshot: current,
+          context,
+          verified: status !== null,
+          ...(status?.user ? { user: status.user } : {}),
+        }
       }
       if (!retries) return null
       return read(current, retries - 1)
@@ -1339,6 +1360,7 @@ export namespace OpenScience {
     return [
       path.join(Global.Path.data, "openscience-session.json"),
       path.join(Global.Path.data, "openscience-workspace-scope.json"),
+      SNAPSHOT_PATH,
       path.join(Global.Path.data, "auth.json"),
       path.join(Global.Path.data, "credentials.json"),
       path.join(Global.Path.data, "credentials.key"),
@@ -1428,6 +1450,9 @@ export namespace OpenScience {
   export function invalidateBalance(): void {
     balanceRevision++
     pendingBalance = undefined
+    // The stored account summary carries the same balance, so it is served
+    // as stale (and refreshed in the background) from here on.
+    accountStale = Date.now()
     if (!cachedBalance) return
     if (cachedBalance.value <= 0) {
       cachedBalance = null
@@ -1615,6 +1640,21 @@ export namespace OpenScience {
     }
   }
 
+  /** The routing preference is local (config, stored keys, env), so it is
+   * computed at read time and never taken from a stored account summary. */
+  async function localBillingMode(
+    config: Pick<typeof import("@/config/config").Config, "getGlobal">,
+  ): Promise<BillingMode["mode"]> {
+    const configured = (await config.getGlobal()).billing?.llm
+    if (configured === "managed") return "managed"
+    if (configured === "byok") return "byok"
+    const openrouterAuth = await Auth.get("openrouter").catch(() => undefined)
+    const storedOwnKey = openrouterAuth?.type === "api" && !isAtlasManagedKey(openrouterAuth.key)
+    const envOpenRouterKey = process.env.OPENROUTER_API_KEY
+    const envOwnKey = !!envOpenRouterKey && !isAtlasManagedKey(envOpenRouterKey)
+    return storedOwnKey || envOwnKey ? "byok" : "managed"
+  }
+
   /** The entitlement check, shared by every concurrent caller in one context. */
   function readAccess(session: FundingSnapshot, timeoutMs: number): Promise<AccessRead> {
     return share(flightKey("access", session), async () => {
@@ -1655,11 +1695,6 @@ export namespace OpenScience {
       knownCredits === undefined ? getCredits(session).catch(() => null) : Promise.resolve(knownCredits),
     ])
     const access = accessRead.body
-    const configured = (await configModule.Config.getGlobal()).billing?.llm
-    const openrouterAuth = await Auth.get("openrouter").catch(() => undefined)
-    const storedOwnKey = openrouterAuth?.type === "api" && !isAtlasManagedKey(openrouterAuth.key)
-    const envOpenRouterKey = process.env.OPENROUTER_API_KEY
-    const envOwnKey = !!envOpenRouterKey && !isAtlasManagedKey(envOpenRouterKey)
     const balance = credits?.balanceCents ?? access?.cli_balance_cents ?? 0
     const denied = accessRead.status === 401 || accessRead.status === 403
     const verified =
@@ -1667,8 +1702,7 @@ export namespace OpenScience {
       (accessRead.ok && typeof access?.managed_unlocked === "boolean" && typeof access.managed_supported === "boolean")
     const supported = !denied && access?.managed_supported === true
     return {
-      mode:
-        configured === "managed" ? "managed" : configured === "byok" || storedOwnKey || envOwnKey ? "byok" : "managed",
+      mode: await localBillingMode(configModule.Config),
       balance_cents: balance,
       balance_usd: balance / 100,
       managed_supported: supported,
@@ -1692,6 +1726,215 @@ export namespace OpenScience {
   }
 
   export async function waitForBillingModeMirror(): Promise<void> {}
+
+  // ---- Stored account summary ----------------------------------------------
+  // The last good account summary is persisted (data dir, mode 0600) so the UI
+  // can show it at once and refresh it in the background. It holds the
+  // profile, funding context, wallet and entitlement the account service
+  // returned; never the API key, which is bound by fingerprint only.
+
+  export interface AccountSnapshot {
+    /** When the summary was read from the account service (ms since epoch). */
+    at: number
+    user?: AccountProfile
+    context: FundingContext
+    credits: Credits | null
+    billing: BillingMode | null
+  }
+
+  export interface AccountSummary extends AccountSnapshot {
+    /** True while a newer summary is being read in the background. */
+    refreshing: boolean
+    /** Why the latest refresh failed, when the stored summary is served instead. */
+    error?: string
+  }
+
+  /** Published when a background refresh stored a newer summary. */
+  export const AccountUpdatedEvent = BusEvent.define("account.updated", z.object({ refreshed_at: z.number() }))
+
+  const StoredOrganization = z.object({
+    organization_id: z.string(),
+    name: z.string(),
+    slug: z.string(),
+    is_personal: z.boolean(),
+    status: z.string(),
+    role: z.string(),
+    membership_status: z.string(),
+    funding_available: z.boolean(),
+    effective_permissions: z.array(z.string()),
+  })
+  const StoredContext = z.object({
+    type: z.enum(["personal", "organization"]),
+    organization_id: z.string().optional(),
+    available: z.boolean(),
+    locked: z.boolean(),
+    organizations: z.array(StoredOrganization),
+  })
+  const StoredCredits = z.object({
+    balanceUsd: z.number(),
+    balanceRedacted: z.boolean().optional(),
+    balanceCents: z.number(),
+    cliBalanceCents: z.number(),
+    spendableBalanceCents: z.number(),
+    promotionalBalanceCents: z.number(),
+    cycleCreditsRemainingCents: z.number(),
+    lifetimeSpentCents: z.number().nullable(),
+  })
+  const StoredBilling = z.object({
+    mode: z.enum(["byok", "managed"]),
+    balance_cents: z.number(),
+    balance_usd: z.number(),
+    managed_supported: z.boolean(),
+    managed_unlocked: z.boolean(),
+    ace_enabled: z.boolean().optional(),
+    balance_redacted: z.boolean().optional(),
+    balance_verified: z.boolean().optional(),
+    access_verified: z.boolean().optional(),
+  })
+  const StoredSnapshot = z.object({
+    protocol: z.literal(1),
+    key_fingerprint: z.string(),
+    user_id: z.string(),
+    organization_id: z.string().optional(),
+    at: z.number(),
+    user: z.record(z.string(), z.unknown()).optional(),
+    context: StoredContext,
+    credits: StoredCredits.nullable(),
+    billing: StoredBilling.nullable(),
+  })
+
+  // Summaries read before this instant are served as stale (a spend or a
+  // credential change happened since).
+  let accountStale = 0
+  let accountFailure: { context: string; at: number; error: string } | undefined
+
+  function sameSnapshot(a: FundingSnapshot, b: FundingSnapshot): boolean {
+    return (
+      a.api_key === b.api_key &&
+      a.user_id === b.user_id &&
+      a.organization_id === b.organization_id &&
+      a.workspace_locked === b.workspace_locked
+    )
+  }
+
+  /** The stored summary, only when it belongs to this exact account and context. */
+  export async function readAccountSnapshot(session: FundingSnapshot): Promise<AccountSnapshot | null> {
+    if (!existsSync(SNAPSHOT_PATH)) return null
+    const parsed = StoredSnapshot.safeParse(
+      await Bun.file(SNAPSHOT_PATH)
+        .json()
+        .catch(() => undefined),
+    )
+    if (!parsed.success) return null
+    const stored = parsed.data
+    if (stored.key_fingerprint !== keyFingerprint(session.api_key)) return null
+    if (stored.user_id !== session.user_id || stored.organization_id !== session.organization_id) return null
+    return {
+      at: stored.at,
+      ...(stored.user ? { user: stored.user as AccountProfile } : {}),
+      context: stored.context,
+      credits: stored.credits,
+      billing: stored.billing,
+    }
+  }
+
+  async function writeAccountSnapshot(session: FundingSnapshot, snapshot: AccountSnapshot): Promise<void> {
+    await atomicWrite(
+      SNAPSHOT_PATH,
+      JSON.stringify({
+        protocol: 1,
+        key_fingerprint: keyFingerprint(session.api_key),
+        user_id: session.user_id,
+        ...(session.organization_id ? { organization_id: session.organization_id } : {}),
+        ...snapshot,
+      } satisfies z.input<typeof StoredSnapshot>),
+    )
+  }
+
+  /** Read a fresh summary from the account service, store it and announce it.
+   * Shared by every concurrent caller in one funding context. Throws when the
+   * account status is unavailable or the selected account changed meanwhile,
+   * so a stored summary is never overwritten by an incomplete read. */
+  export function refreshAccount(session: FundingSnapshot): Promise<AccountSnapshot> {
+    return share(flightKey("account", session), () => fetchAccount(session))
+  }
+
+  async function fetchAccount(session: FundingSnapshot): Promise<AccountSnapshot> {
+    const context = contextTag(session)
+    try {
+      const state = await getReconciledFundingState()
+      if (!state) throw new Error("Sign in again to refresh the Ace account.")
+      if (!state.verified) throw new Error("The Ace account service is unavailable. Retry when connected.")
+      const creditsRequest = getCredits(state.snapshot)
+      const [credits, billing] = await Promise.all([creditsRequest, getBillingMode(state.snapshot, creditsRequest)])
+      const current = await getFundingSnapshot()
+      if (!current || !sameSnapshot(current, state.snapshot)) {
+        throw new Error("The selected account changed while refreshing. Retry.")
+      }
+      const snapshot: AccountSnapshot = {
+        at: Date.now(),
+        ...(state.user ? { user: state.user } : {}),
+        context: state.context,
+        credits,
+        billing,
+      }
+      await writeAccountSnapshot(current, snapshot)
+      if (accountFailure?.context === context) accountFailure = undefined
+      GlobalBus.emit("event", {
+        directory: "global",
+        payload: { type: AccountUpdatedEvent.type, properties: { refreshed_at: snapshot.at } },
+      })
+      return snapshot
+    } catch (error) {
+      accountFailure = {
+        context,
+        at: Date.now(),
+        error: error instanceof Error ? error.message : "Account refresh failed. Try again.",
+      }
+      throw error
+    }
+  }
+
+  async function accountSummary(
+    snapshot: AccountSnapshot,
+    refreshing: boolean,
+    error?: string,
+  ): Promise<AccountSummary> {
+    const { Config } = await import("@/config/config")
+    const mode = await localBillingMode(Config)
+    return {
+      ...snapshot,
+      billing: snapshot.billing ? { ...snapshot.billing, mode } : null,
+      refreshing,
+      ...(error ? { error } : {}),
+    }
+  }
+
+  /** The account summary the UI shows. Null when signed out. A stored summary
+   * is returned at once: as current while it is recent, otherwise marked
+   * `refreshing` while a background read replaces it. Only the first read of
+   * an account, with nothing stored yet, waits for the account service. */
+  export async function getAccountSummary(): Promise<AccountSummary | null> {
+    const session = await getFundingSnapshot()
+    if (!session) return null
+    const cached = await readAccountSnapshot(session)
+    const now = Date.now()
+    // Strict: a summary stored in the same millisecond as a spend is treated
+    // as stale, which costs one background read instead of a wrong verdict.
+    if (cached && cached.at > accountStale && now - cached.at < ACCOUNT_SNAPSHOT_TTL_MS) {
+      return accountSummary(cached, false)
+    }
+    const failure = accountFailure?.context === contextTag(session) ? accountFailure : undefined
+    if (cached && failure && failure.at > cached.at && now - failure.at < ACCOUNT_RETRY_MS) {
+      return accountSummary(cached, false, failure.error)
+    }
+    const refresh = refreshAccount(session)
+    if (!cached) return accountSummary(await refresh, false)
+    // Nobody waits on the background read here; the result is announced on
+    // the global bus and the next summary read serves it.
+    refresh.catch(() => undefined)
+    return accountSummary(cached, true, failure?.error)
+  }
 
   export async function reportUsage(
     _params: Record<string, unknown>,

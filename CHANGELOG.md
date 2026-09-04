@@ -67,6 +67,12 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   cached balance check; only a legacy unscoped session still reconciles its
   workspace first, and the gateway's funding echo is still verified before
   anything is charged.
+- Persisted the last good Ace account summary (profile, funding context,
+  wallet and entitlement; never the key) in the data directory and served it
+  to the Ace and account panels at once, marked `refreshing` while a newer
+  one is read in the background and announced as `account.updated`. A panel
+  no longer shows a spinner for the account service when a summary exists,
+  and a failed refresh keeps the last good values with the reason.
 - Unified loading, empty, alert, and control styling across Customize panels,
   moved Credentials under Capabilities, renamed Security & access to
   Permissions, and gave Local models inline errors and skeleton rows.
