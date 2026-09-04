@@ -511,6 +511,10 @@ function createGlobalSync() {
   }
 
   const booting = new Map<string, Promise<void>>()
+  // Scopes being warmed for a project nobody opened. A failure there is
+  // logged, never shown: the launch screen must not toast about a folder the
+  // user did not ask for, and the project stays untouched for an explicit open.
+  const warming = new Set<string>()
   // Directories whose runtime was actually bootstrapped. Child stores also
   // exist for Home cards, sidebar entries and notification lookups; those never
   // issue a project-scoped request and must stay metadata-only.
@@ -530,7 +534,7 @@ function createGlobalSync() {
 
   // One report per page load closes the server's startup timing line
   // (listening, first instance, interactive) in the sidecar log.
-  const startup = { reported: false }
+  const startup = { reported: false, warmed: false }
   function interactive(phase: "home" | "project") {
     if (startup.reported) return
     startup.reported = true
@@ -546,12 +550,16 @@ function createGlobalSync() {
 
   // The Home route bootstraps nothing. Warm the project the user last worked
   // in once the launch screen has painted so opening it does not wait on the
-  // server instance; a project route already owns its own bootstrap.
+  // server instance; a project route already owns its own bootstrap. Once per
+  // page load: a reconnect re-pushes whatever was opened, and a warmup that
+  // failed must not be retried on every reconnect.
   function prefetch() {
+    if (startup.warmed) return
+    startup.warmed = true
     if (requested.size !== 0) return
     const project = recentProject(globalStore.project)
     if (!project) return
-    void bootstrapInstance(project.worktree, project.id)
+    void bootstrapInstance(project.worktree, project.id, "warm")
   }
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
@@ -766,12 +774,17 @@ function createGlobalSync() {
     return promise
   }
 
-  async function bootstrapInstance(directory: string, projectID?: string) {
+  async function bootstrapInstance(directory: string, projectID?: string, mode: "open" | "warm" = "open") {
     if (!directory) return
     requested.add(directory)
     const key = scopeFor(directory, projectID)
     const pending = booting.get(key)
-    if (pending) return pending
+    if (pending) {
+      // An explicit open joining a warmup owns its failure from here on.
+      if (mode === "open") warming.delete(key)
+      return pending
+    }
+    if (mode === "warm") warming.add(key)
 
     const promise = (async () => {
       const [store, setStore] = ensureChild(directory, projectID)
@@ -796,6 +809,14 @@ function createGlobalSync() {
       try {
         await Promise.all(Object.values(blockingRequests).map((p) => retry(p)))
       } catch (err) {
+        if (warming.has(key)) {
+          console.warn("Failed to warm project", { directory, error: err })
+          // Back to untouched: an explicit open bootstraps again, and the
+          // reconnect and catalog fan-outs skip this directory until it does.
+          setStore("status", "loading")
+          requested.delete(directory)
+          return
+        }
         console.error("Failed to bootstrap instance", err)
         const project = getFilename(directory)
         const message = syncErrorMessage(err)
@@ -897,6 +918,7 @@ function createGlobalSync() {
     booting.set(key, promise)
     promise.finally(() => {
       booting.delete(key)
+      warming.delete(key)
     })
     return promise
   }

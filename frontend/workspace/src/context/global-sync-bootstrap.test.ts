@@ -24,15 +24,21 @@ const serverContext = (await server.ssrLoadModule("/src/context/server.tsx")) as
 const language = (await server.ssrLoadModule("/src/context/language.tsx")) as typeof import("./language")
 const globalSdk = (await server.ssrLoadModule("/src/context/global-sdk.tsx")) as typeof import("./global-sdk")
 const subject = (await server.ssrLoadModule("/src/context/global-sync.tsx")) as typeof import("./global-sync")
+// The same module instance the subject toasts through, so a mounted region
+// shows exactly what the user would see.
+const toast = (await server.ssrLoadModule("@synsci/ui/toast")) as typeof import("@synsci/ui/toast")
 
 const cleanups: Array<() => void> = []
 
 afterAll(() => server.close())
 afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup())
+  toast.toaster.clear()
   document.body.replaceChildren()
   globalThis.localStorage?.clear()
 })
+
+const toasts = () => document.querySelectorAll('[data-component="toast"]')
 
 const origin = "http://127.0.0.1:4096"
 // The server's own worktree: the install catalog is read through it during the
@@ -48,10 +54,13 @@ type Hit = { path: string; directory?: string; project?: string; body?: Record<s
 /**
  * The server as the workspace sees it: every route the bootstrap touches,
  * a global event stream the test can push events into, and a record of the
- * project selector each request carried.
+ * project selector each request carried. Requests scoped to a directory in
+ * `broken` fail the way the server's directory validation does for a folder
+ * that no longer exists.
  */
 function createFakeServer(projects: Project[]) {
   const hits: Hit[] = []
+  const broken = new Set<string>()
   const encoder = new TextEncoder()
   const events = { controller: undefined as ReadableStreamDefaultController<Uint8Array> | undefined }
   const frame = (event: unknown) => encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
@@ -64,6 +73,12 @@ function createFakeServer(projects: Project[]) {
     const selector = request.headers.get("x-openscience-project") ?? undefined
     const body = url.pathname === "/log" ? ((await request.json()) as Record<string, unknown>) : undefined
     hits.push({ path: url.pathname, directory, project: selector, body })
+    if (directory && broken.has(directory)) {
+      return new Response(JSON.stringify({ name: "ProjectDirectoryError", data: { directory } }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      })
+    }
     switch (url.pathname) {
       case "/global/health":
         return json({ healthy: true, version: "test", sourceSha: null, sourceWorktreeHash: null, runId: "run" })
@@ -116,6 +131,7 @@ function createFakeServer(projects: Project[]) {
   }) as typeof globalThis.fetch
   return {
     hits,
+    broken,
     fetch,
     emit(payload: unknown) {
       events.controller?.enqueue(frame({ directory: "global", payload }))
@@ -142,7 +158,8 @@ function mount(fetch: typeof globalThis.fetch) {
     captured = subject.useGlobalSync()
     return null
   }
-  const tree = () =>
+  const tree = () => [
+    web.createComponent(toast.Toast.Region, {}),
     web.createComponent(platform.PlatformProvider, {
       value,
       get children() {
@@ -165,7 +182,8 @@ function mount(fetch: typeof globalThis.fetch) {
           },
         })
       },
-    })
+    }),
+  ]
   cleanups.push(web.render(tree, host))
   return () => captured
 }
@@ -242,6 +260,42 @@ describe("project bootstrap", () => {
     const reports = fake.hits.filter((hit) => hit.body?.service === "startup" && hit.body?.message === "interactive")
     expect(reports).toHaveLength(1)
     expect(reports[0]?.body?.extra).toMatchObject({ phase: "home" })
+  })
+
+  test("a failed warmup stays quiet and leaves the project to bootstrap on an explicit open", async () => {
+    const fake = createFakeServer(projects)
+    // The most recent project's folder is gone: every request scoped to it
+    // fails directory validation on the server.
+    fake.broken.add("/research/b")
+    const sync = mount(fake.fetch)
+    await until(() => !!sync())
+    const app = sync()!
+    for (const item of projects) app.child(item.worktree, { bootstrap: false, projectID: item.id })
+
+    await until(() => app.ready)
+    await settle(subject.PREFETCH_DELAY_MS + 400)
+    const scoped = () => fake.hits.filter((hit) => hit.directory === "/research/b")
+    const current = () => scoped().filter((hit) => hit.path === "/project/current")
+    expect(current()).toHaveLength(1)
+
+    // Nothing on the launch screen: no toast, and the project looks untouched.
+    const [store] = app.child("/research/b", { bootstrap: false })
+    expect(store.status).toBe("loading")
+    expect(toasts()).toHaveLength(0)
+
+    // Reconnect and catalog fan-outs no longer carry the failed directory.
+    const before = scoped().length
+    fake.emit({ type: "server.connected", properties: {} })
+    fake.emit({ type: "global.disposed", properties: {} })
+    fake.emit({ type: "skill.updated", properties: {} })
+    await settle(400)
+    expect(scoped()).toHaveLength(before)
+
+    // An explicit open bootstraps again, and its failure is the user's to see.
+    app.child("/research/b", { projectID: "prj_b" })
+    await until(() => current().length === 2)
+    await until(() => store.status === "partial")
+    await until(() => toasts().length === 1)
   })
 })
 
