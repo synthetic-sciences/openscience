@@ -19,10 +19,17 @@ test("pull requests use one fast product-level lane", async () => {
 
 test("exhaustive and native suites stay off the pull request path", async () => {
   const workflow = await read(".github/workflows/deep-ci.yml")
+  const parsed = Bun.YAML.parse(workflow) as { jobs: Record<string, { needs?: string[]; if?: string }> }
 
   expect(workflow).toContain("workflow_dispatch:")
   expect(workflow).toContain("schedule:")
-  expect(workflow).toContain("bun run test")
+  expect(workflow).toContain('matrix="$(bun tooling/repo/test-shards.ts)"')
+  expect(workflow).toContain("shard: ${{ fromJSON(needs.plan.outputs.matrix) }}")
+  expect(workflow).toContain('bun test --timeout 15000 "${paths[@]}"')
+  expect(workflow).toContain("sudo apt-get install --yes bubblewrap openssh-server")
+  expect(parsed.jobs.backend.needs).toEqual(["plan"])
+  expect(parsed.jobs.suite.needs).toEqual(["plan", "backend"])
+  expect(parsed.jobs.suite.if).toBe("always()")
   expect(workflow).toContain("test/process/darwin-responsibility.test.ts")
   expect(workflow).toContain("test/process/windows-job.test.ts")
   expect(workflow).not.toContain("pull_request:")
