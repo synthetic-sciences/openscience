@@ -2,7 +2,7 @@ import z from "zod"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
-import { NoSuchModelError, type Provider as SDK } from "ai"
+import { APICallError, NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
@@ -57,11 +57,15 @@ export namespace Provider {
     sessionID: string
     messageID: string
     attempt: number
+    /** Agent that issued the request, for log attribution only. */
+    agent?: string
+    /** Model the session selected. The request body's own model wins when present. */
+    modelID?: string
     /** Immutable account/funding choice for this provider operation. */
     funding?: FundingSnapshot
   }
 
-  export type RequestTiming = Pick<RequestContext, "sessionID" | "messageID" | "attempt"> & {
+  export type RequestTiming = Pick<RequestContext, "sessionID" | "messageID" | "attempt" | "agent"> & {
     requestID: string
     providerID: string
     modelID: string
@@ -71,9 +75,13 @@ export namespace Provider {
     firstBodyChunkAt?: number
     lastBodyChunkAt?: number
     completedAt: number
-    outcome: "completed" | "idle_timeout" | "timeout" | "aborted" | "cancelled" | "error"
+    outcome: "completed" | "idle_timeout" | "timeout" | "aborted" | "cancelled" | "error" | "conflict_wait"
     timeoutPhase?: "connect" | "first_event" | "stream"
     errorName?: string
+    /** Present with outcome "conflict_wait": the managed gateway still owns an
+     * identical earlier copy of this request, so the client waits for that
+     * copy instead of dispatching the same body again. */
+    conflict?: { code: string; retries: number; delayMs: number; elapsedMs: number }
   }
 
   export class IdleTimeoutError extends Error {
@@ -225,6 +233,47 @@ export namespace Provider {
     return monitored
   }
 
+  /** The model named by one JSON request body. Several models share a cached
+   * SDK instance, so the closure model is only a fallback for attribution. */
+  function requestModel(body: unknown): string | undefined {
+    if (typeof body !== "string") return
+    const head = /^\s*\{\s*"model"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(body)
+    if (head) return head[1]
+    const parsed = iife(() => {
+      try {
+        return JSON.parse(body) as { model?: unknown } | null
+      } catch {
+        return undefined
+      }
+    })
+    return typeof parsed?.model === "string" ? parsed.model : undefined
+  }
+
+  function timingContext(): RequestContext {
+    return requestContext.getStore() ?? { sessionID: "unknown", messageID: "unknown", attempt: 0 }
+  }
+
+  /** One log line and one hook call per timing item. Absolute timestamps stay
+   * on the item for consumers; the log line carries an ISO start plus deltas. */
+  function publishTiming(item: RequestTiming, onTiming?: (timing: RequestTiming) => void) {
+    log.info("request timing", {
+      ...omit(item, ["startedAt", "responseStartedAt", "firstBodyChunkAt", "lastBodyChunkAt", "completedAt"]),
+      startedAt: new Date(item.startedAt).toISOString(),
+      responseStartMs: item.responseStartedAt === undefined ? undefined : item.responseStartedAt - item.startedAt,
+      firstBodyChunkMs: item.firstBodyChunkAt === undefined ? undefined : item.firstBodyChunkAt - item.startedAt,
+      activeBodyMs:
+        item.firstBodyChunkAt === undefined || item.lastBodyChunkAt === undefined
+          ? undefined
+          : item.lastBodyChunkAt - item.firstBodyChunkAt,
+      totalMs: item.completedAt - item.startedAt,
+    })
+    try {
+      onTiming?.(item)
+    } catch (error) {
+      log.debug("request timing callback failed", { error: `${error}` })
+    }
+  }
+
   /** Apply a hard inactivity limit to connection and response-body reads. The
    * timer resets on every network chunk, so a long active generation is never
    * cut off. Explicit provider `timeout` remains a separate total-request cap. */
@@ -234,7 +283,7 @@ export namespace Provider {
     init: BunFetchRequestInit | undefined,
     options: FetchWithWatchdogOptions,
   ): Promise<Response> {
-    const context = requestContext.getStore() ?? { sessionID: "unknown", messageID: "unknown", attempt: 0 }
+    const context = timingContext()
     const idleTimeoutMs = resolveIdleTimeout(options.idleTimeout)
     const idleController = new AbortController()
     const signals = [init?.signal, idleController.signal].filter(Boolean) as AbortSignal[]
@@ -246,9 +295,10 @@ export namespace Provider {
       sessionID: context.sessionID,
       messageID: context.messageID,
       attempt: context.attempt,
+      ...(context.agent && { agent: context.agent }),
       requestID: crypto.randomUUID(),
       providerID: options.providerID,
-      modelID: options.modelID,
+      modelID: requestModel(init?.body) ?? context.modelID ?? options.modelID,
       idleTimeoutMs,
       startedAt: Date.now(),
     }
@@ -256,29 +306,16 @@ export namespace Provider {
     const emit = (outcome: RequestTiming["outcome"], error?: unknown, phase?: RequestTiming["timeoutPhase"]) => {
       if (emitted) return
       emitted = true
-      const completedAt = Date.now()
-      const item: RequestTiming = {
-        ...timing,
-        completedAt,
-        outcome,
-        ...(phase && { timeoutPhase: phase }),
-        ...(error instanceof Error && { errorName: error.name }),
-      }
-      log.info("request timing", {
-        ...item,
-        responseStartMs: item.responseStartedAt === undefined ? undefined : item.responseStartedAt - item.startedAt,
-        firstBodyChunkMs: item.firstBodyChunkAt === undefined ? undefined : item.firstBodyChunkAt - item.startedAt,
-        activeBodyMs:
-          item.firstBodyChunkAt === undefined || item.lastBodyChunkAt === undefined
-            ? undefined
-            : item.lastBodyChunkAt - item.firstBodyChunkAt,
-        totalMs: item.completedAt - item.startedAt,
-      })
-      try {
-        options.onTiming?.(item)
-      } catch (error) {
-        log.debug("request timing callback failed", { error: `${error}` })
-      }
+      publishTiming(
+        {
+          ...timing,
+          completedAt: Date.now(),
+          outcome,
+          ...(phase && { timeoutPhase: phase }),
+          ...(error instanceof Error && { errorName: error.name }),
+        },
+        options.onTiming,
+      )
     }
 
     let response: Response
@@ -566,23 +603,139 @@ export namespace Provider {
     const retryAfter = Number(retryAfterHeader)
     if (!Number.isFinite(retryAfter) || retryAfter !== seconds) return input.response
     await input.response.body?.cancel().catch(() => undefined)
-    if (seconds > 0) {
-      await new Promise<void>((resolve, reject) => {
-        const signal = input.signal
-        if (signal?.aborted) return reject(signal.reason ?? new DOMException("Aborted", "AbortError"))
-        const aborted = () => {
-          clearTimeout(timer)
-          signal?.removeEventListener("abort", aborted)
-          reject(signal?.reason ?? new DOMException("Aborted", "AbortError"))
-        }
-        const timer = setTimeout(() => {
-          signal?.removeEventListener("abort", aborted)
-          resolve()
-        }, seconds * 1000)
-        signal?.addEventListener("abort", aborted, { once: true })
-      })
-    }
+    if (seconds > 0) await managedDelay(seconds * 1000, input.signal)
     return input.retry()
+  }
+
+  function managedDelay(ms: number, signal?: AbortSignal | null) {
+    return new Promise<void>((resolve, reject) => {
+      if (signal?.aborted) return reject(abortReason(signal))
+      const aborted = () => {
+        clearTimeout(timer)
+        reject(abortReason(signal!))
+      }
+      const timer = setTimeout(() => {
+        signal?.removeEventListener("abort", aborted)
+        resolve()
+      }, ms)
+      signal?.addEventListener("abort", aborted, { once: true })
+    })
+  }
+
+  const MANAGED_CONFLICT_MIN_DELAY_MS = 1_000
+  const MANAGED_CONFLICT_MAX_DELAY_MS = 5_000
+  export const MANAGED_CONFLICT_MAX_WAIT_MS = 20 * 60_000
+  const MANAGED_CONFLICT_RESPONSE_MAX_BYTES = 16_384
+  const MANAGED_CONFLICT_SEALED_MESSAGE =
+    "The managed gateway already dispatched this request once and cannot replay it; the body was not sent again."
+  const MANAGED_CONFLICT_KEY_MESSAGE =
+    "The managed gateway already holds a different request under this idempotency key; the body was not sent again."
+
+  /** Read the gateway's idempotency verdict from a managed 409. Sealed rows
+   * replay with x-openscience-idempotent-replay; live claims answer
+   * operation_in_progress with retry-after. */
+  async function managedConflict(response: Response) {
+    if (response.status !== 409) return
+    const declared = Number(response.headers.get("content-length"))
+    if (Number.isFinite(declared) && declared > MANAGED_CONFLICT_RESPONSE_MAX_BYTES) return
+    const body = await response
+      .clone()
+      .text()
+      .catch(() => "")
+    if (body.length > MANAGED_CONFLICT_RESPONSE_MAX_BYTES) return
+    const object = (value: unknown) =>
+      value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+    const field = (value: unknown) => (typeof value === "string" ? value : undefined)
+    const json = iife(() => {
+      try {
+        return object(JSON.parse(body))
+      } catch {
+        return undefined
+      }
+    })
+    const detail = object(json?.detail) ?? object(json?.error) ?? json
+    const code = field(json?.error) ?? field(detail?.code)
+    const message = field(detail?.message) ?? field(json?.message) ?? ""
+    const sealed = response.headers.get("x-openscience-idempotent-replay") === "true"
+    const header = response.headers.get("retry-after")
+    const retryAfterMs = header !== null && Number.isFinite(Number(header)) ? Number(header) * 1000 : undefined
+    if (!code && !sealed && retryAfterMs === undefined) return
+    return { code, message, sealed, retryAfterMs, body }
+  }
+
+  /** A gateway verdict the AI SDK must not retry: its status-code heuristic
+   * treats every 409 as transient and would dispatch the same body again. */
+  function managedConflictError(response: Response, body: string, message: string) {
+    return new APICallError({
+      message,
+      url: response.url,
+      requestBodyValues: {},
+      statusCode: response.status,
+      responseHeaders: Object.fromEntries(response.headers),
+      responseBody: body,
+      isRetryable: false,
+    })
+  }
+
+  /** Wait for the gateway's original copy of this request instead of sending
+   * the same body again. Sealed or conflicting keys are terminal: the gateway
+   * answers them identically forever, so they surface without any retry. */
+  export async function retryManagedConflict(input: {
+    response: Response
+    managed: boolean
+    headers: Headers
+    signal?: AbortSignal | null
+    retry: () => Promise<Response>
+    timing: Pick<RequestTiming, "providerID" | "modelID" | "idleTimeoutMs">
+    onTiming?: (timing: RequestTiming) => void
+    limitMs?: number
+  }): Promise<Response> {
+    if (!input.managed || !input.headers.get("Idempotency-Key")) return input.response
+    const context = timingContext()
+    const started = Date.now()
+    const limit = input.limitMs ?? MANAGED_CONFLICT_MAX_WAIT_MS
+    const requestID = crypto.randomUUID()
+    const poll = async (response: Response, retries: number): Promise<Response> => {
+      const conflict = await managedConflict(response)
+      if (!conflict) return response
+      if (conflict.sealed)
+        throw managedConflictError(response, conflict.body, conflict.message || MANAGED_CONFLICT_SEALED_MESSAGE)
+      if (conflict.code === "idempotency_conflict") {
+        throw managedConflictError(response, conflict.body, conflict.message || MANAGED_CONFLICT_KEY_MESSAGE)
+      }
+      if (conflict.code !== undefined && conflict.code !== "operation_in_progress") return response
+      const elapsedMs = Date.now() - started
+      if (elapsedMs >= limit) {
+        const span = limit >= 60_000 ? `${Math.round(limit / 60_000)} minutes` : `${Math.ceil(limit / 1000)} seconds`
+        const message = `The managed gateway was still processing an identical earlier copy of this request after ${span}; the body was not sent again.`
+        const body = JSON.stringify({
+          error: "operation_in_progress",
+          detail: { code: "managed_conflict_timeout", message },
+        })
+        throw managedConflictError(response, body, message)
+      }
+      const base = Math.max(MANAGED_CONFLICT_MIN_DELAY_MS, conflict.retryAfterMs ?? 0)
+      const delayMs = Math.min(limit - elapsedMs, MANAGED_CONFLICT_MAX_DELAY_MS, base * 2 ** retries)
+      publishTiming(
+        {
+          sessionID: context.sessionID,
+          messageID: context.messageID,
+          attempt: context.attempt,
+          ...(context.agent && { agent: context.agent }),
+          requestID,
+          ...input.timing,
+          startedAt: started,
+          completedAt: Date.now(),
+          outcome: "conflict_wait",
+          conflict: { code: conflict.code ?? "operation_in_progress", retries, delayMs, elapsedMs },
+        },
+        input.onTiming,
+      )
+      await response.body?.cancel().catch(() => undefined)
+      await managedDelay(delayMs, input.signal)
+      return poll(await input.retry(), retries + 1)
+    }
+    return poll(input.response, 0)
   }
 
   const PUBLIC_PROVIDER_BASE_URLS: Record<string, string> = {
@@ -2440,8 +2593,20 @@ export namespace Provider {
           signal: opts.signal,
           retry: request,
         })
+        const resolved = await retryManagedConflict({
+          response: settled,
+          managed,
+          headers: opts.headers,
+          signal: opts.signal,
+          retry: request,
+          timing: {
+            providerID: model.providerID,
+            modelID: requestModel(opts.body) ?? context?.modelID ?? model.id,
+            idleTimeoutMs: resolveIdleTimeout(idleTimeout),
+          },
+        })
         if (managed) OpenScience.invalidateBalance()
-        return funding ? OpenScience.validateFundingResponse(settled, funding) : settled
+        return funding ? OpenScience.validateFundingResponse(resolved, funding) : resolved
       }
 
       // Special case: google-vertex-anthropic uses a subpath import
