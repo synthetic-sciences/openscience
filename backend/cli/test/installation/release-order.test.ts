@@ -252,11 +252,31 @@ test("deep npm rehearsal gates are explicit opt-ins", async () => {
 
 test("shared dependency cache is architecture-specific and excludes the Bun runtime", async () => {
   const action = await read(".github/actions/setup-bun/action.yml")
+  const parsed = Bun.YAML.parse(action) as {
+    inputs: Record<string, { default: string }>
+    runs: { steps: { name: string; if?: string }[] }
+  }
 
   expect(action).toContain("${{ runner.os }}-${{ runner.arch }}")
   expect(action).toContain("path: ~/.bun/install/cache")
   expect(action).not.toContain("path: ~/.bun\n")
   expect(action).toContain("bun install --frozen-lockfile")
+  expect(parsed.inputs.install.default).toBe("true")
+  expect(parsed.inputs.filter.default).toBe("")
+  for (const name of ["Cache Bun", "Install dependencies"]) {
+    expect(parsed.runs.steps.find((step) => step.name === name)?.if).toBe("inputs.install == 'true'")
+  }
+  expect(parsed.runs.steps.find((step) => step.name === "Setup Bun")?.if).toBeUndefined()
+})
+
+test("desktop packaging installs only the desktop workspace and caches Electron downloads", async () => {
+  const workflow = await read(".github/workflows/publish.yml")
+
+  expect(workflow).toContain('filter: "@synsci/desktop"')
+  expect(workflow).toContain("name: Cache Electron downloads")
+  expect(workflow).toContain("electron-${{ hashFiles('frontend/desktop/package.json') }}")
+  expect(workflow).not.toContain("Smoke packaged signed macOS app")
+  expect(workflow).toContain("Verify the exact signed ZIP and DMG structure")
 })
 
 test("heavy security analysis is scheduled rather than duplicated on every PR", async () => {

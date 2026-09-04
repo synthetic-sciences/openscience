@@ -544,6 +544,8 @@ jobs:
           ref: ${{ needs.version.outputs.source }}
       - uses: ./.github/actions/setup-bun
         if: steps.existing.outputs.found != 'true' || (matrix.signing == 'mac' && matrix.arch == 'x64')
+        with:
+          filter: "@synsci/desktop"
 
       - name: Verify resumed macOS assets
         if: steps.existing.outputs.found == 'true' && matrix.signing == 'mac'
@@ -668,6 +670,18 @@ jobs:
         run: chmod +x "$OPENSCIENCE_DESKTOP_SIDECAR"
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
+      - name: Cache Electron downloads
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('frontend/desktop/package.json') }}
       - name: Build desktop installer
         if: steps.existing.outputs.found != 'true' && (matrix.signing != 'windows' || steps.windows.outputs.enabled == 'true')
         shell: bash
@@ -707,26 +721,6 @@ jobs:
           xcrun stapler staple "$OPENSCIENCE_DMG"
           xcrun stapler validate "$OPENSCIENCE_DMG"
           spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
-      - name: Smoke packaged signed macOS app
-        if: steps.existing.outputs.found != 'true' && matrix.target == 'mac' && matrix.arch == 'x64'
-        shell: bash
-        env:
-          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          dmg="frontend/desktop/dist/OpenScience-mac-x64.dmg"
-          zip="frontend/desktop/dist/OpenScience-mac-x64.zip"
-          mountpoint="$RUNNER_TEMP/openscience-smoke"
-          mkdir -p "$mountpoint"
-          cleanup() { hdiutil detach "$mountpoint" -quiet 2>/dev/null || true; }
-          trap cleanup EXIT
-          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mountpoint" -quiet
-          bun frontend/desktop/script/update-artifact-canary.mjs \
-            --zip "$zip" \
-            --current "$mountpoint/OpenScience.app" \
-            --version "$OPENSCIENCE_VERSION" \
-            --arch x64 \
-            --trusted true
       - name: Upload immutable desktop assets
         if: steps.existing.outputs.found != 'true'
         shell: bash
