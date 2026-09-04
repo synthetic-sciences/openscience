@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Log } from "@/util/log"
+import { Provider } from "@/provider/provider"
 import { MessageV2 } from "./message-v2"
 import z from "zod"
 
@@ -62,6 +63,33 @@ export namespace SessionTelemetry {
   export type RequestProgress = z.infer<typeof RequestProgress>
 
   const requests = new Map<string, RequestProgress & { started: number }>()
+
+  // A managed-gateway conflict is waited out inside the provider fetch, below
+  // the processor, so it reaches the request record through the provider's
+  // timing hook. The hook is attached on the first recorded phase rather than
+  // at module load: provider -> plugin -> session imports this module, so at
+  // load time the Provider namespace may not be initialised yet.
+  let hooked = false
+  function hook() {
+    if (hooked) return
+    hooked = true
+    Provider.onTiming((timing) => {
+      if (timing.outcome !== "conflict_wait" || !timing.conflict) return
+      // Only the message that is currently in flight for the session is
+      // attributable; a background title request waiting on the gateway must
+      // not replace the visible turn's phase.
+      const current = requests.get(timing.sessionID)
+      if (!current || current.messageID !== timing.messageID) return
+      recordProgress({
+        sessionID: timing.sessionID,
+        messageID: timing.messageID,
+        attempt: timing.attempt,
+        phase: "conflict_wait",
+        retryAfterMs: timing.conflict.delayMs,
+        detail: timing.conflict.code,
+      })
+    })
+  }
 
   export const Event = {
     // Per-turn breakdown of the working context by content type, emitted right before the
@@ -176,6 +204,7 @@ export namespace SessionTelemetry {
     retryAfterMs?: number
     detail?: string
   }) {
+    hook()
     const prior = requests.get(input.sessionID)
     const same = prior?.messageID === input.messageID ? prior : undefined
     // Cheap enough to call on every stream delta: a repeat returns before the

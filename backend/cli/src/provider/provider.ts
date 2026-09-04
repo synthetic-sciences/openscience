@@ -253,8 +253,22 @@ export namespace Provider {
     return requestContext.getStore() ?? { sessionID: "unknown", messageID: "unknown", attempt: 0 }
   }
 
-  /** One log line and one hook call per timing item. Absolute timestamps stay
-   * on the item for consumers; the log line carries an ISO start plus deltas. */
+  const timingSubscribers = new Set<(timing: RequestTiming) => void>()
+
+  /** Observe every request timing item, including the conflict waits issued
+   * inside the SDK fetch. Session telemetry subscribes here rather than being
+   * imported by the provider, which would close an import cycle. Returns the
+   * unsubscribe function. */
+  export function onTiming(subscriber: (timing: RequestTiming) => void) {
+    timingSubscribers.add(subscriber)
+    return () => {
+      timingSubscribers.delete(subscriber)
+    }
+  }
+
+  /** One log line, one hook call and one subscriber pass per timing item.
+   * Absolute timestamps stay on the item for consumers; the log line carries
+   * an ISO start plus deltas. */
   function publishTiming(item: RequestTiming, onTiming?: (timing: RequestTiming) => void) {
     log.info("request timing", {
       ...omit(item, ["startedAt", "responseStartedAt", "firstBodyChunkAt", "lastBodyChunkAt", "completedAt"]),
@@ -267,10 +281,12 @@ export namespace Provider {
           : item.lastBodyChunkAt - item.firstBodyChunkAt,
       totalMs: item.completedAt - item.startedAt,
     })
-    try {
-      onTiming?.(item)
-    } catch (error) {
-      log.debug("request timing callback failed", { error: `${error}` })
+    for (const callback of [onTiming, ...timingSubscribers]) {
+      try {
+        callback?.(item)
+      } catch (error) {
+        log.debug("request timing callback failed", { error: `${error}` })
+      }
     }
   }
 

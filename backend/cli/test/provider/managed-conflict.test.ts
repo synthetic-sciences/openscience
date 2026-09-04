@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { APICallError, generateText } from "ai"
+import { Bus } from "../../src/bus"
 import { GlobalBus } from "../../src/bus/global"
 import { OpenScience } from "../../src/openscience"
 import { Instance } from "../../src/project/instance"
@@ -8,6 +9,7 @@ import { Provider } from "../../src/provider/provider"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionRetry } from "../../src/session/retry"
+import { SessionTelemetry } from "../../src/session/telemetry"
 import { tmpdir } from "../fixture/fixture"
 
 const organization = "org_conflict"
@@ -111,9 +113,17 @@ function gateway(script: Array<() => Response>) {
 
 const context = { sessionID: "ses_conflict", messageID: "msg_conflict", attempt: 1, agent: "research" }
 
+async function until(check: () => boolean, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs
+  while (!check()) {
+    if (Date.now() >= deadline) throw new Error("timed out waiting for request progress events")
+    await Bun.sleep(10)
+  }
+}
+
 function settle(
   server: ReturnType<typeof Bun.serve>,
-  input: { managed?: boolean; signal?: AbortSignal; limitMs?: number } = {},
+  input: { managed?: boolean; signal?: AbortSignal; limitMs?: number; context?: Provider.RequestContext } = {},
 ) {
   const headers = new Headers({ "content-type": "application/json", "Idempotency-Key": "os_fixture" })
   const init = {
@@ -126,7 +136,7 @@ function settle(
   const request = () => fetch(url, init)
   const timings: Provider.RequestTiming[] = []
   const started = Date.now()
-  const response = Provider.withRequestContext(context, () =>
+  const response = Provider.withRequestContext(input.context ?? context, () =>
     request().then((first) =>
       Provider.retryManagedConflict({
         response: first,
@@ -410,6 +420,56 @@ describe("managed conflict guard", () => {
       if (base !== undefined) process.env["OPENSCIENCE_API_BASE"] = base
       await OpenScience.clearSession()
     }
+  })
+})
+
+describe("conflict wait telemetry", () => {
+  test("a conflict wait publishes session.request.progress with phase conflict_wait for the in-flight message", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const seen: SessionTelemetry.RequestProgress[] = []
+        Bus.subscribe(SessionTelemetry.Event.Progress, (event) => seen.push(event.properties))
+        // The processor records "connecting" before the provider fetch starts.
+        SessionTelemetry.recordProgress({
+          ...context,
+          providerID: "openrouter",
+          modelID: "openai/gpt-5.6-sol",
+          phase: "connecting",
+        })
+        using fixture = gateway([progress, replay])
+        const { response, timings } = settle(fixture.server)
+        expect((await response).status).toBe(200)
+        expect(timings).toHaveLength(1)
+        await until(() => seen.length >= 2)
+        expect(seen.map((item) => item.phase)).toEqual(["connecting", "conflict_wait"])
+        expect(seen[1]).toMatchObject({
+          sessionID: context.sessionID,
+          messageID: context.messageID,
+          attempt: 1,
+          agent: "research",
+          providerID: "openrouter",
+          modelID: "openai/gpt-5.6-sol",
+          retryAfterMs: 1000,
+          detail: "operation_in_progress",
+          stalls: 1,
+        })
+        // Recorded when the wait starts, not after it.
+        expect(seen[1].elapsedMs).toBeLessThan(1000)
+        expect(SessionTelemetry.progress(context.sessionID)).toEqual(seen[1])
+
+        // A background request for another message (a title stream) waiting on
+        // the gateway never replaces the visible turn's phase.
+        using other = gateway([progress, replay])
+        const background = settle(other.server, { context: { ...context, messageID: "summary:msg_conflict" } })
+        expect((await background.response).status).toBe(200)
+        expect(background.timings).toHaveLength(1)
+        await Bun.sleep(20)
+        expect(seen).toHaveLength(2)
+        SessionTelemetry.recordProgress({ ...context, phase: "done" })
+      },
+    })
   })
 })
 
