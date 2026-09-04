@@ -269,7 +269,9 @@ describe("managed conflict guard", () => {
     expect(error.message).toBe("The provider outcome is unknown and this request cannot be dispatched twice")
     const normalized = MessageV2.fromError(error, { providerID: "openrouter" })
     expect(SessionRetry.retryable(normalized)).toBeUndefined()
-    expect(SessionRetry.terminal(normalized)).toBe(normalized)
+    const shown = SessionRetry.terminal(normalized)
+    expect(shown).not.toBe(normalized)
+    expect((shown as MessageV2.APIError).data.message).toContain("billed again")
     expect(SessionProcessor.providerFailureAction(error, normalized, false)).toEqual({ type: "terminal" })
   })
 

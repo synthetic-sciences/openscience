@@ -201,10 +201,15 @@ export namespace SessionRetry {
 
   // The gateway already dispatched this body once and cannot replay its
   // output (a sealed stream: 409 with the replay header from older gateways,
-  // 410 from current ones). The provider may have billed that dispatch, so the
-  // body is never sent again automatically; the user decides whether to pay
-  // for a second inference by resubmitting.
-  const MANAGED_DISPATCHED_CODES = new Set(["idempotent_stream_already_started", "idempotent_response_not_replayable"])
+  // 410 from current ones), or cannot prove whether the provider ran it. The
+  // provider may have billed that dispatch, so the body is never sent again
+  // automatically; the user decides whether to pay for a second inference by
+  // resubmitting.
+  const MANAGED_DISPATCHED_CODES = new Set([
+    "idempotent_stream_already_started",
+    "idempotent_response_not_replayable",
+    "managed_outcome_unknown",
+  ])
   export const MANAGED_DISPATCHED_MESSAGE =
     "The gateway already dispatched this request and its output is no longer available. It may have been billed; sending it again will be billed again. Resubmit your message to retry."
 

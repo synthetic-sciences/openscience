@@ -89,7 +89,7 @@ describe("session.retry.delay", () => {
 })
 
 describe("session.retry.retryable", () => {
-  test("does not redispatch a managed request whose provider outcome is unknown", () => {
+  test("never re-sends a managed request whose provider outcome is unknown", () => {
     const error = new MessageV2.APIError({
       message: "The provider outcome is unknown and this request cannot be dispatched twice",
       statusCode: 409,
@@ -251,22 +251,19 @@ describe("SessionProcessor.providerFailureAction", () => {
     expect(SessionRetry.retryable(shown)).toBeUndefined()
   })
 
-  test.each([
-    "managed_outcome_unknown",
-    "managed_conflict_timeout",
-    "idempotency_conflict",
-    "operation_in_progress",
-    "temporary_conflict",
-  ])("keeps the gateway's own message for a %s verdict", (code) => {
-    const error = new MessageV2.APIError({
-      message: "Conflict",
-      statusCode: 409,
-      isRetryable: false,
-      responseBody: JSON.stringify({ detail: { code } }),
-    }).toObject() as MessageV2.APIError
-    expect(SessionRetry.terminal(error)).toBe(error)
-    expect(SessionProcessor.providerFailureAction(error, error, false)).toEqual({ type: "terminal" })
-  })
+  test.each(["managed_conflict_timeout", "idempotency_conflict", "operation_in_progress", "temporary_conflict"])(
+    "keeps the gateway's own message for a %s verdict",
+    (code) => {
+      const error = new MessageV2.APIError({
+        message: "Conflict",
+        statusCode: 409,
+        isRetryable: false,
+        responseBody: JSON.stringify({ detail: { code } }),
+      }).toObject() as MessageV2.APIError
+      expect(SessionRetry.terminal(error)).toBe(error)
+      expect(SessionProcessor.providerFailureAction(error, error, false)).toEqual({ type: "terminal" })
+    },
+  )
 
   test("passes transient and non-API errors through terminal unchanged", () => {
     const transient = apiError()
