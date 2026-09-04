@@ -1,8 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Discord community
-    url: https://discord.gg/openscience
-    about: Quick questions and real-time discussion. Issues are searchable and help others, so prefer an issue for anything reproducible.
   - name: Looking for something to work on?
     url: https://github.com/synthetic-sciences/OpenScience/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22
     about: Open issues labeled good first issue or help wanted. CONTRIBUTING.md explains what each label promises.

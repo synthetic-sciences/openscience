@@ -107,7 +107,7 @@ bun test --timeout 15000 -t "resolves"                # cases whose name matches
 bun test --timeout 15000 --watch ./test/skill         # rerun on change
 ```
 
-The full backend suite is long (Deep CI budgets 45 minutes for the whole Linux job), so run the directories you touched while iterating and the full suite before you push. Bare `bun test` at the repo root runs zero tests on purpose (`bunfig.toml` points `test.root` at a nonexistent directory); always run per package.
+The full backend suite is long (Deep CI budgets 45 minutes for the whole Linux job), so run the directories you touched while iterating and the full suite before you push. Bare `bun test` at the repo root fails immediately on purpose (`bunfig.toml` points `test.root` at a nonexistent directory, so Bun exits 1 without scanning anything); always run per package.
 
 Other suites:
 

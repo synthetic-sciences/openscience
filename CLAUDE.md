@@ -34,7 +34,7 @@ cd backend/cli && bun run build
 bun run typecheck
 
 # Run tests
-cd backend/cli && bun test
+cd backend/cli && bun run test
 ```
 
 ## Prompt Architecture (Dual-Layer)
