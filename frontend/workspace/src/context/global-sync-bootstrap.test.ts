@@ -133,8 +133,8 @@ function createFakeServer(projects: Project[]) {
     hits,
     broken,
     fetch,
-    emit(payload: unknown) {
-      events.controller?.enqueue(frame({ directory: "global", payload }))
+    emit(payload: unknown, directory = "global") {
+      events.controller?.enqueue(frame({ directory, payload }))
     },
     /** Every project directory any request was scoped to. */
     directories: () => new Set(hits.map((hit) => hit.directory).filter((item): item is string => !!item)),
@@ -255,11 +255,56 @@ describe("project bootstrap", () => {
     await until(() => app.ready)
     expect(fake.directories()).toEqual(new Set([cwd]))
 
+    const [store] = app.child("/research/b", { bootstrap: false })
     await settle(subject.PREFETCH_DELAY_MS + 400)
     expect(fake.directories()).toEqual(new Set([cwd, "/research/b"]))
+    await until(() => store.status === "complete")
     const reports = fake.hits.filter((hit) => hit.body?.service === "startup" && hit.body?.message === "interactive")
     expect(reports).toHaveLength(1)
     expect(reports[0]?.body?.extra).toMatchObject({ phase: "home" })
+
+    // The warmup stops short of the catalogs: MCP status would start the
+    // project's MCP servers for a folder nobody opened this session.
+    const catalogs = ["/command", "/skill", "/mcp", "/lsp"]
+    const scoped = (path: string) => fake.hits.filter((hit) => hit.path === path && hit.directory === "/research/b")
+    await settle(subject.CATALOG_DELAY_MS + 150)
+    for (const path of catalogs) expect(scoped(path)).toHaveLength(0)
+
+    // Opening the warmed project fetches them, without a second bootstrap.
+    const bootstraps = scoped("/project/current").length
+    app.child("/research/b", { projectID: "prj_b" })
+    await until(() => catalogs.every((path) => scoped(path).length === 1))
+    expect(scoped("/project/current")).toHaveLength(bootstraps)
+  })
+
+  test("a disposed server instance is re-pushed only for a project that was opened", async () => {
+    const fake = createFakeServer(projects)
+    const sync = mount(fake.fetch)
+    await until(() => !!sync())
+    const app = sync()!
+    for (const item of projects) app.child(item.worktree, { bootstrap: false, projectID: item.id })
+    app.child("/research/a", { projectID: "prj_a" })
+    await until(() => app.ready && app.child("/research/a", { bootstrap: false })[0].status === "complete")
+    await settle(subject.CATALOG_DELAY_MS + subject.PREFETCH_DELAY_MS + 150)
+
+    // The stream's opening server.connected can land after ready and re-push
+    // the open project once, so count bootstraps from here.
+    const current = (directory: string) =>
+      fake.hits.filter((hit) => hit.path === "/project/current" && hit.directory === directory)
+    const bootstraps = current("/research/a").length
+    expect(bootstraps).toBeGreaterThan(0)
+
+    // A card-only project: the server released an instance the workspace
+    // never asked for, so there is nothing to bring back.
+    fake.emit({ type: "server.instance.disposed", properties: { directory: "/research/c" } }, "/research/c")
+    await settle(250)
+    expect(fake.directories()).toEqual(new Set([cwd, "/research/a"]))
+    expect(current("/research/a")).toHaveLength(bootstraps)
+
+    // The opened project is bootstrapped again.
+    fake.emit({ type: "server.instance.disposed", properties: { directory: "/research/a" } }, "/research/a")
+    await until(() => current("/research/a").length === bootstraps + 1)
+    expect(fake.directories()).toEqual(new Set([cwd, "/research/a"]))
   })
 
   test("a failed warmup stays quiet and leaves the project to bootstrap on an explicit open", async () => {

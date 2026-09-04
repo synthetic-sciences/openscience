@@ -519,6 +519,14 @@ function createGlobalSync() {
   // exist for Home cards, sidebar entries and notification lookups; those never
   // issue a project-scoped request and must stay metadata-only.
   const requested = new Set<string>()
+  // Directories the user explicitly opened. A warmed project has its runtime
+  // but not its catalogs: listing commands and MCP status launches every
+  // configured MCP server, and the skill catalog scans each skill root, so
+  // those wait for the first open.
+  const opened = new Set<string>()
+  // Directories whose catalogs the current bootstrap already fetched, so an
+  // open landing while the non-blocking requests are in flight fetches once.
+  const catalogued = new Set<string>()
   const timers = new Set<ReturnType<typeof setTimeout>>()
   const defer = (fn: () => void, delay: number) => {
     const timer = setTimeout(() => {
@@ -711,10 +719,16 @@ function createGlobalSync() {
 
   function child(directory: string, options: ChildOptions = {}) {
     const childStore = ensureChild(directory, options.projectID)
-    const shouldBootstrap = options.bootstrap ?? true
-    if (shouldBootstrap && childStore[0].status === "loading") {
+    if (!(options.bootstrap ?? true)) return childStore
+    const first = !opened.has(directory)
+    opened.add(directory)
+    if (childStore[0].status === "loading") {
       void bootstrapInstance(directory, options.projectID)
+      return childStore
     }
+    // Bootstrapped before anyone opened it, by the Home warmup: the runtime
+    // is live and only the catalogs were left for this moment.
+    if (first) void loadCatalogs(directory, options.projectID)
     return childStore
   }
 
@@ -774,6 +788,24 @@ function createGlobalSync() {
     return promise
   }
 
+  // Catalogs the first paint does not show; they load once the session list
+  // is on screen, and only for a project somebody opened.
+  function loadCatalogs(directory: string, projectID?: string) {
+    if (catalogued.has(directory)) return Promise.resolve()
+    catalogued.add(directory)
+    const [, setStore] = ensureChild(directory, projectID)
+    const sdk = sdkFor(directory, projectID)
+    return Promise.all([
+      sdk.command.list().then((x) => setStore("command", x.data ?? [])),
+      sdk.app
+        .skills()
+        .then((x) => setStore("skill", x.data ?? []))
+        .catch(() => {}),
+      sdk.mcp.status().then((x) => setStore("mcp", x.data!)),
+      sdk.lsp.status().then((x) => setStore("lsp", x.data!)),
+    ]).catch((error) => console.warn("Failed to load project catalogs", { directory, error }))
+  }
+
   async function bootstrapInstance(directory: string, projectID?: string, mode: "open" | "warm" = "open") {
     if (!directory) return
     requested.add(directory)
@@ -785,6 +817,8 @@ function createGlobalSync() {
       return pending
     }
     if (mode === "warm") warming.add(key)
+    // A fresh bootstrap, first or re-pushed, fetches the catalogs again.
+    catalogued.delete(directory)
 
     const promise = (async () => {
       const [store, setStore] = ensureChild(directory, projectID)
@@ -827,20 +861,6 @@ function createGlobalSync() {
 
       if (store.status !== "complete") setStore("status", "partial")
       interactive("project")
-
-      // Catalogs the first paint does not show. Listing commands and MCP
-      // status launches every configured MCP server, and the skill catalog
-      // scans each skill root; they load once the session list is on screen.
-      const catalogs = () =>
-        Promise.all([
-          sdk.command.list().then((x) => setStore("command", x.data ?? [])),
-          sdk.app
-            .skills()
-            .then((x) => setStore("skill", x.data ?? []))
-            .catch(() => {}),
-          sdk.mcp.status().then((x) => setStore("mcp", x.data!)),
-          sdk.lsp.status().then((x) => setStore("lsp", x.data!)),
-        ]).catch((error) => console.warn("Failed to load project catalogs", { directory, error }))
 
       Promise.all([
         sdk.path.get().then((x) => setStore("path", x.data!)),
@@ -911,7 +931,8 @@ function createGlobalSync() {
         }),
       ]).then(() => {
         setStore("status", "complete")
-        defer(() => void catalogs(), CATALOG_DELAY_MS)
+        // A warmed project keeps its MCP servers down until its first open.
+        if (opened.has(directory)) defer(() => void loadCatalogs(directory, projectID), CATALOG_DELAY_MS)
       })
     })()
 
