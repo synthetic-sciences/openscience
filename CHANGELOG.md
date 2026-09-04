@@ -40,6 +40,16 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Calmed the agent trajectory: each tool call is one fixed-height row with a
+  present-tense label while it runs ("Reading paper.tex"), a live elapsed
+  clock, and on completion a status glyph (done, failed, cancelled), the
+  duration, and a one-line receipt (lines, matches, files, non-zero exit
+  code) with the output folded until opened; failures keep the tool's own row
+  with the first error line inline; consecutive completed calls of one tool
+  fold behind a counted header; reasoning folds to "Thinking (12s)" and stays
+  open once a reader opens it; streaming prose ends in a quiet static caret;
+  the status line and the write/edit placeholder keep a fixed height so the
+  transcript no longer jumps while a turn works.
 - Replaced the generic "Considering next steps" status with the request's real
   phase (connecting, waiting for the first token, receiving, waiting on the
   gateway, or retrying) and its elapsed time, so a stalled turn is visible as
