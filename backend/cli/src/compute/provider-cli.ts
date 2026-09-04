@@ -5,6 +5,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import type { ComputeSettings } from "../server/routes/settings/compute"
 import { CredentialLifecycle } from "../credentials/lifecycle"
 import { CredentialProcessLedger } from "../credentials/process-ledger"
+import { CredentialRevocation } from "../credentials/revocation"
 import { ProcessIdentity } from "../process/process-identity"
 import { WindowsJobLauncher } from "../process/windows-job-launcher"
 import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "../process/darwin-responsibility-launcher"
@@ -599,6 +600,7 @@ export namespace ProviderCli {
   }
 }
 
-CredentialLifecycle.onRevoke(async () => {
-  await CredentialProcessLedger.revoke("provider")
+// An expired synced overlay reaches only helpers that inherited it.
+CredentialLifecycle.onRevoke(async ({ reason }) => {
+  await CredentialProcessLedger.revoke({ kind: "provider", ...CredentialRevocation.scope(reason) })
 })

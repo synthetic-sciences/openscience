@@ -73,16 +73,7 @@ import { useExecutionAuthority } from "@/atlas/use-execution-authority"
 import { sessionEntryTarget } from "@/pages/session-entry"
 import { shouldConfirmUndo, undoPreview, undoSummary, type UndoPreview } from "@/pages/session-undo"
 import { SessionContextUsage } from "@/components/session-context-usage"
-import type { ContextPreferences } from "@/components/settings/context-preferences"
-import {
-  contextWarning,
-  estimate,
-  formatContextTokens,
-  latestContext,
-  warnTokens,
-  type ContextEstimate,
-  type ContextSample,
-} from "@/pages/session-context"
+import { estimate, latestContext, type ContextEstimate, type ContextSample } from "@/pages/session-context"
 import "./session-header.css"
 import "./session-undo.css"
 import "../components/chat-surface.css"
@@ -216,10 +207,7 @@ export default function Page(): JSX.Element {
         const endpoint = `${url.replace(/\/$/, "")}/settings/preferences`
         void (platform.fetch ?? fetch)(endpoint)
           .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Preferences unavailable"))))
-          .then((preferences: ProductPreferences & Partial<ContextPreferences>) => {
-            productPreferences.sync(preferences)
-            warnTokens.sync(preferences)
-          })
+          .then((preferences: ProductPreferences) => productPreferences.sync(preferences))
           .catch(() => productPreferences.sync({ show_trace: false, atlas_enabled: false, show_local_models: true }))
       },
     ),
@@ -600,9 +588,6 @@ export default function Page(): JSX.Element {
     if (!id || id === "new") return undefined
     return latestContext(messages(), estimates()[id])
   })
-  const contextAlert = createMemo(() =>
-    contextWarning({ tokens: contextSample()?.total, warn: warnTokens.value(), status: sessionStatus() }),
-  )
   // A message is a compaction boundary when it carries a `compaction` part.
   const compactionPart = (id: string) => (sync.data.part[id] ?? []).find((part) => part.type === "compaction")
   const hasCompactionPart = (id: string) => Boolean(compactionPart(id))
@@ -719,7 +704,7 @@ export default function Page(): JSX.Element {
     openContext("terminal")
   }
   // Native session commands (/compact, /status, ...) reuse the last turn's effort and
-  // delegation so the palette, the slash menu, and the context notice behave alike.
+  // delegation so the palette and the slash menu behave alike.
   const sessionCommand = (sessionID: string, name: string) => {
     const last = lastUserMessage()
     const request = {
@@ -1448,31 +1433,6 @@ export default function Page(): JSX.Element {
                           <AsciiSpinner size={10} />
                         </Show>
                         Restore
-                      </button>
-                    </div>
-                  </Show>
-                  <Show when={contextAlert()}>
-                    <div class="session-context-bar" role="status" aria-live="polite">
-                      <span class="session-context-bar__copy">
-                        <strong>
-                          {language.t("session.context.warning.size", {
-                            tokens: formatContextTokens(contextSample()?.total ?? 0, language.locale()),
-                          })}
-                        </strong>{" "}
-                        {language.t("session.context.warning.copy", {
-                          warn: formatContextTokens(warnTokens.value(), language.locale()),
-                        })}
-                      </span>
-                      <button
-                        type="button"
-                        class="session-context-bar__action"
-                        disabled={sessionBusy()}
-                        onClick={() => params.id && sessionCommand(params.id, "compact")}
-                      >
-                        {language.t("session.context.warning.compact")}
-                      </button>
-                      <button type="button" class="session-context-bar__action" onClick={newSession}>
-                        {language.t("session.context.warning.new")}
                       </button>
                     </div>
                   </Show>

@@ -99,6 +99,8 @@ const filesystemSync = Instance.state(
       )
       if (!payload.success || event.directory === directory) return
       if (payload.data.grant.scope !== "installation" && payload.data.projectID !== projectID) return
+      // A runtime never mints an instance: without one there is nothing to stop.
+      if (!Instance.has(directory)) return
       Instance.provide({
         directory,
         projectID,
@@ -117,6 +119,8 @@ const authoritySync = Instance.state(
     const directory = Instance.directory
     const projectID = Instance.project.id
     return AuthoritySignal.watch(async (change) => {
+      // A runtime never mints an instance: without one there is nothing to stop.
+      if (!Instance.has(directory)) return false
       return Instance.provide({
         directory,
         projectID,
@@ -224,14 +228,103 @@ export function applyRuntimeCancellationRequest(request: {
   return Promise.resolve({ status: "requested" as const, runID: request.runID })
 }
 
+/**
+ * Runtimes the first request does not need. Each is an Instance.state that
+ * would otherwise be primed on the connect path: the language-server table,
+ * the filesystem watcher and its root scan, the ripgrep file index, and the
+ * git branch probe. They start shortly after the instance is live, or on
+ * first use, whichever comes first; disposal cancels a warmup still waiting.
+ */
+export const WARMUP_DELAY_MS = 1_000
+
+interface Warmup {
+  timer: ReturnType<typeof setTimeout> | undefined
+  run: Promise<void> | undefined
+  cancelled: boolean
+}
+
+const warmup = Instance.state(
+  (): Warmup => ({ timer: undefined, run: undefined, cancelled: false }),
+  async (state) => {
+    state.cancelled = true
+    if (!state.timer) return
+    clearTimeout(state.timer)
+    state.timer = undefined
+  },
+)
+
+/**
+ * Each runtime primes on its own: a language-server table that cannot be
+ * read (an execution config failure) must not keep the watcher, the file
+ * index or the git probe from starting, nor the scratch sweep from running.
+ * The `cancelled` checks keep a disposal that lands mid-warmup from
+ * registering runtimes for a project the server already released.
+ */
+function warm(state: Warmup) {
+  if (state.cancelled) return Promise.resolve()
+  state.run ??= (async () => {
+    await LSP.init().catch((error) => Log.Default.warn("deferred language-server init failed", { error }))
+    if (state.cancelled) return
+    FileWatcher.init()
+    File.init()
+    await Vcs.init().catch((error) => Log.Default.warn("deferred vcs init failed", { error }))
+    if (state.cancelled) return
+    // Scratch workspaces: remove orphans whose session record is gone.
+    SessionFilesystem.sweep().catch(() => {})
+  })()
+  return state.run
+}
+
+/** Test seam: observe and drive the deferred warmup without waiting on its timer. */
+export const InstanceWarmup = {
+  /** True while the deferred runtimes have neither started nor been cancelled. */
+  pending() {
+    const state = warmup()
+    return !state.run && !state.cancelled
+  },
+  /**
+   * Run the deferred runtimes now instead of waiting for the timer. Joins a
+   * warmup already in flight and resolves once that one finishes.
+   */
+  flush() {
+    const state = warmup()
+    if (state.timer) clearTimeout(state.timer)
+    state.timer = undefined
+    return warm(state)
+  },
+}
+
+function scheduleWarmup() {
+  const state = warmup()
+  if (state.timer || state.run || state.cancelled) return
+  const directory = Instance.directory
+  const projectID = Instance.project.id
+  state.timer = setTimeout(() => {
+    state.timer = undefined
+    // Disposal, of a live instance or of one whose bootstrap failed after
+    // scheduling, clears this timer and flips `cancelled` before the cache
+    // entry goes. A provide for a directory without an instance would mint a
+    // bare one, one that never ran InstanceBootstrap yet would serve every
+    // later request, so a stray callback gives up instead; inside the
+    // instance only the warmup it still owns runs, since a fresh instance
+    // for the directory schedules its own.
+    if (state.cancelled || !Instance.has(directory)) {
+      state.cancelled = true
+      return
+    }
+    Instance.provide({
+      directory,
+      projectID,
+      fn: () => (warmup.created() && warmup() === state ? warm(state) : undefined),
+    }).catch((error) => Log.Default.warn("deferred project warmup failed", { error, directory }))
+  }, WARMUP_DELAY_MS)
+  state.timer.unref?.()
+}
+
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
   Format.init()
-  await LSP.init()
-  FileWatcher.init()
-  File.init()
-  Vcs.init()
   Snapshot.init()
   Truncate.init()
   filesystemSync()
@@ -247,9 +340,6 @@ export async function InstanceBootstrap() {
       Log.Default.warn("project activity update failed", { error }),
     )
   })
-
-  // Scratch workspaces: remove orphans whose session record is gone.
-  SessionFilesystem.sweep().catch(() => {})
 
   Bus.subscribe(Command.Event.Executed, async (payload) => {
     if (payload.properties.name === Command.Default.INIT) {
@@ -348,4 +438,8 @@ export async function InstanceBootstrap() {
   // cleanup handlers above are installed, so recovery has the same strict
   // acknowledgment contract as the original request.
   await Session.resumeDeleting()
+
+  // Last, once nothing above can throw. A bootstrap that still fails has its
+  // runtimes, this timer among them, disposed by Instance.provide.
+  scheduleWarmup()
 }

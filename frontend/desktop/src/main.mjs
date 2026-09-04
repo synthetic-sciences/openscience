@@ -137,12 +137,24 @@ async function port() {
   })
 }
 
+// The sidecar listens well under a second after spawn. Probe again quickly
+// once, then settle into a slower cadence so a slow disk does not turn the
+// wait into a busy loop; the workspace URL loads the moment health passes.
+const READY_FIRST_RETRY_MS = 100
+const READY_RETRY_MS = 250
+
 async function ready(url) {
   const deadline = Date.now() + 30_000
+  const probe = () =>
+    fetch(`${url}/global/health`, { signal: AbortSignal.timeout(2_000) })
+      .then((response) => response.ok)
+      .catch(() => false)
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  if (await probe()) return
+  await pause(READY_FIRST_RETRY_MS)
   while (Date.now() < deadline) {
-    const response = await fetch(`${url}/global/health`).catch(() => undefined)
-    if (response?.ok) return
-    await new Promise((resolve) => setTimeout(resolve, 120))
+    if (await probe()) return
+    await pause(READY_RETRY_MS)
   }
   throw new Error("The local OpenScience service did not start within 30 seconds.")
 }

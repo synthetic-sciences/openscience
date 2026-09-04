@@ -9,10 +9,79 @@
 
   [data-slot="basic-tool-tool-trigger-content"] {
     width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     align-self: stretch;
     gap: 20px;
+  }
+
+  /* One fixed-width status rail per row: receipt or first error line, one
+     glyph, one clock. Tabular digits and a reserved clock width keep a ticking
+     counter from nudging the title while a call runs. */
+  [data-slot="basic-tool-tool-status"] {
+    flex-shrink: 0;
+    min-width: 0;
+    max-width: 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-weaker);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-x-small);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  [data-slot="basic-tool-tool-detail"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot="basic-tool-tool-detail"][data-error="true"] {
+    color: var(--text-critical-base);
+  }
+
+  [data-slot="basic-tool-tool-glyph"] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--icon-weak);
+
+    [data-component="spinner"] {
+      width: 12px;
+      height: 12px;
+    }
+  }
+
+  [data-slot="basic-tool-tool-status"][data-outcome="done"] [data-slot="basic-tool-tool-glyph"] {
+    color: var(--icon-success-base);
+  }
+
+  [data-slot="basic-tool-tool-status"][data-outcome="error"] [data-slot="basic-tool-tool-glyph"] {
+    color: var(--icon-critical-base);
+  }
+
+  [data-slot="basic-tool-tool-status"][data-outcome="cancelled"] [data-slot="basic-tool-tool-glyph"] {
+    color: var(--icon-warning-base);
+  }
+
+  [data-slot="basic-tool-tool-time"] {
+    flex-shrink: 0;
+    min-width: 3.5ch;
+    text-align: right;
+  }
+
+  [data-slot="basic-tool-tool-time"]:empty {
+    min-width: 0;
   }
 
   [data-slot="icon-svg"] {

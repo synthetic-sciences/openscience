@@ -36,7 +36,6 @@ import { useI18n } from "../context/i18n"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Button } from "./button"
-import { Card } from "./card"
 import { createTypewriter } from "./typewriter"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
@@ -45,6 +44,7 @@ import { Spinner } from "./spinner"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
 import { PermissionActions, type PermissionReply } from "./permission-actions"
+import { useClock } from "./clock"
 import { findLast } from "@synsci/util/array"
 import { getDirectory as _getDirectory, getFilename } from "@synsci/util/path"
 import { checksum } from "@synsci/util/encode"
@@ -59,10 +59,16 @@ import {
   scienceTaskLabel,
   sentenceCaseLabel,
   skillActivity,
-  toolErrorDisplay,
+  toolSummary,
 } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
-import { formatTaskDuration, stripTaskMetadata, summarizeTaskActivity, traceFamily } from "./research-trace"
+import {
+  elapsedLabel,
+  formatTaskDuration,
+  stripTaskMetadata,
+  summarizeTaskActivity,
+  traceFamily,
+} from "./research-trace"
 
 export { ARTIFACT_TOOL, ToolRegistry, type ToolComponent, type ToolProps } from "./tool-registry"
 
@@ -652,6 +658,16 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const title = () => part.state?.title as string | undefined
 
   const render = createMemo(() => ToolRegistry.render(part.tool, metadata()) ?? GenericTool)
+  const time = () => ("time" in part.state ? part.state.time : undefined)
+  const error = () => (part.state.status === "error" ? part.state.error : undefined)
+  const summary = createMemo(() =>
+    toolSummary({
+      tool: part.tool,
+      status: part.state.status,
+      output: part.state.status === "completed" ? part.state.output : undefined,
+      metadata: partMetadata(),
+    }),
+  )
 
   return (
     <div
@@ -661,61 +677,25 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
       data-tool-family={traceFamily(part.tool)}
       data-tool-status={part.state.status}
     >
-      <Switch>
-        <Match when={part.state.status === "error" && part.state.error}>
-          {(error) => {
-            const display = () => toolErrorDisplay(part.tool, error())
-            return (
-              <Card variant="error">
-                <div data-component="tool-error">
-                  <Icon name="circle-ban-sign" size="small" />
-                  <div data-slot="message-part-tool-error-body">
-                    <Switch>
-                      <Match when={display().title}>
-                        {(title) => (
-                          <div data-slot="message-part-tool-error-content">
-                            <div data-slot="message-part-tool-error-title">{title()}</div>
-                            <span data-slot="message-part-tool-error-message">{display().message}</span>
-                          </div>
-                        )}
-                      </Match>
-                      <Match when={true}>
-                        <span data-slot="message-part-tool-error-message">{display().message}</span>
-                      </Match>
-                    </Switch>
-                    <Show when={display().details}>
-                      {(details) => (
-                        <details data-slot="message-part-tool-error-details">
-                          <summary>Technical details</summary>
-                          <pre>{details()}</pre>
-                        </details>
-                      )}
-                    </Show>
-                  </div>
-                </div>
-              </Card>
-            )
-          }}
-        </Match>
-        <Match when={true}>
-          <Dynamic
-            component={render()}
-            input={input()}
-            tool={part.tool}
-            metadata={metadata()}
-            // @ts-expect-error
-            output={part.state.output}
-            status={part.state.status}
-            partID={part.id}
-            attachments={part.state.status === "completed" ? part.state.attachments : undefined}
-            title={title()}
-            hideDetails={props.hideDetails}
-            forceOpen={forceOpen()}
-            locked={showPermission() || showQuestion()}
-            defaultOpen={props.defaultOpen}
-          />
-        </Match>
-      </Switch>
+      <Dynamic
+        component={render()}
+        input={input()}
+        tool={part.tool}
+        metadata={metadata()}
+        // @ts-expect-error
+        output={part.state.output}
+        status={part.state.status}
+        time={time()}
+        summary={summary()}
+        error={error()}
+        partID={part.id}
+        attachments={part.state.status === "completed" ? part.state.attachments : undefined}
+        title={title()}
+        hideDetails={props.hideDetails}
+        forceOpen={forceOpen()}
+        locked={showPermission() || showQuestion()}
+        defaultOpen={props.defaultOpen}
+      />
       <Show when={showPermission() && permission()}>
         <PermissionActions respond={respond} metadata={permission()?.metadata} />
       </Show>
@@ -731,6 +711,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
   const throttledText = createTypewriter(displayText)
   const [copied, setCopied] = createSignal(false)
+  const streaming = () => props.message.role === "assistant" && !completedAt(props.message) && !part.time?.end
 
   const handleCopy = async () => {
     const content = displayText()
@@ -742,7 +723,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
   return (
     <Show when={throttledText()}>
-      <div data-component="text-part">
+      <div data-component="text-part" data-streaming={streaming() ? "true" : undefined}>
         <div data-slot="text-part-body">
           <Markdown
             data-slot={props.message.role === "assistant" ? "assistant-prose" : undefined}
@@ -777,10 +758,35 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 // can concatenate provider summary headings directly onto adjacent prose.
 // Encrypted reasoning remains in providerMetadata and is never rendered.
 
+function completedAt(message: MessageType) {
+  return message.role === "assistant" ? (message as AssistantMessage).time.completed : undefined
+}
+
+// Reasoning a reader opened stays open across re-renders and trace toggles
+// within the page session; everything else stays folded to its one-line clock.
+const [opened, setOpened] = createStore<Record<string, boolean>>({})
+
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const i18n = useI18n()
   const part = props.part as ReasoningPart
   const text = () => reasoningDisplayText(part.text)
   const status = () => (text() ? undefined : reasoningTopic(part.text))
+  const live = () => !part.time?.end && !completedAt(props.message)
+  const now = useClock(() => live() && !!part.time?.start)
+  // A completed message whose reasoning never reported an end (an aborted
+  // turn) shows the plain label rather than the rest of the turn as thinking.
+  const duration = () => {
+    const start = part.time?.start
+    const end = live() ? now() : part.time?.end
+    if (!start || !end) return ""
+    return end - start >= 1000 ? elapsedLabel(end - start) : ""
+  }
+  const title = () =>
+    duration()
+      ? i18n.t("ui.messagePart.reasoning.thinking", { duration: duration() })
+      : i18n.t("ui.sessionTurn.status.thinking")
+  const open = () => opened[part.id] === true
+  const bodyID = () => `${part.id}-reasoning`
 
   return (
     <Show when={text() || status()}>
@@ -792,8 +798,32 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
           </div>
         }
       >
-        <div data-component="reasoning-part" data-origin="provider-reasoning">
-          <Markdown text={text()} cacheKey={part.id} />
+        <div
+          data-component="reasoning-part"
+          data-origin="provider-reasoning"
+          data-expanded={open() ? "true" : undefined}
+          data-live={live() ? "true" : undefined}
+        >
+          <button
+            type="button"
+            data-slot="reasoning-part-toggle"
+            aria-expanded={open()}
+            aria-controls={bodyID()}
+            onClick={() => setOpened(part.id, !open())}
+          >
+            <span data-slot="reasoning-part-glyph">
+              <Show when={live()} fallback={<Icon name="brain" size="small" />}>
+                <Spinner />
+              </Show>
+            </span>
+            <span data-slot="reasoning-part-title">{title()}</span>
+            <Icon name="chevron-down" size="small" data-slot="reasoning-part-chevron" />
+          </button>
+          <Show when={open()}>
+            <div id={bodyID()} data-slot="reasoning-part-body">
+              <Markdown text={text()} cacheKey={part.id} />
+            </div>
+          </Show>
         </div>
       </Show>
     </Show>
@@ -1328,7 +1358,7 @@ ToolRegistry.register({
 
     const childSessionId = () => props.metadata.sessionId as string | undefined
     const activity = createMemo(() => summarizeTaskActivity(summary()))
-    const findings = createMemo(() => stripTaskMetadata(props.output))
+    const findings = createMemo(() => stripTaskMetadata(props.output ?? props.error))
     const duration = () => formatTaskDuration(props.metadata.durationMs as number | undefined)
     const model = () => {
       const value = props.metadata.model as { providerID?: string; modelID?: string } | undefined
@@ -1539,8 +1569,10 @@ ToolRegistry.register({
 
                 <Show when={findings()}>
                   {(value) => (
-                    <div data-slot="delegation-findings">
-                      <span data-slot="delegation-section-label">Findings</span>
+                    <div data-slot="delegation-findings" data-error={props.status === "error" ? "true" : undefined}>
+                      <span data-slot="delegation-section-label">
+                        {props.status === "error" ? "Error" : "Findings"}
+                      </span>
                       <Markdown text={value()} />
                     </div>
                   )}
@@ -1619,13 +1651,18 @@ ToolRegistry.register({
   name: "bash",
   render(props) {
     const i18n = useI18n()
+    const subtitle = () => {
+      if (typeof props.input.description === "string" && props.input.description.trim()) return props.input.description
+      const command = typeof props.input.command === "string" ? props.input.command : ""
+      return command.trim().split("\n")[0]?.slice(0, 80) || undefined
+    }
     return (
       <BasicTool
         {...props}
         icon="console"
         trigger={{
           title: i18n.t("ui.tool.shell"),
-          subtitle: props.input.description,
+          subtitle: subtitle(),
         }}
       >
         <Show when={props.input.command || props.metadata.command || props.output || props.metadata.output}>
@@ -1653,7 +1690,7 @@ ToolRegistry.register({
     return (
       <Show
         when={isToolDone(props.status) || bodyReady()}
-        fallback={<ToolProgress label={i18n.t("ui.messagePart.title.edit")} subtitle={filename()} />}
+        fallback={<ToolProgress label={i18n.t("ui.tool.running.edit")} subtitle={filename()} />}
       >
         <BasicTool
           {...props}
@@ -1725,7 +1762,7 @@ ToolRegistry.register({
     return (
       <Show
         when={isToolDone(props.status) || bodyReady()}
-        fallback={<ToolProgress label={i18n.t("ui.messagePart.title.write")} subtitle={filename()} />}
+        fallback={<ToolProgress label={i18n.t("ui.tool.running.write")} subtitle={filename()} />}
       >
         <BasicTool
           {...props}
@@ -1805,7 +1842,7 @@ ToolRegistry.register({
     return (
       <Show
         when={isToolDone(props.status) || files().length > 0}
-        fallback={<ToolProgress label={i18n.t("ui.tool.patch")} subtitle={subtitle()} />}
+        fallback={<ToolProgress label={i18n.t("ui.tool.running.patch")} subtitle={subtitle()} />}
       >
         <BasicTool
           {...props}

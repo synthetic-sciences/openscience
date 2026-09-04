@@ -85,12 +85,6 @@ const Compaction = z.object({
     .max(1)
     .default(CompactionSettings.DEFAULT_THRESHOLD)
     .describe("Fraction of the model window that triggers automatic compaction (compaction.threshold)"),
-  compaction_warn_tokens: z
-    .number()
-    .int()
-    .positive()
-    .default(CompactionSettings.DEFAULT_WARN_TOKENS)
-    .describe("Conversation size in tokens above which the workspace warns (compaction.warn_tokens)"),
 })
 
 export const Preferences = Stored.extend(Compaction.shape)
@@ -112,7 +106,6 @@ const PreferencesPatch = z.object({
   delegation_diversity: Stored.shape.delegation_diversity.removeDefault().optional(),
   compaction_auto: Compaction.shape.compaction_auto.removeDefault().optional(),
   compaction_threshold: Compaction.shape.compaction_threshold.removeDefault().optional(),
-  compaction_warn_tokens: Compaction.shape.compaction_warn_tokens.removeDefault().optional(),
 })
 
 const OnboardingOperationInput = z.object({
@@ -156,7 +149,6 @@ async function compaction() {
   return {
     compaction_auto: effective.auto,
     compaction_threshold: effective.threshold,
-    compaction_warn_tokens: effective.warn_tokens,
   }
 }
 
@@ -214,7 +206,6 @@ export const SettingsPreferencesRoutes = lazy(() =>
         const context = {
           ...(patch.compaction_auto === undefined ? {} : { auto: patch.compaction_auto }),
           ...(patch.compaction_threshold === undefined ? {} : { threshold: patch.compaction_threshold }),
-          ...(patch.compaction_warn_tokens === undefined ? {} : { warn_tokens: patch.compaction_warn_tokens }),
         }
         const rows = Object.fromEntries(Object.entries(patch).filter(([key]) => !(key in Compaction.shape)))
         // Preserve instances: Config.state() re-reads on the global revision bump, so an

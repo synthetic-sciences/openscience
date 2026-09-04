@@ -40,15 +40,28 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Restored the model options popover to its previous layout.
+- Calmed the agent trajectory: each tool call is one fixed-height row with a
+  present-tense label while it runs ("Reading paper.tex"), a live elapsed
+  clock, and on completion a status glyph (done, failed, cancelled), the
+  duration, and a one-line receipt (lines, matches, files, non-zero exit
+  code) with the output folded until opened; failures keep the tool's own row
+  with the first error line inline; consecutive completed calls of one tool
+  fold behind a counted header; reasoning folds to "Thinking (12s)" and stays
+  open once a reader opens it; streaming prose ends in a quiet static caret;
+  the status line and the write/edit placeholder keep a fixed height so the
+  transcript no longer jumps while a turn works.
 - Replaced the generic "Considering next steps" status with the request's real
   phase (connecting, waiting for the first token, receiving, waiting on the
   gateway, or retrying) and its elapsed time, so a stalled turn is visible as
   such.
-- Showed the live context size in the session header with a warning once the
-  conversation passes `compaction.warn_tokens` (default 120000), a one-click
-  "Compact now" notice above the composer, and Customize → General rows for
-  the auto-compact threshold and the warning threshold, backed by
-  `/settings/preferences`.
+- Showed the live context size as a quiet token count in the session header
+  and added a Customize → General row for the auto-compact threshold, backed
+  by `/settings/preferences`.
+- Removed the over-budget context warning bar above the composer with its
+  "Compact now" and "Start a new session" actions, the "Warn above N tokens"
+  row, and the `compaction.warn_tokens` config key. A stale key left in
+  `openscience.json` is ignored.
 - Made the workspace event stream non-blocking: each browser connection drains
   its own bounded queue, so a stalled tab can no longer back-pressure the agent
   loop, and per-request and per-event logging moved to debug.
@@ -58,6 +71,36 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Served a recently verified Ace balance while refreshing it in the background
   under a bounded timeout, so managed turns no longer wait on the account
   service.
+- Shared one in-flight Ace account status, entitlement, and wallet read per
+  funding context, so a managed turn, the settings panels, and credential sync
+  that check the account at the same time no longer repeat the request, and
+  the account summary no longer reads the profile twice.
+- Stopped loading the full account and workspace summary before every managed
+  turn. A scoped session now starts from the local session file and the
+  cached balance check; only a legacy unscoped session still reconciles its
+  workspace first, and the gateway's funding echo is still verified before
+  anything is charged.
+- Persisted the last good Ace account summary (the shown profile fields,
+  funding context, wallet and entitlement; never the key) in the data
+  directory and served it to the Ace and account panels at once, marked
+  `refreshing` while a newer one is read in the background and announced as
+  `account.updated`. A panel no longer shows a spinner for the account
+  service when a summary exists, a refresh that failed or did not fully
+  answer keeps the last good values with the reason, a refusal from the
+  gateway is shown but never stored, and a spend right after a refresh does
+  not start another one.
+- Replaced the Ace panel's 6-second timeout racing 60 seconds of server work
+  with one bounded 15-second account deadline owned by the server and
+  propagated, together with the request's own abort signal, to every
+  outbound account read. A panel that closes cancels the reads it started,
+  a shared read is cancelled only when its last waiter leaves, and the UI
+  waits for the server's answer instead of giving up first.
+- Kept the built provider catalog across project switches. The provider
+  state is now keyed on a revision of the inputs that can differ between
+  projects (provider config, enabled/disabled providers, billing routing,
+  plugins, trust) instead of on the project itself, so opening another
+  project with the same provider setup no longer reruns the whole
+  "[provider] init" pass; a config, auth, or trust change still rebuilds it.
 - Unified loading, empty, alert, and control styling across Customize panels,
   moved Credentials under Capabilities, renamed Security & access to
   Permissions, and gave Local models inline errors and skeleton rows.
@@ -117,6 +160,31 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Renewed synchronized workspace credentials every 90 seconds instead of every
+  4 minutes against their 5-minute grant, and retried a failed refresh with
+  short backoff (5 s, 15 s, 30 s) inside that grant, logging the HTTP status
+  and error class of each failure. One refresh lost to a saturated link or a
+  transient gateway error no longer lets the grant lapse unnoticed.
+- Scoped the expiry of a synchronized workspace credential grant to the
+  runtimes that actually inherited it. The synced provider and service keys are
+  a separate overlay from Ace's managed access and from locally owned keys, so
+  their expiry now revokes only children whose spawn environment carried that
+  overlay, as stamped in the credential process ledger at spawn, instead of
+  disposing every project instance and aborting the active model request
+  mid-turn. Language servers, the SSH broker, and credential helpers never
+  receive the overlay and are left alone; ledger entries written by earlier
+  builds, which carry no stamp, are still revoked for the command, compute,
+  MCP, credential-helper and Modal volume kinds, including MCP transports
+  whose owner server has since died. A grant that lapses before its expiry is
+  published still stamps every child spawned in that window, and a failed
+  expiry is retried with backoff. Expired grants remain unusable for new
+  requests.
+- Named the cause when a credential change other than an overlay expiry
+  cancels a turn or a tool call ("Interrupted: credentials changed (...)"),
+  and recorded an overlay expiry on the commands it stops. A tool call that is
+  cancelled before it started, by a credential change or by the user, is now
+  marked cancelled with "had not started; no action was taken" instead of a
+  failed call with empty arguments.
 - Made title and summary generation single-flight with a bounded number of
   attempts per message, so a slow first turn no longer fans out into duplicate
   title requests.

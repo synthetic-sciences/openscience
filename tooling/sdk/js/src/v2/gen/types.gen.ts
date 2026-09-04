@@ -111,6 +111,13 @@ export type EventProjectTrustChanged = {
   }
 }
 
+export type EventAccountUpdated = {
+  type: "account.updated"
+  properties: {
+    refreshed_at: number
+  }
+}
+
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -1142,6 +1149,7 @@ export type Event =
   | EventProjectUpdated
   | EventServerInstanceDisposed
   | EventProjectTrustChanged
+  | EventAccountUpdated
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileWatcherUpdated
@@ -2086,10 +2094,6 @@ export type Config = {
      */
     threshold?: number
     /**
-     * Show a compact-or-restart notice in the workspace when the conversation context exceeds this many tokens (default: 120000)
-     */
-    warn_tokens?: number
-    /**
      * Assumed context window (tokens) when a provider reports 0 (default: 128000)
      */
     fallbackContext?: number
@@ -2844,6 +2848,9 @@ export type AccountGetResponses = {
    */
   200: {
     session: boolean
+    refreshing: boolean
+    refreshed_at: number | null
+    error?: string
     user?: unknown
     balance_usd: number | null
     billing_mode: {
@@ -8676,10 +8683,6 @@ export type SettingsPreferencesGetResponses = {
      * Fraction of the model window that triggers automatic compaction (compaction.threshold)
      */
     compaction_threshold?: number
-    /**
-     * Conversation size in tokens above which the workspace warns (compaction.warn_tokens)
-     */
-    compaction_warn_tokens?: number
   }
 }
 
@@ -8705,7 +8708,6 @@ export type SettingsPreferencesUpdateData = {
     delegation_diversity?: "focused" | "balanced" | "exploratory"
     compaction_auto?: boolean
     compaction_threshold?: number
-    compaction_warn_tokens?: number
   }
   path?: never
   query?: never
@@ -8747,10 +8749,6 @@ export type SettingsPreferencesUpdateResponses = {
      * Fraction of the model window that triggers automatic compaction (compaction.threshold)
      */
     compaction_threshold?: number
-    /**
-     * Conversation size in tokens above which the workspace warns (compaction.warn_tokens)
-     */
-    compaction_warn_tokens?: number
   }
 }
 
@@ -9450,6 +9448,9 @@ export type SettingsWalletGetResponses = {
       description: string
       createdAt: string
     }>
+    refreshing: boolean
+    refreshedAt: number | null
+    error?: string
   }
 }
 

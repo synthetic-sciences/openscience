@@ -2,10 +2,13 @@ import { describe, test, expect } from "bun:test"
 import {
   artifactTypeLabel,
   artifactActions,
+  errorLine,
   generatedArtifacts,
   humanizeToolName,
+  lineCount,
   reasoningDisplayText,
   reasoningTopic,
+  runningLabel,
   sentenceCaseLabel,
   savedArtifact,
   scienceTaskLabel,
@@ -13,8 +16,11 @@ import {
   sessionErrorText,
   skillActivity,
   skillName,
+  stripBashMetadata,
   stripRedactedReasoning,
   toolErrorDisplay,
+  toolOutcome,
+  toolSummary,
   writtenFiles,
 } from "./tool-display"
 
@@ -362,5 +368,101 @@ describe("generatedArtifacts", () => {
   test("labels PDFs by format instead of the broad report kind", () => {
     expect(artifactTypeLabel({ kind: "report", path: "paper/final.pdf", mimeType: "application/pdf" })).toBe("PDF")
     expect(artifactTypeLabel({ kind: "figure", path: "figures/roc.png", mimeType: "image/png" })).toBe("Figure")
+  })
+})
+
+describe("toolOutcome", () => {
+  test("maps the part lifecycle onto one glyph state", () => {
+    expect(toolOutcome("pending")).toBe("pending")
+    expect(toolOutcome("running")).toBe("running")
+    expect(toolOutcome("completed")).toBe("done")
+    expect(toolOutcome("error", "Error: File not found: paper.pdf")).toBe("error")
+    expect(toolOutcome(undefined)).toBe("pending")
+  })
+
+  test("reads an abort as a cancellation rather than a tool failure", () => {
+    expect(toolOutcome("error", "Tool execution aborted")).toBe("cancelled")
+    expect(toolOutcome("error", "The request was cancelled by the user")).toBe("cancelled")
+    expect(toolOutcome("error", "Command timed out after 120s")).toBe("error")
+  })
+})
+
+describe("runningLabel", () => {
+  test("gives every core tool a present-tense label and leaves unknown tools alone", () => {
+    expect(runningLabel("read")).toBe("ui.tool.running.read")
+    expect(runningLabel("bash")).toBe("ui.tool.running.bash")
+    expect(runningLabel("multiedit")).toBe("ui.tool.running.edit")
+    expect(runningLabel("apply_patch")).toBe("ui.tool.running.patch")
+    expect(runningLabel("task")).toBeUndefined()
+    expect(runningLabel("playwright_browser_click")).toBeUndefined()
+  })
+})
+
+describe("errorLine", () => {
+  test("keeps only the first non-empty line without the Error prefix", () => {
+    expect(errorLine("Error: File not found: paper.pdf\n  at read (read.ts:12)")).toBe("File not found: paper.pdf")
+    expect(errorLine("\n\n  ENOENT: no such file  \nmore")).toBe("ENOENT: no such file")
+    expect(errorLine(undefined)).toBe("")
+  })
+})
+
+describe("toolSummary", () => {
+  const read = "<file>\n00001| import x\n00002| \n00003| print(x)\n\n(End of file - total 3 lines)\n</file>"
+
+  test("counts only the numbered lines of a read", () => {
+    expect(toolSummary({ tool: "read", status: "completed", output: read })).toEqual([
+      { key: "ui.tool.summary.lines.other", params: { count: 3 } },
+    ])
+    expect(toolSummary({ tool: "read", status: "completed", output: "<file>\n00001| one\n</file>" })).toEqual([
+      { key: "ui.tool.summary.lines.one", params: { count: 1 } },
+    ])
+  })
+
+  test("reports the units each tool measures itself", () => {
+    expect(toolSummary({ tool: "grep", status: "completed", metadata: { matches: 8 } })).toEqual([
+      { key: "ui.tool.summary.matches.other", params: { count: 8 } },
+    ])
+    expect(toolSummary({ tool: "glob", status: "completed", metadata: { count: 1 } })).toEqual([
+      { key: "ui.tool.summary.files.one", params: { count: 1 } },
+    ])
+    expect(toolSummary({ tool: "list", status: "completed", metadata: { count: 12 } })).toEqual([
+      { key: "ui.tool.summary.files.other", params: { count: 12 } },
+    ])
+    expect(toolSummary({ tool: "webfetch", status: "completed", output: "a\nb\n" })).toEqual([
+      { key: "ui.tool.summary.lines.other", params: { count: 2 } },
+    ])
+  })
+
+  test("mentions a shell exit code only when it is not zero", () => {
+    expect(toolSummary({ tool: "bash", status: "completed", output: "ok\n", metadata: { exit: 0 } })).toEqual([
+      { key: "ui.tool.summary.lines.one", params: { count: 1 } },
+    ])
+    expect(toolSummary({ tool: "bash", status: "completed", output: "boom\nbang", metadata: { exit: 2 } })).toEqual([
+      { key: "ui.tool.summary.exit", params: { code: 2 } },
+      { key: "ui.tool.summary.lines.other", params: { count: 2 } },
+    ])
+  })
+
+  test("does not count the shell metadata trailer as output", () => {
+    const output =
+      "one\ntwo\n\n<bash_metadata>\nbash tool terminated command after exceeding timeout 5 ms\n</bash_metadata>"
+    expect(stripBashMetadata(output)).toBe("one\ntwo")
+    expect(stripBashMetadata("plain\n")).toBe("plain\n")
+    expect(toolSummary({ tool: "bash", status: "completed", output, metadata: { exit: 124 } })).toEqual([
+      { key: "ui.tool.summary.exit", params: { code: 124 } },
+      { key: "ui.tool.summary.lines.other", params: { count: 2 } },
+    ])
+    const silent = "\n\n<bash_metadata>\nUser aborted the command\n</bash_metadata>"
+    expect(toolSummary({ tool: "bash", status: "completed", output: silent, metadata: { exit: 0 } })).toEqual([])
+  })
+
+  test("stays silent for live calls and for tools whose body already says it", () => {
+    expect(toolSummary({ tool: "grep", status: "running", metadata: { matches: 8 } })).toEqual([])
+    expect(toolSummary({ tool: "bash", status: "error", output: "boom", metadata: { exit: 1 } })).toEqual([])
+    expect(toolSummary({ tool: "edit", status: "completed", output: "Edit applied" })).toEqual([])
+    expect(toolSummary({ tool: "python", status: "completed", output: "1\n2\n3" })).toEqual([])
+    expect(toolSummary({ tool: "task", status: "completed", output: "findings" })).toEqual([])
+    expect(lineCount("")).toBe(0)
+    expect(lineCount("one\ntwo\n")).toBe(2)
   })
 })

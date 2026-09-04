@@ -284,7 +284,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 0;
+  border: 1px solid var(--model-control-border);
   border-radius: var(--radius-xs);
   background: var(--model-control-raised);
   color: var(--model-control-muted);
@@ -502,11 +502,6 @@
   color: var(--text-interactive-base);
 }
 
-.model-settings-chevron {
-  flex: 0 0 auto;
-  color: var(--model-control-muted);
-}
-
 .model-settings-option-section {
   min-width: 0;
 }
@@ -543,14 +538,12 @@
   padding: 4px;
 }
 
-/* Same recipe as the Settings segmented control: borderless muted track and a
-   quiet selected segment, without a second border or shadow. */
 [data-model-options-compact] [role="radiogroup"] {
   display: grid;
   grid-template-columns: repeat(var(--model-option-columns, 3), minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
-  border: 0;
+  border: 1px solid var(--model-control-border);
   border-radius: var(--radius-md);
   background: var(--model-control-raised);
 }
@@ -559,10 +552,9 @@
   min-height: 36px;
   justify-content: center;
   padding: 4px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  box-shadow: none;
   text-align: center;
 }
 
@@ -572,6 +564,7 @@
 }
 
 [data-model-settings-popover] [data-model-options-compact] .model-settings-row[aria-checked="true"] {
+  border-color: var(--model-control-border-strong);
   background: var(--model-control-surface);
 }
 
