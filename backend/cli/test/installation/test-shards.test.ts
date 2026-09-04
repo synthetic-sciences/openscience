@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "path"
 import { readdir } from "node:fs/promises"
-import { affected, entries, isolated, owner, plan, root, weights } from "../../../../tooling/repo/test-shards"
+import { affected, anyTest, entries, isolated, owner, plan, root, weights } from "../../../../tooling/repo/test-shards"
 
 const tool = path.resolve(root, "../../tooling/repo/test-shards.ts")
 
@@ -64,12 +64,23 @@ test("changed paths map to their test directories, root files always run, and pr
   const nothing = affected(["docs/readme.md", "frontend/workspace/src/app.tsx"], items)
   expect(nothing.groups.map((group) => group.paths)).toEqual([rootPaths.join(" ")])
 
-  const global = affected(
+  const anywhere = affected(
     ["backend/cli/test/fixture/fixture.ts", "bun.lock", "backend/cli/src/mystery/index.ts"],
     items,
   )
-  expect(global.global).toEqual(["backend/cli/test/fixture/fixture.ts", "bun.lock", "backend/cli/src/mystery/index.ts"])
-  expect(global.groups.map((group) => group.paths)).toEqual([rootPaths.join(" ")])
+  expect(anywhere.global).toEqual([
+    "backend/cli/test/fixture/fixture.ts",
+    "bun.lock",
+    "backend/cli/src/mystery/index.ts",
+  ])
+  expect(anywhere.groups.map((group) => group.paths)).toEqual([rootPaths.join(" ")])
+
+  // test/global is a real directory, not the any-test sentinel.
+  const global = affected(["backend/cli/src/global/data-dir.ts", "backend/cli/test/global/data-root.test.ts"], items)
+  expect(global.groups).toHaveLength(1)
+  expect(global.groups[0].paths.split(" ")).toContain("./test/global")
+  expect(global.global).toEqual([])
+  expect(global.seconds).toBe(weights.global + weights.root)
 })
 
 test("owners cover release tooling, workflows, scripts, and aliased source areas", () => {
@@ -88,8 +99,12 @@ test("owners cover release tooling, workflows, scripts, and aliased source areas
   expect(owner("backend/cli/src/provider/anthropic.ts")).toBe("provider")
   expect(owner("backend/cli/test/compute/jobs.test.ts")).toBe("compute")
   expect(owner("backend/cli/test/bun.test.ts")).toBe("root")
-  expect(owner("backend/cli/test/preload.ts")).toBe("global")
-  expect(owner("backend/cli/package.json")).toBe("global")
+  expect(owner("backend/cli/src/global/data-dir.ts")).toBe("global")
+  expect(owner("backend/cli/test/global/data-dir.test.ts")).toBe("global")
+  expect(owner("backend/cli/test/preload.ts")).toBe(anyTest)
+  expect(owner("backend/cli/package.json")).toBe(anyTest)
+  expect(owner("backend/cli/src/mystery/index.ts")).toBe(anyTest)
+  expect(anyTest in weights).toBe(false)
 })
 
 test("the CLI prints the deep-ci matrix and the affected groups as JSON", async () => {

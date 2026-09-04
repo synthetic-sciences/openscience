@@ -71,11 +71,15 @@ jobs:
   # from the diff against the pull request base (or the previous main tip on
   # push). The root test files always run and test/project runs in its own bun
   # process. Changes that can affect every test (fixtures, lockfile, preload)
-  # are reported here and covered by Deep CI.
+  # are reported here and covered by Deep CI. Test is a required check, so the
+  # timeout covers the worst case rather than the typical selection: a
+  # cross-cutting change can select the whole weight table (~14 min of tests
+  # in one bun process, the same shape as the 838-920 s single-process Deep CI
+  # baseline) on top of ~2 min of checkout, install, and fixture setup.
   test:
     name: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-bun

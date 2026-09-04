@@ -103,6 +103,11 @@ const exact: Record<string, string> = {
   "frontend/landing/public/install": "installation",
 }
 
+/** Owner of a change that can affect any backend test. Not a directory name:
+ * test/global and src/global are a real weighted entry, so a string such as
+ * "global" cannot double as this sentinel. */
+export const anyTest = "*"
+
 /** Changes that can affect any test. The affected lane runs the root files
  * and reports that full coverage waits for Deep CI. */
 const shared = [
@@ -120,10 +125,10 @@ function area(file: string, base: string) {
   return rest.includes("/") ? rest.slice(0, rest.indexOf("/")) : undefined
 }
 
-/** Map a repo-relative path to the weighted entry that covers it, "global"
+/** Map a repo-relative path to the weighted entry that covers it, `anyTest`
  * when any test may be affected, or undefined when no backend test can be. */
 export function owner(file: string) {
-  if (shared.includes(file) || file.startsWith("backend/cli/test/fixture/")) return "global"
+  if (shared.includes(file) || file.startsWith("backend/cli/test/fixture/")) return anyTest
   if (exact[file]) return exact[file]
   const prefix = prefixes.find(([value]) => file.startsWith(value))
   if (prefix) return prefix[1]
@@ -131,9 +136,9 @@ export function owner(file: string) {
   if (file.startsWith("backend/cli/src/")) {
     const dir = area(file, "backend/cli/src/")
     if (!dir) return "cli"
-    return aliases[dir] ?? (dir in weights ? dir : "global")
+    return aliases[dir] ?? (dir in weights ? dir : anyTest)
   }
-  if (file.startsWith("backend/cli/")) return "global"
+  if (file.startsWith("backend/cli/")) return anyTest
   return undefined
 }
 
@@ -223,8 +228,8 @@ export function affected(changed: string[], items: Entry[]) {
   const global: string[] = []
   for (const file of changed) {
     const name = owner(file)
-    if (name === "global") global.push(file)
-    if (name && name !== "global") names.add(name)
+    if (name === anyTest) global.push(file)
+    else if (name) names.add(name)
   }
   const selected = items.filter((item) => names.has(item.name))
   const groups = plan(selected, 1)
