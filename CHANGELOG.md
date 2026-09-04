@@ -40,6 +40,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Restored the model options popover to its previous layout.
 - Replaced the generic "Considering next steps" status with the request's real
   phase (connecting, waiting for the first token, receiving, waiting on the
   gateway, or retrying) and its elapsed time, so a stalled turn is visible as
