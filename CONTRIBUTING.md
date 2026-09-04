@@ -40,11 +40,11 @@ Always install with the frozen lockfile (`bun run setup` or `bun install --froze
 bun dev --help          # list commands
 bun dev serve           # headless API server (port 4096, then 4097, then a random port)
 bun dev web             # start the server and open the workspace (the default command)
-bun dev <directory>     # open the workspace in a specific project
-bun dev .               # run in the repo root
+bun dev <directory>     # open the workspace in a specific project (absolute path)
+bun dev "$PWD"          # run in this checkout
 ```
 
-With no directory, `bun dev` runs in `backend/cli` (the root script passes `--cwd backend/cli`), so the agent treats `backend/cli` as its project and reads `backend/cli/AGENTS.md`. That file is the agent's ML-workflow instructions for that demo project, not guidance for repo contributors; the repo style guide is the root [AGENTS.md](./AGENTS.md).
+With no directory, `bun dev` runs in `backend/cli` (the root script passes `--cwd backend/cli`), so the agent treats `backend/cli` as its project and reads `backend/cli/AGENTS.md`. That file is the agent's ML-workflow instructions for that demo project, not guidance for repo contributors; the repo style guide is the root [AGENTS.md](./AGENTS.md). Relative paths resolve from `backend/cli` too — `bun dev .` lands there, not in the repo root — so pass an absolute path such as `bun dev "$PWD"` to run in this checkout.
 
 ### Two dev loops
 
@@ -162,7 +162,7 @@ Replace `<platform>` with your platform, for example `darwin-arm64` or `linux-x6
 - `tooling/script`, `tooling/util`, `tooling/patches`: the build helper, shared utilities, and dependency patches applied at install time.
 - `evals/`: launch evals and the cadence dev lab used to evaluate the research harness.
 - `docs/`: engineering notes (`docs/notes`), ADRs, specs, and historical plans.
-- `.openscience/`: repo-local agent config used when you run `bun dev .` in this checkout — custom commands, a skill, and a theme.
+- `.openscience/`: repo-local agent config used when you run `bun dev "$PWD"` from this checkout — custom commands, a skill, and a theme.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together.
 

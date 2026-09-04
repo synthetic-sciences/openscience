@@ -39,7 +39,7 @@ tooling/util         Shared TypeScript utilities (@synsci/util)
 tooling/patches      Dependency patches applied at install time
 evals                Launch evals and the cadence dev lab for the research harness
 docs                 Engineering notes (docs/notes), ADRs, specs, and historical plans
-.openscience         Repo-local agent config (commands, a skill, a theme) used by `bun dev .`
+.openscience         Repo-local agent config (commands, a skill, a theme) used by `bun dev "$PWD"`
 ```
 
 ## Backend (`backend/cli`)

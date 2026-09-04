@@ -72,7 +72,7 @@ cannot be isolated by the sandbox. Global plugins have neither restriction.
 
 `tooling/plugin` is a workspace package, so inside the monorepo you can import
 `@synsci/plugin` directly and point `openscience.json` at your module with a
-`file://` URL. Run `bun dev .` from the repo root and check the server log for
+`file://` URL. Run `bun dev "$PWD"` from the repo root and check the server log for
 `loading plugin`. For a standalone package, `bun add @synsci/plugin` and export
 the plugin from your entry module.
 

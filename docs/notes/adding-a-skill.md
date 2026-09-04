@@ -93,7 +93,7 @@ README.md or the docs site; they drift with every skill change.
 
 ## Try it
 
-Run the workspace in this checkout (`bun dev .`) and ask the agent to use the
+Run the workspace in this checkout (`bun dev "$PWD"`) and ask the agent to use the
 skill by name, or load it directly with the skill tool. Dev mode reads
 `backend/cli/skills/` from disk, so edits show up on the next session without a
 rebuild. Release builds embed the tree through

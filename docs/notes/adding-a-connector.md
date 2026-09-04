@@ -72,7 +72,7 @@ Do not add connector counts to README.md; they drift.
 
 ## Try it
 
-Run `bun dev .` and ask the agent to search your database, or call the tools
+Run `bun dev "$PWD"` and ask the agent to search your database, or call the tools
 directly: `science_list_dbs` should list the new id and `science_search` with
 `db: "<id>"` should return hits.
 
