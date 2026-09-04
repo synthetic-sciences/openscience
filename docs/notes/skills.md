@@ -44,6 +44,9 @@ matches.
 
 ## Authoring
 
+To contribute a skill to the bundled library, see
+[adding-a-skill.md](adding-a-skill.md). Personal skills work like this:
+
 ```bash
 openscience skill new leakage-checks --description "Checklists for spotting data leakage"
 openscience skill validate leakage-checks
