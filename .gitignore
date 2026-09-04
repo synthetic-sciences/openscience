@@ -44,3 +44,6 @@ legacy-chat-ui/
 
 # Local design references and PDF screenshot exports
 .ui-reference/
+
+# Harbor adapter local virtualenv
+tooling/harbor/.venv/
