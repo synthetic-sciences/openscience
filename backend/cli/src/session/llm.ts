@@ -49,6 +49,9 @@ export namespace LLM {
     trace?: { messageID: string; attempt: number }
     route?: string
     onReasoningEffortResolved?: (effort: string | undefined) => void | Promise<void>
+    /** Response headers arrived for a provider stream request; the body may
+     * still be a keepalive-only prefix, so this is not first output. */
+    onResponse?: () => void
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
@@ -339,6 +342,13 @@ export namespace LLM {
                 args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }
               return args.params
+            },
+            async wrapStream(args) {
+              // doStream settles when the response headers arrive, before any
+              // body chunk is read: the exact "waiting for first token" edge.
+              const result = await args.doStream()
+              input.onResponse?.()
+              return result
             },
           },
         ],

@@ -716,6 +716,64 @@ export type EventPermissionReplied = {
   }
 }
 
+export type EventSessionContext = {
+  type: "session.context"
+  properties: {
+    sessionID: string
+    tokens: {
+      system: number
+      text: number
+      reasoning: number
+      tool: number
+      skills: number
+      image: number
+    }
+    images: number
+    total: number
+    budget?: {
+      total: number
+      newest: number
+      history: number
+      usable: number
+      soft: number
+      hard: number
+    }
+  }
+}
+
+export type EventSessionCompaction = {
+  type: "session.compaction"
+  properties: {
+    sessionID: string
+    trigger: "proactive" | "overflow" | "manual"
+    mechanism: "prune" | "summary"
+    before?: number
+    after?: number
+    reclaimed: number
+  }
+}
+
+export type SessionRequestProgress = {
+  sessionID: string
+  messageID: string
+  attempt: number
+  agent: string
+  providerID: string
+  modelID: string
+  phase: "connecting" | "waiting_first_token" | "streaming" | "conflict_wait" | "retry_wait" | "done" | "error"
+  since: number
+  elapsedMs: number
+  retryAfterMs?: number
+  detail?: string
+  firstOutputMs?: number
+  stalls: number
+}
+
+export type EventSessionRequestProgress = {
+  type: "session.request.progress"
+  properties: SessionRequestProgress
+}
+
 export type SessionStatus =
   | {
       type: "idle"
@@ -816,43 +874,6 @@ export type EventQuestionRejected = {
   properties: {
     sessionID: string
     requestID: string
-  }
-}
-
-export type EventSessionContext = {
-  type: "session.context"
-  properties: {
-    sessionID: string
-    tokens: {
-      system: number
-      text: number
-      reasoning: number
-      tool: number
-      skills: number
-      image: number
-    }
-    images: number
-    total: number
-    budget?: {
-      total: number
-      newest: number
-      history: number
-      usable: number
-      soft: number
-      hard: number
-    }
-  }
-}
-
-export type EventSessionCompaction = {
-  type: "session.compaction"
-  properties: {
-    sessionID: string
-    trigger: "proactive" | "overflow" | "manual"
-    mechanism: "prune" | "summary"
-    before?: number
-    after?: number
-    reclaimed: number
   }
 }
 
@@ -1134,13 +1155,14 @@ export type Event =
   | EventMessagePartRemoved
   | EventPermissionAsked
   | EventPermissionReplied
+  | EventSessionContext
+  | EventSessionCompaction
+  | EventSessionRequestProgress
   | EventSessionStatus
   | EventSessionIdle
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
-  | EventSessionContext
-  | EventSessionCompaction
   | EventSessionCompacted
   | EventTodoUpdated
   | EventMcpToolsChanged

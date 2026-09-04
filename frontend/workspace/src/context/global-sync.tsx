@@ -9,6 +9,7 @@ import {
   type FileDiff,
   type Todo,
   type SessionStatus,
+  type SessionRequestProgress,
   type ProviderListResponse,
   type ProviderAuthResponse,
   type Command,
@@ -120,6 +121,9 @@ type State = {
   sessionTotal: number
   session_status: {
     [sessionID: string]: SessionStatus
+  }
+  session_progress: {
+    [sessionID: string]: SessionRequestProgress
   }
   session_diff: {
     [sessionID: string]: FileDiff[]
@@ -589,6 +593,7 @@ function createGlobalSync() {
           session: [],
           sessionTotal: 0,
           session_status: {},
+          session_progress: {},
           session_diff: {},
           todo: {},
           permission: {},
@@ -972,7 +977,8 @@ function createGlobalSync() {
         store.todo[sessionID] !== undefined ||
         store.permission[sessionID] !== undefined ||
         store.question[sessionID] !== undefined ||
-        store.session_status[sessionID] !== undefined
+        store.session_status[sessionID] !== undefined ||
+        store.session_progress[sessionID] !== undefined
 
       if (!hasAny) return
 
@@ -993,6 +999,7 @@ function createGlobalSync() {
           delete draft.permission[sessionID]
           delete draft.question[sessionID]
           delete draft.session_status[sessionID]
+          delete draft.session_progress[sessionID]
         }),
       )
     }
@@ -1000,7 +1007,10 @@ function createGlobalSync() {
     switch (event.type) {
       case "server.instance.disposed": {
         handleInstanceDisposed(
-          () => setStore("session_status", reconcile({})),
+          () => {
+            setStore("session_status", reconcile({}))
+            setStore("session_progress", reconcile({}))
+          },
           () => push(directory),
         )
         return
@@ -1072,6 +1082,10 @@ function createGlobalSync() {
         break
       case "session.status": {
         setStore("session_status", event.properties.sessionID, reconcile(event.properties.status))
+        break
+      }
+      case "session.request.progress": {
+        setStore("session_progress", event.properties.sessionID, reconcile(event.properties))
         break
       }
       case "message.updated": {
