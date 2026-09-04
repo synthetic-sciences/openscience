@@ -14,8 +14,9 @@ updates:
 
   # Bun lockfiles. The security `overrides` in package.json are otherwise
   # maintained by hand. Majors are ignored until each group has a green
-  # track record; bump them deliberately. Requires the Bun ecosystem to be
-  # enabled for the organization's Dependabot.
+  # track record; bump them deliberately. Needs the text-format bun.lock
+  # (present); if the first run reports an unsupported ecosystem, check the
+  # org's Dependabot settings.
   - package-ecosystem: "bun"
     directory: "/"
     schedule:
