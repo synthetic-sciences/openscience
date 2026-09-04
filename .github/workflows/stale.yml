@@ -21,7 +21,7 @@ jobs:
           stale-issue-label: stale
           stale-pr-label: stale
           remove-stale-when-updated: true
-          exempt-issue-labels: "pinned,security,feature-request,on-hold"
+          exempt-issue-labels: "pinned,security,on-hold,enhancement,good first issue,help wanted"
           exempt-pr-labels: "pinned,security,on-hold"
           stale-issue-message: >
             [automated] This issue has had no activity for 90 days. It will be

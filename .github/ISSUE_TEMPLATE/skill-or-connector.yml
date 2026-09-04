@@ -1,0 +1,64 @@
+name: Broken skill or connector
+description: A bundled skill script or a scientific database connector fails
+labels: ["bug", "needs-triage"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is broken?
+      options:
+        - Bundled skill (backend/cli/skills)
+        - Scientific connector (science_search / science_fetch)
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: Skill name or connector id
+      description: The frontmatter `name` of the skill, or the `db` id shown by `science_list_dbs`
+      placeholder: e.g. brenda-database, opentargets
+    validations:
+      required: true
+
+  - type: input
+    id: path
+    attributes:
+      label: Script path or record id
+      description: For a skill, the script under `backend/cli/skills/<category>/<name>/` that fails. For a connector, the query or record id you used.
+      placeholder: e.g. scripts/brenda_queries.py, or ENSG00000141510
+    validations:
+      required: false
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error output
+      description: The exact error text or the tool result the agent showed.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: OpenScience version
+      description: Output of `openscience --version`
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Provider and model
+      placeholder: e.g. Anthropic claude-sonnet (direct key)
+    validations:
+      required: false
+
+  - type: textarea
+    id: fix
+    attributes:
+      label: Suggested fix
+      description: If you know what changed upstream (new API parameter, renamed package, removed endpoint), say so. Pull requests for these are welcome without an issue first.
+    validations:
+      required: false

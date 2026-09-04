@@ -1,5 +1,8 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
-  - name: 💬 Discord Community
+  - name: Discord community
     url: https://discord.gg/openscience
-    about: For quick questions or real-time discussion. Note that issues are searchable and help others with the same question.
+    about: Quick questions and real-time discussion. Issues are searchable and help others, so prefer an issue for anything reproducible.
+  - name: Report a security vulnerability
+    url: https://github.com/synthetic-sciences/OpenScience/security/policy
+    about: Do not open a public issue for vulnerabilities. SECURITY.md explains how to report privately.

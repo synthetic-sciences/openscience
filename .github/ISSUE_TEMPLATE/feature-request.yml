@@ -1,20 +1,35 @@
-name: 🚀 Feature Request
+name: Feature request
 description: Suggest an idea, feature, or enhancement
-labels: [discussion]
-title: "[FEATURE]:"
-
+labels: ["enhancement", "needs-triage"]
 body:
   - type: checkboxes
     id: verified
     attributes:
-      label: Feature hasn't been suggested before.
+      label: This has not been suggested before
       options:
-        - label: I have verified this feature I'm about to request hasn't been suggested before.
+        - label: I searched open and closed issues for this idea.
           required: true
 
   - type: textarea
+    id: problem
     attributes:
-      label: Describe the enhancement you want to request
-      description: What do you want to change or add? What are the benefits of implementing this? Try to be detailed so we can understand your request better :)
+      label: What problem are you trying to solve?
+      description: Describe the research or engineering task and where OpenScience gets in the way today.
     validations:
       required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should OpenScience do instead? Sketch the behavior, not the implementation.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Existing skills, connectors, MCP servers, or plugins that almost do this.
+    validations:
+      required: false

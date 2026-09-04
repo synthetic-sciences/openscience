@@ -1,37 +1,19 @@
 name: Bug report
-description: Report an issue that should be fixed
-labels: ["bug"]
+description: Something in OpenScience does not work as documented
+labels: ["bug", "needs-triage"]
 body:
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: Describe the bug you encountered
-      placeholder: What happened?
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead? Paste error text rather than screenshots of text.
     validations:
       required: true
-
-  - type: input
-    id: plugins
-    attributes:
-      label: Plugins
-      description: What plugins are you using?
-    validations:
-      required: false
-
-  - type: input
-    id: openscience-version
-    attributes:
-      label: OpenScience version
-      description: What version of OpenScience are you using?
-    validations:
-      required: false
 
   - type: textarea
     id: reproduce
     attributes:
       label: Steps to reproduce
-      description: How can we reproduce this issue?
       placeholder: |
         1.
         2.
@@ -39,29 +21,72 @@ body:
     validations:
       required: false
 
-  - type: textarea
-    id: screenshot-or-link
+  - type: dropdown
+    id: install
     attributes:
-      label: Screenshot and/or share link
-      description: Run `/share` to get a share link, or attach a screenshot
-      placeholder: Paste link or drag and drop screenshot here
+      label: How did you install OpenScience?
+      options:
+        - npm install -g @synsci/openscience
+        - npx synsci
+        - Desktop app (DMG / EXE / AppImage)
+        - From source (bun dev)
+        - Other (say which in the description)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: OpenScience version
+      description: Output of `openscience --version` (or `bun dev --version` from source)
+      placeholder: 2.0.69
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Provider and model
+      description: The provider and model selected when the bug happened, and whether it is a direct key, a subscription login, or a local model
+      placeholder: e.g. Anthropic claude-sonnet (direct key), OpenRouter deepseek/deepseek-chat, Ollama llama3
     validations:
       required: false
 
   - type: input
     id: os
     attributes:
-      label: Operating System
-      description: what OS are you using?
-      placeholder: e.g., macOS 26.0.1, Ubuntu 22.04, Windows 11
+      label: Operating system
+      placeholder: e.g. macOS 26.0.1, Ubuntu 22.04, Windows 11
     validations:
       required: false
 
-  - type: input
-    id: terminal
+  - type: dropdown
+    id: sandbox
     attributes:
-      label: Terminal
-      description: what terminal are you using?
-      placeholder: e.g., iTerm2, Ghostty, Alacritty, Windows Terminal
+      label: Action approval mode
+      description: Research tools → Action approval in the composer, or `openscience sandbox` from the terminal
+      options:
+        - Approve for me (default)
+        - Ask for approval
+        - Full access
+        - Not sure
+    validations:
+      required: false
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`openscience doctor` output"
+      description: Paste the output of `openscience doctor`. It lists versions, config and data roots, and configured providers without printing secrets.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Relevant lines from the newest file under `~/.openscience/log/`, plus a screenshot if the bug is visual. Redact anything private.
+      placeholder: Drag and drop files here
     validations:
       required: false
