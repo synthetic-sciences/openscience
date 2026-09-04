@@ -1,5 +1,6 @@
 import type { ChildProcess } from "node:child_process"
 import z from "zod"
+import { CredentialOverlay } from "../../credentials/overlay"
 import { CredentialProcessLedger } from "../../credentials/process-ledger"
 import { ProcessIdentity } from "../../process/process-identity"
 import { WindowsJobLauncher } from "../../process/windows-job-launcher"
@@ -27,8 +28,12 @@ export type CommandStatus = z.infer<typeof CommandStatus>
 
 type Entry = CommandStatus & {
   process: ChildProcess
-  stop: () => Promise<void>
+  /** `reason` names a revocation cause so the owner can report it instead of
+   * a user abort. */
+  stop: (reason?: string) => Promise<void>
   linuxSubreaper: boolean
+  /** Synced workspace overlay the command inherited at spawn, if any. */
+  overlay?: string
 }
 
 const entries = new Map<string, Entry>()
@@ -62,7 +67,7 @@ export namespace CommandRuntime {
   export async function start(
     input: Omit<CommandStatus, "id" | "state" | "process_id" | "started_at" | "resources">,
     process: ChildProcess,
-    stop: () => Promise<void>,
+    stop: (reason?: string) => Promise<void>,
     options: { authorityGeneration?: string; windowsRelease?: string } = {},
   ) {
     if (!process.pid) throw new Error("Shell command started without a process id")
@@ -72,6 +77,7 @@ export namespace CommandRuntime {
       await stop()
       throw new Error("Linux command was not launched behind the verified child-subreaper registration gate")
     }
+    const overlay = CredentialOverlay.current()
     const value: Entry = {
       ...input,
       id: `command-${crypto.randomUUID()}`,
@@ -81,6 +87,7 @@ export namespace CommandRuntime {
       process,
       stop,
       linuxSubreaper: subreaper,
+      ...(overlay ? { overlay } : {}),
     }
     let completed = false
     const complete = () => {
@@ -109,6 +116,7 @@ export namespace CommandRuntime {
       projectID: value.projectID,
       sessionID: value.sessionID,
       authorityGeneration: options.authorityGeneration,
+      overlay,
       windowsRelease: options.windowsRelease,
       ...(value.linuxSubreaper ? { subreaper: process } : {}),
     })
@@ -160,7 +168,7 @@ export namespace CommandRuntime {
   export function list(projectID: string, sessionID?: string): CommandStatus[] {
     return [...entries.values()]
       .filter((value) => value.projectID === projectID && (!sessionID || value.sessionID === sessionID))
-      .map(({ process: _process, stop: _stop, linuxSubreaper: _linuxSubreaper, ...value }) => value)
+      .map(({ process: _process, stop: _stop, linuxSubreaper: _linuxSubreaper, overlay: _overlay, ...value }) => value)
       .toSorted((a, b) => b.started_at - a.started_at)
   }
 
@@ -221,6 +229,7 @@ export namespace CommandRuntime {
   async function stopMatching(
     scope: CredentialProcessLedger.Scope,
     matches: (value: Entry) => boolean,
+    reason?: string,
   ): Promise<number> {
     const targets = [...entries.values()].filter(matches)
     // Durable teardown must enumerate the leader's live descendant closure
@@ -231,7 +240,7 @@ export namespace CommandRuntime {
     const stop = async (value: Entry) => {
       if (stopped.has(value.id)) return
       stopped.add(value.id)
-      await value.stop()
+      await value.stop(reason)
     }
     const recovered = await CredentialProcessLedger.revoke(
       { kind: "command", ...scope },
@@ -263,7 +272,14 @@ export namespace CommandRuntime {
    * Unlike project/session cleanup, this is fail-closed: a stop callback that
    * rejects or a child that remains alive after SIGKILL blocks reconciliation
    * so the process cannot continue with a stale inherited environment. */
-  export async function stopAll(): Promise<number> {
-    return stopMatching({}, () => true)
+  export async function stopAll(reason?: string): Promise<number> {
+    return stopMatching({}, () => true, reason)
+  }
+
+  /** Stop only the commands that inherited the synchronized workspace overlay.
+   * A command spawned without it never held the lapsed grant and keeps
+   * running; the ones that did are told why they were stopped. */
+  export async function stopOverlay(reason: string): Promise<number> {
+    return stopMatching({ overlay: true }, (value) => !!value.overlay, reason)
   }
 }

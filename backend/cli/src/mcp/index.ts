@@ -24,7 +24,9 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import open from "open"
 import { OpenScience } from "@/openscience"
+import { CredentialOverlay } from "@/credentials/overlay"
 import { CredentialProcessLedger } from "@/credentials/process-ledger"
+import { CredentialRevocation } from "@/credentials/revocation"
 import { ProjectTrust } from "@/project/trust"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { Sandbox } from "@/sandbox/sandbox"
@@ -92,6 +94,8 @@ export namespace MCP {
   type MCPClient = Client
   type ToolList = Awaited<ReturnType<MCPClient["listTools"]>>
   const credentialProcesses = new WeakMap<MCPClient, string>()
+  /** Local transports that inherited a synced workspace overlay at spawn. */
+  const credentialOverlays = new WeakMap<MCPClient, string>()
   const localClients = new WeakSet<MCPClient>()
   const localSandboxes = new WeakMap<MCPClient, Sandbox.Wrapped>()
   const toolLists = new WeakMap<MCPClient, { value: ToolList; at: number }>()
@@ -250,6 +254,7 @@ export namespace MCP {
           await Bun.sleep(20)
         }
         credentialProcesses.delete(client)
+        credentialOverlays.delete(client)
       }
       const sandbox = localSandboxes.get(client)
       if (sandbox) {
@@ -273,6 +278,27 @@ export namespace MCP {
     }
     const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
     if (failures.length) throw new AggregateError(failures, "Local MCP servers could not be stopped")
+  }
+
+  /** Stop only the local transports that inherited the synchronized workspace
+   * overlay whose grant lapsed. Their status names the cause so the connector
+   * can be reconnected once the workspace is reachable again; every other
+   * transport keeps running. Never initializes MCP for an instance that has
+   * not used it. */
+  export async function disposeOverlay(): Promise<number> {
+    if (!state.created()) return 0
+    const current = await state()
+    const local = Object.entries(current.clients).filter(([, client]) => credentialOverlays.has(client))
+    const results = await Promise.allSettled(local.map(([, client]) => closeClient(client)))
+    for (const [name] of local) {
+      delete current.clients[name]
+      current.status[name] = { status: "failed", error: CredentialRevocation.EXPIRED }
+    }
+    const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))
+    if (failures.length) {
+      throw new AggregateError(failures, "Local MCP servers holding the expired workspace overlay could not be stopped")
+    }
+    return local.length
   }
 
   export const Status = z
@@ -894,16 +920,19 @@ export namespace MCP {
                   if (!pid) throw new Error("Local MCP transport started without a process id")
                   await withTimeout(waitForOwnedGroup(ready, pid), connectTimeout)
                   const id = `mcp-${crypto.randomUUID()}`
+                  const overlay = CredentialOverlay.current()
                   const registered = await CredentialProcessLedger.register({
                     id,
                     kind: "mcp",
                     pid,
                     detached: true,
                     projectID: Instance.project.id,
+                    overlay,
                     windowsRelease: launcher.release,
                   })
                   if (!registered) throw new Error("Local MCP transport exited before durable registration")
                   credentialProcesses.set(client, id)
+                  if (overlay) credentialOverlays.set(client, overlay)
                   localClients.add(client)
                   localSandboxes.set(client, sandbox)
                   transport.start = async () => undefined

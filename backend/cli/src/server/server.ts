@@ -60,9 +60,7 @@ import { UpdatesSettingsRoutes, desktopUpdateShutdownAuthorized } from "./routes
 import { ScientificToolsSettingsRoutes } from "./routes/settings/scientific-tools"
 import { projectSelection } from "./project-selection"
 import { CredentialLifecycle } from "../credentials/lifecycle"
-import { ComputeJobs } from "../compute/jobs"
-import { CommandRuntime } from "../science/command/registry"
-import { CredentialProcessLedger } from "../credentials/process-ledger"
+import { CredentialTeardown } from "../credentials/teardown"
 import { DataRootBarrier } from "../global/data-root-barrier"
 import { OnboardingAuthRoutes } from "./routes/onboarding-auth"
 import { AccountRoutes } from "./routes/account"
@@ -97,29 +95,10 @@ export namespace Server {
   function startCredentialLifecycle() {
     if (credentialLifecycleReady) return
     credentialLifecycleReady = true
-    CredentialLifecycle.onRevoke(async ({ reason }) => {
-      if (reason === "mcp-auth.migrate") return
-      const mcpAuthority =
-        reason.startsWith("mcp-config.") ||
-        ["mcp-auth.set:", "mcp-auth.remove:", "mcp-auth.tokens:", "mcp-auth.tokens.refresh:", "mcp-auth.client:"].some(
-          (prefix) => reason.startsWith(prefix),
-        )
-      if (mcpAuthority) {
-        // MCP authority is scoped to MCP transports. Do not stop unrelated
-        // notebooks, compute, or shell commands when an OAuth token refreshes.
-        await Promise.all([CredentialProcessLedger.revoke("mcp"), Instance.disposeAll({ strict: true })])
-        return
-      }
-      // Compute jobs and long-running Bash commands do not live in Instance
-      // state. MCP and LSP do, and their disposal callbacks close the
-      // underlying transports/processes.
-      await Promise.all([
-        ComputeJobs.cancelCredentialProcesses(),
-        CommandRuntime.stopAll(),
-        CredentialProcessLedger.revoke("mcp"),
-        Instance.disposeAll({ strict: true }),
-      ])
-    })
+    // Which runtimes a revision reaches is decided by its reason; see
+    // CredentialRevocation for why an expired synced overlay must not dispose
+    // every project instance.
+    CredentialLifecycle.onRevoke(CredentialTeardown.apply)
     credentialLifecycleBaseline = CredentialLifecycle.ensureFresh().then(() => {
       CredentialLifecycle.watch()
     })

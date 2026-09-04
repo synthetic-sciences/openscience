@@ -4089,7 +4089,15 @@ export namespace ComputeJobs {
     })
   }
 
-  async function revokeActive(scope: { projectID?: string; sessionID?: string }): Promise<number> {
+  /** Local and SSH job children inherit the synchronized workspace overlay
+   * that was live when they were spawned. When that overlay's grant lapses,
+   * revoke only the ledger entries stamped with it; jobs spawned without the
+   * overlay never held the expired secrets and keep running. */
+  export async function cancelOverlayProcesses(): Promise<number> {
+    return revokeActive({ overlay: true })
+  }
+
+  async function revokeActive(scope: { projectID?: string; sessionID?: string; overlay?: boolean }): Promise<number> {
     const runtimes = [...active.values()].filter(
       (runtime) =>
         (!scope.projectID || runtime.authority.projectID === scope.projectID) &&

@@ -43,6 +43,7 @@ let count = 0
 let headers: Headers | undefined
 let wait: Promise<void> | undefined
 let stallBody = false
+let statuses: number[] = []
 let permissions: unknown = {}
 let authOrg: string | undefined = "org_a"
 let authUser = "user_a"
@@ -151,7 +152,7 @@ const server = Bun.serve({
         }),
         { headers: responseHeaders },
       )
-    return Response.json(payload, { status, headers: responseHeaders })
+    return Response.json(payload, { status: statuses.shift() ?? status, headers: responseHeaders })
   },
 })
 process.env.OPENSCIENCE_API_BASE = server.url.toString()
@@ -176,6 +177,7 @@ beforeEach(async () => {
   headers = undefined
   wait = undefined
   stallBody = false
+  statuses = []
   permissions = {}
   authOrg = "org_a"
   authUser = "user_a"
@@ -746,6 +748,128 @@ describe("workspace credential sync", () => {
     await WorkspaceCredentials.expire()
     expect(await Auth.get("openai")).toBeUndefined()
     expect(process.env.GITHUB_TOKEN).toBeUndefined()
+  })
+
+  test("refresh renews well inside the grant TTL and retries a failed refresh before it lapses", async () => {
+    // Three refreshes fit inside one TTL, and a full retry chain after a
+    // failed tick still completes before the grant written by the previous
+    // successful tick expires.
+    expect(OpenScience.SYNC_INTERVAL * 3).toBeLessThanOrEqual(WorkspaceCredentials.TTL)
+    const chain = OpenScience.SYNC_BACKOFF.reduce((sum, ms) => sum + ms, 0)
+    expect(OpenScience.SYNC_INTERVAL + chain).toBeLessThan(WorkspaceCredentials.TTL)
+
+    expect((await OpenScience.syncCredentials({ force: true })).state).toBe("ready")
+    const before = (await JsonStore.read(WorkspaceCredentials.filepath)).expires_at as number
+    await Bun.sleep(2)
+    statuses = [503, 502]
+    count = 0
+    const renewed = await OpenScience.scheduleRefresh({ force: true, backoff: [5, 10, 20] })
+    expect(renewed.state).toBe("ready")
+    expect(count).toBe(3)
+    const after = (await JsonStore.read(WorkspaceCredentials.filepath)).expires_at as number
+    expect(after).toBeGreaterThan(before)
+    expect(WorkspaceCredentials.expiresAt()).toBe(after)
+    expect(await Auth.get("openai")).toEqual({ type: "api", key: "fixture-cloud-openai" })
+
+    // Exhausted retries report the last failure and keep the cached grant
+    // for its remaining TTL rather than clearing it early.
+    statuses = [503, 503, 503]
+    count = 0
+    const exhausted = await OpenScience.scheduleRefresh({ force: true, backoff: [1, 1] })
+    expect(exhausted.state).toBe("error")
+    expect(exhausted.error).toContain("503")
+    expect(count).toBe(3)
+    expect(await Auth.get("openai")).toEqual({ type: "api", key: "fixture-cloud-openai" })
+    expect((await JsonStore.read(WorkspaceCredentials.filepath)).expires_at).toBe(after)
+  })
+
+  test("an expired grant revokes only children that inherited the overlay and leaves live runtimes alone", async () => {
+    const { spawn } = await import("node:child_process")
+    const { CommandRuntime } = await import("../../src/science/command/registry")
+    const { CredentialOverlay } = await import("../../src/credentials/overlay")
+    const { CredentialRevocation } = await import("../../src/credentials/revocation")
+    const { CredentialTeardown } = await import("../../src/credentials/teardown")
+    const { Instance } = await import("../../src/project/instance")
+    const { Shell } = await import("../../src/shell/shell")
+    const { tmpdir } = await import("../fixture/fixture")
+    const launch = async (label: string) => {
+      const wrapped = await CommandRuntime.wrap({
+        file: process.execPath,
+        args: ["-e", "setInterval(() => {}, 1000)"],
+      })
+      const child = spawn(wrapped.file, wrapped.args, { stdio: "ignore", detached: process.platform !== "win32" })
+      const state: { exited: boolean; reason?: string } = { exited: false }
+      child.once("exit", () => {
+        state.exited = true
+      })
+      const entry = await CommandRuntime.start(
+        {
+          projectID: `project_${label}`,
+          sessionID: `session_${label}`,
+          messageID: `message_${label}`,
+          description: label,
+          command: label,
+        },
+        child,
+        async (reason) => {
+          state.reason = reason
+          await Shell.killTree(child, { exited: () => state.exited, detached: process.platform !== "win32" })
+        },
+        { windowsRelease: wrapped.release },
+      )
+      child.once("exit", () => CommandRuntime.finish(entry.id))
+      return { child, entry, state }
+    }
+    const settle = async (state: { exited: boolean }, attempt = 0): Promise<boolean> => {
+      if (state.exited) return true
+      if (attempt >= 200) return false
+      await Bun.sleep(10)
+      return settle(state, attempt + 1)
+    }
+
+    await WorkspaceCredentials.clear()
+    expect(CredentialOverlay.current()).toBeUndefined()
+    // Spawned before any workspace grant was live: never held its secrets.
+    const local = await launch("local")
+    expect((await OpenScience.syncCredentials({ force: true })).state).toBe("ready")
+    expect(await WorkspaceCredentials.read()).toBeDefined()
+    expect(CredentialOverlay.current()).toBe("org_a")
+    // Spawned with the overlay live: inherited it, so expiry must reach it.
+    const synced = await launch("synced")
+
+    await using tmp = await tmpdir()
+    const disposed: string[] = []
+    const runtime = Instance.state(
+      () => ({ directory: Instance.directory }),
+      async (value) => {
+        disposed.push(value.directory)
+      },
+    )
+    await Instance.provide({ directory: tmp.path, fn: () => runtime() })
+    const off = CredentialLifecycle.onRevoke(CredentialTeardown.apply)
+    try {
+      await JsonStore.update(WorkspaceCredentials.filepath, (store) => ({ ...store, expires_at: Date.now() - 1 }))
+      await WorkspaceCredentials.expire()
+
+      expect(await settle(synced.state)).toBe(true)
+      expect(synced.state.reason).toBe(CredentialRevocation.EXPIRED)
+      expect(local.state.reason).toBeUndefined()
+      expect(local.state.exited).toBe(false)
+      expect(CommandRuntime.list("project_local", "session_local")).toHaveLength(1)
+      expect(CommandRuntime.list("project_synced", "session_synced")).toEqual([])
+      // The live project runtime and, with it, any active model turn survive.
+      expect(disposed).toEqual([])
+      // The lapsed grant is gone for new work.
+      expect(CredentialOverlay.current()).toBeUndefined()
+      expect(await WorkspaceCredentials.read()).toBeUndefined()
+      expect(await Auth.get("openai")).toBeUndefined()
+      expect(process.env.GITHUB_TOKEN).toBeUndefined()
+    } finally {
+      off()
+      await CommandRuntime.stopAll().catch(() => undefined)
+      await Instance.provide({ directory: tmp.path, fn: () => Instance.dispose() })
+    }
+    expect(disposed).toEqual([tmp.path])
   })
 
   test("managed placeholders and OAuth proxy carriers never become direct API keys", () => {

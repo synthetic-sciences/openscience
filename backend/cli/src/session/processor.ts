@@ -30,6 +30,8 @@ import { InvalidCall } from "@/tool/invalid-call"
 import { ToolSelection } from "./tool-selection"
 import { ProjectAccess } from "@/project/access"
 import { Instance } from "@/project/instance"
+import { CredentialRevocation } from "@/credentials/revocation"
+import { abortedToolPart } from "./tool-outcome"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -967,11 +969,15 @@ export namespace SessionProcessor {
               })
             }
           } catch (e: any) {
+            // A credential revision that cancelled this turn carries its cause
+            // on the controller. Record that cause, not the SDK's generic
+            // "operation was aborted".
+            const cause = CredentialRevocation.interruption(input.abort.reason) ?? e
             log.error("process", {
-              error: e,
+              error: cause,
               stack: JSON.stringify(e.stack),
             })
-            const error = MessageV2.fromError(e, { providerID: input.model.providerID })
+            const error = MessageV2.fromError(cause, { providerID: input.model.providerID })
             // A context-window overflow is deterministic — retrying the same
             // oversized input can only fail again. Signal the outer loop (via the
             // "overflow" return below) to compact + resume instead of burning
@@ -1093,23 +1099,19 @@ export namespace SessionProcessor {
             snapshot = undefined
           }
           const p = await MessageV2.parts(input.assistantMessage.id)
+          const interruption = CredentialRevocation.interruption(input.abort.reason)
           for (const part of p) {
             if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
               if (await toolOutcomes.reconcile(part)) continue
-              await Session.updatePart({
-                ...part,
-                state: {
-                  ...part.state,
-                  status: "error",
-                  error: overflow
-                    ? "Model output was truncated before the tool call completed (context limit); no action was taken. Compacting and retrying."
-                    : "Tool execution aborted",
-                  time: {
-                    start: Date.now(),
-                    end: Date.now(),
-                  },
-                },
-              })
+              await Session.updatePart(
+                overflow
+                  ? abortedToolPart(
+                      part,
+                      "Model output was truncated before the tool call completed (context limit); no action was taken. Compacting and retrying.",
+                      { explain: false },
+                    )
+                  : abortedToolPart(part, interruption?.message ?? "Tool execution aborted"),
+              )
               toolOutcomes.abandon(part.callID)
             }
           }

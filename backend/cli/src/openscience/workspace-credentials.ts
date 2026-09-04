@@ -7,16 +7,27 @@ import { SecretBox } from "../util/secret-box"
 import { SecretFile } from "../util/secret-file"
 import { isAtlasManagedKey } from "../credentials/managed-key"
 import { CredentialLifecycle } from "../credentials/lifecycle"
+import { CredentialOverlay } from "../credentials/overlay"
+import { Log } from "../util/log"
 import { isDeepStrictEqual } from "node:util"
 
 /** A revocable overlay, never a replacement for this device's own credentials.
  * No dashboard config, executable code, arbitrary environment, or billing
  * preference crosses this boundary. Cached grants expire when offline. */
 export namespace WorkspaceCredentials {
+  const log = Log.create({ service: "workspace-credentials" })
+  /** Hard bound on a cached grant. OpenScience.SYNC_INTERVAL renews well
+   * inside it, with retries, so only a genuinely unreachable workspace lets
+   * a grant lapse. */
   export const TTL = 5 * 60_000
   export const filepath = path.join(Global.Path.data, "workspace-credentials.json")
   let expiry: ReturnType<typeof setTimeout> | undefined
   let deadline = 0
+
+  /** When the cached grant lapses, for refresh diagnostics. */
+  export function expiresAt(): number | undefined {
+    return deadline || undefined
+  }
   type Session = { api_key: string; organization_id?: string }
   const Renewal = z
     .object({
@@ -171,18 +182,34 @@ export namespace WorkspaceCredentials {
 
   export async function clear(): Promise<void> {
     await JsonStore.update(filepath, () => ({}))
+    CredentialOverlay.clear()
     if (expiry) clearTimeout(expiry)
     deadline = 0
   }
 
   /** Publish expiry as a real credential revocation so running SDK caches and
-   * child processes cannot retain a cloud grant indefinitely while offline. */
+   * child processes cannot retain a cloud grant indefinitely while offline.
+   *
+   * The revision reason is `workspace-sync.expired`, which CredentialTeardown
+   * treats as overlay-scoped: the grant is cleared here before the revision is
+   * published (no new request can use it), and only children stamped with the
+   * overlay are revoked. Disposing every project instance for this reason was
+   * wrong: it aborted active model turns that ran on Ace or on the device's
+   * own keys and never used the lapsed overlay. */
   export async function expire(): Promise<void> {
     await CredentialLifecycle.mutateIf(
       "workspace-sync.expired",
       async () => {
         const store = await JsonStore.read(filepath)
-        return typeof store.expires_at === "number" && store.expires_at <= Date.now()
+        const lapsed = typeof store.expires_at === "number" && store.expires_at <= Date.now()
+        if (lapsed) {
+          const { OpenScience } = await import("./index")
+          log.warn("synchronized workspace credentials expired before they could be renewed", {
+            expires_at: new Date(store.expires_at as number).toISOString(),
+            sync: OpenScience.credentialSyncStatus(),
+          })
+        }
+        return lapsed
       },
       clear,
     )
@@ -196,7 +223,17 @@ export namespace WorkspaceCredentials {
     expiry.unref()
   }
 
+  /** Every consumer that hands the overlay to a child (subprocess env, service
+   * env injection) reads through here, so the process-local overlay marker is
+   * kept current at the last read before a spawn. */
   export async function read(options: { strict?: boolean } = {}): Promise<Snapshot | undefined> {
+    const snapshot = await load(options)
+    if (snapshot) CredentialOverlay.mark(snapshot.organization_id)
+    else CredentialOverlay.clear()
+    return snapshot
+  }
+
+  async function load(options: { strict?: boolean }): Promise<Snapshot | undefined> {
     const unreadable = () => {
       if (options.strict) throw new Error("Saved workspace credentials could not be read")
       return undefined

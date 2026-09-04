@@ -397,6 +397,7 @@ export const BashTool = Tool.define("bash", async () => {
 
       let exited = false
       let aborted = false
+      const stopped: { reason?: string } = {}
       const { proc, command, kill, sandbox, completion, drain } = await AuthoritySignal.exclusive(async () => {
         const current = await ExecutionAuthority.require({
           projectID: Instance.project.id,
@@ -480,8 +481,9 @@ export const BashTool = Tool.define("bash", async () => {
                 command: params.command,
               },
               child,
-              async () => {
+              async (reason) => {
                 aborted = true
+                stopped.reason = reason
                 await stop()
               },
               { authorityGeneration: current.generation, windowsRelease: wrapped.release },
@@ -556,7 +558,8 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       if (aborted) {
-        resultMetadata.push("User aborted the command")
+        // A credential revocation names itself; anything else is the user.
+        resultMetadata.push(stopped.reason ?? "User aborted the command")
       }
 
       if (resultMetadata.length > 0) {

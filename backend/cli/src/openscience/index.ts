@@ -671,6 +671,13 @@ export namespace OpenScience {
   const attempts = new Map<string, number>()
   let synced: SyncStatus = { state: "disconnected" }
   let syncTimer: ReturnType<typeof setInterval> | undefined
+  /** Renewal cadence for the synced overlay. The grant lives
+   * WorkspaceCredentials.TTL (5 min); a refresh every 4 min meant one failed
+   * attempt (a saturated link during a large download, a transient 5xx) let
+   * the grant lapse before the next tick. Refresh at under a third of the TTL
+   * and retry a failure with short backoff, all inside one TTL. */
+  export const SYNC_INTERVAL = 90_000
+  export const SYNC_BACKOFF: readonly number[] = [5_000, 15_000, 30_000]
 
   export function credentialSyncStatus(): SyncStatus {
     return synced
@@ -689,6 +696,7 @@ export namespace OpenScience {
       synced = { state: "syncing" }
       const controller = new AbortController()
       let timer: ReturnType<typeof setTimeout> | undefined
+      const seen: { status?: number } = {}
       const request = (async () => {
         const response = await fetch(`${apiBase()}/api/cli/sync`, {
           headers: { Authorization: `Bearer ${session.api_key}`, ...fundingHeaders(session) },
@@ -707,6 +715,7 @@ export namespace OpenScience {
             }, options.timeoutMs ?? 8_000)
           }),
         ])
+        seen.status = result.response.status
         if (result.response.status === 401) {
           await clearSession(session.api_key)
           throw new Error("This device was disconnected. Sign in again.")
@@ -766,6 +775,14 @@ export namespace OpenScience {
         if (!(await matches())) return synced
         return (synced = { state: "ready", organization_id: data.snapshot.organization_id, synced_at: Date.now() })
       } catch (error) {
+        // A silent failure here is how a grant lapses unnoticed: name the
+        // status and error class so the next expiry is diagnosable.
+        log.warn("workspace credential sync failed", {
+          status: seen.status,
+          error: error instanceof Error ? error.name : typeof error,
+          message: error instanceof Error ? error.message : String(error),
+          expires_at: WorkspaceCredentials.expiresAt(),
+        })
         const current = await getSession()
         if (current && !identities.has(WorkspaceCredentials.identity(current))) return synced
         return (synced = {
@@ -781,14 +798,47 @@ export namespace OpenScience {
     return task
   }
 
-  export async function scheduleRefresh(): Promise<void> {
-    await syncCredentials()
+  function pause(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms).unref())
+  }
+
+  /** Refresh the synced overlay, retrying a failed attempt with short backoff
+   * so one transient failure is retried well before the grant's TTL elapses.
+   * The first attempt honours the one-minute dedupe unless forced; retries
+   * always go out. */
+  export async function scheduleRefresh(
+    options: { backoff?: readonly number[]; force?: boolean } = {},
+  ): Promise<SyncStatus> {
+    const backoff = options.backoff ?? SYNC_BACKOFF
+    const attempt = async (index: number, force: boolean): Promise<SyncStatus> => {
+      const result = await syncCredentials({ force })
+      if (result.state !== "error") return result
+      const delay = backoff[index]
+      const expires = WorkspaceCredentials.expiresAt()
+      if (delay === undefined) {
+        log.error("workspace credential refresh exhausted its retries", {
+          error: result.error,
+          attempts: index + 1,
+          expires_at: expires,
+        })
+        return result
+      }
+      log.warn("workspace credential refresh failed; retrying", {
+        error: result.error,
+        retry_ms: delay,
+        remaining: backoff.length - index - 1,
+        expires_at: expires,
+      })
+      await pause(delay)
+      return attempt(index + 1, true)
+    }
+    return attempt(0, options.force ?? false)
   }
 
   export function startCredentialSync(): void {
     if (syncTimer) return
     void scheduleRefresh()
-    syncTimer = setInterval(() => void scheduleRefresh(), 4 * 60_000)
+    syncTimer = setInterval(() => void scheduleRefresh(), SYNC_INTERVAL)
     syncTimer.unref()
   }
 

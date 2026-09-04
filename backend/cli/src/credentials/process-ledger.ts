@@ -10,6 +10,7 @@ import { WindowsJob } from "../process/windows-job"
 import { WindowsJobLauncher } from "../process/windows-job-launcher"
 import { AuthorityProcessLedger } from "../project/authority-process"
 import { FileLease } from "../util/file-lease"
+import { CredentialOverlay } from "./overlay"
 
 export namespace CredentialProcessLedger {
   export type Kind = "command" | "compute" | "lsp" | "mcp" | "provider" | "modal-volume" | "local-runtime"
@@ -29,6 +30,9 @@ export namespace CredentialProcessLedger {
     project_id?: string
     session_id?: string
     authority_generation?: string
+    /** Workspace whose synchronized credential overlay was live in the owner
+     * process when this child was spawned, i.e. which the child inherited. */
+    overlay?: string
   }
 
   export interface Scope {
@@ -36,6 +40,9 @@ export namespace CredentialProcessLedger {
     kind?: Kind
     projectID?: string
     sessionID?: string
+    /** Match only children stamped with a synced workspace overlay. An expired
+     * overlay grant reaches exactly those children and nothing else. */
+    overlay?: boolean
   }
 
   export interface RevokeOptions {
@@ -79,7 +86,8 @@ export namespace CredentialProcessLedger {
       typeof item.created_at === "string" &&
       (item.project_id === undefined || typeof item.project_id === "string") &&
       (item.session_id === undefined || typeof item.session_id === "string") &&
-      (item.authority_generation === undefined || typeof item.authority_generation === "string")
+      (item.authority_generation === undefined || typeof item.authority_generation === "string") &&
+      (item.overlay === undefined || (typeof item.overlay === "string" && !!item.overlay))
     )
   }
 
@@ -439,9 +447,12 @@ export namespace CredentialProcessLedger {
     projectID?: string
     sessionID?: string
     authorityGeneration?: string
+    /** Defaults to the overlay currently live in this process. */
+    overlay?: string
     windowsRelease?: string
     subreaper?: ChildProcess
   }): Promise<boolean> {
+    const overlay = input.overlay ?? CredentialOverlay.current()
     if ((process.platform === "win32" || process.platform === "darwin") && !input.windowsRelease) {
       throw new Error(
         `Credential-bearing ${input.kind} child ${input.pid} was not launched behind the ${process.platform === "win32" ? "Windows Job Object" : "macOS responsibility"} registration gate`,
@@ -515,6 +526,7 @@ export namespace CredentialProcessLedger {
         ...(input.projectID ? { project_id: input.projectID } : {}),
         ...(input.sessionID ? { session_id: input.sessionID } : {}),
         ...(input.authorityGeneration ? { authority_generation: input.authorityGeneration } : {}),
+        ...(overlay ? { overlay } : {}),
       }
       if (index < 0) entries.push(next)
       else entries[index] = next
@@ -675,7 +687,8 @@ export namespace CredentialProcessLedger {
             : (!scope?.id || entry.id === scope.id) &&
               (!scope?.kind || entry.kind === scope.kind) &&
               (!scope?.projectID || !entry.project_id || entry.project_id === scope.projectID) &&
-              (!scope?.sessionID || !entry.session_id || entry.session_id === scope.sessionID)
+              (!scope?.sessionID || !entry.session_id || entry.session_id === scope.sessionID) &&
+              (!scope?.overlay || !!entry.overlay)
         if (!match) {
           retained.push(entry)
           continue
