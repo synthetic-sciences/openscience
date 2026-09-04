@@ -99,6 +99,8 @@ const filesystemSync = Instance.state(
       )
       if (!payload.success || event.directory === directory) return
       if (payload.data.grant.scope !== "installation" && payload.data.projectID !== projectID) return
+      // A runtime never mints an instance: without one there is nothing to stop.
+      if (!Instance.has(directory)) return
       Instance.provide({
         directory,
         projectID,
@@ -117,6 +119,8 @@ const authoritySync = Instance.state(
     const directory = Instance.directory
     const projectID = Instance.project.id
     return AuthoritySignal.watch(async (change) => {
+      // A runtime never mints an instance: without one there is nothing to stop.
+      if (!Instance.has(directory)) return false
       return Instance.provide({
         directory,
         projectID,
@@ -297,18 +301,22 @@ function scheduleWarmup() {
   const projectID = Instance.project.id
   state.timer = setTimeout(() => {
     state.timer = undefined
-    // Disposal flips `cancelled` before the cache entry goes; a bootstrap
-    // that failed after scheduling leaves no entry at all. Either way a
-    // provide here would mint a bare instance, one that never ran
-    // InstanceBootstrap yet would serve every later request for the
-    // directory, so the warmup gives up instead.
+    // Disposal, of a live instance or of one whose bootstrap failed after
+    // scheduling, clears this timer and flips `cancelled` before the cache
+    // entry goes. A provide for a directory without an instance would mint a
+    // bare one, one that never ran InstanceBootstrap yet would serve every
+    // later request, so a stray callback gives up instead; inside the
+    // instance only the warmup it still owns runs, since a fresh instance
+    // for the directory schedules its own.
     if (state.cancelled || !Instance.has(directory)) {
       state.cancelled = true
       return
     }
-    Instance.provide({ directory, projectID, fn: () => warm(state) }).catch((error) =>
-      Log.Default.warn("deferred project warmup failed", { error, directory }),
-    )
+    Instance.provide({
+      directory,
+      projectID,
+      fn: () => (warmup.created() && warmup() === state ? warm(state) : undefined),
+    }).catch((error) => Log.Default.warn("deferred project warmup failed", { error, directory }))
   }, WARMUP_DELAY_MS)
   state.timer.unref?.()
 }
@@ -431,7 +439,7 @@ export async function InstanceBootstrap() {
   // acknowledgment contract as the original request.
   await Session.resumeDeleting()
 
-  // Last, once nothing above can throw: a bootstrap that fails must not
-  // leave a timer behind for a directory the server has no instance for.
+  // Last, once nothing above can throw. A bootstrap that still fails has its
+  // runtimes, this timer among them, disposed by Instance.provide.
   scheduleWarmup()
 }

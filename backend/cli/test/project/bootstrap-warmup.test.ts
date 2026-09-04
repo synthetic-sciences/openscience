@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { InstanceBootstrap, InstanceWarmup, WARMUP_DELAY_MS } from "../../src/project/bootstrap"
+import { AuthoritySignal } from "../../src/project/authority-signal"
 import { Instance } from "../../src/project/instance"
 import { State } from "../../src/project/state"
 import { tmpdir } from "../fixture/fixture"
@@ -54,27 +55,33 @@ test("disposing an instance cancels a warmup that has not started", async () => 
   expect(State.size(tmp.path)).toBe(0)
 })
 
-test("a bootstrap that fails after scheduling its warmup cannot mint a bare instance", async () => {
-  await using tmp = await tmpdir()
+/** InstanceBootstrap, then a failure after its warmup is scheduled. */
+async function failingBootstrap(directory: string) {
   const failure = new Error("bootstrap failed")
+  const scheduled = { pending: false }
   await expect(
     Instance.provide({
-      directory: tmp.path,
+      directory,
       init: async () => {
         await InstanceBootstrap()
+        scheduled.pending = InstanceWarmup.pending()
         throw failure
       },
       fn: async () => {},
     }),
   ).rejects.toBe(failure)
-  // Runtimes the bootstrap registered before it failed stay behind; let the
-  // ones that finish registering asynchronously settle before the timer fires.
-  await Bun.sleep(WARMUP_DELAY_MS / 2)
-  const leaked = State.size(tmp.path)
-  await Bun.sleep(WARMUP_DELAY_MS)
-  // The timer found no instance to warm and minted nothing.
+  expect(scheduled.pending).toBe(true)
+}
+
+test("a bootstrap that fails after scheduling its warmup tears the warmup down with its other runtimes", async () => {
+  await using tmp = await tmpdir()
+  await failingBootstrap(tmp.path)
+  // By the time the caller sees the failure, every runtime the bootstrap
+  // registered is disposed, the warmup timer and the authority poller among
+  // them: nothing is left that could provide the directory and mint a bare
+  // instance, and nothing remains to dispose.
   expect(Instance.has(tmp.path)).toBe(false)
-  expect(State.size(tmp.path)).toBe(leaked)
+  expect(State.size(tmp.path)).toBe(0)
 
   // The next request for the directory runs its own bootstrap rather than
   // landing on an instance that skipped InstanceBootstrap.
@@ -87,4 +94,24 @@ test("a bootstrap that fails after scheduling its warmup cannot mint a bare inst
     fn: () => Instance.dispose(),
   })
   expect(init.ran).toBe(true)
+})
+
+test("an unsettled authority change cannot resurrect a project whose bootstrap failed", async () => {
+  await using tmp = await tmpdir()
+  // An authority record another process published and no watcher settled
+  // yet. A poller that survived the failed bootstrap would apply it through
+  // Instance.provide and mint a bare instance, which the warmup timer would
+  // then go on to warm.
+  const signal = await AuthoritySignal.publish({ kind: "trust", projectID: "prj_elsewhere", denied: true })
+  try {
+    await failingBootstrap(tmp.path)
+    expect(Instance.has(tmp.path)).toBe(false)
+    // Several poll intervals plus the warmup delay: a longer wait can only
+    // expose a survivor, never fail a clean teardown.
+    await Bun.sleep(WARMUP_DELAY_MS + 250)
+    expect(Instance.has(tmp.path)).toBe(false)
+    expect(State.size(tmp.path)).toBe(0)
+  } finally {
+    await AuthoritySignal.settle(signal.revision)
+  }
 })
