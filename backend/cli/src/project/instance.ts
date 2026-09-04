@@ -66,6 +66,10 @@ export const Instance = {
       return input.fn()
     })
   },
+  /** Whether an instance, live or still initialising, is registered for the directory. */
+  has(directory: string) {
+    return cache.has(Project.canonicalize(directory))
+  },
   get directory() {
     return context.use().directory
   },

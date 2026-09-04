@@ -36,12 +36,14 @@ export namespace Startup {
   export function interactive(extra: Record<string, unknown> = {}) {
     if (marks.interactive !== undefined) return
     marks.interactive = now()
+    // The marks win: `extra` arrives from the workspace through the log route,
+    // and any client on the port can post one, so it cannot rewrite a leg.
     log.info("timing", {
+      ...extra,
       listening: marks.listening,
       instance: marks.instance,
       project: marks.project,
       interactive: marks.interactive,
-      ...extra,
     })
   }
 

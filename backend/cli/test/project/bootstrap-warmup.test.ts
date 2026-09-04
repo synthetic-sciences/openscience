@@ -53,3 +53,38 @@ test("disposing an instance cancels a warmup that has not started", async () => 
   // A cancelled warmup must not resurrect the released project's runtimes.
   expect(State.size(tmp.path)).toBe(0)
 })
+
+test("a bootstrap that fails after scheduling its warmup cannot mint a bare instance", async () => {
+  await using tmp = await tmpdir()
+  const failure = new Error("bootstrap failed")
+  await expect(
+    Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await InstanceBootstrap()
+        throw failure
+      },
+      fn: async () => {},
+    }),
+  ).rejects.toBe(failure)
+  // Runtimes the bootstrap registered before it failed stay behind; let the
+  // ones that finish registering asynchronously settle before the timer fires.
+  await Bun.sleep(WARMUP_DELAY_MS / 2)
+  const leaked = State.size(tmp.path)
+  await Bun.sleep(WARMUP_DELAY_MS)
+  // The timer found no instance to warm and minted nothing.
+  expect(Instance.has(tmp.path)).toBe(false)
+  expect(State.size(tmp.path)).toBe(leaked)
+
+  // The next request for the directory runs its own bootstrap rather than
+  // landing on an instance that skipped InstanceBootstrap.
+  const init = { ran: false }
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      init.ran = true
+    },
+    fn: () => Instance.dispose(),
+  })
+  expect(init.ran).toBe(true)
+})
