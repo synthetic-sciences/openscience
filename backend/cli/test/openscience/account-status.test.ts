@@ -54,8 +54,10 @@ const server = Bun.serve({
 const previousApiBase = process.env.OPENSCIENCE_API_BASE
 const previousDeadline = process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS
 process.env.OPENSCIENCE_API_BASE = server.url.toString()
-// A short deadline keeps the hung-service case fast; the module reads it once.
-process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = "400"
+// The deadline is read per call. Every test runs under a long one so
+// cancellation is only ever caused by the test itself; the hung-service case
+// shortens it for its own duration.
+process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = "15000"
 const { OpenScience } = await import("../../src/openscience")
 const { SessionProcessor } = await import("../../src/session/processor")
 const { GlobalBus } = await import("../../src/bus/global")
@@ -78,18 +80,24 @@ async function until(check: () => boolean, what: string) {
   throw new Error(`timed out waiting for ${what}`)
 }
 
+const held = { release: undefined as (() => void) | undefined }
+
 /** Stall the given endpoints until the returned release runs. */
 function hold(paths = ALL) {
   const { promise, resolve } = Promise.withResolvers<void>()
   fixture.gate = promise
   fixture.stall = new Set(paths)
-  return () => {
+  held.release = () => {
     fixture.stall = new Set()
+    held.release = undefined
     resolve()
   }
+  return held.release
 }
 
 beforeEach(async () => {
+  // A failed test must not leave the account service stalled for the next.
+  held.release?.()
   fixture.requests = []
   fixture.aborted = []
   fixture.gate = Promise.resolve()
@@ -340,16 +348,22 @@ test("the last caller to leave cancels the outbound account reads", async () => 
 })
 
 test("one bounded deadline ends a hung account service and cancels its read", async () => {
-  hold(["/api/v1/auth/status"])
-  const started = Date.now()
-  await expect(OpenScience.getAccountSummary()).rejects.toBeDefined()
-  expect(Date.now() - started).toBeLessThan(OpenScience.ACCOUNT_DEADLINE_MS * 4)
-  await until(() => fixture.aborted.includes("/api/v1/auth/status"), "the upstream cancellation")
-  // Nothing was stored; the failure is recorded with its reason for the UI.
-  expect(await Bun.file(snapshotFile).exists()).toBe(false)
-  fixture.stall = new Set()
-  const recovered = await OpenScience.getAccountSummary()
-  expect(recovered?.credits?.balanceUsd).toBe(12)
+  process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = "400"
+  try {
+    expect(OpenScience.accountDeadlineMs()).toBe(400)
+    hold(["/api/v1/auth/status"])
+    const started = Date.now()
+    await expect(OpenScience.getAccountSummary()).rejects.toBeDefined()
+    expect(Date.now() - started).toBeLessThan(4_000)
+    await until(() => fixture.aborted.includes("/api/v1/auth/status"), "the upstream cancellation")
+    // Nothing was stored; the failure is recorded with its reason for the UI.
+    expect(await Bun.file(snapshotFile).exists()).toBe(false)
+    held.release?.()
+    const recovered = await OpenScience.getAccountSummary()
+    expect(recovered?.credits?.balanceUsd).toBe(12)
+  } finally {
+    process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = "15000"
+  }
 })
 
 test("a client leaving the account route cancels the outbound reads through the request signal", async () => {

@@ -1821,10 +1821,14 @@ export namespace OpenScience {
    * request signal (aborted when the client leaves) and this budget are
    * combined once and propagated to every outbound fetch, so abandoned work
    * is cancelled and the UI's answer is the server's. */
-  export const ACCOUNT_DEADLINE_MS = Number(process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS) || 15_000
+  // Resolved per call, like the managed base, so the override applies as the
+  // process environment stands rather than as it stood at import.
+  export function accountDeadlineMs(): number {
+    return Number(process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS) || 15_000
+  }
 
   export function accountDeadline(signal?: AbortSignal): AbortSignal {
-    const timeout = AbortSignal.timeout(ACCOUNT_DEADLINE_MS)
+    const timeout = AbortSignal.timeout(accountDeadlineMs())
     return signal ? AbortSignal.any([signal, timeout]) : timeout
   }
 
@@ -1940,7 +1944,7 @@ export namespace OpenScience {
 
   function refreshFailure(error: unknown): string {
     if (error instanceof DOMException && error.name === "TimeoutError") {
-      return `The Ace account service did not answer within ${Math.round(ACCOUNT_DEADLINE_MS / 1000)} seconds.`
+      return `The Ace account service did not answer within ${Math.round(accountDeadlineMs() / 1000)} seconds.`
     }
     if (error instanceof DOMException && error.name === "AbortError") return "The account refresh was cancelled."
     return error instanceof Error ? error.message : "Account refresh failed. Try again."

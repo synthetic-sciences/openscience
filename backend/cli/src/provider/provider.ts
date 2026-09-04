@@ -1,7 +1,11 @@
 import z from "zod"
 import fuzzysort from "fuzzysort"
 import { createHash } from "node:crypto"
+import { stat } from "node:fs/promises"
+import path from "node:path"
 import { Config } from "../config/config"
+import { Global } from "../global"
+import { WorkspaceCredentials } from "../openscience/workspace-credentials"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { APICallError, NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
@@ -1884,14 +1888,25 @@ export namespace Provider {
   }> | null = null
   let _stateCacheRevision: string | undefined
 
-  /** The inputs to `_loadState` that can differ between projects: the
-   * provider-relevant config (project config merges in) and trust. Everything
-   * else it reads (auth, env, models.dev, managed pricing) is process-wide and
-   * already calls `invalidate()` when it changes. Per-request project
-   * boundaries (token minting, module loading) are re-checked at use. */
+  /** A fingerprint of what `_loadState` consumes: the provider-relevant config
+   * (project config merges in), trust, the credential files and the process
+   * env. The files are covered by a stat (every writer replaces them) and the
+   * env is small, so this is far cheaper than a rebuild; models.dev and
+   * managed pricing are process-wide and call `invalidate()` themselves.
+   * Per-request project boundaries (token minting, module loading) are still
+   * re-checked at use. */
   async function stateRevision() {
     const config = await Config.get()
     const trusted = await ProjectTrust.allowed(Instance.project)
+    const files = await Promise.all(
+      [path.join(Global.Path.data, "auth.json"), WorkspaceCredentials.filepath].map((file) =>
+        stat(file).then(
+          (info) => `${info.mtimeMs}:${info.size}`,
+          () => "absent",
+        ),
+      ),
+    )
+    const env = Object.entries(Env.all()).sort(([a], [b]) => a.localeCompare(b))
     return createHash("sha256")
       .update(
         JSON.stringify({
@@ -1901,6 +1916,8 @@ export namespace Provider {
           billing: config.billing?.llm ?? null,
           plugin: config.plugin ?? null,
           trusted,
+          files,
+          env,
         }),
       )
       .digest("hex")
