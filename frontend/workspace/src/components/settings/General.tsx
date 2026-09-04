@@ -8,7 +8,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { productPreferences } from "@/context/product-preferences"
+import { warnTokens } from "@/pages/session-context"
 import { AppearanceSections } from "../settings-general"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { settingsApi } from "./api"
@@ -228,7 +228,7 @@ export default function General() {
     void settingsApi<ContextPreferences>(sdk.url, fetchFn, "/settings/preferences")
       .then((preferences) => {
         setContext(preferences)
-        productPreferences.sync(preferences)
+        warnTokens.sync(preferences)
       })
       .catch((cause) => setError(errorMessage(cause)))
   })
@@ -244,7 +244,7 @@ export default function General() {
         }),
       (saved) => {
         setContext(saved)
-        productPreferences.sync(saved)
+        warnTokens.sync(saved)
       },
     )
     setContextBusy(false)
@@ -424,12 +424,12 @@ export default function General() {
               >
                 <label class="settings-context-tokens-field">
                   <span class="sr-only">{language.t("settings.general.context.warn.title")}</span>
+                  {/* A text field with a numeric keypad: parseWarnTokens accepts "120,000" and
+                      "80k", which a number input would refuse before it reached the parser. */}
                   <input
                     class="settings-field settings-context-tokens"
-                    type="number"
+                    type="text"
                     inputMode="numeric"
-                    min="1000"
-                    step="1000"
                     autocomplete="off"
                     value={warnValue()}
                     disabled={!context() || contextBusy()}
@@ -437,7 +437,10 @@ export default function General() {
                     onBlur={commitWarn}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") event.currentTarget.blur()
-                      if (event.key === "Escape") setWarnDraft(undefined)
+                      if (event.key === "Escape") {
+                        setWarnDraft(undefined)
+                        event.currentTarget.blur()
+                      }
                     }}
                   />
                   <span class="settings-context-tokens-unit">{language.t("settings.general.context.warn.unit")}</span>

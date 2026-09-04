@@ -12,12 +12,13 @@ import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
 import { SessionContextTab } from "@/components/session/session-context-tab"
-import { compactContextTokens, formatContextTokens, latestContext, type ContextSample } from "@/pages/session-context"
+import { compactContextTokens, formatContextTokens, usageSample, type ContextSample } from "@/pages/session-context"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator" | "header"
-  // Live pre-call estimate from `session.context`, supplied by the page that subscribes.
-  live?: ContextSample
+  // Resolved sample from the page that subscribes to `session.context`; without one the
+  // component falls back to the newest provider-reported usage.
+  sample?: ContextSample
 }
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
@@ -50,9 +51,11 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const context = createMemo(() => {
     const locale = language.locale()
-    const sample = latestContext(messages(), props.live)
+    const sample = props.sample ?? usageSample(messages())
     if (!sample) return
-    const last = findLast(messages(), (x) => x.role === "assistant") as AssistantMessage | undefined
+    // A compaction summary runs on the compaction agent's model; size the window by the
+    // model the conversation itself uses.
+    const last = findLast(messages(), (x) => x.role === "assistant" && !x.summary) as AssistantMessage | undefined
     const model = last ? sync.data.provider.all.find((x) => x.id === last.providerID)?.models[last.modelID] : undefined
     return {
       tokens: formatContextTokens(sample.total, locale),

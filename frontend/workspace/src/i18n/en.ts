@@ -484,7 +484,8 @@ export const dict = {
   "settings.general.section.context.description":
     "How much conversation history OpenScience carries into each turn. Saved to compaction.threshold and compaction.warn_tokens in openscience.json.",
   "settings.general.context.threshold.title": "Auto-compact when context exceeds",
-  "settings.general.context.threshold.description": "Share of the model window that triggers automatic compaction.",
+  "settings.general.context.threshold.description":
+    "Share of the model window that triggers automatic compaction. A compaction.threshold set in a project's openscience.json takes precedence inside that project.",
   "settings.general.context.threshold.off":
     "Automatic compaction is off (compaction.auto is false). This share applies once it is on.",
   "settings.general.context.warn.title": "Warn above N tokens",

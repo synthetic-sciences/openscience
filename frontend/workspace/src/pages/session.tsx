@@ -73,7 +73,16 @@ import { useExecutionAuthority } from "@/atlas/use-execution-authority"
 import { sessionEntryTarget } from "@/pages/session-entry"
 import { shouldConfirmUndo, undoPreview, undoSummary, type UndoPreview } from "@/pages/session-undo"
 import { SessionContextUsage } from "@/components/session-context-usage"
-import { contextWarning, formatContextTokens, latestContext, type ContextSample } from "@/pages/session-context"
+import type { ContextPreferences } from "@/components/settings/context-preferences"
+import {
+  contextWarning,
+  estimate,
+  formatContextTokens,
+  latestContext,
+  warnTokens,
+  type ContextEstimate,
+  type ContextSample,
+} from "@/pages/session-context"
 import "./session-header.css"
 import "./session-undo.css"
 import "../components/chat-surface.css"
@@ -207,7 +216,10 @@ export default function Page(): JSX.Element {
         const endpoint = `${url.replace(/\/$/, "")}/settings/preferences`
         void (platform.fetch ?? fetch)(endpoint)
           .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Preferences unavailable"))))
-          .then((preferences) => productPreferences.sync(preferences as ProductPreferences))
+          .then((preferences: ProductPreferences & Partial<ContextPreferences>) => {
+            productPreferences.sync(preferences)
+            warnTokens.sync(preferences)
+          })
           .catch(() => productPreferences.sync({ show_trace: false, atlas_enabled: false, show_local_models: true }))
       },
     ),
@@ -574,12 +586,13 @@ export default function Page(): JSX.Element {
   }
   // Live pre-call context estimate per session from `session.context`, so the header
   // count moves during the first-token wait instead of only after the turn completes.
-  const [estimates, setEstimates] = createSignal<Record<string, ContextSample>>({})
+  // Each one is anchored to the newest stored message, so a later turn or compaction
+  // summary supersedes it by id rather than by comparing the client's clock to the server's.
+  const [estimates, setEstimates] = createSignal<Record<string, ContextEstimate>>({})
   const contextSubscription = sdk.event.on("session.context", (event) => {
-    setEstimates((current) => ({
-      ...current,
-      [event.properties.sessionID]: { total: event.properties.total, at: Date.now(), source: "estimate" },
-    }))
+    const id = event.properties.sessionID
+    const stored = sync.data.message[id] ?? []
+    setEstimates((current) => ({ ...current, [id]: estimate(stored, event.properties.total) }))
   })
   onCleanup(contextSubscription)
   const contextSample = createMemo(() => {
@@ -588,7 +601,7 @@ export default function Page(): JSX.Element {
     return latestContext(messages(), estimates()[id])
   })
   const contextAlert = createMemo(() =>
-    contextWarning({ tokens: contextSample()?.total, warn: productPreferences.warnTokens(), status: sessionStatus() }),
+    contextWarning({ tokens: contextSample()?.total, warn: warnTokens.value(), status: sessionStatus() }),
   )
   // A message is a compaction boundary when it carries a `compaction` part.
   const compactionPart = (id: string) => (sync.data.part[id] ?? []).find((part) => part.type === "compaction")
@@ -1447,7 +1460,7 @@ export default function Page(): JSX.Element {
                           })}
                         </strong>{" "}
                         {language.t("session.context.warning.copy", {
-                          warn: formatContextTokens(productPreferences.warnTokens(), language.locale()),
+                          warn: formatContextTokens(warnTokens.value(), language.locale()),
                         })}
                       </span>
                       <button
@@ -1572,7 +1585,7 @@ function Header(props: {
         onRename={props.onRename}
         onWarm={props.onWarm}
       />
-      <SessionContextUsage variant="header" live={props.context} />
+      <SessionContextUsage variant="header" sample={props.context} />
     </AppHeader>
   )
 }
