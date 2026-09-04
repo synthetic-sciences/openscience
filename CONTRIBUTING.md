@@ -55,7 +55,7 @@ bun dev serve        # terminal 1: API on http://localhost:4096
 bun run dev:ui       # terminal 2: workspace on http://localhost:3000
 ```
 
-The workspace dev build talks to port 4096. If another OpenScience is already listening there, `bun dev serve` silently lands on 4097 and the UI talks to the wrong process; either stop the other instance or point the UI at the right port with `VITE_OPENSCIENCE_SERVER_PORT=4097 bun run dev:ui` (`VITE_OPENSCIENCE_SERVER_HOST` and `VITE_OPENSCIENCE_SERVER` are also honored).
+The workspace dev build talks to port 4096. If another OpenScience is already listening there, `bun dev serve` silently lands on 4097 and the UI talks to the wrong process; either stop the other instance or point the UI at the right port with `VITE_OPENSCIENCE_SERVER_PORT=4097 bun run dev:ui` (`VITE_OPENSCIENCE_SERVER_HOST` and `VITE_OPENSCIENCE_SERVER_URL` are also honored).
 
 **Packaged-like (what users get).** `bun run setup` embeds a production build of the workspace, and `bun dev` serves it exactly like the binary does. Rerun `bun run setup --web` to pick up UI changes.
 

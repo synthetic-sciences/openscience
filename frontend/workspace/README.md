@@ -10,7 +10,7 @@ bun run dev:ui       # from the repo root: this package on http://localhost:3000
 ```
 
 The dev build calls port 4096 unless `VITE_OPENSCIENCE_SERVER_PORT` (or
-`VITE_OPENSCIENCE_SERVER_HOST` / `VITE_OPENSCIENCE_SERVER`) says otherwise.
+`VITE_OPENSCIENCE_SERVER_HOST` / `VITE_OPENSCIENCE_SERVER_URL`) says otherwise.
 `bun run build` writes `dist/`, which `backend/cli/script/generate-web-assets.ts`
 embeds; `bun run setup --web` at the repo root does both. Unit tests run with
 `bun test` in this directory (happy-dom); `bun run typecheck` uses tsgo.

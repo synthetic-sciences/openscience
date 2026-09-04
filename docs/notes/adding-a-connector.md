@@ -34,12 +34,20 @@ never make a key required or return empty results without one.
 
 ## Where it goes
 
-1. Create `backend/cli/src/science/connectors/<domain>/<id>.ts` exporting a
+1. Create `backend/cli/src/science/connectors/<group>/<id>.ts` exporting a
    `const <id>: Connector`. `chemistry/chebi.ts` (55 lines) is a good template.
-2. Export it from `<domain>/index.ts` and append it to that file's default
-   array. `connectors/index.ts` registers every domain array on the shared
-   registry; you do not edit it. (Its header comment still describes an older
-   `./impl/<id>.ts` layout — the domain directories are the current one.)
+   The six groups on disk are `chemistry`, `genomics`, `literature`, `omics`,
+   `pathways` and `proteins`; they are directories, not the `domain` field. A
+   connector's `domain` is independent (`pathways/` holds `biology` sources,
+   `proteins/` holds `proteomics` and `structure`, `genomics/` holds
+   `clinical`), so pick the group your source reads most like.
+2. Export it from `<group>/index.ts` and append it to that file's default
+   array. `connectors/index.ts` imports those six arrays and spreads them into
+   the shared registry, so an existing group needs no edit there — but a new
+   group does need its import and spread added, or the connector never
+   registers and never appears in `science_list_dbs`. (That file's header
+   comment still describes an older `./impl/<id>.ts` layout — the group
+   directories are the current one.)
 3. Add a known-good record id for your source to `SAMPLE` in
    `backend/cli/script/record-fetch-fixtures.ts`.
 

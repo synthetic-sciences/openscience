@@ -52,7 +52,7 @@ export const WebCommand = cmd({
       try {
         process.chdir(args.project as string)
       } catch {
-        UI.error(`Cannot open ${args.project}: no such directory`)
+        UI.error(`Cannot open ${args.project}: no such directory (run \`openscience --help\` to list commands)`)
         process.exit(1)
       }
     }

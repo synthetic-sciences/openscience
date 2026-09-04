@@ -38,7 +38,7 @@ body:
     id: version
     attributes:
       label: OpenScience version
-      description: Output of `openscience --version` (or `bun dev --version` from source)
+      description: Output of `openscience --version` (or `git rev-parse --short HEAD` from source)
       placeholder: 2.0.69
     validations:
       required: true
