@@ -110,9 +110,11 @@ function visibilityRetryDelay(options: NpmCommandOptions) {
   return Number.isFinite(value) && value >= 0 ? value : 2_000
 }
 
-/** Run registry writes in bounded batches. Every batch settles before the
- * first rejection is rethrown, so no in-flight write can race a caller's
- * rollback or land after its diagnostics. */
+/** Run registry calls, reads and writes alike, in bounded batches so the
+ * release runner never fans out wider than batchSize npm processes. Every
+ * batch settles before the first rejection is rethrown, so no in-flight write
+ * can race a caller's rollback or land after its diagnostics. Results keep
+ * the input order. */
 async function inBatches<T, R>(items: T[], work: (item: T) => Promise<R>) {
   const batches = Array.from({ length: Math.ceil(items.length / batchSize) }, (_, index) =>
     items.slice(index * batchSize, index * batchSize + batchSize),
@@ -768,14 +770,14 @@ async function removeDistTag(name: string, tag: string, options: NpmCommandOptio
   throw new Error(`Could not remove ${name}'s ${tag} dist-tag: ${failure(result)}`)
 }
 
-/** Read every package's dist-tags together and reject any conflict before a
- * single tag is written; the writes then run in bounded batches. */
+/** Read every package's dist-tags and reject any conflict before a single
+ * tag is written; reads and writes both run in bounded batches. */
 export async function ensureReleaseStagingTags(
   artifacts: PackedPackage[],
   tag: string,
   options: NpmCommandOptions = {},
 ) {
-  const current = await Promise.all(artifacts.map((artifact) => distTags(artifact.name, options)))
+  const current = await inBatches(artifacts, (artifact) => distTags(artifact.name, options))
   for (const [index, artifact] of artifacts.entries()) {
     const existing = current[index][tag]
     if (existing && existing !== artifact.version) {
@@ -787,7 +789,7 @@ export async function ensureReleaseStagingTags(
 
 export async function verifyReleaseTags(artifacts: PackedPackage[], tag: string, options: NpmCommandOptions = {}) {
   const ordered = exactReleaseArtifacts(artifacts)
-  const current = await Promise.all(ordered.map((artifact) => distTags(artifact.name, options)))
+  const current = await inBatches(ordered, (artifact) => distTags(artifact.name, options))
   const failures = ordered.flatMap((artifact, index) =>
     current[index][tag] === artifact.version ? [] : [`${artifact.name}=${current[index][tag] ?? "unset"}`],
   )
@@ -799,8 +801,9 @@ export async function verifyReleaseTags(artifacts: PackedPackage[], tag: string,
 export async function promoteReleaseToTag(artifacts: PackedPackage[], tag: string, options: NpmCommandOptions = {}) {
   if (!/^[a-z][a-z0-9._-]*$/i.test(tag)) throw new Error(`Invalid npm promotion tag: ${tag}`)
   const ordered = exactReleaseArtifacts(artifacts)
-  const snapshot = await Promise.all(
-    ordered.map(async (artifact) => [artifact.name, (await distTags(artifact.name, options))[tag]] as const),
+  const snapshot = await inBatches(
+    ordered,
+    async (artifact) => [artifact.name, (await distTags(artifact.name, options))[tag]] as const,
   )
   const previous = new Map(snapshot)
   const native = new Set(nativeReleasePackageNames())

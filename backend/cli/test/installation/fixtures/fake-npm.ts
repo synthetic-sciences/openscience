@@ -33,10 +33,7 @@ const inflight = `${file}.inflight`
 await mkdir(inflight, { recursive: true })
 const marker = `${inflight}/${process.pid}`
 await Bun.write(marker, "")
-process.on("exit", () => {
-  rmSync(marker, { force: true })
-  rmSync(lock, { force: true, recursive: true })
-})
+process.on("exit", () => rmSync(marker, { force: true }))
 if (args[0] === "publish") await Bun.sleep(30)
 for (let attempt = 0; ; attempt++) {
   const acquired = await mkdir(lock).then(
@@ -50,6 +47,9 @@ for (let attempt = 0; ; attempt++) {
   if (attempt > 5_000) throw new Error("fake npm registry lock timed out")
   await Bun.sleep(2)
 }
+// Only the holder releases the lock: a process that timed out above must not
+// free another process's lock and let two read-modify-writes overlap.
+process.on("exit", () => rmSync(lock, { force: true, recursive: true }))
 const overlapping = (await readdir(inflight)).length
 const state = (await Bun.file(file).json()) as State
 

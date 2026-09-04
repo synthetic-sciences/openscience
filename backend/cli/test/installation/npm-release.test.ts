@@ -115,14 +115,14 @@ async function readState(file: string) {
   return (await Bun.file(file).json()) as FakeState
 }
 
-// A single local registry observes how many dist-tag writes overlap. The
-// shared-file fixture serializes its own mutations behind a lock but cannot
-// see overlap, so concurrency assertions use this server instead.
+// A single local registry observes how many dist-tag writes and reads
+// overlap. The shared-file fixture serializes its own mutations behind a lock
+// but cannot see overlap, so concurrency assertions use this server instead.
 async function tagRegistry(file: string) {
   const state = await readState(file)
   const failure = state.failTagReadAfterAdd
   const failed = new Set<string>()
-  const activity = { current: 0, maximum: 0, rollbackWhileActive: false }
+  const activity = { current: 0, maximum: 0, rollbackWhileActive: false, reads: { current: 0, maximum: 0 } }
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -130,6 +130,11 @@ async function tagRegistry(file: string) {
       const args = (await request.json()) as string[]
       if (args[0] === "view" && args[2] === "dist-tags") {
         if (failed.delete(args[1])) return Response.json({ exitCode: 1, stderr: "transient dist-tag read failure" })
+        activity.reads.current++
+        activity.reads.maximum = Math.max(activity.reads.maximum, activity.reads.current)
+        // Hold the read long enough for sibling processes to overlap it.
+        await Bun.sleep(40)
+        activity.reads.current--
         return Response.json({ exitCode: 0, stdout: JSON.stringify(state.tags[args[1]] ?? {}) })
       }
       if (args[0] === "dist-tag" && args[1] === "add") {
@@ -600,6 +605,8 @@ test("test promotion batches platforms, keeps dependencies and launcher last, an
   expect(state.tagAdds?.at(-1)).toBe("synsci@2.0.32:test")
   expect(registry.activity.maximum).toBeGreaterThan(1)
   expect(registry.activity.maximum).toBeLessThanOrEqual(5)
+  expect(registry.activity.reads.maximum).toBeGreaterThan(1)
+  expect(registry.activity.reads.maximum).toBeLessThanOrEqual(5)
   for (const name of releasePackageNames()) {
     expect(state.tags[name].test).toBe("2.0.32")
     expect(state.tags[name].latest).toBe("2.0.31")
@@ -683,7 +690,7 @@ test("candidate staging submits absent packages in bounded parallel batches", as
   }
 })
 
-test("staging tags reject a conflict before writing and otherwise add tags in bounded batches", async () => {
+test("staging tags read and write in bounded batches and reject a conflict before writing", async () => {
   const base = await fixturePackage()
   const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
   const tag = releaseStagingTag("2.0.32")
@@ -695,6 +702,8 @@ test("staging tags reject a conflict before writing and otherwise add tags in bo
     `${conflicted}'s ${tag} dist-tag already points to 2.0.31`,
   )
   expect(blocked.state.tagAdds).toBeUndefined()
+  expect(blocked.activity.reads.maximum).toBeGreaterThan(1)
+  expect(blocked.activity.reads.maximum).toBeLessThanOrEqual(5)
 
   const file = await stateFile({ tags: { [artifacts[0].name]: { [tag]: "2.0.32" } } })
   await using registry = await tagRegistry(file)
@@ -709,8 +718,12 @@ test("staging tags reject a conflict before writing and otherwise add tags in bo
   )
   expect(registry.activity.maximum).toBeGreaterThan(1)
   expect(registry.activity.maximum).toBeLessThanOrEqual(5)
+  expect(registry.activity.reads.maximum).toBeLessThanOrEqual(5)
   for (const name of releasePackageNames()) expect(registry.state.tags[name][tag]).toBe("2.0.32")
+  registry.activity.reads.maximum = 0
   await verifyReleaseTags(artifacts, tag, registry.options)
+  expect(registry.activity.reads.maximum).toBeGreaterThan(1)
+  expect(registry.activity.reads.maximum).toBeLessThanOrEqual(5)
 })
 
 test("tag verification names every package whose snapshot drifted", async () => {
