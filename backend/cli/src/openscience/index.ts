@@ -222,6 +222,11 @@ const ACCOUNT_SNAPSHOT_TTL_MS = 30_000
 // After a failed refresh the stored summary is served without a new attempt
 // for this long, so a down account service is not hammered by every open panel.
 const ACCOUNT_RETRY_MS = 5_000
+// A stale summary younger than this is served as it is instead of starting
+// another refresh. A spend marks the summary stale, and with a settings panel
+// open every managed response would otherwise become three account reads
+// (status, entitlement, wallet); the next read after the interval refreshes it.
+const ACCOUNT_REFRESH_MIN_MS = 5_000
 const FUNDING_PROTOCOL = "1"
 const FUNDING_PROTOCOL_HEADER = "OpenScience-Funding-Protocol"
 const FUNDING_CONTEXT_HEADER = "OpenScience-Funding-Context"
@@ -322,7 +327,12 @@ function share<T>(key: string, start: (signal: AbortSignal) => Promise<T>, signa
   return new Promise<T>((resolve, reject) => {
     const abort = () => {
       flight.waiting--
-      if (flight.waiting === 0 && !flight.settled) flight.controller.abort(signal?.reason)
+      if (flight.waiting === 0 && !flight.settled) {
+        flight.controller.abort(signal?.reason)
+        // A caller arriving before the cancelled read settles starts its
+        // own instead of inheriting this cancellation.
+        if (flights.get(key) === flight) flights.delete(key)
+      }
       reject(signal?.reason)
     }
     signal?.addEventListener("abort", abort, { once: true })
@@ -618,6 +628,9 @@ export namespace OpenScience {
         if (!matches(current)) return null
         await writeWorkspaceScope(next)
         await atomicWrite(SESSION_PATH, JSON.stringify(next, null, 2))
+        // The stored summary is bound to the funding context this rewrite
+        // changes; drop it like saveSession does.
+        await fs.rm(SNAPSHOT_PATH, { force: true }).catch(() => undefined)
         return next
       },
     )
@@ -1662,8 +1675,11 @@ export namespace OpenScience {
     snapshot?: FundingSnapshot,
     signal?: AbortSignal,
   ): Promise<Transaction[] | null> {
-    const session = snapshot ?? (await getReconciledFundingState({ signal }))?.snapshot
-    if (!session) return null
+    // A legacy unscoped session learns its workspace from the status read
+    // (joining one already in flight) before any wallet endpoint sees it.
+    const session =
+      snapshot && !isLegacyUnscoped(snapshot) ? snapshot : (await getReconciledFundingState({ signal }))?.snapshot
+    if (!session || (snapshot && session.api_key !== snapshot.api_key)) return null
     try {
       const response = await fundedAtlasFetch(session, `${apiBase()}/api/credits/transactions`, { signal })
       if (!response.ok) return null
@@ -1823,7 +1839,7 @@ export namespace OpenScience {
     error?: string
   }
 
-  /** Published when a background refresh stored a newer summary. */
+  /** Published when a refresh stored a newer summary, or dropped the stored one after a refusal. */
   export const AccountUpdatedEvent = BusEvent.define("account.updated", z.object({ refreshed_at: z.number() }))
 
   /** The one bound on account reads the UI waits for. It replaces the old
@@ -1837,9 +1853,23 @@ export namespace OpenScience {
     return Number(process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS) || 15_000
   }
 
+  function accountDeadlineMessage(): string {
+    return `The Ace account service did not answer within ${Math.round(accountDeadlineMs() / 1000)} seconds.`
+  }
+
+  /** The deadline's own reason says what happened, so a caller it cuts off,
+   * the failure it records and the UI all report the same thing. */
   export function accountDeadline(signal?: AbortSignal): AbortSignal {
-    const timeout = AbortSignal.timeout(accountDeadlineMs())
-    return signal ? AbortSignal.any([signal, timeout]) : timeout
+    const controller = new AbortController()
+    const timer = setTimeout(
+      () => controller.abort(new DOMException(accountDeadlineMessage(), "TimeoutError")),
+      accountDeadlineMs(),
+    )
+    timer.unref()
+    const deadline = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+    if (deadline.aborted) clearTimeout(timer)
+    else deadline.addEventListener("abort", () => clearTimeout(timer), { once: true })
+    return deadline
   }
 
   const StoredOrganization = z.object({
@@ -1894,6 +1924,7 @@ export namespace OpenScience {
     key_fingerprint: z.string(),
     user_id: z.string(),
     organization_id: z.string().optional(),
+    workspace_locked: z.boolean().optional(),
     at: z.number(),
     user: StoredProfile.optional(),
     context: StoredContext,
@@ -1928,7 +1959,8 @@ export namespace OpenScience {
     )
   }
 
-  /** The stored summary, only when it belongs to this exact account and context. */
+  /** The stored summary, only when it belongs to this exact account, funding
+   * context and lock state (what flightKey and sameSnapshot bind on). */
   export async function readAccountSnapshot(session: FundingSnapshot): Promise<AccountSnapshot | null> {
     if (!existsSync(SNAPSHOT_PATH)) return null
     const parsed = StoredSnapshot.safeParse(
@@ -1940,6 +1972,7 @@ export namespace OpenScience {
     const stored = parsed.data
     if (stored.key_fingerprint !== keyFingerprint(session.api_key)) return null
     if (stored.user_id !== session.user_id || stored.organization_id !== session.organization_id) return null
+    if ((stored.workspace_locked === true) !== (session.workspace_locked === true)) return null
     // A clock that moved backwards after the write leaves `at` in the future,
     // where it would pass every freshness check; such a summary is stale.
     const now = Date.now()
@@ -1960,6 +1993,7 @@ export namespace OpenScience {
         key_fingerprint: keyFingerprint(session.api_key),
         user_id: session.user_id,
         ...(session.organization_id ? { organization_id: session.organization_id } : {}),
+        ...(session.workspace_locked ? { workspace_locked: true } : {}),
         at: snapshot.at,
         ...(snapshot.user ? { user: storedProfile(snapshot.user) } : {}),
         context: snapshot.context,
@@ -1981,17 +2015,37 @@ export namespace OpenScience {
   }
 
   function refreshFailure(error: unknown): string {
-    if (error instanceof DOMException && error.name === "TimeoutError") {
-      return `The Ace account service did not answer within ${Math.round(accountDeadlineMs() / 1000)} seconds.`
-    }
+    if (error instanceof DOMException && error.name === "TimeoutError") return accountDeadlineMessage()
     if (error instanceof DOMException && error.name === "AbortError") return "The account refresh was cancelled."
     return error instanceof Error ? error.message : "Account refresh failed. Try again."
+  }
+
+  /** Store `snapshot` for `expected`'s account, or with `null` drop whatever
+   * is stored. The re-check and the write hold the session file's lock like
+   * the session mutators do, so nothing lands after a sign-out or a new
+   * sign-in removed the file. Returns whether the next summary read now
+   * serves something different. */
+  async function commitSummary(expected: FundingSnapshot, snapshot: AccountSnapshot | null): Promise<boolean> {
+    using _ = await Lock.write(SESSION_PATH)
+    const current = await getFundingSnapshot()
+    if (!current || !sameSnapshot(current, expected)) {
+      throw new Error("The selected account changed while refreshing. Retry.")
+    }
+    if (snapshot) {
+      await writeAccountSnapshot(current, snapshot)
+      return true
+    }
+    const stored = existsSync(SNAPSHOT_PATH)
+    await fs.rm(SNAPSHOT_PATH, { force: true })
+    return stored
   }
 
   async function fetchAccount(session: FundingSnapshot, signal: AbortSignal): Promise<AccountSnapshot> {
     const context = contextTag(session)
     const unavailable = () => new Error("The Ace account service is unavailable. Retry when connected.")
     try {
+      // Reads only (status, entitlement, wallet): a refresh, in the
+      // background or not, never calls anything that spends.
       const state = await getReconciledFundingState({ signal })
       if (!state) throw new Error("Sign in again to refresh the Ace account.")
       if (!state.verified) throw unavailable()
@@ -1999,11 +2053,19 @@ export namespace OpenScience {
         getCredits(state.snapshot, { signal }),
         readAccess(state.snapshot, ATLAS_FETCH_TIMEOUT_MS, signal),
       ])
+      if (access.status === 401) {
+        // The gateway rejected the key. accountAtlasFetch has begun clearing
+        // the session; finish that here so a caller that waited finds
+        // neither a session nor a stored summary.
+        await clearSession(state.snapshot.api_key)
+        throw new Error("This device was disconnected. Sign in again.")
+      }
       const billing = await billingFromReads(access, credits)
+      const denied = accessDenied(access)
       // A wallet or entitlement read that did not answer (a timeout, a 5xx)
       // is not a summary: the last good one stays stored and is served with
-      // the failure. Only an explicit denial is a verdict worth keeping.
-      if (!accessDenied(access) && (credits === null || billing.access_verified !== true)) throw unavailable()
+      // the failure.
+      if (!denied && (credits === null || billing.access_verified !== true)) throw unavailable()
       const snapshot: AccountSnapshot = {
         at: Date.now(),
         ...(state.user ? { user: storedProfile(state.user) } : {}),
@@ -2011,22 +2073,18 @@ export namespace OpenScience {
         credits,
         billing,
       }
-      {
-        // The re-check and the write hold the session file's lock like the
-        // session mutators do, so a summary cannot land after a sign-out or
-        // a new sign-in removed the file.
-        using _ = await Lock.write(SESSION_PATH)
-        const current = await getFundingSnapshot()
-        if (!current || !sameSnapshot(current, state.snapshot)) {
-          throw new Error("The selected account changed while refreshing. Retry.")
-        }
-        await writeAccountSnapshot(current, snapshot)
-      }
+      // A refusal is answered to whoever asked but never stored: the next
+      // read asks the gateway again instead of trusting a refusal for a
+      // summary's lifetime, and the last good summary is dropped so it
+      // cannot outrank the refusal.
+      const changed = await commitSummary(state.snapshot, denied ? null : snapshot)
       if (accountFailure?.context === context) accountFailure = undefined
-      GlobalBus.emit("event", {
-        directory: "global",
-        payload: { type: AccountUpdatedEvent.type, properties: { refreshed_at: snapshot.at } },
-      })
+      if (changed) {
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: { type: AccountUpdatedEvent.type, properties: { refreshed_at: snapshot.at } },
+        })
+      }
       return snapshot
     } catch (error) {
       // The read is cancelled once its last caller left; that caller's own
@@ -2063,11 +2121,13 @@ export namespace OpenScience {
     if (!session) return null
     const cached = await readAccountSnapshot(session)
     const now = Date.now()
-    // Strict: a summary stored in the same millisecond as a spend is treated
-    // as stale, which costs one background read instead of a wrong verdict.
-    if (cached && cached.at > accountStale && now - cached.at < ACCOUNT_SNAPSHOT_TTL_MS) {
-      return accountSummary(cached, false)
-    }
+    // A recent summary is current. Strict: one stored in the same millisecond
+    // as a spend is stale, which costs one background read instead of a wrong
+    // verdict. A stale one younger than the refresh interval is served as it
+    // is: the refresh that stored it just ran, and the next read after the
+    // interval starts another. Nothing here asks the account service.
+    const lifetime = cached && cached.at > accountStale ? ACCOUNT_SNAPSHOT_TTL_MS : ACCOUNT_REFRESH_MIN_MS
+    if (cached && now - cached.at < lifetime) return accountSummary(cached, false)
     const failure = accountFailure?.context === contextTag(session) ? accountFailure : undefined
     if (cached && failure && failure.at > cached.at && now - failure.at < ACCOUNT_RETRY_MS) {
       return accountSummary(cached, false, failure.error)

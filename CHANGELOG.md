@@ -72,8 +72,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   directory and served it to the Ace and account panels at once, marked
   `refreshing` while a newer one is read in the background and announced as
   `account.updated`. A panel no longer shows a spinner for the account
-  service when a summary exists, and a refresh that failed or did not fully
-  answer keeps the last good values with the reason.
+  service when a summary exists, a refresh that failed or did not fully
+  answer keeps the last good values with the reason, a refusal from the
+  gateway is shown but never stored, and a spend right after a refresh does
+  not start another one.
 - Replaced the Ace panel's 6-second timeout racing 60 seconds of server work
   with one bounded 15-second account deadline owned by the server and
   propagated, together with the request's own abort signal, to every
