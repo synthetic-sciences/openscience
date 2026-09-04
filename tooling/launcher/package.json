@@ -1,6 +1,6 @@
 {
   "name": "synsci",
-  "version": "2.0.69",
+  "version": "2.0.70",
   "description": "Launcher for OpenScience, the open-source AI research workspace",
   "license": "Apache-2.0",
   "type": "module",
