@@ -102,14 +102,16 @@ export namespace LLM {
       : ProviderTransform.tier(input.model, input.user.tier)
     const routed = tier.model ? await Provider.getModel(input.model.providerID, tier.model) : input.model
     const traceRoute = input.route ?? (await resolveAccessRoute(routed.providerID, routed.id))
-    const l = log
-      .clone()
-      .tag("providerID", input.model.providerID)
-      .tag("modelID", input.model.id)
-      .tag("sessionID", input.sessionID)
-      .tag("small", (input.small ?? false).toString())
-      .tag("agent", input.agent.name)
-      .tag("mode", input.agent.mode)
+    // A per-stream copy: the shared "llm" logger is never tagged, so a title
+    // stream and a research stream running at once cannot relabel each other.
+    const l = log.child({
+      providerID: input.model.providerID,
+      modelID: input.model.id,
+      sessionID: input.sessionID,
+      small: (input.small ?? false).toString(),
+      agent: input.agent.name,
+      mode: input.agent.mode,
+    })
     l.info("stream", {
       modelID: input.model.id,
       providerID: input.model.providerID,

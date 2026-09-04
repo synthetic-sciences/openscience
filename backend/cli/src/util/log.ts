@@ -27,8 +27,12 @@ export namespace Log {
     info(message?: any, extra?: Record<string, any>): void
     error(message?: any, extra?: Record<string, any>): void
     warn(message?: any, extra?: Record<string, any>): void
+    /** A copy of this logger carrying one more tag; the receiver is unchanged. */
     tag(key: string, value: string): Logger
+    /** An uncached copy with the same tags. */
     clone(): Logger
+    /** An uncached copy carrying extra tags, for one call or one stream. */
+    child(tags: Record<string, any>): Logger
     time(
       message: string,
       extra?: Record<string, any>,
@@ -149,17 +153,21 @@ export namespace Log {
   }
 
   let last = Date.now()
+
+  /** One logger per service, shared by every caller of `create` with that
+   * service. Per-call tags belong on `child`/`tag`/`clone` copies, which are
+   * never cached: tagging the shared instance would relabel every concurrent
+   * caller's lines, and caching the copies would grow the map without bound. */
   export function create(tags?: Record<string, any>) {
-    tags = tags || {}
+    const service = tags?.["service"]
+    const cached = typeof service === "string" ? loggers.get(service) : undefined
+    if (cached) return cached
+    const result = logger({ ...tags })
+    if (typeof service === "string") loggers.set(service, result)
+    return result
+  }
 
-    const service = tags["service"]
-    if (service && typeof service === "string") {
-      const cached = loggers.get(service)
-      if (cached) {
-        return cached
-      }
-    }
-
+  function logger(tags: Record<string, any>): Logger {
     function build(message: any, extra?: Record<string, any>) {
       const prefix = Object.entries({
         ...tags,
@@ -200,11 +208,13 @@ export namespace Log {
         }
       },
       tag(key: string, value: string) {
-        if (tags) tags[key] = value
-        return result
+        return logger({ ...tags, [key]: value })
       },
       clone() {
-        return Log.create({ ...tags })
+        return logger({ ...tags })
+      },
+      child(extra: Record<string, any>) {
+        return logger({ ...tags, ...extra })
       },
       time(message: string, extra?: Record<string, any>) {
         const now = Date.now()
@@ -224,11 +234,6 @@ export namespace Log {
         }
       },
     }
-
-    if (service && typeof service === "string") {
-      loggers.set(service, result)
-    }
-
     return result
   }
 }
