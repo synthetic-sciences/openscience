@@ -122,15 +122,14 @@ export const AccountRoutes = lazy(() =>
           })
         }
         const creditsRequest = OpenScience.getCredits(state.snapshot)
-        const [user, credits, billing] = await Promise.all([
-          OpenScience.getProfile(state.snapshot),
+        const [credits, billing] = await Promise.all([
           creditsRequest,
           OpenScience.getBillingMode(state.snapshot, creditsRequest),
         ])
         return c.json({
           session: true,
           credential_sync: OpenScience.credentialSyncStatus(),
-          user: user ?? (state.snapshot.user_id ? { user_id: state.snapshot.user_id } : undefined),
+          user: state.user ?? (state.snapshot.user_id ? { user_id: state.snapshot.user_id } : undefined),
           balance_usd: credits?.balanceUsd ?? null,
           billing_mode: billing,
           funding_context: state.context,

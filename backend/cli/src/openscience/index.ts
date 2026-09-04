@@ -276,6 +276,35 @@ function contextTag(session: Pick<OpenScienceSession, "api_key" | "user_id" | "o
   return `${accountTag(session)}\0${session.organization_id ? `organization:${session.organization_id}` : "personal"}`
 }
 
+// One outbound account read per (kind, key, funding context) at a time. A
+// managed turn, the settings panels and credential sync all check the same
+// account; while one read is in flight the others join it instead of
+// repeating the request.
+const flights = new Map<string, Promise<unknown>>()
+
+function flightKey(
+  kind: string,
+  session: Pick<OpenScienceSession, "api_key" | "user_id" | "organization_id" | "workspace_locked">,
+): string {
+  return [
+    kind,
+    keyFingerprint(session.api_key),
+    session.user_id,
+    session.organization_id ?? "personal",
+    session.workspace_locked ? "locked" : "open",
+  ].join("\0")
+}
+
+function share<T>(key: string, start: () => Promise<T>): Promise<T> {
+  const pending = flights.get(key) as Promise<T> | undefined
+  if (pending) return pending
+  const flight = start().finally(() => {
+    if (flights.get(key) === flight) flights.delete(key)
+  })
+  flights.set(key, flight)
+  return flight
+}
+
 async function atomicWrite(filepath: string, content: string, mode = 0o600): Promise<void> {
   await using operation = await DataRootBarrier.enter(filepath)
   const temp = `${filepath}.${process.pid}.${randomUUID()}.tmp`
@@ -906,7 +935,11 @@ export namespace OpenScience {
     }
   }
 
-  async function readAuthStatus(session: FundingSnapshot | OpenScienceSession): Promise<AuthStatus | null> {
+  function readAuthStatus(session: FundingSnapshot | OpenScienceSession): Promise<AuthStatus | null> {
+    return share(flightKey("status", session), () => fetchAuthStatus(session))
+  }
+
+  async function fetchAuthStatus(session: FundingSnapshot | OpenScienceSession): Promise<AuthStatus | null> {
     try {
       // Auth status is the sole legacy reconciliation read allowed to accept an
       // organization echo before the old unscoped session has been repaired.
@@ -1061,14 +1094,15 @@ export namespace OpenScience {
     return fundingContext(snapshot, await readAuthStatus(snapshot))
   }
 
-  export async function getReconciledFundingState(): Promise<{
+  export interface FundingState {
     snapshot: FundingSnapshot
     context: FundingContext
-  } | null> {
-    const read = async (
-      snapshot: FundingSnapshot,
-      retries: number,
-    ): Promise<{ snapshot: FundingSnapshot; context: FundingContext } | null> => {
+    /** The profile the status read returned, so summaries do not read it twice. */
+    user?: AccountProfile
+  }
+
+  export async function getReconciledFundingState(): Promise<FundingState | null> {
+    const read = async (snapshot: FundingSnapshot, retries: number): Promise<FundingState | null> => {
       const status = await readAuthStatus(snapshot)
       if (isLegacyUnscoped(snapshot) && !status) return null
       const context = await fundingContext(snapshot, status)
@@ -1080,7 +1114,7 @@ export namespace OpenScience {
         current.organization_id === snapshot.organization_id &&
         current.workspace_locked === snapshot.workspace_locked
       ) {
-        return { snapshot: current, context }
+        return { snapshot: current, context, ...(status?.user ? { user: status.user } : {}) }
       }
       if (!retries) return null
       return read(current, retries - 1)
@@ -1467,6 +1501,17 @@ export namespace OpenScience {
   ): Promise<Credits | null> {
     const session = snapshot ?? (await getReconciledFundingState())?.snapshot
     if (!session) return null
+    // The ledger metadata follow-up is part of the read's shape, so a summary
+    // read and a full read are separate flights.
+    return share(flightKey(`wallet:${options.lifetimeSpent === false ? "summary" : "full"}`, session), () =>
+      fetchCredits(session, options),
+    )
+  }
+
+  async function fetchCredits(
+    session: FundingSnapshot,
+    options: { timeoutMs?: number; lifetimeSpent?: boolean },
+  ): Promise<Credits | null> {
     const timeoutMs = options.timeoutMs ?? ATLAS_FETCH_TIMEOUT_MS
     try {
       let currentWallet = true
@@ -1546,6 +1591,33 @@ export namespace OpenScience {
     }
   }
 
+  interface AccessRead {
+    ok: boolean
+    status?: number
+    body?: {
+      cli_balance_cents?: number
+      managed_supported?: boolean
+      managed_unlocked?: boolean
+      ace_enabled?: boolean
+      balance_redacted?: boolean
+    }
+  }
+
+  /** The entitlement check, shared by every concurrent caller in one context. */
+  function readAccess(session: FundingSnapshot, timeoutMs: number): Promise<AccessRead> {
+    return share(flightKey("access", session), async () => {
+      const response = await fundedAtlasFetch(session, `${apiBase()}/api/cli/access`, {}, timeoutMs).catch(
+        () => undefined,
+      )
+      if (!response) return { ok: false }
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined)
+        return { ok: false, status: response.status }
+      }
+      return { ok: true, status: response.status, body: (await response.json()) as AccessRead["body"] }
+    })
+  }
+
   export interface BillingMode {
     mode: "byok" | "managed"
     balance_cents: number
@@ -1565,32 +1637,22 @@ export namespace OpenScience {
   ): Promise<BillingMode | null> {
     const session = snapshot ?? (await getReconciledFundingState())?.snapshot
     if (!session) return null
-    const [configModule, accessResponse, credits] = await Promise.all([
+    const [configModule, accessRead, credits] = await Promise.all([
       import("@/config/config"),
-      fundedAtlasFetch(session, `${apiBase()}/api/cli/access`, {}, timeoutMs).catch(() => undefined),
+      readAccess(session, timeoutMs),
       knownCredits === undefined ? getCredits(session).catch(() => null) : Promise.resolve(knownCredits),
     ])
-    const access = accessResponse?.ok
-      ? ((await accessResponse.json()) as {
-          cli_balance_cents?: number
-          managed_supported?: boolean
-          managed_unlocked?: boolean
-          ace_enabled?: boolean
-          balance_redacted?: boolean
-        })
-      : undefined
+    const access = accessRead.body
     const configured = (await configModule.Config.getGlobal()).billing?.llm
     const openrouterAuth = await Auth.get("openrouter").catch(() => undefined)
     const storedOwnKey = openrouterAuth?.type === "api" && !isAtlasManagedKey(openrouterAuth.key)
     const envOpenRouterKey = process.env.OPENROUTER_API_KEY
     const envOwnKey = !!envOpenRouterKey && !isAtlasManagedKey(envOpenRouterKey)
     const balance = credits?.balanceCents ?? access?.cli_balance_cents ?? 0
-    const denied = accessResponse?.status === 401 || accessResponse?.status === 403
+    const denied = accessRead.status === 401 || accessRead.status === 403
     const verified =
       denied ||
-      (accessResponse?.ok === true &&
-        typeof access?.managed_unlocked === "boolean" &&
-        typeof access.managed_supported === "boolean")
+      (accessRead.ok && typeof access?.managed_unlocked === "boolean" && typeof access.managed_supported === "boolean")
     const supported = !denied && access?.managed_supported === true
     return {
       mode:

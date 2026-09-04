@@ -58,6 +58,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Served a recently verified Ace balance while refreshing it in the background
   under a bounded timeout, so managed turns no longer wait on the account
   service.
+- Shared one in-flight Ace account status, entitlement, and wallet read per
+  funding context, so a managed turn, the settings panels, and credential sync
+  that check the account at the same time no longer repeat the request, and
+  the account summary no longer reads the profile twice.
 - Unified loading, empty, alert, and control styling across Customize panels,
   moved Credentials under Capabilities, renamed Security & access to
   Permissions, and gave Local models inline errors and skeleton rows.
