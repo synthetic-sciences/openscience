@@ -8,13 +8,20 @@ const read = (file: string) => Bun.file(path.join(root, file)).text()
 
 test("pull requests use one fast product-level lane", async () => {
   const workflow = await read(".github/workflows/ci.yml")
+  const parsed = Bun.YAML.parse(workflow) as { jobs: Record<string, { name: string; if?: string }> }
 
   expect(workflow).toContain("name: Fast CI")
   expect(workflow).toContain("bun run typecheck")
   expect(workflow).toContain("bun run --cwd frontend/workspace build")
   expect(workflow).toContain("Smoke release entrypoints")
+  expect(workflow).toContain("bun tooling/repo/test-shards.ts affected")
+  expect(workflow).toContain('bun test --timeout 15000 "${paths[@]}"')
+  expect(workflow).toContain("--cache-strategy content")
   expect(workflow).not.toContain("bun run --cwd backend/cli test")
   expect(workflow).not.toContain("matrix:")
+  // Branch protection requires these exact check names; none may be skipped.
+  expect(Object.values(parsed.jobs).map((job) => job.name)).toEqual(["Typecheck", "Format", "Build (web)", "Test"])
+  for (const job of Object.values(parsed.jobs)) expect(job.if).toBeUndefined()
 })
 
 test("exhaustive and native suites stay off the pull request path", async () => {
