@@ -28,6 +28,11 @@ export namespace State {
     }
   }
 
+  /** Number of runtimes registered for one project root. */
+  export function size(key: string) {
+    return recordsByKey.get(key)?.size ?? 0
+  }
+
   export function clear(key: string, init: Function) {
     const entries = recordsByKey.get(key)
     if (!entries) return
