@@ -738,3 +738,29 @@
     justify-self: start;
   }
 }
+
+/* Customize → General → Context: the warn-above field is a numeric text input so a
+   phone shows a number pad without zooming (16px) and keeps a 44px target. */
+.settings-preferences-panel .settings-context-tokens-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--settings-space-2);
+}
+
+.settings-preferences-panel .settings-context-tokens {
+  width: 128px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-preferences-panel .settings-context-tokens-unit {
+  color: var(--text-weak);
+  font-size: 12px;
+}
+
+@media (max-width: 719px), (pointer: coarse) {
+  .settings-preferences-panel .settings-context-tokens {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}

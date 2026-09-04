@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { Config } from "../../src/config/config"
 import { Global } from "../../src/global"
+import { CompactionSettings } from "../../src/session/compaction-settings"
 import { Preferences, SettingsPreferencesRoutes } from "../../src/server/routes/settings/preferences"
 
 test("advanced navigation is opt-in by default", () => {
@@ -180,5 +182,81 @@ test("two processes reclaim one stale settings lease without losing either patch
       fs.rm(gate, { force: true }),
       fs.rm(`${lock}.coord`, { recursive: true, force: true }),
     ])
+  }
+})
+
+test("compaction preferences expose effective config values and persist to the global config", async () => {
+  const app = SettingsPreferencesRoutes()
+  // The route writes the shared global config; snapshot every candidate file so the
+  // test leaves the other suites' compaction defaults exactly as it found them.
+  const files = ["openscience.jsonc", "openscience.json", "config.json"].map((name) =>
+    path.join(Global.Path.config, name),
+  )
+  const snapshot = await Promise.all(files.map((file) => fs.readFile(file, "utf8").catch(() => undefined)))
+  const before = await Config.getGlobal()
+  const defaults = (await (await app.request("/")).json()) as Preferences
+  expect(defaults).toMatchObject({
+    compaction_auto: CompactionSettings.resolve(before).auto,
+    compaction_threshold: CompactionSettings.resolve(before).threshold,
+    compaction_warn_tokens: CompactionSettings.resolve(before).warn_tokens,
+  })
+  expect(Preferences.parse({})).toMatchObject({
+    compaction_auto: true,
+    compaction_threshold: 0.75,
+    compaction_warn_tokens: 120_000,
+  })
+
+  try {
+    const update = await app.request("/", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ compaction_threshold: 0.5, compaction_warn_tokens: 80_000, show_trace: true }),
+    })
+    expect(update.status).toBe(200)
+    expect((await update.json()) as Preferences).toMatchObject({
+      compaction_auto: true,
+      compaction_threshold: 0.5,
+      compaction_warn_tokens: 80_000,
+      show_trace: true,
+    })
+
+    // The values the UI shows are the values the loop acts on: they land in the
+    // global openscience config, not in settings.json.
+    const config = await Config.getGlobal()
+    expect(CompactionSettings.resolve(config)).toEqual({ auto: true, threshold: 0.5, warn_tokens: 80_000 })
+    const settings = JSON.parse(await fs.readFile(path.join(Global.Path.config, "settings.json"), "utf8")) as Record<
+      string,
+      unknown
+    >
+    expect(settings.compaction_threshold).toBeUndefined()
+    expect(settings.compaction_warn_tokens).toBeUndefined()
+    expect(settings.show_trace).toBe(true)
+
+    const read = (await (await app.request("/")).json()) as Preferences
+    expect(read.compaction_threshold).toBe(0.5)
+    expect(read.compaction_warn_tokens).toBe(80_000)
+
+    const invalid = await app.request("/", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ compaction_threshold: 1.5 }),
+    })
+    expect(invalid.status).toBe(400)
+    const fractional = await app.request("/", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ compaction_warn_tokens: 0 }),
+    })
+    expect(fractional.status).toBe(400)
+  } finally {
+    await Promise.all(
+      files.map((file, index) => {
+        const original = snapshot[index]
+        if (original === undefined) return fs.rm(file, { force: true })
+        return fs.writeFile(file, original, { mode: 0o600 })
+      }),
+    )
+    Config.global.reset()
+    expect(CompactionSettings.resolve(await Config.getGlobal())).toEqual(CompactionSettings.resolve(before))
   }
 })

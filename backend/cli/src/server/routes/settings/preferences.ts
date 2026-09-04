@@ -3,7 +3,9 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import path from "path"
 import { randomUUID } from "node:crypto"
 import z from "zod"
+import { Config } from "../../../config/config"
 import { Global } from "../../../global"
+import { CompactionSettings } from "../../../session/compaction-settings"
 import { lazy } from "../../../util/lazy"
 import { Log } from "../../../util/log"
 import { JsonStore } from "../../../util/jsonstore"
@@ -20,7 +22,8 @@ const OnboardingOperations = z
   .record(z.string().min(1).max(4_096), z.string().uuid())
   .refine((value) => Object.keys(value).length <= 32, "Too many pending desktop onboarding operations")
 
-export const Preferences = z.object({
+// Rows persisted verbatim to settings.json.
+const Stored = z.object({
   // Model reasoning effort applied when a model exposes it (General → Model).
   reasoning_effort: z.enum(["minimal", "low", "medium", "high"]).default("medium"),
   // Licensing use-intent (General → Licensing). Persisted for provenance /
@@ -67,22 +70,49 @@ export const Preferences = z.object({
   // Deprecated no-op retained so older 2.x clients and settings files still round-trip.
   delegation_diversity: z.enum(["focused", "balanced", "exploratory"]).default("balanced"),
 })
+type Stored = z.infer<typeof Stored>
+
+// Context-management rows are config, not app preferences: the session loop reads
+// `compaction.*` through Config, so they live in the global openscience.json. The
+// route exposes the effective values (defaults applied) so the workspace can read
+// and write them without hand-editing the config file. Defaults mirror
+// CompactionSettings.resolve so `Preferences.parse({})` equals a fresh install.
+const Compaction = z.object({
+  compaction_auto: z.boolean().default(true).describe("Automatic compaction when context is full (compaction.auto)"),
+  compaction_threshold: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(CompactionSettings.DEFAULT_THRESHOLD)
+    .describe("Fraction of the model window that triggers automatic compaction (compaction.threshold)"),
+  compaction_warn_tokens: z
+    .number()
+    .int()
+    .positive()
+    .default(CompactionSettings.DEFAULT_WARN_TOKENS)
+    .describe("Conversation size in tokens above which the workspace warns (compaction.warn_tokens)"),
+})
+
+export const Preferences = Stored.extend(Compaction.shape)
 export type Preferences = z.infer<typeof Preferences>
 
 const PreferencesPatch = z.object({
-  reasoning_effort: Preferences.shape.reasoning_effort.removeDefault().optional(),
-  intent: Preferences.shape.intent.removeDefault().optional(),
-  extra_budget_usd: Preferences.shape.extra_budget_usd.removeDefault().optional(),
-  show_trace: Preferences.shape.show_trace.removeDefault().optional(),
-  show_local_models: Preferences.shape.show_local_models.removeDefault().optional(),
-  desktop_onboarding_version: Preferences.shape.desktop_onboarding_version.removeDefault().optional(),
-  atlas_enabled: Preferences.shape.atlas_enabled.removeDefault().optional(),
-  delegation_enabled: Preferences.shape.delegation_enabled.removeDefault().optional(),
-  delegation_specialist: Preferences.shape.delegation_specialist.removeDefault().optional(),
-  delegation_level: Preferences.shape.delegation_level.removeDefault().optional(),
-  delegation_worker_model: Preferences.shape.delegation_worker_model.removeDefault().optional(),
-  delegation_autonomy: Preferences.shape.delegation_autonomy.removeDefault().optional(),
-  delegation_diversity: Preferences.shape.delegation_diversity.removeDefault().optional(),
+  reasoning_effort: Stored.shape.reasoning_effort.removeDefault().optional(),
+  intent: Stored.shape.intent.removeDefault().optional(),
+  extra_budget_usd: Stored.shape.extra_budget_usd.removeDefault().optional(),
+  show_trace: Stored.shape.show_trace.removeDefault().optional(),
+  show_local_models: Stored.shape.show_local_models.removeDefault().optional(),
+  desktop_onboarding_version: Stored.shape.desktop_onboarding_version.removeDefault().optional(),
+  atlas_enabled: Stored.shape.atlas_enabled.removeDefault().optional(),
+  delegation_enabled: Stored.shape.delegation_enabled.removeDefault().optional(),
+  delegation_specialist: Stored.shape.delegation_specialist.removeDefault().optional(),
+  delegation_level: Stored.shape.delegation_level.removeDefault().optional(),
+  delegation_worker_model: Stored.shape.delegation_worker_model.removeDefault().optional(),
+  delegation_autonomy: Stored.shape.delegation_autonomy.removeDefault().optional(),
+  delegation_diversity: Stored.shape.delegation_diversity.removeDefault().optional(),
+  compaction_auto: Compaction.shape.compaction_auto.removeDefault().optional(),
+  compaction_threshold: Compaction.shape.compaction_threshold.removeDefault().optional(),
+  compaction_warn_tokens: Compaction.shape.compaction_warn_tokens.removeDefault().optional(),
 })
 
 const OnboardingOperationInput = z.object({
@@ -105,24 +135,44 @@ function normalizeDelegation(value: unknown) {
   return next
 }
 
-async function read(): Promise<Preferences> {
+async function stored(): Promise<Stored> {
   const raw = await JsonStore.read(filepath)
-  const parsed = Preferences.safeParse(normalizeDelegation(raw))
+  const parsed = Stored.safeParse(normalizeDelegation(raw))
   if (!parsed.success) {
     log.error("invalid settings file; preserving it and serving safe defaults", { issues: parsed.error.issues })
-    return Preferences.parse({})
+    return Stored.parse({})
   }
   return parsed.data
 }
 
-async function mutate(fn: (current: Preferences) => Preferences): Promise<Preferences> {
-  let result: Preferences | undefined
+// Effective compaction settings from the global config scope. Settings requests are
+// not tied to a project Instance, so read the same scope the PATCH below writes.
+async function compaction() {
+  const config = await Config.getGlobal().catch((error) => {
+    log.warn("global config unavailable; serving default compaction settings", { error: `${error}` })
+    return {} as Config.Info
+  })
+  const effective = CompactionSettings.resolve(config)
+  return {
+    compaction_auto: effective.auto,
+    compaction_threshold: effective.threshold,
+    compaction_warn_tokens: effective.warn_tokens,
+  }
+}
+
+async function read(): Promise<Preferences> {
+  const [current, context] = await Promise.all([stored(), compaction()])
+  return { ...current, ...context }
+}
+
+async function mutate(fn: (current: Stored) => Stored): Promise<Stored> {
+  let result: Stored | undefined
   await JsonStore.update(filepath, (raw) => {
-    const current = Preferences.safeParse(normalizeDelegation(raw))
+    const current = Stored.safeParse(normalizeDelegation(raw))
     if (!current.success) {
       throw new Error("The OpenScience settings file is invalid; refusing to overwrite it")
     }
-    result = Preferences.parse(fn(current.data))
+    result = Stored.parse(fn(current.data))
     return result as unknown as Record<string, unknown>
   })
   if (!result) throw new Error("OpenScience did not persist the settings update")
@@ -161,7 +211,19 @@ export const SettingsPreferencesRoutes = lazy(() =>
       async (c) => {
         const patch = normalizeDelegation(c.req.valid("json")) as Partial<Preferences>
         log.info("update", { keys: Object.keys(patch) })
-        return c.json(await mutate((current) => Preferences.parse({ ...current, ...patch })))
+        const context = {
+          ...(patch.compaction_auto === undefined ? {} : { auto: patch.compaction_auto }),
+          ...(patch.compaction_threshold === undefined ? {} : { threshold: patch.compaction_threshold }),
+          ...(patch.compaction_warn_tokens === undefined ? {} : { warn_tokens: patch.compaction_warn_tokens }),
+        }
+        const rows = Object.fromEntries(Object.entries(patch).filter(([key]) => !(key in Compaction.shape)))
+        // Preserve instances: Config.state() re-reads on the global revision bump, so an
+        // active session picks the new threshold up on its next turn without a teardown.
+        if (Object.keys(context).length > 0) {
+          await Config.updateGlobal({ compaction: context }, { preserveInstances: true })
+        }
+        if (Object.keys(rows).length > 0) await mutate((current) => Stored.parse({ ...current, ...rows }))
+        return c.json(await read())
       },
     )
     .post(
@@ -182,7 +244,7 @@ export const SettingsPreferencesRoutes = lazy(() =>
         let operationID: string | undefined
         await mutate((current) => {
           operationID = current.desktop_onboarding_operations[fingerprint] ?? randomUUID()
-          return Preferences.parse({
+          return Stored.parse({
             ...current,
             desktop_onboarding_operations: {
               ...current.desktop_onboarding_operations,
@@ -206,7 +268,7 @@ export const SettingsPreferencesRoutes = lazy(() =>
         await mutate((current) => {
           const operations = { ...current.desktop_onboarding_operations }
           delete operations[fingerprint]
-          return Preferences.parse({ ...current, desktop_onboarding_operations: operations })
+          return Stored.parse({ ...current, desktop_onboarding_operations: operations })
         })
         return c.body(null, 204)
       },

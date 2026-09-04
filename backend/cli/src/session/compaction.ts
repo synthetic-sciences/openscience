@@ -19,6 +19,7 @@ import path from "node:path"
 import fs from "node:fs/promises"
 import { SessionFilesystem } from "./filesystem"
 import { SessionLoopState } from "./loop-state"
+import { CompactionSettings } from "./compaction-settings"
 import { NamedError } from "@synsci/util/error"
 
 export namespace SessionCompaction {
@@ -33,11 +34,12 @@ export namespace SessionCompaction {
     ),
   }
 
-  // Fraction of the usable context budget at which auto-compaction fires. 0.75
-  // matches Claude Code / opencode: ~25% headroom so the NEXT turn (plus its
-  // output) can't blow the hard limit before compaction runs. Overridable via
-  // config.compaction.threshold.
-  export const DEFAULT_THRESHOLD = 0.75
+  // User-facing compaction settings (auto, threshold, warn_tokens) and their defaults
+  // live in the import-free CompactionSettings leaf so the settings route can share
+  // them without a module cycle. Re-exported here for existing callers.
+  export const DEFAULT_THRESHOLD = CompactionSettings.DEFAULT_THRESHOLD
+  export const DEFAULT_WARN_TOKENS = CompactionSettings.DEFAULT_WARN_TOKENS
+  export const settings = CompactionSettings.resolve
 
   // Assumed context window when a provider reports 0 (local / OpenAI-compatible
   // / Codex). Matches the existing unknown-model fallback at provider.ts:770.
@@ -73,11 +75,11 @@ export namespace SessionCompaction {
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
-    if (config.compaction?.auto === false) return false
+    const effective = settings(config)
+    if (!effective.auto) return false
     const { usable } = usableContext(input.model, config)
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    const threshold = config.compaction?.threshold ?? DEFAULT_THRESHOLD
-    return count > usable * threshold
+    return count > usable * effective.threshold
   }
 
   // Circuit breaker (P2.5). A compaction that reclaims less than this fraction of the
