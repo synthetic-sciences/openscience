@@ -11,3 +11,62 @@ updates:
       actions:
         patterns:
           - "*"
+
+  # Bun lockfiles. The security `overrides` in package.json are otherwise
+  # maintained by hand. Majors are ignored until each group has a green
+  # track record; bump them deliberately. Requires the Bun ecosystem to be
+  # enabled for the organization's Dependabot.
+  - package-ecosystem: "bun"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      ai-sdk:
+        patterns:
+          - "ai"
+          - "@ai-sdk/*"
+          - "@openrouter/*"
+      solid:
+        patterns:
+          - "solid-js"
+          - "solid-*"
+          - "@solidjs/*"
+          - "@solid-primitives/*"
+          - "@kobalte/*"
+      vite:
+        patterns:
+          - "vite"
+          - "vite-*"
+          - "@vitejs/*"
+          - "tailwindcss"
+          - "@tailwindcss/*"
+      dev-tools:
+        patterns:
+          - "typescript"
+          - "@typescript/*"
+          - "@types/*"
+          - "prettier"
+          - "turbo"
+          - "husky"
+          - "@playwright/*"
+
+  - package-ecosystem: "bun"
+    directory: "/frontend/landing"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      landing:
+        patterns:
+          - "*"
