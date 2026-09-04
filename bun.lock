@@ -70,7 +70,7 @@
         "modal": "0.9.0",
         "open": "10.1.2",
         "remeda": "catalog:",
-        "tree-sitter-bash": "0.25.0",
+        "tree-sitter-bash": "0.25.1",
         "turndown": "7.2.0",
         "ulid": "catalog:",
         "vscode-jsonrpc": "8.2.1",
@@ -2163,7 +2163,7 @@
 
     "tr46": ["tr46@6.0.0", "", { "dependencies": { "punycode": "^2.3.1" } }, "sha512-bLVMLPtstlZ4iMQHpFHTR7GAGj2jxi8Dg0s2h2MafAE4uSWF98FC/3MomU51iQAMf8/qDUbKWf5GxuvvVcXEhw=="],
 
-    "tree-sitter-bash": ["tree-sitter-bash@0.25.0", "", { "dependencies": { "node-addon-api": "^8.2.1", "node-gyp-build": "^4.8.2" }, "peerDependencies": { "tree-sitter": "^0.25.0" }, "optionalPeers": ["tree-sitter"] }, "sha512-gZtlj9+qFS81qKxpLfD6H0UssQ3QBc/F0nKkPsiFDyfQF2YBqYvglFJUzchrPpVhZe9kLZTrJ9n2J6lmka69Vg=="],
+    "tree-sitter-bash": ["tree-sitter-bash@0.25.1", "", { "dependencies": { "node-addon-api": "^8.2.1", "node-gyp-build": "^4.8.2" }, "peerDependencies": { "tree-sitter": "^0.25.0" }, "optionalPeers": ["tree-sitter"] }, "sha512-7hMytuYIMoXOq24yRulgIxthE9YmggZIOHCyPTTuJcu6EU54tYD+4G39cUb28kxC6jMf/AbPfWGLQtgPTdh3xw=="],
 
     "trim-lines": ["trim-lines@3.0.1", "", {}, "sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg=="],
 

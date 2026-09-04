@@ -88,7 +88,7 @@
     "modal": "0.9.0",
     "open": "10.1.2",
     "remeda": "catalog:",
-    "tree-sitter-bash": "0.25.0",
+    "tree-sitter-bash": "0.25.1",
     "turndown": "7.2.0",
     "ulid": "catalog:",
     "vscode-jsonrpc": "8.2.1",
