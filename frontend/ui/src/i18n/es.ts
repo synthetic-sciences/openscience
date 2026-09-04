@@ -28,6 +28,7 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Recopilando pensamientos",
   "ui.sessionTurn.status.consideringNextSteps": "Considerando siguientes pasos",
   "ui.sessionTurn.progress.connecting": "Conectando con {{model}}…",
+  "ui.sessionTurn.progress.stillConnecting": "Todavía conectando con {{model}} ({{seconds}}s)",
   "ui.sessionTurn.progress.waitingFirstToken": "Esperando a que {{model}} empiece ({{seconds}}s)",
   "ui.sessionTurn.progress.streaming": "Recibiendo de {{model}}…",
   "ui.sessionTurn.progress.conflictWait": "Un intento anterior sigue en curso en la pasarela; esperando ({{seconds}}s)",

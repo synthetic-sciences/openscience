@@ -176,10 +176,12 @@ export namespace SessionTelemetry {
     retryAfterMs?: number
     detail?: string
   }) {
-    const now = Date.now()
     const prior = requests.get(input.sessionID)
     const same = prior?.messageID === input.messageID ? prior : undefined
+    // Cheap enough to call on every stream delta: a repeat returns before the
+    // clock is read.
     if (same && same.phase === input.phase && same.attempt === input.attempt) return same
+    const now = Date.now()
     const started = input.phase === "connecting" || !same ? now : same.started
     const stall = input.phase === "conflict_wait" || input.phase === "retry_wait" ? 1 : 0
     const elapsedMs = now - started
@@ -199,10 +201,11 @@ export namespace SessionTelemetry {
       ...(first !== undefined && { firstOutputMs: first }),
       stalls: (same?.stalls ?? 0) + stall,
     } satisfies RequestProgress
-    if (!requests.has(input.sessionID) && requests.size >= LATEST_LIMIT) {
-      const oldest = requests.keys().next()
-      if (!oldest.done) requests.delete(oldest.value)
-    }
+    if (!prior) trim()
+    // Delete first so the map is ordered by last update rather than first
+    // insertion: a long-lived session is never the eviction candidate just
+    // because it started before 256 newer ones.
+    requests.delete(input.sessionID)
     requests.set(input.sessionID, { ...item, started })
     log.debug("request progress", {
       sessionID: item.sessionID,
@@ -218,6 +221,19 @@ export namespace SessionTelemetry {
       log.debug("request progress publish failed", { error: `${error}` }),
     )
     return item
+  }
+
+  /** Make room for one more request record: a finished request goes first,
+   * then the least recently updated one. */
+  function trim() {
+    if (requests.size < LATEST_LIMIT) return
+    for (const [key, item] of requests) {
+      if (item.phase !== "done" && item.phase !== "error") continue
+      requests.delete(key)
+      return
+    }
+    const oldest = requests.keys().next()
+    if (!oldest.done) requests.delete(oldest.value)
   }
 
   /** Latest request-phase record for a session, including time-to-first-output. */

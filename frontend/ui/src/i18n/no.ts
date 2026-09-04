@@ -30,6 +30,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
   "ui.sessionTurn.progress.connecting": "Kobler til {{model}}…",
+  "ui.sessionTurn.progress.stillConnecting": "Kobler fortsatt til {{model}} ({{seconds}}s)",
   "ui.sessionTurn.progress.waitingFirstToken": "Venter på at {{model}} starter ({{seconds}}s)",
   "ui.sessionTurn.progress.streaming": "Mottar fra {{model}}…",
   "ui.sessionTurn.progress.conflictWait": "Et tidligere forsøk kjører fortsatt på gatewayen; venter ({{seconds}}s)",

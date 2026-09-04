@@ -27,6 +27,7 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
   "ui.sessionTurn.status.consideringNextSteps": "Overvejer næste skridt",
   "ui.sessionTurn.progress.connecting": "Forbinder til {{model}}…",
+  "ui.sessionTurn.progress.stillConnecting": "Forbinder stadig til {{model}} ({{seconds}}s)",
   "ui.sessionTurn.progress.waitingFirstToken": "Venter på at {{model}} starter ({{seconds}}s)",
   "ui.sessionTurn.progress.streaming": "Modtager fra {{model}}…",
   "ui.sessionTurn.progress.conflictWait": "Et tidligere forsøg kører stadig på gatewayen; venter ({{seconds}}s)",

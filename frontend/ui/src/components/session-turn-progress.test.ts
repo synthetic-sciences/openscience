@@ -3,7 +3,7 @@ import { readdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import type { SessionRequestProgress } from "@synsci/sdk/v2/client"
 import { dict as en } from "../i18n/en"
-import { PROGRESS_HINT_MS, progressStatus } from "./session-turn-progress"
+import { PROGRESS_HINT_MS, PROGRESS_SLOW_MS, progressStatus } from "./session-turn-progress"
 
 const since = 1_000_000
 const base: SessionRequestProgress = {
@@ -26,9 +26,21 @@ const at = (phase: SessionRequestProgress["phase"], extra: Partial<SessionReques
 
 describe("request phase status copy", () => {
   test("each live phase names the model and the honest elapsed time", () => {
-    expect(progressStatus(at("connecting"), since + 2_500)).toEqual({
+    expect(progressStatus(at("connecting"), since + PROGRESS_SLOW_MS - 1)).toEqual({
       key: "ui.sessionTurn.progress.connecting",
       params: { model: "openai/gpt-5.6-sol" },
+    })
+    // A connect that outlives the grace period counts up like a silent
+    // response: a gateway polling a conflict inside the fetch never leaves
+    // this phase, so the clock is the only honest signal.
+    expect(progressStatus(at("connecting"), since + PROGRESS_SLOW_MS)).toEqual({
+      key: "ui.sessionTurn.progress.stillConnecting",
+      params: { model: "openai/gpt-5.6-sol", seconds: 3 },
+    })
+    expect(progressStatus(at("connecting"), since + 245_800)).toEqual({
+      key: "ui.sessionTurn.progress.stillConnecting",
+      params: { model: "openai/gpt-5.6-sol", seconds: 245 },
+      hint: "ui.sessionTurn.progress.stillOpen",
     })
     // 7 s elapsed when headers arrived plus 12.4 s in this phase = 19 s.
     expect(progressStatus(at("waiting_first_token", { elapsedMs: 7_000 }), since + 12_400)).toEqual({
@@ -55,12 +67,16 @@ describe("request phase status copy", () => {
     expect(progressStatus(at("error"), since + 10)).toBeUndefined()
   })
 
-  test("the still-open hint appears only after 30 s without a first token", () => {
-    const early = progressStatus(at("waiting_first_token"), since + PROGRESS_HINT_MS - 1)
-    const late = progressStatus(at("waiting_first_token"), since + PROGRESS_HINT_MS)
-    expect(early?.hint).toBeUndefined()
-    expect(late?.hint).toBe("ui.sessionTurn.progress.stillOpen")
+  test("the still-open hint appears only after 30 s without a response", () => {
+    for (const phase of ["connecting", "waiting_first_token"] as const) {
+      const early = progressStatus(at(phase), since + PROGRESS_HINT_MS - 1)
+      const late = progressStatus(at(phase), since + PROGRESS_HINT_MS)
+      expect(early?.hint).toBeUndefined()
+      expect(late?.hint).toBe("ui.sessionTurn.progress.stillOpen")
+    }
     expect(progressStatus(at("streaming"), since + PROGRESS_HINT_MS * 2)?.hint).toBeUndefined()
+    expect(progressStatus(at("conflict_wait"), since + PROGRESS_HINT_MS * 2)?.hint).toBeUndefined()
+    expect(progressStatus(at("retry_wait", { retryAfterMs: 1 }), since + PROGRESS_HINT_MS * 2)?.hint).toBeUndefined()
   })
 
   test("clock skew can shift the counter but never make it negative", () => {
@@ -72,10 +88,17 @@ describe("request phase status copy", () => {
   })
 
   test("every phase key exists in every locale with the placeholders it needs", async () => {
-    const phases = ["connecting", "waiting_first_token", "streaming", "conflict_wait", "retry_wait"] as const
-    const used = phases.map((phase) => progressStatus(at(phase, { retryAfterMs: 1 }), since + PROGRESS_HINT_MS)!)
+    const used = [
+      progressStatus(at("connecting"), since),
+      progressStatus(at("connecting"), since + PROGRESS_HINT_MS),
+      progressStatus(at("waiting_first_token"), since + PROGRESS_HINT_MS),
+      progressStatus(at("streaming"), since),
+      progressStatus(at("conflict_wait"), since),
+      progressStatus(at("retry_wait", { retryAfterMs: 1 }), since),
+    ].flatMap((item) => (item ? [item] : []))
+    expect(used.length).toBe(6)
     const keys = new Set(used.flatMap((item) => [item.key, ...(item.hint ? [item.hint] : [])]))
-    expect(keys.size).toBe(6)
+    expect(keys.size).toBe(7)
     for (const item of used) {
       for (const name of Object.keys(item.params)) expect(en[item.key]).toContain(`{{${name}}}`)
     }

@@ -27,6 +27,7 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "생각 정리 중",
   "ui.sessionTurn.status.consideringNextSteps": "다음 단계 고려 중",
   "ui.sessionTurn.progress.connecting": "{{model}}에 연결 중…",
+  "ui.sessionTurn.progress.stillConnecting": "{{model}}에 계속 연결 중 ({{seconds}}초)",
   "ui.sessionTurn.progress.waitingFirstToken": "{{model}}의 응답 시작을 기다리는 중 ({{seconds}}초)",
   "ui.sessionTurn.progress.streaming": "{{model}}에서 수신 중…",
   "ui.sessionTurn.progress.conflictWait": "이전 시도가 게이트웨이에서 아직 실행 중입니다. 대기 중 ({{seconds}}초)",

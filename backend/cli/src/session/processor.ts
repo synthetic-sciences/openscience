@@ -654,19 +654,17 @@ export namespace SessionProcessor {
             )
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
-            let streamed = false
 
             for await (const value of Provider.withRequestContextIterable(requestContext, stream.fullStream)) {
               input.abort.throwIfAborted()
               // First content is the honest first-output timestamp. A role-only
-              // delta or an SSE keepalive comment never reaches this branch.
+              // delta or an SSE keepalive comment never reaches this branch, and
+              // the record ignores the repeat on every later delta.
               if (
-                !streamed &&
-                (((value.type === "text-delta" || value.type === "reasoning-delta") && value.text.length > 0) ||
-                  value.type === "tool-input-start" ||
-                  value.type === "tool-call")
+                ((value.type === "text-delta" || value.type === "reasoning-delta") && value.text.length > 0) ||
+                value.type === "tool-input-start" ||
+                value.type === "tool-call"
               ) {
-                streamed = true
                 progress("streaming")
               }
               switch (value.type) {
