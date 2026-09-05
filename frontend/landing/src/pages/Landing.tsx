@@ -1,13 +1,29 @@
 import { useState } from "react"
 import photograph from "@/assets/lunar-lab.jpg"
-import logo from "@/assets/synthetic-sciences.svg"
-import { RESEARCH, WORKSPACE } from "@/data/research"
+import { RESEARCH } from "@/data/research"
 import { CONNECTORS } from "@/data/connectors"
+import { Header, Footer, Mark, GITHUB, DOCS, COMMAND } from "@/components/Site"
+import Ace from "@/components/Ace"
 import "./landing.css"
 
-const GITHUB = "https://github.com/synthetic-sciences/openscience"
-const DOCS = "https://openscience.sh/docs"
-const COMMAND = "npm install -g @synsci/openscience"
+const FEATURED = new Set([
+  "pubmed",
+  "arxiv",
+  "openalex",
+  "uniprot",
+  "rcsb-pdb",
+  "ensembl",
+  "pubchem",
+  "chembl",
+  "opentargets",
+  "geo",
+  "gtex",
+  "depmap",
+])
+const DATABASES = [
+  ...CONNECTORS.filter((item) => FEATURED.has(item.id)),
+  ...CONNECTORS.filter((item) => !FEATURED.has(item.id)),
+]
 const PHOTO = "https://www.nasa.gov/image-article/scientists-lunar-chemistry-laboratory/"
 const INSTITUTIONS = [
   ["harvard", "Harvard University"],
@@ -108,7 +124,7 @@ const QUESTIONS = [
   ],
   [
     "Is it free?",
-    "OpenScience is open source under Apache 2.0. Model providers, hosted scientific tools, and compute services may charge for usage. Those costs depend on the services you connect.",
+    "OpenScience is open source under Apache 2.0. Bring your own provider access or use local models. Ace is an optional pay-as-you-go service for managed models and search. Connected providers and compute services may charge separately.",
   ],
   [
     "Where does my research live?",
@@ -119,11 +135,8 @@ const QUESTIONS = [
     "Yes. Add your own skills, MCP servers, plugins, agents, and commands. Use the TypeScript SDK to connect private tools and research infrastructure.",
   ],
 ] as const
-function Mark() {
-  return <img className="science-mark" src={logo} width="28" height="28" alt="" aria-hidden="true" />
-}
-
 export default function Landing() {
+  const [expanded, setExpanded] = useState(false)
   const [chapter, setChapter] = useState(0)
   const [provider, setProvider] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -143,19 +156,7 @@ export default function Landing() {
       <a className="skip-link" href="#research">
         Skip to content
       </a>
-      <header className="site-header">
-        <a className="brand" href="https://syntheticsciences.ai" aria-label="Synthetic Sciences home">
-          <Mark />
-          <span>Synthetic Sciences</span>
-        </a>
-        <nav aria-label="Primary navigation">
-          <a href={DOCS}>Docs</a>
-          <a href={GITHUB}>GitHub</a>
-          <a href="/download" className="nav-download">
-            Get OpenScience
-          </a>
-        </nav>
-      </header>
+      <Header />
       <main>
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero-copy">
@@ -404,27 +405,21 @@ export default function Landing() {
               </details>
             ))}
           </div>
-          <div className="toolkit">
-            <div className="toolkit-heading">
-              <h3>In the workspace</h3>
-              <p>Built-in tools for the work around the experiment.</p>
-            </div>
-            <div className="workspace-tools">
-              {WORKSPACE.map((tool) => (
-                <a key={tool[0]} href={`${GITHUB}/blob/main/backend/cli/src/tool/${tool[2]}`}>
-                  <h4>{tool[0]}</h4>
-                  <p>{tool[1]}</p>
-                </a>
-              ))}
-            </div>
-          </div>
           <div className="toolkit databases">
             <div className="toolkit-heading">
               <h3>Scientific databases</h3>
-              <p>Search publications and retrieve records from the source.</p>
+              <button
+                className="database-more"
+                type="button"
+                aria-expanded={expanded}
+                aria-controls="database-grid"
+                onClick={() => setExpanded(!expanded)}
+              >
+                {expanded ? "Show fewer" : `+${DATABASES.length - FEATURED.size} more`}
+              </button>
             </div>
-            <div className="database-grid">
-              {CONNECTORS.map((connector) => (
+            <div className="database-grid" id="database-grid">
+              {DATABASES.slice(0, expanded ? DATABASES.length : FEATURED.size).map((connector) => (
                 <a key={connector.id} href={connector.home} target="_blank" rel="noreferrer">
                   <span className="database-logo">
                     <img src={connector.logo} alt="" width="24" height="24" loading="lazy" />
@@ -476,25 +471,7 @@ export default function Landing() {
               <p>Your choice of model, in the same workspace.</p>
             </div>
           </div>
-          <div className="ownership">
-            <div>
-              <span className="eyebrow">On your computer</span>
-              <h3>Your research stays with you.</h3>
-              <p>
-                Your files, settings, and results live on your computer. You decide which external services to connect.
-              </p>
-            </div>
-            <div>
-              <span className="eyebrow">Apache 2.0</span>
-              <h3>Read the code. Change it.</h3>
-              <p>
-                OpenScience is open source. You can inspect how it works, contribute a fix, or adapt it for your lab.
-              </p>
-              <a className="text-link" href={GITHUB}>
-                Build with us
-              </a>
-            </div>
-          </div>
+          <Ace />
         </section>
         <section id="faq" className="questions section">
           <div>
@@ -546,67 +523,7 @@ export default function Landing() {
           </p>
         </section>
       </main>
-      <footer className="site-footer">
-        <div className="footer-top">
-          <div className="footer-about">
-            <a className="brand" href="#top">
-              <Mark />
-              <span>OpenScience</span>
-            </a>
-            <p>
-              Open-source software
-              <br />
-              for scientific research.
-            </p>
-            <a href="https://syntheticsciences.ai">By Synthetic Sciences</a>
-          </div>
-          {[
-            {
-              title: "Product",
-              links: [
-                ["Download", "/download"],
-                ["Workspace", "#research"],
-                ["Skills & tools", "#skills"],
-                ["Models", "#models"],
-              ],
-            },
-            {
-              title: "Resources",
-              links: [
-                ["Documentation", DOCS],
-                ["GitHub", GITHUB],
-                ["Releases", `${GITHUB}/releases`],
-                ["npm", "https://www.npmjs.com/package/@synsci/openscience"],
-              ],
-            },
-            {
-              title: "Connect",
-              links: [
-                ["Synthetic Sciences", "https://syntheticsciences.ai"],
-                ["X / Twitter", "https://x.com/SynScience"],
-                ["Contribute", `${GITHUB}/blob/main/CONTRIBUTING.md`],
-                ["License", `${GITHUB}/blob/main/LICENSE`],
-              ],
-            },
-          ].map((group) => (
-            <nav key={group.title} aria-label={group.title}>
-              <span className="eyebrow">{group.title}</span>
-              {group.links.map((link) => (
-                <a key={link[0]} href={link[1]}>
-                  {link[0]}
-                </a>
-              ))}
-            </nav>
-          ))}
-        </div>
-        <div className="footer-meta">
-          <span>© {new Date().getFullYear()} Synthetic Sciences · OpenScience is open source.</span>
-          <a href="#top">Back to top</a>
-        </div>
-        <a className="footer-wordmark" href="#top" aria-label="OpenScience, back to top">
-          OpenScience
-        </a>
-      </footer>
+      <Footer />
     </div>
   )
 }

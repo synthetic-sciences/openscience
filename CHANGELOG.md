@@ -12,7 +12,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 - Redesign openscience.sh around archival research photography, monochrome editorial
   sections, a moving institution strip, interactive workflow previews, detailed
-  research skills and static tool grids, and an oversized OpenScience footer.
+  research skills, expandable database tiles, and an oversized OpenScience footer.
+  Match the download page to the new theme and explain Ace’s pay-as-you-go
+  Wallet reload alongside desktop and command-line installation.
 
 - Keep the saved model-access choice stable through delayed Wallet reads and
   account switches, without letting an old request overwrite the new account UI.

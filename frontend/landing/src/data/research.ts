@@ -112,12 +112,3 @@ export const RESEARCH = [
     example: "Review this draft against the analysis. Flag claims that need evidence and check every figure caption.",
   },
 ] as const
-
-export const WORKSPACE = [
-  ["Python & R", "Run code in persistent research kernels.", "notebook.ts"],
-  ["Terminal & editor", "Work with the files and code in your project.", "bash.ts"],
-  ["Research search", "Search the web and read primary sources.", "research-search.ts"],
-  ["Remote compute", "Submit jobs and follow logs on connected services.", "compute-job.ts"],
-  ["Scientific tools", "Inspect requirements and run configured capabilities.", "scientific-capability.ts"],
-  ["Research artifacts", "Save figures, structures, and other results.", "artifact.ts"],
-] as const

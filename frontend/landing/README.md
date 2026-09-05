@@ -3,11 +3,17 @@
 Marketing site for OpenScience — the source behind [openscience.sh](https://openscience.sh).
 
 Standalone Vite + React + Tailwind project (not part of the monorepo bun
-workspace, so its deps stay isolated). The whole page is one file:
-`src/pages/Landing.tsx`, styled by the scoped `src/pages/landing.css`
-(monochrome editorial layout, self-hosted CMU Concrete, interactive workflow
-preview, detailed research categories, and an institution marquee). Shared download-page styles remain in
-`src/index.css`. Motion respects reduced-motion preferences and can be paused.
+workspace, so its deps stay isolated). The home page is `src/pages/Landing.tsx`;
+`src/pages/Download.tsx` provides the platform downloads and terminal install.
+Both use the monochrome editorial styles in `src/pages/landing.css`, with
+additional download styles in `src/pages/download.css`. Shared branding,
+navigation, footer, and Ace offer live in `src/components/`.
+
+The home page includes an interactive workflow preview, detailed research
+categories, an expandable database grid, and an institution marquee. Motion
+respects reduced-motion preferences and can be paused. Ace links to the
+Synthetic Sciences account billing page; its offer describes usage billing
+and the fixed Wallet reload, not a monthly subscription.
 
 ```bash
 bun install
