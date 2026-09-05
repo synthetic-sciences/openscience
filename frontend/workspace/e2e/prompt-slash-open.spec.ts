@@ -1,18 +1,63 @@
+import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "./fixtures"
 import { promptSelector } from "./utils"
 
+// A contenteditable that mounts a listbox on "/" can drop keys typed in the
+// same frame on a slow runner; open the menu first, then type the query.
+async function slash(page: Page, prompt: Locator, query: string) {
+  await prompt.pressSequentially("/", { delay: 10 })
+  const listbox = page.locator("#composer-slash-listbox")
+  const opened = await listbox.isVisible().catch(() => false)
+  if (!opened) {
+    // Record what the editor actually holds before the assertion fails; the
+    // packaged runner has produced states no local run reproduces.
+    const state = await prompt.evaluate((editor) => {
+      const selection = window.getSelection()
+      const anchor = selection?.anchorNode
+      return {
+        userAgent: navigator.userAgent,
+        innerHTML: editor.innerHTML,
+        text: JSON.stringify(editor.textContent),
+        mode: editor.parentElement?.getAttribute("data-composer-mode"),
+        expanded: editor.getAttribute("aria-expanded"),
+        active: document.activeElement === editor ? "editor" : document.activeElement?.outerHTML.slice(0, 160),
+        selection: anchor
+          ? {
+              inEditor: editor.contains(anchor),
+              node:
+                anchor.nodeType === Node.TEXT_NODE ? JSON.stringify(anchor.textContent) : (anchor as Element).tagName,
+              offset: selection?.anchorOffset,
+              collapsed: selection?.isCollapsed,
+            }
+          : null,
+      }
+    })
+    await test
+      .info()
+      .attach("composer-state", { body: JSON.stringify(state, null, 2), contentType: "application/json" })
+  }
+  await expect(listbox).toBeVisible()
+  await prompt.pressSequentially(query, { delay: 30 })
+}
+
 test("smoke slash menu exposes session actions", async ({ page, gotoSession, sdk }) => {
-  const created = await sdk.session.create({ title: `e2e slash menu ${Date.now()}` }).then((r) => r.data)
+  const title = `e2e slash menu ${Date.now()}`
+  const created = await sdk.session.create({ title }).then((r) => r.data)
   if (!created?.id) throw new Error("Failed to create a session fixture")
 
   try {
     await gotoSession(created.id)
 
+    // Type only once the workspace has hydrated the session list; on a slow
+    // runner the first keystrokes otherwise race the initial render.
+    await expect(
+      page.getByRole("navigation", { name: "Sessions" }).getByRole("button", { name: title, exact: true }),
+    ).toBeVisible()
     const prompt = page.locator(promptSelector)
     await expect(prompt).toBeVisible()
     await prompt.click()
     await expect(prompt).toBeFocused()
-    await prompt.pressSequentially("/compact", { delay: 10 })
+    await slash(page, prompt, "compact")
     await expect(prompt).toContainText("/compact")
 
     const command = page.locator('[data-slash-id="session.compact"]')
@@ -35,7 +80,8 @@ test("an inline slash skill preserves text before and after the token", async ({
     await expect(prompt).toBeVisible()
     await prompt.click()
     await expect(prompt).toBeFocused()
-    await prompt.pressSequentially("Please use /rev", { delay: 10 })
+    await prompt.pressSequentially("Please use ", { delay: 10 })
+    await slash(page, prompt, "rev")
 
     const skill = page.locator('[data-slash-id="skill.review"]')
     await expect(skill).toBeVisible()
@@ -86,7 +132,7 @@ test("inline goal and plan modes preserve the whole draft and caret", async ({ p
 
     await prompt.fill("Finish the paper")
     await caret(0)
-    await prompt.pressSequentially("/go", { delay: 10 })
+    await slash(page, prompt, "go")
     await page.locator('[data-slash-id="command.goal"]').click()
     await expect(prompt).toHaveText("Finish the paper")
     await expect(page.locator('[data-composer-intent="goal"]')).toBeVisible()
@@ -96,7 +142,7 @@ test("inline goal and plan modes preserve the whole draft and caret", async ({ p
 
     await prompt.fill("Please revise the paper")
     await caret(7)
-    await prompt.pressSequentially("/pl", { delay: 10 })
+    await slash(page, prompt, "pl")
     await page.locator('[data-slash-id="command.plan"]').click()
     await expect(prompt).toHaveText("Please revise the paper")
     await expect(page.locator('[data-composer-intent="plan"]')).toBeVisible()
@@ -105,7 +151,7 @@ test("inline goal and plan modes preserve the whole draft and caret", async ({ p
     await page.getByRole("button", { name: "Exit plan mode" }).click()
 
     await prompt.fill("Finish the paper ")
-    await prompt.pressSequentially("/go", { delay: 10 })
+    await slash(page, prompt, "go")
     await page.locator('[data-slash-id="command.goal"]').click()
     await expect(prompt).toHaveText("Finish the paper")
     await prompt.pressSequentially(" today", { delay: 10 })

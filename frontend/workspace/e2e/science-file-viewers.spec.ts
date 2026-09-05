@@ -22,7 +22,7 @@ test("markdown files render and can toggle their editable source", async ({ page
 
 test("image files render their decoded dimensions", async ({ page, openSession }) => {
   await openSession()
-  await openWorkspaceFile(page, "frontend/ui/src/assets/images/social-share.png")
+  await openWorkspaceFile(page, "frontend/workspace/public/social-share.png")
 
   const image = page.getByRole("img", { name: "social-share.png", exact: true })
   await expect(image).toBeVisible()
