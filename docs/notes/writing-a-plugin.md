@@ -87,3 +87,27 @@ bun test --timeout 15000 ./test/tool/registry.test.ts
 
 Plugins do not need to live in this repo. Open an issue first if you think a
 plugin should ship as a built-in.
+
+## Observability and optional review
+
+Keep external provenance or phase protocols in opt-in plugins, not a required
+runtime dependency. Use `event` and tool hooks to observe execution; use message
+transforms only when you deliberately intend to change model input. Record the
+session and tool-call identifiers supplied by the host, distinguish observed
+events from inferred labels, and test success, failure, cancellation, and replay.
+An after-tool callback alone is not a complete failure ledger. Do not claim
+exactly-once delivery or signed provenance unless the plugin implements and
+verifies those guarantees.
+
+Plugins run with host privileges. Do not export prompts, files, provider headers,
+credentials, or raw tool output to a remote tracing service without explicit
+consent. Keep queues and timeouts bounded so an unavailable telemetry service
+cannot stall a scientific task. Metadata protocols such as those proposed in
+issue #103 can evolve independently of the core wire contract.
+
+A review plugin should evaluate citations, artifacts, test results, and stated
+conclusions against explicit criteria. A model's displayed reasoning is not
+proof of correctness. A blocking reviewer (issue #141) needs a separate design:
+which actions it can block, a bounded latency and spend budget, treatment of
+unavailable evidence, visible reasons, and recovery. Existing observation hooks
+do not by themselves implement a safe accept/reject gate.

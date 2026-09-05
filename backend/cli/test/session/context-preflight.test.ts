@@ -297,6 +297,110 @@ describe("current-turn context preflight", () => {
     }
   }, 30_000)
 
+  test("re-arms compaction once when the protected tail still exceeds the hard budget", async () => {
+    const provider = startStressProvider([scenario])
+    try {
+      const base = stressProviderConfig(`http://127.0.0.1:${provider.server.port}/v1`)
+      base.provider[STRESS_PROVIDER_ID].models[STRESS_PROVIDER_COMPACT_MODEL].limit.context = 20_000
+      await using tmp = await tmpdir({
+        git: true,
+        config: { ...base, compaction: { tailTurns: 2, tailTokens: 50_000 } },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          await trustProject()
+          await Provider.invalidate()
+        },
+        fn: async () => {
+          const session = await Session.create({ title: "Post-compaction preflight recovery" })
+          const model = { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_COMPACT_MODEL }
+          await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            tools: { "*": false },
+            system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
+            parts: [{ type: "text", text: "A short completed prior turn." }],
+          })
+          await provider.quiet()
+
+          const retained = await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            tools: { "*": false },
+            noReply: true,
+            system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
+            parts: [{ type: "text", text: `Retained tail:\n${"k".repeat(48_000)}` }],
+          })
+          if (retained.info.role !== "user") throw new Error("Expected a queued user message")
+          // Realistic usage prevents the ordinary low-usage re-arm from hiding
+          // the spent latch. The first summary must preserve this recent tail.
+          await Session.updateMessage({
+            id: await MessageV2.nextMessageID(session.id),
+            sessionID: session.id,
+            parentID: retained.info.id,
+            role: "assistant",
+            mode: "research",
+            agent: "research",
+            path: { cwd: tmp.path, root: tmp.path },
+            modelID: model.modelID,
+            providerID: model.providerID,
+            cost: 0,
+            tokens: { input: 12_000, output: 12, reasoning: 0, cache: { read: 0, write: 0 } },
+            finish: "stop",
+            time: { created: Date.now(), completed: Date.now() },
+          })
+          const before = provider.requests.length
+          const result = await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            tools: { "*": false },
+            system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
+            parts: [{ type: "text", text: `Small current request:\n${"c".repeat(8_000)}` }],
+          })
+          await provider.quiet()
+          if (result.info.role !== "assistant") throw new Error("Expected a recovered assistant response")
+          expect(result.info.error).toBeUndefined()
+          expect(result.info.summary).toBeUndefined()
+          expect(
+            result.parts
+              .filter((part) => part.type === "text")
+              .map((part) => part.text)
+              .join("\n"),
+          ).toContain("CONTEXT_PREFLIGHT_BASELINE")
+
+          const requests = provider.requests.slice(before)
+          expect(requests.filter((request) => request.kind === "summary")).toHaveLength(2)
+          expect(
+            requests.filter((request) => request.kind === "main" && request.scenario === scenario.id),
+          ).toHaveLength(1)
+          expect(requests).toHaveLength(3)
+          const history = await Session.messages({ sessionID: session.id })
+          const failures = history.filter((message) => message.info.role === "assistant" && message.info.error)
+          expect(failures).toHaveLength(1)
+          expect(failures[0].info.role === "assistant" && failures[0].info.error?.data.message).toContain(
+            "after context reduction",
+          )
+          expect(
+            history.filter(
+              (message) => message.info.role === "user" && SessionLoopState.messageKind(message.info) === "context",
+            ),
+          ).toHaveLength(1)
+          const count = provider.requests.length
+          const replay = await SessionPrompt.loop(session.id)
+          await provider.quiet()
+          expect(replay.info.id).toBe(result.info.id)
+          expect(provider.requests).toHaveLength(count)
+        },
+      })
+    } finally {
+      provider.stop()
+    }
+  }, 30_000)
+
   test("does not mistake a delayed prior-turn assistant for an answer to a queued prompt", async () => {
     const provider = startStressProvider([scenario])
     try {

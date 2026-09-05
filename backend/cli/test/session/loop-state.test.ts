@@ -537,6 +537,73 @@ describe("session loop restart state", () => {
     expect(SessionLoopState.terminalError({ user: carrier.info, assistant: failed.info })).toBe(true)
   })
 
+  test("a completed preflight compaction passes only its retained originating rejection", () => {
+    const rejected = assistant("002", "001", "")
+    const carrier = user("004", [])
+    const continuation = user("006", [], "compaction")
+    if (
+      rejected.info.role !== "assistant" ||
+      carrier.info.role !== "user" ||
+      continuation.info.role !== "user" ||
+      continuation.info.internal?.type !== "continuation"
+    )
+      throw new Error("bad fixture")
+    rejected.info.error = { name: "MessageContextWindowError", data: { message: "local preflight rejected" } }
+    carrier.info.internal = {
+      type: "compaction",
+      auto: true,
+      epoch: "001",
+      transaction: carrier.info.id,
+      continuationID: continuation.info.id,
+      trigger: "proactive",
+      recovery: { type: "preflight", continuationID: "003" },
+    }
+    continuation.info.internal.epoch = "001"
+    const input = {
+      user: continuation.info,
+      assistant: rejected.info,
+      messages: [carrier, assistant("005", carrier.info.id, "stop", true), rejected, continuation],
+    }
+    // Reloaded, filtered history can retain the rejection after the summary.
+    expect(SessionLoopState.terminalError(JSON.parse(JSON.stringify(input)))).toBe(false)
+    expect(SessionLoopState.terminalError({ ...input, messages: [] })).toBe(true)
+
+    for (const patch of [
+      { epoch: "other" },
+      { transaction: "other" },
+      { continuationID: "other" },
+      { recovery: undefined },
+      { recovery: { type: "preflight" as const, continuationID: "001" } },
+      { recovery: { type: "preflight" as const, continuationID: "007" } },
+    ]) {
+      expect(
+        SessionLoopState.terminalError({
+          ...input,
+          messages: [{ ...carrier, info: { ...carrier.info, internal: { ...carrier.info.internal, ...patch } } }],
+        }),
+      ).toBe(true)
+    }
+    for (const patch of [{ transaction: "other" }, { kind: "output" as const }])
+      expect(
+        SessionLoopState.terminalError({
+          ...input,
+          user: { ...input.user, internal: { ...continuation.info.internal, ...patch } },
+        }),
+      ).toBe(true)
+    // A newer failure or an uncertain paid outcome never gains permission to
+    // run merely because an older recovery carrier exists.
+    expect(SessionLoopState.terminalError({ ...input, assistant: { ...input.assistant, id: "007" } })).toBe(true)
+    expect(
+      SessionLoopState.terminalError({
+        ...input,
+        assistant: {
+          ...input.assistant,
+          error: { name: "UnknownError", data: { message: "provider outcome unknown" } },
+        },
+      }),
+    ).toBe(true)
+  })
+
   test("recognizes pre-marker contract continuations from existing sessions", () => {
     const history = [
       user("u1", [text("u1", "research")]),

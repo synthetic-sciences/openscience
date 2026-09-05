@@ -405,7 +405,11 @@ export namespace SessionLoopState {
     return input.attempts === 0
   }
 
-  export function terminalError(input: { user: MessageV2.User; assistant?: MessageV2.Assistant }) {
+  export function terminalError(input: {
+    user: MessageV2.User
+    assistant?: MessageV2.Assistant
+    messages?: MessageV2.WithParts[]
+  }) {
     if (!input.assistant?.error) return false
     if (input.assistant.parentID === input.user.id) return true
     // A failed compaction is displayed under the real prompt, while the newest
@@ -428,6 +432,35 @@ export namespace SessionLoopState {
       input.assistant.id < intent.recovery.continuationID
     )
       return false
+    // A retained tail may still end in the original preflight rejection after
+    // its recovery summary. Only that summary's reserved continuation can pass
+    // the old, undispatched error; ordinary continuations and paid failures
+    // remain terminal. The carrier is runtime-owned durable provenance.
+    if (
+      intent.type === "continuation" &&
+      intent.kind === "compaction" &&
+      intent.transaction === input.user.id &&
+      input.assistant.error.name === "MessageContextWindowError"
+    ) {
+      const carrier = input.messages?.find(
+        (message) =>
+          message.info.role === "user" &&
+          message.info.internal?.type === "compaction" &&
+          message.info.internal.continuationID === input.user.id,
+      )?.info
+      const recovery = carrier?.role === "user" ? carrier.internal : undefined
+      if (
+        carrier &&
+        recovery?.type === "compaction" &&
+        recovery.transaction === carrier.id &&
+        recovery.epoch === intent.epoch &&
+        carrier.id < input.user.id &&
+        recovery.recovery?.type === "preflight" &&
+        recovery.recovery.continuationID < carrier.id &&
+        input.assistant.id < recovery.recovery.continuationID
+      )
+        return false
+    }
     return true
   }
 

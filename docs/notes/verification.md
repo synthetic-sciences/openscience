@@ -9,14 +9,20 @@ bun run typecheck                        # all workspaces (tsgo), Fast CI "Typec
 bun run --cwd frontend/workspace build   # Fast CI "Build (web)"
 bun run --cwd backend/cli script/generate-web-assets.ts
 bun run --cwd frontend/docs build        # Deep CI only
-bun run --cwd backend/cli test           # CLI unit + integration suite, Deep CI only
+bun run test:ui                          # Fast CI shared UI unit tests
+bun run test:workspace                   # Fast CI workspace unit tests
+bun run test:sdk                         # Fast CI SDK unit tests
+bun run --cwd backend/cli test           # full CLI unit + integration suite
 ```
 
-Fast CI (`.github/workflows/ci.yml`) runs on every pull request but is
-intentionally small: its "Test" job only syntax-checks the release
-entrypoints. The backend suite and the docs build run in Deep CI
-(`.github/workflows/deep-ci.yml`, nightly and on manual dispatch), so run them
-locally before you push. Start the suite through the `test` script: it passes
+Fast CI (`.github/workflows/ci.yml`) runs on every pull request. It checks
+formatting, monorepo types, release-entrypoint syntax, the workspace build,
+all UI/workspace/SDK unit tests, and affected backend tests selected by
+`tooling/repo/test-shards.ts`. The full backend suite and native platform,
+docs/landing, and workflow checks run in Deep CI
+(`.github/workflows/deep-ci.yml`, nightly and on manual dispatch). Cross-cutting
+changes still need that full suite; a green affected-test selection is not
+full-release evidence. Start backend tests through the `test` script: it passes
 `--timeout 15000`, and bare `bun test` fails spuriously at Bun's 5 s default.
 
 The landing site has its own lockfile and is not a root-workspace package:
@@ -37,7 +43,7 @@ canary inputs enabled. The
 workflow also installs the exact candidate and runs all five packaged
 scientific capability lifecycles on Linux x64, Linux ARM64, and macOS ARM64;
 each evidence record must match the immutable source SHA compiled into that
-candidate. `test` dist-tag promotion depends on all three evidence jobs.
+candidate. `test` dist-tag promotion depends on all fifteen capability/OS evidence jobs.
 Production publishing also verifies the exact-source run and every required
 job through the GitHub Actions API; disabled or skipped candidate gates fail
 closed. When Modal is an advertised backend, also install the exact candidate
@@ -81,5 +87,6 @@ Notes:
   main/sidecar health, cleanup, and injected safe-rollback canaries before the
   draft is made public. The Windows installer may be unsigned only when both
   optional Windows signing secrets are absent, with an explicit release note.
-- Organization funding and team billing are not part of this release tree. PR
-  #413 remains unmerged and must not be included in shipped-feature claims.
+- Organization-scoped workspaces shipped in PR #413. Tests must preserve the
+  selected workspace, membership permissions, and purchased-Wallet boundaries;
+  a passing personal-account test does not establish organization billing.

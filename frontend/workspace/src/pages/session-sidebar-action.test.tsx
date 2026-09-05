@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import type { JSX } from "solid-js"
+import { createComponent, createSignal, type JSX } from "solid-js"
 import { createContextState } from "@/atlas/store/ui"
 
 const cleanups: Array<() => void> = []
@@ -36,6 +36,26 @@ const button = (host: HTMLElement, label: string) =>
   host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
 
 describe("SessionSidebarActions", () => {
+  test("invokes the current callback supplied by its parent", async () => {
+    const subject = await import("./session-sidebar-action")
+    const calls: string[] = []
+    const [action, setAction] = createSignal(() => calls.push("initial"))
+    const host = mount(() =>
+      createComponent(subject.SidebarAction, {
+        label: "Files",
+        detail: "Project files",
+        ariaLabel: "Open project files",
+        get onClick() {
+          return action()
+        },
+        children: "F",
+      }),
+    )
+    setAction(() => () => calls.push("current"))
+    button(host, "Open project files")!.click()
+    expect(calls).toEqual(["current"])
+  })
+
   test("keeps Files, Terminal, and Compute reachable in the compact menu", async () => {
     const subject = await import("./session-sidebar-action")
     const state = createContextState()

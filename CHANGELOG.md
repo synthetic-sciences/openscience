@@ -10,6 +10,22 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Keep the saved model-access choice stable through delayed Wallet reads and
+  account switches, without letting an old request overwrite the new account UI.
+- Recover once when a retained conversation tail still exceeds the context limit
+  after compaction; resume the actual request after its recovery summary without
+  replaying unrelated provider failures.
+- Restore BRENDA helper imports and its missing SOAP bridge; align Open Targets
+  queries with the current public schema; support explicit licensed local DrugBank
+  exports without silently attempting a download.
+- Replace brittle Ace source-text assertions with real rendered account/routing
+  behavior tests, consolidate the sidebar-action harness without dropping its
+  callback regression, and correct contributor and release-verification guidance.
+
+## v2.0.71–v2.0.72 — 2026-09-05
+
+### Changed
+
 - Keep the composer focused while slash-command suggestions refresh, so loading
   skills cannot interrupt typing or drop part of a command.
 - Bound silent model connections and stalled streams, preserve partial output,

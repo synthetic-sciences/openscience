@@ -3,13 +3,10 @@ import {
   aceContractLabel,
   accountUnavailable,
   canSelectManaged,
-  commitBilling,
   formatCreditBalance,
   withAccountDeadline,
   walletBalanceLabel,
 } from "./ManagedInference"
-
-const source = await Bun.file(new URL("./ManagedInference.tsx", import.meta.url)).text()
 
 describe("Ace model access", () => {
   test("waits for the server's one account deadline instead of racing its own short timeout", async () => {
@@ -17,12 +14,6 @@ describe("Ace model access", () => {
     // The server bounds account reads at 15 s and propagates that to its
     // outbound fetches; the UI must never give up before that answer lands.
     expect(deadline.ACCOUNT_DEADLINE_MS).toBeGreaterThanOrEqual(15_000)
-    expect(source).toContain("timeoutMs: ACCOUNT_DEADLINE_MS")
-    expect(source).not.toMatch(/ACCOUNT_TIMEOUT_MS|6_000/)
-    const general = await Bun.file(new URL("./General.tsx", import.meta.url)).text()
-    expect(general).not.toContain("12_000")
-    // The import plus the account load and the credential sync.
-    expect(general.match(/ACCOUNT_DEADLINE_MS/g)).toHaveLength(3)
   })
 
   test("shows only exact purchased-Wallet dollars", () => {
@@ -31,7 +22,6 @@ describe("Ace model access", () => {
     expect(walletBalanceLabel({ signedIn: true, balanceUsd: -1 })).toBe("$-1.00 balance")
     expect(walletBalanceLabel({ signedIn: true, balanceUsd: null })).toBe("Balance unavailable")
     expect(walletBalanceLabel({ signedIn: false, balanceUsd: 20 })).toBe("Not signed in")
-    expect(source).not.toMatch(/promotional balance|promo credit/i)
   })
 
   test("renders the server-authoritative authorization and fixed reload terms", () => {
@@ -88,7 +78,6 @@ describe("Ace model access", () => {
     expect(accountUnavailable({ ...wallet, balanceRedacted: true })).toBe(false)
     expect(accountUnavailable({ ...wallet, managedSupported: false })).toBe(false)
     expect(accountUnavailable({ ...wallet, signedIn: false })).toBe(false)
-    expect(source).toContain('state.account !== "ready" || !canSelectManaged(state.wallet)')
   })
 
   test("a successful balance cannot enable Ace when the access check is unavailable", () => {
@@ -121,24 +110,7 @@ describe("Ace model access", () => {
     expect(accountUnavailable(wallet)).toBe(false)
   })
 
-  test("acknowledges the billing write before catalog refresh", async () => {
-    const order: string[] = []
-    await commitBilling(
-      async () => {
-        order.push("write")
-        return { llm: "managed" }
-      },
-      () => order.push("apply"),
-    )
-    expect(order).toEqual(["write", "apply"])
-  })
-
-  test("renders useful account controls immediately and recovers from a stalled Wallet read", async () => {
-    expect(source).not.toMatch(/Checking account|Checking balance/)
-    expect(source).toContain('"/settings/wallet?summary=true"')
-    expect(source).toContain('if (state.account === "error") return "Account unavailable"')
-    expect(source).toContain('if (state.account === "error") return "Retry"')
-
+  test("aborts a stalled Wallet read at the account deadline", async () => {
     const state = { aborted: false }
     const stalled = withAccountDeadline(
       (signal) =>

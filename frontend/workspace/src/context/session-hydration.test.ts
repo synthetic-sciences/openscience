@@ -8,8 +8,6 @@ import {
   sessionHydrationPlan,
 } from "./session-hydration"
 
-const sessionPage = Bun.file(new URL("../pages/session.tsx", import.meta.url)).text()
-
 describe("session transcript hydration", () => {
   test("revisiting a hydrated session refetches without truncating its cached history", () => {
     const cachedMessages = 800

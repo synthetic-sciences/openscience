@@ -961,7 +961,7 @@ export namespace SessionPrompt {
       // attempt that produced them. A backend restart must not silently issue
       // the same request again; a newer real prompt has a newer user id and is
       // therefore allowed to proceed.
-      if (SessionLoopState.terminalError({ user: lastUser, assistant: lastAssistant })) break
+      if (SessionLoopState.terminalError({ user: lastUser, assistant: lastAssistant, messages: msgs })) break
       // A process may stop after the provider durably records an overflow but
       // before the outer loop queues its compaction carrier. Recover that edge
       // from the assistant's `finish=compact` marker instead of retrying the
@@ -1614,9 +1614,27 @@ export namespace SessionPrompt {
         if (await armedCompact()) continue
       }
       if (preflight.total > preflight.hard) {
+        const recoverable =
+          config.compaction?.auto !== false && SessionLoopState.preflightRecovery({ attempts: preflightRecoveries })
         await failTooLarge(
           `The assembled request is still estimated at ${preflight.total.toLocaleString()} tokens after context reduction, above ${window.name}'s safe input budget of ${preflight.hard.toLocaleString()}. Shorten the request or start a new session. No provider request was sent for this oversized attempt.`,
+          recoverable,
         )
+        if (recoverable) {
+          preflightRecoveries++
+          // Closing the rejected turn makes its protected tail reducible. Give
+          // that changed history one fresh compaction pass, not another check
+          // with the previous pass's already-spent latch.
+          compactionArmed = true
+          await enqueue({
+            user: lastUser,
+            kind: "context",
+            epoch: turn,
+            text: PREFLIGHT_CONTINUATION,
+            routing: routingExcerpt(msgs, lastUser.id),
+          })
+          continue
+        }
         break
       }
 

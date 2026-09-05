@@ -26,6 +26,11 @@ const ready = async (check: () => boolean) => {
   for (let i = 0; i < 100 && !check(); i++) await settle()
   expect(check()).toBe(true)
 }
+const deferred = () => {
+  let resolve!: () => void
+  const promise = new Promise<void>((done) => (resolve = done))
+  return { promise, resolve }
+}
 const contract = {
   activationAuthorizationUsd: 0,
   reloadThresholdUsd: 5,
@@ -63,6 +68,10 @@ const mount = async (wallet: Wallet = funded) => {
     rejectWrite: false,
     refreshes: 0,
     reads: 0,
+    billingReads: 0,
+    holdBillingRead: undefined as Promise<void> | undefined,
+    holdWalletRead: undefined as Promise<void> | undefined,
+    holdWrite: undefined as Promise<void> | undefined,
     writes: [] as unknown[],
     links: [] as string[],
     errors: [] as Array<string | undefined>,
@@ -86,7 +95,9 @@ const mount = async (wallet: Wallet = funded) => {
     if (path === "/settings/wallet") {
       state.reads++
       if (state.unavailable) return json({ message: "Temporarily unavailable" }, 503)
-      return json({ ...state.wallet, billingMode: state.mode })
+      const data = { ...state.wallet, billingMode: state.mode }
+      await state.holdWalletRead
+      return json(data)
     }
     if (path === "/settings/billing") {
       if (request.method === "PUT") {
@@ -94,10 +105,18 @@ const mount = async (wallet: Wallet = funded) => {
         for await (const chunk of request) chunks.push(chunk)
         const body = JSON.parse(Buffer.concat(chunks).toString()) as { llm: typeof state.mode }
         state.writes.push(body)
-        if (state.rejectWrite) return json({ message: "Access preference could not be saved" }, 409)
+        if (state.rejectWrite) {
+          await state.holdWrite
+          return json({ message: "Access preference could not be saved" }, 409)
+        }
         state.mode = body.llm
+        await state.holdWrite
+        return json({ llm: body.llm })
       }
-      return json({ llm: state.mode })
+      state.billingReads++
+      const data = { llm: state.mode }
+      await state.holdBillingRead
+      return json(data)
     }
     return json({ message: `Unexpected request: ${request.method} ${path}` }, 500)
   })
@@ -282,4 +301,52 @@ describe("Ace account surface", () => {
     expect(host.querySelector('[role="status"]')?.textContent).toBe("On")
     expect(state.refreshes).toBe(0)
   })
+
+  test.each(["billing", "wallet"] as const)("a delayed %s read cannot undo a newer saved preference", async (kind) => {
+    const { host, state } = await mount()
+    await ready(() => button(host, "Ace").disabled === false && state.billingReads === 1)
+    const gate = deferred()
+    if (kind === "billing") {
+      state.holdBillingRead = gate.promise
+      window.dispatchEvent(new Event("focus"))
+      await ready(() => state.billingReads === 2)
+    } else {
+      state.holdWalletRead = gate.promise
+      for (const notify of state.updated) notify()
+      await ready(() => state.reads === 2)
+    }
+    button(host, "Keys & subscriptions").click()
+    await ready(() => state.refreshes === 1)
+    gate.resolve()
+    await settle()
+    expect(button(host, "Keys & subscriptions").getAttribute("aria-pressed")).toBe("true")
+    expect(state.mode).toBe("byok")
+    expect(state.writes).toEqual([{ llm: "byok" }])
+  })
+
+  test.each([false, true])(
+    "an old account's write completion cannot change the new account (rejected=%s)",
+    async (rejected) => {
+      const { host, state } = await mount()
+      await ready(() => button(host, "Ace").disabled === false && state.billingReads === 1)
+      const gate = deferred()
+      state.holdWrite = gate.promise
+      state.rejectWrite = rejected
+      button(host, "Keys & subscriptions").click()
+      await ready(() => state.writes.length === 1)
+      state.wallet = { ...funded, balanceUsd: 9, billingMode: "managed" }
+      // Distinct preferences catch both stale success and rollback paths.
+      state.mode = rejected ? "byok" : "managed"
+      window.dispatchEvent(new Event("openscience:account-changed"))
+      await ready(() => host.querySelector("dd")?.textContent === "$9.00")
+      const choice = rejected ? "Keys & subscriptions" : "Ace"
+      expect(button(host, choice).getAttribute("aria-pressed")).toBe("true")
+      expect(button(host, choice).disabled).toBe(false)
+      gate.resolve()
+      await settle()
+      expect(button(host, choice).getAttribute("aria-pressed")).toBe("true")
+      expect(state.errors.filter(Boolean)).toEqual([])
+      expect(state.refreshes).toBe(0)
+    },
+  )
 })

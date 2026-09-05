@@ -77,12 +77,6 @@ const MODES: { value: Mode; title: string; body: string }[] = [
 
 const normalizeMode = (value: unknown): Mode => (value === "managed" ? "managed" : "byok")
 
-/** Apply the small routing write before refreshing the much larger catalog. */
-export async function commitBilling<T>(write: () => Promise<T>, apply: (data: T) => void): Promise<void> {
-  const result = await write()
-  apply(result)
-}
-
 export { withAccountDeadline } from "./account-deadline"
 
 const accountWallet = (signedIn: boolean): Wallet => ({
@@ -114,7 +108,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     refreshing: false,
     account: "idle",
   })
-  const lifecycle = { epoch: 0, disposed: false }
+  const lifecycle = { epoch: 0, preference: 0, billingRead: 0, disposed: false }
   const selected = createMemo(() => MODES.find((item) => item.value === state.mode) ?? MODES[0])
 
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -129,7 +123,8 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
       // server announces the newer summary and this surface re-reads it.
       setState("wallet", next)
       setState("account", accountUnavailable(next) ? "error" : "ready")
-      if (!state.saving && next.billingMode) setState("mode", normalizeMode(next.billingMode))
+      // Wallet summaries may be cached. Only /settings/billing owns the
+      // routing preference; a delayed summary must not undo a saved choice.
       props.onError?.(
         accountUnavailable(next)
           ? "Account refresh temporarily unavailable. Retrying automatically."
@@ -149,14 +144,21 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   const loadWallet = recovery.load
   const loadBilling = () => {
     const epoch = lifecycle.epoch
+    const preference = lifecycle.preference
+    const read = ++lifecycle.billingRead
+    const current = () =>
+      !lifecycle.disposed &&
+      epoch === lifecycle.epoch &&
+      preference === lifecycle.preference &&
+      read === lifecycle.billingRead
     return settingsApi<BillingState>(sdk.url, fetchFn, "/settings/billing")
       .then((next) => {
-        if (lifecycle.disposed || epoch !== lifecycle.epoch) return
+        if (!current()) return
         if (!state.saving) setState("mode", normalizeMode(next.llm))
         if (!state.wallet && next.wallet) setState("wallet", accountWallet(next.wallet.signedIn))
       })
       .catch((error) => {
-        if (!lifecycle.disposed && epoch === lifecycle.epoch) fail(error)
+        if (current()) fail(error)
       })
   }
   const refresh = () => {
@@ -165,20 +167,24 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     void loadWallet()
   }
   const syncProviders = (context: string) => {
+    const epoch = lifecycle.epoch
     setState("refreshing", true)
     return globalSync
       .refreshProviders()
-      .catch((error) =>
+      .catch((error) => {
+        if (lifecycle.disposed || epoch !== lifecycle.epoch) return
         props.onError?.(
           `${context}, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
-        ),
-      )
-      .finally(() => setState("refreshing", false))
+        )
+      })
+      .finally(() => {
+        if (!lifecycle.disposed && epoch === lifecycle.epoch) setState("refreshing", false)
+      })
   }
   const accountChanged = () => {
     lifecycle.epoch++
     recovery.invalidate()
-    setState("wallet", undefined)
+    setState({ wallet: undefined, mode: "byok", saving: false, refreshing: false, account: "loading" })
     props.onError?.(undefined)
     void loadBilling()
     void loadWallet()
@@ -196,28 +202,32 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     )
       return
     const previous = state.mode
+    const epoch = lifecycle.epoch
+    const preference = ++lifecycle.preference
+    const current = () => !lifecycle.disposed && epoch === lifecycle.epoch && preference === lifecycle.preference
     setState("mode", value)
     setState("saving", true)
     props.onError?.(undefined)
-    void commitBilling(
-      () =>
-        settingsApi<BillingState>(sdk.url, fetchFn, "/settings/billing", {
-          method: "PUT",
-          body: JSON.stringify({ llm: value }),
-        }),
-      (data) => setState("mode", normalizeMode(data.llm)),
-    )
-      .then(() => {
+    void settingsApi<BillingState>(sdk.url, fetchFn, "/settings/billing", {
+      method: "PUT",
+      body: JSON.stringify({ llm: value }),
+    })
+      .then((data) => {
+        if (!current()) return
+        setState("mode", normalizeMode(data.llm))
         // The routing choice is already durable. Provider synchronization is
         // follow-up work and must not keep the controls feeling stuck.
         setState("saving", false)
         void syncProviders("Model access was saved")
       })
       .catch((error) => {
+        if (!current()) return
         setState("mode", previous)
         fail(error)
       })
-      .finally(() => setState("saving", false))
+      .finally(() => {
+        if (current()) setState("saving", false)
+      })
   }
 
   const signIn = () => {

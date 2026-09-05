@@ -55,7 +55,7 @@ bun dev serve        # terminal 1: API on http://localhost:4096
 bun run dev:ui       # terminal 2: workspace on http://localhost:3000
 ```
 
-The workspace dev build talks to port 4096. If another OpenScience is already listening there, `bun dev serve` silently lands on 4097 and the UI talks to the wrong process; either stop the other instance or point the UI at the right port with `VITE_OPENSCIENCE_SERVER_PORT=4097 bun run dev:ui` (`VITE_OPENSCIENCE_SERVER_HOST` and `VITE_OPENSCIENCE_SERVER_URL` are also honored).
+The workspace dev build talks to port 4096. If another OpenScience is already listening there, `bun dev serve` falls back to another port and the UI may talk to the wrong process. Keep the existing instance running and point the UI at the port printed by your development server, for example `VITE_OPENSCIENCE_SERVER_PORT=4097 bun run dev:ui` (`VITE_OPENSCIENCE_SERVER_HOST` and `VITE_OPENSCIENCE_SERVER_URL` are also honored).
 
 **Packaged-like (what users get).** `bun run setup` embeds a production build of the workspace, and `bun dev` serves it exactly like the binary does. Rerun `bun run setup --web` to pick up UI changes.
 
@@ -118,20 +118,20 @@ bun run test:workspace                       # frontend/workspace unit tests (ha
 bun run --cwd frontend/workspace test:e2e    # Playwright E2E; run `bunx playwright install` first
 ```
 
-See [frontend/workspace/README.md](frontend/workspace/README.md) for the E2E options. Two backend tests are gated behind environment variables and skipped by default: `OPENSCIENCE_LIVE_CATALOG=1` enables the live models.dev check in `test/provider/live-catalog.test.ts` (the only test that touches the network), and `OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST=1` exposes the thin `researchagent-test` profile used by `evals/cadence-harness`.
+See [frontend/workspace/README.md](frontend/workspace/README.md) for the E2E options. Most tests use fixture data and isolated local servers; platform integrations may require additional tools. `OPENSCIENCE_LIVE_CATALOG=1` opts into the external models.dev check in `test/provider/live-catalog.test.ts`. `OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST=1` exposes the thin `researchagent-test` profile used by `evals/cadence-harness`. Neither flag is authorization to run paid inference or remote compute.
 
 ## Checks and hooks
 
 Before pushing, run the same gates CI enforces:
 
 ```bash
-bun run check         # format:check + typecheck + backend, frontend/ui, and SDK tests
+bun run check         # format:check + typecheck + backend, UI, workspace, and SDK tests
 bun run check:fast    # format:check + backend typecheck only, for the inner loop
 ```
 
 The individual gates are `bun run format:check` (Prettier, `printWidth: 120`), `bun run typecheck` (TypeScript across every workspace: tsgo, or `tsc --noEmit` in tooling/util and frontend/docs; `turbo typecheck --filter=@synsci/openscience` for the backend only), `bun run --cwd backend/cli test`, `bun run test:ui`, and `bun run test:sdk`. Run `bun run format` to fix formatting. There is no linter; the style rules in [AGENTS.md](./AGENTS.md) are enforced in review.
 
-Fast CI (`.github/workflows/ci.yml`) runs on every pull request and checks formatting, typecheck, the workspace build, and a syntax smoke of the release entrypoints. The backend suite, docs build, landing build, and workflow lint run in Deep CI (`.github/workflows/deep-ci.yml`) nightly and on manual dispatch, so a green pull request does not prove the tests pass — run them locally. [docs/notes/verification.md](docs/notes/verification.md) has the full list.
+Fast CI (`.github/workflows/ci.yml`) runs on every pull request: formatting, typecheck, workspace build, release-entrypoint syntax, all UI/workspace/SDK unit tests, and affected backend tests selected by `tooling/repo/test-shards.ts`. Cross-cutting changes can affect more tests than this selection. Deep CI (`.github/workflows/deep-ci.yml`) runs the full backend suite, native platform checks, docs/landing builds, and workflow lint nightly and on manual dispatch. Start with focused local checks; require exact-source Deep CI and the full packaged rehearsal before a stable release. [docs/notes/verification.md](docs/notes/verification.md) has the evidence boundaries.
 
 Two git hooks are installed by `bun install` (husky):
 
@@ -174,6 +174,7 @@ Most external contributions add one of these. Each guide lists the contract, whe
 - [Adding a scientific connector](docs/notes/adding-a-connector.md)
 - [Adding a tool](docs/notes/adding-a-tool.md)
 - [Writing a plugin](docs/notes/writing-a-plugin.md)
+- [Linux compatibility evidence](docs/notes/linux-compatibility.md)
 
 If you change the server API (anything under `backend/cli/src/server`), run `./tooling/repo/generate.ts` and commit the regenerated `tooling/sdk` output in the same pull request.
 
