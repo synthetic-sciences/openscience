@@ -1,9 +1,32 @@
 import { describe, expect, test } from "bun:test"
-import { alignLoopbackAssetHost, assetUrl, localAssetPath, resolvePath, workspaceAssetPath } from "./markdown-assets"
+import {
+  alignLoopbackAssetHost,
+  assetUrl,
+  localAssetPath,
+  resolvePath,
+  workspaceAssetPath,
+  workspaceReceiptPath,
+} from "./markdown-assets"
 
 const raw = (path: string) => `http://127.0.0.1:4096/file/raw?path=${encodeURIComponent(path)}&project=prj_1`
 
 describe("markdown asset resolution", () => {
+  test("exact completed receipts preserve filesystem bytes without broadening raw Markdown links", () => {
+    for (const path of [
+      "/research/note.md",
+      "/session-scratch/note.md",
+      "/connected/note%20#?.md",
+      "C:\\Research\\note.md",
+    ]) {
+      expect(workspaceReceiptPath(path)).toBe(path)
+    }
+    for (const path of ["note.md", "https://example.com/note.md", "file:///private/note.md", "/bad\0path.md"]) {
+      expect(workspaceReceiptPath(path)).toBeUndefined()
+    }
+    expect(workspaceAssetPath("/session-scratch/note.md", "/research")).toBeUndefined()
+    expect(workspaceAssetPath("/connected/note.md", "/research")).toBeUndefined()
+  })
+
   test("resolves relative references against the previewed file's directory", () => {
     expect(assetUrl("figures/plot.png", { base: "notes/paper.md", url: raw })).toBe(raw("notes/figures/plot.png"))
     expect(assetUrl("./figures/plot.png", { base: "notes/paper.md", url: raw })).toBe(raw("notes/figures/plot.png"))

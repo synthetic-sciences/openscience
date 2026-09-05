@@ -10,6 +10,23 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Keep all readable provider reasoning and individual tool calls visible in
+  chronological order, without Detailed/Compact modes or a shared activity
+  disclosure. Omit empty encrypted-only rows instead of repeating unavailable
+  reasoning notices. Preserve readable OpenRouter reasoning when encrypted
+  continuation metadata arrives in the same response.
+- Open chat-linked documents already saved in a managed project's Project files
+  through a read-only, server-verified preview. Recheck project/session identity
+  and canonical containment for content and raw reads without granting the agent
+  access to more folders or weakening symlink and cross-project restrictions.
+- Use a turn's unique canonical write receipt for bare file links when available,
+  show which file location a preview opened, and prevent streamed Markdown updates
+  from opening both an old and a new target on one click. Unrecorded Bash writes
+  are not guessed from command text or file modification times.
+- Distinguish a content search with no matches from an invalid search or a
+  cancellation. Keep provider error diagnostics without logging request bodies,
+  conversation content, response bodies, or credentials retained by the SDK.
+
 - Redesign openscience.sh around archival research photography, monochrome editorial
   sections, a moving institution strip, interactive workflow previews, detailed
   research skills, expandable database tiles, and an oversized OpenScience footer.

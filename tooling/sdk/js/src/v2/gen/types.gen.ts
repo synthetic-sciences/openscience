@@ -198,13 +198,6 @@ export type EventVcsBranchUpdated = {
   }
 }
 
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
 export type FileDiff = {
   file: string
   before: string
@@ -723,6 +716,13 @@ export type EventPermissionReplied = {
   }
 }
 
+export type EventSkillUpdated = {
+  type: "skill.updated"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type EventSessionContext = {
   type: "session.context"
   properties: {
@@ -1030,10 +1030,10 @@ export type EventSessionError = {
   }
 }
 
-export type EventSkillUpdated = {
-  type: "skill.updated"
+export type EventFileEdited = {
+  type: "file.edited"
   properties: {
-    [key: string]: unknown
+    file: string
   }
 }
 
@@ -1158,13 +1158,13 @@ export type Event =
   | EventSessionFilesystemChanged
   | EventProjectAccessChanged
   | EventVcsBranchUpdated
-  | EventFileEdited
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
   | EventPermissionAsked
   | EventPermissionReplied
+  | EventSkillUpdated
   | EventSessionContext
   | EventSessionCompaction
   | EventSessionRequestProgress
@@ -1183,7 +1183,7 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
-  | EventSkillUpdated
+  | EventFileEdited
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
@@ -12529,6 +12529,7 @@ export type FileReadData = {
     directory?: string
     path: string
     sessionID?: string
+    projectPreview?: "true" | "false"
   }
   url: "/file/content"
 }
@@ -12586,6 +12587,7 @@ export type FileResolveReferenceData = {
     directory?: string
     path: string
     sessionID: string
+    projectPreview?: "true" | "false"
   }
   url: "/file/resolve"
 }
@@ -12614,6 +12616,7 @@ export type FileResolveReferenceResponses = {
   200: {
     path: string | null
     writable: boolean | null
+    scope: "project" | "session" | null
   }
 }
 
@@ -12904,6 +12907,7 @@ export type FileRawData = {
     sessionID?: string
     maxBytes?: number
     inline?: "true" | "false"
+    projectPreview?: "true" | "false"
   }
   url: "/file/raw"
 }

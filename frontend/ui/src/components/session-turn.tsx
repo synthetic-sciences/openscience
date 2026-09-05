@@ -17,13 +17,11 @@ import { getDirectory, getFilename } from "@synsci/util/path"
 import { Binary } from "@synsci/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
-import { getToolInfo, Message, Part, QuestionPrompt } from "./message-part"
-import { BasicTool } from "./basic-tool"
+import { Message, Part, QuestionPrompt } from "./message-part"
 import {
   artifactTypeLabel,
   artifactActions,
   generatedArtifacts,
-  reasoningTopic,
   sessionErrorDisplay,
   stripRedactedReasoning,
   writtenFiles,
@@ -37,13 +35,13 @@ import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
 import { createStore } from "solid-js/store"
-import { useActivity, useActivityChange } from "../context/activity"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
 import { progressStatus } from "./session-turn-progress"
-import { compact, visibleResearchTrace, type ResearchTraceEntry } from "./research-trace"
+import { visibleResearchTrace } from "./research-trace"
+import { MarkdownFileScope } from "./markdown"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
 
@@ -95,8 +93,6 @@ export function computeStatusFromPart(part: PartType | undefined, t: Translator)
   }
   if (part.type === "reasoning") {
     if (part.time?.end || !stripRedactedReasoning(part.text ?? "")) return undefined
-    const topic = reasoningTopic(part.text ?? "")
-    if (topic) return t("ui.sessionTurn.status.thinkingWithTopic", { topic })
     return t("ui.sessionTurn.status.thinking")
   }
   if (part.type === "text") {
@@ -129,73 +125,20 @@ function isGeneratedTool(part: PartType | undefined): part is ToolPart {
   return part?.type === "tool" && part.tool === "artifact" && part.state.status === "completed"
 }
 
-function traceTitles(entries: ResearchTraceEntry[]) {
-  return entries
-    .map((item) => (item.part.type === "tool" && "title" in item.part.state ? item.part.state.title : undefined))
-    .filter((title): title is string => !!title)
-}
-
-/** The span of a folded run, so its header carries one honest duration. */
-function traceTime(entries: ResearchTraceEntry[]) {
-  const times = entries.flatMap((item) => {
-    if (item.part.type !== "tool" || !("time" in item.part.state)) return []
-    const time = item.part.state.time
-    return [{ start: time.start, end: "end" in time ? time.end : time.start }]
-  })
-  if (times.length === 0) return undefined
-  return {
-    start: Math.min(...times.map((time) => time.start)),
-    end: Math.max(...times.map((time) => time.end)),
-  }
-}
-
-/** Consecutive completed calls of one tool behind a counted header; every call stays literal inside. */
-function TraceRun(props: { entries: ResearchTraceEntry[] }) {
-  const tool = () => (props.entries[0]!.part as ToolPart).tool
-  const info = () => getToolInfo(tool())
-  const count = () => props.entries.length
-  return (
-    <div data-component="trace-run-group">
-      <BasicTool
-        icon={info().icon}
-        tool={tool()}
-        status="completed"
-        time={traceTime(props.entries)}
-        summary={[{ key: count() === 1 ? "ui.tool.calls.one" : "ui.tool.calls.other", params: { count: count() } }]}
-        trigger={{ title: info().title, subtitle: compact(traceTitles(props.entries)) }}
-      >
-        <div data-slot="trace-run-items">
-          <For each={props.entries}>{(item) => <Part part={item.part} message={item.message} hideCopy />}</For>
-        </div>
-      </BasicTool>
-    </div>
-  )
-}
-
-function AssistantTrace(props: {
-  messages: AssistantMessage[]
-  hideReasoning: boolean
-  hideTools?: boolean
-  hideGeneratedTools?: boolean
-  pendingRequestCallID?: string
-}) {
+function AssistantTrace(props: { messages: AssistantMessage[] }) {
   const data = useData()
-  const activity = useActivity()
   const emptyParts: PartType[] = []
-  const trace = createMemo(() => {
-    const entries = props.messages.flatMap((message) => {
-      const parts = data.store.part[message.id] ?? emptyParts
-      return parts.flatMap((part) => {
-        if (props.hideReasoning && part?.type === "reasoning") return []
-        if (props.hideTools && part?.type === "tool") return []
-        if (part?.type === "tool" && part.callID === props.pendingRequestCallID) return []
-        if (props.hideGeneratedTools && isGeneratedTool(part)) return [{ message, part, hidden: true }]
-        if (part?.type === "tool" && part.tool === "todoread") return [{ message, part, hidden: true }]
-        return [{ message, part }]
-      })
-    })
-    return visibleResearchTrace(entries, activity())
-  })
+  const trace = createMemo(() =>
+    visibleResearchTrace(
+      props.messages.flatMap((message) =>
+        (data.store.part[message.id] ?? emptyParts).map((part) => ({
+          message,
+          part,
+          hidden: (part?.type === "tool" && part.tool === "todoread") || isGeneratedTool(part),
+        })),
+      ),
+    ),
+  )
   const traceByID = createMemo(() => new Map(trace().map((entry) => [entry.part.id, entry])))
   const traceIDs = createMemo(() => trace().map((entry) => entry.part.id), [], { equals: same })
 
@@ -203,34 +146,7 @@ function AssistantTrace(props: {
     <For each={traceIDs()}>
       {(partID) => (
         <Show when={traceByID().get(partID)}>
-          {(entry) => (
-            <Switch>
-              <Match when={entry().group}>
-                {(group) => (
-                  <div data-component="trace-preflight-group">
-                    <BasicTool
-                      icon="console"
-                      tool="bash"
-                      status="completed"
-                      time={traceTime(group())}
-                      trigger={{
-                        title: `Checked environment · ${group().length} steps`,
-                        subtitle: compact(traceTitles(group()), 2),
-                      }}
-                    >
-                      <div data-slot="trace-preflight-items">
-                        <For each={group()}>{(item) => <Part part={item.part} message={item.message} hideCopy />}</For>
-                      </div>
-                    </BasicTool>
-                  </div>
-                )}
-              </Match>
-              <Match when={entry().run}>{(run) => <TraceRun entries={run()} />}</Match>
-              <Match when={true}>
-                <Part part={entry().part} message={entry().message} hideCopy />
-              </Match>
-            </Switch>
-          )}
+          {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
         </Show>
       )}
     </For>
@@ -268,8 +184,6 @@ export function SessionTurn(
     sessionTitle?: string
     messageID: string
     lastUserMessageID?: string
-    stepsExpanded?: boolean
-    onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -281,8 +195,6 @@ export function SessionTurn(
   const i18n = useI18n()
   const data = useData()
   const diffComponent = useDiffComponent()
-  const activity = useActivity()
-  const changeActivity = useActivityChange()
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
@@ -382,13 +294,7 @@ export function SessionTurn(
       if (!msgParts) continue
       for (const p of msgParts) {
         if (p?.type === "tool") return true
-        // Detailed explains provider-hidden reasoning rather than silently
-        // removing the only activity in a completed turn.
-        if (
-          p?.type === "reasoning" &&
-          (stripRedactedReasoning(p.text ?? "").length > 0 || (activity() === "detailed" && p.text.trim()))
-        )
-          return true
+        if (p?.type === "reasoning" && stripRedactedReasoning(p.text ?? "")) return true
       }
     }
     return false
@@ -408,7 +314,6 @@ export function SessionTurn(
     if (!tool) return
     return findLast(assistantMessages(), (message) => message.id === tool.messageID)
   })
-  const pendingRequestCallID = createMemo(() => (requestMessage() ? requestTool()?.callID : undefined))
   const requestParts = createMemo(() => {
     const tool = requestTool()
     if (!tool) return emptyRequestParts
@@ -533,6 +438,14 @@ export function SessionTurn(
     },
     emptyWritten,
     { equals: same },
+  )
+  const linkedFiles = createMemo(() =>
+    writtenFiles(
+      assistantMessages().flatMap((message) => data.store.part[message.id] ?? emptyParts),
+      {
+        canonicalOnly: true,
+      },
+    ),
   )
 
   const response = createMemo(() =>
@@ -740,52 +653,16 @@ export function SessionTurn(
                         <Message message={msg()} parts={stickyParts()} />
                       </div>
 
-                      {/* Trigger (sticky) */}
+                      {/* Keep request state beside its originating user message. */}
                       <Show when={working() || hasSteps()}>
                         <div data-slot="session-turn-response-trigger">
-                          <Button
-                            data-expandable={assistantMessages().length > 0}
-                            data-slot="session-turn-collapsible-trigger-content"
-                            variant="ghost"
-                            size="small"
-                            onClick={props.onStepsExpandedToggle ?? (() => {})}
-                            aria-expanded={props.stepsExpanded}
-                          >
-                            <Switch>
-                              <Match when={working()}>
-                                <Spinner />
-                              </Match>
-                              <Match when={true}>
-                                <svg
-                                  width="10"
-                                  height="10"
-                                  viewBox="0 0 10 10"
-                                  fill="none"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  data-slot="session-turn-trigger-icon"
-                                  style={{
-                                    transform: props.stepsExpanded ? "rotate(0deg)" : "rotate(-90deg)",
-                                    transition: "transform 0.15s ease",
-                                  }}
-                                >
-                                  <path
-                                    d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
-                                    fill="currentColor"
-                                    stroke="currentColor"
-                                    stroke-linejoin="round"
-                                  />
-                                </svg>
-                              </Match>
-                            </Switch>
+                          <div data-slot="session-turn-status">
+                            <Show when={working()}>
+                              <Spinner />
+                            </Show>
                             <Switch>
                               <Match when={retry()}>
-                                <span data-slot="session-turn-retry-message">
-                                  {(() => {
-                                    const r = retry()
-                                    if (!r) return ""
-                                    return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
-                                  })()}
-                                </span>
+                                <span data-slot="session-turn-retry-message">{retry()?.message}</span>
                                 <span data-slot="session-turn-retry-seconds">
                                   · {i18n.t("ui.sessionTurn.retry.retrying")}
                                   {store.retrySeconds > 0
@@ -797,11 +674,8 @@ export function SessionTurn(
                               <Match when={working()}>
                                 <span data-slot="session-turn-status-text">{statusText()}</span>
                               </Match>
-                              <Match when={props.stepsExpanded}>
-                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.hide")}</span>
-                              </Match>
-                              <Match when={!props.stepsExpanded}>
-                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.show")}</span>
+                              <Match when={true}>
+                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.trace.title")}</span>
                               </Match>
                             </Switch>
                             <Show when={!working() || !phase()}>
@@ -810,30 +684,7 @@ export function SessionTurn(
                                 {store.duration}
                               </span>
                             </Show>
-                          </Button>
-                          <Show when={isLastUserMessage() && changeActivity}>
-                            <div
-                              data-slot="session-turn-activity-mode"
-                              role="group"
-                              aria-label={i18n.t("ui.sessionTurn.activity.label")}
-                            >
-                              <For each={["detailed", "compact"] as const}>
-                                {(mode) => (
-                                  <button
-                                    type="button"
-                                    aria-pressed={activity() === mode}
-                                    onClick={() => changeActivity?.(mode)}
-                                  >
-                                    {i18n.t(
-                                      mode === "detailed"
-                                        ? "ui.sessionTurn.activity.detailed"
-                                        : "ui.sessionTurn.activity.compact",
-                                    )}
-                                  </button>
-                                )}
-                              </For>
-                            </div>
-                          </Show>
+                          </div>
                           <Show when={working() && phase()?.hint}>
                             {(hint) => (
                               <div data-slot="session-turn-progress-hint" role="status" aria-live="polite">
@@ -845,17 +696,10 @@ export function SessionTurn(
                       </Show>
                     </div>
                     <Show when={assistantMessages().length > 0}>
-                      <div
-                        data-slot="session-turn-response-section"
-                        data-expanded={props.stepsExpanded ? "true" : undefined}
-                      >
-                        <AssistantTrace
-                          messages={assistantMessages()}
-                          hideReasoning={!props.stepsExpanded}
-                          hideTools={!props.stepsExpanded}
-                          hideGeneratedTools
-                          pendingRequestCallID={props.stepsExpanded ? undefined : pendingRequestCallID()}
-                        />
+                      <div data-slot="session-turn-response-section">
+                        <MarkdownFileScope paths={linkedFiles()}>
+                          <AssistantTrace messages={assistantMessages()} />
+                        </MarkdownFileScope>
                         <Show when={response()}>
                           <div
                             data-slot="session-turn-response-copy-wrapper"
@@ -881,19 +725,11 @@ export function SessionTurn(
                             </span>
                           </div>
                         </Show>
-                        <Show when={props.stepsExpanded && error()}>
-                          {(value) => <SessionErrorNotice error={value()} />}
-                        </Show>
+                        <Show when={error()}>{(value) => <SessionErrorNotice error={value()} />}</Show>
                       </div>
                     </Show>
-                    <Show
-                      when={
-                        (!props.stepsExpanded && requestParts().length > 0) ||
-                        (requestParts().length === 0 && requestMessage() && nextQuestion())
-                      }
-                    >
+                    <Show when={requestParts().length === 0 && requestMessage() && nextQuestion()}>
                       <div data-slot="session-turn-permission-parts">
-                        <For each={requestParts()}>{({ part, message }) => <Part part={part} message={message} />}</For>
                         <Show when={requestParts().length === 0 && requestMessage() && nextQuestion()}>
                           {(question) => (
                             <div data-component="tool-part-wrapper" data-question="true">
@@ -1122,9 +958,6 @@ export function SessionTurn(
                           </For>
                         </div>
                       </section>
-                    </Show>
-                    <Show when={!props.stepsExpanded && error()}>
-                      {(value) => <SessionErrorNotice error={value()} />}
                     </Show>
                   </Match>
                 </Switch>

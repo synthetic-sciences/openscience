@@ -36,33 +36,6 @@
     font-size: var(--font-size-small);
   }
 
-  [data-slot="session-turn-activity-mode"] {
-    display: inline-flex;
-    flex-shrink: 0;
-    padding: 2px;
-    border: 1px solid var(--border-weak-base);
-    border-radius: var(--radius-md);
-
-    button {
-      min-height: 32px;
-      padding: 4px 8px;
-      border-radius: var(--radius-sm);
-      color: var(--text-weak);
-      font-size: var(--font-size-small);
-      cursor: pointer;
-
-      &[aria-pressed="true"] {
-        background: var(--surface-raised-base);
-        color: var(--text-strong);
-      }
-
-      &:focus-visible {
-        outline: 2px solid var(--border-focus);
-        outline-offset: 1px;
-      }
-    }
-  }
-
   [data-slot="session-turn-message-container"] {
     display: flex;
     flex-direction: column;
@@ -564,12 +537,6 @@
       margin: 0;
     }
 
-    > [data-component="reasoning-status-part"] {
-      margin: 1px 0 1px 5px;
-      padding-left: 12px;
-      border-left: 1px solid var(--border-weaker-base);
-    }
-
     > [data-component="text-part"] [data-slot="text-part-body"] {
       margin-top: 14px;
     }
@@ -599,62 +566,19 @@
     }
   }
 
-  [data-slot="session-turn-collapsible"] {
-    gap: 32px;
-    overflow: visible;
-  }
-
-  [data-slot="session-turn-collapsible-trigger-content"] {
+  [data-slot="session-turn-status"] {
     max-width: 100%;
+    min-height: 24px;
     display: flex;
     align-items: center;
     gap: 8px;
     color: var(--text-weak);
-    /* Bigger, obviously-clickable hit area for the show/hide-steps toggle.
-       Negative inline margin keeps the enlarged target from shifting layout. */
-    cursor: pointer;
-    /* One fixed row: a status line that changes copy, gains a clock, or
-       swaps to a retry notice never changes height under the trace. */
-    height: 32px;
-    min-height: 32px;
-    padding: 6px 10px;
-    margin: -6px -10px;
-    white-space: nowrap;
-    border-radius: var(--radius-xs);
-    border: 1px solid transparent;
-    transition:
-      background 0.12s ease,
-      border-color 0.12s ease,
-      color 0.12s ease;
-
-    &:hover {
-      background: var(--surface-raised-base);
-      border-color: var(--border-weak-base);
-      color: var(--text-base);
-    }
-
-    &:focus-visible {
-      border-color: var(--border-base);
-    }
-
-    [data-slot="session-turn-trigger-icon"] {
-      color: var(--icon-base);
-      flex-shrink: 0;
-      transition: transform 0.15s ease;
-    }
+    font-size: var(--font-size-small);
 
     [data-component="spinner"] {
       width: 12px;
       height: 12px;
-      margin-right: 4px;
-      /* Don't let a long status line ("Searching the web · 10m, 1s") squeeze the
-         SVG — without this the 15-unit grid compresses and the dots read as cut off. */
       flex-shrink: 0;
-    }
-
-    [data-component="icon"] {
-      width: 14px;
-      height: 14px;
     }
   }
 
@@ -950,31 +874,6 @@
     [data-slot="session-turn-artifact-action"][data-state="error"] {
       color: var(--text-critical-base);
     }
-  }
-}
-
-[data-component="trace-preflight-group"],
-[data-component="trace-run-group"] {
-  width: 100%;
-  min-width: 0;
-
-  [data-slot="trace-preflight-items"],
-  [data-slot="trace-run-items"] {
-    display: grid;
-    padding: 2px 0 4px 18px;
-    border-left: 1px solid var(--border-weak-base);
-  }
-
-  [data-slot="trace-preflight-items"] > [data-component="tool-part-wrapper"],
-  [data-slot="trace-run-items"] > [data-component="tool-part-wrapper"] {
-    min-width: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-component="session-turn"] [data-slot="session-turn-collapsible-trigger-content"],
-  [data-component="session-turn"] [data-slot="session-turn-trigger-icon"] {
-    transition: none;
   }
 }
 

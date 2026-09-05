@@ -8,8 +8,6 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { activityPreferences } from "@/context/activity-preferences"
-import type { ActivityMode } from "@synsci/ui/context/activity"
 import { AppearanceSections } from "../settings-general"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { settingsApi } from "./api"
@@ -415,30 +413,6 @@ export default function General() {
           </Section>
 
           <AppearanceSections />
-          <Section
-            id="activity"
-            title="Reasoning and activity"
-            description="Choose how the agent's work appears in conversations."
-          >
-            <div class="settings-card settings-preferences-card">
-              <AccountRow
-                title="Activity view"
-                description="Detailed shows received reasoning and individual tool calls. Compact folds repeated activity. Saved on this device."
-              >
-                <Select
-                  aria-label="Activity view"
-                  options={["detailed", "compact"] as ActivityMode[]}
-                  current={activityPreferences.mode()}
-                  value={(value) => value}
-                  label={(value) => (value === "detailed" ? "Detailed" : "Compact")}
-                  onSelect={(value) => value && activityPreferences.change(value)}
-                  variant="secondary"
-                  size="small"
-                  triggerVariant="settings"
-                />
-              </AccountRow>
-            </div>
-          </Section>
         </PanelBody>
       </div>
     </PanelScroll>

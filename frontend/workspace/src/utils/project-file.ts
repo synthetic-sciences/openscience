@@ -50,10 +50,12 @@ export function rawFileQuery(input: {
   scope?: FileScope
   maxBytes?: number
   inline?: boolean
+  projectPreview?: boolean
 }) {
   return {
     ...projectFileQuery(input),
     ...(input.maxBytes !== undefined ? { maxBytes: input.maxBytes } : {}),
     ...(input.inline !== undefined ? { inline: input.inline ? "true" : "false" } : {}),
+    ...(input.projectPreview ? { projectPreview: "true" } : {}),
   }
 }

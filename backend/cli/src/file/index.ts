@@ -26,6 +26,7 @@ import { FileTrash } from "./trash"
 import { Lock } from "@/util/lock"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { Project } from "@/project/project"
+import { ProjectPreview } from "./project-preview"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -260,6 +261,7 @@ export namespace File {
 
   type AccessOptions = {
     sessionID?: string
+    projectPreview?: boolean
   }
 
   type RawOptions = AccessOptions & { maxBytes?: number }
@@ -299,6 +301,12 @@ export namespace File {
     options: AccessOptions | undefined,
     action: (target: string) => Promise<T>,
   ) {
+    if (options?.projectPreview) {
+      if (access !== "read") throw new HTTPException(403, { message: "Project preview is read-only" })
+      const target = await ProjectPreview.authorize(file, options.sessionID)
+      await hooks.value?.afterReadAuthorization?.(target)
+      return AuthoritySignal.exclusive(async () => action(await ProjectPreview.authorize(target, options.sessionID)))
+    }
     if (!options?.sessionID) return action(await contained(file, access))
     const sessionID = options.sessionID
     const authorized = await SessionFilesystem.authorize({ sessionID, path: file, access })
@@ -592,6 +600,20 @@ export namespace File {
         },
       )
       return { ...source, mimeType: Bun.file(full).type || "application/octet-stream" }
+    }
+    if (options?.projectPreview) {
+      const target = await ProjectPreview.authorize(file, options.sessionID)
+      await hooks.value?.afterReadAuthorization?.(target)
+      return AuthoritySignal.exclusive(async () => {
+        const current = await ProjectPreview.authorize(target, options.sessionID)
+        return open(current, {
+          during: (action) =>
+            AuthoritySignal.exclusive(async () => {
+              await ProjectPreview.authorize(current, options.sessionID)
+              return action()
+            }),
+        })
+      })
     }
     if (!options?.sessionID) return open(await contained(file, "read"))
     const sessionID = options.sessionID

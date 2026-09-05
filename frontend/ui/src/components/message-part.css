@@ -235,16 +235,12 @@
   font-size: var(--font-size-medium);
   line-height: 20px;
 
-  [data-slot="reasoning-part-toggle"] {
+  [data-slot="reasoning-part-header"] {
     width: 100%;
-    min-height: 40px;
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 10px 8px 12px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
     color: var(--text-weak);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
@@ -252,20 +248,6 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     text-align: left;
-    cursor: pointer;
-    transition:
-      background-color var(--duration-fast) var(--ease-standard),
-      color var(--duration-fast) var(--ease-standard);
-
-    &:hover {
-      background: var(--surface-base-hover);
-      color: var(--text-base);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--color-focus, var(--border-focus));
-      outline-offset: -2px;
-    }
   }
 
   [data-slot="reasoning-part-glyph"] {
@@ -290,16 +272,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
-  }
-
-  [data-slot="reasoning-part-chevron"] {
-    flex-shrink: 0;
-    color: var(--icon-weak);
-    transition: transform var(--duration-fast) var(--ease-standard);
-  }
-
-  &[data-expanded="true"] [data-slot="reasoning-part-chevron"] {
-    transform: rotate(180deg);
   }
 
   [data-slot="reasoning-part-body"] {
@@ -369,22 +341,6 @@
     color: var(--text-weak);
     font-size: var(--font-size-x-small);
   }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-component="reasoning-part"] [data-slot="reasoning-part-toggle"],
-  [data-component="reasoning-part"] [data-slot="reasoning-part-chevron"] {
-    transition: none;
-  }
-}
-
-[data-component="reasoning-status-part"] {
-  width: 100%;
-  color: var(--text-weaker);
-  font-size: var(--font-size-small);
-  line-height: 18px;
-  -webkit-user-select: text;
-  user-select: text;
 }
 
 [data-component="tool-error"] {
@@ -1094,7 +1050,6 @@
 [data-component="user-message"] [data-slot="user-message-text"],
 [data-component="text-part"],
 [data-component="reasoning-part"],
-[data-component="reasoning-status-part"],
 [data-component="tool-error"],
 [data-component="tool-output"],
 [data-component="edit-content"],

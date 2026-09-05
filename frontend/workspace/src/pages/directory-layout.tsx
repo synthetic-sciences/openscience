@@ -31,7 +31,7 @@ import { ProjectWorkspaceFrame } from "@/atlas/ProjectWorkspaceFrame"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
 import { decode64, setCurrentDirectory } from "@/utils/base64"
-import { assetUrl, workspaceAssetPath } from "@/utils/markdown-assets"
+import { assetUrl, workspaceAssetPath, workspaceReceiptPath } from "@/utils/markdown-assets"
 import { rawFileQuery } from "@/utils/project-file"
 import { projectPrefs } from "@/atlas/store/projectPrefs"
 import { missingProject, ProjectUnavailable } from "./project-availability"
@@ -285,7 +285,12 @@ export default function Layout(props: ParentProps) {
                     onOpenArtifact={openArtifact}
                     onSaveArtifact={saveArtifact}
                   >
-                    <MarkdownImages resolve={image} resolveFile={file} openFile={openFile}>
+                    <MarkdownImages
+                      resolve={image}
+                      resolveFile={file}
+                      resolveFileReceipt={workspaceReceiptPath}
+                      openFile={openFile}
+                    >
                       <LocalProvider>
                         <TerminalProvider>
                           <FileProvider>

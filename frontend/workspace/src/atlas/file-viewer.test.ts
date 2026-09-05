@@ -225,6 +225,12 @@ describe("file viewer reads", () => {
     expect(owner.owns(second)).toBe(true)
     owner.dispose()
   })
+
+  test("includes server-verified preview authority in request identity without dropping the session", () => {
+    const input = { directory: "/project", sessionID: "session-a", path: "/project/note.md" }
+    expect(fileRequestKey(input)).not.toBe(fileRequestKey({ ...input, projectPreview: true }))
+    expect(fileRequestKey({ ...input, projectPreview: true })).toContain("session-a")
+  })
 })
 
 describe("PDF preview limits", () => {

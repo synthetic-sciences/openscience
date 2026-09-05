@@ -14,8 +14,6 @@ import {
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createMediaQuery } from "@solid-primitives/media"
 import { SessionTurn } from "@synsci/ui/session-turn"
-import { ActivityProvider } from "@synsci/ui/context/activity"
-import { activityExpanded, activityPreferences } from "@/context/activity-preferences"
 import { createAutoScroll } from "@synsci/ui/hooks"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
@@ -100,7 +98,6 @@ function requestError(error: unknown) {
  */
 const sessionSidebarKey = "openscience-session-sidebar-v1"
 const sessionSidebarWidthKey = "openscience-session-sidebar-width-v1"
-const traceExpansionKey = "openscience-trace-expansion-v1"
 
 function readSessionSidebar() {
   if (typeof localStorage === "undefined") return false
@@ -130,28 +127,6 @@ function readSessionSidebarWidth() {
 function writeSessionSidebarWidth(width: number) {
   try {
     localStorage.setItem(sessionSidebarWidthKey, clampSidebarWidth(width).toString())
-  } catch {}
-}
-
-function readTraceExpansion() {
-  if (typeof localStorage === "undefined") return {} as Record<string, boolean>
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(traceExpansionKey) ?? "{}")
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {}
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).filter(
-        (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
-      ),
-    )
-  } catch {
-    return {}
-  }
-}
-
-function writeTraceExpansion(value: Record<string, boolean>) {
-  try {
-    const entries = Object.entries(value).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean")
-    localStorage.setItem(traceExpansionKey, JSON.stringify(Object.fromEntries(entries.slice(-200))))
   } catch {}
 }
 
@@ -838,16 +813,6 @@ export default function Page(): JSX.Element {
     return list
   })
 
-  const [stepsExpanded, setStepsExpanded] = createSignal<Record<string, boolean>>(readTraceExpansion())
-  const expandedSteps = (id: string, choices = stepsExpanded()) =>
-    activityExpanded(activityPreferences.mode(), choices[id], working() && id === lastUserMessage()?.id)
-  const toggleSteps = (id: string) =>
-    setStepsExpanded((previous) => {
-      const next = { ...previous, [id]: !expandedSteps(id, previous) }
-      writeTraceExpansion(next)
-      return next
-    })
-
   useGlobalKeys({ onNew: newSession })
 
   // The center belongs to the conversation for the lifetime of the route.
@@ -1335,23 +1300,16 @@ export default function Page(): JSX.Element {
                                   </Show>
                                 }
                               >
-                                <ActivityProvider
-                                  value={activityPreferences.mode}
-                                  onChange={activityPreferences.change}
-                                >
-                                  <SessionTurn
-                                    sessionID={params.id!}
-                                    messageID={message.id}
-                                    lastUserMessageID={lastUserMessage()?.id}
-                                    stepsExpanded={expandedSteps(message.id)}
-                                    onStepsExpandedToggle={() => toggleSteps(message.id)}
-                                    classes={{
-                                      root: "min-w-0 w-full relative",
-                                      content: "flex flex-col justify-between !overflow-visible",
-                                      container: "w-full px-4 md:px-5",
-                                    }}
-                                  />
-                                </ActivityProvider>
+                                <SessionTurn
+                                  sessionID={params.id!}
+                                  messageID={message.id}
+                                  lastUserMessageID={lastUserMessage()?.id}
+                                  classes={{
+                                    root: "min-w-0 w-full relative",
+                                    content: "flex flex-col justify-between !overflow-visible",
+                                    container: "w-full px-4 md:px-5",
+                                  }}
+                                />
                                 <div class="session-turn-actions" role="group" aria-label="Turn actions">
                                   <Show when={!revertInfo()}>
                                     <button

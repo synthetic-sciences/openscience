@@ -2,12 +2,8 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict: Record<Keys, string> = {
-  "ui.messagePart.reasoning.unavailable": "The model did not provide readable reasoning.",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.activity.label": "Activity view",
-  "ui.sessionTurn.activity.detailed": "Detailed",
-  "ui.sessionTurn.activity.compact": "Compact",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
   "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
   "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
@@ -20,8 +16,6 @@ export const dict: Record<Keys, string> = {
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Legg til kommentar",
   "ui.lineComment.submit": "Kommenter",
-  "ui.sessionTurn.steps.show": "Vis utføringsspor",
-  "ui.sessionTurn.steps.hide": "Skjul utføringsspor",
   "ui.sessionTurn.trace.title": "Utføringsspor",
   "ui.sessionTurn.trace.detail": "Registrert verktøyaktivitet; modellsammendrag genereres av leverandøren.",
   "ui.sessionTurn.summary.response": "Svar",
@@ -38,7 +32,6 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.makingEdits": "Gjør endringer",
   "ui.sessionTurn.status.runningCommands": "Kjører kommandoer",
   "ui.sessionTurn.status.thinking": "Tenker",
-  "ui.sessionTurn.status.thinkingWithTopic": "Tenker - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
   "ui.sessionTurn.progress.connecting": "Kobler til {{model}}…",

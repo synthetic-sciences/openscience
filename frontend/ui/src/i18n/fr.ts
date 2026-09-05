@@ -1,10 +1,6 @@
 export const dict = {
-  "ui.messagePart.reasoning.unavailable": "The model did not provide readable reasoning.",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.activity.label": "Activity view",
-  "ui.sessionTurn.activity.detailed": "Detailed",
-  "ui.sessionTurn.activity.compact": "Compact",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
   "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
   "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
@@ -17,8 +13,6 @@ export const dict = {
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Ajouter un commentaire",
   "ui.lineComment.submit": "Commenter",
-  "ui.sessionTurn.steps.show": "Afficher la trace d’exécution",
-  "ui.sessionTurn.steps.hide": "Masquer la trace d’exécution",
   "ui.sessionTurn.trace.title": "Trace d’exécution",
   "ui.sessionTurn.trace.detail":
     "Activité d’outils enregistrée ; les résumés du modèle sont générés par le fournisseur.",
@@ -36,7 +30,6 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "Application des modifications",
   "ui.sessionTurn.status.runningCommands": "Exécution des commandes",
   "ui.sessionTurn.status.thinking": "Réflexion",
-  "ui.sessionTurn.status.thinkingWithTopic": "Réflexion - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Rassemblement des idées",
   "ui.sessionTurn.status.consideringNextSteps": "Examen des prochaines étapes",
   "ui.sessionTurn.progress.connecting": "Connexion à {{model}}…",

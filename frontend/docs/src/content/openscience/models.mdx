@@ -97,6 +97,20 @@ openscience run --model moonshotai/kimi-k3 "Implement the pipeline"
 
 `--model <provider>/<model>` overrides the default for one run. `--variant` selects a provider-supported reasoning tier such as `minimal`, `high`, `xhigh`, or `max`.
 
+## Reasoning and activity
+
+The workspace shows every readable reasoning passage the provider sends, alongside
+individual tool calls in their recorded order. Reasoning stays visible during
+streaming, after completion, and when you reopen the session. There is no
+Detailed/Compact selector. You can still open each tool's inputs and outputs.
+
+Readable reasoning depends on the provider. OpenAI supplies
+[reasoning summaries, not its private reasoning tokens](https://developers.openai.com/api/docs/guides/reasoning#reasoning-summaries).
+OpenScience requests its most detailed available summary with `auto`; headings
+inside that text come from the provider. OpenScience does not shorten those
+passages or generate replacement summaries. Encrypted continuation metadata is
+not readable text and does not create a blank reasoning row.
+
 ## Slow or stalled requests
 
 The request status distinguishes local preparation, connecting, waiting for the first readable output, and receiving output. A connection delay can include network setup, gateway admission, and provider processing; it does not mean the model has been thinking for that whole interval. A stream can also remain open after its last output.

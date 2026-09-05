@@ -56,7 +56,58 @@ describe("tool.grep", () => {
           ctx,
         )
         expect(result.metadata.matches).toBe(0)
-        expect(result.output).toBe("No files found")
+        expect(result.output).toBe("No matching content found")
+      },
+    })
+  })
+
+  test("brace includes search both named files without widening the filter", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "EXECUTION_PLAN.md"), "needle first")
+        await Bun.write(path.join(dir, "CORAL_APPLICATION_PLAN.md"), "needle second")
+        await Bun.write(path.join(dir, "OTHER.md"), "needle excluded")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await (
+          await GrepTool.init()
+        ).execute({ pattern: "needle", include: "{EXECUTION_PLAN.md,CORAL_APPLICATION_PLAN.md}" }, ctx)
+        expect(result.metadata.matches).toBe(2)
+        expect(result.output).toContain("EXECUTION_PLAN.md")
+        expect(result.output).toContain("CORAL_APPLICATION_PLAN.md")
+        expect(result.output).not.toContain("OTHER.md")
+      },
+    })
+  })
+
+  for (const input of [{ pattern: "[" }, { pattern: "needle", include: "[" }]) {
+    test(`invalid ${input.include ? "include" : "regex"} is a search failure, not an empty success`, async () => {
+      await using tmp = await tmpdir({
+        init: (dir) => Bun.write(path.join(dir, "sample.md"), "needle"),
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await expect((await GrepTool.init()).execute(input, ctx)).rejects.toThrow("Search failed:")
+        },
+      })
+    })
+  }
+
+  test("a canceled search preserves the abort cause, not an empty result", async () => {
+    await using tmp = await tmpdir({
+      init: (dir) => Bun.write(path.join(dir, "sample.md"), "needle"),
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const abort = new DOMException("Search canceled by caller", "AbortError")
+        await expect(
+          (await GrepTool.init()).execute({ pattern: "needle" }, { ...ctx, abort: AbortSignal.abort(abort) }),
+        ).rejects.toBe(abort)
       },
     })
   })
@@ -142,7 +193,7 @@ describe("tool.grep", () => {
         fn: async () => {
           const result = await (await GrepTool.init()).execute({ pattern: "outside needle", path: tmp.path }, ctx)
           expect(result.metadata.matches).toBe(0)
-          expect(result.output).toBe("No files found")
+          expect(result.output).toBe("No matching content found")
         },
       })
     },

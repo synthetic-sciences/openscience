@@ -3,12 +3,8 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
-  "ui.messagePart.reasoning.unavailable": "The model did not provide readable reasoning.",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.activity.label": "Activity view",
-  "ui.sessionTurn.activity.detailed": "Detailed",
-  "ui.sessionTurn.activity.compact": "Compact",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
   "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
   "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
@@ -21,8 +17,6 @@ export const dict = {
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Kommentar hinzufügen",
   "ui.lineComment.submit": "Kommentieren",
-  "ui.sessionTurn.steps.show": "Ausführungsprotokoll anzeigen",
-  "ui.sessionTurn.steps.hide": "Ausführungsprotokoll ausblenden",
   "ui.sessionTurn.trace.title": "Ausführungsprotokoll",
   "ui.sessionTurn.trace.detail":
     "Aufgezeichnete Werkzeugaktivität; Modellzusammenfassungen werden vom Anbieter generiert.",
@@ -40,7 +34,6 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "Änderungen vornehmen",
   "ui.sessionTurn.status.runningCommands": "Befehle ausführen",
   "ui.sessionTurn.status.thinking": "Denken",
-  "ui.sessionTurn.status.thinkingWithTopic": "Denken - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Gedanken sammeln",
   "ui.sessionTurn.status.consideringNextSteps": "Nächste Schritte erwägen",
   "ui.sessionTurn.progress.connecting": "Verbindung zu {{model}} wird hergestellt…",

@@ -27,6 +27,7 @@ import { SessionTraceStore } from "./trace-store"
 import { ToolSelection } from "./tool-selection"
 import { InvalidCall } from "@/tool/invalid-call"
 import { resolveAccessRoute } from "./access-route"
+import { providerErrorMetadata } from "./provider-error"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -280,9 +281,7 @@ export namespace LLM {
     ]
     const result = streamText({
       onError(error) {
-        l.error("stream error", {
-          error,
-        })
+        l.error("stream error", providerErrorMetadata(error))
       },
       async experimental_repairToolCall(failed) {
         const repaired = await repairToolCall(failed, tools)

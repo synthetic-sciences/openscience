@@ -32152,6 +32152,17 @@
               "type": "string",
               "pattern": "^ses.*"
             }
+          },
+          {
+            "in": "query",
+            "name": "projectPreview",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
           }
         ],
         "summary": "Read file",
@@ -32273,6 +32284,17 @@
               "pattern": "^ses.*"
             },
             "required": true
+          },
+          {
+            "in": "query",
+            "name": "projectPreview",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
           }
         ],
         "summary": "Resolve a session file reference",
@@ -32304,11 +32326,26 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "scope": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "project",
+                            "session"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
                     "path",
-                    "writable"
+                    "writable",
+                    "scope"
                   ]
                 }
               }
@@ -33338,6 +33375,17 @@
           {
             "in": "query",
             "name": "inline",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "projectPreview",
             "schema": {
               "type": "string",
               "enum": [
@@ -52690,30 +52738,6 @@
           "properties"
         ]
       },
-      "Event.file.edited": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.edited"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "file"
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
       "FileDiff": {
         "type": "object",
         "properties": {
@@ -54590,6 +54614,23 @@
           "properties"
         ]
       },
+      "Event.skill.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "skill.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "Event.session.context": {
         "type": "object",
         "properties": {
@@ -55583,16 +55624,23 @@
           "properties"
         ]
       },
-      "Event.skill.updated": {
+      "Event.file.edited": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "skill.updated"
+            "const": "file.edited"
           },
           "properties": {
             "type": "object",
-            "properties": {}
+            "properties": {
+              "file": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "file"
+            ]
           }
         },
         "required": [
@@ -56060,9 +56108,6 @@
             "$ref": "#/components/schemas/Event.vcs.branch.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.file.edited"
-          },
-          {
             "$ref": "#/components/schemas/Event.message.updated"
           },
           {
@@ -56079,6 +56124,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.permission.replied"
+          },
+          {
+            "$ref": "#/components/schemas/Event.skill.updated"
           },
           {
             "$ref": "#/components/schemas/Event.session.context"
@@ -56135,7 +56183,7 @@
             "$ref": "#/components/schemas/Event.session.error"
           },
           {
-            "$ref": "#/components/schemas/Event.skill.updated"
+            "$ref": "#/components/schemas/Event.file.edited"
           },
           {
             "$ref": "#/components/schemas/Event.pty.created"

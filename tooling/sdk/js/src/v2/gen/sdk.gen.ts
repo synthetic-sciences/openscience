@@ -5617,6 +5617,7 @@ export class File_ extends HeyApiClient {
       directory?: string
       path: string
       sessionID?: string
+      projectPreview?: "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5628,6 +5629,7 @@ export class File_ extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "path" },
             { in: "query", key: "sessionID" },
+            { in: "query", key: "projectPreview" },
           ],
         },
       ],
@@ -5690,6 +5692,7 @@ export class File_ extends HeyApiClient {
       directory?: string
       path: string
       sessionID: string
+      projectPreview?: "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5701,6 +5704,7 @@ export class File_ extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "path" },
             { in: "query", key: "sessionID" },
+            { in: "query", key: "projectPreview" },
           ],
         },
       ],
@@ -5799,6 +5803,7 @@ export class File_ extends HeyApiClient {
       sessionID?: string
       maxBytes?: number
       inline?: "true" | "false"
+      projectPreview?: "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5812,6 +5817,7 @@ export class File_ extends HeyApiClient {
             { in: "query", key: "sessionID" },
             { in: "query", key: "maxBytes" },
             { in: "query", key: "inline" },
+            { in: "query", key: "projectPreview" },
           ],
         },
       ],

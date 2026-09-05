@@ -19,6 +19,7 @@ import { ArtifactStore } from "../../artifact/store"
 import { FileTrash } from "../../file/trash"
 import { SessionFilesystem } from "../../session/filesystem"
 import { errors } from "../error"
+import { ProjectPreview } from "../../file/project-preview"
 
 const LineageRun = z.object({
   id: z.string(),
@@ -239,11 +240,15 @@ export const FileRoutes = lazy(() =>
         z.object({
           path: z.string(),
           sessionID: Identifier.schema("session").optional(),
+          projectPreview: z.enum(["true", "false"]).optional(),
         }),
       ),
       async (c) => {
         const query = c.req.valid("query")
-        const content = await File.read(query.path, { sessionID: query.sessionID })
+        const content = await File.read(query.path, {
+          sessionID: query.sessionID,
+          projectPreview: query.projectPreview === "true",
+        })
         return c.json(content)
       },
     )
@@ -259,7 +264,13 @@ export const FileRoutes = lazy(() =>
             description: "Resolved authorized file path, or null when the reference is missing or ambiguous",
             content: {
               "application/json": {
-                schema: resolver(z.object({ path: z.string().nullable(), writable: z.boolean().nullable() })),
+                schema: resolver(
+                  z.object({
+                    path: z.string().nullable(),
+                    writable: z.boolean().nullable(),
+                    scope: z.enum(["project", "session"]).nullable(),
+                  }),
+                ),
               },
             },
           },
@@ -272,15 +283,26 @@ export const FileRoutes = lazy(() =>
         z.object({
           path: z.string().trim().min(1).max(4_096),
           sessionID: Identifier.schema("session"),
+          projectPreview: z.enum(["true", "false"]).optional(),
         }),
       ),
       async (c) => {
         const query = c.req.valid("query")
-        const resolved = await authorized(File.resolveReference(query.path, { sessionID: query.sessionID }))
+        const project =
+          query.projectPreview === "true"
+            ? await authorized(ProjectPreview.resolve(query.path, query.sessionID))
+            : undefined
+        const exists = project && (await Bun.file(project).exists())
+        const resolved =
+          query.projectPreview === "true"
+            ? exists
+              ? project
+              : undefined
+            : await authorized(File.resolveReference(query.path, { sessionID: query.sessionID }))
         const writable = resolved
           ? await authorized(SessionFilesystem.allows({ sessionID: query.sessionID, path: resolved, access: "write" }))
           : null
-        return c.json({ path: resolved ?? null, writable })
+        return c.json({ path: resolved ?? null, writable, scope: resolved ? (exists ? "project" : "session") : null })
       },
     )
     .put(
@@ -528,11 +550,16 @@ export const FileRoutes = lazy(() =>
             .max(1024 * 1024 * 1024)
             .optional(),
           inline: z.enum(["true", "false"]).optional(),
+          projectPreview: z.enum(["true", "false"]).optional(),
         }),
       ),
       async (c) => {
         const query = c.req.valid("query")
-        const source = await File.rawSource(query.path, { sessionID: query.sessionID, maxBytes: query.maxBytes })
+        const source = await File.rawSource(query.path, {
+          sessionID: query.sessionID,
+          maxBytes: query.maxBytes,
+          projectPreview: query.projectPreview === "true",
+        })
         const range = byteRange(c.req.header("Range"), source.size)
         if (range === "invalid") {
           await source.close()

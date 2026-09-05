@@ -105,6 +105,15 @@ export function workspaceAssetPath(src: string, root: string, base = ""): string
   if (candidate === owner || candidate.startsWith(`${owner}/`)) return target
 }
 
+/** Exact runtime file receipts may target session scratch or a connected
+ * directory, just like tool-card links. This is a path-shape check, not a
+ * permission grant: the viewer keeps its session and the backend authorizes
+ * the read. Never URL-decode a filesystem receipt or strip legal #/? bytes. */
+export function workspaceReceiptPath(path: string): string | undefined {
+  if (path.includes("\0") || !(path.startsWith("/") || windows.test(path))) return
+  return path
+}
+
 /**
  * Rewrite one image reference to a served file URL. Relative paths resolve
  * against the directory of `base` (the previewed file; omit `base` to resolve

@@ -23,13 +23,32 @@ The server always binds localhost — the deprecated `server.hostname` / `server
 ## What the workspace gives you
 
 - **File tree and editor.** Browse and edit the project the agent is working in; edits and diffs render inline.
-- **System-terminal workflow.** The browser workspace does not include a Terminal tab; run project commands in your system terminal alongside the browser.
+- **Project terminal.** Run commands alongside the conversation in the workspace terminal, or use your system terminal.
 - **Session history.** Every conversation is a session; switch between them without losing context.
 - **Inline scientific rendering.** Molecules, protein structures, genomes, and plots render directly in the transcript instead of as file paths.
 - **Prompt queueing.** Type your next prompt while the agent is still streaming; queued prompts run in order.
 - **Undo from here.** Roll the session back to any message and take a different path from that point.
 - **Model selector and credentials panel.** Pick any configured model per session and add provider keys without leaving the browser. See [Models](/openscience/models).
 - **Customize panels.** Manage models, connectors, research tools, skills, compute, and local storage without leaving the workspace.
+
+## Project files and session scratch
+
+Project files are the project's durable documents. Session scratch is a separate
+working area for one conversation; the two locations can contain different files
+with the same name. Check the preview's location before treating a scratch copy as
+the project document. You can open the durable copy directly from **Files → Project
+files**.
+
+When a completed file-writing tool records one exact path for a bare filename,
+the chat link uses that path. A filename alone is not proof of which copy a shell
+command wrote: older Bash-generated links may still open scratch. Choose the
+known project copy from Project files rather than relying on modification times.
+
+Chat links can open documents already saved in a managed project's Project files
+without moving them into scratch. This preview is read-only and verifies the
+project and session on each read. It does not grant the agent access to more
+folders. Connected files still require their existing filesystem permission, and
+links into another project or outside an authorized root remain blocked.
 
 ## Scientific environments
 

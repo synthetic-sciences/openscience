@@ -18,6 +18,7 @@ const server = await createServer({
 })
 const solidjs = (await server.ssrLoadModule("solid-js")) as typeof import("solid-js")
 const web = (await server.ssrLoadModule("solid-js/web")) as typeof import("solid-js/web")
+const marked = (await server.ssrLoadModule("@synsci/ui/context/marked")) as typeof import("@synsci/ui/context/marked")
 const subject = (await server.ssrLoadModule("/src/atlas/FilePreview.tsx")) as typeof import("./FilePreview")
 const drafts = (await server.ssrLoadModule("/src/atlas/file-drafts.ts")) as typeof import("./file-drafts")
 const codemirror = (await server.ssrLoadModule("@codemirror/view")) as typeof import("@codemirror/view")
@@ -43,7 +44,15 @@ const services = (
 const mount = (view: () => JSX.Element) => {
   const host = document.createElement("div")
   document.body.append(host)
-  const dispose = web.render(view, host)
+  const dispose = web.render(
+    () =>
+      marked.MarkedProvider({
+        get children() {
+          return view()
+        },
+      }),
+    host,
+  )
   cleanups.push(dispose)
   return { host, dispose }
 }
@@ -246,5 +255,196 @@ describe("file preview save ownership", () => {
         "http://server-b.test",
       ).revision,
     ).toBe("b-1")
+  })
+})
+
+describe("chat project preview resolution", () => {
+  type Read = { path: string; sessionID?: string; projectPreview?: string }
+  const denied = (path: string) => ({
+    name: "SessionFilesystemDeniedError",
+    data: { path, sessionID: "session-a", access: "read" },
+  })
+  const setup = (
+    read: (input: Read) => Promise<FileData>,
+    resolve: (query: Record<string, unknown>) => Promise<Response>,
+  ) => ({
+    ...services(() => file("unused")),
+    client: { file: { read: async (input: Read) => ({ data: await read(input) }) } } as Services["client"],
+    request: Object.assign(
+      async (path: string, _init: unknown, query: Record<string, unknown>) => {
+        expect(path).toBe("/file/resolve")
+        return resolve(query)
+      },
+      {
+        url: (path: string, query: Record<string, string>) =>
+          `http://server-a.test${path}?${new URLSearchParams(query)}`,
+      },
+    ) as Services["request"],
+  })
+
+  for (const absolute of [false, true]) {
+    test(`recovers a ${absolute ? "absolute" : "relative"} project link only after broker verification`, async () => {
+      const reads: Read[] = []
+      const resolutions: Record<string, unknown>[] = []
+      const path = "/project/COST_MODEL.md"
+      const sdk = setup(
+        async (input) => {
+          reads.push(input)
+          if (!input.path.startsWith("/")) throw new Error("File not found")
+          if (!input.projectPreview) throw denied(input.path)
+          return { content: "# Managed fixture", mimeType: "text/markdown" }
+        },
+        async (query) => {
+          resolutions.push(query)
+          return json({ path, writable: false, scope: "project" })
+        },
+      )
+      const { host } = mount(() =>
+        subject.FileView({
+          path: absolute ? path : "COST_MODEL.md",
+          directory: "/project",
+          scope: "auto",
+          sessionID: "session-a",
+          writable: true,
+          services: sdk,
+        }),
+      )
+      await settle()
+      await settle()
+      expect(host.querySelector('[aria-label="COST_MODEL.md preview"]')).not.toBeNull()
+      expect(host.textContent).toContain("Project files · /project")
+      expect(host.textContent).not.toContain("outside the active workspace")
+      expect(reads).toEqual([
+        ...(!absolute ? [{ path: "COST_MODEL.md", sessionID: "session-a" }] : []),
+        { path, sessionID: "session-a" },
+        { path, sessionID: "session-a", projectPreview: "true" },
+      ])
+      expect(resolutions).toEqual([
+        { path: absolute ? path : "COST_MODEL.md", sessionID: "session-a", projectPreview: "true" },
+      ])
+      expect(button(host, "Save changes")).toBeNull()
+      expect(button(host, "Edit")).toBeNull()
+      expect(button(host, "Save as Result")).toBeNull()
+      expect(button(host, "Copy contents")?.disabled).toBe(false)
+      expect(button(host, "Download file")).not.toBeNull()
+    })
+  }
+
+  test("never retries generic 403 or outside-project denial under project authority", async () => {
+    for (const [path, error] of [
+      ["/project/note.html", new Error("HTTP 403 Forbidden")],
+      ["/other/note.html", denied("/other/note.html")],
+    ] as const) {
+      let resolves = 0
+      const reads: Read[] = []
+      const sdk = setup(
+        async (input) => {
+          reads.push(input)
+          throw error
+        },
+        async () => {
+          resolves++
+          return json({ path, scope: "project" })
+        },
+      )
+      const { host, dispose } = mount(() =>
+        subject.FileView({ path, directory: "/project", scope: "auto", sessionID: "session-a", services: sdk }),
+      )
+      await settle()
+      expect(reads).toEqual([{ path, sessionID: "session-a" }])
+      expect(resolves).toBe(0)
+      expect(host.textContent).not.toContain("unused")
+      dispose()
+      host.remove()
+    }
+  })
+
+  test("a denied broker result stays denied, and a late result cannot cross session ownership", async () => {
+    const resolution = pending<Response>()
+    const [session, setSession] = solidjs.createSignal("session-a")
+    const reads: Read[] = []
+    const sdk = setup(
+      async (input) => {
+        reads.push(input)
+        throw denied(input.path)
+      },
+      async (query) => (query.sessionID === "session-a" ? resolution.promise : json({ path: null, scope: null })),
+    )
+    const { host } = mount(() =>
+      subject.FileView({
+        path: "/project/note.html",
+        directory: "/project",
+        scope: "auto",
+        get sessionID() {
+          return session()
+        },
+        services: sdk,
+      }),
+    )
+    await settle()
+    setSession("session-b")
+    await settle()
+    resolution.resolve(json({ path: "/project/note.html", writable: false, scope: "project" }))
+    await settle()
+    expect(reads.every((read) => !read.projectPreview)).toBe(true)
+    expect(host.textContent).toContain("outside the active workspace")
+  })
+
+  test("resets verified project authority on navigation and labels scratch distinctly", async () => {
+    const [session, setSession] = solidjs.createSignal("session-a")
+    const reads: Read[] = []
+    const sdk = setup(
+      async (input) => {
+        reads.push(input)
+        if (input.sessionID === "session-b" || input.projectPreview) return file("<h1>fixture</h1>")
+        if (!input.path.startsWith("/")) throw new Error("File not found")
+        throw denied(input.path)
+      },
+      async () => json({ path: "/project/note.html", scope: "project", writable: false }),
+    )
+    const { host } = mount(() =>
+      subject.FileView({
+        path: "note.html",
+        directory: "/project",
+        scope: "auto",
+        get sessionID() {
+          return session()
+        },
+        services: sdk,
+      }),
+    )
+    await settle()
+    expect(host.textContent).toContain("Project files · /project")
+    setSession("session-b")
+    await settle()
+    expect(reads.filter((read) => read.sessionID === "session-b")).toEqual([
+      { path: "note.html", sessionID: "session-b" },
+    ])
+    expect(host.textContent).toContain("Session scratch")
+  })
+
+  test("labels a separately connected file without adding project preview authority", async () => {
+    const reads: Read[] = []
+    const sdk = setup(
+      async (input) => {
+        reads.push(input)
+        if (input.path !== "/connected/note.html") throw new Error("File not found")
+        return file("<h1>fixture</h1>")
+      },
+      async () => json({ path: "/connected/note.html", scope: "session", writable: false }),
+    )
+    const { host } = mount(() =>
+      subject.FileView({
+        path: "note.html",
+        directory: "/project",
+        scope: "auto",
+        sessionID: "session-a",
+        services: sdk,
+      }),
+    )
+    await settle()
+    expect(host.textContent).toContain("Connected file · /connected")
+    expect(reads.at(-1)).toEqual({ path: "/connected/note.html", sessionID: "session-a" })
+    expect(reads.every((read) => !read.projectPreview)).toBe(true)
   })
 })

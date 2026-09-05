@@ -29,47 +29,9 @@ export function stripRedactedReasoning(text: string): string {
   return visible.trim() ? visible : ""
 }
 
-// Provider phase headings occur at the start of a reasoning part or directly
-// after the punctuation that ended the previous phase, and occupy their own
-// line. Ordinary Markdown emphasis in prose does not have that shape.
-const providerReasoningPhase = /(^|[.!?])\*\*([^*\n]+)\*\*(?:(?:\r?\n[ \t]*)+|$)/g
-const providerStatusOnly =
-  /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|choosing|simplifying)\b[^.!?]*$/i
-
-function statusOnlyReasoning(text: string) {
-  const value = text.trim()
-  if (!value || value.includes("\n") || value.length > 140) return false
-  return providerStatusOnly.test(value)
-}
-
-/**
- * OpenRouter's Responses bridge streams provider summaries as a single signed
- * reasoning part. Each summary phase starts with a bold label, but adjacent
- * phases are not guaranteed to include a separator (`...done.**Next**`). Keep
- * the signed bytes untouched in storage and normalize only the readable UI.
- */
+/** Provider-readable text, not a locally rewritten or shortened transcript. */
 export function reasoningDisplayText(text: string): string {
-  const visible = stripRedactedReasoning(text)
-  if (!visible) return ""
-  // Keep every readable heading and sentence. This is typography repair, not
-  // summarization: a short provider phase is still received reasoning text.
-  return visible
-    .replace(providerReasoningPhase, (value, prefix: string) =>
-      prefix ? `${prefix}\n\n${value.slice(prefix.length)}` : value,
-    )
-    .trim()
-}
-
-/** The most recent provider phase is useful as one compact live status. */
-export function reasoningTopic(text: string): string | undefined {
-  const visible = stripRedactedReasoning(text)
-  let topic: string | undefined
-  for (const match of visible.matchAll(providerReasoningPhase)) {
-    const label = match[2]?.trim()
-    if (label && statusOnlyReasoning(label)) topic = label
-  }
-  if (topic) return topic
-  return statusOnlyReasoning(visible) ? visible.trim() : undefined
+  return stripRedactedReasoning(text)
 }
 
 export type ToolOutcome = "pending" | "running" | "done" | "error" | "cancelled"
@@ -339,11 +301,9 @@ export function scienceTaskLabel(input: { title?: unknown; code?: unknown; langu
 }
 
 /**
- * Files a turn actually wrote, from its completed tool parts. write/edit/
- * multiedit carry the target in input.filePath; apply_patch lists every
- * changed file (with moves resolved and deletes skipped) in its completed
- * metadata. Python and R tools take only code — kernel-side writes carry no
- * path in the part — so it is deliberately not guessed at here.
+ * Completed file receipts, preferring the runtime-resolved target over the
+ * requested input path. Canonical-only mode supplies precise write/edit/patch
+ * targets for bare chat links; it never guesses paths from shell or kernel code.
  */
 export function writtenFiles(
   parts: ReadonlyArray<{
@@ -351,19 +311,27 @@ export function writtenFiles(
     tool?: string
     state?: { status?: string; input?: unknown; metadata?: unknown }
   }>,
+  options?: { canonicalOnly?: boolean },
 ): string[] {
   const files: string[] = []
   const seen = new Set<string>()
   const push = (value: unknown) => {
     if (typeof value !== "string" || !value || seen.has(value)) return
+    if (options?.canonicalOnly && !/^(?:\/|[A-Za-z]:[\\/])/.test(value)) return
     seen.add(value)
     files.push(value)
   }
   for (const part of parts) {
     if (part.type !== "tool" || part.state?.status !== "completed") continue
     const input = (part.state.input ?? {}) as Record<string, unknown>
-    if (part.tool === "write" || part.tool === "edit" || part.tool === "multiedit") push(input.filePath)
     const metadata = (part.state.metadata ?? {}) as Record<string, unknown>
+    if (part.tool === "write" || part.tool === "edit" || part.tool === "multiedit") {
+      const diff = metadata.filediff
+      const canonical =
+        part.tool === "edit" && diff && typeof diff === "object" && "file" in diff ? diff.file : metadata.filepath
+      push(typeof canonical === "string" ? canonical : options?.canonicalOnly ? undefined : input.filePath)
+    }
+    if (options?.canonicalOnly && part.tool !== "apply_patch") continue
     if (["notebook", "python", "r", "rkernel"].includes(part.tool ?? "")) {
       for (const file of Array.isArray(metadata.files) ? metadata.files : []) push(file)
     }

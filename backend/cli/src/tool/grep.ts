@@ -85,6 +85,7 @@ export const GrepTool = Tool.define("grep", {
     searchPath = (await authorized?.revalidate()) ?? searchPath
     args.push(searchPath)
 
+    ctx.abort.throwIfAborted()
     const proc = Bun.spawn([rgPath, ...args], {
       stdout: "pipe",
       stderr: "pipe",
@@ -94,15 +95,21 @@ export const GrepTool = Tool.define("grep", {
     const error = new Response(proc.stderr).text()
     const collected = await output(proc, ctx.abort)
     const [errorOutput, exitCode] = await Promise.all([error, proc.exited])
+    ctx.abort.throwIfAborted()
 
     // Exit codes: 0 = matches found, 1 = no matches, 2 = errors (but may still have matches)
     // With --no-messages, we suppress error output but still get exit code 2 for broken symlinks etc.
-    // Only fail if exit code is 2 AND no output was produced
-    if (exitCode === 1 || (exitCode === 2 && collected.lines.length === 0)) {
+    // Invalid patterns and inaccessible roots are failures, not proof that no
+    // files exist. A valid content search can also find files but no matching
+    // lines; keep that distinct from a filename search.
+    if (exitCode === 2 && collected.lines.length === 0) {
+      throw new Error(`Search failed: ${errorOutput.trim() || "Some paths could not be searched."}`)
+    }
+    if (exitCode === 1) {
       return {
         title: params.pattern,
         metadata: { matches: 0, truncated: false },
-        output: "No files found",
+        output: "No matching content found",
       }
     }
 
@@ -143,7 +150,7 @@ export const GrepTool = Tool.define("grep", {
       return {
         title: params.pattern,
         metadata: { matches: 0, truncated: false },
-        output: "No files found",
+        output: "No matching content found",
       }
     }
 

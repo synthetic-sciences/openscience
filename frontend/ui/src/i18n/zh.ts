@@ -3,12 +3,8 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
-  "ui.messagePart.reasoning.unavailable": "The model did not provide readable reasoning.",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.activity.label": "Activity view",
-  "ui.sessionTurn.activity.detailed": "Detailed",
-  "ui.sessionTurn.activity.compact": "Compact",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
   "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
   "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
@@ -21,8 +17,6 @@ export const dict = {
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "添加评论",
   "ui.lineComment.submit": "评论",
-  "ui.sessionTurn.steps.show": "显示执行轨迹",
-  "ui.sessionTurn.steps.hide": "隐藏执行轨迹",
   "ui.sessionTurn.trace.title": "执行轨迹",
   "ui.sessionTurn.trace.detail": "记录的工具活动；模型摘要由提供商生成。",
   "ui.sessionTurn.summary.response": "回复",
@@ -39,7 +33,6 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "正在修改",
   "ui.sessionTurn.status.runningCommands": "正在运行命令",
   "ui.sessionTurn.status.thinking": "思考中",
-  "ui.sessionTurn.status.thinkingWithTopic": "思考：{{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "正在整理思路",
   "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
   "ui.sessionTurn.progress.connecting": "正在连接 {{model}}…",

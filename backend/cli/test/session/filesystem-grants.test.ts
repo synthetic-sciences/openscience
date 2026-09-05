@@ -1159,11 +1159,19 @@ describe("file access uses session grants", () => {
 
       const nested = await resolve("ioai_final/board.py")
       expect(nested.status).toBe(200)
-      expect(await nested.json()).toEqual({ path: path.join(source.path, "ioai_final", "board.py"), writable: false })
+      expect(await nested.json()).toEqual({
+        path: path.join(source.path, "ioai_final", "board.py"),
+        writable: false,
+        scope: "session",
+      })
 
       const bare = await resolve("unique.csv")
       expect(bare.status).toBe(200)
-      expect(await bare.json()).toEqual({ path: path.join(source.path, "reports", "unique.csv"), writable: false })
+      expect(await bare.json()).toEqual({
+        path: path.join(source.path, "reports", "unique.csv"),
+        writable: false,
+        scope: "session",
+      })
 
       await SessionFilesystem.grant({
         sessionID: session.id,
@@ -1171,15 +1179,16 @@ describe("file access uses session grants", () => {
         access: "read",
         scope: "project",
       })
-      expect(await (await resolve("unique.csv")).json()).toEqual({ path: null, writable: null })
-      expect(await (await resolve("../board.py")).json()).toEqual({ path: null, writable: null })
+      expect(await (await resolve("unique.csv")).json()).toEqual({ path: null, writable: null, scope: null })
+      expect(await (await resolve("../board.py")).json()).toEqual({ path: null, writable: null, scope: null })
       expect(await (await resolve(path.join(source.path, "ioai_final", "board.py"))).json()).toEqual({
         path: null,
         writable: null,
+        scope: null,
       })
 
       await SessionFilesystem.revoke(session.id, sourceGrant.id)
-      expect(await (await resolve("ioai_final/board.py")).json()).toEqual({ path: null, writable: null })
+      expect(await (await resolve("ioai_final/board.py")).json()).toEqual({ path: null, writable: null, scope: null })
       await expect(
         File.read(path.join(source.path, "ioai_final", "board.py"), { sessionID: session.id }),
       ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)

@@ -33,7 +33,6 @@ import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
 import { useDialog } from "../context/dialog"
 import { useI18n } from "../context/i18n"
-import { useActivity } from "../context/activity"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Button } from "./button"
@@ -60,7 +59,6 @@ import {
   sentenceCaseLabel,
   skillActivity,
   stripBashMetadata,
-  stripRedactedReasoning,
   toolOutcome,
   toolSummary,
 } from "./tool-display"
@@ -756,25 +754,17 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   )
 }
 
-// Keep the provider-visible reasoning bytes untouched in the stored message so
-// signed continuation still works. Normalize only its presentation: OpenRouter
-// can concatenate provider summary headings directly onto adjacent prose.
-// Encrypted reasoning remains in providerMetadata and is never rendered.
+// Render every readable provider passage without an app-generated summary or
+// folding state. Signed/encrypted continuation stays untouched in the message.
 
 function completedAt(message: MessageType) {
   return message.role === "assistant" ? (message as AssistantMessage).time.completed : undefined
 }
 
-// Explicit per-part choices survive remounts and trace toggles. New parts follow
-// the reader's activity preference, including while the provider is streaming.
-const [opened, setOpened] = createStore<Record<string, boolean>>({})
-
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const i18n = useI18n()
-  const activity = useActivity()
   const part = props.part as ReasoningPart
   const text = () => reasoningDisplayText(part.text)
-  const unavailable = () => !!part.text.trim() && !stripRedactedReasoning(part.text)
   const live = () => !part.time?.end && !completedAt(props.message)
   const now = useClock(() => live() && !!part.time?.start)
   // A completed message whose reasoning never reported an end (an aborted
@@ -789,48 +779,21 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
     duration()
       ? i18n.t("ui.messagePart.reasoning.thinking", { duration: duration() })
       : i18n.t("ui.messagePart.reasoning.label")
-  const open = () => opened[part.id] ?? activity() === "detailed"
-  const bodyID = () => `${part.id}-reasoning`
-
   return (
-    <Show when={text() || (activity() === "detailed" && unavailable())}>
-      <Show
-        when={text()}
-        fallback={
-          <div data-component="reasoning-status-part" data-origin="provider-reasoning-unavailable">
-            {i18n.t("ui.messagePart.reasoning.unavailable")}
-          </div>
-        }
-      >
-        <div
-          data-component="reasoning-part"
-          data-origin="provider-reasoning"
-          data-expanded={open() ? "true" : undefined}
-          data-live={live() ? "true" : undefined}
-        >
-          <button
-            type="button"
-            data-slot="reasoning-part-toggle"
-            aria-expanded={open()}
-            aria-controls={bodyID()}
-            title={i18n.t("ui.messagePart.reasoning.elapsedHint")}
-            onClick={() => setOpened(part.id, !open())}
-          >
-            <span data-slot="reasoning-part-glyph">
-              <Show when={live()} fallback={<Icon name="brain" size="small" />}>
-                <Spinner />
-              </Show>
-            </span>
-            <span data-slot="reasoning-part-title">{title()}</span>
-            <Icon name="chevron-down" size="small" data-slot="reasoning-part-chevron" />
-          </button>
-          <Show when={open()}>
-            <div id={bodyID()} data-slot="reasoning-part-body">
-              <Markdown text={text()} cacheKey={part.id} />
-            </div>
-          </Show>
+    <Show when={text()}>
+      <div data-component="reasoning-part" data-origin="provider-reasoning" data-live={live() ? "true" : undefined}>
+        <div data-slot="reasoning-part-header" title={i18n.t("ui.messagePart.reasoning.elapsedHint")}>
+          <span data-slot="reasoning-part-glyph">
+            <Show when={live()} fallback={<Icon name="brain" size="small" />}>
+              <Spinner />
+            </Show>
+          </span>
+          <span data-slot="reasoning-part-title">{title()}</span>
         </div>
-      </Show>
+        <div data-slot="reasoning-part-body">
+          <Markdown text={text()} cacheKey={part.id} />
+        </div>
+      </div>
     </Show>
   )
 }

@@ -1,7 +1,36 @@
 diff --git a/dist/index.js b/dist/index.js
+index 7af01a3f1f2ab0cc2aaf73e2b99ec4cdcf313c7c..00981ea71e4abedbafa1685c2329a776fe36079b 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -2245,6 +2245,6 @@ var OpenRouterChatLanguageModel = class {
+@@ -1834,6 +1834,12 @@ var OpenRouterChatLanguageModel = class {
+       }
+     ] : [];
+     const content = [];
++    // Private continuation records must not suppress separately supplied text.
++    if (reasoningDetails.length > 0 && choice.message.reasoning && !reasoningDetails.some((detail) =>
++      detail.type === "reasoning.text" && detail.text?.trim() || detail.type === "reasoning.summary" && detail.summary?.trim()
++    )) {
++      reasoning.push({ type: "reasoning", text: choice.message.reasoning });
++    }
+     content.push(...reasoning);
+     if (choice.message.content) {
+       content.push({
+@@ -2104,6 +2110,13 @@ var OpenRouterChatLanguageModel = class {
+                   }
+                 }
+               }
++              // Prefer readable details, but retain the legacy field when the
++              // details contain only opaque state or empty text/summary items.
++              if (delta.reasoning && !delta.reasoning_details.some((detail) =>
++                detail.type === "reasoning.text" && detail.text?.trim() || detail.type === "reasoning.summary" && detail.summary?.trim()
++              )) {
++                emitReasoningChunk(delta.reasoning, reasoningMetadata);
++              }
+             } else if (delta.reasoning) {
+               emitReasoningChunk(delta.reasoning);
+             }
+@@ -2244,7 +2257,7 @@ var OpenRouterChatLanguageModel = class {
+                   id: toolCall.id,
                    delta: (_l = toolCallDelta.function.arguments) != null ? _l : ""
                  });
 -                if (((_m = toolCall.function) == null ? void 0 : _m.name) != null && ((_n = toolCall.function) == null ? void 0 : _n.arguments) != null && isParsableJson(toolCall.function.arguments)) {
@@ -10,9 +39,38 @@ diff --git a/dist/index.js b/dist/index.js
                      type: "tool-call",
                      toolCallId: (_o = toolCall.id) != null ? _o : generateId(),
 diff --git a/dist/index.mjs b/dist/index.mjs
+index 1ed50c68bda3f1a4f7def2dda80bd595d641a08d..31058b648975f1c57eb333a0d50c43950c562c5d 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -2208,6 +2208,6 @@ var OpenRouterChatLanguageModel = class {
+@@ -1797,6 +1797,12 @@ var OpenRouterChatLanguageModel = class {
+       }
+     ] : [];
+     const content = [];
++    // Private continuation records must not suppress separately supplied text.
++    if (reasoningDetails.length > 0 && choice.message.reasoning && !reasoningDetails.some((detail) =>
++      detail.type === "reasoning.text" && detail.text?.trim() || detail.type === "reasoning.summary" && detail.summary?.trim()
++    )) {
++      reasoning.push({ type: "reasoning", text: choice.message.reasoning });
++    }
+     content.push(...reasoning);
+     if (choice.message.content) {
+       content.push({
+@@ -2067,6 +2073,13 @@ var OpenRouterChatLanguageModel = class {
+                   }
+                 }
+               }
++              // Prefer readable details, but retain the legacy field when the
++              // details contain only opaque state or empty text/summary items.
++              if (delta.reasoning && !delta.reasoning_details.some((detail) =>
++                detail.type === "reasoning.text" && detail.text?.trim() || detail.type === "reasoning.summary" && detail.summary?.trim()
++              )) {
++                emitReasoningChunk(delta.reasoning, reasoningMetadata);
++              }
+             } else if (delta.reasoning) {
+               emitReasoningChunk(delta.reasoning);
+             }
+@@ -2207,7 +2220,7 @@ var OpenRouterChatLanguageModel = class {
+                   id: toolCall.id,
                    delta: (_l = toolCallDelta.function.arguments) != null ? _l : ""
                  });
 -                if (((_m = toolCall.function) == null ? void 0 : _m.name) != null && ((_n = toolCall.function) == null ? void 0 : _n.arguments) != null && isParsableJson(toolCall.function.arguments)) {

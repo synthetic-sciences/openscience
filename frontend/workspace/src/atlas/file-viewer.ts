@@ -35,6 +35,7 @@ export interface FileRequestIdentity {
   directory: string
   sessionID?: string
   path: string
+  projectPreview?: boolean
 }
 
 export interface FileRequestTicket {
@@ -108,7 +109,14 @@ export function missingFileFallback(input: {
  * that component after navigation.
  */
 export function fileRequestKey(input: FileRequestIdentity) {
-  return [input.server ?? "", input.projectID ?? "", input.directory, input.sessionID ?? "", input.path].join("\n")
+  return [
+    input.server ?? "",
+    input.projectID ?? "",
+    input.directory,
+    input.sessionID ?? "",
+    input.path,
+    ...(input.projectPreview ? ["project-preview"] : []),
+  ].join("\n")
 }
 
 /** Browser and transport implementations use several spellings for the same
@@ -285,12 +293,25 @@ export function reconcileSavedDraft(current: string, submitted: string, saved: s
 
 export async function readFile(
   reader: () => Promise<FileData>,
-): Promise<{ data?: FileData; error?: Error; cancelled?: true }> {
+): Promise<{ data?: FileData; error?: Error; cancelled?: true; denied?: true }> {
   return reader().then(
     (data) => ({ data }),
     (error: unknown) =>
       isFileRequestCancellation(error)
         ? { cancelled: true as const }
-        : { error: error instanceof Error ? error : new Error(fileErrorMessage(error)) },
+        : {
+            error: error instanceof Error ? error : new Error(fileErrorMessage(error)),
+            ...(fileAuthorityDenied(error) ? { denied: true as const } : {}),
+          },
   )
+}
+
+/** Only a typed filesystem denial may ask the broker to resolve project UI
+ * authority. A generic HTTP 403, permission message or transport error cannot. */
+function fileAuthorityDenied(error: unknown): boolean {
+  if (!error || typeof error !== "object" || Array.isArray(error)) return false
+  const value = error as Record<string, unknown>
+  if (value.name === "SessionFilesystemDeniedError") return true
+  if (typeof value.path === "string" && typeof value.sessionID === "string" && value.access === "read") return true
+  return [value.data, value.error, value.cause].some(fileAuthorityDenied)
 }

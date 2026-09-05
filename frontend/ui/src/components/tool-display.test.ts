@@ -7,7 +7,6 @@ import {
   humanizeToolName,
   lineCount,
   reasoningDisplayText,
-  reasoningTopic,
   runningLabel,
   sentenceCaseLabel,
   savedArtifact,
@@ -137,6 +136,42 @@ describe("writtenFiles", () => {
     ).toEqual(["results/report.md", "analysis.py"])
   })
 
+  test("prefers runtime-resolved write and edit targets over the originally requested input", () => {
+    const parts = [
+      completed("write", { filePath: "notes.md" }, { filepath: "/project/notes.md" }),
+      completed("edit", { filePath: "/alias/plan.md" }, { filediff: { file: "/project/plan.md" } }),
+    ]
+    expect(writtenFiles(parts)).toEqual(["/project/notes.md", "/project/plan.md"])
+    expect(writtenFiles(parts, { canonicalOnly: true })).toEqual(["/project/notes.md", "/project/plan.md"])
+  })
+
+  test("canonical-only link provenance never infers paths from inputs, reads, or shell text", () => {
+    expect(
+      writtenFiles(
+        [
+          completed("write", { filePath: "/project/legacy.md" }),
+          completed("edit", { filePath: "legacy.md" }),
+          completed("write", {}, { filepath: "relative.md" }),
+          completed("read", { filePath: "/project/read.md" }, { filepath: "/project/read.md" }),
+          completed("bash", { command: "touch /project/bash.md" }, { filepath: "/project/bash.md" }),
+          completed("notebook", {}, { files: ["/project/notebook.md"] }),
+          { type: "tool", tool: "write", state: { status: "error", metadata: { filepath: "/project/failed.md" } } },
+          completed(
+            "apply_patch",
+            {},
+            {
+              files: [
+                { filePath: "/project/old.md", movePath: "/project/new.md", type: "move" },
+                { filePath: "/project/deleted.md", type: "delete" },
+              ],
+            },
+          ),
+        ],
+        { canonicalOnly: true },
+      ),
+    ).toEqual(["/project/new.md"])
+  })
+
   test("ignores tools that did not finish and parts that are not tools", () => {
     expect(
       writtenFiles([
@@ -230,28 +265,23 @@ describe("provider reasoning presentation", () => {
   const titanic =
     "**Evaluating Titanic dataset analysis**\n\nThe user asks for an analysis. Let's get started!**Choosing a reputable Titanic dataset**\n\nI need a reputable source.**Simplifying analysis steps**\n\nI can keep the work focused.[REDACTED]"
 
-  test("keeps the full readable trajectory and separates concatenated provider phase titles", () => {
-    expect(reasoningDisplayText(titanic)).toBe(
-      "**Evaluating Titanic dataset analysis**\n\nThe user asks for an analysis. Let's get started!\n\n**Choosing a reputable Titanic dataset**\n\nI need a reputable source.\n\n**Simplifying analysis steps**\n\nI can keep the work focused.",
-    )
-  })
-
-  test("uses the latest phase as the single live status topic", () => {
-    expect(reasoningTopic(titanic)).toBe("Simplifying analysis steps")
+  test("keeps every provider heading and passage without rewriting their boundaries", () => {
+    expect(reasoningDisplayText(titanic)).toBe(titanic.replace("[REDACTED]", ""))
   })
 
   test("leaves ordinary readable reasoning unchanged", () => {
     expect(reasoningDisplayText("Checking the source, then comparing the results.")).toBe(
       "Checking the source, then comparing the results.",
     )
-    expect(reasoningTopic("Checking the source, then comparing the results.")).toBeUndefined()
+    expect(reasoningDisplayText("  Received text with original whitespace.\n\n")).toBe(
+      "  Received text with original whitespace.\n\n",
+    )
   })
 
   test("preserves plain provider phase labels in the transcript", () => {
     expect(reasoningDisplayText("Planning comprehensive research workflow")).toBe(
       "Planning comprehensive research workflow",
     )
-    expect(reasoningTopic("Planning comprehensive research workflow")).toBe("Planning comprehensive research workflow")
     expect(reasoningDisplayText("Analyzing the source revealed three incompatible assay formats.")).toBe(
       "Analyzing the source revealed three incompatible assay formats.",
     )
@@ -267,16 +297,14 @@ describe("provider reasoning presentation", () => {
     const prose =
       "Let me also make sure about **featureCounts GTF requirement**: featureCounts works best with a GFF/GTF."
     expect(reasoningDisplayText(prose)).toBe(prose)
-    expect(reasoningTopic(prose)).toBeUndefined()
     expect(reasoningDisplayText("This is (**important context**) for the result.")).toBe(
       "This is (**important context**) for the result.",
     )
   })
 
-  test("does not classify arbitrary bold headings as provider phases", () => {
+  test("preserves arbitrary headings without classifying their content", () => {
     const heading = "**Feature counts requirement**\nThe explanation remains below it."
     expect(reasoningDisplayText(heading)).toBe(heading)
-    expect(reasoningTopic(heading)).toBeUndefined()
   })
 })
 

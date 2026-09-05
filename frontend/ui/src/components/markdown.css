@@ -212,7 +212,7 @@
 [data-component="markdown"] code[data-file-link] {
   cursor: pointer;
 }
-[data-component="markdown"] code[data-file-link]:hover {
+[data-component="markdown"] code[data-file-link]:is(:hover, :focus-visible) {
   color: var(--text-interactive-base);
   text-decoration: underline;
   text-underline-offset: 2px;

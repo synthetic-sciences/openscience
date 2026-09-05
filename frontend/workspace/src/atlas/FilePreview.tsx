@@ -1,4 +1,5 @@
 import {
+  batch,
   createSignal,
   createEffect,
   createMemo,
@@ -61,7 +62,7 @@ import { resolveViewer } from "@/atlas/files/viewer-registry"
 import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import { discardFileDraft, recoverFileDraftState, rememberFileDraft } from "@/atlas/file-drafts"
 import { MarkdownDocument } from "@/atlas/MarkdownDocument"
-import { rawFileQuery } from "@/utils/project-file"
+import { projectContains, rawFileQuery } from "@/utils/project-file"
 import { CodeEditor } from "@/atlas/CodeEditor"
 import { HTML_STYLESHEET_BYTES, htmlStylesheets, loadHtmlStylesheets, rewriteHtmlAssets } from "@/utils/html-assets"
 import "./FilePreview.css"
@@ -147,6 +148,7 @@ export function FileView(props: {
   const [resolvedScope, setResolvedScope] = createSignal<ResolvedFileScope>(initialScope())
   const [resolvedPath, setResolvedPath] = createSignal(props.path)
   const [resolvedWritable, setResolvedWritable] = createSignal<boolean>()
+  const [projectPreview, setProjectPreview] = createSignal(false)
   let scopeIdentity = ""
   createEffect(() => {
     const next = [
@@ -159,9 +161,12 @@ export function FileView(props: {
     ].join("\n")
     if (next === scopeIdentity) return
     scopeIdentity = next
-    setResolvedScope(initialScope())
-    setResolvedPath(props.path)
-    setResolvedWritable(undefined)
+    batch(() => {
+      setResolvedScope(initialScope())
+      setResolvedPath(props.path)
+      setResolvedWritable(undefined)
+      setProjectPreview(false)
+    })
   })
   const requestPath = () =>
     resolvedScope() === "session" ? resolvedPath() : resolveArtifactPath(directory(), resolvedPath())
@@ -183,6 +188,7 @@ export function FileView(props: {
     path: props.path,
     target: requestPath(),
     scope: props.scope,
+    projectPreview: projectPreview(),
   }))
   let mounted = true
   onCleanup(() => (mounted = false))
@@ -219,6 +225,7 @@ export function FileView(props: {
       directory: dir,
       sessionID: activeSession,
       path,
+      projectPreview: projectPreview(),
     })
     if (readRetryTimer) {
       clearTimeout(readRetryTimer)
@@ -261,7 +268,7 @@ export function FileView(props: {
     // absolute paths remain absolute and require a session filesystem grant.
     void readFile(async () => {
       const response = await sdk.client.file.read(
-        { path, sessionID: activeSession },
+        { path, sessionID: activeSession, ...(projectPreview() ? { projectPreview: "true" as const } : {}) },
         { signal: ticket.controller.signal },
       )
       const envelope = response as unknown as { data?: FileData }
@@ -305,19 +312,35 @@ export function FileView(props: {
           (props.scope ?? "project") === "auto" &&
           resolvedScope() === "project" &&
           session &&
-          isMissingFileError(result.error)
+          !projectPreview() &&
+          (isMissingFileError(result.error) || (result.denied && projectContains(dir, path)))
         ) {
           const originalError = result.error
           void sdk
-            .request("/file/resolve", { signal: ticket.controller.signal }, { path: reference, sessionID: session })
+            .request(
+              "/file/resolve",
+              { signal: ticket.controller.signal },
+              {
+                path: reference,
+                sessionID: session,
+                ...(result.denied ? { projectPreview: "true" } : {}),
+              },
+            )
             .then(async (response) => {
               if (!request.owns(ticket, key) || owner() !== location) return
               if (!response.ok) throw new Error(await response.text())
-              const resolved = (await response.json()) as { path?: unknown; writable?: unknown }
+              const resolved = (await response.json()) as { path?: unknown; writable?: unknown; scope?: unknown }
               if (!request.owns(ticket, key) || owner() !== location) return
-              if (typeof resolved.path === "string" && resolved.path) {
-                if (typeof resolved.writable === "boolean") setResolvedWritable(resolved.writable)
-                setResolvedPath(resolved.path)
+              if (
+                typeof resolved.path === "string" &&
+                resolved.path &&
+                (!result.denied || resolved.scope === "project")
+              ) {
+                batch(() => {
+                  if (typeof resolved.writable === "boolean") setResolvedWritable(resolved.writable)
+                  setProjectPreview(resolved.scope === "project")
+                  setResolvedPath(resolved.path as string)
+                })
                 return
               }
               setView({ status: "error", error: originalError, data: undefined })
@@ -365,7 +388,10 @@ export function FileView(props: {
   })
 
   const data = () => view.data
-  const writable = () => props.writable ?? resolvedWritable()
+  const writable = () =>
+    projectPreview() || props.writable === false || resolvedWritable() === false
+      ? false
+      : (props.writable ?? resolvedWritable())
   const isBinary = () => data()?.encoding === "base64"
   const truncated = () => data()?.truncated === true
   const mime = () => data()?.mimeType ?? ""
@@ -423,7 +449,14 @@ export function FileView(props: {
   const rawUrl = (path: string, dir = directory(), session = fileSessionID()) =>
     sdk.request.url(
       "/file/raw",
-      rawFileQuery({ directory: dir, path, sessionID: session, scope: resolvedScope(), inline: true }),
+      rawFileQuery({
+        directory: dir,
+        path,
+        sessionID: session,
+        scope: resolvedScope(),
+        inline: true,
+        projectPreview: projectPreview(),
+      }),
     )
   const image = (src: string) =>
     assetUrl(src, {
@@ -481,6 +514,7 @@ export function FileView(props: {
             sessionID: session,
             scope: resolvedScope(),
             maxBytes: HTML_STYLESHEET_BYTES,
+            projectPreview: projectPreview(),
           }),
         )
         if (!response.ok) return
@@ -559,6 +593,7 @@ export function FileView(props: {
           sessionID: session,
           scope: resolvedScope(),
           maxBytes: PDF_PREVIEW_LIMIT,
+          projectPreview: projectPreview(),
         }),
       )
       .then(async (response) => {
@@ -761,7 +796,13 @@ export function FileView(props: {
       const response = await sdk.request(
         "/file/raw",
         undefined,
-        rawFileQuery({ directory: directory(), path: requestPath(), sessionID: session, scope: resolvedScope() }),
+        rawFileQuery({
+          directory: directory(),
+          path: requestPath(),
+          sessionID: session,
+          scope: resolvedScope(),
+          projectPreview: projectPreview(),
+        }),
       )
       if (!response.ok) throw new Error(`download failed (${response.status})`)
       const blob = await response.blob()
@@ -776,6 +817,15 @@ export function FileView(props: {
     if (props.subtitle) return props.subtitle
     const path = resolvedPath()
     const index = path.lastIndexOf("/")
+    if (props.scope === "auto") {
+      const source =
+        projectContains(directory(), requestPath()) && resolvedScope() === "project"
+          ? "Project files"
+          : /^(?:\/|[A-Za-z]:[\\/])/.test(path)
+            ? "Connected file"
+            : "Session scratch"
+      return index > 0 ? `${source} · ${path.slice(0, index)}` : source
+    }
     return index > 0 ? path.slice(0, index) : resolvedScope() === "session" ? "Session files" : "Project files"
   }
 
@@ -792,7 +842,7 @@ export function FileView(props: {
         saveDisabled={!view.revision || view.conflict === true}
         writable={writable()}
         disabled={view.status !== "ready"}
-        artifact={Boolean(activeSessionID())}
+        artifact={Boolean(activeSessionID()) && !projectPreview()}
         archiving={archiving()}
         onPreview={() => setView("source", false)}
         onSource={() => setView("source", true)}

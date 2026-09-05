@@ -1,10 +1,6 @@
 export const dict = {
-  "ui.messagePart.reasoning.unavailable": "The model did not provide readable reasoning.",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.activity.label": "Activity view",
-  "ui.sessionTurn.activity.detailed": "Detailed",
-  "ui.sessionTurn.activity.compact": "Compact",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
   "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
   "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
@@ -18,8 +14,6 @@ export const dict = {
   "ui.lineComment.placeholder": "เพิ่มความคิดเห็น",
   "ui.lineComment.submit": "แสดงความคิดเห็น",
 
-  "ui.sessionTurn.steps.show": "แสดงร่องรอยการทำงาน",
-  "ui.sessionTurn.steps.hide": "ซ่อนร่องรอยการทำงาน",
   "ui.sessionTurn.trace.title": "ร่องรอยการทำงาน",
   "ui.sessionTurn.trace.detail": "กิจกรรมเครื่องมือที่บันทึกไว้; สรุปของโมเดลสร้างโดยผู้ให้บริการ",
   "ui.sessionTurn.summary.response": "การตอบสนอง",
@@ -36,7 +30,6 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "กำลังแก้ไข",
   "ui.sessionTurn.status.runningCommands": "กำลังเรียกใช้คำสั่ง",
   "ui.sessionTurn.status.thinking": "กำลังคิด",
-  "ui.sessionTurn.status.thinkingWithTopic": "กำลังคิด - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "รวบรวมความคิด",
   "ui.sessionTurn.status.consideringNextSteps": "พิจารณาขั้นตอนถัดไป",
   "ui.sessionTurn.progress.connecting": "กำลังเชื่อมต่อกับ {{model}}…",

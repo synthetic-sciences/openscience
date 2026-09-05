@@ -343,11 +343,7 @@
   border-bottom: 0;
 }
 
-.session-scroller [data-slot="session-turn-collapsible-trigger-content"] {
-  margin: -3px -7px;
-  padding: 3px 7px;
-  border: 0;
-  border-radius: var(--radius-xs);
+.session-scroller [data-slot="session-turn-status"] {
   color: var(--color-text-muted, var(--text-weak));
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);

@@ -13,9 +13,8 @@ class Observer {
 }
 Object.assign(globalThis, { ResizeObserver: globalThis.ResizeObserver ?? Observer })
 
-// Render the real trajectory components in jsdom: a folded reasoning row, the
-// streaming caret hook on prose, and a turn whose repeated reads fold behind
-// one counted header while the live call stays its own line.
+// Render the real transcript in jsdom: all provider-readable reasoning,
+// streaming prose, and chronological tool rows with expandable output.
 const vite = await createServer({
   root: fileURLToPath(new URL("../../../workspace", import.meta.url)),
   mode: "production",
@@ -32,10 +31,14 @@ const reactive = (await vite.ssrLoadModule("solid-js/store")) as typeof import("
 const data = (await vite.ssrLoadModule("@synsci/ui/context/data")) as typeof import("../context/data")
 const dialog = (await vite.ssrLoadModule("@synsci/ui/context/dialog")) as typeof import("../context/dialog")
 const diff = (await vite.ssrLoadModule("@synsci/ui/context/diff")) as typeof import("../context/diff")
+const codeContext = (await vite.ssrLoadModule("@synsci/ui/context/code")) as typeof import("../context/code")
 const marked = (await vite.ssrLoadModule("@synsci/ui/context/marked")) as typeof import("../context/marked")
-const activity = (await vite.ssrLoadModule("@synsci/ui/context/activity")) as typeof import("../context/activity")
 const parts = (await vite.ssrLoadModule("@synsci/ui/message-part")) as typeof import("./message-part")
 const turn = (await vite.ssrLoadModule("@synsci/ui/session-turn")) as typeof import("./session-turn")
+const markdown = (await vite.ssrLoadModule("@synsci/ui/markdown")) as typeof import("./markdown")
+const assets = (await vite.ssrLoadModule(
+  "/src/utils/markdown-assets.ts",
+)) as typeof import("../../../workspace/src/utils/markdown-assets")
 const cleanups: Array<() => void> = []
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 const ready = async (check: () => boolean) => {
@@ -84,7 +87,7 @@ const read = (id: string, file: string, start: number): ToolPart => ({
 })
 
 type Store = Parameters<typeof data.DataProvider>[0]["data"]
-const mount = (view: () => JSX.Element, store: Store, mode: () => "detailed" | "compact" = () => "detailed") => {
+const mount = (view: () => JSX.Element, store: Store) => {
   const host = document.createElement("div")
   host.className = "session-scroller"
   document.body.append(host)
@@ -102,12 +105,10 @@ const mount = (view: () => JSX.Element, store: Store, mode: () => "detailed" | "
                   get children() {
                     return marked.MarkedProvider({
                       get children() {
-                        return activity.ActivityProvider({
-                          value: mode,
-                          get children() {
-                            return view()
-                          },
-                        })
+                        // JSX initializes components untracked. Calling the
+                        // view directly makes constructor reads (such as the
+                        // initial duration) remount the whole test subtree.
+                        return web.createComponent(view, {})
                       },
                     })
                   },
@@ -139,33 +140,23 @@ describe("reasoning rows", () => {
     time,
   })
 
-  test("shows live reasoning by default, respects collapse, and preserves explicit choices across remounts", async () => {
+  test("keeps all streamed reasoning inline through completion and remounts without a toggle", async () => {
     const [message, setMessage] = reactive.createStore<AssistantMessage>(assistant())
     const [part, setPart] = reactive.createStore<ReasoningPart>(reasoning("prt_reason", { start: Date.now() - 12_300 }))
     const host = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
     await settle()
     const row = host.querySelector('[data-component="reasoning-part"]')!
-    const toggle = row.querySelector<HTMLButtonElement>('[data-slot="reasoning-part-toggle"]')!
+    const header = row.querySelector('[data-slot="reasoning-part-header"]')!
     expect(row.getAttribute("data-live")).toBe("true")
-    expect(row.getAttribute("data-expanded")).toBe("true")
-    expect(toggle.getAttribute("aria-expanded")).toBe("true")
-    expect(toggle.getAttribute("aria-controls")).toBe("prt_reason-reasoning")
-    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning (12s)")
-    expect(toggle.querySelector('[data-component="spinner"]')).not.toBeNull()
-    await ready(() => row.querySelector("#prt_reason-reasoning p") !== null)
-
-    toggle.click()
-    await settle()
-    expect(toggle.getAttribute("aria-expanded")).toBe("false")
-    expect(row.querySelector('[data-slot="reasoning-part-body"]')).toBeNull()
-    setPart("text", part.text + " The new chunk must not reopen a reader's collapsed row.")
-    await settle()
-    expect(toggle.getAttribute("aria-expanded")).toBe("false")
-
-    toggle.click()
-    await ready(() => row.querySelector("#prt_reason-reasoning p") !== null)
-    expect(row.getAttribute("data-expanded")).toBe("true")
-    expect(toggle.getAttribute("aria-expanded")).toBe("true")
+    expect(row.querySelector("button")).toBeNull()
+    expect(header.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning (12s)")
+    expect(header.querySelector('[data-component="spinner"]')).not.toBeNull()
+    await ready(() => row.querySelector('[data-slot="reasoning-part-body"] p') !== null)
+    const body = row.querySelector('[data-slot="reasoning-part-body"]')!
+    setPart("text", part.text + "\n\n**Researching cost distribution**\n\nThe entire next passage stays visible.")
+    await ready(() => body.textContent?.includes("The entire next passage stays visible.") === true)
+    expect(row.querySelector('[data-slot="reasoning-part-body"]')).toBe(body)
+    expect(body.querySelector("strong")?.textContent).toBe("Researching cost distribution")
     expect(row.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain("Comparing the two assay")
 
     // The turn completes: the clock freezes on the final duration and the row stays open.
@@ -173,17 +164,20 @@ describe("reasoning rows", () => {
     setMessage("time", "completed", Date.now())
     await settle()
     expect(row.getAttribute("data-live")).toBeNull()
-    expect(toggle.querySelector('[data-component="spinner"]')).toBeNull()
-    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning (15s)")
-    expect(toggle.getAttribute("aria-expanded")).toBe("true")
+    expect(header.querySelector('[data-component="spinner"]')).toBeNull()
+    expect(header.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning (15s)")
+    expect(body.textContent).toContain("The entire next passage stays visible.")
 
-    // A reader's choice survives the row being remounted (steps hidden and shown again).
+    // Hydrating a completed turn keeps the full provider text visible too.
     cleanups.splice(0).forEach((cleanup) => cleanup())
     document.body.replaceChildren()
     const again = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
     await settle()
-    expect(again.querySelector('[data-slot="reasoning-part-toggle"]')?.getAttribute("aria-expanded")).toBe("true")
-    expect(again.querySelector('[data-slot="reasoning-part-body"]')).not.toBeNull()
+    await ready(() => again.querySelector('[data-slot="reasoning-part-body"] p') !== null)
+    expect(again.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain(
+      "The entire next passage stays visible.",
+    )
+    expect(again.querySelector('[data-slot="reasoning-part-toggle"]')).toBeNull()
   })
 
   test("an aborted turn shows a plain Reasoning label when reasoning never reported its end", async () => {
@@ -192,75 +186,58 @@ describe("reasoning rows", () => {
     const host = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
     await settle()
     const row = host.querySelector('[data-component="reasoning-part"]')!
-    const toggle = row.querySelector('[data-slot="reasoning-part-toggle"]')!
+    const header = row.querySelector('[data-slot="reasoning-part-header"]')!
     expect(row.getAttribute("data-live")).toBeNull()
-    expect(toggle.querySelector('[data-component="spinner"]')).toBeNull()
-    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning")
+    expect(header.querySelector('[data-component="spinner"]')).toBeNull()
+    expect(header.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning")
   })
 
-  test("compact mode folds completed reasoning the reader never opened", async () => {
+  test("completed reasoning is visible without a stored presentation preference", async () => {
     const message = assistant(Date.now())
     const part = reasoning("prt_folded", { start: 1_000, end: 1_800 })
-    const host = mount(
-      () => parts.Part({ part, message, hideCopy: true }),
-      empty(),
-      () => "compact",
-    )
+    const host = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
     await settle()
-    const toggle = host.querySelector('[data-slot="reasoning-part-toggle"]')!
-    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    const header = host.querySelector('[data-slot="reasoning-part-header"]')!
     // Under one second the clock stays quiet rather than reading "Thinking (0s)".
-    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning")
-    expect(host.querySelector('[data-slot="reasoning-part-body"]')).toBeNull()
+    expect(header.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning")
+    await ready(() => host.querySelector('[data-slot="reasoning-part-body"] p') !== null)
+    expect(host.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain(part.text)
   })
 
-  test("new rows follow mode changes while explicit collapse is remembered", async () => {
-    const [mode, setMode] = reactive.createStore<{ value: "detailed" | "compact" }>({ value: "compact" })
-    const part = reasoning("prt_mode", { start: 1_000, end: 2_000 })
-    const host = mount(
-      () => parts.Part({ part, message: assistant(2_000), hideCopy: true }),
-      empty(),
-      () => mode.value,
-    )
-    const toggle = () => host.querySelector<HTMLButtonElement>('[data-slot="reasoning-part-toggle"]')!
-    await settle()
-    expect(toggle().getAttribute("aria-expanded")).toBe("false")
-    setMode("value", "detailed")
-    await settle()
-    expect(toggle().getAttribute("aria-expanded")).toBe("true")
-    toggle().click()
-    setMode("value", "compact")
-    setMode("value", "detailed")
-    await settle()
-    expect(toggle().getAttribute("aria-expanded")).toBe("false")
-  })
-
-  test("explains redacted-only reasoning without pretending there is readable text to expand", async () => {
-    const part = { ...reasoning("prt_redacted", { start: 1_000, end: 2_000 }), text: "[REDACTED]" }
+  test.each(["", " \n ", "[REDACTED]", "[REDACTED]\n[REDACTED]"])("omits non-readable reasoning %j", async (text) => {
+    const part = { ...reasoning("prt_redacted", { start: 1_000, end: 2_000 }), text }
     const host = mount(() => parts.Part({ part, message: assistant(2_000), hideCopy: true }), empty())
     await settle()
-    expect(host.querySelector('[data-origin="provider-reasoning-unavailable"]')?.textContent).toBe(
-      "The model did not provide readable reasoning.",
-    )
-    expect(host.querySelector('[data-slot="reasoning-part-toggle"]')).toBeNull()
-    expect(host.textContent).not.toContain("[REDACTED]")
+    expect(host.textContent).toBe("")
+    expect(host.querySelector('[data-component="reasoning-part"]')).toBeNull()
   })
 
-  test("a completed redacted-only turn retains its activity disclosure in Detailed mode", async () => {
+  test("interleaved encrypted parts do not add blank rows or repeated notices to a completed turn", async () => {
     const message = assistant(2_000)
-    const part = { ...reasoning("prt_redacted_turn", { start: 1_000, end: 2_000 }), text: "[REDACTED]" }
+    const visible = reasoning("prt_visible", { start: 1_000, end: 2_000 })
+    const answer: TextPart = { id: "prt_answer", sessionID, messageID: message.id, type: "text", text: "Final answer." }
     const store: Store = {
       ...empty(),
       message: { [sessionID]: [user, message] },
-      part: { [user.id]: [], [message.id]: [part] },
+      part: {
+        [user.id]: [],
+        [message.id]: [
+          { ...visible, id: "prt_empty", text: "" },
+          { ...visible, id: "prt_redacted1", text: "[REDACTED]" },
+          visible,
+          { ...visible, id: "prt_redacted2", text: "[REDACTED]" },
+          answer,
+        ],
+      },
     }
-    const host = mount(
-      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
-      store,
-    )
-    await settle()
-    expect(host.querySelector('[data-slot="session-turn-collapsible-trigger-content"]')).not.toBeNull()
-    expect(host.querySelector('[data-origin="provider-reasoning-unavailable"]')).not.toBeNull()
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id }), store)
+    await ready(() => host.textContent?.includes(answer.text) === true)
+    expect(host.querySelector('[data-slot="session-turn-status"]')).not.toBeNull()
+    expect(host.querySelectorAll('[data-component="reasoning-part"]')).toHaveLength(1)
+    expect(host.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain(visible.text)
+    expect(host.querySelector('[data-origin="provider-reasoning-unavailable"]')).toBeNull()
+    expect(host.textContent).not.toContain("did not provide readable reasoning")
+    expect(host.textContent).not.toContain("[REDACTED]")
   })
 })
 
@@ -286,8 +263,8 @@ describe("streaming prose", () => {
   })
 })
 
-describe("folded runs in a turn", () => {
-  test("detailed mode keeps completed operations individually visible", async () => {
+describe("chronological activity in a turn", () => {
+  test("completed operations stay individually visible without an outer disclosure or mode selector", async () => {
     const message = assistant(5_000)
     const store: Store = {
       ...empty(),
@@ -297,14 +274,18 @@ describe("folded runs in a turn", () => {
         [message.id]: [read("prt_detail1", "paper.tex", 1_000), read("prt_detail2", "analysis.py", 2_000)],
       },
     }
-    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, stepsExpanded: true }), store)
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
     await ready(() => host.querySelectorAll('[data-component="tool-part-wrapper"]').length === 2)
     expect(host.querySelector('[data-component="trace-run-group"]')).toBeNull()
     expect(host.textContent).toContain("paper.tex")
     expect(host.textContent).toContain("analysis.py")
+    const status = host.querySelector('[data-slot="session-turn-status"]')!
+    expect(status.tagName).not.toBe("BUTTON")
+    expect(status.hasAttribute("aria-expanded")).toBe(false)
+    expect(host.querySelector('[data-slot="session-turn-activity-mode"]')).toBeNull()
   })
 
-  test("repeated reads share one counted header while the live call keeps its own verb line", async () => {
+  test("repeated reads and the live call retain their individual chronological rows", async () => {
     const message = assistant()
     const grep: ToolPart = {
       id: "prt_grep",
@@ -330,29 +311,13 @@ describe("folded runs in a turn", () => {
         ] satisfies Part[],
       },
     }
-    const host = mount(
-      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
-      store,
-      () => "compact",
-    )
-    await ready(() => host.querySelector('[data-component="trace-run-group"]') !== null)
-
-    const run = host.querySelector('[data-component="trace-run-group"]')!
-    const header = run.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!
-    expect(run.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Read")
-    expect(run.querySelector('[data-slot="basic-tool-tool-subtitle"]')?.textContent).toBe(
-      "paper.tex · analysis.py · results.csv",
-    )
-    expect(run.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("3 calls")
-    expect(run.querySelector('[data-slot="basic-tool-tool-status"]')?.getAttribute("data-outcome")).toBe("done")
-    expect(header.getAttribute("aria-expanded")).toBe("false")
-    expect(run.querySelectorAll('[data-component="tool-part-wrapper"]')).toHaveLength(0)
-
-    header.click()
-    await settle()
-    expect(header.getAttribute("aria-expanded")).toBe("true")
-    const rows = run.querySelectorAll('[data-slot="trace-run-items"] > [data-component="tool-part-wrapper"]')
-    expect(rows).toHaveLength(3)
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id }), store)
+    await ready(() => host.querySelectorAll('[data-component="tool-part-wrapper"]').length === 4)
+    expect(host.querySelector('[data-component="trace-run-group"]')).toBeNull()
+    const rows = host.querySelectorAll('[data-component="tool-part-wrapper"]')
+    expect(
+      [...rows].slice(0, 3).map((row) => row.querySelector('[data-slot="basic-tool-tool-subtitle"]')?.textContent),
+    ).toEqual(["paper.tex", "analysis.py", "results.csv"])
     expect(rows[1]?.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("2 lines")
 
     const live = host.querySelector('[data-component="tool-part-wrapper"][data-tool-status="running"]')!
@@ -380,11 +345,7 @@ describe("folded runs in a turn", () => {
       message: { [sessionID]: [user, message] },
       part: { [user.id]: [prompt], [message.id]: [read("prt_read1", "paper.tex", 1_000), running] },
     })
-    const host = mount(
-      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
-      store,
-      () => "compact",
-    )
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id }), store)
     const rows = () => host.querySelectorAll('[data-component="tool-part-wrapper"]')
     const row = (id: string) =>
       [...rows()].find((item) => item.querySelector('[data-slot="basic-tool-tool-subtitle"]')?.textContent === id)!
@@ -410,17 +371,117 @@ describe("folded runs in a turn", () => {
       "true",
     )
 
-    // The turn settles: the two reads fold behind one counted header.
+    // Completion does not replace the rows or reset an opened tool receipt.
     setStore("message", sessionID, 1, "time", { created: 2, completed: Date.now() })
-    await ready(() => host.querySelector('[data-component="trace-run-group"]') !== null)
-    const run = host.querySelector('[data-component="trace-run-group"]')!
-    expect(run.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("2 calls")
-    expect(run.querySelector('[data-slot="basic-tool-tool-subtitle"]')?.textContent).toBe("paper.tex · analysis.py")
-    expect(host.querySelectorAll('[data-component="tool-part-wrapper"]')).toHaveLength(0)
+    await settle()
+    expect(host.querySelector('[data-component="trace-run-group"]')).toBeNull()
+    expect(rows()).toHaveLength(2)
+    expect(row("paper.tex").querySelector('[data-slot="collapsible-trigger"]')).toBe(first)
+    expect(first.getAttribute("aria-expanded")).toBe("true")
   })
 })
 
 describe("execution inspection", () => {
+  test("a preview's explicit file resolver is not replaced by surrounding turn provenance", async () => {
+    const opened: string[] = []
+    const host = mount(
+      () =>
+        web.createComponent(markdown.MarkdownFileScope, {
+          paths: ["/research/TWITTER_THREAD.md"],
+          get children() {
+            return web.createComponent(markdown.Markdown, {
+              text: "`TWITTER_THREAD.md`",
+              resolveFile: (path) => `/document/${path}`,
+              onOpenFile: (path) => opened.push(path),
+            })
+          },
+        }),
+      empty(),
+    )
+    await ready(() => host.querySelector("code[data-file-path]") !== null)
+    host.querySelector<HTMLElement>("code")!.click()
+    expect(opened).toEqual(["/document/TWITTER_THREAD.md"])
+  })
+
+  test.each(["/research/TWITTER_THREAD.md", "/session-scratch/TWITTER_THREAD.md", "/connected/TWITTER_THREAD.md"])(
+    "bare filename opens exact receipt %s without overriding explicit links",
+    async (target) => {
+      const message = assistant(3_000)
+      const write: ToolPart = {
+        id: "prt_write",
+        sessionID,
+        messageID: message.id,
+        type: "tool",
+        callID: "call_write",
+        tool: "write",
+        state: {
+          status: "completed",
+          input: { filePath: "TWITTER_THREAD.md" },
+          metadata: { filepath: target },
+          output: "Written",
+          title: "TWITTER_THREAD.md",
+          time: { start: 1_000, end: 2_000 },
+        },
+      }
+      const response: TextPart = {
+        id: "prt_response",
+        sessionID,
+        messageID: message.id,
+        type: "text",
+        text: "Updated `TWITTER_THREAD.md`. [Explicit scratch link](TWITTER_THREAD.md).",
+      }
+      const [store, setStore] = reactive.createStore<Store>({
+        ...empty(),
+        message: { [sessionID]: [user, message] },
+        part: { [user.id]: [], [message.id]: [write, response] },
+      })
+      const opened: string[] = []
+      const host = mount(
+        () =>
+          web.createComponent(markdown.MarkdownImages, {
+            resolve: (src) => src,
+            resolveFile: (path) => assets.workspaceAssetPath(path, "/research"),
+            resolveFileReceipt: assets.workspaceReceiptPath,
+            openFile: (path) => opened.push(path),
+            get children() {
+              return web.createComponent(codeContext.CodeComponentProvider, {
+                component: () => null,
+                get children() {
+                  return web.createComponent(turn.SessionTurn, { sessionID, messageID: user.id })
+                },
+              })
+            },
+          }),
+        store,
+      )
+      await ready(() => host.querySelector('[data-slot="assistant-prose"] code[data-file-path]') !== null)
+      const code = host.querySelector<HTMLElement>('[data-slot="assistant-prose"] code')!
+      const anchor = host.querySelector<HTMLAnchorElement>('[data-slot="assistant-prose"] a')!
+      expect(code.getAttribute("data-file-path")).toBe(target)
+      expect(anchor.getAttribute("data-file-path")).toBe("TWITTER_THREAD.md")
+      code.click()
+      expect(opened).toEqual([target])
+
+      // A later receipt with the same basename is genuinely ambiguous. It
+      // removes the shortcut instead of falling back to the old scratch copy.
+      setStore("part", message.id, (parts) => [
+        ...parts,
+        {
+          ...write,
+          id: "prt_other_write",
+          callID: "call_other_write",
+          state: { ...write.state, metadata: { filepath: "/research/drafts/TWITTER_THREAD.md" } },
+        },
+      ])
+      await ready(() => !code.hasAttribute("data-file-path"))
+      expect(host.querySelector('[data-slot="assistant-prose"] code')).toBe(code)
+      code.click()
+      expect(opened).toEqual([target])
+      anchor.click()
+      expect(opened).toEqual([target, "TWITTER_THREAD.md"])
+    },
+  )
+
   test.each(["missing", "denied"] as const)(
     "shell copy handles a %s clipboard and recovers on retry",
     async (failure) => {
@@ -564,10 +625,7 @@ describe("execution inspection", () => {
       message: { [sessionID]: [user, first] },
       part: { [user.id]: [], [first.id]: [command] },
     })
-    const host = mount(
-      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
-      store,
-    )
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id }), store)
     const status = () => host.querySelector('[data-slot="session-turn-status-text"]')?.textContent ?? ""
     await ready(() => status().includes("Running commands"))
     setStore("session_progress", {
@@ -701,16 +759,12 @@ describe("timeout recovery", () => {
         message: { [sessionID]: [user, message] },
         part: { [user.id]: [], [message.id]: [command, reason, partial] },
       })
-      const [view, setView] = reactive.createStore({ expanded: true })
       const host = mount(
         () =>
           turn.SessionTurn({
             sessionID,
             messageID: user.id,
             lastUserMessageID: user.id,
-            get stepsExpanded() {
-              return view.expanded
-            },
           }),
         store,
       )
@@ -733,7 +787,7 @@ describe("timeout recovery", () => {
       expect(host.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain(reason.text)
       expect(host.textContent).toContain(partial.text)
       expect(host.querySelector('[data-component="reasoning-part"]')?.getAttribute("data-live")).toBeNull()
-      expect(host.querySelector('[data-slot="session-turn-response-trigger"] [data-component="spinner"]')).toBeNull()
+      expect(host.querySelector('[data-slot="session-turn-status"] [data-component="spinner"]')).toBeNull()
       expect(host.querySelector('[data-slot="session-turn-retry-message"]')).toBeNull()
       expect(host.querySelector('[data-slot="session-turn-progress-hint"]')).toBeNull()
 
@@ -742,12 +796,6 @@ describe("timeout recovery", () => {
       await ready(() => tool.querySelector('[data-component="shell-output"] pre') !== null)
       expect(tool.querySelector('[data-component="shell-output"] pre')?.textContent).toContain("measurement=17")
       expect(tool.getAttribute("data-tool-status")).toBe("completed")
-
-      setView("expanded", false)
-      await settle()
-      expect(host.querySelectorAll('[data-slot="session-state-message"]')).toHaveLength(1)
-      expect(host.querySelector('[data-slot="session-state-message"]')?.textContent).toBe(timeout.data.message)
-      expect(host.textContent).toContain(partial.text)
 
       // An older failed attempt must not mask a new, genuinely active request.
       const next = { ...assistant(), id: "msg_0003" }
@@ -765,9 +813,7 @@ describe("timeout recovery", () => {
           "Waiting for output from openai/gpt-5.6-sol",
         ),
       )
-      expect(
-        host.querySelector('[data-slot="session-turn-response-trigger"] [data-component="spinner"]'),
-      ).not.toBeNull()
+      expect(host.querySelector('[data-slot="session-turn-status"] [data-component="spinner"]')).not.toBeNull()
     },
   )
 })

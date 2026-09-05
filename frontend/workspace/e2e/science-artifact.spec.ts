@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import type { Locator, Page } from "@playwright/test"
+import type { ReasoningPart } from "@synsci/sdk/v2"
 import { test, expect } from "./fixtures"
 import { createSdk } from "./utils"
 
@@ -146,13 +147,6 @@ async function withArtifact(
     await browser.gotoSession(sessionID)
     await expect(browser.page).toHaveURL(new RegExp(`/session/${sessionID}$`))
 
-    const steps = browser.page.locator('[data-slot="session-turn-collapsible-trigger-content"]')
-    await expect(steps).toBeVisible()
-    // Detailed mode already shows completed activity. Only expand a closed
-    // trace; an unconditional toggle would hide the artifact under test.
-    if ((await steps.getAttribute("aria-expanded")) !== "true") await steps.click()
-    await expect(steps).toHaveAttribute("aria-expanded", "true")
-
     const artifact = locate(browser.page)
     const metadata = browser.page
       .locator('details[data-slot="session-turn-metadata"]')
@@ -168,48 +162,88 @@ async function withArtifact(
   }
 }
 
-test("artifacts remain inspectable across Detailed and Compact activity modes", async ({ page, sdk, gotoSession }) => {
+test("literal reasoning and artifacts remain visible despite obsolete compact and collapse preferences", async ({
+  page,
+  sdk,
+  gotoSession,
+}) => {
   const sessionID = await seedArtifact(sdk, {
     kind: "sequence",
-    data: { id: "activity-mode-dna", sequence: "ACGTACGT", type: "dna", perRow: 8 },
+    data: { id: "literal-trace-dna", sequence: "ACGTACGT", type: "dna", perRow: 8 },
   })
   try {
+    const messages = await sdk.session.messages({ sessionID, limit: 50 }).then((result) => result.data ?? [])
+    const userID = messages.find((message) => message.info.role === "user")?.info.id
+    if (!userID) throw new Error("Seeded artifact has no user message")
+    const assistant = messages.find((message) => message.info.role === "assistant")
+    if (!assistant) throw new Error("Seeded artifact has no assistant message")
+    const passages = [
+      "**Comparing the assay controls**\n\nThe recorded control and treatment observations need the same evaluation conditions. I will retain the measured values, the failed observations, and the uncertainty instead of replacing the source with a shorter description. This whole passage should remain readable before the sequence result, including this final sentence.",
+      "**Checking the transfer condition**\n\nThe second passage belongs after the first one. The saved sequence is a separate tool result, not a replacement for either passage. A reader should be able to inspect both explanations and the actual sequence without changing an activity mode or opening a reasoning disclosure.",
+    ]
+    const reasoning = (id: string, text: string): ReasoningPart => ({
+      id,
+      type: "reasoning",
+      sessionID,
+      messageID: assistant.info.id,
+      text,
+      time: { start: 1_000, end: 2_000 },
+    })
+    // This route changes only the isolated session's fixture response; the
+    // real fake-model turn and its persisted artifact still supply the rest.
+    await page.route(new RegExp(`/session/${sessionID}/message(?:\\?|$)`), async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          messages.map((message) =>
+            message.info.id === assistant.info.id
+              ? {
+                  ...message,
+                  parts: [
+                    reasoning("prt_00000_readable", passages[0]),
+                    reasoning("prt_00000_redacted", "[REDACTED]"),
+                    reasoning("prt_00001_readable", passages[1]),
+                    reasoning("prt_00001_redacted", "[REDACTED]\n[REDACTED]"),
+                    ...message.parts,
+                  ],
+                }
+              : message,
+          ),
+        ),
+      })
+    })
+    await page.addInitScript((id) => {
+      localStorage.setItem("openscience:activity-view:v1", "compact")
+      localStorage.setItem("openscience-trace-expansion-v1", JSON.stringify({ [id]: false }))
+    }, userID)
     await gotoSession(sessionID)
-    const steps = page.locator('[data-slot="session-turn-collapsible-trigger-content"]')
-    const mode = page.getByRole("group", { name: "Activity view", exact: true })
-    const detailed = mode.getByRole("button", { name: "Detailed", exact: true })
-    const compact = mode.getByRole("button", { name: "Compact", exact: true })
     const artifact = page.locator('[data-component="science-artifact"][data-kind="sequence"]')
-    const residues = artifact.locator('[data-slot="sequence-residues"]')
-
-    // The default is readable immediately, with no preliminary toggle.
-    await expect(detailed).toHaveAttribute("aria-pressed", "true")
-    await expect(steps).toHaveAttribute("aria-expanded", "true")
+    const reasoningRows = page.locator('[data-component="reasoning-part"]')
+    await expect(page.getByRole("group", { name: "Activity view", exact: true })).toHaveCount(0)
+    await expect(page.locator('[data-slot="session-turn-collapsible-trigger-content"]')).toHaveCount(0)
+    await expect(reasoningRows).toHaveCount(2)
+    await expect(reasoningRows.locator("button")).toHaveCount(0)
+    await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(
+      passages.map((passage) => passage.replaceAll("**", "")),
+    )
     await expect(artifact).toBeVisible()
-    await expect(residues).toHaveText("ACGTACGT")
-
-    await compact.click()
-    await expect(compact).toHaveAttribute("aria-pressed", "true")
-    await expect(steps).toHaveAttribute("aria-expanded", "false")
-    await expect(artifact).toBeHidden()
+    await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
     await page.reload()
-    await expect(compact).toHaveAttribute("aria-pressed", "true")
-    await expect(steps).toHaveAttribute("aria-expanded", "false")
-
-    // Compact keeps the same artifact accessible through its disclosure.
-    await steps.click()
-    await expect(steps).toHaveAttribute("aria-expanded", "true")
+    await expect(reasoningRows).toHaveCount(2)
+    await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(
+      passages.map((passage) => passage.replaceAll("**", "")),
+    )
+    await expect(page.locator('[data-component="reasoning-part"], [data-component="science-artifact"]')).toHaveCount(3)
+    expect(
+      await page
+        .locator('[data-component="reasoning-part"], [data-component="science-artifact"]')
+        .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-component"))),
+    ).toEqual(["reasoning-part", "reasoning-part", "science-artifact"])
     await expect(artifact).toBeVisible()
-    await expect(residues).toHaveText("ACGTACGT")
-    await steps.click()
-    await detailed.click()
-    await expect(detailed).toHaveAttribute("aria-pressed", "true")
-    // Explicit reader collapse wins over a changed mode default.
-    await expect(steps).toHaveAttribute("aria-expanded", "false")
-    await expect(artifact).toBeHidden()
-    await steps.click()
-    await expect(artifact).toBeVisible()
-    await expect(residues).toHaveText("ACGTACGT")
+    await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
+    await reasoningRows.first().scrollIntoViewIfNeeded()
+    await page.screenshot({ path: test.info().outputPath("literal-trace.png") })
   } finally {
     await sdk.session.delete({ sessionID }).catch(() => undefined)
   }

@@ -47,6 +47,7 @@ const config = {
   SANITIZE_NAMED_PROPS: true,
   FORBID_TAGS: ["style"],
   FORBID_CONTENTS: ["style", "script"],
+  FORBID_ATTR: ["data-file-link", "data-file-path"],
   ADD_TAGS: ["semantics", "annotation", "annotation-xml"],
   ADD_ATTR: ["encoding", "target"],
 }
@@ -79,8 +80,38 @@ type OpenFile = (path: string) => void
 const assets = createContext<{
   resolveImage: Resolve
   resolveFile?: ResolveFile
+  resolveFileReceipt?: ResolveFile
   openFile?: OpenFile
 }>()
+const writtenFiles = createContext<() => readonly string[]>()
+
+/** Scope bare chat filenames to this turn's exact completed write receipts. */
+export function MarkdownFileScope(props: ParentProps<{ paths: readonly string[] }>) {
+  return <writtenFiles.Provider value={() => props.paths}>{props.children}</writtenFiles.Provider>
+}
+
+export function resolveInlineFileTarget(
+  reference: string,
+  paths: readonly string[],
+  resolve: ResolveFile,
+  resolveReceipt: ResolveFile = resolve,
+) {
+  if (/[\\/]/.test(reference)) return resolve(reference)
+  const matches = [
+    ...new Set(
+      paths.filter((path) => {
+        if (!/^(?:\/|[A-Za-z]:[\\/])/.test(path)) return false
+        const name = path.replaceAll("\\", "/").split("/").at(-1)
+        return /^[A-Za-z]:[\\/]/.test(path) ? name?.toLowerCase() === reference.toLowerCase() : name === reference
+      }),
+    ),
+  ]
+  if (matches.length === 0) return resolve(reference)
+  if (matches.length !== 1) return undefined
+  // Only an exact, unique completed receipt reaches this separate path.
+  // It selects a viewer target, never grants server-side read authority.
+  return resolveReceipt(matches[0])
+}
 
 /**
  * Provide default local-asset behavior for every Markdown rendered below.
@@ -88,13 +119,19 @@ const assets = createContext<{
  * contextual viewer. Per-Markdown resolvers still win.
  */
 export function MarkdownImages(
-  props: ParentProps<{ resolve: Resolve; resolveFile?: ResolveFile; openFile?: OpenFile }>,
+  props: ParentProps<{
+    resolve: Resolve
+    resolveFile?: ResolveFile
+    resolveFileReceipt?: ResolveFile
+    openFile?: OpenFile
+  }>,
 ) {
   return (
     <assets.Provider
       value={{
         resolveImage: props.resolve,
         resolveFile: props.resolveFile,
+        resolveFileReceipt: props.resolveFileReceipt,
         openFile: props.openFile,
       }}
     >
@@ -119,7 +156,9 @@ export function resolveImages(root: ParentNode, resolve: Resolve) {
 
 /** Mark local Markdown anchors for the authenticated in-app file viewer. */
 export function resolveFileLinks(root: ParentNode, resolve: ResolveFile) {
-  root.querySelectorAll("a[href]").forEach((anchor) => {
+  root.querySelectorAll("a").forEach((anchor) => {
+    anchor.removeAttribute("data-file-link")
+    anchor.removeAttribute("data-file-path")
     const href = anchor.getAttribute("href")
     if (!href) return
     const path = resolve(href)
@@ -135,35 +174,45 @@ export function resolveFileLinks(root: ParentNode, resolve: ResolveFile) {
 const inlineFilePath =
   /\.(md|mdx|json|jsonl|txt|py|ipynb|ts|tsx|js|jsx|csv|tsv|ya?ml|toml|tex|bib|pdf|png|jpe?g|gif|svg|sh|r|rmd|parquet|h5|hdf5|npy|npz|pkl|log|cfg|ini|xml|html?|css|sql|go|rs|java|db|sqlite)$/i
 
-/** Make an inline code path clickable only after the host resolves it into
- * its current workspace authority. Unresolved absolute/temp paths remain
- * plain text instead of opening a viewer that can only be denied. */
-export function resolveInlineFileLinks(root: ParentNode, resolve: ResolveFile, open: OpenFile) {
+/** Link only host-resolved paths. A recorded tool output may target session
+ * scratch or a connected folder; the viewer still authorizes every read.
+ * Unresolved paths stay plain text. */
+export function resolveInlineFileLinks(root: ParentNode, resolve: ResolveFile) {
   root.querySelectorAll("code").forEach((element) => {
-    if (element.closest("pre")) return
     const target = element as HTMLElement
-    if (target.dataset.fileLink) return
+    if (target.hasAttribute("data-file-link")) {
+      target.removeAttribute("role")
+      target.removeAttribute("tabindex")
+      target.removeAttribute("title")
+    }
+    target.removeAttribute("data-file-link")
+    target.removeAttribute("data-file-path")
+    if (element.closest("pre, a")) return
     const text = (element.textContent ?? "").trim()
     const candidate =
       text.length > 2 && text.length < 260 && !/\s/.test(text) && inlineFilePath.test(text) ? resolve(text) : undefined
     if (!candidate) return
-    target.dataset.fileLink = "1"
     target.setAttribute("data-file-link", "true")
     target.setAttribute("data-file-path", candidate)
-    target.addEventListener("click", (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      open(candidate)
-    })
+    target.setAttribute("role", "link")
+    target.tabIndex = 0
+    target.title = candidate
   })
 }
 
 /** Open a marked local anchor and report whether this click was handled. */
-export function openFileLink(root: ParentNode, event: MouseEvent, open: OpenFile): boolean {
+export function openFileLink(root: ParentNode, event: MouseEvent | KeyboardEvent, open: OpenFile): boolean {
   const target = event.target
   if (!(target instanceof Element)) return false
-  const anchor = target.closest('a[data-file-link="true"]')
+  const anchor = target.closest('a[data-file-link="true"], code[data-file-link="true"]')
   if (!anchor || !root.contains(anchor)) return false
+  // Native anchors already translate Enter into a click. Inline code links
+  // need the same keyboard action, without a second synthetic click.
+  if (
+    event.type === "keydown" &&
+    (!(event instanceof KeyboardEvent) || event.key !== "Enter" || anchor.tagName !== "CODE")
+  )
+    return false
   const path = anchor.getAttribute("data-file-path")
   if (!path) return false
   event.preventDefault()
@@ -308,6 +357,7 @@ export function Markdown(
     "onOpenFile",
   ])
   const shared = useContext(assets)
+  const paths = useContext(writtenFiles)
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -379,7 +429,17 @@ export function Markdown(
     if (resolve) resolveImages(temp, resolve)
     const resolveFile = local.resolveFile ?? shared?.resolveFile
     const openFile = local.onOpenFile ?? shared?.openFile
-    if (resolveFile && openFile) resolveFileLinks(temp, resolveFile)
+    if (resolveFile && openFile) {
+      resolveFileLinks(temp, resolveFile)
+      resolveInlineFileLinks(temp, (reference) =>
+        resolveInlineFileTarget(
+          reference,
+          local.resolveFile ? [] : (paths?.() ?? []),
+          resolveFile,
+          shared?.resolveFileReceipt,
+        ),
+      )
+    }
 
     morphdom(container, temp, {
       childrenOnly: true,
@@ -404,16 +464,19 @@ export function Markdown(
       },
     })
 
-    if (resolveFile && openFile) resolveInlineFileLinks(container, resolveFile, openFile)
-
     if (fileCleanup) {
       fileCleanup()
       fileCleanup = undefined
     }
     if (resolveFile && openFile) {
       const handler = (event: MouseEvent) => openFileLink(container, event, openFile)
+      const keyboard = (event: KeyboardEvent) => openFileLink(container, event, openFile)
       container.addEventListener("click", handler)
-      fileCleanup = () => container.removeEventListener("click", handler)
+      container.addEventListener("keydown", keyboard)
+      fileCleanup = () => {
+        container.removeEventListener("click", handler)
+        container.removeEventListener("keydown", keyboard)
+      }
     }
 
     if (copySetupTimer) clearTimeout(copySetupTimer)
