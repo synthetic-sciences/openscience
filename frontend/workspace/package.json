@@ -62,7 +62,7 @@
     "katex": "^0.17.0",
     "luxon": "catalog:",
     "molstar": "^5.10.1",
-    "pdfjs-dist": "6.2.108",
+    "pdfjs-dist": "6.3.289",
     "remeda": "catalog:",
     "shiki": "catalog:",
     "solid-js": "catalog:",
