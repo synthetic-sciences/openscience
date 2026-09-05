@@ -55,7 +55,7 @@
         "@synsci/util": "workspace:*",
         "@zip.js/zip.js": "2.7.62",
         "ai": "catalog:",
-        "bun-pty": "0.4.4",
+        "bun-pty": "0.4.10",
         "decimal.js": "10.5.0",
         "diff": "catalog:",
         "fuzzysort": "3.1.0",
@@ -1138,7 +1138,7 @@
 
     "builder-util-runtime": ["builder-util-runtime@9.7.0", "", { "dependencies": { "debug": "^4.3.4", "sax": "^1.2.4" } }, "sha512-g/kR520giAFYkSXTzcmF3kqQq7wi8F6N6SzeDgZrqTBN+VHdmgWOyTdD1yD7AATDId/yXLvuP34CxW46/BwCdw=="],
 
-    "bun-pty": ["bun-pty@0.4.4", "", {}, "sha512-WK4G6uWsZgu1v4hKIlw6G1q2AOf8Rbga2Yr7RnxArVjjyb+mtVa/CFc9GOJf+OYSJSH8k7LonAtQOVeNAddRyg=="],
+    "bun-pty": ["bun-pty@0.4.10", "", {}, "sha512-7WFtCw9MwG9gMMvkX+pwUOavNbgmfL+masMWmO9d/HdFCz8VdR+5G4Q3UCLhy2OJ/ImbWuJ1FHFmm0KdgW102w=="],
 
     "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
