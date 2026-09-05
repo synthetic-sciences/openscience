@@ -8,7 +8,7 @@ import { Project } from "../../project/project"
 import { MCP } from "../../mcp"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()

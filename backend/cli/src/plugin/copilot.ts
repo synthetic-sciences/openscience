@@ -1,6 +1,6 @@
 import type { Hooks, PluginInput } from "@synsci/plugin"
 import { Installation } from "@/installation"
-import { iife } from "@/util/iife"
+import { iife } from "@synsci/util/iife"
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
 // Add a small safety buffer when polling to avoid hitting the server

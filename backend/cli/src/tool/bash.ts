@@ -6,7 +6,7 @@ import path from "path"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
-import { lazy } from "@/util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { Language } from "web-tree-sitter"
 
 import { $ } from "bun"

@@ -8,7 +8,7 @@ import { Config } from "../config/config"
 import path from "path"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
-import { lazy } from "@/util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { withTimeout } from "@/util/timeout"
 import type ParcelWatcher from "@parcel/watcher"
 import { $ } from "bun"

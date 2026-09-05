@@ -19,7 +19,7 @@
 
 import { Hono } from "hono"
 import { spawn } from "child_process"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { projectSelection } from "../project-selection"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"

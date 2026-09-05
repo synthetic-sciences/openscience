@@ -33,10 +33,8 @@ import {
   nextReconnectHydrationLimit,
   reconnectHydrationLimit,
 } from "./session-hydration"
-// InitError used to live in pages/error.tsx (now deleted with the legacy
-// openscience shell). Inline the shape so the openscience context layer keeps
-// compiling — it's dead code under the new AtlasApp entry but is still
-// imported transitively from app.tsx tooling.
+// The shape pages/error.tsx renders; kept local so this module does not
+// import a page.
 type InitError = { code: string; message?: string; cause?: unknown }
 
 export function syncErrorMessage(error: unknown): string {

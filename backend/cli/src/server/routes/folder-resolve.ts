@@ -20,7 +20,7 @@ import { spawn } from "child_process"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { projectSelection } from "../project-selection"
 import { probeProtectedFolderAccess } from "../../file/protected-folder-access"
 

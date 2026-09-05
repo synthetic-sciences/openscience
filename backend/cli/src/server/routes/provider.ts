@@ -7,7 +7,7 @@ import { ModelsDev } from "../../provider/models"
 import { ProviderAuth } from "../../provider/auth"
 import { mapValues } from "remeda"
 import { errors } from "../error"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 export const ProviderRoutes = lazy(() =>
   new Hono()

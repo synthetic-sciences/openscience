@@ -6,7 +6,7 @@ import path from "node:path"
 import z from "zod"
 import { Global } from "@/global"
 import { DataRelocation } from "@/global/data-relocation"
-import { lazy } from "@/util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { Lock } from "@/util/lock"
 
 const pointerPath = path.join(Global.Path.config, "data-location")

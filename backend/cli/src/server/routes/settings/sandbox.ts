@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { validator } from "hono-openapi"
 import z from "zod"
-import { lazy } from "../../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { Log } from "../../../util/log"
 import { Config } from "../../../config/config"
 import { Sandbox } from "../../../sandbox/sandbox"

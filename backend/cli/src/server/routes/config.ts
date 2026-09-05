@@ -6,7 +6,7 @@ import { Provider } from "../../provider/provider"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { Log } from "../../util/log"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 const log = Log.create({ service: "server" })
 

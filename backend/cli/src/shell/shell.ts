@@ -1,5 +1,5 @@
 import { Flag } from "@/flag/flag"
-import { lazy } from "@/util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import path from "path"
 import fs from "fs"
 import { spawn, spawnSync, type ChildProcess } from "child_process"

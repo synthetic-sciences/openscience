@@ -4,7 +4,7 @@ import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { normalizeDeepSeekToolSchema } from "./tool-schema"
-import { iife } from "@/util/iife"
+import { iife } from "@synsci/util/iife"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 

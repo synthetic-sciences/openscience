@@ -8,7 +8,7 @@ import { Provenance, type Artifact, type Run } from "../../science/provenance/st
 import { Ripgrep } from "../../file/ripgrep"
 import { LSP } from "../../lsp"
 import { Instance } from "../../project/instance"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { ScienceFile } from "../../file/science"
 import { ArtifactFile } from "../../file/artifacts"
 import { PublicationFile } from "../../file/publication"

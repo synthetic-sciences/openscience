@@ -3,7 +3,7 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { Config } from "../../../config/config"
 import { OpenScience } from "../../../openscience"
-import { lazy } from "../../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 export const BillingState = z.object({
   llm: z.enum(["managed", "byok"]).nullable(),

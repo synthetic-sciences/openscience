@@ -1,6 +1,6 @@
 import type { NamedError } from "@synsci/util/error"
 import { MessageV2 } from "./message-v2"
-import { iife } from "@/util/iife"
+import { iife } from "@synsci/util/iife"
 
 export namespace SessionRetry {
   export const RETRY_INITIAL_DELAY = 2000

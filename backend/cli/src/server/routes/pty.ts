@@ -5,7 +5,7 @@ import z from "zod"
 import { Pty } from "@/pty"
 import { Storage } from "../../storage/storage"
 import { errors } from "../error"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 export const PtyRoutes = lazy(() =>
   new Hono()

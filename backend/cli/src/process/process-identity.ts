@@ -1,7 +1,7 @@
 import crypto from "node:crypto"
 import fs from "node:fs/promises"
 import { WindowsJob } from "./windows-job"
-import { lazy } from "../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 /** Exact, PID-reuse-safe process-start identities shared by durable owners. */
 export namespace ProcessIdentity {
