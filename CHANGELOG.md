@@ -10,6 +10,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Keep the composer focused while slash-command suggestions refresh, so loading
+  skills cannot interrupt typing or drop part of a command.
 - Bound silent model connections and stalled streams, preserve partial output,
   and stop without automatically replaying an uncertain paid request. Detailed
   reasoning and tool activity are visible by default, with a saved Compact option;

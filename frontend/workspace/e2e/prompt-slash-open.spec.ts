@@ -2,8 +2,7 @@ import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "./fixtures"
 import { promptSelector } from "./utils"
 
-// A contenteditable that mounts a listbox on "/" can drop keys typed in the
-// same frame on a slow runner; open the menu first, then type the query.
+// Check opening separately from filtering so failures identify the interaction.
 async function slash(page: Page, prompt: Locator, query: string) {
   await prompt.pressSequentially("/", { delay: 10 })
   const listbox = page.locator("#composer-slash-listbox")
@@ -66,6 +65,71 @@ test("smoke slash menu exposes session actions", async ({ page, gotoSession, sdk
     await page.keyboard.press("Escape")
     await expect(command).toHaveCount(0)
   } finally {
+    await sdk.session.delete({ sessionID: created.id }).catch(() => undefined)
+  }
+})
+
+test("typing a slash query keeps focus when the skill catalog arrives", async ({ page, gotoSession, sdk }) => {
+  const created = await sdk.session.create({ title: `e2e slash refresh ${Date.now()}` }).then((r) => r.data)
+  if (!created?.id) throw new Error("Failed to create a slash refresh fixture")
+  let release!: () => void
+  const pending = new Promise<void>((resolve) => (release = resolve))
+  await page.route("**/skill", async (route) => {
+    const response = await route.fetch()
+    await pending
+    await route.fulfill({ response })
+  })
+
+  try {
+    await gotoSession(created.id)
+    const prompt = page.locator(promptSelector)
+    await prompt.click()
+    await prompt.pressSequentially("/c", { delay: 30 })
+    await expect(page.locator("#composer-slash-listbox")).toBeVisible()
+    const continuity = await prompt.evaluateHandle((editor) => {
+      const state = { blurred: false, detached: false }
+      const blur = () => (state.blurred = true)
+      editor.addEventListener("blur", blur)
+      const observer = new MutationObserver((records) => {
+        if (records.some((record) => Array.from(record.removedNodes).some((node) => node.contains(editor)))) {
+          state.detached = true
+        }
+      })
+      observer.observe(document.body, { childList: true, subtree: true })
+      return {
+        finish() {
+          observer.disconnect()
+          editor.removeEventListener("blur", blur)
+          return state
+        },
+      }
+    })
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname === "/skill")
+    release()
+    await refreshed
+    await page.keyboard.type("ompact", { delay: 30 })
+    expect(await continuity.evaluate((monitor) => monitor.finish())).toEqual({ blurred: false, detached: false })
+    await continuity.dispose()
+    await expect(prompt).toHaveText("/compact")
+    await expect(prompt).toBeFocused()
+    await expect(page.locator('[data-slash-id="session.compact"]')).toBeVisible()
+
+    const destination = page.getByRole("button", { name: "Search this project", exact: true })
+    const target = await destination.elementHandle()
+    if (!target) throw new Error("Missing focus destination")
+    await prompt.evaluate((editor, button) => {
+      editor.dispatchEvent(new InputEvent("input", { bubbles: true }))
+      button.focus()
+    }, target)
+    // Let post-input rendering finish; it must not reclaim deliberately moved focus.
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    )
+    await expect(destination).toBeFocused()
+    await expect(page.locator("#composer-slash-listbox")).toHaveCount(0)
+    await target.dispose()
+  } finally {
+    release()
     await sdk.session.delete({ sessionID: created.id }).catch(() => undefined)
   }
 })

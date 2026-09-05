@@ -1442,7 +1442,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const shellMode = store.mode === "shell"
     const slashMatch = shellMode ? undefined : slashTokenAt(rawText, cursorPosition)
-    const keepSlashFocus = !!slashMatch && document.activeElement === editorRef
 
     if (!shellMode) {
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
@@ -1477,15 +1476,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mirror.input = true
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
-    if (keepSlashFocus) {
-      requestAnimationFrame(() => {
-        if (document.activeElement !== editorRef) {
-          editorRef.focus({ preventScroll: true })
-          setCursorPosition(editorRef, cursorPosition)
-        }
-        if (slashTokenAt(editorRef.textContent ?? "", getCursorPosition(editorRef))) setStore("popover", "slash")
-      })
-    }
   }
 
   const setRangeEdge = (range: Range, edge: "start" | "end", offset: number) => {
@@ -2587,7 +2577,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 when={slashFlat().length > 0}
                 fallback={<div class="text-text-weak px-2 py-1">{language.t("prompt.popover.emptyCommands")}</div>}
               >
-                <For each={slashGrouped()}>
+                {/* A suggestion refresh must not suspend the session and detach the focused editor. */}
+                <For each={slashGrouped.latest}>
                   {(group) => (
                     <section class="workspace-composer__slash-group" aria-label={group.category}>
                       <header class="workspace-composer__slash-heading">{group.category}</header>

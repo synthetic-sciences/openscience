@@ -148,7 +148,10 @@ async function withArtifact(
 
     const steps = browser.page.locator('[data-slot="session-turn-collapsible-trigger-content"]')
     await expect(steps).toBeVisible()
-    await steps.click()
+    // Detailed mode already shows completed activity. Only expand a closed
+    // trace; an unconditional toggle would hide the artifact under test.
+    if ((await steps.getAttribute("aria-expanded")) !== "true") await steps.click()
+    await expect(steps).toHaveAttribute("aria-expanded", "true")
 
     const artifact = locate(browser.page)
     const metadata = browser.page
@@ -164,6 +167,53 @@ async function withArtifact(
     await browser.sdk.session.delete({ sessionID }).catch(() => undefined)
   }
 }
+
+test("artifacts remain inspectable across Detailed and Compact activity modes", async ({ page, sdk, gotoSession }) => {
+  const sessionID = await seedArtifact(sdk, {
+    kind: "sequence",
+    data: { id: "activity-mode-dna", sequence: "ACGTACGT", type: "dna", perRow: 8 },
+  })
+  try {
+    await gotoSession(sessionID)
+    const steps = page.locator('[data-slot="session-turn-collapsible-trigger-content"]')
+    const mode = page.getByRole("group", { name: "Activity view", exact: true })
+    const detailed = mode.getByRole("button", { name: "Detailed", exact: true })
+    const compact = mode.getByRole("button", { name: "Compact", exact: true })
+    const artifact = page.locator('[data-component="science-artifact"][data-kind="sequence"]')
+    const residues = artifact.locator('[data-slot="sequence-residues"]')
+
+    // The default is readable immediately, with no preliminary toggle.
+    await expect(detailed).toHaveAttribute("aria-pressed", "true")
+    await expect(steps).toHaveAttribute("aria-expanded", "true")
+    await expect(artifact).toBeVisible()
+    await expect(residues).toHaveText("ACGTACGT")
+
+    await compact.click()
+    await expect(compact).toHaveAttribute("aria-pressed", "true")
+    await expect(steps).toHaveAttribute("aria-expanded", "false")
+    await expect(artifact).toBeHidden()
+    await page.reload()
+    await expect(compact).toHaveAttribute("aria-pressed", "true")
+    await expect(steps).toHaveAttribute("aria-expanded", "false")
+
+    // Compact keeps the same artifact accessible through its disclosure.
+    await steps.click()
+    await expect(steps).toHaveAttribute("aria-expanded", "true")
+    await expect(artifact).toBeVisible()
+    await expect(residues).toHaveText("ACGTACGT")
+    await steps.click()
+    await detailed.click()
+    await expect(detailed).toHaveAttribute("aria-pressed", "true")
+    // Explicit reader collapse wins over a changed mode default.
+    await expect(steps).toHaveAttribute("aria-expanded", "false")
+    await expect(artifact).toBeHidden()
+    await steps.click()
+    await expect(artifact).toBeVisible()
+    await expect(residues).toHaveText("ACGTACGT")
+  } finally {
+    await sdk.session.delete({ sessionID }).catch(() => undefined)
+  }
+})
 
 test("notebook artifact metadata renders through the canonical kernel tool", async ({ page, sdk, gotoSession }) => {
   await withArtifact(
