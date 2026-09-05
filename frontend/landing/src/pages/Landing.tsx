@@ -2,8 +2,9 @@ import { useState } from "react"
 import photograph from "@/assets/lunar-lab.jpg"
 import { RESEARCH } from "@/data/research"
 import { CONNECTORS } from "@/data/connectors"
-import { Header, Footer, Mark, GITHUB, DOCS, COMMAND } from "@/components/Site"
+import { Header, Footer, Mark, GITHUB } from "@/components/Site"
 import Ace from "@/components/Ace"
+import Models from "@/components/Models"
 import "./landing.css"
 
 const FEATURED = new Set([
@@ -98,21 +99,6 @@ const WORK = [
     ],
   },
 ] as const
-const PROVIDERS = [
-  { name: "OpenAI", note: "Use your OpenAI API key or a supported account connection.", mark: "01" },
-  { name: "Anthropic", note: "Connect Anthropic and use Claude for your research sessions.", mark: "02" },
-  { name: "Google", note: "Connect your Google provider credentials to work with Gemini.", mark: "03" },
-  {
-    name: "Open weights",
-    note: "Connect compatible providers for models from DeepSeek, Moonshot, Z.AI, and more.",
-    mark: "04",
-  },
-  {
-    name: "Your local model",
-    note: "Use Ollama or an OpenAI-compatible local endpoint. Keep model inference on your own hardware.",
-    mark: "05",
-  },
-] as const
 const QUESTIONS = [
   [
     "What is OpenScience?",
@@ -138,21 +124,10 @@ const QUESTIONS = [
 export default function Landing() {
   const [expanded, setExpanded] = useState(false)
   const [chapter, setChapter] = useState(0)
-  const [provider, setProvider] = useState(0)
   const [paused, setPaused] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const [failed, setFailed] = useState(false)
   const work = WORK[chapter]
-  async function copy() {
-    const result = await navigator.clipboard?.writeText(COMMAND).then(
-      () => true,
-      () => false,
-    )
-    setCopied(Boolean(result))
-    setFailed(!result)
-  }
   return (
-    <div id="top" className={`landing${paused ? " motion-paused" : ""}`}>
+    <div id="top" className={`landing home-page${paused ? " motion-paused" : ""}`}>
       <a className="skip-link" href="#research">
         Skip to content
       </a>
@@ -160,19 +135,15 @@ export default function Landing() {
       <main>
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero-copy">
-            <p className="eyebrow entrance">A workbench for scientific research</p>
             <h1 id="hero-title" className="entrance">
-              For the
+              A workbench
               <br />
-              beautifully
+              for scientific
               <br />
-              <span>unsolved.</span>
+              research.
             </h1>
             <div className="hero-intro entrance">
-              <p>
-                OpenScience is a research agent that works with your papers, code, and experiments. Open source, on your
-                computer.
-              </p>
+              <p>Open source, on your computer.</p>
               <a href="/download" className="button button-light">
                 Get OpenScience
               </a>
@@ -202,7 +173,7 @@ export default function Landing() {
             </figcaption>
           </figure>
         </section>
-        <section className="institutions" aria-label="Research community">
+        <section className="institutions paper" aria-label="Research community">
           <div className="marquee-heading">
             <p className="eyebrow">Used by researchers at</p>
             <button className="motion-control" type="button" aria-pressed={paused} onClick={() => setPaused(!paused)}>
@@ -230,20 +201,13 @@ export default function Landing() {
             </div>
           </div>
         </section>
-        <section id="research" className="research paper section">
-          <div className="section-heading">
-            <p className="eyebrow">01 / The workbench</p>
-          </div>
+        <section id="research" className="research section">
           <div className="research-heading">
             <h2>
-              Stay with
+              Your research
               <br />
-              the question.
+              workspace.
             </h2>
-            <p>
-              OpenScience works in your project: reading papers, writing code, and running experiments. You can inspect
-              the work as it happens and pick up where you left off.
-            </p>
           </div>
           <div className="workflow-layout">
             <div
@@ -279,7 +243,6 @@ export default function Landing() {
                     document.getElementById(`chapter-${next}`)?.focus()
                   }}
                 >
-                  <span className="chapter-number">0{index + 1}</span>
                   <span>
                     <strong>{item.title}</strong>
                     <span className="chapter-description">{item.description}</span>
@@ -336,111 +299,79 @@ export default function Landing() {
               <div className="workspace-document">
                 <div>
                   <span>{work.label}</span>
-                  <span>Saved in your project</span>
                 </div>
                 <pre>{work.lines.join("\n")}</pre>
               </div>
             </div>
           </div>
-          <div className="section-tail">
-            <span>Papers, notebooks, and results saved in your project.</span>
-            <a className="text-link" href={`${DOCS}/#/openscience/workspace`}>
-              Explore the workspace
-            </a>
-          </div>
-        </section>
-        <section id="skills" className="capabilities section">
-          <div className="section-heading">
-            <p className="eyebrow">02 / Research tools</p>
-            <a className="text-link" href={`${DOCS}/#/openscience/skills`}>
-              Browse the skills
-            </a>
-          </div>
-          <div className="capability-heading">
-            <h2>
-              Tools for
-              <br />
-              your kind of science.
-            </h2>
-            <p>
-              Run an analysis, work through a simulation, or prepare a paper. OpenScience has research skills for the
-              details of each field.
-            </p>
-          </div>
-          <div className="skill-index">
-            {RESEARCH.map((field, index) => (
-              <details key={field.title} name="research-fields" open={index === 0}>
-                <summary>
-                  <span className="index-number">0{index + 1}</span>
-                  <h3>{field.title}</h3>
-                  <span className="skill-detail">{field.detail}</span>
-                  <span className="detail-toggle" aria-hidden="true">
-                    +
-                  </span>
-                </summary>
-                <div className="field-content">
-                  <div className="field-tasks">
-                    {field.tasks.map((task) => (
-                      <div key={task[0]}>
-                        <h4>{task[0]}</h4>
-                        <p>{task[1]}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="field-skills">
-                    <span className="eyebrow">Included skills</span>
-                    <div>
-                      {field.skills.map((skill) => (
-                        <a key={skill[0]} href={`${GITHUB}/tree/main/backend/cli/skills/${skill[1]}`}>
-                          {skill[0]}
-                        </a>
+          <div id="skills" className="capabilities">
+            <div className="capability-heading">
+              <h2>Research tools.</h2>
+            </div>
+            <div className="skill-index">
+              {RESEARCH.map((field) => (
+                <details key={field.title} name="research-fields">
+                  <summary>
+                    <h3>{field.title}</h3>
+                    <span className="skill-detail">{field.detail}</span>
+                    <span className="detail-toggle" aria-hidden="true">
+                      +
+                    </span>
+                  </summary>
+                  <div className="field-content">
+                    <div className="field-tasks">
+                      {field.tasks.map((task) => (
+                        <div key={task[0]}>
+                          <h4>{task[0]}</h4>
+                          <p>{task[1]}</p>
+                        </div>
                       ))}
                     </div>
+                    <div className="field-skills">
+                      <span className="eyebrow">Included skills</span>
+                      <div>
+                        {field.skills.map((skill) => (
+                          <a key={skill[0]} href={`${GITHUB}/tree/main/backend/cli/skills/${skill[1]}`}>
+                            {skill[0]}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="field-example">
+                      <span className="eyebrow">Try asking</span>
+                      <p>“{field.example}”</p>
+                    </div>
                   </div>
-                  <div className="field-example">
-                    <span className="eyebrow">Try asking</span>
-                    <p>“{field.example}”</p>
-                  </div>
-                </div>
-              </details>
-            ))}
-          </div>
-          <div className="toolkit databases">
-            <div className="toolkit-heading">
-              <h3>Scientific databases</h3>
-              <button
-                className="database-more"
-                type="button"
-                aria-expanded={expanded}
-                aria-controls="database-grid"
-                onClick={() => setExpanded(!expanded)}
-              >
-                {expanded ? "Show fewer" : `+${DATABASES.length - FEATURED.size} more`}
-              </button>
-            </div>
-            <div className="database-grid" id="database-grid">
-              {DATABASES.slice(0, expanded ? DATABASES.length : FEATURED.size).map((connector) => (
-                <a key={connector.id} href={connector.home} target="_blank" rel="noreferrer">
-                  <span className="database-logo">
-                    <img src={connector.logo} alt="" width="24" height="24" loading="lazy" />
-                  </span>
-                  <span>{connector.name}</span>
-                </a>
+                </details>
               ))}
             </div>
           </div>
-          <div className="toolkit-note">
-            <p>Add your own lab’s tools through MCP servers, plugins, and custom skills.</p>
-            <a className="text-link" href={`${DOCS}/#/openscience/skills`}>
-              Extend OpenScience
-            </a>
+        </section>
+        <section id="databases" className="databases paper section" aria-labelledby="databases-title">
+          <div className="toolkit-heading">
+            <h2 id="databases-title">Scientific databases.</h2>
+            <button
+              className="database-more"
+              type="button"
+              aria-expanded={expanded}
+              aria-controls="database-grid"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? "Show fewer" : `+${DATABASES.length - FEATURED.size} more`}
+            </button>
+          </div>
+          <div className="database-grid" id="database-grid">
+            {DATABASES.slice(0, expanded ? DATABASES.length : FEATURED.size).map((connector) => (
+              <a key={connector.id} href={connector.home} target="_blank" rel="noreferrer">
+                <span className="database-logo">
+                  <img src={connector.logo} alt="" width="24" height="24" loading="lazy" />
+                </span>
+                <span>{connector.name}</span>
+              </a>
+            ))}
           </div>
         </section>
-        <section id="models" className="models paper section">
-          <div className="section-heading">
-            <p className="eyebrow">03 / Models</p>
-            <span className="small-note">Open source. Model agnostic.</span>
-          </div>
+        <section id="models" className="models section">
           <div className="model-layout">
             <div className="model-copy">
               <h2>
@@ -448,38 +379,15 @@ export default function Landing() {
                 <br />
                 agnostic.
               </h2>
-              <p>
-                Use the model you prefer. Connect your API keys or provider account, or run a model on your machine. You
-                can change models between sessions.
-              </p>
-              <a className="text-link" href={`${DOCS}/#/openscience/models`}>
-                Find your model
-              </a>
-              <div className="model-note" aria-live="polite">
-                <span className="eyebrow">{PROVIDERS[provider].name}</span>
-                <p>{PROVIDERS[provider].note}</p>
-              </div>
+              <p>Connect your API keys, use a supported provider account, or run a model on your own machine.</p>
             </div>
-            <div className="provider-list" aria-label="Model provider examples">
-              {PROVIDERS.map((item, index) => (
-                <button key={item.name} aria-pressed={provider === index} onClick={() => setProvider(index)}>
-                  <span className="provider-number">{item.mark}</span>
-                  <span>{item.name}</span>
-                  <span className="provider-select" data-selected={provider === index} aria-hidden="true" />
-                </button>
-              ))}
-              <p>Your choice of model, in the same workspace.</p>
-            </div>
+            <Models />
           </div>
-          <Ace />
         </section>
+        <Ace />
         <section id="faq" className="questions section">
           <div>
-            <p className="eyebrow">04 / Questions</p>
             <h2>Good to know.</h2>
-            <a className="text-link" href={DOCS}>
-              Read the docs
-            </a>
           </div>
           <div className="faq-list">
             {QUESTIONS.map((question) => (
@@ -496,31 +404,10 @@ export default function Landing() {
           </div>
         </section>
         <section className="closing paper">
-          <h2>
-            What are you
-            <br />
-            working on?
-          </h2>
+          <h2>Get OpenScience.</h2>
           <a className="button button-dark" href="/download">
-            Get OpenScience
+            Download <span className="button-dot" aria-hidden="true" />
           </a>
-          <div className="install">
-            <code>{COMMAND}</code>
-            <button
-              type="button"
-              onClick={copy}
-              aria-label={copied ? "Install command copied" : "Copy install command"}
-            >
-              {copied ? "Copied ✓" : "Copy"}
-            </button>
-          </div>
-          <p className="copy-feedback" role="status">
-            {failed
-              ? "Select the command above to copy it manually."
-              : copied
-                ? "Copied. Paste it into your terminal to install."
-                : "Free and open source."}
-          </p>
         </section>
       </main>
       <Footer />

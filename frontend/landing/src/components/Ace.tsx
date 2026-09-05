@@ -2,13 +2,11 @@ import { DOCS } from "./Site"
 
 export default function Ace() {
   return (
-    <div id="ace" className="ace-offer">
+    <section id="ace" className="ace-offer paper section" aria-labelledby="ace-title">
       <div className="ace-copy">
-        <p className="eyebrow">Optional / Pay as you go</p>
-        <h3>OpenScience Ace.</h3>
+        <h2 id="ace-title">OpenScience Ace.</h2>
         <p>
-          Use managed models and research search with one Wallet. Sign in with Synthetic Sciences, choose a model, and
-          get to work. No individual provider keys to set up.
+          Managed models and research search, billed to one Wallet. Use Ace without setting up individual provider keys.
         </p>
         <div className="ace-actions">
           <a className="button button-dark" href="https://app.syntheticsciences.ai/billing">
@@ -51,6 +49,6 @@ export default function Ace() {
           separately before payment. Set a monthly usage limit or turn off future reloads in your account.
         </p>
       </div>
-    </div>
+    </section>
   )
 }

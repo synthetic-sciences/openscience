@@ -11,7 +11,9 @@ additional download styles in `src/pages/download.css`. Shared branding,
 navigation, footer, and Ace offer live in `src/components/`.
 
 The home page includes an interactive workflow preview, detailed research
-categories, an expandable database grid, and an institution marquee. Motion
+categories, an expandable database grid, and an institution marquee. A searchable
+model-picker preview uses a curated set of identities from the client catalog;
+selection updates its illustrative composer without making inference requests. Motion
 respects reduced-motion preferences and can be paused. Ace appears on the home page and links to the
 Synthetic Sciences account billing page; its offer describes usage billing
 and the fixed Wallet reload, not a monthly subscription.

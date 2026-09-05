@@ -14,7 +14,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   sections, a moving institution strip, interactive workflow previews, detailed
   research skills, expandable database tiles, and an oversized OpenScience footer.
   Center desktop downloads and command-line installation in a matching download
-  page. Introduce Ace’s pay-as-you-go Wallet billing on the home page.
+  page. Alternate black and white homepage sections, simplify navigation and copy,
+  and add a searchable model-picker preview. Introduce Ace’s pay-as-you-go
+  Wallet billing on the home page.
 
 - Keep the saved model-access choice stable through delayed Wallet reads and
   account switches, without letting an old request overwrite the new account UI.
