@@ -1,81 +1,86 @@
 ---
 title: "Quickstart"
-description: "Install OpenScience, set a provider key, and run your first research session."
-icon: "rocket"
+description: "Install OpenScience, choose model access, and complete your first research task."
 ---
 
-Five minutes from zero to a running research session. Use your own provider account, API key, or local model.
+Start with a small dataset or a few papers you know. This makes it easier to check the first result before giving OpenScience a larger task.
 
-<Steps>
-  <Step title="Install">
-    ```bash
-    npm install -g @synsci/openscience
-    ```
+## 1. Install and open OpenScience
 
-    Or without a global install, `npx synsci` runs the same workbench in one step. The install script (`curl -fsSL https://openscience.sh/install | bash`) drops a standalone `openscience` binary into `~/.openscience/bin`, and platform binaries are attached to every [GitHub release](https://github.com/synthetic-sciences/openscience/releases).
+Download the [desktop app](https://openscience.sh/download) for your operating system and open it. You can also install the command-line app with npm:
 
-    On macOS, the desktop app can be installed without opening Security Settings:
+```bash
+npm install -g @synsci/openscience
+openscience
+```
 
-    ```bash
-    curl -fsSL https://openscience.sh/install-desktop | bash
-    ```
+`openscience` opens the browser workspace. To use an existing project folder:
 
-    This verifies the published release checksum and app identity before installing OpenScience in Applications and removing the download quarantine attribute. Until OpenScience is distributed with an Apple Developer ID certificate, direct browser downloads remain subject to Gatekeeper.
+```bash
+openscience ~/research/my-project
+```
 
-    Linux requires kernel 5.1 or newer. Glibc builds require glibc 2.17 or newer, and musl builds are selected separately. CentOS 7's stock 3.10 kernel is not supported; use a newer host kernel or VM.
-  </Step>
-  <Step title="Connect a model">
-    ```bash
-    openscience keys add
-    ```
+`npx synsci` is an alternative launcher that installs and opens OpenScience. It requires Node.js and npm.
 
-    Choose a provider sign-in or save your API key locally. You can also skip this step and use a local model.
-  </Step>
-  <Step title="Choose model access">
-    ```bash
-    export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ...
-    ```
+## 2. Choose model access
 
-    Any provider works — bring your own key and it stays on your machine. `openscience keys add` gives you an interactive sign-in for providers that support it. See [Models](/openscience/models) for routing and reasoning-effort tiers.
-  </Step>
-  <Step title="Open the workspace">
-    ```bash
-    openscience
-    ```
+Open **Customize → Models** and choose the option that fits your setup:
 
-    The command starts a local server and opens the browser workspace: file tree, editor, and session history, with inline rendering for molecules, structures, genomes, and plots. See [Workspace](/openscience/workspace).
-  </Step>
-  <Step title="Give it a goal">
-    Ask for the outcome, not the steps. The default `research` agent plans, reads, codes, runs, and reports:
+| Option | What to do | What you pay for |
+| --- | --- | --- |
+| Ace | Sign in, select your funding workspace, and add Wallet funds or enable automatic reloads. | Usage charged to that workspace's Wallet. |
+| Your provider | Select **BYOK / Subscription**, then connect an API key or a supported provider sign-in. | Your provider's usage or subscription terms. |
+| Local model | Open **Customize → Local models**, connect a running endpoint, and select its model. | Your hardware; no Ace model charge. |
 
-    ```text
-    Reproduce the headline result of arXiv:2305.13245 on a small model
-    and tell me whether it holds at 125M parameters.
-    ```
+An OpenScience account is optional when using your own provider access or local models. See [Models](/openscience/models), [Local models](/openscience/local-models), and [Pricing](/openscience/pricing) for the details.
 
-    Prefer your system terminal? One-shot runs work without the browser:
+For terminal setup, run `openscience keys add` to connect a provider, or `openscience local add` to connect a local endpoint.
 
-    ```bash
-    openscience run "Profile train.py and find the input-pipeline bottleneck"
-    ```
-  </Step>
-</Steps>
+## 3. Open a project and add your inputs
 
-## Verify the install
+Create a project or open an existing folder in the workspace. Add the files the task needs and mention them in your request. Keep the original data and ask OpenScience to write results to a separate folder.
+
+Try this request with your own CSV:
+
+```text
+Inspect data/measurements.csv and explain each column. Check missing
+values, units, and duplicate rows. Save a data-quality report in results/.
+Do not change the original dataset.
+```
+
+Without a dataset, try:
+
+```text
+Help me plan a literature review on protein language models. Ask about
+my research question and inclusion criteria before searching.
+```
+
+## 4. Review and continue
+
+Read the response and open the files it produced. Check the cited sources, assumptions, and any reported limitations. Continue in the same conversation to refine the result:
+
+```text
+Make a plot of the missing-value counts. Explain which columns need
+attention before we compare treatment groups.
+```
+
+Use a new conversation for a separate question. Your previous conversations remain available in the project history.
+
+## Try a terminal run
+
+```bash
+openscience run "Summarize the files in this project and suggest a first analysis"
+openscience run --continue "Write the analysis plan to results/plan.md"
+```
+
+See [Sessions](/openscience/sessions) for attachments, continuing a specific conversation, and exporting your work.
+
+## Check your setup
 
 ```bash
 openscience --version
-openscience models        # configured providers and models
-openscience skill list    # installed skills
+openscience doctor
+openscience models
 ```
 
-## Where next
-
-<Columns cols={2}>
-  <Card title="Agents" icon="bot" href="/openscience/agents">
-    One adaptive Research agent, Normal and Ultra effort, and read-only plan mode.
-  </Card>
-  <Card title="Command reference" icon="terminal" href="/openscience/commands">
-    Every subcommand: runs, sessions, skills, server, lifecycle.
-  </Card>
-</Columns>
+If no model is available, finish connecting your provider or local endpoint, then select a model. If Ace is selected, check the funding workspace and Wallet in **Customize → Models**.

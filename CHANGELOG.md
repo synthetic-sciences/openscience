@@ -10,6 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Rebuild the public documentation around current installation, Ace pricing,
+  provider keys, local models, research workflows, and troubleshooting.
+
 - Update the homepage closing headline, simplify the photo wordmark, and add
   LinkedIn with external-link arrows to the footer’s Connect links.
 

@@ -1,48 +1,77 @@
 ---
-title: "Pricing"
-description: "How Ace records provider usage, Wallet charges, and pending holds."
-icon: "receipt"
+title: "Pricing and usage"
+description: "What the workbench costs, how Ace uses your Wallet, and how to control spending."
 ---
 
-Your Wallet contains purchased funds. Promotional or subscription allowances are separate benefits, not Wallet cash. Using your own provider key, eligible provider sign-in, or a local model does not debit your Ace Wallet.
+The OpenScience workbench is free and open source. Choose how to pay for the models and services you use:
 
-## Managed model charges
+| Model access | OpenScience account | How usage is paid |
+| --- | --- | --- |
+| Ace | Required | Pay as you go from the selected workspace's purchased Wallet. |
+| Your API key | Optional | Billed by your provider under its own rates. |
+| Supported provider sign-in | Optional | Subject to that provider account's access, limits, and terms. |
+| Local model | Optional | Runs on your hardware without an Ace model charge. |
 
-Ace has no additional 2% service fee on new managed model or Firecrawl requests. The charge depends on the upstream route shown in the model catalog:
+Using your own key, provider sign-in, or local model does not charge your Ace Wallet for model usage. Separately requested managed search or other paid services can still have costs.
 
-| Route | Billing basis |
+## Ace terms
+
+Ace gives you access to managed models and research search without setting up individual provider keys.
+
+| Item | Amount |
 | --- | --- |
-| OpenRouter | Provider-reported `usage.cost`, plus the configured cost of funding OpenRouter credits. |
-| Native Anthropic, Google, or xAI | Verified token usage at the reviewed published standard rate for that model and request time. |
-| Firecrawl | Verified `creditsUsed` multiplied by the configured USD-per-credit rate. |
+| Enable Ace | $0 authorization |
+| Monthly subscription | None |
+| Usage | Pay as you go |
+| Automatic Wallet reload | $20 when the purchased balance drops below $5, while Ace reloads are enabled |
+| Payment processing | Disclosed separately before payment |
 
-The current OpenRouter funding adjustment is **5.5%**, applied additively: $1.00 of reported provider spend debits $1.055. It is separate from payment-processing charges disclosed when you fund your Wallet. OpenRouter documents both its [usage-cost field](https://openrouter.ai/docs/cookbook/administration/usage-accounting) and [credit-funding fees](https://openrouter.ai/docs/faq#pricing-and-fees).
+A reload adds **$20 to your purchased Wallet balance**. The $20 is a funding amount, not a monthly plan or a promise of unlimited usage. Review the current terms in [your billing account](https://app.syntheticsciences.ai/billing) before authorizing payment.
 
-Native billing uses reported input, output, cache-read, and cache-write counts, including each provider's reasoning-token and long-context rules. It follows the reviewed [Anthropic](https://platform.claude.com/docs/en/about-claude/pricing), [Google](https://ai.google.dev/gemini-api/docs/pricing), or [xAI](https://docs.x.ai/developers/pricing) rate schedule, not an assertion about a private upstream invoice. Unpriced add-ons and premium service tiers are rejected before dispatch. A native route is used only when its access and pricing are configured; Grok and Meta otherwise retain their OpenRouter routes.
+You can use purchased Wallet funds for available managed models without leaving automatic reloads enabled. Availability depends on the account and its current balance.
 
-## Read model rates
+## Check model rates before a task
 
-The Rates and limits disclosure in Customize → Models displays USD per million tokens. Cached input is a separate class, not extra ordinary input. Long-context pricing can change the rate for the whole request before the context window is full.
+Open **Customize → Models**, choose a model, and open **Rates and limits**. Prices are shown in USD per million tokens. Input, output, and cached input can have different rates; some models also have higher rates for long requests.
 
-For example, the reviewed OpenRouter GPT-5.6 Sol schedule is:
+The context window is how much material a model can handle in one request. A pricing threshold is where a different rate begins. They need not be the same number.
 
-| Input tier | Input | Output | Cached input |
-| --- | ---: | ---: | ---: |
-| Up to and including 272k input tokens | $2.00 | $10.00 | $0.20 |
-| Above 272k input tokens | $4.00 | $15.00 | $0.40 |
+For an illustrative model charging $2 per million input tokens and $10 per million output tokens, 10,000 input tokens and 2,000 output tokens would cost $0.04 at those rates. This is an example, not an OpenScience model quote. Use the rates displayed for your selected model and the final Wallet entry for actual charges.
 
-These are upstream rates before the funding adjustment. The **1.05M-token context capacity is not the pricing threshold**. The [OpenRouter model catalog](https://openrouter.ai/api/v1/models) defines the current tiers; the final charge uses the provider's actual reported cost, not a reconstruction from this example.
+Long conversations may send earlier context again. Larger inputs, longer outputs, extra research branches, and external searches can all increase a task's total cost. Selecting a local model removes the model usage charge from Ace; it does not make separately connected services free.
 
-## Research search
+## Research search and other services
 
-With no personal Firecrawl key connected, a signed-in funded workspace uses managed Firecrawl by default. The configured rate is currently **$0.001 per verified Firecrawl credit**: a response reporting two credits costs $0.002. A reported zero costs zero. This is the configured rate, not a claim that Synthetic Sciences' private plan or invoice has been verified.
+Managed research search uses the selected workspace's Wallet. A connected personal search account uses that service's access and billing instead. If search access is unavailable, OpenScience may return a limited fallback; check the response before assuming the search was complete.
 
-Firecrawl reports `creditsUsed` on its [search response](https://docs.firecrawl.dev/api-reference/endpoint/search). Its [billing rules](https://docs.firecrawl.dev/billing) distinguish search from optional scraping and special sources. Managed enrichment caps basic content retrieval at three results, disables paid PDF parsing and enhanced proxies, and leaves explicit X/Twitter searches as snippets because their scraping has a separate rate.
+Compute and other services you connect have their own terms. Confirm the resources and budget before asking for a paid experiment. Ace model access does not include unlimited external services or compute.
 
-## Holds are not final charges
+## Choose which Wallet pays
 
-A request may reserve funds before it runs. After verified usage arrives, Ace settles the actual charge once and releases any unused reservation. Amounts are recorded in integer micro-USD; a small request is not rounded up to a full cent.
+Check **Customize → General → Funding workspace** before starting paid work. Workspaces have separate balances. OpenScience does not automatically switch to another workspace's Wallet when the selected one cannot fund a request.
 
-If provider usage is missing or invalid, the estimate does not become the final bill. Firecrawl keeps a pending operation and hold for reconciliation; the response identifies pending provider usage. Native model requests without recoverable usage remain pending for up to one hour, after which the unresolved cost is absorbed and the hold released. A pending hold can reduce available funds without being a completed charge.
+Changing the funding workspace applies to subsequent requests. A request already in progress keeps the workspace it started with.
 
-Use the Wallet control in **Customize → Models → Ace** to review your purchased balance and account details. Keep the operation ID when asking about a pending search charge.
+```bash
+openscience status
+openscience wallet show
+openscience wallet topup
+```
+
+`wallet topup` opens billing so you can review and confirm a payment.
+
+## Control spending
+
+Open **Wallet** from **Customize → Models**, or visit [billing](https://app.syntheticsciences.ai/billing), to review funds, set a monthly usage limit, and turn off future reloads.
+
+**Switching to BYOK / Subscription does not turn off Ace automatic reloads.** Manage the reload authorization in Wallet. Turning off future reloads does not reverse usage that has already occurred.
+
+Start expensive work with a small pilot. State a budget and ask for approval before expanding an experiment. Prompt instructions help scope the task; use account controls for spending limits.
+
+## Pending amounts and final charges
+
+A request may temporarily reserve Wallet funds. After usage is confirmed, the final charge is recorded and unused reserved funds are released. A pending amount can reduce the available balance before it becomes a completed charge.
+
+If a request fails or times out, review its partial output before retrying: work may already have occurred. Keep the request or operation identifier, time, and selected workspace when asking about an unexpected or pending charge through your account's support options.
+
+`openscience stats` shows local session usage. Treat it as a research usage summary; use Wallet or your provider's billing records to reconcile payments.
