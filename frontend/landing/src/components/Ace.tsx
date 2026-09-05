@@ -2,7 +2,7 @@ import { DOCS } from "./Site"
 
 export default function Ace() {
   return (
-    <div className="ace-offer">
+    <div id="ace" className="ace-offer">
       <div className="ace-copy">
         <p className="eyebrow">Optional / Pay as you go</p>
         <h3>OpenScience Ace.</h3>

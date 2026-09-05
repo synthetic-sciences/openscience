@@ -11,7 +11,7 @@ export function Mark() {
 export function Header({ download = false }: { download?: boolean }) {
   return (
     <header className="site-header">
-      <a className="brand" href="https://syntheticsciences.ai" aria-label="Synthetic Sciences home">
+      <a className="brand" href="/" aria-label="OpenScience home">
         <Mark />
         <span>Synthetic Sciences</span>
       </a>
@@ -50,7 +50,7 @@ export function Footer() {
               ["Workspace", "/#research"],
               ["Skills & tools", "/#skills"],
               ["Models", "/#models"],
-              ["OpenScience Ace", "/download#ace"],
+              ["OpenScience Ace", "/#ace"],
             ],
           },
           {

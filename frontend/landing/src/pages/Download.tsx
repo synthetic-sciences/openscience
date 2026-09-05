@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { Header, Footer, GITHUB, DOCS, COMMAND } from "@/components/Site"
-import Ace from "@/components/Ace"
 import "./landing.css"
 import "./download.css"
 
@@ -125,11 +124,6 @@ function Copy({ command, label }: { command: string; label: string }) {
 
 export default function Download() {
   const [target, setTarget] = useState<Target>(detect)
-  const selected = useRef(false)
-  const chooseTarget = (value: Target) => {
-    selected.current = true
-    setTarget(value)
-  }
 
   useEffect(() => {
     const title = document.title
@@ -205,7 +199,7 @@ export default function Download() {
     void data.getHighEntropyValues(["architecture"]).then(
       (value) => {
         const architecture = value.architecture?.toLowerCase()
-        if (!architecture || selected.current || !/arm|^(x86|x64|x86_64|amd64)$/.test(architecture)) return
+        if (!architecture || !/arm|^(x86|x64|x86_64|amd64)$/.test(architecture)) return
         const hinted = architecture.includes("arm")
         setTarget(platform === "linux" ? (hinted ? "linux-arm64" : "linux-x64") : hinted ? "mac-arm64" : "mac-x64")
       },
@@ -214,7 +208,6 @@ export default function Download() {
   }, [])
 
   const download = DOWNLOADS[target]
-  const options = (Object.keys(DOWNLOADS) as Target[]).filter((item) => DOWNLOADS[item].platform === download.platform)
 
   return (
     <div id="top" className="landing download-page">
@@ -225,134 +218,61 @@ export default function Download() {
       <main>
         <section id="download" className="download-intro section" aria-labelledby="download-title">
           <div className="download-copy">
-            <a className="text-link" href="/">
-              OpenScience
-            </a>
-            <h1 id="download-title">
-              Get
-              <br />
-              OpenScience.
-            </h1>
-            <p>
-              The desktop app and command line.
-              <br />
-              Free and open source.
-            </p>
-            <div className="download-shortcuts">
-              <a href="#command-line">Install from the terminal</a>
-              <a href="#ace">Explore Ace</a>
-            </div>
-          </div>
-          <div className="desktop-download paper">
-            <div className="download-card-heading">
-              <p className="eyebrow">Desktop app</p>
-              <a href={`${GITHUB}/releases/latest`}>Release notes</a>
-            </div>
-            <h2>OpenScience for {download.label}.</h2>
-            <p className="download-description">Papers, code, and experiments in one app.</p>
-            <div className="platform-selector" role="group" aria-label="Operating system">
-              {PLATFORMS.map((platform) => (
-                <button
-                  key={platform.id}
-                  type="button"
-                  aria-pressed={download.platform === platform.id}
-                  onClick={() => chooseTarget(platform.target)}
-                >
-                  <PlatformMark platform={platform.id} />
-                  {platform.label}
-                  <span className="selection-dot" aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-            <div className="architecture-selector" role="group" aria-label="Processor architecture">
-              <span className="eyebrow">Processor</span>
-              <div>
-                {options.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={target === option}
-                    onClick={() => chooseTarget(option)}
-                  >
-                    <span className="selection-dot" aria-hidden="true" />
-                    {DOWNLOADS[option].detail}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <h1 id="download-title">Get OpenScience.</h1>
+            <p>Free, open-source software for scientific research.</p>
             <a
-              className="button button-dark desktop-action"
+              className="button button-light desktop-action"
               href={`${RELEASE}/${download.file}`}
               aria-label={`Download OpenScience for ${download.label}, ${download.detail}`}
             >
-              Download for {download.label}
+              Download for {download.label} ({download.detail})
               <span className="button-dot" aria-hidden="true" />
             </a>
-            <div className="download-file" aria-live="polite">
-              <span>
-                {download.kind} · {download.detail}
-              </span>
-              <span>Free download</span>
-            </div>
-            <div className="platform-instructions" aria-live="polite">
-              {download.platform === "mac" && (
-                <p>Open the disk image and drag OpenScience into Applications. Signed and notarized for macOS.</p>
-              )}
-              {download.platform === "windows" && (
-                <p>
-                  This installer is unsigned. Smart App Control may block it, and SmartScreen may warn. Keep Windows
-                  security protections enabled.
+          </div>
+          <div className="platform-downloads" aria-label="All desktop downloads">
+            {PLATFORMS.map((platform) => (
+              <div className="platform-card" key={platform.id}>
+                <h2>
+                  <PlatformMark platform={platform.id} />
+                  {platform.label}
+                </h2>
+                <div className="platform-files">
+                  {(Object.keys(DOWNLOADS) as Target[])
+                    .filter((key) => DOWNLOADS[key].platform === platform.id)
+                    .map((key) => (
+                      <a
+                        key={key}
+                        href={`${RELEASE}/${DOWNLOADS[key].file}`}
+                        aria-label={`Download OpenScience for ${DOWNLOADS[key].label}, ${DOWNLOADS[key].detail}`}
+                      >
+                        <span className="file-name">
+                          <span className="selection-dot" aria-hidden="true" />
+                          {DOWNLOADS[key].detail}
+                        </span>
+                        <span className="file-format">.{DOWNLOADS[key].file.split(".").pop()}</span>
+                      </a>
+                    ))}
+                </div>
+                <p className="platform-instructions">
+                  {platform.id === "mac" && "Open the disk image and drag into Applications. Signed and notarized."}
+                  {platform.id === "windows" &&
+                    "Unsigned installer. Smart App Control may block it; SmartScreen may warn. Keep Windows security protections enabled."}
+                  {platform.id === "linux" && "Make the AppImage executable, then open it."}
                 </p>
-              )}
-              {download.platform === "linux" && (
-                <p>Make the AppImage executable in your file manager’s permissions, then open it.</p>
-              )}
-            </div>
+              </div>
+            ))}
           </div>
         </section>
-        <section id="command-line" className="command-section section" aria-labelledby="command-title">
-          <div className="command-copy">
-            <p className="eyebrow">Command line</p>
-            <h2 id="command-title">Install with npm.</h2>
-            <p>Install with npm, then run OpenScience from your project folder. Requires Node.js and npm.</p>
-            <a className="text-link" href={`${DOCS}/#/openscience/commands`}>
-              CLI documentation
-            </a>
-          </div>
+        <section id="command-line" className="command-section paper section" aria-labelledby="command-title">
+          <h2 id="command-title">Install from your terminal.</h2>
+          <p className="command-description">Requires Node.js and npm.</p>
           <div className="command-steps">
             <Copy command={COMMAND} label="01 / Install" />
-            <Copy command="openscience" label="02 / Open in your project" />
-            <a className="text-link" href={`${GITHUB}/releases`}>
-              All releases and downloads
-            </a>
+            <Copy command="openscience" label="02 / Run in your project folder" />
           </div>
-        </section>
-        <section id="ace" className="download-ace paper section" aria-label="OpenScience Ace">
-          <Ace />
-          <div className="ace-setup">
-            <p className="eyebrow">Connect Ace in the app</p>
-            <p>
-              Open <strong>Customize → Models → Ace</strong>, sign in, and choose your funding workspace.
-            </p>
-            <a className="text-link" href={`${DOCS}/#/openscience/gateway`}>
-              Setup guide
-            </a>
-          </div>
-        </section>
-        <section className="download-help section">
-          <div>
-            <p className="eyebrow">Your own providers</p>
-            <h2>Already have a model?</h2>
-          </div>
-          <div>
-            <p>
-              Connect an API key, a supported provider account, or a local model in Customize. You can use OpenScience
-              without an Ace account.
-            </p>
-            <a className="text-link" href={`${DOCS}/#/openscience/models`}>
-              See the connection options
-            </a>
-          </div>
+          <a className="text-link" href={`${DOCS}/#/openscience/commands`}>
+            CLI documentation
+          </a>
         </section>
       </main>
       <Footer />
