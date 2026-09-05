@@ -17,6 +17,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   checkout instead of opening a broken tab.
 - Fixed 62 dangling script and reference paths in bundled skills; the
   `scientific-schematics` generator is now addressed by its skill path.
+- openscience.sh is a short page again: the hero, one product panel, how it
+  works, the sources it searches, why it is safe to run, five questions.
+- Every workspace font size now comes from the token scale (13px is named
+  `--font-size-medium`; half-pixel sizes snapped to the nearest step), and the
+  Models panel says what auto-reload does.
 
 ## v2.0.70 — 2026-09-04
 
