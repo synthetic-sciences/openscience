@@ -190,7 +190,7 @@
         "@synsci/ui": "workspace:*",
         "@synsci/util": "workspace:*",
         "codemirror": "6.0.2",
-        "ghostty-web": "0.3.0",
+        "ghostty-web": "0.4.0",
         "igv": "^3.8.4",
         "katex": "^0.17.0",
         "luxon": "catalog:",
@@ -277,7 +277,6 @@
     "gray-matter@4.0.3": "tooling/patches/gray-matter@4.0.3.patch",
     "@ai-sdk/xai@2.0.51": "tooling/patches/@ai-sdk%2Fxai@2.0.51.patch",
     "@ai-sdk/anthropic@2.0.57": "tooling/patches/@ai-sdk%2Fanthropic@2.0.57.patch",
-    "ghostty-web@0.3.0": "tooling/patches/ghostty-web@0.3.0.patch",
     "@openrouter/ai-sdk-provider@1.5.2": "tooling/patches/@openrouter%2Fai-sdk-provider@1.5.2.patch",
   },
   "overrides": {
@@ -1432,7 +1431,7 @@
 
     "get-tsconfig": ["get-tsconfig@4.14.0", "", { "dependencies": { "resolve-pkg-maps": "^1.0.0" } }, "sha512-yTb+8DXzDREzgvYmh6s9vHsSVCHeC0G3PI5bEXNBHtmshPnO+S5O7qgLEOn0I5QvMy6kpZN8K1NKGyilLb93wA=="],
 
-    "ghostty-web": ["ghostty-web@0.3.0", "", {}, "sha512-SAdSHWYF20GMZUB0n8kh1N6Z4ljMnuUqT8iTB2n5FAPswEV10MejEpLlhW/769GL5+BQa1NYwEg9y/XCckV5+A=="],
+    "ghostty-web": ["ghostty-web@0.4.0", "", {}, "sha512-0puDBik2qapbD/QQBW9o5ZHfXnZBqZWx/ctBiVtKZ6ZLds4NYb+wZuw1cRLXZk9zYovIQ908z3rvFhexAvc5Hg=="],
 
     "giget": ["giget@3.3.1", "", { "bin": { "giget": "dist/cli.mjs" } }, "sha512-r+mvuDjrjMpsdw46Kmeydb8bdHm7wOKw8wNBtTndkjbPjgAp5oUJUxRE76wZFknxIPokfWvep2qSXK37aXE6zg=="],
 

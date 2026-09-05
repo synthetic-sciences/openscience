@@ -57,7 +57,7 @@
     "@synsci/ui": "workspace:*",
     "@synsci/util": "workspace:*",
     "codemirror": "6.0.2",
-    "ghostty-web": "0.3.0",
+    "ghostty-web": "0.4.0",
     "igv": "^3.8.4",
     "katex": "^0.17.0",
     "luxon": "catalog:",
