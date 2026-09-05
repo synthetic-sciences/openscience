@@ -4,8 +4,10 @@ Marketing site for OpenScience — the source behind [openscience.sh](https://op
 
 Standalone Vite + React + Tailwind project (not part of the monorepo bun
 workspace, so its deps stay isolated). The whole page is one file:
-`src/pages/Landing.tsx`, styled by `src/index.css` (warm-dark palette,
-self-hosted CMU Concrete, dither/grain/atmosphere utilities, scroll reveals).
+`src/pages/Landing.tsx`, styled by the scoped `src/pages/landing.css`
+(monochrome editorial layout, self-hosted CMU Concrete, interactive workflow
+preview, and continuous marquees). Shared download-page styles remain in
+`src/index.css`. Motion respects reduced-motion preferences and can be paused.
 
 ```bash
 bun install
@@ -14,8 +16,9 @@ bun run build            # production build → dist/
 ```
 
 `public/install` is served at `openscience.sh/install`, so
-`curl -fsSL https://openscience.sh/install | bash` works. Screenshots in
-`src/assets/` are captured from the real workspace UI.
+`curl -fsSL https://openscience.sh/install | bash` works. The home page uses a credited archival laboratory photograph; see
+`src/assets/ATTRIBUTIONS.md`. The interactive workspace panel is labeled as an
+illustrative workflow, not a captured session.
 
 `public/install-desktop` is the certificate-free macOS bootstrap. It verifies
 the release checksum and app identity, installs the app in Applications,

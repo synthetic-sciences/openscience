@@ -10,6 +10,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Redesign openscience.sh around archival research photography, monochrome editorial
+  sections, moving institution and source strips, interactive workflow previews,
+  expanded skill and BioNeMo coverage, and an oversized OpenScience footer.
+
 - Keep the saved model-access choice stable through delayed Wallet reads and
   account switches, without letting an old request overwrite the new account UI.
 - Recover once when a retained conversation tail still exceeds the context limit

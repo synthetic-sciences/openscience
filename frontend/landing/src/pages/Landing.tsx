@@ -1,578 +1,703 @@
-import { useEffect, useState } from "react"
-import heroPlate from "@/assets/hero.webp"
+import { useState } from "react"
+import photograph from "@/assets/lunar-lab.jpg"
 import { CONNECTORS } from "@/data/connectors"
-import Nav from "@/Nav"
-
-/* OpenScience. CMU Concrete, warm dark, one coral accent.
-   The page is deliberately short: the hero says what it is, one panel shows
-   the product, three lines say how it works, the sources it can search, why
-   it is safe to run, a few questions, and a footer. No decoration that does
-   not carry information. */
-
-const H_BIG = "text-[clamp(30px,3.4vw,48px)] leading-[1.06] tracking-[-0.02em]"
-const H_MED = "text-[22px] sm:text-[26px] leading-[1.14] tracking-[-0.012em]"
-const P = "text-[14px] leading-[1.7] text-foreground/75"
-const P_BIG = "text-[16px] sm:text-[17px] leading-[1.7] text-foreground/75"
+import "./landing.css"
 
 const GITHUB = "https://github.com/synthetic-sciences/openscience"
-const DOCS = "https://github.com/synthetic-sciences/OpenScience#readme"
-const RELEASES = `${GITHUB}/releases`
-
-const MODELS = [
-  ["5.6 Sol", "OpenAI", "Reasoning"],
-  ["5.6 Terra", "OpenAI", "Reasoning"],
-  ["Opus 5", "Anthropic", "Reasoning"],
-  ["Kimi K3", "Moonshot AI", "Reasoning"],
-  ["GLM 5.3", "Z.AI", "Reasoning"],
-  ["DeepSeek V4 Flash", "DeepSeek", "General"],
+const DOCS = "https://openscience.sh/docs"
+const COMMAND = "npm install -g @synsci/openscience"
+const PHOTO = "https://www.nasa.gov/image-article/scientists-lunar-chemistry-laboratory/"
+const INSTITUTIONS = [
+  ["harvard", "Harvard University"],
+  ["mit", "MIT"],
+  ["stanford", "Stanford University"],
+  ["fermilab", "Fermilab"],
+  ["yale", "Yale University"],
+  ["oxford", "University of Oxford"],
+  ["nus", "National University of Singapore"],
+  ["iit-bombay", "IIT Bombay"],
+  ["iit-delhi", "IIT Delhi"],
 ] as const
-
-const LOGOS = [
-  { id: "harvard", src: "/logos/harvard.png", alt: "Harvard University" },
-  { id: "mit", src: "/logos/mit.png", alt: "Massachusetts Institute of Technology" },
-  { id: "stanford", src: "/logos/stanford.png", alt: "Stanford University" },
-  { id: "fermilab", src: "/logos/fermilab.png", alt: "Fermilab" },
-  { id: "yale", src: "/logos/yale.png", alt: "Yale University" },
-  { id: "oxford", src: "/logos/oxford.png", alt: "University of Oxford" },
-  { id: "nus", src: "/logos/nus.png", alt: "National University of Singapore" },
-  { id: "iit-bombay", src: "/logos/iit-bombay.png", alt: "IIT Bombay" },
-  { id: "iit-delhi", src: "/logos/iit-delhi.png", alt: "IIT Delhi" },
+const WORK = [
+  {
+    title: "Read the literature",
+    description:
+      "Follow a question through papers, datasets, and primary sources. Keep the evidence beside the conversation.",
+    prompt: "What do we know about protein design under limited experimental data? Start with the literature.",
+    heading: "A good question starts with the evidence.",
+    body: "Search the literature, compare methods, and collect the sources worth reading closely.",
+    files: ["literature.md", "references.bib", "research-question.md"],
+    activity: ["Search arXiv and PubMed", "Compare methods and limitations", "Save a cited research brief"],
+    label: "literature.md",
+    lines: [
+      "# Research brief",
+      "",
+      "01  Structure-conditioned design",
+      "02  Sequence-based approaches",
+      "03  Where evidence is still missing",
+      "",
+      "Sources → references.bib",
+    ],
+  },
+  {
+    title: "Work through the experiment",
+    description:
+      "Move from the method to code, notebooks, and scientific tools. Run the work and keep the outputs in your project.",
+    prompt: "Build a reproducible baseline. Keep the held-out data separate and record the environment.",
+    heading: "Make the method something you can run.",
+    body: "Write the analysis, inspect the outputs, and work through the result with your files and terminal in reach.",
+    files: ["analysis.ipynb", "environment.yml", "results/"],
+    activity: ["Inspect the project data", "Run the baseline analysis", "Save code, environment, and outputs"],
+    label: "analysis.ipynb",
+    lines: [
+      "# Baseline experiment",
+      "",
+      "[1] Load and validate inputs",
+      "[2] Define the held-out split",
+      "[3] Run the baseline",
+      "[4] Inspect the result",
+      "",
+      "Outputs → results/",
+    ],
+  },
+  {
+    title: "Bring it to the page",
+    description:
+      "Turn the work into a manuscript, with figures, citations, and the underlying analysis still close at hand.",
+    prompt: "Draft the methods from the actual analysis. Link each figure to its source and flag unsupported claims.",
+    heading: "Write with the work still in view.",
+    body: "Assemble the manuscript from your project. Review the claims, revisit the evidence, and refine the figures.",
+    files: ["manuscript.tex", "figures/", "references.bib"],
+    activity: ["Draft the methods section", "Connect figures and citations", "Review claims against the evidence"],
+    label: "manuscript.tex",
+    lines: [
+      "# Methods",
+      "",
+      "1. Data and inclusion criteria",
+      "2. Experimental procedure",
+      "3. Evaluation protocol",
+      "",
+      "Figures → figures/",
+      "Citations → references.bib",
+    ],
+  },
 ] as const
-
-function Cta({
-  children,
-  href = "#",
-  variant = "primary",
-  arrow = true,
-  external = false,
-  className = "",
-}: {
-  children: React.ReactNode
-  href?: string
-  variant?: "primary" | "ghost"
-  arrow?: boolean
-  external?: boolean
-  className?: string
-}) {
-  const base =
-    "group/cta inline-flex items-center justify-center gap-2.5 h-11 px-6 text-[14px] leading-none select-none"
-  const look =
-    variant === "primary"
-      ? "btn-primary"
-      : "border border-foreground/25 text-foreground/90 hover:border-foreground/55 hover:bg-foreground/[0.04] backdrop-blur-[2px] transition-colors duration-300"
+const SKILLS = [
+  {
+    title: "Molecular biology",
+    detail: "Sequences, structures, and the questions between them.",
+    tools: "Biopython · Scanpy · scvi-tools · AnnData",
+    text: "Work with biological sequences, single-cell data, and experimental workflows, with domain-specific procedures available to the agent.",
+  },
+  {
+    title: "Chemistry & materials",
+    detail: "From a molecule to its properties.",
+    tools: "RDKit · DeepChem · pymatgen · molecular dynamics",
+    text: "Prepare molecules, explore chemical properties, and work through materials simulations with specialist research skills.",
+  },
+  {
+    title: "Machine learning",
+    detail: "Build the baseline. Understand the result.",
+    tools: "PyTorch · Transformers · DeepSpeed · PEFT",
+    text: "Train, fine-tune, and evaluate models. Keep the experiment configuration, code, and analysis together.",
+  },
+  {
+    title: "Data & statistics",
+    detail: "Look closely at what the data says.",
+    tools: "Polars · statsmodels · PyMC · scikit-learn",
+    text: "Clean datasets, fit statistical models, and test assumptions before turning an analysis into a claim.",
+  },
+  {
+    title: "Papers & publication",
+    detail: "Make the work legible to the next person.",
+    tools: "LaTeX · Zotero · literature review · scientific writing",
+    text: "Find and manage citations, draft manuscripts, and prepare figures with the project's evidence close at hand.",
+  },
+] as const
+const PROVIDERS = [
+  { name: "OpenAI", note: "Use your OpenAI API key or a supported account connection.", mark: "01" },
+  { name: "Anthropic", note: "Connect Anthropic and use Claude for your research sessions.", mark: "02" },
+  { name: "Google", note: "Connect your Google provider credentials to work with Gemini.", mark: "03" },
+  {
+    name: "Open weights",
+    note: "Connect compatible providers for models from DeepSeek, Moonshot, Z.AI, and more.",
+    mark: "04",
+  },
+  {
+    name: "Your local model",
+    note: "Use Ollama or an OpenAI-compatible local endpoint. Keep model inference on your own hardware.",
+    mark: "05",
+  },
+] as const
+const QUESTIONS = [
+  [
+    "What is OpenScience?",
+    "An open-source AI workbench for scientific research. It brings a research agent, papers, project files, code, notebooks, scientific tools, and writing into one local workspace.",
+  ],
+  [
+    "Do I need an OpenScience account?",
+    "No. Install OpenScience and connect the model providers and tools you want to use. You can bring your own API keys, supported provider accounts, or local models.",
+  ],
+  [
+    "Is it free?",
+    "OpenScience is open source under Apache 2.0. Model providers, hosted scientific tools, and compute services may charge for usage. Those costs depend on the services you connect.",
+  ],
+  [
+    "Where does my research live?",
+    "Your project files and local workspace stay on your computer. When you use a remote model or scientific service, the inputs needed for that request are sent to that service. You choose the providers and permissions.",
+  ],
+  [
+    "Can I add my lab’s tools?",
+    "Yes. Add your own skills, MCP servers, plugins, agents, and commands. Use the TypeScript SDK to connect private tools and research infrastructure.",
+  ],
+] as const
+function Arrow() {
   return (
-    <a
-      href={href}
-      className={`${base} ${look} ${className}`}
-      {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
-    >
-      {children}
-      {arrow ? (
-        <svg
-          width="14"
-          height="10"
-          viewBox="0 0 14 10"
-          aria-hidden
-          className="transition-transform duration-300 group-hover/cta:translate-x-[3px]"
-        >
-          <path d="M0 5h12M8.5 1 13 5l-4.5 4" stroke="currentColor" strokeWidth="1.2" fill="none" />
-        </svg>
-      ) : null}
-    </a>
+    <span aria-hidden="true" className="arrow">
+      ↗
+    </span>
   )
 }
-
-function OsMark({ size = 15 }: { size?: number }) {
+function Mark() {
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden className="text-foreground/85">
-      <circle cx="8" cy="8" r="6.6" stroke="currentColor" strokeWidth="1" opacity="0.9" />
-      <ellipse
-        cx="8"
-        cy="8"
-        rx="6.6"
-        ry="2.6"
-        stroke="currentColor"
-        strokeWidth="0.8"
-        opacity="0.45"
-        transform="rotate(-24 8 8)"
-      />
-      <circle cx="8" cy="8" r="1.4" fill="currentColor" />
-      <circle cx="13.35" cy="4.6" r="1.5" fill="hsl(var(--accent-coral))" />
+    <svg className="science-mark" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" />
+      <ellipse cx="12" cy="12" rx="9" ry="3.5" stroke="currentColor" transform="rotate(-40 12 12)" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
     </svg>
   )
 }
 
-const HERO_NOISE =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")"
-
-/* Veil: a light uniform scrim softens the plate; a soft top-left shield sits
-   under the wordmark and a bottom-right shield under the copy, so the beam
-   and the ship at bottom-left stay in view. */
-const HERO_VEIL = [
-  "linear-gradient(hsl(30 14% 7% / 0.2), hsl(30 14% 7% / 0.2))",
-  "radial-gradient(ellipse 55% 45% at 5% 6%, hsl(30 14% 7% / 0.8) 0%, hsl(30 14% 7% / 0.4) 55%, transparent 85%)",
-  "radial-gradient(ellipse 85% 75% at 96% 94%, hsl(var(--background)) 0%, hsl(30 14% 7% / 0.84) 38%, hsl(30 14% 7% / 0.28) 66%, transparent 90%)",
-  "linear-gradient(180deg, hsl(28 18% 4% / 0.5) 0%, transparent 15%)",
-].join(", ")
-
-function Hero() {
-  return (
-    <section className="relative h-screen min-h-[680px] w-full bg-background overflow-hidden grain">
-      <div className="absolute inset-0" aria-hidden>
-        <div
-          className="absolute inset-0 bg-background bg-no-repeat [background-position:62%_center] [background-size:cover]"
-          style={{ backgroundImage: `url(${heroPlate})` }}
-        />
-        <div className="absolute inset-0 opacity-[0.32] mix-blend-overlay" style={{ backgroundImage: HERO_NOISE }} />
-        <div className="absolute inset-0" style={{ background: HERO_VEIL }} />
-      </div>
-
-      <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-[5]"
-        style={{
-          height: "16%",
-          background: "linear-gradient(to top, hsl(var(--background)) 0%, hsl(var(--background) / 0) 100%)",
-        }}
-      />
-
-      <div className="absolute inset-x-0 top-0 z-20 mx-auto flex h-20 w-full max-w-[1400px] items-center justify-center px-6 sm:px-10">
-        <Nav />
-      </div>
-
-      <div className="absolute inset-0 z-10 mx-auto flex h-full max-w-[1400px] flex-col px-6 sm:px-10">
-        <div className="hero-text rise self-start mt-[9vh]" style={{ animationDelay: "120ms" }}>
-          <div className="text-[clamp(40px,6.4vw,96px)] leading-[0.9] tracking-[-0.04em]">openscience</div>
-          <a
-            href="https://syntheticsciences.ai"
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-block text-[13px] tracking-[0.04em] text-foreground/55 transition-colors duration-300 hover:text-foreground/85"
-          >
-            by Synthetic Sciences
-          </a>
-        </div>
-
-        <div className="hero-text mt-auto mb-[5vh] self-end text-right max-w-[820px]">
-          <div className="rise" style={{ animationDelay: "260ms" }}>
-            <h1 className="text-balance text-[clamp(34px,4.6vw,62px)] leading-[1.04] tracking-[-0.024em] text-foreground">
-              The open-source AI workbench for scientists.
-            </h1>
-          </div>
-          <div
-            className="rise mt-9 flex flex-wrap items-center justify-end gap-3 [text-shadow:none]"
-            style={{ animationDelay: "420ms" }}
-          >
-            <Cta href="/download#desktop">Download desktop</Cta>
-            <Cta href="/download#terminal" variant="ghost" arrow={false}>
-              Install with npm
-            </Cta>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* One quiet row of institutions. Static: a marquee is motion for its own sake. */
-function TrustRow() {
-  return (
-    <section className="w-full border-t border-border/40 py-10">
-      <div className="mx-auto flex w-full max-w-[1400px] flex-col items-center gap-6 px-6 sm:px-10">
-        <div className="text-[13px] tracking-[0.04em] text-foreground/45">Used by researchers at</div>
-        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-5">
-          {LOGOS.map((logo) => (
-            <img
-              key={logo.id}
-              src={logo.src}
-              alt={logo.alt}
-              title={logo.alt}
-              className="logo-wall-img"
-              draggable={false}
-            />
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* Section frame: a top rule, generous vertical space, nothing else. */
-function Section({ id, children, className = "" }: { id?: string; children: React.ReactNode; className?: string }) {
-  return (
-    <section id={id} className="w-full border-t border-border/40">
-      <div className={`mx-auto w-full max-w-[1400px] px-6 py-20 sm:px-10 sm:py-28 ${className}`}>{children}</div>
-    </section>
-  )
-}
-
-function ModelRouteVisual() {
-  const [index, setIndex] = useState(0)
-  const [manual, setManual] = useState(false)
-
-  useEffect(() => {
-    if (manual) return
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
-    const timer = window.setInterval(() => setIndex((value) => (value + 1) % MODELS.length), 1700)
-    return () => window.clearInterval(timer)
-  }, [manual])
-
-  const model = MODELS[index]
-
-  return (
-    <div className="model-stage h-full overflow-hidden border border-border/55 bg-[hsl(28,14%,5%)] shadow-[0_30px_90px_-30px_rgba(0,0,0,0.75)]">
-      <div className="flex items-center justify-between border-b border-border/55 px-5 py-3.5 sm:px-6">
-        <span className="text-[12px] text-foreground/45">session / models</span>
-        <span className="flex items-center gap-2 font-terminal text-[9px] tracking-[0.08em] text-foreground/35">
-          <span className="size-1.5 rounded-full bg-[hsl(92,36%,56%)]" /> LOCALHOST
-        </span>
-      </div>
-
-      <div className="relative min-h-[620px] overflow-hidden bg-background/45 p-4 sm:min-h-[520px] sm:p-6">
-        <div className="pointer-events-none absolute inset-0 grid-paper opacity-50" />
-        <div className="pointer-events-none absolute left-8 top-9 hidden w-[42%] sm:block">
-          <div className="font-terminal text-[9px] tracking-[0.08em] text-foreground/25">TASK</div>
-          <p className="mt-3 max-w-[34ch] text-[13px] leading-6 text-foreground/35">
-            Compare the held-out cohort with the preregistered result and cite the supporting evidence.
-          </p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {["study.csv", "analysis.ipynb", "manuscript.md"].map((file) => (
-              <span
-                key={file}
-                className="border border-border/40 bg-background/65 px-2.5 py-1.5 font-terminal text-[9px] text-foreground/30"
-              >
-                {file}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div
-          className="relative z-10 ml-auto w-full max-w-[470px] overflow-hidden border border-border/70 bg-[hsl(28,14%,7%)] shadow-[0_24px_70px_-24px_rgba(0,0,0,0.9)]"
-          onFocusCapture={() => setManual(true)}
-        >
-          <div className="flex items-center justify-between border-b border-border/55 px-4 py-3">
-            <div>
-              <div className="text-[13px] text-foreground/90">Models</div>
-              <div className="mt-0.5 text-[10px] text-foreground/35">Choose for this session</div>
-            </div>
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden className="text-foreground/35">
-              <circle cx="6.5" cy="6.5" r="4" stroke="currentColor" />
-              <path d="m9.5 9.5 3 3" stroke="currentColor" />
-            </svg>
-          </div>
-
-          <div className="p-1.5">
-            {MODELS.map(([name, provider, kind], item) => (
-              <button
-                type="button"
-                key={name}
-                onClick={() => {
-                  setIndex(item)
-                  setManual(true)
-                }}
-                className={`relative flex w-full items-center gap-3 px-3 py-2 text-left transition-all duration-500 ${
-                  item === index
-                    ? "model-picker-active translate-x-0.5 bg-foreground/[0.085]"
-                    : "text-foreground/55 hover:bg-foreground/[0.035]"
-                }`}
-                aria-pressed={item === index}
-              >
-                <span
-                  className={`flex size-7 shrink-0 items-center justify-center border font-terminal text-[9px] ${
-                    item === index
-                      ? "border-[hsl(var(--accent-coral))]/55 text-[hsl(var(--accent-coral))]"
-                      : "border-border/60 text-foreground/35"
-                  }`}
-                >
-                  {provider.slice(0, 1)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12.5px] text-foreground/85">{name}</span>
-                  <span className="mt-0.5 block truncate text-[10px] text-foreground/35">
-                    {kind} · {provider}
-                  </span>
-                </span>
-                <span
-                  className={`text-[13px] ${item === index ? "text-[hsl(var(--accent-coral))]" : "text-transparent"}`}
-                >
-                  ✓
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 border-t border-border/55">
-            <div className="border-r border-border/55 px-4 py-3">
-              <div className="text-[11px] text-foreground/70">More models</div>
-              <div className="mt-1 text-[9.5px] text-foreground/30">Browse connected providers.</div>
-            </div>
-            <div className="px-4 py-3">
-              <div className="text-[11px] text-foreground/70">Manage models</div>
-              <div className="mt-1 text-[9.5px] text-foreground/30">Choose what appears here.</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="absolute inset-x-4 bottom-4 z-20 border border-border/65 bg-[hsl(28,14%,6%)] p-3 sm:inset-x-6 sm:bottom-6">
-          <div className="text-[11px] text-foreground/35">Ask OpenScience to work through the evidence…</div>
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span
-              key={model[0]}
-              className="model-chip-change inline-flex items-center gap-2 border border-border/55 px-2.5 py-1.5 text-[10.5px] text-foreground/70"
-            >
-              <span className="size-1.5 rounded-full bg-[hsl(var(--accent-coral))]" />
-              {model[0]}
-            </span>
-            <span className="flex size-7 items-center justify-center bg-primary text-primary-foreground" aria-hidden>
-              ↑
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ConnectorLogo({ connector }: { connector: (typeof CONNECTORS)[number] }) {
-  return (
-    <span
-      className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-white/10 bg-white/[0.94] p-1.5 shadow-[0_6px_18px_-10px_rgba(0,0,0,0.9)]"
-      aria-hidden
-    >
-      <img src={connector.logo} alt="" className="size-full object-contain" loading="lazy" decoding="async" />
-    </span>
-  )
-}
-
-function ConnectorWall() {
-  return (
-    <ul className="tool-wall grid grid-cols-2 gap-px bg-border/45 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-      {CONNECTORS.map((connector) => (
-        <li key={connector.id} className="min-w-0">
-          <a
-            href={connector.home}
-            target="_blank"
-            rel="noreferrer"
-            title={connector.name}
-            className="group relative flex min-h-[72px] min-w-0 items-center gap-3 overflow-hidden bg-[hsl(28,14%,7%)] px-3 py-3 text-[10.5px] text-foreground/65 transition-[background-color,color,transform] duration-300 hover:-translate-y-px hover:bg-foreground/[0.07] hover:text-foreground focus-visible:z-10 focus-visible:outline focus-visible:outline-1 focus-visible:outline-[hsl(var(--accent-coral))] sm:px-4 sm:text-[11.5px]"
-          >
-            <ConnectorLogo connector={connector} />
-            <span className="min-w-0 break-words leading-[1.35] [overflow-wrap:anywhere]">{connector.name}</span>
-          </a>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function FaqItem({ q, a, isOpen, onToggle }: { q: string; a: string; isOpen: boolean; onToggle: () => void }) {
-  return (
-    <div className="border-t border-border/40 first:border-t-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isOpen}
-        className="w-full text-left py-7 flex items-center gap-5 group cursor-pointer"
-      >
-        <div className="flex-1">
-          <div
-            className={`${H_MED} transition-colors duration-300 ${
-              isOpen ? "text-foreground" : "text-foreground/80 group-hover:text-foreground"
-            }`}
-          >
-            {q}
-          </div>
-        </div>
-        <span
-          className={`text-[hsl(var(--accent-coral))] shrink-0 transition-transform duration-300 ${
-            isOpen ? "rotate-180" : ""
-          }`}
-          aria-hidden
-        >
-          <svg width="14" height="8" viewBox="0 0 14 8" fill="none">
-            <polyline points="1,1 7,7 13,1" stroke="currentColor" strokeWidth="1.5" />
-          </svg>
-        </span>
-      </button>
-      <div
-        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
-          isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-        }`}
-      >
-        <div className="overflow-hidden">
-          <p className={`pr-12 pb-7 max-w-[58ch] ${P}`}>{a}</p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function FaqList({ items }: { items: Array<{ q: string; a: string }> }) {
-  const [openIdx, setOpenIdx] = useState<number | null>(0)
-  return (
-    <div>
-      {items.map((item, i) => (
-        <FaqItem
-          key={item.q}
-          q={item.q}
-          a={item.a}
-          isOpen={openIdx === i}
-          onToggle={() => setOpenIdx(openIdx === i ? null : i)}
-        />
-      ))}
-    </div>
-  )
-}
-
 export default function Landing() {
+  const [chapter, setChapter] = useState(0)
+  const [provider, setProvider] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const work = WORK[chapter]
+  async function copy() {
+    const result = await navigator.clipboard?.writeText(COMMAND).then(
+      () => true,
+      () => false,
+    )
+    setCopied(Boolean(result))
+    setFailed(!result)
+  }
   return (
-    <div
-      id="top"
-      className="min-h-screen bg-background text-foreground antialiased selection:bg-primary/30 selection:text-foreground"
-    >
-      <Hero />
-      <TrustRow />
-
-      <Section id="models">
-        <div className="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
-          <div className="max-w-[520px]">
-            <h2 className={`text-balance ${H_BIG}`}>Model agnostic.</h2>
-            <p className={`mt-6 max-w-[40ch] ${P_BIG}`}>
-              Use a connected provider, your own API key, or a local model. Switch per session. OpenScience does not
-              proxy model traffic.
+    <div id="top" className={`landing${paused ? " motion-paused" : ""}`}>
+      <a className="skip-link" href="#research">
+        Skip to content
+      </a>
+      <header className="site-header">
+        <a className="brand" href="https://syntheticsciences.ai" aria-label="Synthetic Sciences home">
+          <Mark />
+          <span>Synthetic Sciences</span>
+        </a>
+        <nav aria-label="Primary navigation">
+          <a href="#research" className="nav-research">
+            The workbench
+          </a>
+          <a href={DOCS}>
+            Docs <Arrow />
+          </a>
+          <a href={GITHUB}>
+            GitHub <Arrow />
+          </a>
+          <a href="/download" className="nav-download">
+            Get OpenScience <span aria-hidden="true">↓</span>
+          </a>
+        </nav>
+      </header>
+      <main>
+        <section className="hero" aria-labelledby="hero-title">
+          <div className="hero-copy">
+            <p className="eyebrow entrance">A workbench for scientific research</p>
+            <h1 id="hero-title" className="entrance">
+              For the
+              <br />
+              beautifully
+              <br />
+              <span>unsolved.</span>
+            </h1>
+            <div className="hero-intro entrance">
+              <p>
+                Meet OpenScience. An open-source home for your research, from the first question to the final footnote.
+              </p>
+              <a href="/download" className="button button-light">
+                Start your research <Arrow />
+              </a>
+              <span className="hero-platforms">macOS, Windows & Linux</span>
+            </div>
+            <a className="hero-scroll" href="#research">
+              <span className="scroll-line" />A closer look <span aria-hidden="true">↓</span>
+            </a>
+          </div>
+          <figure className="hero-photograph">
+            <img
+              src={photograph}
+              alt="Researchers working with glass laboratory apparatus at NASA Ames, studying lunar samples in 1969."
+              width="1041"
+              height="1083"
+              fetchPriority="high"
+            />
+            <div className="photograph-brand" aria-hidden="true">
+              <Mark />
+              <span>OpenScience</span>
+            </div>
+            <figcaption>
+              <span>Curiosity is a human thing.</span>
+              <a href={PHOTO} target="_blank" rel="noreferrer">
+                NASA Ames, 1969 · NASA/J. Remmington ↗
+              </a>
+            </figcaption>
+          </figure>
+        </section>
+        <section className="institutions" aria-label="Research community">
+          <div className="marquee-heading">
+            <p className="eyebrow">Used by researchers at</p>
+            <button className="motion-control" type="button" aria-pressed={paused} onClick={() => setPaused(!paused)}>
+              {paused ? "Resume motion" : "Pause motion"}
+              <span aria-hidden="true">{paused ? "▷" : "Ⅱ"}</span>
+            </button>
+          </div>
+          <div className="marquee institution-marquee">
+            <div className="marquee-track">
+              {[0, 1].map((repeat) => (
+                <div className="marquee-group" key={repeat} aria-hidden={repeat === 1 ? true : undefined}>
+                  {INSTITUTIONS.map((institution) => (
+                    <img
+                      key={institution[0]}
+                      data-institution={institution[0]}
+                      src={`/logos/${institution[0]}.png`}
+                      alt={institution[1]}
+                      width="180"
+                      height="48"
+                      loading="lazy"
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+        <section id="research" className="research paper section">
+          <div className="section-heading">
+            <p className="eyebrow">01 / The workbench</p>
+            <span className="small-note">A place to think. And do.</span>
+          </div>
+          <div className="research-heading">
+            <h2>
+              Stay with
+              <br />
+              the question.
+            </h2>
+            <p>
+              The paper leads to a dataset. The dataset leads to an experiment. The experiment changes the question.
+              <br />
+              <br />
+              Keep the whole thread in one workspace.
             </p>
           </div>
-          <div className="min-w-0">
-            <ModelRouteVisual />
-          </div>
-        </div>
-      </Section>
-
-      <Section id="skills">
-        <h2 className={`text-balance ${H_BIG}`}>Plan. Run. Check.</h2>
-        <div className="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
-          {[
-            ["Plan", "Define the method and what would count as a useful result before anything runs."],
-            [
-              "Run",
-              "Use the files, code, terminal, and tools already in the project. Results are saved next to the work.",
-            ],
-            ["Check", "Check the result against the method and the source material before writing it up."],
-          ].map(([title, body]) => (
-            <div key={title} className="border-t border-border/60 pt-5">
-              <h3 className={H_MED}>{title}</h3>
-              <p className={`mt-3 max-w-[38ch] ${P}`}>{body}</p>
+          <div className="workflow-layout">
+            <div
+              className="chapter-list"
+              role="tablist"
+              aria-label="Explore the research workflow"
+              aria-orientation="vertical"
+            >
+              {WORK.map((item, index) => (
+                <button
+                  id={`chapter-${index}`}
+                  role="tab"
+                  aria-selected={chapter === index}
+                  aria-controls="work-preview"
+                  tabIndex={chapter === index ? 0 : -1}
+                  key={item.title}
+                  className={`chapter${chapter === index ? " selected" : ""}`}
+                  onClick={() => setChapter(index)}
+                  onKeyDown={(event) => {
+                    const next =
+                      event.key === "ArrowDown"
+                        ? (index + 1) % WORK.length
+                        : event.key === "ArrowUp"
+                          ? (index + WORK.length - 1) % WORK.length
+                          : event.key === "Home"
+                            ? 0
+                            : event.key === "End"
+                              ? WORK.length - 1
+                              : undefined
+                    if (next === undefined) return
+                    event.preventDefault()
+                    setChapter(next)
+                    document.getElementById(`chapter-${next}`)?.focus()
+                  }}
+                >
+                  <span className="chapter-number">0{index + 1}</span>
+                  <span>
+                    <strong>{item.title}</strong>
+                    <span className="chapter-description">{item.description}</span>
+                  </span>
+                  <span className="chapter-arrow" aria-hidden="true">
+                    ↗
+                  </span>
+                </button>
+              ))}
             </div>
+            <div
+              id="work-preview"
+              className="workspace"
+              role="tabpanel"
+              aria-labelledby={`chapter-${chapter}`}
+              tabIndex={0}
+            >
+              <div className="workspace-chrome">
+                <span>
+                  <Mark />
+                  OpenScience
+                </span>
+                <span>research / untitled question</span>
+                <span className="workspace-status">Local workspace</span>
+              </div>
+              <div className="workspace-body">
+                <aside className="workspace-files" aria-label="Example project files">
+                  <span className="eyebrow">Project</span>
+                  {work.files.map((file) => (
+                    <span key={file}>↳ {file}</span>
+                  ))}
+                  <span className="workspace-files-bottom">+ Your next question</span>
+                </aside>
+                <div className="workspace-conversation" key={chapter}>
+                  <span className="example-label">Illustrative workflow</span>
+                  <p className="example-prompt">{work.prompt}</p>
+                  <div className="example-response">
+                    <Mark />
+                    <h3>{work.heading}</h3>
+                    <p>{work.body}</p>
+                    <ul>
+                      {work.activity.map((activity) => (
+                        <li key={activity}>
+                          <span aria-hidden="true">↳</span>
+                          {activity}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="example-composer">
+                    <span>Follow the next question…</span>
+                    <span aria-hidden="true">↑</span>
+                  </div>
+                </div>
+              </div>
+              <div className="workspace-document">
+                <div>
+                  <span>{work.label}</span>
+                  <span>Saved in your project</span>
+                </div>
+                <pre>{work.lines.join("\n")}</pre>
+              </div>
+            </div>
+          </div>
+          <div className="section-tail">
+            <span>Your files. Your terminal. Your train of thought.</span>
+            <a className="text-link" href={`${DOCS}/#/openscience/workspace`}>
+              Explore the workspace <Arrow />
+            </a>
+          </div>
+        </section>
+        <section id="skills" className="capabilities section">
+          <div className="section-heading">
+            <p className="eyebrow">02 / A working scientist’s toolkit</p>
+            <a className="text-link" href={`${DOCS}/#/openscience/skills`}>
+              Explore the skills <Arrow />
+            </a>
+          </div>
+          <div className="capability-heading">
+            <h2>
+              Go where
+              <br />
+              the work takes you.
+            </h2>
+            <p>
+              Follow a question across disciplines with hundreds of research skills and direct access to scientific
+              data.
+            </p>
+          </div>
+          <div className="capability-counts">
+            <div>
+              <strong>
+                300<span>+</span>
+              </strong>
+              <span>bundled research skills</span>
+            </div>
+            <div>
+              <strong>{CONNECTORS.length}</strong>
+              <span>scientific data sources</span>
+            </div>
+            <div>
+              <strong>10</strong>
+              <span>experimental BioNeMo integrations</span>
+            </div>
+          </div>
+          <div className="skill-index">
+            {SKILLS.map((skill, index) => (
+              <details key={skill.title}>
+                <summary>
+                  <span className="index-number">0{index + 1}</span>
+                  <h3>{skill.title}</h3>
+                  <span className="skill-detail">{skill.detail}</span>
+                  <span className="detail-toggle" aria-hidden="true">
+                    +
+                  </span>
+                </summary>
+                <div className="skill-expanded">
+                  <p>{skill.text}</p>
+                  <span>{skill.tools}</span>
+                </div>
+              </details>
+            ))}
+          </div>
+          <div className="bionemo">
+            <div>
+              <p className="eyebrow">A closer look / NVIDIA BioNeMo</p>
+              <h3>
+                From sequence
+                <br />
+                to structure.
+              </h3>
+              <p>Protein design, molecular docking, and biological models, connected to the same research workspace.</p>
+              <a href={`${GITHUB}/tree/main/backend/cli/src/science/capability/manifests`} className="text-link">
+                See the scientific-tool catalog <Arrow />
+              </a>
+            </div>
+            <div className="bionemo-index">
+              <div className="bionemo-label">
+                <span>Available adapters</span>
+                <span>Experimental</span>
+              </div>
+              {[
+                ["Boltz-2", "Structure & affinity"],
+                ["DiffDock", "Molecular docking"],
+                ["Evo 2", "DNA generation"],
+                ["RFdiffusion", "Protein backbones"],
+                ["ProteinMPNN", "Sequence design"],
+              ].map((tool) => (
+                <div className="bionemo-row" key={tool[0]}>
+                  <span>{tool[0]}</span>
+                  <span>{tool[1]}</span>
+                </div>
+              ))}
+              <p>
+                Also GenMol, MolMIM, MSA Search, OpenFold2, and OpenFold3. Requires your NVIDIA API key and service
+                access. These integrations are experimental, not release-verified.
+              </p>
+            </div>
+          </div>
+        </section>
+        <section className="source-strip" aria-label="Scientific data sources">
+          <div className="marquee-heading">
+            <p className="eyebrow">Connected to the scientific record</p>
+            <a href={`${DOCS}/#/openscience/skills`} className="text-link">
+              All {CONNECTORS.length} sources <Arrow />
+            </a>
+          </div>
+          <div className="marquee source-marquee">
+            <div className="marquee-track">
+              {[0, 1].map((repeat) => (
+                <div className="marquee-group" key={repeat} aria-hidden={repeat === 1 ? true : undefined}>
+                  {CONNECTORS.map((connector) => (
+                    <a
+                      key={connector.id}
+                      href={connector.home}
+                      tabIndex={repeat === 1 ? -1 : undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <img src={connector.logo} width="25" height="25" alt="" loading="lazy" />
+                      <span>{connector.name}</span>
+                      <span className="source-plus" aria-hidden="true">
+                        +
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+        <section id="models" className="models paper section">
+          <div className="section-heading">
+            <p className="eyebrow">03 / Your choice, all the way down</p>
+            <span className="small-note">Open source. Model agnostic.</span>
+          </div>
+          <div className="model-layout">
+            <div className="model-copy">
+              <h2>
+                Good science
+                <br />
+                keeps its
+                <br />
+                options open.
+              </h2>
+              <p>
+                Choose the model that fits the work. Use your own keys, connect a provider account, or run a model
+                locally. Switch as your research changes.
+              </p>
+              <a className="text-link" href={`${DOCS}/#/openscience/models`}>
+                Find your model <Arrow />
+              </a>
+              <div className="model-note" aria-live="polite">
+                <span className="eyebrow">{PROVIDERS[provider].name}</span>
+                <p>{PROVIDERS[provider].note}</p>
+              </div>
+            </div>
+            <div className="provider-list" aria-label="Model provider examples">
+              {PROVIDERS.map((item, index) => (
+                <button key={item.name} aria-pressed={provider === index} onClick={() => setProvider(index)}>
+                  <span className="provider-number">{item.mark}</span>
+                  <span>{item.name}</span>
+                  <span className="provider-select" aria-hidden="true">
+                    {provider === index ? "↗" : "+"}
+                  </span>
+                </button>
+              ))}
+              <p>One workspace. No single-model commitment.</p>
+            </div>
+          </div>
+          <div className="ownership">
+            <div>
+              <span className="eyebrow">Local by design</span>
+              <h3>The project is yours.</h3>
+              <p>
+                Your files, settings, and results live on your computer. You decide which external services to connect.
+              </p>
+            </div>
+            <div>
+              <span className="eyebrow">Open by conviction</span>
+              <h3>So is the code.</h3>
+              <p>Inspect it. Change it. Make it work for your lab. OpenScience is released under Apache 2.0.</p>
+              <a className="text-link" href={GITHUB}>
+                Build with us <Arrow />
+              </a>
+            </div>
+          </div>
+        </section>
+        <section id="faq" className="questions section">
+          <div>
+            <p className="eyebrow">04 / A few useful answers</p>
+            <h2>
+              Before
+              <br />
+              you begin.
+            </h2>
+            <a className="text-link" href={DOCS}>
+              Read the docs <Arrow />
+            </a>
+          </div>
+          <div className="faq-list">
+            {QUESTIONS.map((question) => (
+              <details key={question[0]}>
+                <summary>
+                  {question[0]}
+                  <span className="detail-toggle" aria-hidden="true">
+                    +
+                  </span>
+                </summary>
+                <p>{question[1]}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+        <section className="closing paper">
+          <p className="eyebrow">For the next thing you want to understand.</p>
+          <h2>
+            Make room
+            <br />
+            for discovery.
+          </h2>
+          <a className="button button-dark" href="/download">
+            Get OpenScience <Arrow />
+          </a>
+          <div className="install">
+            <code>{COMMAND}</code>
+            <button
+              type="button"
+              onClick={copy}
+              aria-label={copied ? "Install command copied" : "Copy install command"}
+            >
+              {copied ? "Copied ✓" : "Copy ↗"}
+            </button>
+          </div>
+          <p className="copy-feedback" role="status">
+            {failed
+              ? "Select the command above to copy it manually."
+              : copied
+                ? "Copied. Paste it into your terminal to install."
+                : "Free & open source · Bring your curiosity."}
+          </p>
+        </section>
+      </main>
+      <footer className="site-footer">
+        <div className="footer-top">
+          <div className="footer-about">
+            <a className="brand" href="#top">
+              <Mark />
+              <span>OpenScience</span>
+            </a>
+            <p>
+              A workbench for the work
+              <br />
+              of understanding.
+            </p>
+            <a href="https://syntheticsciences.ai">
+              By Synthetic Sciences <Arrow />
+            </a>
+          </div>
+          {[
+            {
+              title: "Product",
+              links: [
+                ["Download", "/download"],
+                ["The workbench", "#research"],
+                ["Skills & tools", "#skills"],
+                ["Models", "#models"],
+              ],
+            },
+            {
+              title: "Resources",
+              links: [
+                ["Documentation", DOCS],
+                ["GitHub", GITHUB],
+                ["Releases", `${GITHUB}/releases`],
+                ["npm", "https://www.npmjs.com/package/@synsci/openscience"],
+              ],
+            },
+            {
+              title: "Connect",
+              links: [
+                ["Synthetic Sciences", "https://syntheticsciences.ai"],
+                ["X / Twitter", "https://x.com/SynScience"],
+                ["Contribute", `${GITHUB}/blob/main/CONTRIBUTING.md`],
+                ["License", `${GITHUB}/blob/main/LICENSE`],
+              ],
+            },
+          ].map((group) => (
+            <nav key={group.title} aria-label={group.title}>
+              <span className="eyebrow">{group.title}</span>
+              {group.links.map((link) => (
+                <a key={link[0]} href={link[1]}>
+                  {link[0]}
+                </a>
+              ))}
+            </nav>
           ))}
         </div>
-      </Section>
-
-      <Section id="sources">
-        <div className="mb-10 max-w-[560px]">
-          <h2 className={`text-balance ${H_BIG}`}>Search {CONNECTORS.length} scientific sources.</h2>
-          <p className={`mt-4 max-w-[52ch] ${P_BIG}`}>
-            Papers, structures, variants, compounds, pathways, and expression data, queried directly by the agent.
-          </p>
+        <div className="footer-meta">
+          <span>© {new Date().getFullYear()} Synthetic Sciences · OpenScience is open source.</span>
+          <a href="#top">Back to top ↑</a>
         </div>
-        <div className="overflow-hidden border border-border/55">
-          <ConnectorWall />
-        </div>
-      </Section>
-
-      <Section id="local-first">
-        <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
-          <div className="max-w-[560px]">
-            <h2 className={`text-balance ${H_BIG}`}>Runs on your computer. Open source.</h2>
-            <p className={`mt-6 max-w-[46ch] ${P_BIG}`}>
-              There is no hosted control plane. Projects, settings, credentials, and results stay on your device, and
-              requests go directly to the services you choose. The agent, skills, tools, and workspace are public under
-              Apache 2.0.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Cta href="/download">Download</Cta>
-              <Cta href={GITHUB} variant="ghost" external>
-                View on GitHub
-              </Cta>
-            </div>
-          </div>
-          <div className="divide-y divide-border/50 border-y border-border/50 self-center text-[13px] sm:text-[14px]">
-            {[
-              ["Projects", "On your device"],
-              ["Credentials", "Encrypted locally"],
-              ["Providers", "Direct connections"],
-              ["License", "Apache 2.0"],
-            ].map((item) => (
-              <div key={item[0]} className="flex items-center justify-between gap-6 py-3.5">
-                <span className="text-foreground/55">{item[0]}</span>
-                <span className="text-right text-foreground/85">{item[1]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Section>
-
-      <Section id="faq">
-        <div className="grid grid-cols-12 gap-10 lg:gap-16">
-          <div className="col-span-12 self-start lg:sticky lg:top-28 lg:col-span-5">
-            <h2 className={`text-balance ${H_BIG}`}>Questions.</h2>
-            <p className={`mt-4 max-w-[36ch] ${P_BIG}`}>The rest is in the docs.</p>
-          </div>
-          <div className="col-span-12 lg:col-span-7">
-            <FaqList
-              items={[
-                {
-                  q: "What is OpenScience?",
-                  a: "A local app for research. Chat, files, terminals, sources, and results are in the same workspace.",
-                },
-                {
-                  q: "How is it different from a coding agent?",
-                  a: "It works with papers and datasets as well as code, and saves results inside the project.",
-                },
-                {
-                  q: "Which models can it use?",
-                  a: "Connected provider accounts, your own API keys, or local models. OpenScience does not proxy model traffic.",
-                },
-                {
-                  q: "Do I need an account?",
-                  a: "No. Install the app, connect only the providers and tools you want, and work locally.",
-                },
-                {
-                  q: "Can I extend it?",
-                  a: "Yes. Add skills, plugins, MCP servers, custom agents, and commands. The SDK can connect private lab tools.",
-                },
-              ]}
-            />
-          </div>
-        </div>
-      </Section>
-
-      <footer className="w-full border-t border-border/40">
-        <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-6 py-10 text-[13px] text-foreground/55 sm:flex-row sm:items-center sm:justify-between sm:px-10">
-          <div className="flex items-center gap-2.5 text-foreground">
-            <OsMark size={15} />
-            <span className="font-display text-[20px] leading-none tracking-tight">openscience</span>
-            <span className="ml-2 text-foreground/45">by Synthetic Sciences · Apache 2.0</span>
-          </div>
-          <nav className="flex flex-wrap items-center gap-x-6 gap-y-2" aria-label="Footer">
-            {[
-              ["Docs", DOCS, true],
-              ["GitHub", GITHUB, true],
-              ["Releases", RELEASES, true],
-              ["npm", "https://www.npmjs.com/package/@synsci/openscience", true],
-              ["Download", "/download", false],
-              ["X", "https://x.com/SynScience", true],
-            ].map(([label, href, external]) => (
-              <a
-                key={label as string}
-                href={href as string}
-                className="link-underline hover:text-foreground"
-                {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
-              >
-                {label as string}
-              </a>
-            ))}
-          </nav>
-        </div>
+        <a className="footer-wordmark" href="#top" aria-label="OpenScience, back to top">
+          OpenScience
+        </a>
       </footer>
     </div>
   )
