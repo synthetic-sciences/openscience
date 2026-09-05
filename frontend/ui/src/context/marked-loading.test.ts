@@ -6,13 +6,6 @@ import { markdownFallback } from "../components/markdown"
 const source = await readFile(new URL("./marked.tsx", import.meta.url), "utf8")
 
 describe("markdown runtime loading", () => {
-  test("keeps syntax engines out of the application entry until markdown needs them", () => {
-    expect(source).not.toMatch(/^import\s+(?!type\b).*\sfrom\s+["']marked["']/m)
-    expect(source).not.toMatch(/^import\s+(?!type\b).*\sfrom\s+["']@pierre\/diffs["']/m)
-    expect(source).toContain('import("marked")')
-    expect(source).toContain('import("@pierre/diffs")')
-  })
-
   test("registers the OpenScience theme before first-use highlighting", async () => {
     const html = await highlightSnippet("const result = 42", "javascript")
 

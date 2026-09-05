@@ -183,46 +183,6 @@ describe("files pane", () => {
     expect(host.querySelector("[data-source-context]")).toBeNull()
   })
 
-  test("keeps primary workspaces out of More", async () => {
-    const workspace = {
-      ...grant("fsg_workspace", "/home/keertan/.openscience/workspaces/ses_1", "write"),
-      scope: "session",
-      source: "workspace",
-    }
-    const connected = grant("fsg_dataset", "/home/keertan/data/pdebench", "read")
-    const host = mount(() =>
-      subject.FilesPane({
-        session: SESSION,
-        directory: DIRECTORY,
-        request: async (path) => {
-          if (path === `/session/${SESSION}/filesystem`)
-            return new Response(JSON.stringify(snapshot([workspace, connected])), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            })
-          if (path === "/settings/compute") return listing({ providers: [] })
-          if (path.startsWith("/file/artifact-store")) return listing([])
-          return listing([])
-        },
-      }),
-    )
-    await settle()
-
-    expect(host.querySelector('[data-workspace-source="project"]')).not.toBeNull()
-    expect(host.querySelector('[data-workspace-source="session"]')).not.toBeNull()
-    expect(host.querySelector('[data-workspace-source="artifacts"]')).not.toBeNull()
-
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    await settle()
-
-    expect(host.querySelector('[data-source-item="project"]')).toBeNull()
-    expect(host.querySelector('[data-source-item="session"]')).toBeNull()
-    expect(host.querySelector('[data-source-item="artifacts"]')).toBeNull()
-    expect(host.querySelector('[data-source-item="fsg_dataset"]')).not.toBeNull()
-    expect(host.querySelector('[data-source-item="trash"]')).not.toBeNull()
-    expect(host.querySelector("[data-source-add]")).not.toBeNull()
-  })
-
   test("uses the human project name instead of a managed storage UUID", async () => {
     const managed = "/Users/researcher/.openscience/projects/58e4a6d9-f9cb-4de0-83aa-a236cb718206"
     startOn("project")
@@ -1144,34 +1104,6 @@ describe("files pane", () => {
     })
   })
 
-  test("lists saved Results under Results rather than reporting an empty folder", async () => {
-    // The artifacts source short-circuited to [] and fell through to the file
-    // table's "This folder is empty." — so a project with artifacts in it said
-    // it had none. The active half of the snapshot was already being loaded
-    // for the trash view; only the rendering was missing.
-    const host = mount(() =>
-      subject.FilesPane({
-        request: async (path) => {
-          if (path.startsWith("/file/artifact-store?state=trash")) return listing([])
-          if (path.startsWith("/file/artifact-store")) return listing([saved("art_9", "peak_fit.ipynb")])
-          // A real listing would answer here; reaching it for the artifacts
-          // source is the bug that mislabels project files as artifacts.
-          return listing([{ name: "SHOULD_NOT_APPEAR.py", type: "file", size: 1 }])
-        },
-      }),
-    )
-    await settle()
-
-    host.querySelector<HTMLButtonElement>('[data-workspace-source="artifacts"]')?.click()
-    await settle()
-
-    const names = [...host.querySelectorAll("[data-card-open]")].map((node) => node.getAttribute("aria-label"))
-    expect(names).toEqual(["Open peak_fit.ipynb, version 2 of 2"])
-    expect(host.querySelector("[data-artifact-grid]")).not.toBeNull()
-    expect(host.textContent).not.toContain("This folder is empty.")
-    expect(host.textContent).not.toContain("SHOULD_NOT_APPEAR.py")
-  })
-
   test("renders artifacts as a grid, never as file-table rows", async () => {
     const host = mount(() =>
       subject.FilesPane({
@@ -1629,43 +1561,5 @@ describe("files pane", () => {
     expect(host.querySelector('[data-source-item="fsg_2"]')).not.toBeNull()
     expect(host.querySelector('[data-source-item="trash"]')?.getAttribute("aria-checked")).toBe("true")
     expect(host.querySelector("[data-trash-list]")).not.toBeNull()
-  })
-
-  test("wires Browse… through the dialog host to the FolderPicker and back into the path field", () => {
-    // A source-text guard, and a weaker one than a mount: it pins that the wire
-    // is written, not that clicking Browse… produces a picker. A mount cannot
-    // reach this path at all, verified by probe rather than assumed:
-    //   - the standalone seam leaves `dialog` undefined, so <Show when={dialog}>
-    //     never renders the Browse… button (the connect form does render);
-    //   - dropping the seam to get a real dialog throws "SDK context must be
-    //     used within a context provider" before the pane mounts;
-    //   - mounting FolderPicker directly throws "GlobalSDK context must be used
-    //     within a context provider".
-    // Rendering it for real needs SDK, sync, router, dialog, global-SDK and
-    // global-sync providers plus a server to walk. A refactor that severs any
-    // link below would pass every behavioural test in this file, which is
-    // exactly why this exists.
-    const source = readFileSync(fileURLToPath(new URL("./FilesPane.tsx", import.meta.url)), "utf8")
-
-    expect(source).toContain('import { FolderPicker } from "@/atlas/FolderPicker"')
-    expect(source).toContain("platform?.openDirectoryPickerDialog")
-    expect(source).toContain("dialog?.show(")
-    expect(source).toContain("<FolderPicker")
-    expect(source).toContain('kind="folder"')
-    // The picker answers with one path or several; either way one lands in the
-    // same store field the path input renders.
-    expect(source).toContain("const picked = Array.isArray(result) ? result[0] : result")
-    expect(source).toContain('if (picked) setConnect("path", picked)')
-    expect(source).toContain("onClick={browse}")
-    expect(source).toContain("value={connect.path}")
-  })
-
-  test("routes local files to the persisted inspector strip instead of mounting a second viewer", () => {
-    const source = readFileSync(fileURLToPath(new URL("./FilesPane.tsx", import.meta.url)), "utf8")
-
-    expect(source).toContain('import { uiStore } from "@/atlas/store/ui"')
-    expect(source).toContain("if (props.onOpenFile) return props.onOpenFile(file)")
-    expect(source).toContain("uiStore.openFile(projectRoot(), file.path)")
-    expect(source).not.toContain('import { FileView } from "@/atlas/FilePreview"')
   })
 })

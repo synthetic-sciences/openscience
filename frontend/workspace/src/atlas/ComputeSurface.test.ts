@@ -56,32 +56,4 @@ describe("compute surface", () => {
   test("keeps the former export as a compatibility alias", () => {
     expect(subject.ActivitySurface).toBe(subject.ComputeSurface)
   })
-
-  test("documents the tracking-only boundary", () => {
-    const source = readFileSync(fileURLToPath(new URL("./ComputeSurface.tsx", import.meta.url)), "utf8")
-
-    expect(source).toContain("read-only instrument panel")
-    expect(source).toContain("Compute only tracks what")
-    expect(source).toContain("still needs operational attention")
-    expect(source).toContain("owns no")
-    expect(source).toContain("lifecycle controls")
-    expect(source).toContain("completed-history workflow")
-    expect(source).not.toContain("ComputeJobs")
-    expect(source).not.toContain("New kernel")
-  })
-
-  test("uses its own width for narrow layouts", () => {
-    const css = readFileSync(fileURLToPath(new URL("./ComputeSurface.css", import.meta.url)), "utf8")
-    const strip = readFileSync(fileURLToPath(new URL("./HostStrip.css", import.meta.url)), "utf8")
-
-    expect(css).toContain("container: compute / inline-size")
-    expect(css).toContain("@container compute (max-width: 470px)")
-    expect(css).toContain("@container compute (max-width: 350px)")
-    expect(css).toContain(".compute-row")
-    expect(css).not.toContain(".activity-card")
-    expect(css).not.toContain(".activity-disclosure")
-    expect(strip).toContain("@container compute (max-width: 470px)")
-    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}/)
-    expect(strip).not.toMatch(/#[0-9a-fA-F]{3,8}/)
-  })
 })

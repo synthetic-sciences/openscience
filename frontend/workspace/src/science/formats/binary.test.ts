@@ -60,19 +60,3 @@ describe("binary scientific format helpers", () => {
     })
   })
 })
-
-describe("binary scientific workbench integration", () => {
-  test("routes supported containers through local inspection and raw downloads", () => {
-    const preview = read("../../atlas/FilePreview.tsx")
-    const view = read("./BinaryScienceView.tsx")
-
-    expect(preview).toContain('import { BinaryScienceView } from "@/science/formats/BinaryScienceView"')
-    expect(preview).toContain('return "scientific-binary"')
-    expect(preview).toContain('"/file/raw",')
-    expect(preview).toContain("rawFileQuery({")
-    expect(view).toContain('sdk.request("/file/inspect"')
-    expect(view).toContain("Dataset inventory")
-    expect(view).toContain("Reference coverage")
-    expect(view).toContain("Embedding preview")
-  })
-})

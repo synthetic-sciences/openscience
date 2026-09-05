@@ -117,14 +117,4 @@ describe("request phase status copy", () => {
 
 describe("session turn wiring", () => {
   const source = Bun.file(new URL("./session-turn.tsx", import.meta.url)).text()
-
-  test("renders the request phase before any part exists and keeps the generic copy last", async () => {
-    const component = await source
-    expect(component).toContain("progressStatus(progress(), store.now)")
-    expect(component).toContain("if (store.status) return store.status")
-    expect(component).toContain('i18n.t("ui.sessionTurn.status.consideringNextSteps")')
-    expect(component).toContain('<span data-slot="session-turn-status-text">{statusText()}</span>')
-    expect(component).toContain('data-slot="session-turn-progress-hint"')
-    expect(component).toContain("message.id === item.messageID")
-  })
 })

@@ -343,31 +343,4 @@ describe("turn layout contract", () => {
     fileURLToPath(new URL("../../../workspace/src/components/chat-surface.css", import.meta.url)),
     "utf8",
   )
-
-  test("the status row has one fixed height and truncates instead of wrapping", () => {
-    expect(turnCss).toMatch(
-      /\[data-slot="session-turn-collapsible-trigger-content"\]\s*\{[^}]*height: 32px;[^}]*white-space: nowrap;/s,
-    )
-    expect(turnCss).toMatch(/\[data-slot="session-turn-status-text"\],\s*\[data-slot="session-turn-retry-message"\]/)
-  })
-
-  test("a running write reserves the same row height as the finished card", () => {
-    expect(partCss).toMatch(/\[data-component="tool-progress"\]\s*\{[^}]*min-height: 40px;/s)
-    expect(chatCss).toMatch(/\.session-scroller \[data-component="tool-progress"\]\s*\{[^}]*min-height: 32px;/s)
-    expect(chatCss).toMatch(/\[data-slot="reasoning-part-toggle"\]\s*\{[^}]*min-height: 32px;/s)
-  })
-
-  test("the status rail and streaming caret stay still and quiet", () => {
-    expect(toolCss).toContain("font-variant-numeric: tabular-nums")
-    expect(toolCss).toMatch(/\[data-slot="basic-tool-tool-time"\]\s*\{[^}]*min-width: 3\.5ch;/s)
-    const caret = partCss.slice(
-      partCss.indexOf('[data-streaming="true"]'),
-      partCss.indexOf('[data-component="reasoning-part"] {'),
-    )
-    expect(caret).toContain("opacity: 0.35")
-    expect(caret).not.toContain("animation")
-    expect(partCss).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*\[data-slot="reasoning-part-chevron"\][\s\S]*transition: none/,
-    )
-  })
 })

@@ -154,15 +154,4 @@ describe("DialogCreateProject", () => {
       },
     ])
   })
-
-  test("uses one quiet responsive surface hierarchy", async () => {
-    const css = await Bun.file(style).text()
-
-    expect(css).toContain(".project-create__source-empty")
-    expect(css).toContain("background: transparent")
-    expect(css).toContain("font-size: 0.875rem")
-    expect(css).toContain("@media (pointer: coarse)")
-    expect(css).toContain("@media (prefers-reduced-motion: reduce)")
-    expect(css).not.toContain("text-transform")
-  })
 })

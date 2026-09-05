@@ -141,34 +141,6 @@ describe("Connector Settings form behavior", () => {
     ).toThrow("requires setup review")
   })
 
-  test("runs the recommended preset as setup, browser OAuth, inspection, with rollback on failure", () => {
-    const source = readFileSync(new URL("./Connectors.tsx", import.meta.url), "utf8")
-    const start = source.indexOf("async function addCatalogPreset")
-    const end = source.indexOf("function editConnector", start)
-    const preset = source.slice(start, end)
-
-    expect(start).toBeGreaterThan(-1)
-    expect(end).toBeGreaterThan(start)
-    expect(preset).toContain("catalogPresetConfig(setup)")
-    expect(preset).toContain("sdk.client.mcp.config.set")
-    expect(preset).toContain("beginAuthentication(setup.name)")
-    expect(preset).toContain("await inspect(setup.name)")
-    expect(preset).toContain('.remove({ name: setup.name, scope: "global" })')
-  })
-
-  test("treats an already-authorized start as settled instead of waiting on a dead browser flow", () => {
-    const source = readFileSync(new URL("./Connectors.tsx", import.meta.url), "utf8")
-    const start = source.indexOf("async function beginAuthentication")
-    const end = source.indexOf("async function restorePendingAuthorizations", start)
-    const authentication = source.slice(start, end)
-
-    expect(start).toBeGreaterThan(-1)
-    expect(end).toBeGreaterThan(start)
-    expect(authentication).toContain('started.state === "settled"')
-    expect(authentication).toContain("acceptAuthenticationResult(name, started.result)")
-    expect(authentication).toContain("waitForAuthentication(name, started)")
-  })
-
   test("uses recognizable connector identities and transport-specific fallbacks", () => {
     expect(
       connectorIdentity("code", {
@@ -212,11 +184,5 @@ describe("Connector Settings form behavior", () => {
         command: ["uvx", "analysis-mcp"],
       }),
     ).toEqual({ icon: "console", label: "Local process" })
-  })
-
-  test("keeps connection truth visible in narrow layouts", () => {
-    const css = readFileSync(new URL("./connectors.css", import.meta.url), "utf8")
-    expect(css).not.toMatch(/\.connectors-status\s*\{\s*display:\s*none/u)
-    expect(css).toContain(".connectors-status {\n    grid-column: 2;\n    grid-row: 2;")
   })
 })

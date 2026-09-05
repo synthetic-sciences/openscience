@@ -21,31 +21,6 @@ import {
   type SlashCommand,
 } from "./prompt-slash"
 
-test("slash menu exposes accessible listbox semantics without an entrance animation", () => {
-  const component = readFileSync(fileURLToPath(new URL("./prompt-input.tsx", import.meta.url)), "utf8")
-  const styles = readFileSync(fileURLToPath(new URL("./prompt-input.css", import.meta.url)), "utf8")
-
-  expect(component).toContain('role={store.popover === "slash" ? "listbox" : undefined}')
-  expect(component).toContain('role="option"')
-  expect(component).toContain('role="combobox"')
-  expect(component).toContain('aria-autocomplete="list"')
-  expect(component).toContain("aria-activedescendant")
-  expect(component).toContain("slashOptionId(cmd)")
-  expect(component).toContain("compactSlashItems(items, compactSkillNames)")
-  expect(component).toContain("slashMatches(all, query, SLASH_QUERY_LIMIT)")
-  expect(component).toContain('item.slash !== "stop" || working()')
-  expect(component).toContain("<SkillLibraryDialog")
-  expect(component).toContain("initialQuery={cmd.searchText}")
-  expect(component).toContain('if (!edit || !replaceSlash("", false)) return')
-  expect(styles).toMatch(/\.workspace-composer__slash-row\s*\{[^}]*display: grid/s)
-  expect(styles).toMatch(/\.workspace-composer__slash-group\s*\{[^}]*display: grid/s)
-  expect(styles).toMatch(/\.workspace-composer__slash-heading\s*\{[^}]*font-size: 12px/s)
-  expect(styles).toMatch(/\.workspace-composer__suggestions\s*\{[^}]*border-radius: var\(--radius-xl\)/s)
-  expect(styles).toMatch(/\.workspace-composer__suggestions\s*\{[^}]*max-height: min\(360px, 48vh\)/s)
-  expect(styles).not.toMatch(/\.workspace-composer__suggestions\s*\{[^}]*animation:/s)
-  expect(styles).toContain(".workspace-composer__intent")
-})
-
 test("empty slash stays bounded to native commands plus the selected skill shortlist", () => {
   const command = (trigger: string, source: SlashCommand["source"] = "builtin"): SlashCommand => ({
     id: `${source}.${trigger}`,

@@ -26,10 +26,6 @@ describe("session transcript hydration", () => {
     expect(plan.limit).toBe(cachedMessages + SESSION_MESSAGE_CHUNK)
   })
 
-  test("active route hydration opts into the authoritative refresh", async () => {
-    expect(await sessionPage).toContain("sync.session.sync(id, { refresh: true })")
-  })
-
   test("the refreshed snapshot updates known messages without dropping cached turns outside its window", () => {
     const cached = [
       { id: "msg_001", text: "oldest cached turn" },

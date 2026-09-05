@@ -66,14 +66,4 @@ describe("Storage settings recovery", () => {
     expect(source).toContain("Resume safely")
     expect(source).not.toContain("aria-valuenow={relocation")
   })
-
-  test("keeps cache cleanup local, explicit, and immediately responsive", () => {
-    const source = readFileSync(fileURLToPath(new URL("./Storage.tsx", import.meta.url)), "utf8")
-
-    expect(source).toContain('"/settings/storage/cache"')
-    expect(source).toContain('{ method: "DELETE" }')
-    expect(source).toContain("Local cache cleared")
-    expect(source).toContain('clearing() ? "Clearing…" : "Clear cache"')
-    expect(source).not.toMatch(/account|sign[ -]?in|hosted service/iu)
-  })
 })

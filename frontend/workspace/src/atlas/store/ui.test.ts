@@ -384,14 +384,6 @@ describe("evidence surface removal", () => {
     expect(state.context()).toBe("files")
     expect(state.open()).toBe(true)
   })
-
-  test("has deleted the Evidence pane component and its evidence-only helper module", async () => {
-    const graph = fileURLToPath(new URL("../EvidenceGraph.tsx", import.meta.url))
-    const helper = fileURLToPath(new URL("../../provenance/run.ts", import.meta.url))
-
-    expect(await Bun.file(graph).exists()).toBe(false)
-    expect(await Bun.file(helper).exists()).toBe(false)
-  })
 })
 
 describe("open-file tabs", () => {

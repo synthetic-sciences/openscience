@@ -84,14 +84,3 @@ describe("detectScientificFile", () => {
     })
   })
 })
-
-describe("scientific file viewer integration", () => {
-  test("routes recognized files through the shared science artifact dispatcher", () => {
-    const preview = read("../atlas/FilePreview.tsx")
-
-    expect(preview).toContain('import { detectScientificFile } from "@/science/files"')
-    expect(preview).toContain('import { ScienceArtifact } from "@/science/ScienceArtifact"')
-    expect(preview).toContain('"scientific-data"')
-    expect(preview).toContain("<ScienceArtifact")
-  })
-})

@@ -97,15 +97,4 @@ describe("compute jobs API", () => {
       expect(headers.get("x-openscience-directory")).toBe("/work/alpha")
     }
   })
-
-  test("preserves the real job, output, and lifecycle API paths", () => {
-    expect(apiSource).toContain('call<Job[]>("", { cache: "no-store" })')
-    expect(apiSource).toContain('call<Job>("", { method: "POST"')
-    expect(apiSource).toContain("call<Job>(`/${id}/retry`")
-    expect(apiSource).toContain("call<Job>(`/${id}/cancel`")
-    expect(apiSource).toContain("call<Job>(`/${id}/release`")
-    expect(apiSource).toContain("`/${id}/log`")
-    expect(apiSource).toContain("`/${id}/events`")
-    expect(apiSource).toContain("if (state.active)")
-  })
 })

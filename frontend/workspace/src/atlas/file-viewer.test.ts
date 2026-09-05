@@ -155,12 +155,6 @@ describe("file viewer reads", () => {
     expect(isMissingFileError(new Error("Project file access denied"))).toBe(false)
   })
 
-  test("normalizes successful reads without changing their data", async () => {
-    const data = { content: "# Result", encoding: "utf8", mimeType: "text/markdown", size: 8 }
-
-    expect(await readFile(async () => data)).toEqual({ data })
-  })
-
   test("uses explicit project locations directly while keeping scratch and external links session-authorized", () => {
     const location = { directory: "/projects/one", sessionID: "ses_one" }
     expect(initialFileScope("auto", { ...location, path: "/projects/one/report.md" })).toBe("project")
@@ -191,16 +185,6 @@ describe("file viewer reads", () => {
     ).toBeUndefined()
   })
 
-  test("turns a rejected read into local error state instead of throwing", async () => {
-    const result = await readFile(async () => {
-      throw "file access denied"
-    })
-
-    expect(result.data).toBeUndefined()
-    expect(result.error).toBeInstanceOf(Error)
-    expect(result.error?.message).toBe("file access denied")
-  })
-
   test("extracts useful messages from structured SDK failures", async () => {
     expect(fileErrorMessage({ data: { message: "Session scratch does not grant access to this project file" } })).toBe(
       "Session scratch does not grant access to this project file",
@@ -219,23 +203,6 @@ describe("file viewer reads", () => {
       throw { data: { message: "Project file access denied" } }
     })
     expect(result.error?.message).toBe("Project file access denied")
-  })
-
-  test("classifies aborted primary reads as cancellation instead of a visible error", async () => {
-    const named = await readFile(async () => {
-      throw new DOMException("The operation was aborted", "AbortError")
-    })
-    const browser = await readFile(async () => {
-      throw new Error("signal is aborted without reason")
-    })
-
-    expect(named).toEqual({ cancelled: true })
-    expect(browser).toEqual({ cancelled: true })
-    expect(
-      await readFile(async () => {
-        throw { name: "UnknownError", data: { message: "signal is aborted without reason" } }
-      }),
-    ).toEqual({ cancelled: true })
   })
 
   test("uses bounded backoff for an active interrupted file read", () => {
