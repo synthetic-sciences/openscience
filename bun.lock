@@ -6,6 +6,7 @@
       "name": "@synsci/monorepo",
       "dependencies": {
         "@synsci/script": "workspace:*",
+        "@synsci/sdk": "workspace:*",
         "typescript": "catalog:",
       },
       "devDependencies": {
@@ -195,6 +196,7 @@
         "molstar": "^5.10.1",
         "pdfjs-dist": "6.2.108",
         "remeda": "catalog:",
+        "shiki": "catalog:",
         "solid-js": "catalog:",
         "strip-ansi": "7.1.2",
         "tailwindcss": "catalog:",

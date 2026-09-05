@@ -83,6 +83,7 @@
   },
   "dependencies": {
     "@synsci/script": "workspace:*",
+    "@synsci/sdk": "workspace:*",
     "typescript": "catalog:"
   },
   "repository": {
