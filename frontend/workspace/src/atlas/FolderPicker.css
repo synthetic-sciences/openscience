@@ -67,7 +67,7 @@
 .folder-picker__section-label {
   padding: 0 8px 6px;
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 17px;
 }
@@ -130,7 +130,7 @@
 
 .folder-picker__sidebar-label {
   color: currentColor;
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-regular);
   line-height: 18px;
 }
@@ -142,7 +142,7 @@
 .folder-picker__sidebar-sublabel {
   color: var(--text-weaker);
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 16px;
 }
@@ -235,7 +235,7 @@
   background: transparent;
   color: var(--text-weak);
   font-family: var(--font-family-sans);
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 18px;
   text-overflow: ellipsis;
@@ -309,7 +309,7 @@
   background: transparent;
   color: var(--text-strong);
   font-family: var(--font-family-sans);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-regular);
   line-height: 18px;
 }
@@ -320,14 +320,14 @@
 
 .folder-picker__path-field input {
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 
 .folder-picker__field-label,
 .folder-picker__count {
   flex: 0 0 auto;
   color: var(--text-weaker);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
   white-space: nowrap;
@@ -348,7 +348,7 @@
   background: var(--surface-raised-base);
   color: var(--text-base);
   font-family: var(--font-family-sans);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
   cursor: pointer;
@@ -448,7 +448,7 @@
   overflow: hidden;
   flex: 1;
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 19px;
   text-overflow: ellipsis;
@@ -468,7 +468,7 @@
 
 .folder-picker__pick-label {
   color: var(--text-weaker);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 18px;
 }
 
@@ -493,7 +493,7 @@
   gap: 7px;
   padding: 28px 24px;
   color: var(--text-weak);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-regular);
   line-height: 19px;
   text-align: center;
@@ -501,7 +501,7 @@
 
 .folder-picker__empty strong {
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
 }
 
@@ -513,7 +513,7 @@
 
 .folder-picker__empty code {
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 
 .folder-picker__empty--error > [data-component="icon"] {
@@ -537,7 +537,7 @@
   overflow: hidden;
   color: var(--text-weak);
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 18px;
   text-overflow: ellipsis;

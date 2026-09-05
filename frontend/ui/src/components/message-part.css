@@ -115,14 +115,14 @@
 
     strong {
       color: var(--text-strong);
-      font-size: 12.5px;
+      font-size: var(--font-size-small);
       font-weight: var(--font-weight-medium);
       line-height: 16px;
     }
 
     span {
       color: var(--text-weak);
-      font-size: 11.5px;
+      font-size: var(--font-size-small);
       font-weight: var(--font-weight-regular);
       line-height: 15px;
     }
@@ -233,7 +233,7 @@
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--text-base);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   line-height: 20px;
 
   [data-slot="reasoning-part-toggle"] {
@@ -314,7 +314,7 @@
     margin-top: 0;
     font-style: normal;
     color: var(--text-weak);
-    font-size: 13px;
+    font-size: var(--font-size-medium);
     line-height: 20px;
 
     > :first-child {
@@ -419,13 +419,13 @@
   justify-content: flex-start;
   color: var(--text-weak);
   font-family: var(--font-family-sans);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   line-height: 20px;
 
   [data-component="markdown"] {
     width: 100%;
     min-width: 0;
-    font-size: 13px;
+    font-size: var(--font-size-medium);
     line-height: 20px;
 
     pre {
@@ -441,7 +441,7 @@
       border: none;
       border-radius: 0;
       background-color: transparent !important;
-      font-size: 13px;
+      font-size: var(--font-size-medium);
       line-height: 20px;
     }
 
@@ -461,7 +461,7 @@
 
     table {
       margin: 0;
-      font-size: 13px;
+      font-size: var(--font-size-medium);
     }
 
     tr {
@@ -526,7 +526,7 @@
     align-items: center;
     gap: 4px;
     font-family: var(--font-family-sans);
-    font-size: 13px;
+    font-size: var(--font-size-medium);
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
@@ -617,7 +617,7 @@
   }
 
   [data-slot="checkbox-checkbox-label"] {
-    font-size: 13px;
+    font-size: var(--font-size-medium);
     line-height: 20px;
   }
 
@@ -693,7 +693,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 13px;
+      font-size: var(--font-size-medium);
       font-weight: var(--font-weight-medium);
       color: var(--text-weak);
     }
@@ -703,7 +703,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 11px;
+      font-size: var(--font-size-x-small);
       line-height: 15px;
       color: var(--text-weaker);
     }
@@ -715,7 +715,7 @@
     justify-content: flex-end;
     gap: 6px;
     color: var(--text-weaker);
-    font-size: 11px;
+    font-size: var(--font-size-x-small);
     white-space: nowrap;
 
     [data-component="icon"] {
@@ -762,7 +762,7 @@
     color: var(--text-weak);
     cursor: pointer;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-x-small);
     font-weight: var(--font-weight-medium);
     white-space: nowrap;
 
@@ -788,7 +788,7 @@
       border-radius: var(--radius-xs);
       background: var(--surface-raised-base);
       color: var(--text-weaker);
-      font-size: 11px;
+      font-size: var(--font-size-x-small);
       line-height: 16px;
 
       &[data-failed] {
@@ -802,7 +802,7 @@
     display: block;
     margin-bottom: 7px;
     color: var(--text-weaker);
-    font-size: 10px;
+    font-size: var(--font-size-2x-small);
     font-weight: var(--font-weight-medium);
     letter-spacing: 0.04em;
   }
@@ -817,7 +817,7 @@
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--surface-raised-base) 78%, transparent);
     color: var(--text-weaker);
-    font-size: 12px;
+    font-size: var(--font-size-small);
 
     > strong {
       min-width: 0;
@@ -845,7 +845,7 @@
   [data-slot="delegation-findings"] [data-component="markdown"] {
     margin-top: 0;
     color: var(--text-weak);
-    font-size: 13px;
+    font-size: var(--font-size-medium);
 
     > :first-child {
       margin-top: 0;
@@ -881,7 +881,7 @@
       > strong {
         flex-shrink: 0;
         color: var(--text-weak);
-        font-size: 12px;
+        font-size: var(--font-size-small);
         font-weight: var(--font-weight-medium);
       }
 
@@ -891,14 +891,14 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         color: var(--text-weaker);
-        font-size: 11px;
+        font-size: var(--font-size-x-small);
       }
     }
   }
 
   [data-slot="delegation-activity-failed"] {
     color: var(--text-on-critical-base);
-    font-size: 11px;
+    font-size: var(--font-size-x-small);
   }
 
   [data-slot="delegation-raw"] {
@@ -909,7 +909,7 @@
       cursor: pointer;
       list-style: none;
       color: var(--text-weaker);
-      font-size: 11px;
+      font-size: var(--font-size-x-small);
 
       &::-webkit-details-marker {
         display: none;
@@ -944,7 +944,7 @@
 
   [data-slot="task-tool-title"] {
     font-family: var(--font-family-sans);
-    font-size: 13px;
+    font-size: var(--font-size-medium);
     font-weight: var(--font-weight-medium);
     line-height: 20px;
     color: var(--text-weak);
@@ -952,7 +952,7 @@
 
   [data-slot="task-tool-subtitle"] {
     font-family: var(--font-family-sans);
-    font-size: 13px;
+    font-size: var(--font-size-medium);
     font-weight: var(--font-weight-regular);
     line-height: 20px;
     color: var(--text-weaker);
@@ -1322,7 +1322,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1331,7 +1331,7 @@
 [data-component="saved-artifact-tool"] > header span,
 [data-component="saved-artifact-tool"] > footer {
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 
 [data-slot="saved-artifact-preview"] {
@@ -1446,7 +1446,7 @@
 
   [data-slot="permission-compute-title"] {
     color: var(--text-strong);
-    font-size: 12px;
+    font-size: var(--font-size-small);
     font-weight: var(--font-weight-emphasis);
   }
 
@@ -1483,7 +1483,7 @@
 
   [data-slot="permission-compute-scope"] {
     color: var(--text-weak);
-    font-size: 11px;
+    font-size: var(--font-size-x-small);
     line-height: 1.45;
     text-wrap: pretty;
   }
@@ -1531,7 +1531,7 @@
 
     [data-slot="question-tab"] {
       padding: 4px 12px;
-      font-size: 13px;
+      font-size: var(--font-size-medium);
       border-radius: var(--radius-xs);
       background-color: var(--surface-base);
       color: var(--text-base);
@@ -1561,7 +1561,7 @@
     gap: 8px;
 
     [data-slot="question-text"] {
-      font-size: 14px;
+      font-size: var(--font-size-base);
       color: var(--text-base);
       line-height: 1.5;
     }
@@ -1605,13 +1605,13 @@
       }
 
       [data-slot="option-label"] {
-        font-size: 14px;
+        font-size: var(--font-size-base);
         color: var(--text-base);
         font-weight: var(--font-weight-medium);
       }
 
       [data-slot="option-description"] {
-        font-size: 12px;
+        font-size: var(--font-size-small);
         color: var(--text-weak);
       }
     }
@@ -1625,7 +1625,7 @@
       [data-slot="custom-input"] {
         flex: 1;
         padding: 8px 12px;
-        font-size: 14px;
+        font-size: var(--font-size-base);
         border: 1px solid var(--border-default);
         border-radius: var(--radius-xs);
         background-color: var(--surface-base);
@@ -1670,7 +1670,7 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
-      font-size: 13px;
+      font-size: var(--font-size-medium);
 
       [data-slot="review-label"] {
         color: var(--text-weak);
@@ -1704,7 +1704,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    font-size: 13px;
+    font-size: var(--font-size-medium);
 
     [data-slot="question-text"] {
       color: var(--text-weak);
@@ -1795,7 +1795,7 @@
   min-height: 29px;
   padding: 4px 18px;
   font-family: var(--font-family-sans);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-regular);
   line-height: 20px;
   color: var(--text-weak);

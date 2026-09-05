@@ -19,7 +19,7 @@
 }
 
 .workspace-composer__setup strong {
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 17px;
 }
@@ -27,7 +27,7 @@
 .workspace-composer__setup small {
   overflow: hidden;
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 17px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -42,7 +42,7 @@
   background: var(--surface-base);
   color: var(--text-strong);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   cursor: pointer;
 }
@@ -74,7 +74,7 @@
   min-width: 0;
   min-height: 20px;
   color: var(--text-strong);
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
 }
@@ -95,7 +95,7 @@
   margin-left: 20px;
   padding-right: 4px;
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 15px;
 }
@@ -127,14 +127,14 @@
 
 .workspace-composer__dropzone-copy strong {
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 17px;
 }
 
 .workspace-composer__dropzone-copy span {
   color: var(--text-weak);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 15px;
 }
@@ -209,14 +209,14 @@
 
 .workspace-composer__attachment-copy strong {
   color: var(--text-strong);
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
 }
 
 .workspace-composer__attachment-copy span {
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 15px;
 }
 
@@ -305,7 +305,7 @@
 .workspace-composer__suggestion-empty {
   padding: 5px 8px;
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 18px;
 }
 
@@ -330,7 +330,7 @@
   border-radius: var(--radius-sm);
   background: var(--surface-base-hover);
   color: var(--text-weak);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
 }
 
@@ -350,14 +350,14 @@
 
 .workspace-composer__conversation-row strong {
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 17px;
 }
 
 .workspace-composer__conversation-row small {
   color: var(--text-weak);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   line-height: 15px;
 }
 
@@ -384,7 +384,7 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
   display: block;
   padding: 4px 8px 2px;
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
 }
@@ -421,7 +421,7 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
   min-width: 0;
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
   text-overflow: ellipsis;
@@ -430,7 +430,7 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
 
 .workspace-composer__slash-detail {
   color: var(--text-weak);
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   line-height: 16px;
 }
 
@@ -438,7 +438,7 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
   max-width: 76px;
   overflow: hidden;
   color: var(--text-weaker);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -608,7 +608,7 @@ form.workspace-composer .workspace-composer__intent {
   background: var(--surface-raised-base-hover);
   color: var(--text-weak);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
   transition:
@@ -664,7 +664,7 @@ form.workspace-composer .workspace-composer__research-tools > summary {
   border-radius: var(--radius-sm);
   color: var(--text-weak);
   font-family: var(--font-family-sans);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-regular);
   line-height: 1;
   list-style: none;
@@ -742,7 +742,7 @@ form.workspace-composer .workspace-composer__research-tools-header > span {
   min-width: 0;
   flex: 1;
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
 }
@@ -767,7 +767,7 @@ form.workspace-composer .workspace-composer__research-slider {
 form.workspace-composer .workspace-composer__research-slider-label {
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
   text-overflow: ellipsis;
@@ -797,7 +797,7 @@ form.workspace-composer .workspace-composer__research-slider button {
   background: transparent;
   color: var(--text-weak);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
   white-space: nowrap;
@@ -885,7 +885,7 @@ form.workspace-composer .workspace-composer__research-setting-label {
   min-width: 0;
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
   text-overflow: ellipsis;
@@ -896,7 +896,7 @@ form.workspace-composer .workspace-composer__research-setting-value {
   min-width: 0;
   overflow: hidden;
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 16px;
   text-align: right;
@@ -1030,7 +1030,7 @@ form.workspace-composer .workspace-composer__research-choice-menu > button > spa
 form.workspace-composer .workspace-composer__research-choice-menu > button strong {
   overflow: hidden;
   color: currentColor;
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
   text-overflow: ellipsis;
@@ -1039,7 +1039,7 @@ form.workspace-composer .workspace-composer__research-choice-menu > button stron
 
 form.workspace-composer .workspace-composer__research-choice-menu > button small {
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 16px;
   text-wrap: pretty;
 }
@@ -1053,7 +1053,7 @@ form.workspace-composer .workspace-composer__research-access-retry {
   background: var(--surface-critical-weak);
   color: var(--text-critical-base);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   cursor: pointer;
 }
 
@@ -1127,7 +1127,7 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
 
 @media (max-width: 719px) {
   form.workspace-composer {
-    --composer-editor-font-size: 16px;
+    --composer-editor-font-size: var(--font-size-large);
     --composer-editor-line-height: 24px;
     --composer-editor-padding-inline: 12px;
     min-height: 94px;

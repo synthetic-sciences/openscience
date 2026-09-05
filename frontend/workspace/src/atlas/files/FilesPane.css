@@ -16,7 +16,7 @@
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
   transition:
@@ -85,7 +85,7 @@
 }
 .files-menu__group {
   padding: 10px 10px 5px;
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   letter-spacing: var(--letter-spacing-normal);
   color: var(--color-text-faint);
 }
@@ -116,7 +116,7 @@
   background: none;
   color: var(--color-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   text-align: left;
   cursor: pointer;
   transition:
@@ -153,7 +153,7 @@
   display: block;
   margin-top: 1px;
   font-family: var(--font-code);
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   color: var(--color-text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -177,7 +177,7 @@
   gap: 7px;
   color: var(--color-text-faint);
   font-family: var(--font-code);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 .files-menu__badge {
   min-height: 22px;
@@ -185,7 +185,7 @@
   border: 0;
   border-radius: 999px;
   background: var(--color-bg-subtle);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   letter-spacing: var(--letter-spacing-normal);
   color: var(--color-text-muted);
 }
@@ -204,7 +204,7 @@
   background: none;
   font: inherit;
   font-family: var(--font-code);
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   color: var(--color-text-muted);
   cursor: pointer;
   transition:
@@ -245,7 +245,7 @@
   border: 0;
   background: var(--color-bg);
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 .files-table__header > :last-child {
   min-width: 52px;
@@ -266,7 +266,7 @@
   background: none;
   color: var(--color-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   text-align: left;
   cursor: pointer;
   transition:
@@ -373,7 +373,7 @@
   min-width: 52px;
   text-align: right;
   font-family: var(--font-code);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   color: var(--color-text-faint);
   font-variant-numeric: tabular-nums;
 }
@@ -386,7 +386,7 @@
 .files-empty {
   padding: 34px 18px;
   color: var(--color-text-faint);
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   line-height: 1.6;
 }
 
@@ -403,13 +403,13 @@
   border-radius: var(--atlas-radius-sm);
   background: var(--color-bg-subtle);
   color: var(--color-text-faint);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   line-height: 1.5;
 }
 .files-trash__section {
   padding: 12px 8px 4px;
   color: var(--color-text-faint);
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
   letter-spacing: 0.04em;
 }
@@ -429,7 +429,7 @@
   background: none;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   cursor: pointer;
   transition:
     background-color 140ms ease,
@@ -584,7 +584,7 @@
   background: transparent;
   color: var(--color-text-faint);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   white-space: nowrap;
   cursor: pointer;
@@ -631,7 +631,7 @@
   min-height: 28px;
   padding: 0 4px;
   color: var(--color-text-faint);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   line-height: 1.35;
 }
 .files-source-context__label {
@@ -660,7 +660,7 @@
   border-radius: var(--atlas-radius-sm);
   background: var(--color-bg-subtle);
   color: var(--color-text-muted);
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   line-height: 1.5;
   white-space: nowrap;
 }
@@ -689,7 +689,7 @@
   background: transparent;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   cursor: pointer;
   transition:
     background-color 140ms ease,
@@ -758,7 +758,7 @@
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 .files-search__input::-webkit-search-cancel-button {
   appearance: none;
@@ -845,12 +845,12 @@
 }
 .files-connect__heading strong {
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-emphasis);
 }
 .files-connect__heading small {
   color: var(--color-text-faint);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   line-height: 1.45;
 }
 .files-connect__dismiss {
@@ -889,7 +889,7 @@
   flex-direction: column;
   gap: 4px;
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 .files-connect__field select {
   width: 100%;
@@ -900,7 +900,7 @@
   background: var(--color-bg);
   color: var(--color-text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 .files-connect__path {
   flex: 1;
@@ -913,12 +913,12 @@
   color: var(--color-text);
   font: inherit;
   font-family: var(--font-code);
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 .files-connect__note {
   margin: 0;
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   line-height: 1.5;
 }
 .files-connect__note--blocked {
@@ -938,7 +938,7 @@
   background: none;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   cursor: pointer;
   transition:
     background-color 140ms ease,
@@ -972,7 +972,7 @@
   border-radius: var(--atlas-radius-sm);
   background: var(--color-bg-subtle);
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 1.5;
 }
 .files-notice--error {
@@ -993,7 +993,7 @@
   background: var(--color-bg);
   color: var(--color-text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-emphasis);
   cursor: pointer;
   transition:
@@ -1032,7 +1032,7 @@
 .artifact-toolbar__count {
   margin-right: auto;
   color: var(--color-text-faint);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1045,7 +1045,7 @@
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   cursor: pointer;
   transition:
     background-color 140ms ease,
@@ -1111,7 +1111,7 @@
 }
 .artifact-group__name {
   overflow: hidden;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-emphasis);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1119,7 +1119,7 @@
 .artifact-group__meta {
   margin-left: auto;
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1207,7 +1207,7 @@
 }
 .artifact-card__name {
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1226,7 +1226,7 @@
 }
 .artifact-card__sub {
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1289,7 +1289,7 @@
 .artifact-thumb--notebook small {
   color: var(--color-text-faint);
   font-family: var(--font-family-sans);
-  font-size: 8px;
+  font-size: var(--font-size-2x-small);
   font-weight: var(--font-weight-emphasis);
   line-height: 1;
 }
@@ -1309,7 +1309,7 @@
   overflow: hidden;
   color: var(--color-text-weak);
   font-family: var(--font-code);
-  font-size: 8px;
+  font-size: var(--font-size-2x-small);
   line-height: 1.5;
   white-space: pre;
 }
@@ -1330,7 +1330,7 @@
   background: var(--color-surface-solid);
   color: var(--color-text-faint);
   font-family: var(--font-code);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   letter-spacing: var(--letter-spacing-normal);
 }
 .artifact-card[data-layout="list"] .artifact-thumb--binary span {
@@ -1431,7 +1431,7 @@
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -1458,7 +1458,7 @@
 .artifact-menu__check {
   flex: none;
   width: 12px;
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 
 /* ------------------------------------------------------------ remote viewer */
@@ -1490,13 +1490,13 @@
 }
 .remote-view__name {
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .remote-view__sub {
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
 }
 .remote-view__action {
@@ -1511,7 +1511,7 @@
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   cursor: pointer;
   transition:
     background-color 140ms ease,
@@ -1542,7 +1542,7 @@
   padding: 12px;
   color: var(--color-text);
   font-family: var(--font-code);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 1.55;
   /* Wrap rather than scroll sideways: a docked pane is ~400px and a long line
      otherwise takes the whole body with it. */
@@ -1567,7 +1567,7 @@
   gap: 6px;
   padding: 30px 16px;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   text-align: center;
 }
 .remote-view__empty p {
@@ -1575,7 +1575,7 @@
 }
 .remote-view__hint {
   color: var(--color-text-faint);
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 
 .files-loading {
@@ -1584,7 +1584,7 @@
   gap: 8px;
   padding: 4px 12px 8px;
   color: var(--color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
 }
 .files-loading__spark {
   width: 7px;

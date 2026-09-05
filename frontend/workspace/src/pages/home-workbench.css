@@ -105,7 +105,7 @@
   padding: 0 9px;
   border: 1px solid var(--color-border);
   background: transparent;
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
 }
 
@@ -169,7 +169,7 @@
   max-width: 560px;
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-regular);
   line-height: 1.5;
 }
@@ -193,7 +193,7 @@
 
 .science-home__refreshing {
   color: var(--color-text-faint);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
 
@@ -229,7 +229,7 @@
   flex: 1;
   color: var(--color-text);
   font-family: var(--font-family-sans);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   line-height: 1;
 }
 
@@ -335,7 +335,7 @@
   align-items: center;
   gap: 7px;
   color: var(--color-text-faint);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
 }
@@ -397,7 +397,7 @@
   padding: 0 14px;
   border-radius: var(--atlas-radius-sm);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   list-style: none;
 }
@@ -429,7 +429,7 @@
   border-radius: var(--atlas-radius-pill);
   background: var(--surface-base-hover);
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
 }
 
@@ -463,7 +463,7 @@
   flex: 1;
   overflow: hidden;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -477,7 +477,7 @@
   border-radius: var(--atlas-radius-xs);
   color: var(--color-text-muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
 }
 
@@ -509,13 +509,13 @@
 
 .science-home__state strong {
   color: var(--color-text);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-emphasis);
 }
 
 .science-home__state > div > span {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   line-height: 1.5;
 }
 
@@ -545,7 +545,7 @@
   background: var(--color-surface-solid);
   color: var(--color-text);
   font-family: var(--font-family-sans);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-emphasis);
   letter-spacing: -0.005em;
   white-space: nowrap;
@@ -645,7 +645,7 @@
   }
 
   .science-home__heading-copy > p {
-    font-size: 13.5px;
+    font-size: var(--font-size-base);
   }
 
   .science-home__heading-actions {

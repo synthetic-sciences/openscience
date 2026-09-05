@@ -28,14 +28,14 @@
   align-items: baseline;
   gap: 5px;
   color: var(--color-text-faint);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .data-table-summary strong {
   color: var(--color-text);
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
 }
 
@@ -57,7 +57,7 @@
   background: var(--color-bg-subtle);
   color: var(--color-text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   transition:
     background-color 140ms ease,
     outline-color 140ms ease;
@@ -79,7 +79,7 @@
   position: absolute;
   right: 9px;
   color: var(--color-text-faint);
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
@@ -101,7 +101,7 @@
   background: transparent;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -173,7 +173,7 @@
   overflow: hidden;
   color: var(--color-text);
   font-family: var(--font-code);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -183,7 +183,7 @@
   gap: 8px;
   margin-top: 5px;
   color: var(--color-text-faint);
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -220,7 +220,7 @@
   border-collapse: separate;
   color: var(--color-text-muted);
   font-family: var(--font-code);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
 
@@ -283,7 +283,7 @@
 .data-table-column-type {
   color: var(--color-text-faint);
   font-family: var(--font-sans);
-  font-size: 9.5px;
+  font-size: var(--font-size-2x-small);
   font-weight: var(--font-weight-regular);
 }
 
@@ -291,7 +291,7 @@
   flex: none;
   color: var(--color-text-faint);
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 
 .data-table-scroll tbody td,
@@ -333,7 +333,7 @@
 
 .data-table-index {
   z-index: 1 !important;
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
 }
 
@@ -357,7 +357,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   text-align: center;
   text-overflow: ellipsis;
@@ -382,7 +382,7 @@
   overflow: hidden;
   min-width: 0;
   color: var(--color-text);
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -393,7 +393,7 @@
   min-width: 0;
   gap: 10px;
   color: var(--color-text-faint);
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -429,14 +429,14 @@
 }
 
 .data-table-empty strong {
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
 }
 
 .data-table-empty span {
   max-width: 420px;
   color: var(--color-text-faint);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 1.5;
   text-wrap: pretty;
 }

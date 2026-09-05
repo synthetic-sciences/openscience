@@ -86,7 +86,7 @@
 .settings-preferences-panel--sandbox .settings-sandbox-backend-details dt {
   margin: 0 0 2px;
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   line-height: 16px;
 }
 
@@ -94,7 +94,7 @@
   margin: 0;
   color: var(--text-strong);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   line-height: 17px;
   overflow-wrap: anywhere;
   font-synthesis: none;
@@ -115,7 +115,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -146,7 +146,7 @@
   align-items: center;
   gap: var(--settings-space-2);
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
 }
@@ -178,14 +178,14 @@
   align-items: start;
   gap: var(--settings-space-2);
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 18px;
 }
 
 .settings-preferences-panel--sandbox .settings-sandbox-check__detail {
   min-width: 0;
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   line-height: 18px;
   overflow-wrap: anywhere;
   white-space: normal;

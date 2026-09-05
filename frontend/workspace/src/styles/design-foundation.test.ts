@@ -52,7 +52,9 @@ describe("workspace design foundation", () => {
     expect(compute).not.toContain(".kernel-card__stop")
     expect(compute).toMatch(/\.compute-row\s*\{[^}]*min-height:\s*48px[^}]*display:\s*grid/s)
     expect(compute).toMatch(/\.compute-row__telemetry\s*\{[^}]*display:\s*flex[^}]*color:\s*var\(--color-text-muted\)/s)
-    expect(terminal).toMatch(/\.terminal-surface__search button\s*\{[^}]*height:\s*32px[^}]*font-size:\s*12px/s)
+    expect(terminal).toMatch(
+      /\.terminal-surface__search button\s*\{[^}]*height:\s*32px[^}]*font-size:\s*(?:12px|var\(--font-size-small\))/s,
+    )
     expect(terminal).toMatch(/\.terminal-surface__tab,\s*\.terminal-surface__close\s*\{[^}]*height:\s*32px/s)
     expect(atlas).not.toContain(".terminal-surface")
     expect(settings).toMatch(/--settings-type-helper:\s*12px/)

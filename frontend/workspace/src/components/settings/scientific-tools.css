@@ -76,7 +76,7 @@
 .scientific-tool-row__title strong {
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
   text-overflow: ellipsis;
@@ -86,7 +86,7 @@
 .scientific-tool-row__title small,
 .scientific-tool-row__copy > span {
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   line-height: 16px;
 }
 
@@ -121,7 +121,7 @@
   border-radius: var(--settings-radius-pill);
   background: transparent;
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-regular);
   line-height: 16px;
   white-space: nowrap;
@@ -151,7 +151,7 @@
   border: 0;
   background: var(--settings-surface-muted);
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   box-shadow: none;
 }
 
@@ -187,7 +187,7 @@
   border-radius: var(--settings-radius-control);
   background: var(--settings-surface-muted);
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 18px;
   text-wrap: pretty;
 }
@@ -195,7 +195,7 @@
 .scientific-tools-footnote {
   margin: 0;
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   line-height: 16px;
   text-wrap: pretty;
 }

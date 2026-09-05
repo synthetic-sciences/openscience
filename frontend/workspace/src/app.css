@@ -12,7 +12,7 @@
 }
 
 .app-not-found__eyebrow {
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-emphasis);
   letter-spacing: var(--letter-spacing-normal);
   color: var(--text-weak);
@@ -29,7 +29,7 @@
   max-width: 48ch;
   margin: 0;
   color: var(--text-weak);
-  font-size: 15px;
+  font-size: var(--font-size-base);
   line-height: 1.6;
   text-wrap: pretty;
 }
@@ -44,7 +44,7 @@
   border-radius: var(--radius-md);
   background: var(--button-primary-base);
   color: var(--icon-invert-base);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-emphasis);
   text-decoration: none;
   cursor: pointer;
@@ -70,7 +70,7 @@
   border-radius: var(--radius-md);
   background: var(--surface-raised-base);
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -95,5 +95,5 @@
 .project-unavailable .project-unavailable__note {
   max-width: none;
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }

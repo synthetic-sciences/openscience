@@ -3,7 +3,7 @@
   gap: 10px;
   color: var(--color-text-muted);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   line-height: 19px;
 }
 
@@ -35,7 +35,7 @@
   overflow: hidden;
   color: var(--color-text);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -57,7 +57,7 @@
   background: var(--surface-base);
   color: var(--color-text-muted);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 
 .session-undo-bar__copy {

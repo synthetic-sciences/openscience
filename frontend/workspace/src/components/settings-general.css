@@ -52,14 +52,14 @@
 
 .settings-update-history strong {
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
 }
 
 .settings-update-history small,
 .settings-update-history time {
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 
 .settings-update-history time {

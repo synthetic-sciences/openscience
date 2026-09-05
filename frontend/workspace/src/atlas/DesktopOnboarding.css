@@ -41,7 +41,7 @@
 
 .desktop-onboarding__account-state {
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 
 .desktop-onboarding__content {
@@ -57,7 +57,7 @@
 .desktop-onboarding__intro p {
   margin: 0 0 6px;
   color: var(--text-weak);
-  font-size: 10px;
+  font-size: var(--font-size-2x-small);
   font-weight: var(--font-weight-emphasis);
   letter-spacing: 0.11em;
 }
@@ -77,7 +77,7 @@
 .desktop-onboarding__note,
 .desktop-onboarding__footer > span {
   color: var(--text-weak);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 1.5;
   text-wrap: pretty;
 }
@@ -136,12 +136,12 @@
 }
 
 .desktop-onboarding__workspace-action strong {
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-emphasis);
 }
 
 .desktop-onboarding__workspace-action small {
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 
 .desktop-onboarding__workspace-icon {
@@ -190,13 +190,13 @@
 
 .desktop-onboarding__models > summary strong,
 .desktop-onboarding__model-copy strong {
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-emphasis);
 }
 
 .desktop-onboarding__models > summary small {
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 
 .desktop-onboarding__models > summary > span:last-child {
@@ -242,7 +242,7 @@
   align-items: center;
   gap: 6px;
   color: var(--text-weak);
-  font-size: 10px;
+  font-size: var(--font-size-2x-small);
   font-weight: var(--font-weight-emphasis);
   letter-spacing: 0.04em;
 }
@@ -277,7 +277,7 @@
   flex-direction: column;
   gap: 6px;
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 
 .desktop-onboarding__credentials select {
@@ -303,7 +303,7 @@
   outline: none;
   background: color-mix(in srgb, var(--text-danger) 7%, transparent);
   color: var(--text-danger);
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 
 .desktop-onboarding__error:focus-visible {
