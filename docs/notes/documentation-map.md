@@ -61,6 +61,8 @@ All page paths below are relative to `frontend/docs/src/content/openscience/`.
 
 `script/catalog.ts` generates the skill and database directories. `script/export.ts` generates `llms.txt` and `llms-full.txt` during builds.
 
+Fast CI runs the full checks with backend dependencies installed. The hosting build needs only the documentation package; it generates exports and bundles the content without loading backend modules.
+
 ## External references reviewed
 
 - [Claude Code overview](https://code.claude.com/docs/en/overview): organize entrypoints around a first task and link to deeper workflow and reference guides.

@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
-    "build": "bun run check && bun run export && vite build",
+    "build": "bun run export && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "catalog": "bun --no-env-file script/catalog.ts",

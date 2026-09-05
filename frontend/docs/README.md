@@ -14,7 +14,7 @@ bun run --cwd frontend/docs typecheck
 bun run --cwd frontend/docs build
 ```
 
-The build validates content, generates plain-text exports, and writes `dist/`. Fast CI runs the content and routing checks and builds the docs.
+The build generates plain-text exports and writes `dist/`. Run `test:docs` to validate content and routing; Fast CI runs these checks before building the docs. Schema and catalog checks use the backend's dependencies, while the hosting build installs only the documentation package and builds the already-checked content.
 
 For browser coverage:
 
