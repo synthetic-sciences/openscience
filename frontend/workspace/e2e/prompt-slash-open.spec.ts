@@ -6,7 +6,37 @@ import { promptSelector } from "./utils"
 // same frame on a slow runner; open the menu first, then type the query.
 async function slash(page: Page, prompt: Locator, query: string) {
   await prompt.pressSequentially("/", { delay: 10 })
-  await expect(page.locator("#composer-slash-listbox")).toBeVisible()
+  const listbox = page.locator("#composer-slash-listbox")
+  const opened = await listbox.isVisible().catch(() => false)
+  if (!opened) {
+    // Record what the editor actually holds before the assertion fails; the
+    // packaged runner has produced states no local run reproduces.
+    const state = await prompt.evaluate((editor) => {
+      const selection = window.getSelection()
+      const anchor = selection?.anchorNode
+      return {
+        userAgent: navigator.userAgent,
+        innerHTML: editor.innerHTML,
+        text: JSON.stringify(editor.textContent),
+        mode: editor.parentElement?.getAttribute("data-composer-mode"),
+        expanded: editor.getAttribute("aria-expanded"),
+        active: document.activeElement === editor ? "editor" : document.activeElement?.outerHTML.slice(0, 160),
+        selection: anchor
+          ? {
+              inEditor: editor.contains(anchor),
+              node:
+                anchor.nodeType === Node.TEXT_NODE ? JSON.stringify(anchor.textContent) : (anchor as Element).tagName,
+              offset: selection?.anchorOffset,
+              collapsed: selection?.isCollapsed,
+            }
+          : null,
+      }
+    })
+    await test
+      .info()
+      .attach("composer-state", { body: JSON.stringify(state, null, 2), contentType: "application/json" })
+  }
+  await expect(listbox).toBeVisible()
   await prompt.pressSequentially(query, { delay: 30 })
 }
 
