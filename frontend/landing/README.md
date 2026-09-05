@@ -6,7 +6,7 @@ Standalone Vite + React + Tailwind project (not part of the monorepo bun
 workspace, so its deps stay isolated). The whole page is one file:
 `src/pages/Landing.tsx`, styled by the scoped `src/pages/landing.css`
 (monochrome editorial layout, self-hosted CMU Concrete, interactive workflow
-preview, and continuous marquees). Shared download-page styles remain in
+preview, detailed research categories, and an institution marquee). Shared download-page styles remain in
 `src/index.css`. Motion respects reduced-motion preferences and can be paused.
 
 ```bash

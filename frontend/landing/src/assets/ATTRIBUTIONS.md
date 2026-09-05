@@ -12,3 +12,9 @@ The file is the original black-and-white photograph, not an AI-generated image.
 The page crops it responsively and adds a CSS scrim for text contrast. The visible
 caption credits the photographer and links to the archival source. The photograph
 provides historical research context; it does not imply NASA endorsement.
+
+## Synthetic Sciences mark
+
+`synthetic-sciences.svg` reproduces the vector brand mark used by the official
+[Synthetic Sciences website](https://syntheticsciences.ai/). Its path and view box
+are preserved; the fill is white for the monochrome landing page.

@@ -11,8 +11,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 ### Changed
 
 - Redesign openscience.sh around archival research photography, monochrome editorial
-  sections, moving institution and source strips, interactive workflow previews,
-  expanded skill and BioNeMo coverage, and an oversized OpenScience footer.
+  sections, a moving institution strip, interactive workflow previews, detailed
+  research skills and static tool grids, and an oversized OpenScience footer.
 
 - Keep the saved model-access choice stable through delayed Wallet reads and
   account switches, without letting an old request overwrite the new account UI.

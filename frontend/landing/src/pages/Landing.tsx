@@ -1,5 +1,7 @@
 import { useState } from "react"
 import photograph from "@/assets/lunar-lab.jpg"
+import logo from "@/assets/synthetic-sciences.svg"
+import { RESEARCH, WORKSPACE } from "@/data/research"
 import { CONNECTORS } from "@/data/connectors"
 import "./landing.css"
 
@@ -21,11 +23,10 @@ const INSTITUTIONS = [
 const WORK = [
   {
     title: "Read the literature",
-    description:
-      "Follow a question through papers, datasets, and primary sources. Keep the evidence beside the conversation.",
+    description: "Find the relevant papers, compare their methods, and save the references in your project.",
     prompt: "What do we know about protein design under limited experimental data? Start with the literature.",
-    heading: "A good question starts with the evidence.",
-    body: "Search the literature, compare methods, and collect the sources worth reading closely.",
+    heading: "Literature review",
+    body: "I’ll compare the approaches, note their limitations, and put the references in a bibliography.",
     files: ["literature.md", "references.bib", "research-question.md"],
     activity: ["Search arXiv and PubMed", "Compare methods and limitations", "Save a cited research brief"],
     label: "literature.md",
@@ -40,12 +41,11 @@ const WORK = [
     ],
   },
   {
-    title: "Work through the experiment",
-    description:
-      "Move from the method to code, notebooks, and scientific tools. Run the work and keep the outputs in your project.",
+    title: "Run the experiment",
+    description: "Write and run the analysis in Python or R. Use local tools or send a job to your connected compute.",
     prompt: "Build a reproducible baseline. Keep the held-out data separate and record the environment.",
-    heading: "Make the method something you can run.",
-    body: "Write the analysis, inspect the outputs, and work through the result with your files and terminal in reach.",
+    heading: "Baseline experiment",
+    body: "I’ll inspect the data and define the split before running the baseline. The code and environment will be saved together.",
     files: ["analysis.ipynb", "environment.yml", "results/"],
     activity: ["Inspect the project data", "Run the baseline analysis", "Save code, environment, and outputs"],
     label: "analysis.ipynb",
@@ -61,12 +61,12 @@ const WORK = [
     ],
   },
   {
-    title: "Bring it to the page",
+    title: "Write it up",
     description:
-      "Turn the work into a manuscript, with figures, citations, and the underlying analysis still close at hand.",
+      "Draft the manuscript from your analysis. Check the references and prepare the figures for publication.",
     prompt: "Draft the methods from the actual analysis. Link each figure to its source and flag unsupported claims.",
-    heading: "Write with the work still in view.",
-    body: "Assemble the manuscript from your project. Review the claims, revisit the evidence, and refine the figures.",
+    heading: "Manuscript review",
+    body: "I’ll draft the methods from the notebook and mark any claims that the analysis doesn’t yet support.",
     files: ["manuscript.tex", "figures/", "references.bib"],
     activity: ["Draft the methods section", "Connect figures and citations", "Review claims against the evidence"],
     label: "manuscript.tex",
@@ -80,38 +80,6 @@ const WORK = [
       "Figures → figures/",
       "Citations → references.bib",
     ],
-  },
-] as const
-const SKILLS = [
-  {
-    title: "Molecular biology",
-    detail: "Sequences, structures, and the questions between them.",
-    tools: "Biopython · Scanpy · scvi-tools · AnnData",
-    text: "Work with biological sequences, single-cell data, and experimental workflows, with domain-specific procedures available to the agent.",
-  },
-  {
-    title: "Chemistry & materials",
-    detail: "From a molecule to its properties.",
-    tools: "RDKit · DeepChem · pymatgen · molecular dynamics",
-    text: "Prepare molecules, explore chemical properties, and work through materials simulations with specialist research skills.",
-  },
-  {
-    title: "Machine learning",
-    detail: "Build the baseline. Understand the result.",
-    tools: "PyTorch · Transformers · DeepSpeed · PEFT",
-    text: "Train, fine-tune, and evaluate models. Keep the experiment configuration, code, and analysis together.",
-  },
-  {
-    title: "Data & statistics",
-    detail: "Look closely at what the data says.",
-    tools: "Polars · statsmodels · PyMC · scikit-learn",
-    text: "Clean datasets, fit statistical models, and test assumptions before turning an analysis into a claim.",
-  },
-  {
-    title: "Papers & publication",
-    detail: "Make the work legible to the next person.",
-    tools: "LaTeX · Zotero · literature review · scientific writing",
-    text: "Find and manage citations, draft manuscripts, and prepare figures with the project's evidence close at hand.",
   },
 ] as const
 const PROVIDERS = [
@@ -151,21 +119,8 @@ const QUESTIONS = [
     "Yes. Add your own skills, MCP servers, plugins, agents, and commands. Use the TypeScript SDK to connect private tools and research infrastructure.",
   ],
 ] as const
-function Arrow() {
-  return (
-    <span aria-hidden="true" className="arrow">
-      ↗
-    </span>
-  )
-}
 function Mark() {
-  return (
-    <svg className="science-mark" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" />
-      <ellipse cx="12" cy="12" rx="9" ry="3.5" stroke="currentColor" transform="rotate(-40 12 12)" />
-      <circle cx="12" cy="12" r="2" fill="currentColor" />
-    </svg>
-  )
+  return <img className="science-mark" src={logo} width="28" height="28" alt="" aria-hidden="true" />
 }
 
 export default function Landing() {
@@ -194,17 +149,10 @@ export default function Landing() {
           <span>Synthetic Sciences</span>
         </a>
         <nav aria-label="Primary navigation">
-          <a href="#research" className="nav-research">
-            The workbench
-          </a>
-          <a href={DOCS}>
-            Docs <Arrow />
-          </a>
-          <a href={GITHUB}>
-            GitHub <Arrow />
-          </a>
+          <a href={DOCS}>Docs</a>
+          <a href={GITHUB}>GitHub</a>
           <a href="/download" className="nav-download">
-            Get OpenScience <span aria-hidden="true">↓</span>
+            Get OpenScience
           </a>
         </nav>
       </header>
@@ -221,15 +169,16 @@ export default function Landing() {
             </h1>
             <div className="hero-intro entrance">
               <p>
-                Meet OpenScience. An open-source home for your research, from the first question to the final footnote.
+                OpenScience is a research agent that works with your papers, code, and experiments. Open source, on your
+                computer.
               </p>
               <a href="/download" className="button button-light">
-                Start your research <Arrow />
+                Get OpenScience
               </a>
-              <span className="hero-platforms">macOS, Windows & Linux</span>
             </div>
             <a className="hero-scroll" href="#research">
-              <span className="scroll-line" />A closer look <span aria-hidden="true">↓</span>
+              <span className="scroll-line" />
+              Explore OpenScience
             </a>
           </div>
           <figure className="hero-photograph">
@@ -238,16 +187,16 @@ export default function Landing() {
               alt="Researchers working with glass laboratory apparatus at NASA Ames, studying lunar samples in 1969."
               width="1041"
               height="1083"
-              fetchPriority="high"
+              {...{ fetchpriority: "high" }}
             />
             <div className="photograph-brand" aria-hidden="true">
               <Mark />
               <span>OpenScience</span>
             </div>
             <figcaption>
-              <span>Curiosity is a human thing.</span>
+              <span>Lunar Chemistry Laboratory</span>
               <a href={PHOTO} target="_blank" rel="noreferrer">
-                NASA Ames, 1969 · NASA/J. Remmington ↗
+                NASA Ames, 1969 · NASA/J. Remmington
               </a>
             </figcaption>
           </figure>
@@ -283,7 +232,6 @@ export default function Landing() {
         <section id="research" className="research paper section">
           <div className="section-heading">
             <p className="eyebrow">01 / The workbench</p>
-            <span className="small-note">A place to think. And do.</span>
           </div>
           <div className="research-heading">
             <h2>
@@ -292,10 +240,8 @@ export default function Landing() {
               the question.
             </h2>
             <p>
-              The paper leads to a dataset. The dataset leads to an experiment. The experiment changes the question.
-              <br />
-              <br />
-              Keep the whole thread in one workspace.
+              OpenScience works in your project: reading papers, writing code, and running experiments. You can inspect
+              the work as it happens and pick up where you left off.
             </p>
           </div>
           <div className="workflow-layout">
@@ -337,9 +283,7 @@ export default function Landing() {
                     <strong>{item.title}</strong>
                     <span className="chapter-description">{item.description}</span>
                   </span>
-                  <span className="chapter-arrow" aria-hidden="true">
-                    ↗
-                  </span>
+                  <span className="chapter-dot" aria-hidden="true" />
                 </button>
               ))}
             </div>
@@ -364,7 +308,7 @@ export default function Landing() {
                   {work.files.map((file) => (
                     <span key={file}>↳ {file}</span>
                   ))}
-                  <span className="workspace-files-bottom">+ Your next question</span>
+                  <span className="workspace-files-bottom">+ New conversation</span>
                 </aside>
                 <div className="workspace-conversation" key={chapter}>
                   <span className="example-label">Illustrative workflow</span>
@@ -383,7 +327,7 @@ export default function Landing() {
                     </ul>
                   </div>
                   <div className="example-composer">
-                    <span>Follow the next question…</span>
+                    <span>Ask about this project…</span>
                     <span aria-hidden="true">↑</span>
                   </div>
                 </div>
@@ -398,152 +342,123 @@ export default function Landing() {
             </div>
           </div>
           <div className="section-tail">
-            <span>Your files. Your terminal. Your train of thought.</span>
+            <span>Papers, notebooks, and results saved in your project.</span>
             <a className="text-link" href={`${DOCS}/#/openscience/workspace`}>
-              Explore the workspace <Arrow />
+              Explore the workspace
             </a>
           </div>
         </section>
         <section id="skills" className="capabilities section">
           <div className="section-heading">
-            <p className="eyebrow">02 / A working scientist’s toolkit</p>
+            <p className="eyebrow">02 / Research tools</p>
             <a className="text-link" href={`${DOCS}/#/openscience/skills`}>
-              Explore the skills <Arrow />
+              Browse the skills
             </a>
           </div>
           <div className="capability-heading">
             <h2>
-              Go where
+              Tools for
               <br />
-              the work takes you.
+              your kind of science.
             </h2>
             <p>
-              Follow a question across disciplines with hundreds of research skills and direct access to scientific
-              data.
+              Run an analysis, work through a simulation, or prepare a paper. OpenScience has research skills for the
+              details of each field.
             </p>
           </div>
-          <div className="capability-counts">
-            <div>
-              <strong>
-                300<span>+</span>
-              </strong>
-              <span>bundled research skills</span>
-            </div>
-            <div>
-              <strong>{CONNECTORS.length}</strong>
-              <span>scientific data sources</span>
-            </div>
-            <div>
-              <strong>10</strong>
-              <span>experimental BioNeMo integrations</span>
-            </div>
-          </div>
           <div className="skill-index">
-            {SKILLS.map((skill, index) => (
-              <details key={skill.title}>
+            {RESEARCH.map((field, index) => (
+              <details key={field.title} name="research-fields" open={index === 0}>
                 <summary>
                   <span className="index-number">0{index + 1}</span>
-                  <h3>{skill.title}</h3>
-                  <span className="skill-detail">{skill.detail}</span>
+                  <h3>{field.title}</h3>
+                  <span className="skill-detail">{field.detail}</span>
                   <span className="detail-toggle" aria-hidden="true">
                     +
                   </span>
                 </summary>
-                <div className="skill-expanded">
-                  <p>{skill.text}</p>
-                  <span>{skill.tools}</span>
+                <div className="field-content">
+                  <div className="field-tasks">
+                    {field.tasks.map((task) => (
+                      <div key={task[0]}>
+                        <h4>{task[0]}</h4>
+                        <p>{task[1]}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="field-skills">
+                    <span className="eyebrow">Included skills</span>
+                    <div>
+                      {field.skills.map((skill) => (
+                        <a key={skill[0]} href={`${GITHUB}/tree/main/backend/cli/skills/${skill[1]}`}>
+                          {skill[0]}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="field-example">
+                    <span className="eyebrow">Try asking</span>
+                    <p>“{field.example}”</p>
+                  </div>
                 </div>
               </details>
             ))}
           </div>
-          <div className="bionemo">
-            <div>
-              <p className="eyebrow">A closer look / NVIDIA BioNeMo</p>
-              <h3>
-                From sequence
-                <br />
-                to structure.
-              </h3>
-              <p>Protein design, molecular docking, and biological models, connected to the same research workspace.</p>
-              <a href={`${GITHUB}/tree/main/backend/cli/src/science/capability/manifests`} className="text-link">
-                See the scientific-tool catalog <Arrow />
-              </a>
+          <div className="toolkit">
+            <div className="toolkit-heading">
+              <h3>In the workspace</h3>
+              <p>Built-in tools for the work around the experiment.</p>
             </div>
-            <div className="bionemo-index">
-              <div className="bionemo-label">
-                <span>Available adapters</span>
-                <span>Experimental</span>
-              </div>
-              {[
-                ["Boltz-2", "Structure & affinity"],
-                ["DiffDock", "Molecular docking"],
-                ["Evo 2", "DNA generation"],
-                ["RFdiffusion", "Protein backbones"],
-                ["ProteinMPNN", "Sequence design"],
-              ].map((tool) => (
-                <div className="bionemo-row" key={tool[0]}>
-                  <span>{tool[0]}</span>
-                  <span>{tool[1]}</span>
-                </div>
+            <div className="workspace-tools">
+              {WORKSPACE.map((tool) => (
+                <a key={tool[0]} href={`${GITHUB}/blob/main/backend/cli/src/tool/${tool[2]}`}>
+                  <h4>{tool[0]}</h4>
+                  <p>{tool[1]}</p>
+                </a>
               ))}
-              <p>
-                Also GenMol, MolMIM, MSA Search, OpenFold2, and OpenFold3. Requires your NVIDIA API key and service
-                access. These integrations are experimental, not release-verified.
-              </p>
             </div>
           </div>
-        </section>
-        <section className="source-strip" aria-label="Scientific data sources">
-          <div className="marquee-heading">
-            <p className="eyebrow">Connected to the scientific record</p>
-            <a href={`${DOCS}/#/openscience/skills`} className="text-link">
-              All {CONNECTORS.length} sources <Arrow />
+          <div className="toolkit databases">
+            <div className="toolkit-heading">
+              <h3>Scientific databases</h3>
+              <p>Search publications and retrieve records from the source.</p>
+            </div>
+            <div className="database-grid">
+              {CONNECTORS.map((connector) => (
+                <a key={connector.id} href={connector.home} target="_blank" rel="noreferrer">
+                  <span className="database-logo">
+                    <img src={connector.logo} alt="" width="24" height="24" loading="lazy" />
+                  </span>
+                  <span>{connector.name}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+          <div className="toolkit-note">
+            <p>Add your own lab’s tools through MCP servers, plugins, and custom skills.</p>
+            <a className="text-link" href={`${DOCS}/#/openscience/skills`}>
+              Extend OpenScience
             </a>
-          </div>
-          <div className="marquee source-marquee">
-            <div className="marquee-track">
-              {[0, 1].map((repeat) => (
-                <div className="marquee-group" key={repeat} aria-hidden={repeat === 1 ? true : undefined}>
-                  {CONNECTORS.map((connector) => (
-                    <a
-                      key={connector.id}
-                      href={connector.home}
-                      tabIndex={repeat === 1 ? -1 : undefined}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <img src={connector.logo} width="25" height="25" alt="" loading="lazy" />
-                      <span>{connector.name}</span>
-                      <span className="source-plus" aria-hidden="true">
-                        +
-                      </span>
-                    </a>
-                  ))}
-                </div>
-              ))}
-            </div>
           </div>
         </section>
         <section id="models" className="models paper section">
           <div className="section-heading">
-            <p className="eyebrow">03 / Your choice, all the way down</p>
+            <p className="eyebrow">03 / Models</p>
             <span className="small-note">Open source. Model agnostic.</span>
           </div>
           <div className="model-layout">
             <div className="model-copy">
               <h2>
-                Good science
+                Model
                 <br />
-                keeps its
-                <br />
-                options open.
+                agnostic.
               </h2>
               <p>
-                Choose the model that fits the work. Use your own keys, connect a provider account, or run a model
-                locally. Switch as your research changes.
+                Use the model you prefer. Connect your API keys or provider account, or run a model on your machine. You
+                can change models between sessions.
               </p>
               <a className="text-link" href={`${DOCS}/#/openscience/models`}>
-                Find your model <Arrow />
+                Find your model
               </a>
               <div className="model-note" aria-live="polite">
                 <span className="eyebrow">{PROVIDERS[provider].name}</span>
@@ -555,42 +470,38 @@ export default function Landing() {
                 <button key={item.name} aria-pressed={provider === index} onClick={() => setProvider(index)}>
                   <span className="provider-number">{item.mark}</span>
                   <span>{item.name}</span>
-                  <span className="provider-select" aria-hidden="true">
-                    {provider === index ? "↗" : "+"}
-                  </span>
+                  <span className="provider-select" data-selected={provider === index} aria-hidden="true" />
                 </button>
               ))}
-              <p>One workspace. No single-model commitment.</p>
+              <p>Your choice of model, in the same workspace.</p>
             </div>
           </div>
           <div className="ownership">
             <div>
-              <span className="eyebrow">Local by design</span>
-              <h3>The project is yours.</h3>
+              <span className="eyebrow">On your computer</span>
+              <h3>Your research stays with you.</h3>
               <p>
                 Your files, settings, and results live on your computer. You decide which external services to connect.
               </p>
             </div>
             <div>
-              <span className="eyebrow">Open by conviction</span>
-              <h3>So is the code.</h3>
-              <p>Inspect it. Change it. Make it work for your lab. OpenScience is released under Apache 2.0.</p>
+              <span className="eyebrow">Apache 2.0</span>
+              <h3>Read the code. Change it.</h3>
+              <p>
+                OpenScience is open source. You can inspect how it works, contribute a fix, or adapt it for your lab.
+              </p>
               <a className="text-link" href={GITHUB}>
-                Build with us <Arrow />
+                Build with us
               </a>
             </div>
           </div>
         </section>
         <section id="faq" className="questions section">
           <div>
-            <p className="eyebrow">04 / A few useful answers</p>
-            <h2>
-              Before
-              <br />
-              you begin.
-            </h2>
+            <p className="eyebrow">04 / Questions</p>
+            <h2>Good to know.</h2>
             <a className="text-link" href={DOCS}>
-              Read the docs <Arrow />
+              Read the docs
             </a>
           </div>
           <div className="faq-list">
@@ -608,14 +519,13 @@ export default function Landing() {
           </div>
         </section>
         <section className="closing paper">
-          <p className="eyebrow">For the next thing you want to understand.</p>
           <h2>
-            Make room
+            What are you
             <br />
-            for discovery.
+            working on?
           </h2>
           <a className="button button-dark" href="/download">
-            Get OpenScience <Arrow />
+            Get OpenScience
           </a>
           <div className="install">
             <code>{COMMAND}</code>
@@ -624,7 +534,7 @@ export default function Landing() {
               onClick={copy}
               aria-label={copied ? "Install command copied" : "Copy install command"}
             >
-              {copied ? "Copied ✓" : "Copy ↗"}
+              {copied ? "Copied ✓" : "Copy"}
             </button>
           </div>
           <p className="copy-feedback" role="status">
@@ -632,7 +542,7 @@ export default function Landing() {
               ? "Select the command above to copy it manually."
               : copied
                 ? "Copied. Paste it into your terminal to install."
-                : "Free & open source · Bring your curiosity."}
+                : "Free and open source."}
           </p>
         </section>
       </main>
@@ -644,20 +554,18 @@ export default function Landing() {
               <span>OpenScience</span>
             </a>
             <p>
-              A workbench for the work
+              Open-source software
               <br />
-              of understanding.
+              for scientific research.
             </p>
-            <a href="https://syntheticsciences.ai">
-              By Synthetic Sciences <Arrow />
-            </a>
+            <a href="https://syntheticsciences.ai">By Synthetic Sciences</a>
           </div>
           {[
             {
               title: "Product",
               links: [
                 ["Download", "/download"],
-                ["The workbench", "#research"],
+                ["Workspace", "#research"],
                 ["Skills & tools", "#skills"],
                 ["Models", "#models"],
               ],
@@ -693,7 +601,7 @@ export default function Landing() {
         </div>
         <div className="footer-meta">
           <span>© {new Date().getFullYear()} Synthetic Sciences · OpenScience is open source.</span>
-          <a href="#top">Back to top ↑</a>
+          <a href="#top">Back to top</a>
         </div>
         <a className="footer-wordmark" href="#top" aria-label="OpenScience, back to top">
           OpenScience
