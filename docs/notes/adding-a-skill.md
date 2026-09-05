@@ -87,7 +87,7 @@ bun test --timeout 15000 ./test/skill/bundled-skills.test.ts   # every bundled S
 bun test --timeout 15000 ./test/skill                          # the rest of the skill suite
 ```
 
-`bundled-skills.test.ts` pins the number of bundled skills (`expect(files.length).toBe(312)`);
+`bundled-skills.test.ts` pins the number of bundled skills;
 bump it in the same change when you add or remove one. Do not add counts to
 README.md or the docs site; they drift with every skill change.
 

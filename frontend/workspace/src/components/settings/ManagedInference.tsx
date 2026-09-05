@@ -143,6 +143,9 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
   })
   const loadWallet = recovery.load
   const loadBilling = () => {
+    // Reads started during a write can observe the previous server value but
+    // arrive after its acknowledgement. The write response already refreshes it.
+    if (state.saving) return
     const epoch = lifecycle.epoch
     const preference = lifecycle.preference
     const read = ++lifecycle.billingRead

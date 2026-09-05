@@ -18,6 +18,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Restore BRENDA helper imports and its missing SOAP bridge; align Open Targets
   queries with the current public schema; support explicit licensed local DrugBank
   exports without silently attempting a download.
+- Add an opt-in, read-only local Zotero library skill, with explicit query and
+  response limits; document conservative Mammouth custom-provider chat setup
+  without claiming native discovery or unverified tool capabilities.
 - Replace brittle Ace source-text assertions with real rendered account/routing
   behavior tests, consolidate the sidebar-action harness without dropping its
   callback regression, and correct contributor and release-verification guidance.

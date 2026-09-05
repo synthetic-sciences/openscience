@@ -1,249 +1,79 @@
-# Open Targets Platform API Reference
+# Open Targets Platform API reference
 
-## API Endpoint
+## Endpoint and schema
 
-```
-https://api.platform.opentargets.org/api/v4/graphql
-```
+The public endpoint is `https://api.platform.opentargets.org/api/v4/graphql`.
+Send POST JSON with `query` and optional `variables`. No key is required.
+Use the [GraphQL browser](https://api.platform.opentargets.org/api/v4/graphql/browser)
+or schema introspection to verify fields. Query contracts below were checked
+September 5, 2026; data releases may change them.
 
-Interactive GraphQL playground with documentation:
-```
-https://api.platform.opentargets.org/api/v4/graphql/browser
-```
+The API is for exploratory queries. Use official data downloads or BigQuery for
+systematic analyses rather than issuing large numbers of API requests.
 
-## Access Methods
+## Bundled helper contract
 
-The Open Targets Platform provides multiple access methods:
+`scripts/query_opentargets.py` exports:
 
-1. **GraphQL API** - Best for single entity queries and flexible data retrieval
-2. **Web Interface** - Interactive platform at https://platform.opentargets.org
-3. **Data Downloads** - FTP at https://ftp.ebi.ac.uk/pub/databases/opentargets/platform/
-4. **Google BigQuery** - For large-scale systematic queries
+- `search_entities(query_string, entity_types=None)`: first 10 matching hits.
+- `get_target_info(ensembl_id, include_diseases=False)`: target annotations,
+  optionally the first 10 associated diseases.
+- `get_disease_info(efo_id, include_targets=False)`: disease annotations,
+  optionally the first 10 associated targets.
+- `get_target_disease_evidence(ensembl_id, efo_id, data_types=None)`: first 100
+  evidence rows, optionally filtered locally by datatype. A filtered empty page
+  does not establish that no matching evidence exists.
+- `get_known_drugs_for_disease(efo_id)`: current `drugAndClinicalCandidates`
+  response, with `count` and `rows`. Each row includes `id`,
+  `maxClinicalStage`, and nullable `drug`.
+- `get_drug_info(chembl_id)`: drug identifiers, stages, warnings, mechanisms and
+  indications in the current nested shapes.
+- `get_target_associations(ensembl_id, min_score=0.0)`: first 100 associations,
+  filtered locally by score.
+- `execute_query(query, variables=None)`: custom GraphQL query, with a 30-second
+  HTTP timeout and GraphQL errors surfaced even when the HTTP status is 400.
 
-## Authentication
+For absent entities, dictionary helpers return `{}` and row helpers return `[]`.
+Transport or schema failures raise an exception instead; do not treat them as
+negative biological evidence.
 
-No authentication is required for the GraphQL API. All data is freely accessible.
+## Pagination
 
-## Rate Limits
+Every explicit `Pagination` object needs both required integer fields:
+`page: {size: 10, index: 0}`. The index is zero-based. Set the next index for the
+next page and check the upstream count/rows; do not label one page "all results".
+Evidence uses the separate `size`/`cursor` interface, not `page`.
+The current evidence argument is `datasourceIds`, not `datatypes`; these represent
+different concepts and must not be substituted for one another.
 
-For systematic queries involving multiple targets or diseases, use dataset downloads or BigQuery instead of repeated API calls. The API is optimized for single-entity and exploratory queries.
+## Current field shapes
 
-## GraphQL Query Structure
+- Association `datatypeScores` has `id` and `score`. The helpers alias `id`
+  to `componentId` for compatibility with existing consumers.
+- Safety effects have `direction` and optional `dosing`; biosamples expose
+  `tissueLabel` and `tissueId`, not a nested `tissue` object.
+- `Disease.knownDrugs` has been replaced by `drugAndClinicalCandidates`.
+  Its rows are clinical candidate records, not the old drug-target-trial rows.
+- Drugs expose `maximumClinicalStage` as a string. Do not manufacture a numeric
+  phase or approval state.
+- Drug synonyms are `{label, source}` objects. Mechanisms use
+  `mechanismsOfAction { rows { actionType mechanismOfAction targetName targets { id approvedSymbol } } }`.
+- Indications use `indications { count rows { disease { id name } maxClinicalStage } }`.
+  Warnings use `drugWarnings`, not `withdrawnNotice`.
 
-GraphQL queries consist of:
-1. Query operation with optional variables
-2. Field selection (request only needed fields)
-3. Nested entity traversal
-
-### Basic Python Example
-
-```python
-import requests
-import json
-
-# Define the query
-query_string = """
-  query target($ensemblId: String!){
-    target(ensemblId: $ensemblId){
-      id
-      approvedSymbol
-      biotype
-      geneticConstraint {
-        constraintType
-        exp
-        obs
-        score
-      }
-    }
-  }
-"""
-
-# Define variables
-variables = {"ensemblId": "ENSG00000169083"}
-
-# Make the request
-base_url = "https://api.platform.opentargets.org/api/v4/graphql"
-response = requests.post(base_url, json={"query": query_string, "variables": variables})
-data = json.loads(response.text)
-print(data)
-```
-
-## Available Query Endpoints
-
-### /target
-Retrieve gene annotations, tractability assessments, and disease associations.
-
-**Common fields:**
-- `id` - Ensembl gene ID
-- `approvedSymbol` - HGNC gene symbol
-- `approvedName` - Full gene name
-- `biotype` - Gene type (protein_coding, etc.)
-- `tractability` - Druggability assessment
-- `safetyLiabilities` - Safety information
-- `expressions` - Baseline expression data
-- `knownDrugs` - Approved/clinical drugs
-- `associatedDiseases` - Disease associations with evidence
-
-### /disease
-Retrieve disease/phenotype data, known drugs, and clinical information.
-
-**Common fields:**
-- `id` - EFO disease identifier
-- `name` - Disease name
-- `description` - Disease description
-- `therapeuticAreas` - High-level disease categories
-- `synonyms` - Alternative names
-- `knownDrugs` - Drugs indicated for disease
-- `associatedTargets` - Target associations with evidence
-
-### /drug
-Retrieve compound details, mechanisms of action, and pharmacovigilance data.
-
-**Common fields:**
-- `id` - ChEMBL identifier
-- `name` - Drug name
-- `drugType` - Small molecule, antibody, etc.
-- `maximumClinicalTrialPhase` - Development stage
-- `indications` - Disease indications
-- `mechanismsOfAction` - Target mechanisms
-- `adverseEvents` - Pharmacovigilance data
-
-### /search
-Search across all entities (targets, diseases, drugs).
-
-**Parameters:**
-- `queryString` - Search term
-- `entityNames` - Filter by entity type(s)
-- `page` - Pagination
-
-### /associationDiseaseIndirect
-Retrieve target-disease associations including indirect evidence from disease descendants in ontology.
-
-**Key fields:**
-- `rows` - Association records with scores
-- `aggregations` - Aggregated statistics
-
-## Example Queries
-
-### Query 1: Get target information with disease associations
+## Example
 
 ```python
-query = """
-  query targetInfo($ensemblId: String!) {
-    target(ensemblId: $ensemblId) {
-      approvedSymbol
-      approvedName
-      tractability {
-        label
-        modality
-        value
-      }
-      associatedDiseases(page: {size: 10}) {
-        rows {
-          disease {
-            name
-          }
-          score
-          datatypeScores {
-            componentId
-            score
-          }
-        }
-      }
-    }
-  }
-"""
-variables = {"ensemblId": "ENSG00000157764"}
+from scripts.query_opentargets import search_entities, get_target_info
+
+hits = search_entities("BRCA1", ["target"])
+if hits:
+    target = get_target_info(hits[0]["id"], include_diseases=True)
+    for row in (target.get("associatedDiseases") or {}).get("rows", []):
+        print(row["disease"]["name"], row["score"])
 ```
 
-### Query 2: Search for diseases
-
-```python
-query = """
-  query searchDiseases($queryString: String!) {
-    search(queryString: $queryString, entityNames: ["disease"]) {
-      hits {
-        id
-        entity
-        name
-        description
-      }
-    }
-  }
-"""
-variables = {"queryString": "alzheimer"}
-```
-
-### Query 3: Get evidence for target-disease pair
-
-```python
-query = """
-  query evidences($ensemblId: String!, $efoId: String!) {
-    disease(efoId: $efoId) {
-      evidences(ensemblIds: [$ensemblId], size: 100) {
-        rows {
-          datasourceId
-          datatypeId
-          score
-          studyId
-          literature
-        }
-      }
-    }
-  }
-"""
-variables = {"ensemblId": "ENSG00000157764", "efoId": "EFO_0000249"}
-```
-
-### Query 4: Get known drugs for a disease
-
-```python
-query = """
-  query knownDrugs($efoId: String!) {
-    disease(efoId: $efoId) {
-      knownDrugs {
-        uniqueDrugs
-        rows {
-          drug {
-            name
-            id
-          }
-          targets {
-            approvedSymbol
-          }
-          phase
-          status
-        }
-      }
-    }
-  }
-"""
-variables = {"efoId": "EFO_0000249"}
-```
-
-## Error Handling
-
-GraphQL returns status code 200 even for errors. Check the response structure:
-
-```python
-if 'errors' in response_data:
-    print(f"GraphQL errors: {response_data['errors']}")
-else:
-    print(f"Data: {response_data['data']}")
-```
-
-## Best Practices
-
-1. **Request only needed fields** - Minimize data transfer and improve response time
-2. **Use variables** - Make queries reusable and safer
-3. **Handle pagination** - Most list fields support pagination with `page: {size: N, index: M}`
-4. **Explore the schema** - Use the GraphQL browser to discover available fields
-5. **Batch related queries** - Combine multiple entity fetches in a single query when possible
-6. **Cache results** - Store frequently accessed data locally to reduce API calls
-7. **Use BigQuery for bulk** - Switch to BigQuery/downloads for systematic analyses
-
-## Data Licensing
-
-All Open Targets Platform data is freely available. When using the data in research or commercial products, cite the latest publication:
-
-Ochoa, D. et al. (2025) Open Targets Platform: facilitating therapeutic hypotheses building in drug discovery. Nucleic Acids Research, 53(D1):D1467-D1477.
+Association scores are relative rankings, not calibrated probabilities of
+clinical success. Review evidence sources and biological context. Cite the
+[Open Targets Platform](https://platform.opentargets.org) and the applicable
+release/publication in research outputs.

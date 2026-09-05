@@ -68,10 +68,12 @@ Retrieves reaction equations and stoichiometry for enzymes.
 1. `email`: BRENDA account email
 2. `passwordHash`: SHA-256 hashed password
 3. `ecNumber*: EC number of the enzyme (wildcards allowed)
-4. `organism*: Organism name (wildcards allowed, default: "*")
-5. `reaction*: Reaction equation (wildcards allowed, default: "*")
-6. `commentary*: Commentary field (default: "*")
-7. `literature*: Literature reference field (default: "*")
+4. `reaction*`: Reaction equation filter
+5. `commentary*`: Commentary filter
+6. `literature*`: Literature filter
+7. `organism*`: Organism filter
+
+This order follows the official Python 3 Zeep contract; empty values request all values.
 
 **Response Format:**
 ```
@@ -179,13 +181,11 @@ Reactions use standard biochemical notation:
 
 ### API Rate Limits
 
-- **Maximum**: 5 requests per second
-- **Sustained**: 1 request per second recommended
-- **Daily quota**: Varies by account type
+- The [official usage policy](https://www.brenda-enzymes.org/soap.php) requests no more than one request per second.
 
 ### Best Practices
 
-1. **Implement delays**: Add 0.5-1 second between requests
+1. **Implement delays**: Allow at least one second between requests
 2. **Cache results**: Store frequently accessed data locally
 3. **Use specific searches**: Narrow by organism and substrate when possible
 4. **Batch operations**: Group related queries
@@ -207,62 +207,24 @@ Reactions use standard biochemical notation:
 
 ## Python Client Reference
 
-### brenda_client Module
+The bundled `scripts/brenda_client.py` implements only the two operations used
+by the analysis helpers: `get_km_values(ec_number, organism=None, substrate=None)`
+and `get_reactions(ec_number, organism=None, reaction=None)`.
 
-#### Core Functions
+Import from `scripts.brenda_client` when working in the skill directory, or
+`brenda_client` when the `scripts` directory is on the Python import path.
+No credentials or network connections are used at import time. Calls read
+`BRENDA_EMAIL` (legacy `BRENDA_EMIAL` fallback) and `BRENDA_PASSWORD` from
+the environment; `.env` files are not loaded automatically. The password is
+SHA-256 hashed before sending it to the official HTTPS SOAP endpoint.
 
-**`load_env_from_file(path=".env")`**
-- **Purpose**: Load environment variables from .env file
-- **Parameters**: `path` - Path to .env file (default: ".env")
-- **Returns**: None (populates os.environ)
-
-**`_get_credentials() -> tuple[str, str]`**
-- **Purpose**: Retrieve BRENDA credentials from environment
-- **Returns**: Tuple of (email, password)
-- **Raises**: RuntimeError if credentials missing
-
-**`_get_client() -> Client`**
-- **Purpose**: Initialize or retrieve SOAP client
-- **Returns**: Zeep Client instance
-- **Features**: Singleton pattern, custom transport settings
-
-**`_hash_password(password: str) -> str`**
-- **Purpose**: Generate SHA-256 hash of password
-- **Parameters**: `password` - Plain text password
-- **Returns**: Hexadecimal SHA-256 hash
-
-**`call_brenda(action: str, parameters: List[str]) -> str`**
-- **Purpose**: Execute BRENDA SOAP action
-- **Parameters**:
-  - `action` - SOAP action name (e.g., "getKmValue")
-  - `parameters` - List of parameters in correct order
-- **Returns**: Raw response string from BRENDA
-
-#### Convenience Functions
-
-**`get_km_values(ec_number: str, organism: str = "*", substrate: str = "*") -> List[str]`**
-- **Purpose**: Retrieve Km values for specified enzyme
-- **Parameters**:
-  - `ec_number`: Enzyme Commission number
-  - `organism`: Organism name (wildcard allowed, default: "*")
-  - `substrate`: Substrate name (wildcard allowed, default: "*")
-- **Returns**: List of parsed data strings
-
-**`get_reactions(ec_number: str, organism: str = "*", reaction: str = "*") -> List[str]`**
-- **Purpose**: Retrieve reaction data for specified enzyme
-- **Parameters**:
-  - `ec_number`: Enzyme Commission number
-  - `organism`: Organism name (wildcard allowed, default: "*")
-  - `reaction`: Reaction pattern (wildcard allowed, default: "*")
-- **Returns**: List of reaction data strings
-
-#### Utility Functions
-
-**`split_entries(return_text: str) -> List[str]`**
-- **Purpose**: Normalize BRENDA responses to list format
-- **Parameters**: `return_text` - Raw response from BRENDA
-- **Returns**: List of individual data entries
-- **Features**: Handles both string and complex object responses
+The bridge has 30-second WSDL and operation timeouts. It serializes and paces
+SOAP calls to at most one per second within a process, without automatic retry.
+Coordinate multiple processes separately to respect the same upstream limit.
+String responses and structured Zeep rows are normalized into the legacy
+`field*value#field*value` entries expected by the analysis helpers.
+Commentary-derived activation mechanisms remain heuristic annotations, not
+verified mechanistic evidence.
 
 ## Data Structures and Parsing
 
@@ -306,7 +268,7 @@ Reactions use standard biochemical notation:
 
 **Get all Km values for an enzyme:**
 ```python
-from brenda_client import get_km_values
+from scripts.brenda_client import get_km_values
 
 # Get all alcohol dehydrogenase Km values
 km_data = get_km_values("1.1.1.1")
@@ -358,7 +320,7 @@ glucose_km = get_km_values("1.1.1.1",
 
 **Get all reactions for an enzyme:**
 ```python
-from brenda_client import get_reactions
+from scripts.brenda_client import get_reactions
 
 reactions = get_reactions("1.1.1.1")
 ```

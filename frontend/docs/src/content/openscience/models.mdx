@@ -44,6 +44,49 @@ openscience run --model ollama/llama3.1 "hello"
 
 See **[Local models](/openscience/local-models)** for setup details.
 
+## Mammouth API (custom provider)
+
+Mammouth documents an [OpenAI-compatible chat endpoint](https://info.mammouth.ai/docs/api-quick-start/)
+at `https://api.mammouth.ai/v1`. You can configure it without a native provider
+integration. Merge this block into `openscience.json`; keep your actual key in
+the `MAMMOUTH_API_KEY` environment variable, not the project file:
+
+```json
+{
+  "provider": {
+    "mammouth": {
+      "name": "Mammouth",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://api.mammouth.ai/v1",
+        "apiKey": "{env:MAMMOUTH_API_KEY}"
+      },
+      "models": {
+        "mammouth-recommended": {
+          "name": "Mammouth Recommended",
+          "tool_call": false,
+          "reasoning": false
+        }
+      }
+    }
+  }
+}
+```
+
+The `mammouth-recommended` alias follows Mammouth's current recommendation, so
+the underlying model can change without editing this entry. For reproducible
+runs, choose an exact model ID from Mammouth's [Model Explorer](https://model-explorer.mammouth.ai/).
+Its [public catalog](https://api.mammouth.ai/public/models) supplies current IDs,
+input/output limits and rates. OpenScience does **not** automatically import or
+refresh that catalog; review the selected model's limits and pricing when using
+a custom entry. Requests use your Mammouth account, not your Ace Wallet.
+
+This conservative example is for chat: it does not advertise unverified tool
+calling or reasoning controls. The public catalog does not declare those
+capabilities, and this is not a verified agent/tool-model integration. Enable
+capabilities only when the chosen Mammouth route's contract supports them.
+Native Mammouth discovery remains a separate feature request.
+
 ## Choose a model per run
 
 ```bash

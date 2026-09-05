@@ -11,12 +11,14 @@ Utility functions for common DrugBank operations including:
 Usage:
     from drugbank_helper import DrugBankHelper
 
-    db = DrugBankHelper()
+    db = DrugBankHelper(xml_path="/path/to/licensed/drugbank.xml")
     drug_info = db.get_drug_info('DB00001')
     interactions = db.get_interactions('DB00001')
 """
 
 from typing import Dict, List, Optional, Any
+import os
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
 
@@ -25,21 +27,40 @@ class DrugBankHelper:
 
     NAMESPACE = {'db': 'http://www.drugbank.ca'}
 
-    def __init__(self, root=None):
+    def __init__(self, root=None, xml_path=None):
         """
         Initialize DrugBankHelper
 
         Args:
-            root: Pre-loaded XML root element. If None, will load from drugbank-downloader
+            root: Pre-loaded XML root element.
+            xml_path: Licensed local XML export. Defaults to DRUGBANK_XML_PATH.
+                No data is downloaded automatically.
         """
+        if root is not None and xml_path is not None:
+            raise ValueError("Supply root or xml_path, not both")
         self.root = root
+        self.xml_path = xml_path if xml_path is not None else os.environ.get("DRUGBANK_XML_PATH")
         self._drug_cache = {}
 
     def _get_root(self):
-        """Lazy load DrugBank root element"""
+        """Read only the explicitly configured local export; never download data."""
         if self.root is None:
-            from drugbank_downloader import get_drugbank_root
-            self.root = get_drugbank_root()
+            if not self.xml_path:
+                raise ValueError(
+                    "DrugBank data is not configured. Obtain a licensed XML export from "
+                    "https://go.drugbank.com/releases, then pass xml_path='/path/to/drugbank.xml' "
+                    "or set DRUGBANK_XML_PATH. You can also supply a pre-loaded root. "
+                    "OpenScience does not download DrugBank data automatically."
+                )
+            try:
+                root = ET.parse(Path(self.xml_path).expanduser()).getroot()
+            except FileNotFoundError as error:
+                raise FileNotFoundError("DrugBank XML was not found. Check xml_path or DRUGBANK_XML_PATH.") from error
+            except ET.ParseError as error:
+                raise ValueError("DrugBank XML could not be parsed. Supply the extracted XML export, not a ZIP archive.") from error
+            if root.tag != "{http://www.drugbank.ca}drugbank":
+                raise ValueError("The configured XML is not a DrugBank export (expected the DrugBank XML namespace).")
+            self.root = root
         return self.root
 
     def _get_text_safe(self, element) -> Optional[str]:

@@ -72,6 +72,7 @@ const mount = async (wallet: Wallet = funded) => {
     holdBillingRead: undefined as Promise<void> | undefined,
     holdWalletRead: undefined as Promise<void> | undefined,
     holdWrite: undefined as Promise<void> | undefined,
+    holdCommit: undefined as Promise<void> | undefined,
     writes: [] as unknown[],
     links: [] as string[],
     errors: [] as Array<string | undefined>,
@@ -109,6 +110,7 @@ const mount = async (wallet: Wallet = funded) => {
           await state.holdWrite
           return json({ message: "Access preference could not be saved" }, 409)
         }
+        await state.holdCommit
         state.mode = body.llm
         await state.holdWrite
         return json({ llm: body.llm })
@@ -322,6 +324,26 @@ describe("Ace account surface", () => {
     expect(button(host, "Keys & subscriptions").getAttribute("aria-pressed")).toBe("true")
     expect(state.mode).toBe("byok")
     expect(state.writes).toEqual([{ llm: "byok" }])
+  })
+
+  test("focus during a routing write cannot queue a stale preference read", async () => {
+    const { host, state } = await mount()
+    await ready(() => button(host, "Ace").disabled === false && state.billingReads === 1)
+    const commit = deferred()
+    const read = deferred()
+    state.holdCommit = commit.promise
+    state.holdBillingRead = read.promise
+    button(host, "Keys & subscriptions").click()
+    await ready(() => state.writes.length === 1)
+    window.dispatchEvent(new Event("focus"))
+    await settle()
+    commit.resolve()
+    await ready(() => state.refreshes === 1)
+    read.resolve()
+    await settle()
+    expect(state.billingReads).toBe(1)
+    expect(button(host, "Keys & subscriptions").getAttribute("aria-pressed")).toBe("true")
+    expect(state.mode).toBe("byok")
   })
 
   test.each([false, true])(

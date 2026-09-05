@@ -52,12 +52,11 @@ except ImportError:
     print("Warning: pandas not installed. Install with: uv pip install pandas")
     PANDAS_AVAILABLE = False
 
-# Import the brenda_client from the project root
-import sys
-sys.path.append(str(Path(__file__).parent.parent.parent.parent))
-
 try:
-    from brenda_client import get_km_values, get_reactions, call_brenda
+    if __package__:
+        from .brenda_client import get_km_values, get_reactions
+    else:
+        from brenda_client import get_km_values, get_reactions
     BRENDA_CLIENT_AVAILABLE = True
 except ImportError:
     print("Warning: brenda_client not available")
@@ -556,7 +555,7 @@ def get_activators(ec_number: str) -> List[Dict[str, Any]]:
                         activators.append({
                             'name': activator,
                             'type': 'metal ion' if '+' in activator else 'reducing agent' if 'dtt' in activator.lower() or 'mercapto' in activator.lower() else 'other',
-                            'mechanism': 'allosteric' if 'allosteric' in commentary else 'cofactor' else 'unknown',
+                            'mechanism': 'allosteric' if 'allosteric' in commentary else ('cofactor' if 'cofactor' in commentary else 'unknown'),
                             'organism': parsed.get('organism', ''),
                             'ec_number': ec_number,
                             'commentary': parsed.get('commentary', '')

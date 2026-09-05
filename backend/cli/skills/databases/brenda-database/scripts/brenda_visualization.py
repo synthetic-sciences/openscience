@@ -38,12 +38,20 @@ except ImportError:
     PANDAS_AVAILABLE = False
 
 try:
-    from brenda_queries import (
-        get_km_values, get_reactions, parse_km_entry, parse_reaction_entry,
-        compare_across_organisms, get_environmental_parameters,
-        get_substrate_specificity, get_modeling_parameters,
-        search_enzymes_by_substrate, search_by_pattern
-    )
+    if __package__:
+        from .brenda_queries import (
+            get_km_values, get_reactions, parse_km_entry, parse_reaction_entry,
+            compare_across_organisms, get_environmental_parameters,
+            get_substrate_specificity, get_modeling_parameters,
+            search_enzymes_by_substrate, search_by_pattern
+        )
+    else:
+        from brenda_queries import (
+            get_km_values, get_reactions, parse_km_entry, parse_reaction_entry,
+            compare_across_organisms, get_environmental_parameters,
+            get_substrate_specificity, get_modeling_parameters,
+            search_enzymes_by_substrate, search_by_pattern
+        )
     BRENDA_QUERIES_AVAILABLE = True
 except ImportError:
     print("Warning: brenda_queries not available")

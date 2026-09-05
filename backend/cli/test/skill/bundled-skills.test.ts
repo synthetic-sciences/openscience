@@ -8,7 +8,7 @@ const root = path.join(import.meta.dir, "..", "..", "skills")
 const files = await Array.fromAsync(new Bun.Glob("**/SKILL.md").scan({ cwd: root, absolute: true }))
 
 test("every bundled skill with frontmatter parses and validates", async () => {
-  expect(files.length).toBe(312)
+  expect(files.length).toBe(313)
   const broken = await Promise.all(
     files.map(async (file) => {
       const raw = await Bun.file(file).text()

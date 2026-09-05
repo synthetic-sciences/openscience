@@ -120,13 +120,13 @@ Get detailed evidence supporting a target-disease association.
 ```python
 from scripts.query_opentargets import get_target_disease_evidence
 
-# Get all evidence
+# Get the first 100 evidence rows
 evidence = get_target_disease_evidence(
     ensembl_id="ENSG00000157764",
     efo_id="EFO_0000249"
 )
 
-# Filter by evidence type
+# Filter that page locally by evidence type (not a complete evidence search)
 genetic_evidence = get_target_disease_evidence(
     ensembl_id="ENSG00000157764",
     efo_id="EFO_0000249",
@@ -162,21 +162,13 @@ from scripts.query_opentargets import get_known_drugs_for_disease
 drugs = get_known_drugs_for_disease("EFO_0000249")
 
 # drugs contains:
-# - uniqueDrugs: Total number of unique drugs
-# - uniqueTargets: Total number of unique targets
-# - rows: List of drug-target-indication records with:
-#   - drug: {name, drugType, maximumClinicalTrialPhase}
-#   - targets: Genes targeted by the drug
-#   - phase: Clinical trial phase for this indication
-#   - status: Trial status (active, completed, etc.)
-#   - mechanismOfAction: How drug works
+# - count: Number of clinical candidate rows
+# - rows: List of records with id, maxClinicalStage, and drug
+#   - drug: {id, name, drugType, maximumClinicalStage}, or null
 ```
 
-**Clinical phases:**
-- Phase 4: Approved drug
-- Phase 3: Late-stage clinical trials
-- Phase 2: Mid-stage trials
-- Phase 1: Early safety trials
+Clinical stages are upstream strings, not numeric phase values. Preserve the
+reported stage; do not infer approval, targets, or trial status from it.
 
 ### 6. Get Drug Information
 
@@ -188,17 +180,18 @@ from scripts.query_opentargets import get_drug_info
 drug_info = get_drug_info("CHEMBL25")
 
 # Access:
-# - name, synonyms: Drug identifiers
+# - name, synonyms: Drug identifiers; synonyms are {label, source} records
 # - drugType: Small molecule, antibody, etc.
-# - maximumClinicalTrialPhase: Development stage
-# - mechanismsOfAction: Target and action type
-# - indications: Diseases with trial phases
-# - withdrawnNotice: If withdrawn, reasons and countries
+# - maximumClinicalStage: Reported development stage
+# - mechanismsOfAction.rows: Target and action records
+# - indications: {count, rows}, each row has disease and maxClinicalStage
+# - drugWarnings: Reported warningType, country, and description
 ```
 
-### 7. Get All Associations for a Target
+### 7. Get a Page of Associations for a Target
 
-Find all diseases associated with a target, optionally filtering by score.
+Find the first 100 disease associations for a target, optionally filtering that
+page by score. This helper does not retrieve every association.
 
 ```python
 from scripts.query_opentargets import get_target_associations
@@ -322,7 +315,7 @@ Helper functions for common API operations:
 - `get_target_disease_evidence()` - Get supporting evidence
 - `get_known_drugs_for_disease()` - Find drugs for a disease
 - `get_drug_info()` - Retrieve drug details
-- `get_target_associations()` - Get all associations for a target
+- `get_target_associations()` - Get the first 100 associations for a target
 - `execute_query()` - Execute custom GraphQL queries
 
 ### References
@@ -354,7 +347,11 @@ Complete target annotation reference:
 
 ## Data Updates and Versioning
 
-The Open Targets Platform is updated **quarterly** with new data releases. The current release (as of October 2025) is available at the API endpoint.
+The API schema and datasets change between releases. The bundled queries were
+validated against the public schema on September 5, 2026. If a field is rejected,
+inspect the current schema rather than returning an empty result or substituting
+a biologically different field. `componentId` in helper association output is a
+GraphQL alias for the current `ScoredComponent.id` field.
 
 **Release information:** Check https://platform-docs.opentargets.org/release-notes for the latest updates.
 
@@ -369,4 +366,3 @@ Ochoa, D. et al. (2025) Open Targets Platform: facilitating therapeutic hypothes
 4. **Evidence quality varies:** Weight expert-curated sources higher than computational predictions
 5. **Requires biological interpretation:** Scores and evidence must be interpreted in biological and clinical context
 6. **No authentication required:** All data is freely accessible, but cite appropriately
-

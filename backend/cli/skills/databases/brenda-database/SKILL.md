@@ -34,7 +34,7 @@ Access comprehensive kinetic data for enzymes:
 
 **Get Km Values by EC Number**:
 ```python
-from brenda_client import get_km_values
+from scripts.brenda_client import get_km_values
 
 # Get Km values for all organisms
 km_data = get_km_values("1.1.1.1")  # Alcohol dehydrogenase
@@ -73,7 +73,7 @@ Retrieve reaction equations and details:
 
 **Get Reactions by EC Number**:
 ```python
-from brenda_client import get_reactions
+from scripts.brenda_client import get_reactions
 
 # Get all reactions for EC number
 reactions = get_reactions("1.1.1.1")
@@ -303,7 +303,7 @@ uv pip install zeep requests pandas matplotlib seaborn
 
 BRENDA requires authentication credentials:
 
-1. **Create .env file**:
+1. **Set these variables in the process environment** (an existing `.env` file is not loaded automatically):
 ```
 BRENDA_EMAIL=your.email@example.com
 BRENDA_PASSWORD=your_brenda_password
@@ -409,7 +409,7 @@ tree = build_retrosynthetic_tree("lactate", depth=2)
 **Rate Limits**:
 - BRENDA API has moderate rate limiting
 - Recommended: 1 request per second for sustained usage
-- Maximum: 5 requests per 10 seconds
+- Do not exceed 1 request per second across scripts/processes. The bundled bridge serializes and paces requests within one process.
 
 **Best Practices**:
 1. **Cache results**: Store frequently accessed enzyme data locally
@@ -423,7 +423,7 @@ tree = build_retrosynthetic_tree("lactate", depth=2)
 
 **Error Handling**:
 ```python
-from brenda_client import get_km_values, get_reactions
+from scripts.brenda_client import get_km_values, get_reactions
 from zeep.exceptions import Fault, TransportError
 
 try:
@@ -445,7 +445,7 @@ except Exception as e:
 Find suitable enzymes for a specific substrate:
 
 ```python
-from brenda_client import get_km_values
+from scripts.brenda_client import get_km_values
 from scripts.brenda_queries import search_enzymes_by_substrate, compare_substrate_affinity
 
 # Search for enzymes that act on substrate
@@ -556,7 +556,7 @@ print(f"Potential issues: {feasibility['warnings']}")
 Comprehensive kinetic analysis for enzyme selection:
 
 ```python
-from brenda_client import get_km_values
+from scripts.brenda_client import get_km_values
 from scripts.brenda_queries import parse_km_entry, get_modeling_parameters
 from scripts.brenda_visualization import plot_kinetic_parameters
 
@@ -686,7 +686,7 @@ For detailed BRENDA documentation, see `references/api_reference.md`. This inclu
 - Some enzymes may have limited data in BRENDA
 
 **Rate Limiting**:
-- Add delays between requests (0.5-1 second)
+- Allow at least one second between requests; coordinate separately running processes.
 - Cache results locally
 - Use more specific queries to reduce data volume
 - Consider batch operations for multiple queries
