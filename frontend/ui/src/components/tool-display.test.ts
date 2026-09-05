@@ -230,9 +230,9 @@ describe("provider reasoning presentation", () => {
   const titanic =
     "**Evaluating Titanic dataset analysis**\n\nThe user asks for an analysis. Let's get started!**Choosing a reputable Titanic dataset**\n\nI need a reputable source.**Simplifying analysis steps**\n\nI can keep the work focused.[REDACTED]"
 
-  test("keeps the full readable trajectory without provider phase titles", () => {
+  test("keeps the full readable trajectory and separates concatenated provider phase titles", () => {
     expect(reasoningDisplayText(titanic)).toBe(
-      "The user asks for an analysis. Let's get started!\n\nI need a reputable source.\n\nI can keep the work focused.",
+      "**Evaluating Titanic dataset analysis**\n\nThe user asks for an analysis. Let's get started!\n\n**Choosing a reputable Titanic dataset**\n\nI need a reputable source.\n\n**Simplifying analysis steps**\n\nI can keep the work focused.",
     )
   })
 
@@ -247,17 +247,19 @@ describe("provider reasoning presentation", () => {
     expect(reasoningTopic("Checking the source, then comparing the results.")).toBeUndefined()
   })
 
-  test("uses plain provider phase labels as status instead of transcript rows", () => {
-    expect(reasoningDisplayText("Planning comprehensive research workflow")).toBe("")
+  test("preserves plain provider phase labels in the transcript", () => {
+    expect(reasoningDisplayText("Planning comprehensive research workflow")).toBe(
+      "Planning comprehensive research workflow",
+    )
     expect(reasoningTopic("Planning comprehensive research workflow")).toBe("Planning comprehensive research workflow")
     expect(reasoningDisplayText("Analyzing the source revealed three incompatible assay formats.")).toBe(
       "Analyzing the source revealed three incompatible assay formats.",
     )
   })
 
-  test("strips provider headings even when the bridge omits the blank line", () => {
+  test("preserves provider headings when the bridge omits the blank line", () => {
     expect(reasoningDisplayText("**Inspecting assay quality**\nThe substantive analysis remains visible.")).toBe(
-      "The substantive analysis remains visible.",
+      "**Inspecting assay quality**\nThe substantive analysis remains visible.",
     )
   })
 
@@ -279,6 +281,12 @@ describe("provider reasoning presentation", () => {
 })
 
 describe("toolErrorDisplay", () => {
+  test("does not call an interrupted execution a tool failure", () => {
+    expect(toolErrorDisplay("bash", "Tool execution aborted")).toEqual({
+      title: "Bash cancelled",
+      message: "Tool execution aborted",
+    })
+  })
   test("collapses legacy malformed Bash schema dumps behind technical details", () => {
     const raw =
       'The bash tool was called with invalid arguments: [{"code":"invalid_type","path":["command"]}]. Please rewrite the input.'
@@ -372,6 +380,11 @@ describe("generatedArtifacts", () => {
 })
 
 describe("toolOutcome", () => {
+  test("reports a completed command with a nonzero exit as unsuccessful", () => {
+    expect(toolOutcome("completed", undefined, 2)).toBe("error")
+    expect(toolOutcome("completed", undefined, 0)).toBe("done")
+    expect(toolOutcome("completed", undefined, undefined)).toBe("done")
+  })
   test("maps the part lifecycle onto one glyph state", () => {
     expect(toolOutcome("pending")).toBe("pending")
     expect(toolOutcome("running")).toBe("running")

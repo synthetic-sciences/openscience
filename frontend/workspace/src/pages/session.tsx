@@ -14,6 +14,8 @@ import {
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createMediaQuery } from "@solid-primitives/media"
 import { SessionTurn } from "@synsci/ui/session-turn"
+import { ActivityProvider } from "@synsci/ui/context/activity"
+import { activityExpanded, activityPreferences } from "@/context/activity-preferences"
 import { createAutoScroll } from "@synsci/ui/hooks"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
@@ -137,7 +139,9 @@ function readTraceExpansion() {
     const value: unknown = JSON.parse(localStorage.getItem(traceExpansionKey) ?? "{}")
     if (!value || typeof value !== "object" || Array.isArray(value)) return {}
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).filter((entry): entry is [string, true] => entry[1] === true),
+      Object.entries(value as Record<string, unknown>).filter(
+        (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
+      ),
     )
   } catch {
     return {}
@@ -146,7 +150,7 @@ function readTraceExpansion() {
 
 function writeTraceExpansion(value: Record<string, boolean>) {
   try {
-    const entries = Object.entries(value).filter((entry): entry is [string, true] => entry[1] === true)
+    const entries = Object.entries(value).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean")
     localStorage.setItem(traceExpansionKey, JSON.stringify(Object.fromEntries(entries.slice(-200))))
   } catch {}
 }
@@ -835,9 +839,11 @@ export default function Page(): JSX.Element {
   })
 
   const [stepsExpanded, setStepsExpanded] = createSignal<Record<string, boolean>>(readTraceExpansion())
+  const expandedSteps = (id: string, choices = stepsExpanded()) =>
+    activityExpanded(activityPreferences.mode(), choices[id], working() && id === lastUserMessage()?.id)
   const toggleSteps = (id: string) =>
     setStepsExpanded((previous) => {
-      const next = { ...previous, [id]: !previous[id] }
+      const next = { ...previous, [id]: !expandedSteps(id, previous) }
       writeTraceExpansion(next)
       return next
     })
@@ -1329,20 +1335,23 @@ export default function Page(): JSX.Element {
                                   </Show>
                                 }
                               >
-                                <SessionTurn
-                                  sessionID={params.id!}
-                                  messageID={message.id}
-                                  lastUserMessageID={lastUserMessage()?.id}
-                                  stepsExpanded={
-                                    stepsExpanded()[message.id] ?? (working() && message.id === lastUserMessage()?.id)
-                                  }
-                                  onStepsExpandedToggle={() => toggleSteps(message.id)}
-                                  classes={{
-                                    root: "min-w-0 w-full relative",
-                                    content: "flex flex-col justify-between !overflow-visible",
-                                    container: "w-full px-4 md:px-5",
-                                  }}
-                                />
+                                <ActivityProvider
+                                  value={activityPreferences.mode}
+                                  onChange={activityPreferences.change}
+                                >
+                                  <SessionTurn
+                                    sessionID={params.id!}
+                                    messageID={message.id}
+                                    lastUserMessageID={lastUserMessage()?.id}
+                                    stepsExpanded={expandedSteps(message.id)}
+                                    onStepsExpandedToggle={() => toggleSteps(message.id)}
+                                    classes={{
+                                      root: "min-w-0 w-full relative",
+                                      content: "flex flex-col justify-between !overflow-visible",
+                                      container: "w-full px-4 md:px-5",
+                                    }}
+                                  />
+                                </ActivityProvider>
                                 <div class="session-turn-actions" role="group" aria-label="Turn actions">
                                   <Show when={!revertInfo()}>
                                     <button

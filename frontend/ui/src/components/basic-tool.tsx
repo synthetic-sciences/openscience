@@ -4,7 +4,6 @@ import { Card } from "./card"
 import { useClock } from "./clock"
 import { Collapsible } from "./collapsible"
 import { Icon, IconProps } from "./icon"
-import { Markdown } from "./markdown"
 import { Spinner } from "./spinner"
 import { elapsedLabel, formatTaskDuration } from "./research-trace"
 import {
@@ -51,6 +50,7 @@ export interface BasicToolProps {
   time?: { start: number; end?: number }
   summary?: ToolSummary[]
   error?: string
+  metadata?: Record<string, unknown>
 }
 
 /** @internal Exported for the focused memoization regression test. */
@@ -69,8 +69,11 @@ const glyphLabel: Record<ToolOutcome, UiI18nKey> = {
 function ToolFailure(props: { tool: string; error: string }) {
   const display = () => toolErrorDisplay(props.tool, props.error)
   return (
-    <Card variant="error" data-slot="basic-tool-failure">
-      <div data-component="tool-error">
+    <Card
+      variant={toolOutcome("error", props.error) === "cancelled" ? "normal" : "error"}
+      data-slot="basic-tool-failure"
+    >
+      <div data-component="tool-error" data-outcome={toolOutcome("error", props.error)}>
         <Icon name="circle-ban-sign" size="small" />
         <div data-slot="message-part-tool-error-body">
           <Switch>
@@ -104,7 +107,9 @@ export function BasicTool(props: BasicToolProps) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(props.defaultOpen ?? false)
   const content = resolveBasicToolChildren(() => props.children)
-  const outcome = createMemo(() => toolOutcome(props.status, props.error))
+  const outcome = createMemo(() =>
+    toolOutcome(props.status, props.error, props.tool === "bash" ? props.metadata?.exit : undefined),
+  )
   const live = () => outcome() === "running" || outcome() === "pending"
   const now = useClock(() => live() && !!props.time?.start)
   const clock = createMemo(() => {
@@ -196,7 +201,11 @@ export function BasicTool(props: BasicToolProps) {
           <Show when={props.status}>
             <span data-slot="basic-tool-tool-status" data-outcome={outcome()}>
               <Show when={detail()}>
-                <span data-slot="basic-tool-tool-detail" data-error={props.error ? "true" : undefined}>
+                <span
+                  data-slot="basic-tool-tool-detail"
+                  data-error={outcome() === "error" ? "true" : undefined}
+                  title={detail()}
+                >
                   {detail()}
                 </span>
               </Show>
@@ -263,6 +272,7 @@ export function GenericTool(props: {
       time={props.time}
       summary={props.summary}
       error={props.error}
+      metadata={props.metadata}
       hideDetails={props.hideDetails}
       defaultOpen={props.defaultOpen}
       forceOpen={props.forceOpen}
@@ -272,7 +282,9 @@ export function GenericTool(props: {
       <Show when={props.output}>
         {(output) => (
           <div data-component="tool-output" data-scrollable>
-            <Markdown text={"```\n" + output() + "\n```"} />
+            <pre>
+              <code>{output()}</code>
+            </pre>
           </div>
         )}
       </Show>

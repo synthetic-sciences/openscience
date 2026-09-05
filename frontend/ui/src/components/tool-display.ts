@@ -51,17 +51,13 @@ function statusOnlyReasoning(text: string) {
 export function reasoningDisplayText(text: string): string {
   const visible = stripRedactedReasoning(text)
   if (!visible) return ""
-  const readable = visible
-    .replace(providerReasoningPhase, (value, prefix: string, label: string) =>
-      statusOnlyReasoning(label) ? `${prefix}\n\n` : value,
+  // Keep every readable heading and sentence. This is typography repair, not
+  // summarization: a short provider phase is still received reasoning text.
+  return visible
+    .replace(providerReasoningPhase, (value, prefix: string) =>
+      prefix ? `${prefix}\n\n${value.slice(prefix.length)}` : value,
     )
-    .replace(/\n{3,}/g, "\n\n")
     .trim()
-  // Some Responses-compatible providers emit the phase label as its own
-  // reasoning part instead of a bold heading. It is useful as the single live
-  // status above the turn, but rendering every one-line label in the transcript
-  // produces the wall of "Planning…" rows that obscures the actual trajectory.
-  return statusOnlyReasoning(readable) ? "" : readable
 }
 
 /** The most recent provider phase is useful as one compact live status. */
@@ -79,8 +75,8 @@ export function reasoningTopic(text: string): string | undefined {
 export type ToolOutcome = "pending" | "running" | "done" | "error" | "cancelled"
 
 /** Where a call is in its life. An abort is a cancellation, not a failure of the tool. */
-export function toolOutcome(status: string | undefined, error?: string): ToolOutcome {
-  if (status === "completed") return "done"
+export function toolOutcome(status: string | undefined, error?: string, exit?: unknown): ToolOutcome {
+  if (status === "completed") return typeof exit === "number" && exit !== 0 ? "error" : "done"
   if (status === "error") return /\b(?:aborted|cancel+ed)\b/i.test(error ?? "") ? "cancelled" : "error"
   if (status === "running") return "running"
   return "pending"
@@ -178,6 +174,9 @@ export function toolSummary(input: {
 
 export function toolErrorDisplay(tool: string, value: string) {
   const cleaned = value.replace(/^Error:\s*/, "")
+  if (toolOutcome("error", cleaned) === "cancelled") {
+    return { title: `${humanizeToolName(tool)} cancelled`, message: cleaned }
+  }
   const malformed = /(?:tool was called with invalid arguments|received invalid arguments or incomplete input)/i.test(
     cleaned,
   )

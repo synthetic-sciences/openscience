@@ -112,6 +112,20 @@ describe("research trace presentation", () => {
     expect(trace.some((item) => item.group)).toBe(false)
   })
 
+  test("keeps a nonzero preflight exit individually inspectable in compact mode", () => {
+    const calls = [0, 1, 0].map((exit, index) => {
+      const call = entry(`shell-${index}`, "bash", "Find runtime")
+      if (call.part.type === "tool" && call.part.state.status === "completed") {
+        call.part.state.input = { command: "which python" }
+        call.part.state.metadata = { exit }
+      }
+      return call
+    })
+    const trace = visibleResearchTrace(calls, "compact")
+    expect(trace.map((item) => item.part.id)).toEqual(calls.map((item) => item.part.id))
+    expect(trace.some((item) => item.group || item.run)).toBe(false)
+  })
+
   test("collapses adjacent completed skill loads into one truthful disclosure", () => {
     const trace = visibleResearchTrace([
       {

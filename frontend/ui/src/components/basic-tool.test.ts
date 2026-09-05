@@ -151,8 +151,8 @@ describe("tool row lifecycle", () => {
     expect(failure?.querySelector('[data-slot="message-part-tool-error-message"]')?.textContent).toContain("paper.pdf")
   })
 
-  test("an aborted call is marked cancelled, not failed", async () => {
-    const { status } = mount({
+  test("an aborted call remains a cancellation when its details are opened", async () => {
+    const { host, trigger, status } = mount({
       icon: "console",
       tool: "bash",
       status: "error",
@@ -163,6 +163,25 @@ describe("tool row lifecycle", () => {
     expect(status()?.getAttribute("data-outcome")).toBe("cancelled")
     expect(status()?.querySelector('[data-slot="basic-tool-tool-glyph"]')?.getAttribute("aria-label")).toBe("Cancelled")
     expect(status()?.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("Tool execution aborted")
+    trigger().click()
+    await settle()
+    expect(host.querySelector('[data-slot="message-part-tool-error-title"]')?.textContent).toBe("Bash cancelled")
+    expect(host.querySelector('[data-slot="basic-tool-failure"]')?.getAttribute("data-variant")).toBe("normal")
+  })
+
+  test("a nonzero command exit is visibly unsuccessful while retaining its output receipt", async () => {
+    const { host, status } = mount({
+      icon: "console",
+      tool: "bash",
+      status: "completed",
+      metadata: { exit: 2 },
+      summary: [{ key: "ui.tool.summary.exit", params: { code: 2 } }],
+      trigger: { title: "Shell", subtitle: "Check project" },
+    })
+    await settle()
+    expect(status()?.getAttribute("data-outcome")).toBe("error")
+    expect(status()?.querySelector('[data-slot="basic-tool-tool-glyph"]')?.getAttribute("aria-label")).toBe("Failed")
+    expect(host.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("exit 2")
   })
 
   test("rows without lifecycle props render no status rail", async () => {

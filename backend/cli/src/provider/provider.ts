@@ -27,6 +27,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import { MANAGED_OPENROUTER_MODEL_SET, managedModelDetails } from "./managed-catalog"
 import { managedModelRoute } from "./managed-routing"
 import { ManagedPricing } from "./managed-pricing"
+import { gatewayTiming, type GatewayTiming } from "./gateway-timing"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -68,26 +69,29 @@ export namespace Provider {
     modelID?: string
     /** Immutable account/funding choice for this provider operation. */
     funding?: FundingSnapshot
+    /** Actual fetch dispatch, after local request and credential preparation. */
+    onRequest?: () => void
   }
 
-  export type RequestTiming = Pick<RequestContext, "sessionID" | "messageID" | "attempt" | "agent"> & {
-    requestID: string
-    providerID: string
-    modelID: string
-    idleTimeoutMs: number | false
-    startedAt: number
-    responseStartedAt?: number
-    firstBodyChunkAt?: number
-    lastBodyChunkAt?: number
-    completedAt: number
-    outcome: "completed" | "idle_timeout" | "timeout" | "aborted" | "cancelled" | "error" | "conflict_wait"
-    timeoutPhase?: "connect" | "first_event" | "stream"
-    errorName?: string
-    /** Present with outcome "conflict_wait": the managed gateway still owns an
-     * identical earlier copy of this request, so the client waits for that
-     * copy instead of dispatching the same body again. */
-    conflict?: { code: string; retries: number; delayMs: number; elapsedMs: number }
-  }
+  export type RequestTiming = Pick<RequestContext, "sessionID" | "messageID" | "attempt" | "agent"> &
+    GatewayTiming & {
+      requestID: string
+      providerID: string
+      modelID: string
+      idleTimeoutMs: number | false
+      startedAt: number
+      responseStartedAt?: number
+      firstBodyChunkAt?: number
+      lastBodyChunkAt?: number
+      completedAt: number
+      outcome: "completed" | "idle_timeout" | "timeout" | "aborted" | "cancelled" | "error" | "conflict_wait"
+      timeoutPhase?: "connect" | "first_event" | "stream"
+      errorName?: string
+      /** Present with outcome "conflict_wait": the managed gateway still owns an
+       * identical earlier copy of this request, so the client waits for that
+       * copy instead of dispatching the same body again. */
+      conflict?: { code: string; retries: number; delayMs: number; elapsedMs: number }
+    }
 
   export class IdleTimeoutError extends Error {
     readonly phase: "connect" | "first_event" | "stream"
@@ -174,6 +178,7 @@ export namespace Provider {
     modelID: string
     idleTimeout?: unknown
     totalTimeout?: unknown
+    managed?: boolean
     onTiming?: (timing: RequestTiming) => void
   }
 
@@ -347,6 +352,11 @@ export namespace Provider {
           // Bun's native fetch accepts this runtime option even though its
           // current BunFetchRequestInit declaration omits it.
           ;(fetchInit as BunFetchRequestInit & { timeout: false }).timeout = false
+          try {
+            context.onRequest?.()
+          } catch {
+            log.debug("request dispatch callback failed")
+          }
           return fetchFn(fetchInput, fetchInit)
         },
         phase: "connect",
@@ -355,6 +365,19 @@ export namespace Provider {
         signal,
       })
       timing.responseStartedAt = Date.now()
+      if (options.managed) Object.assign(timing, gatewayTiming(response.headers))
+      log.info("request response", {
+        sessionID: timing.sessionID,
+        messageID: timing.messageID,
+        attempt: timing.attempt,
+        agent: timing.agent,
+        requestID: timing.requestID,
+        providerID: timing.providerID,
+        modelID: timing.modelID,
+        responseStartMs: timing.responseStartedAt - timing.startedAt,
+        gatewayRequestID: timing.gatewayRequestID,
+        gatewayTiming: timing.gatewayTiming,
+      })
     } catch (error) {
       emit(timingOutcome(error, signal), error, isIdleTimeoutError(error) ? error.phase : undefined)
       throw error
@@ -2678,6 +2701,7 @@ export namespace Provider {
             modelID: model.id,
             idleTimeout,
             totalTimeout: options["timeout"],
+            managed,
           })
         const response = await request()
         const settled = await retryManagedPaymentRequired({

@@ -37,6 +37,7 @@ import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
 import { createStore } from "solid-js/store"
+import { useActivity, useActivityChange } from "../context/activity"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -59,10 +60,12 @@ export function isLongDiffPreview(diff: Pick<FileDiff, "before" | "after">) {
   return Math.max(contentLineCount(diff.before), contentLineCount(diff.after)) > DIFF_PREVIEW_LINE_THRESHOLD
 }
 
-function computeStatusFromPart(part: PartType | undefined, t: Translator): string | undefined {
+export function computeStatusFromPart(part: PartType | undefined, t: Translator): string | undefined {
   if (!part) return undefined
 
   if (part.type === "tool") {
+    // Pending means the model is still supplying arguments, not execution.
+    if (part.state.status !== "running") return undefined
     switch (part.tool) {
       case "task":
         return t("ui.sessionTurn.status.delegating")
@@ -76,6 +79,8 @@ function computeStatusFromPart(part: PartType | undefined, t: Translator): strin
       case "glob":
         return t("ui.sessionTurn.status.searchingCodebase")
       case "webfetch":
+      case "websearch":
+      case "research_search":
         return t("ui.sessionTurn.status.searchingWeb")
       case "edit":
       case "write":
@@ -89,11 +94,13 @@ function computeStatusFromPart(part: PartType | undefined, t: Translator): strin
     }
   }
   if (part.type === "reasoning") {
+    if (part.time?.end || !stripRedactedReasoning(part.text ?? "")) return undefined
     const topic = reasoningTopic(part.text ?? "")
     if (topic) return t("ui.sessionTurn.status.thinkingWithTopic", { topic })
     return t("ui.sessionTurn.status.thinking")
   }
   if (part.type === "text") {
+    if (part.time?.end || !part.text?.trim()) return undefined
     return t("ui.sessionTurn.status.gatheringThoughts")
   }
   return undefined
@@ -173,6 +180,7 @@ function AssistantTrace(props: {
   pendingRequestCallID?: string
 }) {
   const data = useData()
+  const activity = useActivity()
   const emptyParts: PartType[] = []
   const trace = createMemo(() => {
     const entries = props.messages.flatMap((message) => {
@@ -186,7 +194,7 @@ function AssistantTrace(props: {
         return [{ message, part }]
       })
     })
-    return visibleResearchTrace(entries)
+    return visibleResearchTrace(entries, activity())
   })
   const traceByID = createMemo(() => new Map(trace().map((entry) => [entry.part.id, entry])))
   const traceIDs = createMemo(() => trace().map((entry) => entry.part.id), [], { equals: same })
@@ -273,6 +281,8 @@ export function SessionTurn(
   const i18n = useI18n()
   const data = useData()
   const diffComponent = useDiffComponent()
+  const activity = useActivity()
+  const changeActivity = useActivityChange()
 
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
@@ -372,8 +382,13 @@ export function SessionTurn(
       if (!msgParts) continue
       for (const p of msgParts) {
         if (p?.type === "tool") return true
-        // Encrypted placeholders are continuation state, not readable UI.
-        if (p?.type === "reasoning" && stripRedactedReasoning(p.text ?? "").length > 0) return true
+        // Detailed explains provider-hidden reasoning rather than silently
+        // removing the only activity in a completed turn.
+        if (
+          p?.type === "reasoning" &&
+          (stripRedactedReasoning(p.text ?? "").length > 0 || (activity() === "detailed" && p.text.trim()))
+        )
+          return true
       }
     }
     return false
@@ -429,7 +444,8 @@ export function SessionTurn(
   const isShellMode = createMemo(() => !!shellModePart())
 
   const rawStatus = createMemo(() => {
-    const msgs = assistantMessages()
+    const latest = assistantMessages().at(-1)
+    const msgs = latest && !latest.time.completed ? [latest] : []
     let lastStatus: string | undefined
     let currentTask: ToolPart | undefined
 
@@ -464,12 +480,14 @@ export function SessionTurn(
       const taskMessages = data.store.message[taskSessionId] ?? emptyMessages
       for (let mi = taskMessages.length - 1; mi >= 0; mi--) {
         const msg = taskMessages[mi]
-        if (!msg || msg.role !== "assistant") continue
+        if (!msg || msg.role !== "assistant" || msg.time.completed) continue
 
         const msgParts = data.store.part[msg.id] ?? emptyParts
         for (let pi = msgParts.length - 1; pi >= 0; pi--) {
           const part = msgParts[pi]
-          if (part) return computeStatusFromPart(part, i18n.t)
+          if (!part) continue
+          const current = computeStatusFromPart(part, i18n.t)
+          if (current) return current
         }
       }
     }
@@ -489,7 +507,7 @@ export function SessionTurn(
   const progress = createMemo(() => {
     const item = data.store.session_progress?.[props.sessionID]
     if (!item) return
-    if (!assistantMessages().some((message) => message.id === item.messageID)) return
+    if (assistantMessages().at(-1)?.id !== item.messageID) return
     return item
   })
 
@@ -601,7 +619,6 @@ export function SessionTurn(
     diffPreviewsExpanded: [] as string[],
     diffLimit: diffInit,
     artifacts: {} as Record<string, { state: "saving" | "saved" | "error"; error?: string }>,
-    status: rawStatus(),
     duration: duration(),
   })
 
@@ -662,19 +679,24 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  createEffect(() => {
-    const newStatus = rawStatus()
-    if (newStatus === store.status || !newStatus) return
-    setStore("status", newStatus)
+  // Waiting belongs to the current request. Completed tools from earlier
+  // steps must never replace it with a stale execution label.
+  const phase = createMemo(() => {
+    const current = progress()
+    const status = progressStatus(current, store.now)
+    const latest = assistantMessages().at(-1)
+    const running =
+      latest &&
+      (data.store.part[latest.id] ?? emptyParts).some((part) => part.type === "tool" && part.state.status === "running")
+    if (current?.phase === "streaming" && running) return
+    if (current?.phase === "streaming" && !status?.hint && rawStatus()) return
+    return status
   })
-
-  // Part-derived status wins; before the first part exists the request phase
-  // says what the wait actually is, and the generic copy is the last resort.
-  const phase = createMemo(() => (store.status ? undefined : progressStatus(progress(), store.now)))
   const statusText = createMemo(() => {
-    if (store.status) return store.status
     const live = phase()
     if (live) return i18n.t(live.key, live.params)
+    const current = rawStatus()
+    if (current) return current
     return i18n.t("ui.sessionTurn.status.consideringNextSteps")
   })
 
@@ -775,9 +797,36 @@ export function SessionTurn(
                                 <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.show")}</span>
                               </Match>
                             </Switch>
-                            <span aria-hidden="true">·</span>
-                            <span aria-live="off">{store.duration}</span>
+                            <Show when={!working() || !phase()}>
+                              <span aria-hidden="true">·</span>
+                              <span aria-live="off" title={i18n.t("ui.sessionTurn.totalTime")}>
+                                {store.duration}
+                              </span>
+                            </Show>
                           </Button>
+                          <Show when={isLastUserMessage() && changeActivity}>
+                            <div
+                              data-slot="session-turn-activity-mode"
+                              role="group"
+                              aria-label={i18n.t("ui.sessionTurn.activity.label")}
+                            >
+                              <For each={["detailed", "compact"] as const}>
+                                {(mode) => (
+                                  <button
+                                    type="button"
+                                    aria-pressed={activity() === mode}
+                                    onClick={() => changeActivity?.(mode)}
+                                  >
+                                    {i18n.t(
+                                      mode === "detailed"
+                                        ? "ui.sessionTurn.activity.detailed"
+                                        : "ui.sessionTurn.activity.compact",
+                                    )}
+                                  </button>
+                                )}
+                              </For>
+                            </div>
+                          </Show>
                           <Show when={working() && phase()?.hint}>
                             {(hint) => (
                               <div data-slot="session-turn-progress-hint" role="status" aria-live="polite">

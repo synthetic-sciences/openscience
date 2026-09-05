@@ -34,6 +34,7 @@ const data = (await vite.ssrLoadModule("@synsci/ui/context/data")) as typeof imp
 const dialog = (await vite.ssrLoadModule("@synsci/ui/context/dialog")) as typeof import("../context/dialog")
 const diff = (await vite.ssrLoadModule("@synsci/ui/context/diff")) as typeof import("../context/diff")
 const marked = (await vite.ssrLoadModule("@synsci/ui/context/marked")) as typeof import("../context/marked")
+const activity = (await vite.ssrLoadModule("@synsci/ui/context/activity")) as typeof import("../context/activity")
 const parts = (await vite.ssrLoadModule("@synsci/ui/message-part")) as typeof import("./message-part")
 const turn = (await vite.ssrLoadModule("@synsci/ui/session-turn")) as typeof import("./session-turn")
 const cleanups: Array<() => void> = []
@@ -84,7 +85,7 @@ const read = (id: string, file: string, start: number): ToolPart => ({
 })
 
 type Store = Parameters<typeof data.DataProvider>[0]["data"]
-const mount = (view: () => JSX.Element, store: Store) => {
+const mount = (view: () => JSX.Element, store: Store, mode: () => "detailed" | "compact" = () => "detailed") => {
   const host = document.createElement("div")
   host.className = "session-scroller"
   document.body.append(host)
@@ -102,7 +103,12 @@ const mount = (view: () => JSX.Element, store: Store) => {
                   get children() {
                     return marked.MarkedProvider({
                       get children() {
-                        return view()
+                        return activity.ActivityProvider({
+                          value: mode,
+                          get children() {
+                            return view()
+                          },
+                        })
                       },
                     })
                   },
@@ -134,7 +140,7 @@ describe("reasoning rows", () => {
     time,
   })
 
-  test("fold to a Thinking clock by default, open on click, and stay open across remounts", async () => {
+  test("shows live reasoning by default, respects collapse, and preserves explicit choices across remounts", async () => {
     const [message, setMessage] = reactive.createStore<AssistantMessage>(assistant())
     const [part, setPart] = reactive.createStore<ReasoningPart>(reasoning("prt_reason", { start: Date.now() - 12_300 }))
     const host = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
@@ -142,12 +148,20 @@ describe("reasoning rows", () => {
     const row = host.querySelector('[data-component="reasoning-part"]')!
     const toggle = row.querySelector<HTMLButtonElement>('[data-slot="reasoning-part-toggle"]')!
     expect(row.getAttribute("data-live")).toBe("true")
-    expect(row.getAttribute("data-expanded")).toBeNull()
-    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    expect(row.getAttribute("data-expanded")).toBe("true")
+    expect(toggle.getAttribute("aria-expanded")).toBe("true")
     expect(toggle.getAttribute("aria-controls")).toBe("prt_reason-reasoning")
-    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Thinking (12s)")
+    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning (12s)")
     expect(toggle.querySelector('[data-component="spinner"]')).not.toBeNull()
+    await ready(() => row.querySelector("#prt_reason-reasoning p") !== null)
+
+    toggle.click()
+    await settle()
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
     expect(row.querySelector('[data-slot="reasoning-part-body"]')).toBeNull()
+    setPart("text", part.text + " The new chunk must not reopen a reader's collapsed row.")
+    await settle()
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
 
     toggle.click()
     await ready(() => row.querySelector("#prt_reason-reasoning p") !== null)
@@ -161,7 +175,7 @@ describe("reasoning rows", () => {
     await settle()
     expect(row.getAttribute("data-live")).toBeNull()
     expect(toggle.querySelector('[data-component="spinner"]')).toBeNull()
-    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Thinking (15s)")
+    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning (15s)")
     expect(toggle.getAttribute("aria-expanded")).toBe("true")
 
     // A reader's choice survives the row being remounted (steps hidden and shown again).
@@ -173,7 +187,7 @@ describe("reasoning rows", () => {
     expect(again.querySelector('[data-slot="reasoning-part-body"]')).not.toBeNull()
   })
 
-  test("an aborted turn shows a plain Thinking label when reasoning never reported its end", async () => {
+  test("an aborted turn shows a plain Reasoning label when reasoning never reported its end", async () => {
     const message = assistant(Date.now())
     const part = reasoning("prt_aborted", { start: Date.now() - 40_000 })
     const host = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
@@ -182,19 +196,72 @@ describe("reasoning rows", () => {
     const toggle = row.querySelector('[data-slot="reasoning-part-toggle"]')!
     expect(row.getAttribute("data-live")).toBeNull()
     expect(toggle.querySelector('[data-component="spinner"]')).toBeNull()
-    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Thinking")
+    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning")
   })
 
-  test("a completed turn folds reasoning the reader never opened", async () => {
+  test("compact mode folds completed reasoning the reader never opened", async () => {
     const message = assistant(Date.now())
     const part = reasoning("prt_folded", { start: 1_000, end: 1_800 })
-    const host = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
+    const host = mount(
+      () => parts.Part({ part, message, hideCopy: true }),
+      empty(),
+      () => "compact",
+    )
     await settle()
     const toggle = host.querySelector('[data-slot="reasoning-part-toggle"]')!
     expect(toggle.getAttribute("aria-expanded")).toBe("false")
     // Under one second the clock stays quiet rather than reading "Thinking (0s)".
-    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Thinking")
+    expect(toggle.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning")
     expect(host.querySelector('[data-slot="reasoning-part-body"]')).toBeNull()
+  })
+
+  test("new rows follow mode changes while explicit collapse is remembered", async () => {
+    const [mode, setMode] = reactive.createStore<{ value: "detailed" | "compact" }>({ value: "compact" })
+    const part = reasoning("prt_mode", { start: 1_000, end: 2_000 })
+    const host = mount(
+      () => parts.Part({ part, message: assistant(2_000), hideCopy: true }),
+      empty(),
+      () => mode.value,
+    )
+    const toggle = () => host.querySelector<HTMLButtonElement>('[data-slot="reasoning-part-toggle"]')!
+    await settle()
+    expect(toggle().getAttribute("aria-expanded")).toBe("false")
+    setMode("value", "detailed")
+    await settle()
+    expect(toggle().getAttribute("aria-expanded")).toBe("true")
+    toggle().click()
+    setMode("value", "compact")
+    setMode("value", "detailed")
+    await settle()
+    expect(toggle().getAttribute("aria-expanded")).toBe("false")
+  })
+
+  test("explains redacted-only reasoning without pretending there is readable text to expand", async () => {
+    const part = { ...reasoning("prt_redacted", { start: 1_000, end: 2_000 }), text: "[REDACTED]" }
+    const host = mount(() => parts.Part({ part, message: assistant(2_000), hideCopy: true }), empty())
+    await settle()
+    expect(host.querySelector('[data-origin="provider-reasoning-unavailable"]')?.textContent).toBe(
+      "The model did not provide readable reasoning.",
+    )
+    expect(host.querySelector('[data-slot="reasoning-part-toggle"]')).toBeNull()
+    expect(host.textContent).not.toContain("[REDACTED]")
+  })
+
+  test("a completed redacted-only turn retains its activity disclosure in Detailed mode", async () => {
+    const message = assistant(2_000)
+    const part = { ...reasoning("prt_redacted_turn", { start: 1_000, end: 2_000 }), text: "[REDACTED]" }
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [part] },
+    }
+    const host = mount(
+      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
+      store,
+    )
+    await settle()
+    expect(host.querySelector('[data-slot="session-turn-collapsible-trigger-content"]')).not.toBeNull()
+    expect(host.querySelector('[data-origin="provider-reasoning-unavailable"]')).not.toBeNull()
   })
 })
 
@@ -221,6 +288,23 @@ describe("streaming prose", () => {
 })
 
 describe("folded runs in a turn", () => {
+  test("detailed mode keeps completed operations individually visible", async () => {
+    const message = assistant(5_000)
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, message] },
+      part: {
+        [user.id]: [],
+        [message.id]: [read("prt_detail1", "paper.tex", 1_000), read("prt_detail2", "analysis.py", 2_000)],
+      },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, stepsExpanded: true }), store)
+    await ready(() => host.querySelectorAll('[data-component="tool-part-wrapper"]').length === 2)
+    expect(host.querySelector('[data-component="trace-run-group"]')).toBeNull()
+    expect(host.textContent).toContain("paper.tex")
+    expect(host.textContent).toContain("analysis.py")
+  })
+
   test("repeated reads share one counted header while the live call keeps its own verb line", async () => {
     const message = assistant()
     const grep: ToolPart = {
@@ -250,6 +334,7 @@ describe("folded runs in a turn", () => {
     const host = mount(
       () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
       store,
+      () => "compact",
     )
     await ready(() => host.querySelector('[data-component="trace-run-group"]') !== null)
 
@@ -299,6 +384,7 @@ describe("folded runs in a turn", () => {
     const host = mount(
       () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
       store,
+      () => "compact",
     )
     const rows = () => host.querySelectorAll('[data-component="tool-part-wrapper"]')
     const row = (id: string) =>
@@ -332,6 +418,214 @@ describe("folded runs in a turn", () => {
     expect(run.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("2 calls")
     expect(run.querySelector('[data-slot="basic-tool-tool-subtitle"]')?.textContent).toBe("paper.tex · analysis.py")
     expect(host.querySelectorAll('[data-component="tool-part-wrapper"]')).toHaveLength(0)
+  })
+})
+
+describe("execution inspection", () => {
+  test.each(["missing", "denied"] as const)(
+    "shell copy handles a %s clipboard and recovers on retry",
+    async (failure) => {
+      const original = Object.getOwnPropertyDescriptor(navigator, "clipboard")
+      const writes: string[] = []
+      const clipboard = (value: unknown) => Object.defineProperty(navigator, "clipboard", { configurable: true, value })
+      clipboard(failure === "missing" ? undefined : { writeText: () => Promise.reject(new Error("Permission denied")) })
+      try {
+        const part: ToolPart = {
+          id: `prt_copy_${failure}`,
+          sessionID,
+          messageID: "msg_0002",
+          type: "tool",
+          callID: `call_copy_${failure}`,
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { command: "inspect results" },
+            title: "Inspect results",
+            output: "done",
+            metadata: { exit: 0 },
+            time: { start: 1_000, end: 2_000 },
+          },
+        }
+        const host = mount(() => parts.Part({ part, message: assistant(2_000) }), empty())
+        host.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!.click()
+        await settle()
+        const copy = () => host.querySelector<HTMLButtonElement>('[data-slot="shell-output-actions"] button')!
+        copy().click()
+        await ready(() => host.querySelector('[data-slot="shell-output-copy-error"]') !== null)
+        expect(copy().getAttribute("aria-label")).toBe("Copy")
+        expect(host.querySelector('[data-slot="shell-output-copy-error"]')?.textContent).toContain("copy it manually")
+        clipboard({
+          writeText: async (text: string) => {
+            writes.push(text)
+          },
+        })
+        copy().click()
+        await ready(() => copy().getAttribute("aria-label") === "Copied!")
+        expect(writes).toEqual(["$ inspect results\n\ndone"])
+        expect(host.querySelector('[data-slot="shell-output-copy-error"]')).toBeNull()
+      } finally {
+        if (original) Object.defineProperty(navigator, "clipboard", original)
+        else Reflect.deleteProperty(navigator, "clipboard")
+      }
+    },
+  )
+
+  test("shell output stays literal, bounded and collapsed until opened", async () => {
+    const output = "```\n<script>not executable</script>\n**literal output**\n"
+    const part: ToolPart = {
+      id: "prt_shell",
+      sessionID,
+      messageID: "msg_0002",
+      type: "tool",
+      callID: "call_shell",
+      tool: "bash",
+      state: {
+        status: "completed",
+        input: { command: "inspect results", description: "Inspect output" },
+        title: "Inspect output",
+        output,
+        metadata: { exit: 0 },
+        time: { start: 1_000, end: 2_000 },
+      },
+    }
+    const host = mount(() => parts.Part({ part, message: assistant(2_000) }), empty())
+    await settle()
+    expect(host.querySelector('[data-component="shell-output"]')).toBeNull()
+    host.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!.click()
+    await settle()
+    expect(host.querySelector('[data-component="tool-output"][data-scrollable] pre code')?.textContent).toBe(
+      `$ inspect results\n\n${output}`,
+    )
+    expect(host.querySelector("script")).toBeNull()
+    expect(host.querySelector('[data-slot="shell-output-actions"] button')?.getAttribute("aria-label")).toBe("Copy")
+  })
+
+  test("an agent's completed operation is not labelled as its current activity, and manual collapse survives progress", async () => {
+    const [part, setPart] = reactive.createStore<ToolPart>({
+      id: "prt_agent",
+      sessionID,
+      messageID: "msg_0002",
+      type: "tool",
+      callID: "call_agent",
+      tool: "task",
+      state: {
+        status: "running",
+        input: { subagent_type: "research", description: "Compare assays" },
+        title: "Compare assays",
+        metadata: {
+          summary: [{ id: "read_done", tool: "read", state: { status: "completed", title: "Read old paper" } }],
+        },
+        time: { start: Date.now() - 8_000 },
+      },
+    })
+    const host = mount(() => parts.Part({ part, message: assistant() }), empty())
+    await settle()
+    const card = host.querySelector<HTMLDetailsElement>('[data-component="delegation-card"]')!
+    expect(card.open).toBe(true)
+    expect(card.querySelector('[data-slot="delegation-current"]')).toBeNull()
+    expect(card.querySelector('[data-slot="delegation-summary-meta"]')?.textContent).toContain("8s")
+    card.querySelector<HTMLElement>("summary")!.click()
+    await settle()
+    expect(card.open).toBe(false)
+    setPart("state", {
+      ...part.state,
+      status: "running",
+      title: "Compare assays",
+      time: { start: Date.now() - 9_000 },
+      metadata: { summary: [{ id: "read_live", tool: "read", state: { status: "running", title: "Read new paper" } }] },
+    })
+    await settle()
+    expect(card.open).toBe(false)
+    card.querySelector<HTMLElement>("summary")!.click()
+    await settle()
+    expect(card.querySelector('[data-slot="delegation-current"]')?.textContent).toContain("Read new paper")
+  })
+
+  test("a new model request replaces the preceding command status with its own wait", async () => {
+    const first = assistant()
+    const next = { ...assistant(), id: "msg_0003" }
+    const command: ToolPart = {
+      id: "prt_prior_command",
+      sessionID,
+      messageID: first.id,
+      type: "tool",
+      callID: "call_prior",
+      tool: "bash",
+      state: {
+        status: "running",
+        input: { command: "inspect results" },
+        title: "Inspect results",
+        metadata: {},
+        time: { start: Date.now() - 1_000 },
+      },
+    }
+    const [store, setStore] = reactive.createStore<Store>({
+      ...empty(),
+      session_status: { [sessionID]: { type: "busy" } },
+      message: { [sessionID]: [user, first] },
+      part: { [user.id]: [], [first.id]: [command] },
+    })
+    const host = mount(
+      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
+      store,
+    )
+    const status = () => host.querySelector('[data-slot="session-turn-status-text"]')?.textContent ?? ""
+    await ready(() => status().includes("Running commands"))
+    setStore("session_progress", {
+      [sessionID]: {
+        sessionID,
+        messageID: first.id,
+        attempt: 1,
+        agent: "research",
+        providerID: "openrouter",
+        modelID: "openai/gpt-5.6-sol",
+        phase: "streaming",
+        since: Date.now() - 60_000,
+        elapsedMs: 0,
+        stalls: 0,
+        lastOutputAt: Date.now() - 60_000,
+      },
+    })
+    await settle()
+    // A model waiting for an actively running tool is not a stalled provider.
+    expect(status()).toContain("Running commands")
+    setStore("part", first.id, 0, {
+      ...command,
+      state: { status: "pending", input: {}, raw: "" },
+    })
+    await settle()
+    // The model is still generating arguments; no command is executing yet.
+    expect(status()).toContain("No new output from")
+    expect(status()).not.toContain("Running commands")
+    setStore("part", first.id, 0, {
+      ...command,
+      state: {
+        ...command.state,
+        status: "completed",
+        title: "Inspect results",
+        metadata: {},
+        output: "done",
+        time: { start: 1_000, end: 2_000 },
+      },
+    })
+    setStore("message", sessionID, [user, { ...first, time: { created: 2, completed: 2_000 } }, next])
+    setStore("part", next.id, [])
+    setStore("session_progress", {
+      [sessionID]: {
+        sessionID,
+        messageID: next.id,
+        attempt: 2,
+        agent: "research",
+        providerID: "openrouter",
+        modelID: "openai/gpt-5.6-sol",
+        phase: "waiting_first_token",
+        since: Date.now(),
+        elapsedMs: 7_000,
+        stalls: 0,
+      },
+    })
+    await ready(() => status().includes("Waiting for output from openai/gpt-5.6-sol"))
+    expect(status()).not.toContain("Running commands")
   })
 })
 

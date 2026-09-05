@@ -33,6 +33,7 @@ import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
 import { useDialog } from "../context/dialog"
 import { useI18n } from "../context/i18n"
+import { useActivity } from "../context/activity"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Button } from "./button"
@@ -54,11 +55,13 @@ import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import {
   reasoningDisplayText,
-  reasoningTopic,
   savedArtifact,
   scienceTaskLabel,
   sentenceCaseLabel,
   skillActivity,
+  stripBashMetadata,
+  stripRedactedReasoning,
+  toolOutcome,
   toolSummary,
 } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
@@ -762,15 +765,16 @@ function completedAt(message: MessageType) {
   return message.role === "assistant" ? (message as AssistantMessage).time.completed : undefined
 }
 
-// Reasoning a reader opened stays open across re-renders and trace toggles
-// within the page session; everything else stays folded to its one-line clock.
+// Explicit per-part choices survive remounts and trace toggles. New parts follow
+// the reader's activity preference, including while the provider is streaming.
 const [opened, setOpened] = createStore<Record<string, boolean>>({})
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const i18n = useI18n()
+  const activity = useActivity()
   const part = props.part as ReasoningPart
   const text = () => reasoningDisplayText(part.text)
-  const status = () => (text() ? undefined : reasoningTopic(part.text))
+  const unavailable = () => !!part.text.trim() && !stripRedactedReasoning(part.text)
   const live = () => !part.time?.end && !completedAt(props.message)
   const now = useClock(() => live() && !!part.time?.start)
   // A completed message whose reasoning never reported an end (an aborted
@@ -784,17 +788,17 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const title = () =>
     duration()
       ? i18n.t("ui.messagePart.reasoning.thinking", { duration: duration() })
-      : i18n.t("ui.sessionTurn.status.thinking")
-  const open = () => opened[part.id] === true
+      : i18n.t("ui.messagePart.reasoning.label")
+  const open = () => opened[part.id] ?? activity() === "detailed"
   const bodyID = () => `${part.id}-reasoning`
 
   return (
-    <Show when={text() || status()}>
+    <Show when={text() || (activity() === "detailed" && unavailable())}>
       <Show
         when={text()}
         fallback={
-          <div data-component="reasoning-status-part" data-origin="provider-reasoning-status">
-            {status()}
+          <div data-component="reasoning-status-part" data-origin="provider-reasoning-unavailable">
+            {i18n.t("ui.messagePart.reasoning.unavailable")}
           </div>
         }
       >
@@ -809,6 +813,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
             data-slot="reasoning-part-toggle"
             aria-expanded={open()}
             aria-controls={bodyID()}
+            title={i18n.t("ui.messagePart.reasoning.elapsedHint")}
             onClick={() => setOpened(part.id, !open())}
           >
             <span data-slot="reasoning-part-glyph">
@@ -1359,13 +1364,20 @@ ToolRegistry.register({
     const childSessionId = () => props.metadata.sessionId as string | undefined
     const activity = createMemo(() => summarizeTaskActivity(summary()))
     const findings = createMemo(() => stripTaskMetadata(props.output ?? props.error))
-    const duration = () => formatTaskDuration(props.metadata.durationMs as number | undefined)
+    const live = () => props.status === "running" || props.status === "pending"
+    const now = useClock(() => live() && !!props.time?.start)
+    const duration = () => {
+      if (live() && props.time?.start) return elapsedLabel(now() - props.time.start)
+      const measured = props.time?.end === undefined ? undefined : props.time.end - props.time.start
+      return formatTaskDuration((props.metadata.durationMs as number | undefined) ?? measured)
+    }
     const model = () => {
       const value = props.metadata.model as { providerID?: string; modelID?: string } | undefined
       return [value?.providerID, value?.modelID].filter(Boolean).join(" / ") || undefined
     }
     const outcome = () => {
       if (props.status === "running" || props.status === "pending") return props.status
+      if (toolOutcome(props.status, props.error) === "cancelled") return "cancelled"
       const value = props.metadata.outcome
       if (value === "completed" || value === "partial" || value === "error" || value === "timed_out") return value
       return props.status === "error" ? "error" : "completed"
@@ -1376,9 +1388,12 @@ ToolRegistry.register({
       if (outcome() === "partial") return "Partial result"
       if (outcome() === "timed_out") return "Time limit reached"
       if (outcome() === "error") return "Needs attention"
+      if (outcome() === "cancelled") return i18n.t("ui.tool.status.cancelled")
       return "Completed"
     }
-    const current = () => summary().findLast((item) => item.state.status === "running") ?? summary().at(-1)
+    const [expanded, setExpanded] = createSignal<boolean>()
+    const open = () => expanded() ?? live()
+    const current = () => summary().findLast((item) => item.state.status === "running")
     const subtitle = () =>
       (outcome() === "running" || outcome() === "pending" ? current()?.state.title : undefined) ??
       props.input.description
@@ -1509,12 +1524,15 @@ ToolRegistry.register({
             )}
           </Match>
           <Match when={true}>
-            <details
-              data-component="delegation-card"
-              data-outcome={outcome()}
-              open={outcome() === "running" || outcome() === "pending"}
-            >
-              <summary data-slot="delegation-summary" aria-label={`${outcomeLabel()} delegated research`}>
+            <details data-component="delegation-card" data-outcome={outcome()} open={open()}>
+              <summary
+                data-slot="delegation-summary"
+                aria-label={`${outcomeLabel()} delegated research`}
+                onClick={(event) => {
+                  event.preventDefault()
+                  setExpanded(!open())
+                }}
+              >
                 <div data-slot="delegation-mark">
                   <Icon name="research" size="normal" />
                 </div>
@@ -1549,7 +1567,7 @@ ToolRegistry.register({
                       <span data-failed>{Number(props.metadata.failedToolCalls)} failed</span>
                     </Show>
                   </div>
-                  <Show when={childSessionId()}>
+                  <Show when={childSessionId() && data.navigateToSession}>
                     <button type="button" data-slot="delegation-open" onClick={handleSubtitleClick}>
                       Open agent
                       <Icon name="arrow-right" size="small" />
@@ -1571,7 +1589,11 @@ ToolRegistry.register({
                   {(value) => (
                     <div data-slot="delegation-findings" data-error={props.status === "error" ? "true" : undefined}>
                       <span data-slot="delegation-section-label">
-                        {props.status === "error" ? "Error" : "Findings"}
+                        {outcome() === "cancelled"
+                          ? i18n.t("ui.tool.status.cancelled")
+                          : props.status === "error"
+                            ? "Error"
+                            : "Findings"}
                       </span>
                       <Markdown text={value()} />
                     </div>
@@ -1618,19 +1640,28 @@ ToolRegistry.register({
                 <Show when={summary().length > 0}>
                   <details data-slot="delegation-raw">
                     <summary>
-                      Raw operations <span>· {summary().length}</span>
+                      Operations <span>· {summary().length}</span>
                     </summary>
                     <div data-component="task-tools">
                       <For each={summary()}>
                         {(item) => {
                           const info = getToolInfo(item.tool)
                           return (
-                            <div data-slot="task-tool-item">
+                            <div data-slot="task-tool-item" data-status={item.state.status}>
                               <Icon name={info.icon} size="small" />
                               <span data-slot="task-tool-title">{info.title}</span>
                               <Show when={item.state.title}>
                                 <span data-slot="task-tool-subtitle">{item.state.title}</span>
                               </Show>
+                              <span data-slot="task-tool-status">
+                                {i18n.t(
+                                  item.state.status === "completed"
+                                    ? "ui.tool.status.done"
+                                    : item.state.status === "error"
+                                      ? "ui.tool.status.error"
+                                      : "ui.tool.status.running",
+                                )}
+                              </span>
                             </div>
                           )
                         }}
@@ -1651,6 +1682,26 @@ ToolRegistry.register({
   name: "bash",
   render(props) {
     const i18n = useI18n()
+    const command = () => String(props.input.command ?? props.metadata.command ?? "")
+    const output = () => stripAnsi(stripBashMetadata(props.output ?? props.metadata.output))
+    const transcript = () => [command() ? `$ ${command()}` : "", output()].filter(Boolean).join("\n\n")
+    const [copy, setCopy] = createStore({ copied: false, error: false })
+    const handleCopy = async () => {
+      setCopy({ copied: false, error: false })
+      if (!navigator.clipboard?.writeText) {
+        setCopy("error", true)
+        return
+      }
+      await navigator.clipboard.writeText(transcript()).then(
+        () => setCopy("copied", true),
+        () => setCopy("error", true),
+      )
+    }
+    createEffect(() => {
+      if (!copy.copied) return
+      const timer = setTimeout(() => setCopy("copied", false), 2_000)
+      onCleanup(() => clearTimeout(timer))
+    })
     const subtitle = () => {
       if (typeof props.input.description === "string" && props.input.description.trim()) return props.input.description
       const command = typeof props.input.command === "string" ? props.input.command : ""
@@ -1665,11 +1716,27 @@ ToolRegistry.register({
           subtitle: subtitle(),
         }}
       >
-        <Show when={props.input.command || props.metadata.command || props.output || props.metadata.output}>
-          <div data-component="tool-output" data-scrollable>
-            <Markdown
-              text={`\`\`\`\`command\n$ ${props.input.command ?? props.metadata.command ?? ""}${props.output || props.metadata.output ? "\n\n" + stripAnsi(props.output || props.metadata.output) : ""}\n\`\`\`\``}
-            />
+        <Show when={transcript()}>
+          <div data-component="shell-output">
+            <div data-slot="shell-output-actions">
+              <IconButton
+                icon={copy.copied ? "check" : "copy"}
+                variant="ghost"
+                onClick={handleCopy}
+                aria-label={copy.copied ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                title={copy.copied ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              />
+            </div>
+            <Show when={copy.error}>
+              <div data-slot="shell-output-copy-error" role="status" aria-live="polite">
+                Could not copy. Select the command and output and copy it manually.
+              </div>
+            </Show>
+            <div data-component="tool-output" data-scrollable>
+              <pre>
+                <code>{transcript()}</code>
+              </pre>
+            </div>
           </div>
         </Show>
       </BasicTool>

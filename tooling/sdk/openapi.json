@@ -473,6 +473,22 @@
                     "session": {
                       "type": "boolean"
                     },
+                    "refreshing": {
+                      "type": "boolean"
+                    },
+                    "refreshed_at": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
                     "user": {},
                     "balance_usd": {
                       "anyOf": [
@@ -631,6 +647,8 @@
                   },
                   "required": [
                     "session",
+                    "refreshing",
+                    "refreshed_at",
                     "balance_usd",
                     "billing_mode",
                     "funding_context",
@@ -23519,6 +23537,22 @@
                           "createdAt"
                         ]
                       }
+                    },
+                    "refreshing": {
+                      "type": "boolean"
+                    },
+                    "refreshedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -23530,7 +23564,9 @@
                     "aceEnabled",
                     "aceContract",
                     "lifetimeSpentUsd",
-                    "transactions"
+                    "transactions",
+                    "refreshing",
+                    "refreshedAt"
                   ]
                 }
               }
@@ -52280,6 +52316,30 @@
           "properties"
         ]
       },
+      "Event.account.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "account.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "refreshed_at": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "refreshed_at"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "Event.lsp.client.diagnostics": {
         "type": "object",
         "properties": {
@@ -54700,6 +54760,7 @@
           "phase": {
             "type": "string",
             "enum": [
+              "preparing",
               "connecting",
               "waiting_first_token",
               "streaming",
@@ -54722,6 +54783,9 @@
             "type": "string"
           },
           "firstOutputMs": {
+            "type": "number"
+          },
+          "lastOutputAt": {
             "type": "number"
           },
           "stalls": {
@@ -55973,6 +56037,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.project.trust.changed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.account.updated"
           },
           {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"

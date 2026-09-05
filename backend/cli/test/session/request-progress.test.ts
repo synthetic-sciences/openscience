@@ -4,6 +4,7 @@ import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionProcessor } from "../../src/session/processor"
 import { SessionStatus } from "../../src/session/status"
 import { SessionTelemetry } from "../../src/session/telemetry"
 import { tmpdir, trustProject } from "../fixture/fixture"
@@ -41,6 +42,8 @@ function delayed(marks: { headers?: number; content?: number }) {
     const writer = pipe.writable.getWriter()
     await writer.write(encoder.encode(": OPENROUTER PROCESSING\n\n"))
     await writer.write(encoder.encode(chunk({ role: "assistant", content: "" }, null)))
+    await writer.write(encoder.encode(chunk({ reasoning_content: "[RE" }, null)))
+    await writer.write(encoder.encode(chunk({ reasoning_content: "DACTED]" }, null)))
     await Bun.sleep(DELAY_MS)
     marks.content = Date.now()
     await writer.write(encoder.encode(chunk({ content: "Delayed first token" }, null)))
@@ -61,6 +64,58 @@ async function until(check: () => boolean, timeoutMs = 5_000) {
 }
 
 describe("session.request.progress", () => {
+  test.each([
+    ["", "[REDACTED]", false],
+    ["[RE", "DACTED]", false],
+    ["Readable thought", "[RE", false],
+    ["Readable thought[RE", "DACTED]", false],
+    ["[REDACTED]", "Actual reasoning", true],
+    ["Readable thought", " \n", false],
+    ["Readable thought", " continues", true],
+  ] as const)("distinguishes readable reasoning from private placeholders", (text, delta, expected) => {
+    expect(SessionProcessor.readableReasoning(text, delta)).toBe(expected)
+  })
+
+  test("retains preflight time and tracks output activity without resetting the phase or flooding the bus", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const seen: SessionTelemetry.RequestProgress[] = []
+        Bus.subscribe(SessionTelemetry.Event.Progress, (event) => seen.push(event.properties))
+        const base = {
+          sessionID: "ses_activity",
+          messageID: "msg_activity",
+          attempt: 1,
+          agent: "research",
+          providerID: "stress",
+          modelID: "fixture-model",
+        }
+        const preparing = SessionTelemetry.recordProgress({ ...base, phase: "preparing" })
+        await Bun.sleep(20)
+        const connecting = SessionTelemetry.recordProgress({ ...base, phase: "connecting" })
+        expect(connecting.elapsedMs).toBe(connecting.since - preparing.since)
+        expect(connecting.elapsedMs).toBeGreaterThanOrEqual(15)
+        SessionTelemetry.recordProgress({ ...base, phase: "waiting_first_token" })
+        const streaming = SessionTelemetry.recordProgress({ ...base, phase: "streaming" })
+        await Bun.sleep(20)
+        for (let n = 0; n < 100; n++) SessionTelemetry.recordProgress({ ...base, phase: "streaming" })
+        expect(SessionTelemetry.progress(base.sessionID)?.lastOutputAt).toBeGreaterThan(streaming.lastOutputAt!)
+        expect(seen.filter((item) => item.phase === "streaming")).toHaveLength(1)
+        await Bun.sleep(1_000)
+        SessionTelemetry.recordProgress({ ...base, phase: "streaming" })
+        await until(() => seen.filter((item) => item.phase === "streaming").length === 2)
+        const activity = SessionTelemetry.progress(base.sessionID)!
+        expect(activity.since).toBe(streaming.since)
+        expect(activity.elapsedMs).toBe(streaming.elapsedMs)
+        expect(activity.firstOutputMs).toBe(streaming.firstOutputMs)
+        expect(activity.lastOutputAt).toBeGreaterThan(streaming.lastOutputAt! + 1_000)
+        SessionTelemetry.recordProgress({ ...base, phase: "done" })
+        expect(SessionTelemetry.progress(base.sessionID)?.lastOutputAt).toBe(activity.lastOutputAt)
+      },
+    })
+  })
+
   test("reports headers as waiting_first_token and only real content as streaming", async () => {
     const marks: { headers?: number; content?: number } = {}
     using server = Bun.serve({
@@ -102,7 +157,13 @@ describe("session.request.progress", () => {
         await until(() => mine().some((item) => item.phase === "done"))
 
         const phases = mine()
-        expect(phases.map((item) => item.phase)).toEqual(["connecting", "waiting_first_token", "streaming", "done"])
+        expect(phases.map((item) => item.phase)).toEqual([
+          "preparing",
+          "connecting",
+          "waiting_first_token",
+          "streaming",
+          "done",
+        ])
         expect(phases[0]).toMatchObject({
           sessionID: session.id,
           attempt: 1,
@@ -113,8 +174,8 @@ describe("session.request.progress", () => {
           stalls: 0,
         })
 
-        const waiting = phases[1]
-        const streaming = phases[2]
+        const waiting = phases[2]
+        const streaming = phases[3]
         // Headers were observed while the body still held only the keepalive
         // comment and the role-only delta.
         expect(waiting.since).toBeGreaterThanOrEqual(marks.headers!)
@@ -125,7 +186,8 @@ describe("session.request.progress", () => {
         expect(streaming.firstOutputMs).toBeGreaterThanOrEqual(DELAY_MS - 50)
         expect(streaming.elapsedMs).toBe(streaming.firstOutputMs!)
 
-        const done = phases[3]
+        expect(streaming.lastOutputAt).toBeGreaterThanOrEqual(marks.content!)
+        const done = phases[4]
         expect(done.firstOutputMs).toBe(streaming.firstOutputMs)
         expect(done.elapsedMs).toBeGreaterThanOrEqual(streaming.elapsedMs)
         expect(SessionTelemetry.progress(session.id)).toEqual(done)

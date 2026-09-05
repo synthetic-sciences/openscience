@@ -25,12 +25,25 @@ export function progressStatus(progress: SessionRequestProgress | undefined, now
   // headers arrived and the body is silent: both earn the same hint.
   const hint = phase >= PROGRESS_HINT_MS && { hint: "ui.sessionTurn.progress.stillOpen" as const }
   switch (progress.phase) {
+    case "preparing":
+      return {
+        key: "ui.sessionTurn.progress.preparing",
+        params: { model, seconds },
+        ...(phase >= PROGRESS_HINT_MS && { hint: "ui.sessionTurn.progress.preparingHint" as const }),
+      }
     case "connecting":
       if (phase < PROGRESS_SLOW_MS) return { key: "ui.sessionTurn.progress.connecting", params: { model } }
       return { key: "ui.sessionTurn.progress.stillConnecting", params: { model, seconds }, ...hint }
     case "waiting_first_token":
       return { key: "ui.sessionTurn.progress.waitingFirstToken", params: { model, seconds }, ...hint }
     case "streaming":
+      if (progress.lastOutputAt !== undefined && now - progress.lastOutputAt >= PROGRESS_HINT_MS) {
+        return {
+          key: "ui.sessionTurn.progress.stalled",
+          params: { model, seconds: Math.max(0, Math.floor((now - progress.lastOutputAt) / 1000)) },
+          hint: "ui.sessionTurn.progress.stalledHint",
+        }
+      }
       return { key: "ui.sessionTurn.progress.streaming", params: { model } }
     case "conflict_wait":
       return { key: "ui.sessionTurn.progress.conflictWait", params: { seconds } }

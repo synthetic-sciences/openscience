@@ -97,6 +97,7 @@ function skillMatches(entry: CompletedSkillEntry) {
 
 function completedShellPreflight(entry: ResearchTraceEntry) {
   if (entry.part.type !== "tool" || entry.part.tool !== "bash" || entry.part.state.status !== "completed") return false
+  if (typeof entry.part.state.metadata?.exit === "number" && entry.part.state.metadata.exit !== 0) return false
   const input = (entry.part.state.input ?? {}) as Record<string, unknown>
   const command = typeof input.command === "string" ? input.command.trim() : ""
   return [
@@ -112,6 +113,13 @@ const foldable = new Set([...context, ...sources, ...changes, "bash"])
 
 function foldableCall(entry: ResearchTraceEntry) {
   if (entry.group || entry.part.type !== "tool") return false
+  if (
+    entry.part.tool === "bash" &&
+    entry.part.state.status === "completed" &&
+    typeof entry.part.state.metadata?.exit === "number" &&
+    entry.part.state.metadata.exit !== 0
+  )
+    return false
   return entry.part.state.status === "completed" && foldable.has(entry.part.tool)
 }
 
@@ -170,7 +178,10 @@ export function foldRuns(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
  * calls, and the newest call of a message still working always remain
  * literal rows, so a row never folds at the moment its receipt appears.
  */
-export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTraceEntry[] {
+export function visibleResearchTrace(
+  entries: ResearchTraceEntry[],
+  mode: "detailed" | "compact" = "compact",
+): ResearchTraceEntry[] {
   // Streaming reconciliation can briefly surface the same durable part twice
   // while an insert and update are coalesced. Keep the first chronological
   // position but render the newest value for that stable part ID.
@@ -191,11 +202,13 @@ export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTra
     if (
       entry.part.type === "reasoning" &&
       !reasoningDisplayText(entry.part.text ?? "") &&
-      !reasoningTopic(entry.part.text ?? "")
+      !reasoningTopic(entry.part.text ?? "") &&
+      !(mode === "detailed" && entry.part.text?.trim())
     )
       return false
     return true
   })
+  if (mode === "detailed") return visible
   const result: ResearchTraceEntry[] = []
   for (let index = 0; index < visible.length; index++) {
     const first = visible[index]!

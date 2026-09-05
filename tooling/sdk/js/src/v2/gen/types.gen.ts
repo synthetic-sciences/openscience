@@ -767,12 +767,14 @@ export type SessionRequestProgress = {
   agent: string
   providerID: string
   modelID: string
-  phase: "connecting" | "waiting_first_token" | "streaming" | "conflict_wait" | "retry_wait" | "done" | "error"
+  phase:
+    "preparing" | "connecting" | "waiting_first_token" | "streaming" | "conflict_wait" | "retry_wait" | "done" | "error"
   since: number
   elapsedMs: number
   retryAfterMs?: number
   detail?: string
   firstOutputMs?: number
+  lastOutputAt?: number
   stalls: number
 }
 

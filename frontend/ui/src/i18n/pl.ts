@@ -1,4 +1,16 @@
 export const dict = {
+  "ui.messagePart.reasoning.unavailable": "The model did not provide readable reasoning.",
+  "ui.messagePart.reasoning.label": "Reasoning",
+  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
+  "ui.sessionTurn.activity.label": "Activity view",
+  "ui.sessionTurn.activity.detailed": "Detailed",
+  "ui.sessionTurn.activity.compact": "Compact",
+  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
+  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
+  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
+  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
+  "ui.sessionTurn.progress.stalledHint":
+    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "Komentarz do ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Komentowanie: ",

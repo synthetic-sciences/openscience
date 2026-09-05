@@ -22,6 +22,47 @@
     display: none;
   }
 
+  [data-slot="session-turn-response-trigger"] {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    min-width: 0;
+  }
+
+  [data-slot="session-turn-progress-hint"] {
+    flex-basis: 100%;
+    color: var(--text-weak);
+    font-size: var(--font-size-small);
+  }
+
+  [data-slot="session-turn-activity-mode"] {
+    display: inline-flex;
+    flex-shrink: 0;
+    padding: 2px;
+    border: 1px solid var(--border-weak-base);
+    border-radius: var(--radius-md);
+
+    button {
+      min-height: 32px;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      color: var(--text-weak);
+      font-size: var(--font-size-small);
+      cursor: pointer;
+
+      &[aria-pressed="true"] {
+        background: var(--surface-raised-base);
+        color: var(--text-strong);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--color-focus);
+        outline-offset: 1px;
+      }
+    }
+  }
+
   [data-slot="session-turn-message-container"] {
     display: flex;
     flex-direction: column;

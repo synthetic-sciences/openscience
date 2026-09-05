@@ -227,9 +227,8 @@
   opacity: 0.35;
 }
 
-/* Reasoning folds to one row that reads like a tool call: a glyph, the
-   "Thinking (12s)" clock, a chevron. The body only mounts once a reader opens
-   it, and an opened body stays open for the rest of the page session. */
+/* Reasoning follows the activity preference. The disclosure remains available
+   while streaming, and its clock measures the received reasoning phase. */
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--text-base);
@@ -305,7 +304,7 @@
 
   [data-slot="reasoning-part-body"] {
     margin: 0 0 6px 19px;
-    padding: 2px 10px 2px 12px;
+    padding: 4px 12px 8px;
     border-left: 1px solid var(--border-weaker-base);
     color: var(--text-weak);
   }
@@ -324,6 +323,51 @@
     > :last-child {
       margin-bottom: 0;
     }
+  }
+}
+
+[data-component="shell-output"] {
+  position: relative;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset-base, var(--surface-base));
+
+  [data-slot="shell-output-actions"] {
+    display: flex;
+    justify-content: flex-end;
+    padding: 2px 4px 0;
+  }
+
+  [data-component="tool-output"] {
+    min-width: 0;
+    padding: 0 12px 12px;
+    scrollbar-width: thin;
+    overscroll-behavior: contain;
+
+    &::-webkit-scrollbar {
+      display: block;
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      border-radius: var(--radius-xs);
+      background: var(--border-weak-base);
+    }
+
+    pre {
+      width: 100%;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-family: var(--font-family-mono);
+      font-size: 12px;
+      line-height: 19px;
+    }
+  }
+
+  [data-slot="shell-output-copy-error"] {
+    padding: 0 12px 8px;
+    color: var(--text-weak);
+    font-size: var(--font-size-x-small);
   }
 }
 
@@ -355,8 +399,9 @@
 
   [data-slot="message-part-tool-error-content"] {
     display: flex;
+    flex-direction: column;
     align-items: start;
-    gap: 8px;
+    gap: 4px;
   }
 
   [data-slot="message-part-tool-error-body"] {
@@ -400,6 +445,17 @@
     max-height: 240px;
     overflow-y: auto;
     word-break: break-word;
+  }
+
+  &[data-outcome="cancelled"] {
+    [data-slot="icon-svg"] {
+      color: var(--icon-weak);
+    }
+
+    [data-slot="message-part-tool-error-title"],
+    [data-slot="message-part-tool-error-message"] {
+      color: var(--text-weak);
+    }
   }
 }
 
@@ -484,6 +540,9 @@
     margin: 0;
     padding: 0;
     background: none;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--font-family-mono);
     line-height: 20px;
   }
 
@@ -717,6 +776,7 @@
     color: var(--text-weaker);
     font-size: 11px;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 
     [data-component="icon"] {
       transition: transform 140ms ease;
@@ -959,6 +1019,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  [data-slot="task-tool-status"] {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: var(--font-size-x-small);
+    color: var(--text-weaker);
+  }
+
+  [data-slot="task-tool-item"][data-status="error"] [data-slot="task-tool-status"] {
+    color: var(--text-critical-base);
   }
 }
 

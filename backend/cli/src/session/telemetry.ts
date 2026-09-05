@@ -28,6 +28,7 @@ export namespace SessionTelemetry {
   const LATEST_LIMIT = 256
 
   export const RequestPhase = z.enum([
+    "preparing",
     "connecting",
     "waiting_first_token",
     "streaming",
@@ -42,7 +43,8 @@ export namespace SessionTelemetry {
   // when the current phase began; `elapsedMs` is how long the attempt had been
   // running at that moment, so a client can render a skew-free elapsed clock as
   // `elapsedMs + (now - since)`. `firstOutputMs` and `stalls` accumulate across
-  // the message so a later trace can show time-to-first-output.
+  // the message so a later trace can show time-to-first-output. `lastOutputAt`
+  // tracks readable model/tool-call output, never transport keepalives.
   export const RequestProgress = z
     .object({
       sessionID: z.string(),
@@ -57,12 +59,13 @@ export namespace SessionTelemetry {
       retryAfterMs: z.number().optional(),
       detail: z.string().optional(),
       firstOutputMs: z.number().optional(),
+      lastOutputAt: z.number().optional(),
       stalls: z.number(),
     })
     .meta({ ref: "SessionRequestProgress" })
   export type RequestProgress = z.infer<typeof RequestProgress>
 
-  const requests = new Map<string, RequestProgress & { started: number }>()
+  const requests = new Map<string, RequestProgress & { started: number; published: number }>()
 
   // A managed-gateway conflict is waited out inside the provider fetch, below
   // the processor, so it reaches the request record through the provider's
@@ -192,7 +195,8 @@ export namespace SessionTelemetry {
   /** Publish a request-phase transition. Identity fields omitted by the caller
    * are inherited from the session's current record, so a layer that only knows
    * the session (the retry status, a provider fetch hook) can still report a
-   * phase. A repeat of the same phase for the same attempt is a no-op. */
+   * phase. Streaming repeats refresh activity at most once per second on the
+   * bus; other repeats are a no-op. */
   export function recordProgress(input: {
     sessionID: string
     messageID: string
@@ -207,11 +211,27 @@ export namespace SessionTelemetry {
     hook()
     const prior = requests.get(input.sessionID)
     const same = prior?.messageID === input.messageID ? prior : undefined
-    // Cheap enough to call on every stream delta: a repeat returns before the
-    // clock is read.
-    if (same && same.phase === input.phase && same.attempt === input.attempt) return same
+    const repeat = same && same.phase === input.phase && same.attempt === input.attempt
+    if (repeat && input.phase !== "streaming") return same
     const now = Date.now()
-    const started = input.phase === "connecting" || !same ? now : same.started
+    if (repeat) {
+      same.lastOutputAt = now
+      // Keep the exact activity time locally, but do not send a bus event for
+      // each token or reset the original streaming-phase clock.
+      if (now - same.published < 1_000) return same
+      same.published = now
+      const { started: _, published: __, ...item } = same
+      void Bus.publish(Event.Progress, item).catch((error) =>
+        log.debug("request progress publish failed", { error: `${error}` }),
+      )
+      return item
+    }
+    const started =
+      !same ||
+      input.phase === "preparing" ||
+      (input.phase === "connecting" && (same.attempt !== input.attempt || same.phase === "retry_wait"))
+        ? now
+        : same.started
     const stall = input.phase === "conflict_wait" || input.phase === "retry_wait" ? 1 : 0
     const elapsedMs = now - started
     const first = same?.firstOutputMs ?? (input.phase === "streaming" ? elapsedMs : undefined)
@@ -228,6 +248,11 @@ export namespace SessionTelemetry {
       ...(input.retryAfterMs !== undefined && { retryAfterMs: Math.max(0, input.retryAfterMs) }),
       ...(input.detail && { detail: input.detail }),
       ...(first !== undefined && { firstOutputMs: first }),
+      ...(input.phase === "streaming"
+        ? { lastOutputAt: now }
+        : same?.lastOutputAt !== undefined
+          ? { lastOutputAt: same.lastOutputAt }
+          : {}),
       stalls: (same?.stalls ?? 0) + stall,
     } satisfies RequestProgress
     if (!prior) trim()
@@ -235,7 +260,18 @@ export namespace SessionTelemetry {
     // insertion: a long-lived session is never the eviction candidate just
     // because it started before 256 newer ones.
     requests.delete(input.sessionID)
-    requests.set(input.sessionID, { ...item, started })
+    requests.set(input.sessionID, { ...item, started, published: now })
+    if (input.phase === "streaming" && same?.firstOutputMs === undefined) {
+      log.info("request first output", {
+        sessionID: item.sessionID,
+        messageID: item.messageID,
+        attempt: item.attempt,
+        agent: item.agent,
+        providerID: item.providerID,
+        modelID: item.modelID,
+        firstOutputMs: item.firstOutputMs,
+      })
+    }
     log.debug("request progress", {
       sessionID: item.sessionID,
       messageID: item.messageID,
@@ -269,7 +305,7 @@ export namespace SessionTelemetry {
   export function progress(sessionID: string): RequestProgress | undefined {
     const item = requests.get(sessionID)
     if (!item) return
-    const { started: _, ...rest } = item
+    const { started: _, published: __, ...rest } = item
     return rest
   }
 

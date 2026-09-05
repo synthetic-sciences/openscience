@@ -42,6 +42,20 @@ export namespace SessionProcessor {
   const MAX_RETRY_ATTEMPTS = 10
   const log = Log.create({ service: "session.processor" })
 
+  /** Provider reasoning can contain a private-payload placeholder, including
+   * split across deltas. Only text that can be shown counts as output. */
+  export function readableReasoning(text: string, delta: string) {
+    const marker = "[REDACTED]"
+    const tail = text.slice(-(marker.length - 1))
+    const start = tail.lastIndexOf("[")
+    const pending = start >= 0 && marker.startsWith(tail.slice(start)) ? tail.slice(start) : ""
+    // Inspect only a possible split marker and the new delta; rescanning a
+    // growing reasoning block for every token would itself add latency.
+    const clean = (pending + delta).replaceAll(marker, "")
+    const end = clean.lastIndexOf("[")
+    return (end >= 0 && marker.startsWith(clean.slice(end)) ? clean.slice(0, end) : clean).trim().length > 0
+  }
+
   export function managedPauseError(message: string) {
     return new MessageV2.APIError({
       message,
@@ -558,18 +572,6 @@ export namespace SessionProcessor {
       },
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
-        // Resolve the transport before touching Atlas. BYOK and subscription
-        // turns must stay independent from an unrelated saved Ace session.
-        const credentialSource = await resolveCredentialSource(input.model.providerID, input.model.id)
-        // One immutable funding choice spans preflight and every retry/step in
-        // this provider operation. A settings change applies to the next turn.
-        const funding = await fundingSnapshot(credentialSource)
-        const tracking = tracks({ tools: streamInput.tools, toolcall: input.model.capabilities.toolcall })
-        needsCompaction = false
-        overflow = false
-        const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
-        shouldBreakOnDeny = shouldBreak
-        let traceRoute = "custom"
         const progress = (phase: SessionTelemetry.RequestPhase) =>
           SessionTelemetry.recordProgress({
             sessionID: input.sessionID,
@@ -580,8 +582,29 @@ export namespace SessionProcessor {
             modelID: input.model.id,
             phase,
           })
+        progress("preparing")
+        const prepared = await (async () => {
+          // Resolve the transport before touching Atlas. BYOK and subscription
+          // turns stay independent from an unrelated saved Ace session.
+          const source = await resolveCredentialSource(input.model.providerID, input.model.id)
+          // One immutable funding choice spans preflight and every retry/step.
+          const funding = await fundingSnapshot(source)
+          const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
+          return { source, funding, shouldBreak }
+        })().catch((error) => {
+          progress("error")
+          throw error
+        })
+        const credentialSource = prepared.source
+        const funding = prepared.funding
+        const tracking = tracks({ tools: streamInput.tools, toolcall: input.model.capabilities.toolcall })
+        needsCompaction = false
+        overflow = false
+        shouldBreakOnDeny = prepared.shouldBreak
+        let traceRoute = "custom"
         while (true) {
           try {
+            progress("preparing")
             traceRoute = accessRoute(credentialSource, input.model)
 
             if (requiresWalletBalance(credentialSource)) {
@@ -610,6 +633,7 @@ export namespace SessionProcessor {
               attempt: attempt + 1,
               agent: streamInput.agent.name,
               modelID: input.model.id,
+              onRequest: () => progress("connecting"),
               ...(credentialSource === "managed" && funding ? { funding } : {}),
             }
             // The conversation-first Research agent does not create or require
@@ -645,7 +669,6 @@ export namespace SessionProcessor {
                   ],
                 }
               : streamInput
-            progress("connecting")
             const stream = await Provider.withRequestContext(requestContext, () =>
               LLM.stream({
                 ...request,
@@ -666,9 +689,12 @@ export namespace SessionProcessor {
               input.abort.throwIfAborted()
               // First content is the honest first-output timestamp. A role-only
               // delta or an SSE keepalive comment never reaches this branch, and
-              // the record ignores the repeat on every later delta.
+              // later content refreshes the throttled activity timestamp.
               if (
-                ((value.type === "text-delta" || value.type === "reasoning-delta") && value.text.length > 0) ||
+                (value.type === "text-delta" && value.text.trim().length > 0) ||
+                (value.type === "reasoning-delta" &&
+                  readableReasoning(reasoningMap[value.id]?.text ?? "", value.text)) ||
+                (value.type === "tool-input-delta" && value.delta.length > 0) ||
                 value.type === "tool-input-start" ||
                 value.type === "tool-call"
               ) {
