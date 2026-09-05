@@ -646,7 +646,12 @@ export function DocumentationPage() {
       </a>
       <header className="docs-topbar">
         <a href="https://openscience.sh" className="docs-brand">
-          <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
+          <span
+            className="docs-brand-mark"
+            role="img"
+            aria-label="Synthetic Sciences"
+            style={{ maskImage: `url(${import.meta.env.BASE_URL}synthetic-sciences.svg)` }}
+          />
           <span className="docs-brand-text">
             <small>OpenScience</small>
             <strong>Docs</strong>
@@ -990,10 +995,14 @@ const docsCss = `
     background: var(--color-bg-elevated);
   }
 
-  .docs-brand img {
+  .docs-brand-mark {
     width: 28px;
     height: 28px;
     flex-shrink: 0;
+    background: currentColor;
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
   }
 
   .docs-brand-text {

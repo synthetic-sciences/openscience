@@ -10,6 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Use the Synthetic Sciences mark consistently in documentation, website and
+  workspace favicons, workspace headers, model settings, and social previews.
+
 - Rebuild the public documentation around current installation, Ace pricing,
   provider keys, local models, research workflows, and troubleshooting. Add
   Explore tools and Skills tabs with complete catalogs, usage guides, and

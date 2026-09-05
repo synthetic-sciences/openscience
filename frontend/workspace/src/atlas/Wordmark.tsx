@@ -1,5 +1,6 @@
 import { type JSX, Show } from "solid-js"
 import { FONT_SANS } from "@/styles/tokens"
+import { ProviderIcon } from "@synsci/ui/provider-icon"
 
 interface WordmarkProps {
   size?: "sm" | "md" | "lg"
@@ -23,10 +24,8 @@ export function Wordmark(props: WordmarkProps): JSX.Element {
   const content = () => (
     <>
       <Show when={!props.textOnly}>
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
+        <ProviderIcon
+          id="synsci"
           aria-hidden="true"
           style={{
             width: `${px().logo}px`,
@@ -34,28 +33,7 @@ export function Wordmark(props: WordmarkProps): JSX.Element {
             "flex-shrink": 0,
             color: "var(--color-text)",
           }}
-        >
-          <circle cx="12" cy="12" r="2.15" fill="currentColor" />
-          <ellipse cx="12" cy="12" rx="9" ry="3.7" stroke="currentColor" stroke-width="1.35" />
-          <ellipse
-            cx="12"
-            cy="12"
-            rx="9"
-            ry="3.7"
-            stroke="currentColor"
-            stroke-width="1.35"
-            transform="rotate(60 12 12)"
-          />
-          <ellipse
-            cx="12"
-            cy="12"
-            rx="9"
-            ry="3.7"
-            stroke="currentColor"
-            stroke-width="1.35"
-            transform="rotate(120 12 12)"
-          />
-        </svg>
+        />
       </Show>
       <span
         aria-hidden="true"

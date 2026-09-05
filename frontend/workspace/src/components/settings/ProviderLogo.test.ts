@@ -46,9 +46,8 @@ describe("provider logos", () => {
     for (const id of ["minimax", "nvidia"] as const) expect(providerLogoSource(id)).toEqual({ kind: "provider", id })
   })
 
-  test("keeps OpenScience separate from Synthetic Sciences and Ace", () => {
-    expect(providerLogoSource("openscience")).toEqual({ kind: "vector", id: "openscience" })
-    for (const id of ["synsci", "ace", "synthetic-sciences", "Synthetic Sciences"])
+  test("uses the Synthetic Sciences mark for OpenScience and Ace", () => {
+    for (const id of ["openscience", "synsci", "ace", "synthetic-sciences", "Synthetic Sciences"])
       expect(providerLogoSource(id)).toEqual({ kind: "provider", id: "synsci" })
   })
 
