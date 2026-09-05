@@ -19,7 +19,7 @@ The desktop consumes `session.request.progress`, defined in [session/telemetry.t
 
 `lastOutputAt` records the latest readable output or tool-call activity. Streaming activity refreshes the local record on every meaningful delta and publishes updates at most once per second, without resetting `since`. The UI can identify an open stream with no new output; silence alone does not prove that the model, gateway, or network failed.
 
-SSE comments, role-only deltas, whitespace-only text, and private reasoning placeholders such as `[REDACTED]` do not count as readable output. Split placeholders are handled across deltas. A tool name or partial tool arguments count as output, but do not prove that a tool executed. Tool execution has its own pending, running, completed, and error states.
+SSE comments, role-only deltas, whitespace-only text, and private reasoning placeholders such as `[REDACTED]` do not count as readable output. Split placeholders are handled across deltas. Nonblank partial tool arguments or a completed tool call count as output, but do not prove that a tool executed. An ID/name-only tool-start event is not progress. Tool execution has its own pending, running, completed, and error states.
 
 ## Correlate local and gateway logs
 
@@ -54,12 +54,29 @@ The local response-header delay spans a different boundary: desktop dispatch thr
 
 After streaming headers have been sent, the gateway cannot add the later first-content time to those headers. Correlate gateway stream logs with the desktop's first-readable-output record to investigate that interval. A long context, a high reasoning setting, or reported cache usage can help explain a result, but none independently proves where the delay occurred. Preserve missing observations as unknown, and compare matched requests before claiming a speed improvement.
 
+## Stall deadlines
+
+The provider transport and session processor enforce separate, configurable deadlines. Values live under `provider.<id>.options` in `openscience.json`; each accepts a positive integer in milliseconds or `false` to disable that deadline.
+
+| Option              | Default    | Clock boundary                                                                                                                                                                                             |
+| ------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `connectTimeout`    | 120,000 ms | Fetch dispatch until response headers, including connection setup and upstream admission.                                                                                                                  |
+| `idleTimeout`       | 300,000 ms | Waiting for the next response-body chunk; raw keepalive bytes reset this timer. It does not run while the consumer is not requesting another chunk.                                                        |
+| `outputIdleTimeout` | 600,000 ms | Waiting for new readable model output or tool-call activity; keepalives, blank deltas, and private-only reasoning do not reset it. Suspended while local processing or an actual tool execution is active. |
+| `timeout`           | Disabled   | Optional total HTTP-request duration, even if output continues.                                                                                                                                            |
+
+These limits bound silence; they do not impose a default total generation limit or make upstream inference faster. A provider that reasons privately without sending readable output may legitimately reach `outputIdleTimeout`; increase it for that provider when appropriate. Disabling `timeout` alone does not disable the three stall deadlines.
+
+`Provider.RequestTimeoutError` identifies `connect`, `first_event`, `stream`, `output`, or `total`. `Provider.requestTimeout(error)` returns the actual timeout from an SDK cause or aggregate wrapper. Timeout recovery is terminal, including before readable output: the provider may already have processed the paid request, so OpenScience does not automatically dispatch a replacement. Received transcript parts are retained.
+
+The output watchdog cancels the provider HTTP request through `RequestContext.abort`, not the session's tool-authority signal. Already-started tools retain their separate lifecycle; an HTTP timeout is not proof that a remote tool or provider computation was rolled back. The transport's own deadlines also abort the underlying fetch, not only the consumer's wait.
+
 ## Focused verification
 
 From `backend/cli`, these tests exercise the actual parser, dispatch observation, phase transitions, split private placeholders, keepalive handling, and activity throttling without paid model calls:
 
 ```bash
-bun test --timeout 15000 ./test/provider/gateway-timing.test.ts ./test/provider/idle-watchdog.test.ts ./test/session/request-progress.test.ts ./test/session/telemetry.test.ts
+bun test --timeout 15000 ./test/provider/gateway-timing.test.ts ./test/provider/idle-watchdog.test.ts ./test/session/request-progress.test.ts ./test/session/telemetry.test.ts ./test/session/output-watchdog.test.ts ./test/session/stall-recovery.test.ts
 ```
 
 When changing the progress schema, regenerate the SDK with `./tooling/repo/generate.ts` from the repository root and update the workspace's phase handling in the same change.

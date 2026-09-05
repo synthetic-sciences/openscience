@@ -10,7 +10,7 @@ Choose **BYOK / Subscription** or **Ace** in **Customize → Models**. BYOK uses
 
 Sign in from the Ace panel, select your workspace, and add Wallet funds or authorize Ace reloads. The model picker shows the available managed catalog and pricing for its actual upstream route.
 
-Supported Claude and Gemini models use native Anthropic and Google endpoints when their credentials and reviewed rates are configured. Other managed models use OpenRouter. Grok and Meta retain their OpenRouter routes until native access is ready; implementing a native adapter does not activate it. Direct Meta pricing still needs verification before that route can be enabled.
+Managed models currently use OpenRouter through the Synthetic Sciences gateway. Your own connected provider keys and eligible subscriptions use their separate direct routes; they are not charged to your Ace Wallet.
 
 The model's context capacity and its pricing thresholds are different numbers. Open a model's options for its context limit, input/output rates, cache rates, and supported reasoning tiers. See [Pricing](/openscience/pricing).
 
@@ -53,6 +53,39 @@ openscience run --model moonshotai/kimi-k3 "Implement the pipeline"
 ```
 
 `--model <provider>/<model>` overrides the default for one run. `--variant` selects a provider-supported reasoning tier such as `minimal`, `high`, `xhigh`, or `max`.
+
+## Slow or stalled requests
+
+The request status distinguishes local preparation, connecting, waiting for the first readable output, and receiving output. A connection delay can include network setup, gateway admission, and provider processing; it does not mean the model has been thinking for that whole interval. A stream can also remain open after its last output.
+
+OpenScience stops a request that exceeds one of these default waits:
+
+| Setting | Default | What it limits |
+| --- | --- | --- |
+| `connectTimeout` | 2 minutes | Waiting for response headers. |
+| `idleTimeout` | 5 minutes | Waiting for the next response-body data, including transport keepalives. |
+| `outputIdleTimeout` | 10 minutes | Waiting for new readable text, reasoning, or tool-call activity. Keepalives do not count. This timer pauses during local processing and tool execution. |
+| `timeout` | No limit | Optional total request duration, even while output continues. |
+
+There is no default total-generation limit. If your provider needs longer for private reasoning or a slow local model, merge an override into that provider's `options` in `openscience.json`. For example, this allows 20 minutes without readable output from your OpenRouter connection:
+
+```json
+{
+  "provider": {
+    "openrouter": {
+      "options": {
+        "outputIdleTimeout": 1200000
+      }
+    }
+  }
+}
+```
+
+Values are milliseconds. Set an individual option to `false` to disable that deadline; `timeout: false` does not disable the other three. Use the provider ID shown by `openscience models`, including the managed provider ID when configuring Ace.
+
+Local overrides do not extend a gateway or provider's own limits. Ace also enforces server-side progress deadlines; disabling a desktop deadline cannot keep an idle managed request open indefinitely.
+
+After a timeout, received output stays in your session. OpenScience does not automatically resend the model request: the provider may already have processed it, and a replacement can incur another charge. Review partial output and any completed tools before continuing yourself.
 
 ## Route ownership
 

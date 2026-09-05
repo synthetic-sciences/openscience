@@ -496,8 +496,15 @@ export function SessionTurn(
   })
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
-  const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
+  const working = createMemo(() => {
+    if (status().type === "idle" || !isLastUserMessage()) return false
+    const latest = lastAssistantMessage()
+    // Message completion and session status arrive independently. An old busy
+    // or retry event cannot restart a request that already ended with an error.
+    return !(latest?.time.completed && latest.error)
+  })
   const retry = createMemo(() => {
+    if (!working()) return
     const s = status()
     if (s.type !== "retry") return
     return s
@@ -1116,7 +1123,7 @@ export function SessionTurn(
                         </div>
                       </section>
                     </Show>
-                    <Show when={error() && !props.stepsExpanded}>
+                    <Show when={!props.stepsExpanded && error()}>
                       {(value) => <SessionErrorNotice error={value()} />}
                     </Show>
                   </Match>

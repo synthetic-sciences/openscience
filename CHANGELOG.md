@@ -10,6 +10,12 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Bound silent model connections and stalled streams, preserve partial output,
+  and stop without automatically replaying an uncertain paid request. Detailed
+  reasoning and tool activity are visible by default, with a saved Compact option;
+  errors keep their explanation when collapsed and cannot leave a stale retry spinner.
+- Separate local preparation, gateway admission, response headers, and readable
+  output timings so a silent connection is no longer presented as active thinking.
 - Removed ~31 MB of never-loaded fonts and favicons, dead frontend and backend
   modules, duplicated helpers, and the tests that only asserted source text.
   `bun run check` and Fast CI now run the frontend unit suites too.

@@ -57,7 +57,9 @@ import { ProviderTransform } from "./transform"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
   const MAX_TIMER_MS = 2_147_483_647
-  export const DEFAULT_IDLE_TIMEOUT_MS = false
+  export const DEFAULT_CONNECT_TIMEOUT_MS = 120_000
+  export const DEFAULT_IDLE_TIMEOUT_MS = 300_000
+  export const DEFAULT_OUTPUT_IDLE_TIMEOUT_MS = 600_000
 
   export type RequestContext = {
     sessionID: string
@@ -69,6 +71,8 @@ export namespace Provider {
     modelID?: string
     /** Immutable account/funding choice for this provider operation. */
     funding?: FundingSnapshot
+    /** Provider-only cancellation; tool execution keeps its own authority signal. */
+    abort?: AbortSignal
     /** Actual fetch dispatch, after local request and credential preparation. */
     onRequest?: () => void
   }
@@ -79,13 +83,14 @@ export namespace Provider {
       providerID: string
       modelID: string
       idleTimeoutMs: number | false
+      connectTimeoutMs?: number | false
       startedAt: number
       responseStartedAt?: number
       firstBodyChunkAt?: number
       lastBodyChunkAt?: number
       completedAt: number
       outcome: "completed" | "idle_timeout" | "timeout" | "aborted" | "cancelled" | "error" | "conflict_wait"
-      timeoutPhase?: "connect" | "first_event" | "stream"
+      timeoutPhase?: "connect" | "first_event" | "stream" | "output" | "total"
       errorName?: string
       /** Present with outcome "conflict_wait": the managed gateway still owns an
        * identical earlier copy of this request, so the client waits for that
@@ -93,24 +98,30 @@ export namespace Provider {
       conflict?: { code: string; retries: number; delayMs: number; elapsedMs: number }
     }
 
-  export class IdleTimeoutError extends Error {
-    readonly phase: "connect" | "first_event" | "stream"
-    readonly idleTimeoutMs: number
+  export class RequestTimeoutError extends Error {
+    constructor(
+      readonly phase: "connect" | "first_event" | "stream" | "output" | "total",
+      readonly timeoutMs: number,
+    ) {
+      const label = {
+        connect: "response headers",
+        first_event: "the first response-body data",
+        stream: "more response-body data",
+        output: "new model output",
+        total: "the request to complete",
+      }[phase]
+      super(`The model request timed out after ${Math.ceil(timeoutMs / 1000)} seconds waiting for ${label}.`)
+      this.name = "ProviderRequestTimeoutError"
+    }
+  }
 
-    constructor(phase: "connect" | "first_event" | "stream", idleTimeoutMs: number) {
-      const label =
-        phase === "connect"
-          ? "a response"
-          : phase === "first_event"
-            ? "the first response-body chunk"
-            : "the next response-body chunk"
-      super(
-        `Provider produced no activity for ${Math.ceil(idleTimeoutMs / 1000)} seconds while waiting for ${label}. ` +
-          "The request was cancelled; retry it or check the provider/network connection.",
-      )
+  export class IdleTimeoutError extends RequestTimeoutError {
+    constructor(
+      phase: "connect" | "first_event" | "stream",
+      readonly idleTimeoutMs: number,
+    ) {
+      super(phase, idleTimeoutMs)
       this.name = "ProviderIdleTimeoutError"
-      this.phase = phase
-      this.idleTimeoutMs = idleTimeoutMs
     }
   }
 
@@ -142,12 +153,69 @@ export namespace Provider {
     }
   }
 
-  export function resolveIdleTimeout(value: unknown): number | false {
+  function resolveTimeout(value: unknown, fallback: number): number | false {
     if (value === false) return false
     if (typeof value === "number" && Number.isFinite(value) && value > 0) {
       return Math.min(Math.floor(value), MAX_TIMER_MS)
     }
-    return DEFAULT_IDLE_TIMEOUT_MS
+    return fallback
+  }
+
+  export function resolveConnectTimeout(value: unknown): number | false {
+    return resolveTimeout(value, DEFAULT_CONNECT_TIMEOUT_MS)
+  }
+
+  export function resolveIdleTimeout(value: unknown): number | false {
+    return resolveTimeout(value, DEFAULT_IDLE_TIMEOUT_MS)
+  }
+
+  export function resolveOutputIdleTimeout(value: unknown): number | false {
+    return resolveTimeout(value, DEFAULT_OUTPUT_IDLE_TIMEOUT_MS)
+  }
+
+  /** SDKs can wrap transport errors or preserve only their stable shape. A
+   * timeout never proves that an upstream paid request was not processed. */
+  export function requestTimeout(error: unknown): RequestTimeoutError | undefined {
+    const seen = new Set<unknown>()
+    const pending = [error]
+    while (pending.length) {
+      const current = pending.shift()
+      if (!current || seen.has(current)) continue
+      if (current instanceof RequestTimeoutError) return current
+      if (current instanceof DOMException && current.name === "TimeoutError") {
+        // Native errors carry no duration. Preserve their truthful message.
+        return Object.assign(new RequestTimeoutError("total", 0), { message: current.message })
+      }
+      seen.add(current)
+      if (typeof current !== "object") continue
+      const shape = current as {
+        name?: unknown
+        phase?: unknown
+        timeoutMs?: unknown
+        idleTimeoutMs?: unknown
+        cause?: unknown
+      }
+      const duration = shape.name === "ProviderIdleTimeoutError" ? shape.idleTimeoutMs : shape.timeoutMs
+      const phases =
+        shape.name === "ProviderIdleTimeoutError"
+          ? ["connect", "first_event", "stream"]
+          : ["connect", "first_event", "stream", "output", "total"]
+      if (
+        (shape.name === "ProviderRequestTimeoutError" || shape.name === "ProviderIdleTimeoutError") &&
+        phases.includes(String(shape.phase)) &&
+        typeof duration === "number" &&
+        Number.isFinite(duration) &&
+        duration > 0
+      ) {
+        return new RequestTimeoutError(shape.phase as RequestTimeoutError["phase"], duration)
+      }
+      pending.push(shape.cause)
+      if (current instanceof AggregateError) pending.push(...current.errors)
+    }
+  }
+
+  export function isRequestTimeoutError(error: unknown): boolean {
+    return requestTimeout(error) !== undefined
   }
 
   export function isIdleTimeoutError(error: unknown): error is IdleTimeoutError {
@@ -177,6 +245,7 @@ export namespace Provider {
     providerID: string
     modelID: string
     idleTimeout?: unknown
+    connectTimeout?: unknown
     totalTimeout?: unknown
     managed?: boolean
     onTiming?: (timing: RequestTiming) => void
@@ -223,9 +292,10 @@ export namespace Provider {
 
   function timingOutcome(error: unknown, signal: AbortSignal): RequestTiming["outcome"] {
     if (isIdleTimeoutError(error)) return "idle_timeout"
+    if (isRequestTimeoutError(error)) return "timeout"
     if (signal.aborted) {
       const reason = abortReason(signal)
-      if (reason instanceof DOMException && reason.name === "TimeoutError") return "timeout"
+      if (isRequestTimeoutError(reason)) return "timeout"
       return "aborted"
     }
     return "error"
@@ -311,11 +381,17 @@ export namespace Provider {
   ): Promise<Response> {
     const context = timingContext()
     const idleTimeoutMs = resolveIdleTimeout(options.idleTimeout)
+    const connectTimeoutMs = resolveConnectTimeout(options.connectTimeout)
     const idleController = new AbortController()
-    const signals = [init?.signal, idleController.signal].filter(Boolean) as AbortSignal[]
-    if (typeof options.totalTimeout === "number" && Number.isFinite(options.totalTimeout) && options.totalTimeout > 0) {
-      signals.push(AbortSignal.timeout(Math.min(Math.floor(options.totalTimeout), MAX_TIMER_MS)))
-    }
+    const signals = [init?.signal, context.abort, idleController.signal].filter(Boolean) as AbortSignal[]
+    const total =
+      typeof options.totalTimeout === "number" && Number.isFinite(options.totalTimeout) && options.totalTimeout > 0
+        ? Math.min(Math.floor(options.totalTimeout), MAX_TIMER_MS)
+        : undefined
+    const timer =
+      total === undefined
+        ? undefined
+        : setTimeout(() => idleController.abort(new RequestTimeoutError("total", total)), total).unref()
     const signal = signals.length === 1 ? signals[0]! : AbortSignal.any(signals)
     const timing: Omit<RequestTiming, "completedAt" | "outcome"> = {
       sessionID: context.sessionID,
@@ -326,12 +402,14 @@ export namespace Provider {
       providerID: options.providerID,
       modelID: requestModel(init?.body) ?? context.modelID ?? options.modelID,
       idleTimeoutMs,
+      connectTimeoutMs,
       startedAt: Date.now(),
     }
     let emitted = false
     const emit = (outcome: RequestTiming["outcome"], error?: unknown, phase?: RequestTiming["timeoutPhase"]) => {
       if (emitted) return
       emitted = true
+      if (timer) clearTimeout(timer)
       publishTiming(
         {
           ...timing,
@@ -360,7 +438,7 @@ export namespace Provider {
           return fetchFn(fetchInput, fetchInit)
         },
         phase: "connect",
-        idleTimeoutMs,
+        idleTimeoutMs: connectTimeoutMs,
         idleController,
         signal,
       })
@@ -379,7 +457,7 @@ export namespace Provider {
         gatewayTiming: timing.gatewayTiming,
       })
     } catch (error) {
-      emit(timingOutcome(error, signal), error, isIdleTimeoutError(error) ? error.phase : undefined)
+      emit(timingOutcome(error, signal), error, requestTimeout(error)?.phase)
       throw error
     }
 
@@ -439,7 +517,7 @@ export namespace Provider {
           controller.enqueue(next.value)
         } catch (error) {
           if (!cancelled) {
-            emit(timingOutcome(error, signal), error, isIdleTimeoutError(error) ? error.phase : undefined)
+            emit(timingOutcome(error, signal), error, requestTimeout(error)?.phase)
             controller.error(error)
           }
           cancelReader(error)
@@ -2615,7 +2693,10 @@ export namespace Provider {
       const customFetch = options["fetch"]
       const tokenCommand = options["tokenCommand"] as string | undefined
       const idleTimeout = options["idleTimeout"]
+      const connectTimeout = options["connectTimeout"]
       delete options["idleTimeout"]
+      delete options["connectTimeout"]
+      delete options["outputIdleTimeout"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, then add an activity watchdog.
@@ -2700,6 +2781,7 @@ export namespace Provider {
             providerID: model.providerID,
             modelID: model.id,
             idleTimeout,
+            connectTimeout,
             totalTimeout: options["timeout"],
             managed,
           })

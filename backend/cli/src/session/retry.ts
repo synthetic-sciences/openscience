@@ -192,6 +192,9 @@ export namespace SessionRetry {
   // waited out a live original request.
   const MANAGED_TERMINAL_CODES = new Set([
     "managed_outcome_unknown",
+    "managed_request_timeout",
+    "managed_response_incomplete",
+    "provider_request_timeout",
     "managed_conflict_timeout",
     "operation_in_progress",
     "idempotency_conflict",
@@ -218,8 +221,25 @@ export namespace SessionRetry {
    * the billing consequence; replace it and pin the error non-retryable so no
    * client re-sends it. Every other error passes through untouched. */
   export function terminal<T extends ReturnType<NamedError["toObject"]>>(error: T): T | MessageV2.APIError {
+    const normalized = normalizeProviderError(error)
+    if (normalized.code === "managed_request_timeout" || normalized.code === "managed_response_incomplete") {
+      return new MessageV2.APIError({
+        message:
+          (normalized.code === "managed_response_incomplete"
+            ? "The managed response ended before confirming completion. "
+            : "The managed response stopped making progress. ") +
+          "Partial output and completed tool results are kept. OpenScience did not retry automatically. The provider may still bill this request; resubmitting starts a new request.",
+        isRetryable: false,
+        metadata: {
+          code: normalized.code,
+          openscience_state: "stopped",
+          dispatch_state: "outcome_unknown",
+          action: "resubmit",
+        },
+      }).toObject() as MessageV2.APIError
+    }
     if (!MessageV2.APIError.isInstance(error)) return error
-    if (!MANAGED_DISPATCHED_CODES.has(normalizeProviderError(error).code)) return error
+    if (!MANAGED_DISPATCHED_CODES.has(normalized.code)) return error
     return new MessageV2.APIError({
       ...error.data,
       message: MANAGED_DISPATCHED_MESSAGE,

@@ -1804,13 +1804,21 @@ export type ProviderConfig = {
      */
     setCacheKey?: boolean
     /**
-     * Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. Use idleTimeout to bound silent connections without cutting off active generations.
+     * Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. Use connectTimeout, idleTimeout, and outputIdleTimeout to bound stalled requests without capping active generations.
      */
     timeout?: number | false
     /**
-     * Optional maximum provider inactivity in milliseconds while connecting or waiting for the next response-body chunk. Disabled by default; when configured it resets on each body chunk and does not cap total generation time.
+     * Maximum provider response-body inactivity in milliseconds. Defaults to 300000 (5 minutes). Set false to disable; this does not cap total generation time.
      */
     idleTimeout?: number | false
+    /**
+     * Maximum wait for provider response headers in milliseconds, including connection setup and upstream admission. Defaults to 120000 (2 minutes). Set false to disable.
+     */
+    connectTimeout?: number | false
+    /**
+     * Maximum wait for new readable model output or tool-call activity in milliseconds. Defaults to 600000 (10 minutes); transport keepalives do not reset it. Suspended during tool execution and local processing. Set false to disable.
+     */
+    outputIdleTimeout?: number | false
     [key: string]: unknown
   }
 }
@@ -2499,11 +2507,7 @@ export type McpStatusNeedsClientRegistration = {
 }
 
 export type McpStatus =
-  | McpStatusConnected
-  | McpStatusDisabled
-  | McpStatusFailed
-  | McpStatusNeedsAuth
-  | McpStatusNeedsClientRegistration
+  McpStatusConnected | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth | McpStatusNeedsClientRegistration
 
 export type McpInspection = {
   status: McpStatus
@@ -10943,15 +10947,7 @@ export type SessionTraceResponses = {
          * Primary workflow domain. Use weather for forecast postprocessing or meteorology, posttrain for fine-tuning/alignment/checkpoint training, evidence for literature synthesis, and ml for other machine-learning experiments.
          */
         domain:
-          | "general"
-          | "statistics"
-          | "biology"
-          | "physics"
-          | "chemistry"
-          | "ml"
-          | "weather"
-          | "posttrain"
-          | "evidence"
+          "general" | "statistics" | "biology" | "physics" | "chemistry" | "ml" | "weather" | "posttrain" | "evidence"
         template: "minimal" | "empirical" | "evidence"
         stages: Array<{
           id: string

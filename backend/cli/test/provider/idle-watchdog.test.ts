@@ -29,6 +29,7 @@ function watched(
       providerID: "test-provider",
       modelID: "test-model",
       idleTimeout: 30,
+      connectTimeout: options.idleTimeout ?? 30,
       ...options,
       onTiming: (timing) => {
         timings.push(timing)
@@ -69,19 +70,113 @@ describe("provider activity watchdog", () => {
     expect(serialized).not.toContain("funding")
   })
 
-  test("leaves provider inactivity unbounded by default and clamps explicit timer values", () => {
-    expect(Provider.resolveIdleTimeout(undefined)).toBe(false)
+  test("bounds silent request stages by default and preserves explicit escape hatches", () => {
+    expect(Provider.resolveConnectTimeout(undefined)).toBe(120_000)
+    expect(Provider.resolveIdleTimeout(undefined)).toBe(300_000)
+    expect(Provider.resolveOutputIdleTimeout(undefined)).toBe(600_000)
+    expect(Provider.resolveConnectTimeout(false)).toBe(false)
     expect(Provider.resolveIdleTimeout(false)).toBe(false)
+    expect(Provider.resolveOutputIdleTimeout(false)).toBe(false)
     expect(Provider.resolveIdleTimeout(12_345.9)).toBe(12_345)
     expect(Provider.resolveIdleTimeout(Number.MAX_SAFE_INTEGER)).toBe(2_147_483_647)
   })
 
   test("provider timeout config separates total and idle contracts", () => {
-    const parsed = Config.Provider.parse({ options: { timeout: false, idleTimeout: 120_000 } })
+    const parsed = Config.Provider.parse({
+      options: { timeout: false, idleTimeout: 120_000, connectTimeout: 60_000, outputIdleTimeout: false },
+    })
     expect(parsed.options?.timeout).toBe(false)
     expect(parsed.options?.idleTimeout).toBe(120_000)
+    expect(parsed.options?.connectTimeout).toBe(60_000)
+    expect(parsed.options?.outputIdleTimeout).toBe(false)
     expect(() => Config.Provider.parse({ options: { idleTimeout: 2_147_483_648 } })).toThrow()
     expect(() => Config.Provider.parse({ options: { timeout: 2_147_483_648 } })).toThrow()
+    expect(() => Config.Provider.parse({ options: { connectTimeout: 0 } })).toThrow()
+    expect(() => Config.Provider.parse({ options: { outputIdleTimeout: 2_147_483_648 } })).toThrow()
+  })
+
+  test("uses a distinct header deadline and aborts the underlying fetch", async () => {
+    let signal: AbortSignal | undefined
+    const { response, timings } = watched(
+      async (_input, init) => {
+        signal = init?.signal ?? undefined
+        return new Promise<Response>(() => {})
+      },
+      { connectTimeout: 20, idleTimeout: 200 },
+    )
+    const result = await settleWithin(response)
+    expect(result.type).toBe("rejected")
+    expect(signal?.aborted).toBe(true)
+    expect(Provider.isRequestTimeoutError(signal?.reason)).toBe(true)
+    expect(timings[0]).toMatchObject({ connectTimeoutMs: 20, idleTimeoutMs: 200, timeoutPhase: "connect" })
+    expect(timings[0].completedAt - timings[0].startedAt).toBeLessThan(150)
+  })
+
+  test("does not apply the body-idle deadline while response headers are pending", async () => {
+    const { response, timings } = watched(
+      async () => {
+        await Bun.sleep(30)
+        return new Response("ok")
+      },
+      { connectTimeout: 100, idleTimeout: 10 },
+    )
+    expect(await (await response).text()).toBe("ok")
+    expect(timings[0].outcome).toBe("completed")
+    expect(timings[0].responseStartedAt! - timings[0].startedAt).toBeGreaterThanOrEqual(25)
+  })
+
+  test("provider-only cancellation closes HTTP while preserving the tool authority signal", async () => {
+    const user = new AbortController()
+    const provider = new AbortController()
+    const error = new Provider.RequestTimeoutError("output", 600_000)
+    let signal: AbortSignal | undefined
+    const timings: Provider.RequestTiming[] = []
+    const response = await Provider.withRequestContext({ ...context, abort: provider.signal }, () =>
+      Provider.fetchWithIdleWatchdog(
+        async (_input, init) => {
+          signal = init?.signal ?? undefined
+          return new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(encoder.encode("saved partial output"))
+              },
+            }),
+          )
+        },
+        "https://provider.test/no-network",
+        { signal: user.signal },
+        { providerID: "test-provider", modelID: "test-model", onTiming: (item) => timings.push(item) },
+      ),
+    )
+    const reader = response.body!.getReader()
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe("saved partial output")
+    const pending = reader.read()
+    provider.abort(error)
+    expect(await settleWithin(pending)).toEqual({ type: "rejected", error })
+    expect(signal?.aborted).toBe(true)
+    expect(signal?.reason).toBe(error)
+    expect(user.signal.aborted).toBe(false)
+    expect(timings[0]).toMatchObject({
+      outcome: "timeout",
+      timeoutPhase: "output",
+      errorName: "ProviderRequestTimeoutError",
+    })
+  })
+
+  test("recognizes all timeout kinds through SDK wrappers without classifying unrelated errors", () => {
+    for (const phase of ["connect", "first_event", "stream", "output", "total"] as const) {
+      const error = new Provider.RequestTimeoutError(phase, 100)
+      const wrapped = new Error("SDK wrapper", { cause: error })
+      expect(Provider.isRequestTimeoutError(wrapped)).toBe(true)
+      expect(Provider.requestTimeout(wrapped)).toBe(error)
+      expect(Provider.isRequestTimeoutError(new AggregateError([{ name: error.name, phase, timeoutMs: 100 }]))).toBe(
+        true,
+      )
+    }
+    expect(Provider.isRequestTimeoutError(new Error("unrelated"))).toBe(false)
+    expect(
+      Provider.isRequestTimeoutError({ name: "ProviderRequestTimeoutError", phase: "invalid", timeoutMs: 100 }),
+    ).toBe(false)
   })
 
   test("hard-returns when connection setup is silent even if fetch ignores abort", async () => {
@@ -218,12 +313,12 @@ describe("provider activity watchdog", () => {
     expect(timings[0].timeoutPhase).toBeUndefined()
   })
 
-  test("idleTimeout false disables inactivity while retaining caller cancellation", async () => {
+  test("explicitly disabled header and body deadlines retain caller cancellation", async () => {
     const controller = new AbortController()
     const reason = new DOMException("cancel disabled-idle request", "AbortError")
     const { response, timings } = watched(
       async () => new Promise<Response>(() => {}),
-      { idleTimeout: false },
+      { idleTimeout: false, connectTimeout: false },
       { signal: controller.signal },
     )
 
@@ -241,7 +336,7 @@ describe("provider activity watchdog", () => {
     if (settled.type !== "rejected") return
     expect(settled.error).toBe(reason)
     expect(timings).toHaveLength(1)
-    expect(timings[0]).toMatchObject({ idleTimeoutMs: false, outcome: "aborted" })
+    expect(timings[0]).toMatchObject({ idleTimeoutMs: false, connectTimeoutMs: false, outcome: "aborted" })
   })
 
   test("honors an explicit total timeout even while the body stays active", async () => {
@@ -262,9 +357,9 @@ describe("provider activity watchdog", () => {
     const settled = await settleWithin(response.then((value) => value.text()))
     expect(settled.type).toBe("rejected")
     if (settled.type !== "rejected") return
-    expect((settled.error as Error).name).toBe("TimeoutError")
+    expect(Provider.requestTimeout(settled.error)).toMatchObject({ phase: "total", timeoutMs: 45 })
     expect(timings).toHaveLength(1)
-    expect(timings[0].outcome).toBe("timeout")
+    expect(timings[0]).toMatchObject({ outcome: "timeout", timeoutPhase: "total" })
     expect(timings[0].firstBodyChunkAt).toBeDefined()
   })
 

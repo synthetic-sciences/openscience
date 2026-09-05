@@ -203,26 +203,48 @@ describe("SessionProcessor.providerFailureAction", () => {
     expect(SessionProcessor.providerFailureAction(error, error, true)).toEqual({ type: "drain", message: "boom" })
   })
 
-  test("retries one side-effect-free idle request but drains a started tool", () => {
-    const error = new Provider.IdleTimeoutError("stream", 300_000)
-    const normalized = wrap(error.message)
-    expect(SessionProcessor.providerFailureAction(error, normalized, false)).toEqual({
-      type: "retry-idle",
-      message: error.message,
+  test.each(["connect", "first_event", "stream", "output", "total"] as const)(
+    "never replays a %s timeout even when no tool ran",
+    (phase) => {
+      const error = new Provider.RequestTimeoutError(phase, 300_000)
+      const normalized = wrap(error.message)
+      expect(SessionProcessor.providerFailureAction(error, normalized, false)).toEqual({ type: "terminal" })
+      expect(SessionProcessor.providerFailureAction(error, normalized, true)).toEqual({ type: "terminal" })
+      expect(SessionProcessor.timeoutError(new Error("SDK wrapper", { cause: error }))).toMatchObject({
+        name: "APIError",
+        data: { isRetryable: false, metadata: { phase, action: "resubmit", dispatch_state: "outcome_unknown" } },
+      })
+    },
+  )
+
+  test("keeps bounded transient retries without granting timeout replays", () => {
+    expect(SessionProcessor.consumeProviderRetry({ attempt: 0, transientRetries: 0 })).toEqual({
+      attempt: 1,
+      transientRetries: 1,
     })
-    expect(SessionProcessor.providerFailureAction(error, normalized, true)).toEqual({
-      type: "drain",
-      message: error.message,
-    })
+    expect(SessionProcessor.consumeProviderRetry({ attempt: 10, transientRetries: 10 })).toBeUndefined()
   })
 
-  test("keeps the idle replay independent from a prior transient retry", () => {
-    const initial = { attempt: 0, transientRetries: 0, idleRetryUsed: false }
-    const afterReset = SessionProcessor.consumeProviderRetry("retry", initial)
-    expect(afterReset).toEqual({ attempt: 1, transientRetries: 1, idleRetryUsed: false })
-    const afterIdle = SessionProcessor.consumeProviderRetry("retry-idle", afterReset!)
-    expect(afterIdle).toEqual({ attempt: 2, transientRetries: 1, idleRetryUsed: true })
-    expect(SessionProcessor.consumeProviderRetry("retry-idle", afterIdle!)).toBeUndefined()
+  test.each([400, 200, 503])("never retries gateway timeout under HTTP %s or SSE", (statusCode) => {
+    const body = JSON.stringify({
+      error: {
+        code: "managed_request_timeout",
+        type: "managed_request_timeout",
+        message: "Upstream unavailable after a progress timeout",
+      },
+    })
+    const error = new MessageV2.APIError({
+      message: "Upstream unavailable",
+      statusCode,
+      isRetryable: true,
+      responseBody: body,
+    }).toObject()
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+    expect(SessionRetry.retryable(wrap(body))).toBeUndefined()
+    expect(SessionRetry.terminal(wrap(body))).toMatchObject({
+      name: "APIError",
+      data: { isRetryable: false, metadata: { code: "managed_request_timeout", action: "resubmit" } },
+    })
   })
 
   test.each([

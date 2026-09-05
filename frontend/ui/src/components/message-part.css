@@ -359,8 +359,8 @@
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       font-family: var(--font-family-mono);
-      font-size: 12px;
-      line-height: 19px;
+      font-size: var(--font-size-small);
+      line-height: 1.6;
     }
   }
 

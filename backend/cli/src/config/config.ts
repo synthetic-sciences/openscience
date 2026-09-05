@@ -1111,7 +1111,7 @@ export namespace Config {
             ])
             .optional()
             .describe(
-              "Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. Use idleTimeout to bound silent connections without cutting off active generations.",
+              "Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. Use connectTimeout, idleTimeout, and outputIdleTimeout to bound stalled requests without capping active generations.",
             ),
           idleTimeout: z
             .union([
@@ -1121,13 +1121,25 @@ export namespace Config {
                 .positive()
                 .max(2_147_483_647)
                 .describe(
-                  "Optional maximum provider inactivity in milliseconds while connecting or waiting for the next response-body chunk. Disabled by default and resets on every body chunk when configured.",
+                  "Maximum provider response-body inactivity in milliseconds. Defaults to 300000 (5 minutes); resets on every body chunk, including keepalives.",
                 ),
               z.literal(false).describe("Disable the provider inactivity watchdog."),
             ])
             .optional()
             .describe(
-              "Optional maximum provider inactivity in milliseconds while connecting or waiting for the next response-body chunk. Disabled by default; when configured it resets on each body chunk and does not cap total generation time.",
+              "Maximum provider response-body inactivity in milliseconds. Defaults to 300000 (5 minutes). Set false to disable; this does not cap total generation time.",
+            ),
+          connectTimeout: z
+            .union([z.number().int().positive().max(2_147_483_647), z.literal(false)])
+            .optional()
+            .describe(
+              "Maximum wait for provider response headers in milliseconds, including connection setup and upstream admission. Defaults to 120000 (2 minutes). Set false to disable.",
+            ),
+          outputIdleTimeout: z
+            .union([z.number().int().positive().max(2_147_483_647), z.literal(false)])
+            .optional()
+            .describe(
+              "Maximum wait for new readable model output or tool-call activity in milliseconds. Defaults to 600000 (10 minutes); transport keepalives do not reset it. Suspended during tool execution and local processing. Set false to disable.",
             ),
         })
         .catchall(z.any())

@@ -1,5 +1,4 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import type { AssistantMessage, Part, ReasoningPart, TextPart, ToolPart, UserMessage } from "@synsci/sdk/v2"
 import type { JSX } from "solid-js"
@@ -629,12 +628,146 @@ describe("execution inspection", () => {
   })
 })
 
-describe("turn layout contract", () => {
-  const turnCss = readFileSync(fileURLToPath(new URL("./session-turn.css", import.meta.url)), "utf8")
-  const partCss = readFileSync(fileURLToPath(new URL("./message-part.css", import.meta.url)), "utf8")
-  const toolCss = readFileSync(fileURLToPath(new URL("./basic-tool.css", import.meta.url)), "utf8")
-  const chatCss = readFileSync(
-    fileURLToPath(new URL("../../../workspace/src/components/chat-surface.css", import.meta.url)),
-    "utf8",
+describe("timeout recovery", () => {
+  const timeout: NonNullable<AssistantMessage["error"]> = {
+    name: "APIError",
+    data: {
+      message:
+        "The model request timed out waiting for new output. Received output was preserved. The provider may have processed the request; it was not automatically sent again.",
+      isRetryable: false,
+      metadata: {
+        code: "provider_request_timeout",
+        openscience_state: "stopped",
+        action: "resubmit",
+        dispatch_state: "outcome_unknown",
+        phase: "output",
+      },
+    },
+  }
+
+  test.each(["busy", "retry"] as const)(
+    "keeps partial output and stops live indicators after a terminal timeout despite stale %s state",
+    async (status) => {
+      const message = assistant()
+      const reason: ReasoningPart = {
+        id: `prt_timeout_reason_${status}`,
+        sessionID,
+        messageID: message.id,
+        type: "reasoning",
+        text: "The measurement is incomplete, so the result cannot be confirmed yet.",
+        time: { start: Date.now() - 8_000 },
+      }
+      const partial: TextPart = {
+        id: `prt_timeout_text_${status}`,
+        sessionID,
+        messageID: message.id,
+        type: "text",
+        text: "The preliminary measurement was 17 units.",
+      }
+      const command: ToolPart = {
+        id: `prt_timeout_tool_${status}`,
+        sessionID,
+        messageID: message.id,
+        type: "tool",
+        tool: "bash",
+        callID: `call_timeout_${status}`,
+        state: {
+          status: "completed",
+          input: { command: "inspect measurements" },
+          title: "Inspect measurements",
+          output: "measurement=17",
+          metadata: { exit: 0 },
+          time: { start: 1_000, end: 2_000 },
+        },
+      }
+      const [store, setStore] = reactive.createStore<Store>({
+        ...empty(),
+        session_status: { [sessionID]: { type: "busy" } },
+        session_progress: {
+          [sessionID]: {
+            sessionID,
+            messageID: message.id,
+            attempt: 1,
+            agent: "research",
+            providerID: "openrouter",
+            modelID: "openai/gpt-5.6-sol",
+            phase: "streaming",
+            since: Date.now(),
+            elapsedMs: 0,
+            stalls: 0,
+            lastOutputAt: Date.now(),
+          },
+        },
+        message: { [sessionID]: [user, message] },
+        part: { [user.id]: [], [message.id]: [command, reason, partial] },
+      })
+      const [view, setView] = reactive.createStore({ expanded: true })
+      const host = mount(
+        () =>
+          turn.SessionTurn({
+            sessionID,
+            messageID: user.id,
+            lastUserMessageID: user.id,
+            get stepsExpanded() {
+              return view.expanded
+            },
+          }),
+        store,
+      )
+      await ready(() => host.querySelector('[data-slot="reasoning-part-body"] p') !== null)
+      expect(host.querySelector('[data-component="reasoning-part"]')?.getAttribute("data-live")).toBe("true")
+
+      // Completion and status are independent events. A lost/late idle event
+      // must not keep the completed request looking like an automatic retry.
+      setStore("message", sessionID, 1, { ...message, error: timeout, time: { created: 2, completed: Date.now() } })
+      setStore(
+        "session_status",
+        sessionID,
+        status === "busy"
+          ? { type: "busy" }
+          : { type: "retry", attempt: 2, next: Date.now() + 10_000, message: "Reconnecting to the provider" },
+      )
+      await ready(() => host.querySelector('[data-slot="session-state-message"]') !== null)
+      expect(host.querySelectorAll('[data-slot="session-state-message"]')).toHaveLength(1)
+      expect(host.querySelector('[data-slot="session-state-message"]')?.textContent).toBe(timeout.data.message)
+      expect(host.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain(reason.text)
+      expect(host.textContent).toContain(partial.text)
+      expect(host.querySelector('[data-component="reasoning-part"]')?.getAttribute("data-live")).toBeNull()
+      expect(host.querySelector('[data-slot="session-turn-response-trigger"] [data-component="spinner"]')).toBeNull()
+      expect(host.querySelector('[data-slot="session-turn-retry-message"]')).toBeNull()
+      expect(host.querySelector('[data-slot="session-turn-progress-hint"]')).toBeNull()
+
+      const tool = host.querySelector('[data-component="tool-part-wrapper"]')!
+      tool.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!.click()
+      await ready(() => tool.querySelector('[data-component="shell-output"] pre') !== null)
+      expect(tool.querySelector('[data-component="shell-output"] pre')?.textContent).toContain("measurement=17")
+      expect(tool.getAttribute("data-tool-status")).toBe("completed")
+
+      setView("expanded", false)
+      await settle()
+      expect(host.querySelectorAll('[data-slot="session-state-message"]')).toHaveLength(1)
+      expect(host.querySelector('[data-slot="session-state-message"]')?.textContent).toBe(timeout.data.message)
+      expect(host.textContent).toContain(partial.text)
+
+      // An older failed attempt must not mask a new, genuinely active request.
+      const next = { ...assistant(), id: "msg_0003" }
+      setStore("message", sessionID, [user, store.message[sessionID][1], next])
+      setStore("part", next.id, [])
+      setStore("session_status", sessionID, { type: "busy" })
+      setStore("session_progress", sessionID, {
+        ...store.session_progress![sessionID],
+        messageID: next.id,
+        phase: "waiting_first_token",
+        since: Date.now(),
+      })
+      await ready(() =>
+        (host.querySelector('[data-slot="session-turn-status-text"]')?.textContent ?? "").includes(
+          "Waiting for output from openai/gpt-5.6-sol",
+        ),
+      )
+      expect(
+        host.querySelector('[data-slot="session-turn-response-trigger"] [data-component="spinner"]'),
+      ).not.toBeNull()
+    },
   )
 })
