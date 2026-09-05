@@ -2,12 +2,18 @@ import { test, expect } from "./fixtures"
 import { promptSelector } from "./utils"
 
 test("smoke slash menu exposes session actions", async ({ page, gotoSession, sdk }) => {
-  const created = await sdk.session.create({ title: `e2e slash menu ${Date.now()}` }).then((r) => r.data)
+  const title = `e2e slash menu ${Date.now()}`
+  const created = await sdk.session.create({ title }).then((r) => r.data)
   if (!created?.id) throw new Error("Failed to create a session fixture")
 
   try {
     await gotoSession(created.id)
 
+    // Type only once the workspace has hydrated the session list; on a slow
+    // runner the first keystrokes otherwise race the initial render.
+    await expect(
+      page.getByRole("navigation", { name: "Sessions" }).getByRole("button", { name: title, exact: true }),
+    ).toBeVisible()
     const prompt = page.locator(promptSelector)
     await expect(prompt).toBeVisible()
     await prompt.click()
