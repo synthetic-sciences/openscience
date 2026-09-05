@@ -34,7 +34,7 @@
 .external-file-access__copy h2 {
   margin: 0;
   color: var(--color-text);
-  font-size: 20px;
+  font-size: var(--font-size-x-large);
   font-weight: var(--font-weight-medium);
   line-height: 1.25;
   letter-spacing: -0.012em;
@@ -43,7 +43,7 @@
 .external-file-access__copy p {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-regular);
   line-height: 1.55;
 }
@@ -59,13 +59,13 @@
   gap: 7px;
   padding-top: 2px;
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
 }
 
 .external-file-access__field > span {
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
 }
 
@@ -78,7 +78,7 @@
 
 .external-file-access__field small {
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 1.45;
 }
@@ -90,7 +90,7 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 1.5;
 }

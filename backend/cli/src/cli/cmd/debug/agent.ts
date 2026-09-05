@@ -8,7 +8,7 @@ import { Identifier } from "../../../id/id"
 import { ToolRegistry } from "../../../tool/registry"
 import { Instance } from "../../../project/instance"
 import { PermissionNext } from "../../../permission/next"
-import { iife } from "../../../util/iife"
+import { iife } from "@synsci/util/iife"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 

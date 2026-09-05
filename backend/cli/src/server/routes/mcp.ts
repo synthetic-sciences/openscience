@@ -4,7 +4,7 @@ import z from "zod"
 import { MCP } from "../../mcp"
 import { Config } from "../../config/config"
 import { errors } from "../error"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 const McpAuthPending = z
   .discriminatedUnion("pending", [

@@ -12,7 +12,7 @@ import {
   CapabilityManifest,
   type CapabilityManifest as Manifest,
 } from "../../../science/capability/schema"
-import { lazy } from "../../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 const DetailedCapability = CapabilityManifest.safeExtend({ current_availability: CapabilityAvailability })
 

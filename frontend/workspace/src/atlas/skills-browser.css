@@ -55,7 +55,7 @@
   background: var(--color-accent-subtle);
   color: var(--color-text-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
 }

@@ -4,7 +4,7 @@ import z from "zod"
 import { Install } from "../../../skill/install/install"
 import { Skill } from "../../../skill/skill"
 import { errors } from "../../error"
-import { lazy } from "../../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 // Settings → Skills panel backend.
 //

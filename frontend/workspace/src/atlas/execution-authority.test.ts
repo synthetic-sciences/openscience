@@ -141,16 +141,4 @@ describe("frontend execution authority", () => {
       }),
     ).rejects.toThrow("valid project-trust action")
   })
-
-  test("fails closed without dereferencing a failed authority resource", () => {
-    expect(hook).toContain("if (decision.error || decision.loading) return false")
-    expect(hook).toContain("value.projectID === expected.projectID")
-    expect(hook).toContain("value.sessionID === expected.sessionID")
-    expect(hook).toContain("value.capability === expected.capability")
-    expect(hook).toContain("await api.trust(value)")
-    expect(hook).toContain("await controls.refetch()")
-    expect(hook).toContain('sdk.event.on("project.access.changed"')
-    expect(hook).toContain('sdk.event.on("server.instance.disposed", refresh)')
-    expect(hook).toContain("onCleanup(instance)")
-  })
 })

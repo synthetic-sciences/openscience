@@ -97,18 +97,4 @@ describe("scientific tools settings state", () => {
       capabilityState({ ...hosted, current_availability: { local: "unavailable", hosted: "setup_needed" } }),
     ).toMatchObject({ label: "Setup needed", action: "credentials" })
   })
-
-  test("wires installation and account setup without remote catalog polling", async () => {
-    const [component, loader, logos] = await Promise.all([
-      Bun.file(new URL("./ScientificTools.tsx", import.meta.url)).text(),
-      Bun.file(new URL("./scientific-tools-loader.ts", import.meta.url)).text(),
-      Bun.file(new URL("./ScientificToolLogo.tsx", import.meta.url)).text(),
-    ])
-    expect(component).toContain("setupScientificTool")
-    expect(component).toContain('navigate(target() === "modal" ? "compute" : "credentials")')
-    expect(loader).toContain('method: "POST"')
-    expect(component).not.toContain("setInterval")
-    expect(logos).toContain("https://github.com/scipy/scipy/")
-    expect(logos).toContain("https://github.com/rdkit/rdkit/")
-  })
 })

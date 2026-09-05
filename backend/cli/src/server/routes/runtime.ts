@@ -6,7 +6,7 @@ import { Identifier } from "../../id/id"
 import { RuntimeEvents } from "../../runtime/events"
 import { Session } from "../../session"
 import { SessionPrompt } from "../../session/prompt"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { Log } from "../../util/log"
 import { Flag } from "../../flag/flag"
 

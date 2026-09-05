@@ -24,7 +24,7 @@ import {
   normalizePublicationReview,
   type PublicationReviewReport,
   type PublicationReviewState,
-} from "@/artifacts/inspector"
+} from "./publication-review"
 
 type Panel = "citations" | "figures" | "review" | "publish"
 type PublicationFormat = "html" | "pdf" | "docx" | "latex" | "pptx"

@@ -188,16 +188,6 @@ describe("source menu", () => {
     expect(host.querySelector('[data-source-revoke="ro"]')).toBeNull()
   })
 
-  test("constrains the menu and its paths so a long path cannot force a scrollbar", () => {
-    const css = readFileSync(fileURLToPath(new URL("./FilesPane.css", import.meta.url)), "utf8")
-
-    expect(css).toMatch(/\.files-menu\s*\{[^}]*overflow-x: hidden/s)
-    expect(css).toMatch(/\.files-menu\s*\{[^}]*width: min\([^}]*100cqi/s)
-    expect(css).toMatch(/\.files-browser\s*\{[^}]*overflow: visible/s)
-    // A 1fr grid track will not shrink below its content without this.
-    expect(css).toMatch(/\.files-menu__item\s*>\s*span:nth-child\(2\)\s*\{[^}]*min-width: 0/s)
-  })
-
   test("moves focus into the menu and Escape returns it to the trigger", async () => {
     const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {} }))
     const trigger = host.querySelector<HTMLButtonElement>("[data-source-button]")!

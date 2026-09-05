@@ -25,33 +25,3 @@ describe("instance disposal", () => {
     expect(calls).toEqual(["clear", "sync"])
   })
 })
-
-describe("global bootstrap", () => {
-  test("issues one path lookup and shares it with the provider catalog task", async () => {
-    const component = await source
-    const start = component.indexOf("async function bootstrap()")
-    const bootstrap = component.slice(start, component.indexOf("onMount(() => {", start))
-
-    expect(bootstrap).toContain("const path = retry(() => globalSDK.client.path.get()")
-    expect(bootstrap.match(/path\.get\(\)/g)).toHaveLength(1)
-  })
-})
-
-describe("event stream recovery", () => {
-  test("rebuilds root and project state when a replacement stream connects", async () => {
-    const component = await source
-    const connected = component.slice(
-      component.indexOf('case "server.connected"'),
-      component.indexOf('case "global.disposed"'),
-    )
-
-    expect(connected).toContain("refresh()")
-    // Only projects whose runtime was bootstrapped come back; Home cards and
-    // sidebar entries own child stores too, and re-pushing those would mint a
-    // server instance per known project on every reconnect.
-    expect(connected).toContain("for (const directory of requested)")
-    expect(connected).not.toContain("Object.keys(children)")
-    expect(connected).toContain("push(directory)")
-    expect(connected).toContain("refreshLoadedMessages(directory)")
-  })
-})

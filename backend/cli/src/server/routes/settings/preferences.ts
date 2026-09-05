@@ -6,7 +6,7 @@ import z from "zod"
 import { Config } from "../../../config/config"
 import { Global } from "../../../global"
 import { CompactionSettings } from "../../../session/compaction-settings"
-import { lazy } from "../../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { Log } from "../../../util/log"
 import { JsonStore } from "../../../util/jsonstore"
 

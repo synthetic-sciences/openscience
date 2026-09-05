@@ -378,10 +378,6 @@ dataloader = DataLoader(dataset, num_workers=8)
 
 **Multi-node setup**: See [references/multi-node.md](references/multi-node.md) for Ray cluster deployment on AWS, GCP, Kubernetes, and SLURM.
 
-**Hyperparameter tuning**: See [references/hyperparameter-tuning.md](references/hyperparameter-tuning.md) for Ray Tune integration, search algorithms (Optuna, HyperOpt), and population-based training.
-
-**Custom training loops**: See [references/custom-loops.md](references/custom-loops.md) for advanced Ray Train usage, custom backends, and integration with other frameworks.
-
 ## Hardware requirements
 
 - **Single node**: 1+ GPUs (or CPUs)

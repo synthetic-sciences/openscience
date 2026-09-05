@@ -115,7 +115,7 @@
   }
 
   .shiki {
-    font-size: 13px;
+    font-size: var(--font-size-medium);
     padding: 8px 12px;
     border-radius: var(--radius-md);
     border: 0.5px solid var(--border-weak-base);
@@ -166,7 +166,7 @@
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     color: var(--syntax-string);
     font-weight: var(--font-weight-medium);
-    /* font-size: 13px; */
+    /* font-size: var(--font-size-medium); */
 
     /* padding: 2px 2px; */
     /* margin: 0 1.5px; */

@@ -4,7 +4,7 @@ import { resolver } from "hono-openapi"
 import { Question } from "../../question"
 import z from "zod"
 import { errors } from "../error"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 export const QuestionRoutes = lazy(() =>
   new Hono()

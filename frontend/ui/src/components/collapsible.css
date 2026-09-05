@@ -20,7 +20,7 @@
     color: var(--text-base);
 
     font-family: var(--font-family-sans);
-    font-size: 13px;
+    font-size: var(--font-size-medium);
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: 20px;
@@ -73,7 +73,7 @@
   [data-slot="basic-tool-tool-title"],
   [data-slot="basic-tool-tool-subtitle"],
   [data-slot="basic-tool-tool-arg"] {
-    font-size: 13px;
+    font-size: var(--font-size-medium);
     line-height: 20px;
   }
 

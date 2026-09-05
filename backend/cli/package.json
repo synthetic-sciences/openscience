@@ -69,7 +69,6 @@
     "@modelcontextprotocol/sdk": "1.26.0",
     "@openrouter/ai-sdk-provider": "1.5.2",
     "@parcel/watcher": "2.5.1",
-    "@standard-schema/spec": "1.0.0",
     "@synsci/plugin": "workspace:*",
     "@synsci/sdk": "workspace:*",
     "@synsci/util": "workspace:*",

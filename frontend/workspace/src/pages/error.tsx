@@ -48,11 +48,6 @@ function formatInitError(error: InitError, t: Translator): string {
       const name = typeof data.name === "string" ? data.name : ""
       return t("error.chain.mcpFailed", { name })
     }
-    case "ProviderAuthError": {
-      const providerID = typeof data.providerID === "string" ? data.providerID : "unknown"
-      const message = typeof data.message === "string" ? data.message : safeJson(data.message)
-      return t("error.chain.providerAuthFailed", { provider: providerID, message })
-    }
     case "APIError": {
       const message = typeof data.message === "string" ? data.message : t("error.chain.apiError")
       const lines: string[] = [message]

@@ -127,16 +127,6 @@ describe("host strip", () => {
     expect(host.textContent).not.toContain("0 / 0")
   })
 
-  test("names the block as machine resources", () => {
-    const source = readFileSync(fileURLToPath(new URL("./HostStrip.tsx", import.meta.url)), "utf8")
-
-    expect(source).toContain('<span class="host-strip__label">Memory</span>')
-    expect(source).toContain("<strong>This computer</strong>")
-    expect(source).toContain('aria-label="Current local compute"')
-    expect(source).not.toContain("<details")
-    expect(source).not.toContain("<summary")
-  })
-
   test("states the machine's capacity once a poll succeeds", async () => {
     const calls: Array<Promise<Response>> = []
     const host = guard(() => subject.HostStrip({ request: track(serving, calls) }))

@@ -3,7 +3,7 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { OpenScience } from "../../../openscience"
 import { ACE_CONTRACT } from "../../../openscience/ace-contract"
-import { lazy } from "../../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 export const WalletState = z.object({
   signedIn: z.boolean(),

@@ -4,7 +4,7 @@ import path from "path"
 import z from "zod"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
-import { lazy } from "@/util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist

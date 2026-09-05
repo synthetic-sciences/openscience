@@ -107,14 +107,14 @@ bun test --timeout 15000 -t "resolves"                # cases whose name matches
 bun test --timeout 15000 --watch ./test/skill         # rerun on change
 ```
 
-The full backend suite is long (Deep CI budgets 45 minutes for the whole Linux job), so run the directories you touched while iterating and the full suite before you push. Bare `bun test` at the repo root fails immediately on purpose (`bunfig.toml` points `test.root` at a nonexistent directory, so Bun exits 1 without scanning anything); always run per package.
+The full backend suite takes about 15 minutes on one machine (Deep CI shards it across five runners in about 5 minutes), so run the directories you touched while iterating and let Deep CI run the rest. Bare `bun test` at the repo root fails immediately on purpose (`bunfig.toml` points `test.root` at a nonexistent directory, so Bun exits 1 without scanning anything); always run per package.
 
 Other suites:
 
 ```bash
 bun run test:ui                              # frontend/ui unit tests (~8 s)
 bun run test:sdk                             # tooling/sdk/js unit tests (<1 s)
-cd frontend/workspace && bun test            # workspace unit tests (happy-dom); has known failures on main and is not a gate yet
+bun run test:workspace                       # frontend/workspace unit tests (happy-dom, ~40 s); Fast CI runs these on every PR
 bun run --cwd frontend/workspace test:e2e    # Playwright E2E; run `bunx playwright install` first
 ```
 

@@ -41,7 +41,7 @@
 .startup-update__copy strong {
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -50,7 +50,7 @@
 .startup-update__copy small {
   overflow: hidden;
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;

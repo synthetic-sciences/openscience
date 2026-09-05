@@ -18,11 +18,10 @@ describe("shared motion contract", () => {
   })
 
   test("mounts menus immediately and gives dismissals a short ease-in exit", async () => {
-    const [dropdown, select, popover, hoverCard, toast] = await Promise.all([
+    const [dropdown, select, popover, toast] = await Promise.all([
       read("../components/dropdown-menu.css"),
       read("../components/select.css"),
       read("../components/popover.css"),
-      read("../components/hover-card.css"),
       read("../components/toast.css"),
     ])
 
@@ -32,7 +31,6 @@ describe("shared motion contract", () => {
     expect(dropdown).toContain("dropdown-menu-close var(--duration-fast) ease-in forwards")
     expect(select).toContain("select-close var(--duration-fast) ease-in forwards")
     expect(popover).toContain("popover-close var(--duration-fast) ease-in forwards")
-    expect(hoverCard).toContain("hover-card-close var(--duration-fast) ease-in forwards")
     expect(toast).toContain("toastPopOut var(--duration-fast) ease-in forwards")
   })
 

@@ -10,9 +10,10 @@ Give it a goal. It reads the literature, writes and runs code, runs the experime
 
 [![CI](https://github.com/synthetic-sciences/OpenScience/actions/workflows/ci.yml/badge.svg)](https://github.com/synthetic-sciences/OpenScience/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/%40synsci%2Fopenscience?label=%40synsci%2Fopenscience&color=0d9488)](https://www.npmjs.com/package/@synsci/openscience)
+[![release](https://img.shields.io/github/v/release/synthetic-sciences/OpenScience?label=release&color=0d9488)](https://github.com/synthetic-sciences/OpenScience/releases/latest)
 [![license](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-[Install](#install) · [Quickstart](#quickstart) · [Configuration](#configuration)
+[Install](#install) · [Quickstart](#quickstart) · [Releases](#releases) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -47,9 +48,20 @@ The command is `openscience`, and it opens the workspace in your browser. Connec
 npx synsci
 ```
 
-Platform binaries and desktop installers are also attached to [GitHub Releases](https://github.com/synthetic-sciences/OpenScience/releases); see the [changelog](CHANGELOG.md) for what's new in each version. Stable macOS releases are Developer ID signed, notarized, and stapled. A signed stable install can verify the exact architecture-specific release ZIP, replace itself, prove the packaged main process and bundled runtime healthy, and restart without another DMG. Local or ad-hoc-signed development builds are not part of the stable update channel and cannot self-update.
+Stable macOS releases are Developer ID signed, notarized, and stapled. A signed stable install can verify the exact architecture-specific release ZIP, replace itself, prove the packaged main process and bundled runtime healthy, and restart without another DMG. Local or ad-hoc-signed development builds are not part of the stable update channel and cannot self-update.
 
 Linux installs require kernel 5.1 or newer. Glibc builds require glibc 2.17 or newer, and musl builds are published separately. CentOS 7's stock 3.10 kernel is not supported even though its glibc version meets the minimum; use a newer host kernel or VM.
+
+## Releases
+
+| Where                                                                             | What                                                                                   |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| [GitHub Releases](https://github.com/synthetic-sciences/OpenScience/releases)     | Release notes, desktop installers (macOS DMG, Windows, Linux), CLI archives, checksums |
+| [openscience.sh/download](https://openscience.sh/download)                        | The right desktop download for your platform                                           |
+| [`@synsci/openscience`](https://www.npmjs.com/package/@synsci/openscience) on npm | The CLI (`npm install -g @synsci/openscience`); `synsci` is the one-line launcher      |
+| [CHANGELOG.md](CHANGELOG.md)                                                      | Curated, per-version notes                                                             |
+
+Releases are cut from `main` by the `publish` workflow after a full rehearsal at the same commit, so a tag always matches a tested source. Signed desktop builds update themselves; `npm update -g @synsci/openscience` updates the CLI. The process itself is documented in [docs/notes/release-process.md](docs/notes/release-process.md).
 
 ## Quickstart
 

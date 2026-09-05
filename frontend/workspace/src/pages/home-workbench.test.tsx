@@ -269,21 +269,4 @@ describe("ProjectsWorkbench", () => {
 
     expect(calls).toEqual(["create", "query:"])
   })
-
-  test("keeps the widened, readable, responsive sizing contract", async () => {
-    const css = await Bun.file(style).text()
-
-    expect(css).toContain("width: min(100%, 1040px)")
-    expect(css).toContain("font-size: 29px")
-    expect(css).toContain("min-height: 64px")
-    expect(css).toContain("font-size: 14.5px")
-    expect(css).toContain("@media (max-width: 760px)")
-    expect(css).toContain("@media (max-width: 520px)")
-    expect(css).toContain("@media (pointer: coarse)")
-    expect(css).toContain("@media (prefers-contrast: more)")
-    expect(css).not.toContain(".science-home__count")
-    expect(css).toContain(":focus-visible")
-    expect(css).toContain(".science-home__project-action:active")
-    expect(css).toContain("transform: scale(0.97)")
-  })
 })

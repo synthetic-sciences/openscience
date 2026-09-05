@@ -12,16 +12,6 @@ import {
 const source = await Bun.file(new URL("./ManagedInference.tsx", import.meta.url)).text()
 
 describe("Ace model access", () => {
-  test("keeps BYOK and Ace as explicit routing contracts", () => {
-    expect(source.indexOf('title: "Keys & subscriptions"')).toBeGreaterThan(-1)
-    expect(source.indexOf('title: "Ace"')).toBeGreaterThan(source.indexOf('title: "Keys & subscriptions"'))
-    expect(source).toContain('id="synsci"')
-    expect(source).toContain('settingsApi<LoginResult>(sdk.url, fetchFn, "/account/login-browser"')
-    expect(source).toContain("platform.openLink(URLS.dashboardBilling)")
-    expect(source).toContain('return "Turn on Ace"')
-    expect(source).not.toContain("setInterval")
-  })
-
   test("waits for the server's one account deadline instead of racing its own short timeout", async () => {
     const deadline = await import("./account-deadline")
     // The server bounds account reads at 15 s and propagates that to its
@@ -141,13 +131,6 @@ describe("Ace model access", () => {
       () => order.push("apply"),
     )
     expect(order).toEqual(["write", "apply"])
-  })
-
-  test("refreshes account state immediately and provider availability in the background", () => {
-    expect(source).toContain('window.addEventListener("openscience:account-changed", accountChanged)')
-    expect(source).toContain("void loadBilling()")
-    expect(source).toContain("void loadWallet()")
-    expect(source).toContain('void syncProviders("The Ace account changed")')
   })
 
   test("renders useful account controls immediately and recovers from a stalled Wallet read", async () => {

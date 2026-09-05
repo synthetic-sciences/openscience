@@ -7,7 +7,7 @@ import { DarwinResponsibility } from "@/process/darwin-responsibility"
 import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "@/process/darwin-responsibility-launcher"
 import { WindowsJob } from "@/process/windows-job"
 import { FileLease } from "@/util/file-lease"
-import { lazy } from "@/util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 /**
  * Durable ownership for project-authorized processes that otherwise exist only

@@ -42,7 +42,7 @@ This is not optional. Grant proposals without visual elements are incomplete and
 
 **How to generate schematics:**
 ```bash
-python scripts/generate_schematic.py "your diagram description" -o figures/output.png
+python skills/scientific-schematics/scripts/generate_schematic.py "your diagram description" -o figures/output.png
 ```
 
 The AI will automatically:
@@ -347,8 +347,6 @@ Detailed description of how the research will be conducted.
 - Address regulatory approvals (IRB, IND, IDE)
 - Describe clinical trial design and monitoring
 
-For detailed methodology guidance by discipline, refer to `references/research_methods.md`.
-
 ### 7. Preliminary Data and Feasibility
 
 Demonstrate that the research is achievable and the team is capable.
@@ -421,8 +419,6 @@ Demonstrate that the project is well-planned and achievable within the proposed 
 - Phase-based structure with exit criteria
 - Demonstration and transition planning
 
-For detailed guidance, refer to `references/timeline_planning.md`.
-
 ### 9. Team Qualifications and Collaboration
 
 Demonstrate that the team has the expertise, experience, and resources to succeed.
@@ -456,8 +452,6 @@ Demonstrate that the team has the expertise, experience, and resources to succee
 - Demonstrates genuine partnership
 - Includes resource sharing or access agreements
 - Signed and on letterhead
-
-For detailed guidance, refer to `references/team_building.md`.
 
 ### 10. Budget and Budget Justification
 
@@ -505,8 +499,6 @@ Develop realistic budgets that align with the proposed work and agency guideline
 - Justify travel (conferences, collaborations)
 - Explain consultant roles and rates
 - Show how budget aligns with timeline
-
-For detailed budget guidance, refer to `references/budget_preparation.md`.
 
 ## Review Criteria by Agency
 
@@ -589,8 +581,6 @@ Varies by program office, but generally includes:
 - **What if you succeed?** (Impact if the research works)
 - **What if you're right?** (Implications of your hypothesis)
 - **Who cares?** (Why it matters for national security)
-
-For detailed review criteria by agency, refer to `references/review_criteria.md`.
 
 ## Writing Principles for Competitive Proposals
 
@@ -724,8 +714,6 @@ For detailed review criteria by agency, refer to `references/review_criteria.md`
 - **Young Faculty Award (YFA)**: Early career researchers, up to $500K
 - **Director's Fellowship**: High-risk, paradigm-shifting research
 
-For detailed program guidance, refer to `references/funding_mechanisms.md`.
-
 ## Resubmission Strategies
 
 ### NIH Resubmission (A1)
@@ -759,8 +747,6 @@ For detailed program guidance, refer to `references/funding_mechanisms.md`.
 - May be reviewed by same or different panel
 - Consider program officer feedback
 - May need to wait for next submission cycle
-
-For detailed resubmission guidance, refer to `references/resubmission_strategies.md`.
 
 ## Common Mistakes to Avoid
 
@@ -911,11 +897,6 @@ This skill includes comprehensive reference files covering specific aspects of g
 - `references/darpa_guidelines.md`: DARPA BAAs, program offices, and proposal strategies
 - `references/broader_impacts.md`: Strategies for compelling broader impacts statements
 - `references/specific_aims_guide.md`: Writing effective specific aims pages
-- `references/budget_preparation.md`: Budget development and justification
-- `references/review_criteria.md`: Detailed review criteria by agency
-- `references/timeline_planning.md`: Creating realistic timelines and milestones
-- `references/team_building.md`: Assembling and presenting effective teams
-- `references/resubmission_strategies.md`: Responding to reviews and revising proposals
 
 Load these references as needed when working on specific aspects of grant writing.
 
@@ -923,15 +904,10 @@ Load these references as needed when working on specific aspects of grant writin
 
 - `assets/nsf_project_summary_template.md`: NSF project summary structure
 - `assets/nih_specific_aims_template.md`: NIH specific aims page template
-- `assets/timeline_gantt_template.md`: Timeline and Gantt chart examples
 - `assets/budget_justification_template.md`: Budget justification structure
 - `assets/biosketch_templates/`: Agency-specific biosketch formats
 
 ## Scripts and Tools
-
-- `scripts/compliance_checker.py`: Verify formatting requirements
-- `scripts/budget_calculator.py`: Calculate budgets with inflation and fringe
-- `scripts/deadline_tracker.py`: Track submission deadlines and milestones
 
 ---
 

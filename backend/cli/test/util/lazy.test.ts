@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { lazy } from "../../src/util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 describe("util.lazy", () => {
   test("should call function only once", () => {

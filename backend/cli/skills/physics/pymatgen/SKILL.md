@@ -508,7 +508,7 @@ Executable Python scripts for common tasks:
   - Stability analysis and thermodynamic properties
   - Usage: `python scripts/phase_diagram_generator.py Li-Fe-O --analyze "LiFeO2"`
 
-All scripts include detailed help: `python scripts/script_name.py --help`
+All scripts include detailed help: `python scripts/<script>.py --help`
 
 ### References (`references/`)
 

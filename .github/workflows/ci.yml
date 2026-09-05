@@ -79,6 +79,20 @@ jobs:
   # table (~14 min of tests in one bun process, the same shape as the
   # 838-920 s single-process Deep CI baseline) on top of ~2 min of checkout,
   # install, fixture setup, and the web build the server tests need.
+  frontend:
+    name: Frontend unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - name: Shared UI
+        run: bun run test:ui
+      - name: Workspace
+        run: bun run test:workspace
+      - name: SDK
+        run: bun run test:sdk
+
   test:
     name: Test
     runs-on: ubuntu-latest

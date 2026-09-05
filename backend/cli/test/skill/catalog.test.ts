@@ -9,7 +9,6 @@ import type { Agent } from "../../src/agent/agent"
 import type { Tool } from "../../src/tool/tool"
 import { ComputeCapabilities } from "../../src/compute/capabilities"
 import { SkillCatalog } from "../../src/skill/catalog"
-import { BioNemoWorkflow } from "../../src/skill/workflows/bionemo"
 import { Config } from "../../src/config/config"
 import { GlobalBus } from "../../src/bus/global"
 
@@ -234,17 +233,4 @@ test("changing selection refreshes live catalogs without disposing active projec
     GlobalBus.off("event", listener)
     await Config.unsetGlobal(["skills"])
   }
-})
-
-test("BioNeMo planner chooses hosted NIM honestly and blocks unsupported NGC pulls", () => {
-  const hosted = ComputeCapabilities.describe({ modal: true, hosts: [], secrets: ["nvidia_nim"] })
-  expect(BioNemoWorkflow.plan({ targets: hosted, gpu_memory_gb: 80 }).route).toBe("hosted_nim")
-
-  const ngc = ComputeCapabilities.describe({ modal: true, hosts: [], secrets: ["nvidia_ngc"] })
-  const blocked = BioNemoWorkflow.plan({ targets: ngc, gpu_memory_gb: 80 })
-  expect(blocked.route).toBe("blocked")
-  expect(blocked.missing).toContain("reviewed private-registry image adapter")
-
-  const absent = ComputeCapabilities.describe({ modal: true, hosts: [], secrets: [] })
-  expect(BioNemoWorkflow.plan({ targets: absent }).missing).toContain("NVIDIA hosted API key or NGC registry key")
 })

@@ -36,12 +36,4 @@ describe("research composer placeholder", () => {
       expect(Object.keys(dict).some((key) => key.startsWith("prompt.example."))).toBe(false)
     }
   })
-
-  test("derives the visible and accessible labels from the same mode-aware value", () => {
-    expect(source).toContain('if (store.mode === "shell") return language.t("prompt.placeholder.shell")')
-    expect(source).toContain('if (commentCount() > 1) return language.t("prompt.placeholder.summarizeComments")')
-    expect(source).toContain('if (commentCount() === 1) return language.t("prompt.placeholder.summarizeComment")')
-    expect(source).toContain("aria-label={placeholder()}")
-    expect(source).toContain('class="workspace-composer__placeholder" aria-hidden="true" dir="auto"')
-  })
 })

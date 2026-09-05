@@ -1,6 +1,6 @@
 import { Provider } from "@/provider/provider"
 
-import { fn } from "@/util/fn"
+import { fn } from "@synsci/util/fn"
 import z from "zod"
 import { Session } from "."
 

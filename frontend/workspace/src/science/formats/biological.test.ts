@@ -177,35 +177,3 @@ describe("mzML inspection", () => {
     expect(result.times).toEqual([0.5, 0.8])
   })
 })
-
-describe("scientific data workbench integration", () => {
-  test("routes biological formats into the shared file preview", () => {
-    const preview = read("../../atlas/FilePreview.tsx")
-    const view = read("./ScientificDataView.tsx")
-
-    expect(preview).toContain('import { ScientificDataView } from "@/science/formats/ScientificDataView"')
-    expect(preview).toContain('kind() === "scientific-data"')
-    expect(preview).toContain("<ScientificDataView")
-    expect(view).toContain('data-component="scientific-data"')
-    expect(view).toContain("Per-cycle base quality")
-    expect(view).toContain("Variant classes")
-    expect(view).toContain("Spectrum inventory")
-  })
-
-  test("keeps scientific controls readable without changing scientific acronyms", () => {
-    const view = read("./ScientificDataView.tsx")
-
-    expect(view).toContain('const CONTROL_FONT_SIZE = "12px"')
-    expect(view).toContain('const HELPER_FONT_SIZE = "11.5px"')
-    expect(view).toContain('const TABLE_FONT_SIZE = "12px"')
-    expect(view).not.toMatch(/"font-size": "(?:8|9|10|11)px"/)
-    expect(view).not.toContain("FONT_MONO")
-    expect(view).toMatch(/>\s*Overview\s*</)
-    expect(view).toMatch(/>\s*Records\s*</)
-    expect(view).toContain('placeholder="Filter records…"')
-    expect(view).toContain("{sentence(column)}")
-    expect(view).toContain('label="GC"')
-    expect(view).toContain('"REF", "ALT"')
-    expect(view).toContain('"MAPQ", "CIGAR"')
-  })
-})

@@ -256,8 +256,6 @@ tables = client.sql_query("SELECT DISTINCT table_name, column_label FROM clinica
 clinical_df = client.get_clinical_table("table_name")
 ```
 
-See `references/clinical_data_guide.md` for detailed workflows including value mapping patterns and joining clinical data with imaging.
-
 ## Data Access Options
 
 | Method | Auth Required | Best For |
@@ -1124,8 +1122,6 @@ client.sql_query("""
     ORDER BY collection_id
 """)
 ```
-
-See `references/clinical_data_guide.md` for complete patterns including value mapping and patient cohort selection.
 
 ## Related Skills
 

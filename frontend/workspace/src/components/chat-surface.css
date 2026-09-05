@@ -25,7 +25,7 @@
 .session-scroller {
   --chat-prose-font-size: var(--font-size-base);
   --chat-prose-line-height: var(--line-height-large);
-  --chat-operation-font-size: 13px;
+  --chat-operation-font-size: var(--font-size-medium);
   --chat-operation-line-height: 20px;
   --chat-meta-font-size: var(--font-size-small);
   --chat-meta-line-height: var(--line-height-large);
@@ -298,7 +298,7 @@
   border-spacing: 0;
   border-collapse: separate;
   background: color-mix(in srgb, var(--color-surface-solid) 70%, transparent);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   line-height: 20px;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
@@ -349,7 +349,7 @@
   border: 0;
   border-radius: var(--radius-xs);
   color: var(--color-text-muted, var(--text-weak));
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
 }
 
@@ -480,7 +480,7 @@
 
 .session-scroller [data-slot="session-turn-generated"] > header {
   color: var(--color-text-muted, var(--text-weak));
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   letter-spacing: normal;
   text-transform: none;
@@ -517,7 +517,7 @@
   box-shadow: var(--atlas-shadow-sm);
   color: var(--color-text);
   font-family: var(--font-family-sans);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
   pointer-events: auto;

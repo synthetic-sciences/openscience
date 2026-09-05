@@ -43,7 +43,7 @@ This is not optional. Clinical reports benefit greatly from visual elements. Bef
 
 **How to generate schematics:**
 ```bash
-python scripts/generate_schematic.py "your diagram description" -o figures/output.png
+python skills/scientific-schematics/scripts/generate_schematic.py "your diagram description" -o figures/output.png
 ```
 
 The AI will automatically:

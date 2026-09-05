@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import { Network } from "@/settings/network"
-import { lazy } from "@/util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import z from "zod"
 
 export const NetworkSettingsRoutes = lazy(() =>

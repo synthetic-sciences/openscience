@@ -154,7 +154,7 @@ describe("Ace account surface", () => {
     expect(button(host, "Manage Ace")).toBeDefined()
     const details = host.querySelector("details")!
     expect(details.open).toBe(false)
-    expect(details.querySelector("summary")?.textContent).toBe("Auto-reload on$20 below $5")
+    expect(details.querySelector("summary")?.textContent).toBe("Auto-reloadadds $20 when the balance drops below $5")
     details.querySelector("summary")!.click()
     expect(details.open).toBe(true)
     expect(details.textContent).toContain(subject.aceContractLabel(contract))
@@ -166,7 +166,9 @@ describe("Ace account surface", () => {
       ...funded,
       aceContract: { ...contract, reloadAmountUsd: 40, reloadThresholdUsd: 9 },
     })
-    await ready(() => host.querySelector("summary")?.textContent?.includes("$40 below $9") === true)
+    await ready(
+      () => host.querySelector("summary")?.textContent?.includes("$40 when the balance drops below $9") === true,
+    )
     button(host, "Ace").click()
     await settle()
     expect(state.writes).toEqual([])
@@ -175,7 +177,7 @@ describe("Ace account surface", () => {
     expect(state.writes).toEqual([{ llm: "byok" }])
     expect(button(host, "Keys & subscriptions").getAttribute("aria-pressed")).toBe("true")
     expect(host.querySelector('[role="status"]')?.textContent).toBe("On")
-    expect(host.querySelector("summary")?.textContent).toContain("Auto-reload on")
+    expect(host.querySelector("summary")?.textContent).toContain("Auto-reload")
     expect(state.links).toEqual([])
   })
 

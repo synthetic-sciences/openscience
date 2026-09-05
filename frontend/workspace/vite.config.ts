@@ -26,8 +26,10 @@ export function workspaceManualChunks(id: string): string | undefined {
 
 export default defineConfig({
   plugins: [desktopPlugin] as any,
-  // @pierre/diffs and the workspace both depend on Shiki. Resolve them to one
+  // @pierre/diffs and @synsci/ui both depend on Shiki. Resolve them to one
   // runtime so Vite emits each language/theme chunk once instead of twice.
+  // dedupe resolves from this package, so the workspace must keep declaring
+  // shiki even though no workspace source imports it directly.
   resolve: {
     dedupe: ["shiki"],
   },

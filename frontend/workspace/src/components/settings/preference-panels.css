@@ -114,7 +114,7 @@
   border-radius: 999px;
   background: var(--settings-surface-muted);
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
   font-variant-numeric: tabular-nums;
@@ -151,7 +151,7 @@
   border-radius: var(--settings-radius-control);
   background: var(--settings-surface-muted);
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   transition:
     background-color 150ms ease,
@@ -216,7 +216,7 @@
 
 .settings-preference-domain-list code {
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   line-height: 18px;
   font-variant-numeric: slashed-zero;
 }
@@ -267,7 +267,7 @@
 .settings-preferences-panel .settings-sandbox-save-state {
   min-width: 48px;
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   line-height: 18px;
   text-align: right;
@@ -440,14 +440,14 @@
 
 .settings-compute-config-import__heading h4 {
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
 }
 
 .settings-compute-config-import__heading p {
   margin-top: 2px;
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   line-height: 1.45;
   text-wrap: pretty;
 }
@@ -470,7 +470,7 @@
   max-width: 72ch;
   margin-top: var(--settings-space-2);
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   line-height: 1.45;
   white-space: pre-line;
   text-wrap: pretty;
@@ -485,7 +485,7 @@
 .settings-compute-host-notes-editor > p {
   margin: 0;
   color: var(--text-weak);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   line-height: 1.45;
 }
 
@@ -593,7 +593,7 @@
   align-items: start;
   gap: var(--settings-space-2);
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 18px;
 }
 
@@ -632,7 +632,7 @@
 .settings-account-value {
   max-width: min(320px, 100%);
   color: var(--text-strong);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }

@@ -2,7 +2,7 @@ import path from "path"
 import os from "os"
 import fs from "fs"
 import { spawn, spawnSync } from "child_process"
-import { lazy } from "@/util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { Log } from "@/util/log"
 import { Shell } from "@/shell/shell"
 

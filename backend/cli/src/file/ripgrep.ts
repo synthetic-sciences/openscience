@@ -4,7 +4,7 @@ import { Global } from "../global"
 import fs from "fs/promises"
 import z from "zod"
 import { NamedError } from "@synsci/util/error"
-import { lazy } from "../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"

@@ -30,13 +30,13 @@
   align-items: center;
   gap: 7px;
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
 }
 
 .pdf-viewer-title strong {
   flex: none;
   color: var(--color-text-muted);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   letter-spacing: 0.02em;
 }
@@ -78,7 +78,7 @@
   background: transparent;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   cursor: pointer;
   transition:
     background-color 140ms ease,
@@ -113,7 +113,7 @@
 .pdf-viewer-page-status {
   min-width: 76px;
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   text-align: center;
   white-space: nowrap;
@@ -164,7 +164,7 @@
   background: transparent;
   color: var(--color-text-faint);
   font: inherit;
-  font-size: 10px;
+  font-size: var(--font-size-2x-small);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   transition:
@@ -239,7 +239,7 @@
 .pdf-viewer-page-number {
   min-width: 24px;
   color: var(--color-text-faint);
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -253,7 +253,7 @@
   padding: 32px 16px;
   margin: 0 auto;
   color: var(--color-text-faint);
-  font-size: 12px;
+  font-size: var(--font-size-small);
   line-height: 1.5;
   text-wrap: pretty;
 }
@@ -265,7 +265,7 @@
 
 .pdf-viewer-error strong {
   color: var(--color-error);
-  font-size: 13px;
+  font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
 }
 
@@ -280,7 +280,7 @@
   background: color-mix(in srgb, var(--color-surface-solid) 90%, transparent);
   box-shadow: var(--atlas-shadow-xs);
   color: var(--color-text-faint);
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   backdrop-filter: blur(8px);
 }
@@ -288,7 +288,7 @@
 .pdf-viewer-cap-note {
   padding: 12px 0 4px;
   color: var(--color-text-faint);
-  font-size: 10.5px;
+  font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
 }
 

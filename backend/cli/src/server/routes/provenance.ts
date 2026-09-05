@@ -5,7 +5,7 @@ import { Instance } from "../../project/instance"
 import { Provenance, type Edge, type Node } from "../../science/provenance/store"
 import { Review } from "../../science/provenance/review"
 import { WritableMetadata } from "../../science/provenance/write"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 import { ExecutionHistory } from "../../science/execution/history"
 
 const Kind = z.enum(["artifact", "run", "source", "claim"])

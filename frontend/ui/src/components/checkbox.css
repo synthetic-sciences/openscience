@@ -60,7 +60,7 @@
   [data-slot="checkbox-checkbox-description"] {
     color: var(--text-base);
     font-family: var(--font-family-sans);
-    font-size: 12px;
+    font-size: var(--font-size-small);
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-normal);
     letter-spacing: var(--letter-spacing-normal);
@@ -69,7 +69,7 @@
   [data-slot="checkbox-checkbox-error"] {
     color: var(--text-error);
     font-family: var(--font-family-sans);
-    font-size: 12px;
+    font-size: var(--font-size-small);
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-normal);
     letter-spacing: var(--letter-spacing-normal);

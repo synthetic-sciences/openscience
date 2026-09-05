@@ -6,7 +6,7 @@ import { File } from "../../file"
 import { Ripgrep } from "../../file/ripgrep"
 import { Instance } from "../../project/instance"
 import { Session } from "../../session"
-import { lazy } from "../../util/lazy"
+import { lazy } from "@synsci/util/lazy"
 
 // Plain-text project search over session titles, conversation text, ordinary
 // workspace files, and recognized artifacts. Honest scope: case-insensitive

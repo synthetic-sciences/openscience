@@ -151,42 +151,42 @@ POSTER FORMAT REQUIREMENTS (STRICTLY ENFORCE):
 **Example - WRONG (7-stage workflow - TOO COMPLEX):**
 ```bash
 # ❌ BAD - This creates tiny unreadable text like the drug discovery poster
-python scripts/generate_schematic.py "Drug discovery workflow showing: Stage 1 Target Identification, Stage 2 Molecular Synthesis, Stage 3 Virtual Screening, Stage 4 AI Lead Optimization, Stage 5 Clinical Trial Design, Stage 6 FDA Approval. Include success metrics, timelines, and validation steps for each stage." -o figures/workflow.png
+python skills/scientific-schematics/scripts/generate_schematic.py "Drug discovery workflow showing: Stage 1 Target Identification, Stage 2 Molecular Synthesis, Stage 3 Virtual Screening, Stage 4 AI Lead Optimization, Stage 5 Clinical Trial Design, Stage 6 FDA Approval. Include success metrics, timelines, and validation steps for each stage." -o figures/workflow.png
 # Result: 7+ stages with tiny text, unreadable from 6 feet - POSTER FAILURE
 ```
 
 **Example - CORRECT (simplified to 3 key stages):**
 ```bash
 # ✅ GOOD - Same content, split into ONE simple high-level graphic
-python scripts/generate_schematic.py "POSTER FORMAT for A0. ULTRA-SIMPLE 3-box workflow: 'DISCOVER' → 'VALIDATE' → 'APPROVE'. Each word in GIANT bold (120pt+). Thick arrows (10px). 60% white space. NO substeps, NO details. 3 words total. Readable from 10 feet." -o figures/workflow_overview.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. ULTRA-SIMPLE 3-box workflow: 'DISCOVER' → 'VALIDATE' → 'APPROVE'. Each word in GIANT bold (120pt+). Thick arrows (10px). 60% white space. NO substeps, NO details. 3 words total. Readable from 10 feet." -o figures/workflow_overview.png
 # Result: Clean, impactful, readable - can add detail graphics separately if needed
 ```
 
 **Example - WRONG (complex case studies with multiple sections):**
 ```bash
 # ❌ BAD - Creates cramped unreadable sections
-python scripts/generate_schematic.py "Case studies: Insilico Medicine (drug candidate, discovery time, clinical trials), Recursion Pharma (platform, methodology, results), Exscientia (drug candidates, FDA status, timeline). Include company logos, metrics, and outcomes." -o figures/cases.png
+python skills/scientific-schematics/scripts/generate_schematic.py "Case studies: Insilico Medicine (drug candidate, discovery time, clinical trials), Recursion Pharma (platform, methodology, results), Exscientia (drug candidates, FDA status, timeline). Include company logos, metrics, and outcomes." -o figures/cases.png
 # Result: 3 case studies with 4+ elements each = 12+ total elements, tiny text
 ```
 
 **Example - CORRECT (one case study, one key metric):**
 ```bash
 # ✅ GOOD - Show ONE case with ONE key number
-python scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case study card: Company logo (large), '18 MONTHS' in GIANT text (150pt), 'to discovery' below (60pt). 3 elements total: logo + number + caption. 50% white space. Readable from 10 feet." -o figures/case_single.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case study card: Company logo (large), '18 MONTHS' in GIANT text (150pt), 'to discovery' below (60pt). 3 elements total: logo + number + caption. 50% white space. Readable from 10 feet." -o figures/case_single.png
 # Result: Clear, readable, impactful. Make 3 separate graphics if you need 3 cases.
 ```
 
 **Example - WRONG (key findings too complex):**
 ```bash
 # BAD - too many items, too much detail
-python scripts/generate_schematic.py "Key findings showing 8 metrics: accuracy 95%, precision 92%, recall 94%, F1 0.93, AUC 0.97, training time 2.3 hours, inference 50ms, model size 145MB with comparison to 5 baseline methods" -o figures/findings.png
+python skills/scientific-schematics/scripts/generate_schematic.py "Key findings showing 8 metrics: accuracy 95%, precision 92%, recall 94%, F1 0.93, AUC 0.97, training time 2.3 hours, inference 50ms, model size 145MB with comparison to 5 baseline methods" -o figures/findings.png
 # Result: Cramped graphic with tiny numbers
 ```
 
 **Example - CORRECT (key findings simple):**
 ```bash
 # GOOD - only 3 key items, giant numbers
-python scripts/generate_schematic.py "POSTER FORMAT for A0. KEY FINDINGS with ONLY 3 large cards. Card 1: '95%' in GIANT text (120pt) with 'ACCURACY' below (48pt). Card 2: '2X' in GIANT text with 'FASTER' below. Card 3: checkmark icon with 'VALIDATED' in large text. 50% white space. High contrast colors. NO other text or details." -o figures/findings.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. KEY FINDINGS with ONLY 3 large cards. Card 1: '95%' in GIANT text (120pt) with 'ACCURACY' below (48pt). Card 2: '2X' in GIANT text with 'FASTER' below. Card 3: checkmark icon with 'VALIDATED' in large text. 50% white space. High contrast colors. NO other text or details." -o figures/findings.png
 # Result: Bold, readable impact statement
 ```
 
@@ -219,7 +219,7 @@ python scripts/generate_schematic.py "POSTER FORMAT for A0. KEY FINDINGS with ON
 **Example - WRONG (too complex, text will be small):**
 ```bash
 # BAD - too many elements in one graphic
-python scripts/generate_schematic.py "Complete ML pipeline showing data collection, 
+python skills/scientific-schematics/scripts/generate_schematic.py "Complete ML pipeline showing data collection, 
 preprocessing with 5 steps, feature engineering with 8 techniques, model training 
 with hyperparameter tuning, validation with cross-validation, and deployment with 
 monitoring. Include all labels and descriptions." -o figures/pipeline.png
@@ -230,13 +230,13 @@ monitoring. Include all labels and descriptions." -o figures/pipeline.png
 # GOOD - split into multiple simple graphics with large text
 
 # Graphic 1: High-level overview (3-4 elements max)
-python scripts/generate_schematic.py "POSTER FORMAT for A0: Simple 4-step pipeline. 
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0: Simple 4-step pipeline. 
 Four large boxes: DATA → PROCESS → MODEL → RESULTS. 
 GIANT labels (80pt+), thick arrows, lots of white space. 
 Only 4 words total. Readable from 8 feet." -o figures/overview.png
 
 # Graphic 2: Key result (1 metric highlighted)
-python scripts/generate_schematic.py "POSTER FORMAT for A0: Single key metric display.
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0: Single key metric display.
 Giant '95%' text (150pt+) with 'ACCURACY' below (60pt+).
 Checkmark icon. Minimal design, high contrast.
 Readable from 10 feet." -o figures/accuracy.png
@@ -314,20 +314,20 @@ mkdir -p figures
 # Drug discovery workflow - HIGH-LEVEL ONLY, 3 stages
 # BAD: "Stage 1: Target ID, Stage 2: Molecular Synthesis, Stage 3: Virtual Screening, Stage 4: AI Lead Opt..."
 # GOOD: Collapse to 3 mega-stages
-python scripts/generate_schematic.py "POSTER FORMAT for A0. ULTRA-SIMPLE 3-box workflow: 'DISCOVER' (120pt bold) → 'VALIDATE' (120pt bold) → 'APPROVE' (120pt bold). Thick arrows (10px). 60% white space. ONLY these 3 words. NO substeps. Readable from 12 feet." -o figures/workflow_simple.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. ULTRA-SIMPLE 3-box workflow: 'DISCOVER' (120pt bold) → 'VALIDATE' (120pt bold) → 'APPROVE' (120pt bold). Thick arrows (10px). 60% white space. ONLY these 3 words. NO substeps. Readable from 12 feet." -o figures/workflow_simple.png
 
 # System architecture - MAXIMUM 3 components
-python scripts/generate_schematic.py "POSTER FORMAT for A0. ULTRA-SIMPLE 3-component stack: 'DATA' box (120pt) → 'AI MODEL' box (120pt) → 'PREDICTION' box (120pt). Thick vertical arrows. 60% white space. 3 words only. Readable from 12 feet." -o figures/architecture.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. ULTRA-SIMPLE 3-component stack: 'DATA' box (120pt) → 'AI MODEL' box (120pt) → 'PREDICTION' box (120pt). Thick vertical arrows. 60% white space. 3 words only. Readable from 12 feet." -o figures/architecture.png
 
 # Timeline - ONLY 3 key milestones (not year-by-year)
 # BAD: "2018, 2019, 2020, 2021, 2022, 2023, 2024 with events"
 # GOOD: Only 3 breakthrough moments
-python scripts/generate_schematic.py "POSTER FORMAT for A0. Timeline with ONLY 3 points: '2018' + icon, '2021' + icon, '2024' + icon. GIANT years (120pt). Large icons. 60% white space. NO connecting lines or details. Readable from 12 feet." -o figures/timeline.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. Timeline with ONLY 3 points: '2018' + icon, '2021' + icon, '2024' + icon. GIANT years (120pt). Large icons. 60% white space. NO connecting lines or details. Readable from 12 feet." -o figures/timeline.png
 
 # Case study - ONE case, ONE key metric
 # BAD: "3 case studies: Insilico (details), Recursion (details), Exscientia (details)"
 # GOOD: ONE case with ONE number
-python scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case study: Large logo + '18 MONTHS' (150pt bold) + 'to discovery' (60pt). 3 elements total. 60% white space. Readable from 12 feet." -o figures/case1.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case study: Large logo + '18 MONTHS' (150pt bold) + 'to discovery' (60pt). 3 elements total. 60% white space. Readable from 12 feet." -o figures/case1.png
 
 # If you need 3 cases → make 3 separate simple graphics (not one complex graphic)
 ```
@@ -335,22 +335,22 @@ python scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case study: Larg
 **For Stylized Blocks and Graphics (Nano Banana Pro):**
 ```bash
 # Title block - SIMPLE
-python scripts/generate_schematic.py "POSTER FORMAT for A0. Title block: 'ML FOR DRUG DISCOVERY' in HUGE bold text (120pt+). Dark blue background. ONE subtle icon. NO other text. 40% white space. Readable from 15 feet." -o figures/title_block.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. Title block: 'ML FOR DRUG DISCOVERY' in HUGE bold text (120pt+). Dark blue background. ONE subtle icon. NO other text. 40% white space. Readable from 15 feet." -o figures/title_block.png
 
 # Introduction visual - SIMPLE, 3 elements only
-python scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE problem visual with ONLY 3 icons: drug icon, arrow, target icon. ONE label per icon (80pt+). 50% white space. NO detailed text. Readable from 8 feet." -o figures/intro_visual.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE problem visual with ONLY 3 icons: drug icon, arrow, target icon. ONE label per icon (80pt+). 50% white space. NO detailed text. Readable from 8 feet." -o figures/intro_visual.png
 
 # Conclusion/summary - ONLY 3 items, GIANT numbers
-python scripts/generate_schematic.py "POSTER FORMAT for A0. KEY FINDINGS with EXACTLY 3 cards only. Card 1: '95%' (150pt font) with 'ACCURACY' (60pt). Card 2: '2X' (150pt) with 'FASTER' (60pt). Card 3: checkmark icon with 'READY' (60pt). 50% white space. NO other text. Readable from 10 feet." -o figures/conclusions_graphic.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. KEY FINDINGS with EXACTLY 3 cards only. Card 1: '95%' (150pt font) with 'ACCURACY' (60pt). Card 2: '2X' (150pt) with 'FASTER' (60pt). Card 3: checkmark icon with 'READY' (60pt). 50% white space. NO other text. Readable from 10 feet." -o figures/conclusions_graphic.png
 
 # Background visual - SIMPLE, 3 icons only
-python scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE visual with ONLY 3 large icons in a row: problem icon → challenge icon → impact icon. ONE word label each (80pt+). 50% white space. NO detailed text. Readable from 8 feet." -o figures/background_visual.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE visual with ONLY 3 large icons in a row: problem icon → challenge icon → impact icon. ONE word label each (80pt+). 50% white space. NO detailed text. Readable from 8 feet." -o figures/background_visual.png
 ```
 
 **For Data Visualizations - SIMPLE, 3 bars max:**
 ```bash
 # SIMPLE chart with ONLY 3 bars, GIANT labels
-python scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE bar chart with ONLY 3 bars: BASELINE (70%), EXISTING (85%), OURS (95%). GIANT percentage labels ON the bars (100pt+). NO axis labels, NO legend, NO gridlines. Our bar highlighted in different color. 40% white space. Readable from 8 feet." -o figures/comparison_chart.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE bar chart with ONLY 3 bars: BASELINE (70%), EXISTING (85%), OURS (95%). GIANT percentage labels ON the bars (100pt+). NO axis labels, NO legend, NO gridlines. Our bar highlighted in different color. 40% white space. Readable from 8 feet." -o figures/comparison_chart.png
 ```
 
 ### Step 2b: MANDATORY Post-Generation Review (Before Assembly)
@@ -470,20 +470,20 @@ mkdir -p figures
 # STEP 2: Generate ULTRA-SIMPLE graphics with strict limits
 
 # Workflow - HIGH-LEVEL ONLY (collapsed from 7 stages to 3)
-python scripts/generate_schematic.py "POSTER FORMAT for A0. ULTRA-SIMPLE 3-box workflow: 'DISCOVER' → 'VALIDATE' → 'APPROVE'. Each word 120pt+ bold. Thick arrows (10px). 60% white space. ONLY 3 words total. Readable from 12 feet." -o figures/workflow.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. ULTRA-SIMPLE 3-box workflow: 'DISCOVER' → 'VALIDATE' → 'APPROVE'. Each word 120pt+ bold. Thick arrows (10px). 60% white space. ONLY 3 words total. Readable from 12 feet." -o figures/workflow.png
 
 # Case study 1 - ONE case, ONE metric (will make 3 separate graphics)
-python scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case: Company logo + '18 MONTHS' (150pt bold) + 'to drug discovery' (60pt). 3 elements only. 60% white space. Readable from 12 feet." -o figures/case1.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case: Company logo + '18 MONTHS' (150pt bold) + 'to drug discovery' (60pt). 3 elements only. 60% white space. Readable from 12 feet." -o figures/case1.png
 
-python scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case: Company logo + '95% SUCCESS' (150pt bold) + 'in trials' (60pt). 3 elements only. 60% white space." -o figures/case2.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case: Company logo + '95% SUCCESS' (150pt bold) + 'in trials' (60pt). 3 elements only. 60% white space." -o figures/case2.png
 
-python scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case: Company logo + 'FDA APPROVED' (150pt bold) + '2024' (60pt). 3 elements only. 60% white space." -o figures/case3.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. ONE case: Company logo + 'FDA APPROVED' (150pt bold) + '2024' (60pt). 3 elements only. 60% white space." -o figures/case3.png
 
 # Timeline - ONLY 3 key years (not 7 years)
-python scripts/generate_schematic.py "POSTER FORMAT for A0. ONLY 3 years: '2018' (150pt) + icon, '2021' (150pt) + icon, '2024' (150pt) + icon. Large icons. 60% white space. NO lines or details. Readable from 12 feet." -o figures/timeline.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. ONLY 3 years: '2018' (150pt) + icon, '2021' (150pt) + icon, '2024' (150pt) + icon. Large icons. 60% white space. NO lines or details. Readable from 12 feet." -o figures/timeline.png
 
 # Results - ONLY 2 bars (our method vs best baseline, not 5 methods)
-python scripts/generate_schematic.py "POSTER FORMAT for A0. TWO bars only: 'BASELINE 70%' and 'OURS 95%' (highlighted). GIANT percentages (150pt) ON bars. NO axis, NO legend. 60% white space. Readable from 12 feet." -o figures/results.png
+python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. TWO bars only: 'BASELINE 70%' and 'OURS 95%' (highlighted). GIANT percentages (150pt) ON bars. NO axis, NO legend. 60% white space. Readable from 12 feet." -o figures/results.png
 
 # STEP 2b: Post-Generation Review (MANDATORY)
 # Open each figure at 25% zoom:
@@ -1386,16 +1386,16 @@ Guidance beyond LaTeX for effective poster sessions:
 2. **Generate SIMPLE visual elements**:
    ```bash
    # Introduction - ONLY 3 icons/elements
-   python scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE visual with ONLY 3 elements: [icon1] [icon2] [icon3]. ONE word labels (80pt+). 50% white space. Readable from 8 feet." -o figures/intro.png
+   python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE visual with ONLY 3 elements: [icon1] [icon2] [icon3]. ONE word labels (80pt+). 50% white space. Readable from 8 feet." -o figures/intro.png
    
    # Methods - ONLY 4 steps maximum
-   python scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE flowchart with ONLY 4 boxes: STEP1 → STEP2 → STEP3 → STEP4. GIANT labels (100pt+). 50% white space. NO sub-steps." -o figures/methods.png
+   python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE flowchart with ONLY 4 boxes: STEP1 → STEP2 → STEP3 → STEP4. GIANT labels (100pt+). 50% white space. NO sub-steps." -o figures/methods.png
    
    # Results - ONLY 3 bars/comparisons
-   python scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE chart with ONLY 3 bars. GIANT percentages ON bars (120pt+). NO axis, NO legend. 50% white space." -o figures/results.png
+   python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. SIMPLE chart with ONLY 3 bars. GIANT percentages ON bars (120pt+). NO axis, NO legend. 50% white space." -o figures/results.png
    
    # Conclusions - EXACTLY 3 items with GIANT numbers
-   python scripts/generate_schematic.py "POSTER FORMAT for A0. EXACTLY 3 key findings: '[NUMBER]' (150pt) '[LABEL]' (60pt) for each. 50% white space. NO other text." -o figures/conclusions.png
+   python skills/scientific-schematics/scripts/generate_schematic.py "POSTER FORMAT for A0. EXACTLY 3 key findings: '[NUMBER]' (150pt) '[LABEL]' (60pt) for each. 50% white space. NO other text." -o figures/conclusions.png
    ```
 
 3. **Review generated figures - check for overflow:**

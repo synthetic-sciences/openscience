@@ -18,7 +18,6 @@
     "./theme/context": "./src/theme/context.tsx",
     "./icons/provider": "./src/components/provider-icons/types.ts",
     "./icons/file-type": "./src/components/file-icons/types.ts",
-    "./fonts/*": "./src/assets/fonts/*",
     "./audio/*": "./src/assets/audio/*"
   },
   "scripts": {
@@ -27,12 +26,12 @@
     "generate:tailwind": "bun run script/tailwind.ts"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/jsdom": "28.0.3",
     "@types/katex": "0.16.7",
     "@types/luxon": "catalog:",
+    "@typescript/native-preview": "catalog:",
     "global-jsdom": "29.0.0",
     "jsdom": "29.1.1",
     "tailwindcss": "catalog:",
@@ -44,14 +43,11 @@
   "dependencies": {
     "@kobalte/core": "catalog:",
     "@pierre/diffs": "catalog:",
-    "@shikijs/transformers": "3.9.2",
-    "@solid-primitives/bounds": "0.1.7",
     "@solid-primitives/media": "2.3.6",
     "@solid-primitives/resize-observer": "2.2.0",
     "@solidjs/meta": "catalog:",
     "@synsci/sdk": "workspace:*",
     "@synsci/util": "workspace:*",
-    "@typescript/native-preview": "catalog:",
     "dompurify": "3.4.14",
     "fuzzysort": "catalog:",
     "iconoir": "7.12.1",
@@ -65,7 +61,6 @@
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
-    "strip-ansi": "7.1.2",
-    "virtua": "catalog:"
+    "strip-ansi": "7.1.2"
   }
 }
