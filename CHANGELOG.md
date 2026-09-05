@@ -8,6 +8,22 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Changed
+
+- Removed ~31 MB of never-loaded fonts and favicons, dead frontend and backend
+  modules, duplicated helpers, and the tests that only asserted source text.
+  `bun run check` and Fast CI now run the frontend unit suites too.
+- `openscience web` explains when the workspace UI is not built into a source
+  checkout instead of opening a broken tab.
+- Fixed 62 dangling script and reference paths in bundled skills; the
+  `scientific-schematics` generator is now addressed by its skill path.
+
+## v2.0.70 — 2026-09-04
+
+Everything below shipped across v2.0.24 through v2.0.70. Per-release notes,
+signed installers, and checksums are on [GitHub Releases](https://github.com/synthetic-sciences/OpenScience/releases);
+the CLI is `@synsci/openscience` on npm.
+
 ### Added
 
 - Made `openscience run` usable without a terminal: `--auto-approve` (alias

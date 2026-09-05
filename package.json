@@ -18,8 +18,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:ui": "cd frontend/ui && bun test",
+    "test:workspace": "cd frontend/workspace && bun test",
     "test:sdk": "cd tooling/sdk/js && bun test",
-    "check": "bun run format:check && bun run typecheck && bun run test && bun run test:ui && bun run test:sdk",
+    "check": "bun run format:check && bun run typecheck && bun run test && bun run test:ui && bun run test:workspace && bun run test:sdk",
     "check:fast": "bun run format:check && turbo typecheck --filter=@synsci/openscience",
     "prepare": "husky"
   },

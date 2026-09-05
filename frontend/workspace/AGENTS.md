@@ -5,9 +5,9 @@
 ## Local Dev
 
 - For local UI changes, run the backend and app dev servers separately.
-- Backend (from `backend/cli`): `bun run --conditions=browser ./src/index.ts serve --port 4096`
-- App (from `frontend/workspace`): `bun dev -- --port 4444`
-- Open `http://localhost:4444` to verify UI changes (it targets the backend at `http://localhost:4096`).
+- Backend (repo root): `bun dev serve` (listens on 4096, falls back to 4097; set `VITE_OPENSCIENCE_SERVER_PORT` if it did).
+- App (repo root): `bun run dev:ui`, then open `http://localhost:3000`.
+- Unit tests: `bun run test:workspace` from the repo root (happy-dom). Playwright specs: `bun run --cwd frontend/workspace test`.
 
 ## SolidJS
 

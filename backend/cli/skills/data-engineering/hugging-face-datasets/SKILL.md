@@ -21,7 +21,7 @@ This skill provides tools to manage datasets on the Hugging Face Hub with a focu
 
 # Dependencies
 # This skill uses PEP 723 scripts with inline dependency management
-# Scripts auto-install requirements when run with: uv run scripts/script_name.py
+# Scripts auto-install requirements when run with: uv run scripts/<script>.py
 
 - uv (Python package manager)
 - Getting Started: See "Usage Instructions" below for PEP 723 usage
@@ -62,7 +62,7 @@ The skill includes two Python scripts that use PEP 723 inline dependency managem
 
 > **All paths are relative to the directory containing this SKILL.md
 file.**
-> Scripts are run with: `uv run scripts/script_name.py [arguments]`
+> Scripts are run with: `uv run scripts/<script>.py [arguments]`
 
 - `scripts/dataset_manager.py` - Dataset creation and management
 - `scripts/sql_manager.py` - SQL-based dataset querying and transformation

@@ -1,6 +1,10 @@
 # CLAUDE.md: OpenScience
 
-## Project Overview
+Read `AGENTS.md` first: repository map, commands, conventions, and the CI/release
+rules. This file keeps the product facts and the prompt-architecture guide that
+help when the shipped agent misbehaves.
+
+## Product facts
 
 **OpenScience (`openscience`)** is an open-source, model-agnostic AI research agent for ML engineering and scientific work. Built with Bun and TypeScript, it ships as native binaries for Linux, macOS, and Windows.
 
@@ -10,32 +14,6 @@
 - **Data root**: `~/.openscience/` by default (relocatable; legacy `synsc` data imports automatically)
 - **Config file**: `openscience.json`
 - **Provider ID**: `synsci` (Atlas wire contract, do not rename)
-
-## Repository Structure
-
-Single git repo organized by runtime boundary.
-
-```text
-frontend/          workspace (browser UI), docs site, and shared UI
-backend/           CLI/server, skills, sessions, and provider integrations
-tooling/           SDK, plugin runtime, repo automation, launcher, utilities, and patches
-```
-
-## Development
-
-```bash
-# Run CLI in dev mode
-bun run dev
-
-# Build all platform binaries
-cd backend/cli && bun run build
-
-# Typecheck
-bun run typecheck
-
-# Run tests
-cd backend/cli && bun run test
-```
 
 ## Prompt Architecture (Dual-Layer)
 
@@ -118,13 +96,3 @@ src/agent/prompt/*.txt      # Agent behavior, what the agent is told to do
 src/session/prompt.ts       # Routing, which prompt gets injected for which agent
 src/session/system.ts       # Provider routing, which system prompt for which model
 ```
-
-## Style Guide
-
-See `AGENTS.md` for full style guide. Key points:
-
-- Prefer `const` over `let`, avoid `else`, single-word variable names
-- Use Bun APIs (`Bun.file()`, etc.)
-- Rely on type inference, avoid explicit annotations
-- No mocks in tests, test real implementations
-- No `any` type

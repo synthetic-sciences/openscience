@@ -4,6 +4,7 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { openUrl } from "../../util/open-url"
+import { WEB_INDEX } from "../../web/assets"
 import { probeProtectedFolderAccess } from "../../file/protected-folder-access"
 import { GracefulShutdown } from "../../process/graceful-shutdown"
 import {
@@ -97,9 +98,18 @@ export const WebCommand = cmd({
     const target = localWorkspaceUrl(base, directory)
     UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
     UI.empty()
-    UI.println(UI.Style.TEXT_DIM, "  Opening your browser… if it doesn't open, visit the URL above.")
-
-    if (process.env.OPENSCIENCE_RESTARTED !== "1") openUrl(target)
+    if (!WEB_INDEX) {
+      // A source checkout without the embedded UI serves 404s for every
+      // workspace route; say so instead of opening a broken tab.
+      UI.println(UI.Style.TEXT_WARNING_BOLD, "  The workspace UI is not built into this binary.")
+      UI.println(
+        UI.Style.TEXT_DIM,
+        "  Run `bun run setup --web` once, or use `bun dev serve` with `bun run dev:ui` for the live UI loop.",
+      )
+    } else {
+      UI.println(UI.Style.TEXT_DIM, "  Opening your browser… if it doesn't open, visit the URL above.")
+      if (process.env.OPENSCIENCE_RESTARTED !== "1") openUrl(target)
+    }
 
     // macOS-only: warn when the host explicitly denies protected-folder
     // access. System Settings opens only after a deliberate UI action.

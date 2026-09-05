@@ -27,7 +27,7 @@ The server binds to `127.0.0.1` and enforces a Host and Origin allowlist. There 
 backend/cli          The CLI, server, agent runtime, tools, connectors, and skills
 frontend/workspace   The workspace UI (SolidJS), served by the CLI
 frontend/desktop     The Electron shell that wraps the packaged runtime
-frontend/ui          Shared UI components, themes, and fonts
+frontend/ui          Shared UI components, themes, and icons
 frontend/docs        The documentation site (Vite + React)
 frontend/landing     The marketing site (openscience.sh); has its own lockfile
 tooling/sdk/js       The TypeScript SDK, generated from the server contract

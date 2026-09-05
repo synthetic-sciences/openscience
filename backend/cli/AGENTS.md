@@ -1,3 +1,5 @@
+<!-- These are instructions for the OpenScience agent when it works inside backend/cli as a project (`bun dev` with no project argument). Repository guidance for contributors is in the root AGENTS.md. -->
+
 # OpenScience - ML Workflow Defaults
 
 This file provides default instructions for the OpenScience when working in ML/AI research projects.

@@ -36,7 +36,7 @@ This is not optional. Hypothesis reports without visual elements are incomplete.
 
 **How to generate schematics:**
 ```bash
-python scripts/generate_schematic.py "your diagram description" -o figures/output.png
+python skills/scientific-schematics/scripts/generate_schematic.py "your diagram description" -o figures/output.png
 ```
 
 The AI will automatically:

@@ -227,12 +227,6 @@ model = MambaLMHeadModel.from_pretrained("state-spaces/mamba-2.8b")
 
 ## Advanced topics
 
-**Selective SSM**: See [references/selective-ssm.md](references/selective-ssm.md) for mathematical formulation, state-space equations, and how selectivity enables O(n) complexity.
-
-**Mamba-2 architecture**: See [references/mamba2-details.md](references/mamba2-details.md) for multi-head structure, tensor parallelism, and distributed training setup.
-
-**Performance optimization**: See [references/performance.md](references/performance.md) for hardware-aware design, CUDA kernels, and memory efficiency techniques.
-
 ## Hardware requirements
 
 - **GPU**: NVIDIA with CUDA 11.6+
@@ -250,7 +244,6 @@ model = MambaLMHeadModel.from_pretrained("state-spaces/mamba-2.8b")
 - **Memory**: 50% less (no KV cache)
 - **Scaling**: Linear vs quadratic
 
-
 ## Known Conflicts
 
 - **Do not install alongside `flash-attention`** in the same environment. Both compile custom CUDA kernels that may conflict. Use separate virtual environments or Modal containers.
@@ -262,5 +255,4 @@ model = MambaLMHeadModel.from_pretrained("state-spaces/mamba-2.8b")
 - GitHub: https://github.com/state-spaces/mamba ⭐ 13,000+
 - Models: https://huggingface.co/state-spaces
 - Docs: Repository README and wiki
-
 

@@ -27,12 +27,13 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # The AI SDK providers carry hand-maintained patches (tooling/patches)
+      # and the tool-call repair path depends on exact `ai` semantics; those
+      # bumps are engineering work, not lockfile updates (see #503).
+      - dependency-name: "ai"
+      - dependency-name: "@ai-sdk/*"
+      - dependency-name: "@openrouter/*"
     groups:
-      ai-sdk:
-        patterns:
-          - "ai"
-          - "@ai-sdk/*"
-          - "@openrouter/*"
       solid:
         patterns:
           - "solid-js"
@@ -67,6 +68,8 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Tracks the packageManager pin in the root package.json by hand.
+      - dependency-name: "@types/bun"
     groups:
       landing:
         patterns:
