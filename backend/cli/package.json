@@ -65,6 +65,7 @@
     "@ai-sdk/xai": "2.0.51",
     "@clack/prompts": "1.0.0-alpha.1",
     "@gitlab/gitlab-ai-provider": "3.3.1",
+    "@hono/standard-validator": "0.1.5",
     "@modelcontextprotocol/sdk": "1.26.0",
     "@openrouter/ai-sdk-provider": "1.5.2",
     "@parcel/watcher": "2.5.1",
