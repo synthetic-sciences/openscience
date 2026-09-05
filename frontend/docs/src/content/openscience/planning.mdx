@@ -1,0 +1,64 @@
+---
+title: "Planning and persistent goals"
+description: "Turn a broad research objective into a plan, bounded experiments, and reviewable progress."
+---
+
+Use planning when the choice of method matters, and a persistent goal when the work needs several stages. State what counts as done so OpenScience can evaluate progress against a concrete result.
+
+## Write a useful objective
+
+Include the research question, inputs, deliverables, validation, and resource limits:
+
+```text
+Produce a reproducible comparison of the two assays in data/. Deliver a
+cleaning script, an effect-size table, one figure, and a methods note.
+Preserve original data, account for repeated samples, and ask before any
+paid compute. Finish by rerunning the script and listing limitations.
+```
+
+A broad instruction such as “analyze everything” leaves the output and stopping point ambiguous. Narrowing it makes the work easier to review.
+
+## Start in Plan mode
+
+```text
+/plan Review the input files and propose the analysis before executing it.
+Identify the unit of observation, missing information, candidate methods,
+and the checks that would make the result trustworthy.
+```
+
+Plan mode can inspect material and prepare its plan. Review the assumptions, dependencies, costs, and intended file changes, then return to Research and authorize the agreed execution.
+
+## Set a goal
+
+```text
+/goal Complete the agreed assay comparison with the four deliverables and
+a successful rerun from the preserved inputs.
+```
+
+Use `/status` to inspect current progress. Keep the task's acceptance criteria in a project file when the goal is long enough to span compaction or handoff.
+
+Persistent goals still require the application and necessary resources to be running. They do not schedule future work while the machine is off.
+
+## Split work into reviewable stages
+
+| Stage | A useful checkpoint |
+| --- | --- |
+| Inspect | Input inventory, data dictionary, missing prerequisites. |
+| Plan | Chosen method, alternatives, assumptions, and budget. |
+| Pilot | A small end-to-end run with inspected outputs. |
+| Execute | Full run with recorded parameters and progress. |
+| Validate | Reproduction command, diagnostic checks, unresolved issues. |
+| Package | Final report, code, source references, and saved Results. |
+
+Delegate independent questions when helpful, such as reviewing statistical assumptions while surveying relevant methods. Choose **Off**, **Auto**, or **High** delegation through [Research controls](/openscience/agents).
+
+## Steer or stop work
+
+Queue a follow-up when the current response can finish first. Stop it when the direction needs to change immediately. Inspect existing files and job status before retrying: a stopped response may already have written useful outputs or launched a compute job.
+
+```text
+Stop expanding the experiment. Summarize completed work and current jobs,
+save a checkpoint, and propose the smallest remaining validation step.
+```
+
+Use [Compute jobs](/openscience/jobs) to manage an external job itself. Use [Context and handoffs](/openscience/context) before moving the task to another conversation.

@@ -1,0 +1,56 @@
+---
+title: "Genomics and sequence analysis"
+description: "Work from reference records through read, variant, annotation, and single-cell inspection."
+---
+
+OpenScience can retrieve supported biological records, inspect sequence and genomic formats, and help implement an analysis with available scientific software. Begin with the organism, reference version, input format, and question.
+
+## Select the starting point
+
+| Input | First task |
+| --- | --- |
+| Gene or protein name | Resolve the intended organism and accession in a [scientific database](/openscience/database-workflows). |
+| FASTA sequences | Check identifiers, alphabet, lengths, gaps, and duplicate records. |
+| FASTQ reads | Inspect read quality, lengths, invalid records, and whether the preview is sampled. |
+| VCF variants | Confirm reference assembly, samples, filtering, and variant representation. |
+| BED/GFF/GTF annotations | Verify assembly, coordinate convention, feature type, and chromosome naming. |
+| SAM/BAM/CRAM alignments | Check references, alignment status, indexes, and tool availability. |
+| H5AD or Loom | Inspect dimensions, annotations, stored layers, and available embeddings. |
+
+## Inspect before transforming
+
+```text
+Inspect data/reads.fastq and methods/sample-sheet.csv. Check sample names,
+read lengths, quality summaries, and whether the inspection covers the
+full file. Save a report and propose the next quality-control step before
+filtering or discarding reads.
+```
+
+Use the [scientific viewers](/openscience/scientific-viewers) for an initial visual check, then request full-file calculations where appropriate. Preserve failed or excluded records in a separate report.
+
+## Keep reference assumptions explicit
+
+Record the reference assembly, annotation release, identifier version, and coordinate convention in the analysis. Do not silently combine a variant file from one assembly with annotations from another.
+
+For sequence comparisons, state whether the input is nucleotide or protein sequence, which records are included, and whether an existing alignment is trusted or must be recomputed.
+
+## Work with single-cell data
+
+```text
+Inspect data/cells.h5ad without changing it. Summarize cell and feature
+counts, available annotations, layers, and stored embeddings. Ask which
+layer represents counts and which preprocessing has already been done.
+Propose quality-control and analysis steps before applying them.
+```
+
+An existing embedding is an analysis output, not evidence that the preprocessing or cluster interpretation is correct. Keep sample-level structure and experimental design visible when comparing groups.
+
+## Choose skills and tools
+
+Search the [skill directory](/openscience/skill-library) for the organism, assay, or method. Check [Tools](/openscience/tool-catalog) for readiness and prerequisites before asking for a pipeline. Biopython has a supported setup path; other specialized packages may require a separate reviewed environment.
+
+Larger workloads can use [compute jobs](/openscience/jobs). Begin with a pilot, preserve commands and versions, and retrieve the full output set.
+
+## Deliver a reusable result
+
+Ask for original source identifiers, input/reference versions, quality-control summaries, transformation code, output paths, and limitations. Keep biological interpretation separate from the software's raw output, and save the reviewed report as a [Result](/openscience/results).

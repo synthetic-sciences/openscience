@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "catalog": "bun --no-env-file script/catalog.ts",
-    "check": "bun --no-env-file script/catalog.ts --check && bun --no-env-file script/check.ts",
+    "check": "bun --no-env-file script/catalog.ts --check && bun --no-env-file script/check.ts && bun --no-env-file script/examples.ts",
     "export": "bun script/export.ts",
     "test": "bun test ./test",
     "test:e2e": "playwright test"

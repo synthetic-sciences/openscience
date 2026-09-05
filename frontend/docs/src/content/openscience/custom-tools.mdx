@@ -1,0 +1,53 @@
+---
+title: "Create a custom tool"
+description: "Add a small typed operation that the agent can call from a project."
+---
+
+A custom tool is code the agent can call with typed arguments. Use a [skill](/openscience/skills) for a procedure, a [command](/openscience/slash-commands) for a reusable prompt, or [MCP](/openscience/connectors) for an existing external tool server.
+
+## Add a project tool
+
+Create `.openscience/tool/sequence-length.ts` in your project:
+
+```typescript
+import { tool } from "@synsci/plugin"
+
+export default tool({
+  description: "Count residues in one plain nucleotide or protein sequence",
+  args: {
+    sequence: tool.schema.string().min(1),
+  },
+  async execute(args) {
+    const sequence = args.sequence.replace(/\s/g, "")
+    if (!/^[A-Za-z*.-]+$/.test(sequence)) {
+      return "Expected one plain sequence, not FASTA headers or a filename."
+    }
+    return JSON.stringify({ length: sequence.length })
+  },
+})
+```
+
+This deliberately small tool counts characters after whitespace removal. It does not validate an alphabet, remove alignment gaps, or parse a multi-record file. Those are separate behaviors to define if needed.
+
+Project code must be reviewed and permitted by the project's settings before it can load. Reopen the project after adding a tool and check that it becomes available.
+
+## Ask the agent to use it
+
+```text
+Use the sequence-length tool on ACGTACGT. Report the returned count and
+explain what it counts. Then check how it handles a sequence with spaces.
+```
+
+Tool availability also depends on the selected agent and tool permissions. Use an actual tool result to verify the connection instead of accepting a model's mental calculation as a test.
+
+## Name and structure tools
+
+The default export uses the file's name. Named exports are exposed with the filename and export name. Keep each tool's purpose narrow and its description clear about accepted input, output, and side effects.
+
+Use the supplied tool context when resolving project paths or reacting to cancellation. Ask for the appropriate permission before an operation that needs user approval. Never embed account secrets in the module.
+
+## Test behavior before sharing
+
+Test valid input, invalid input, empty or large cases as relevant, cancellation for long operations, and recoverable errors. Return enough information for the agent to tell success from a partial or failed operation.
+
+Keep project tools in version control and review changes as executable code. The [plugin authoring guide](https://github.com/synthetic-sciences/openscience/blob/main/docs/notes/writing-a-plugin.md) and [tool helper types](https://github.com/synthetic-sciences/openscience/blob/main/tooling/plugin/src/tool.ts) describe the extension contract.

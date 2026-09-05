@@ -1,0 +1,88 @@
+---
+title: "TypeScript SDK and local API"
+description: "Create an integration against your running OpenScience project."
+---
+
+Use the TypeScript SDK to build a local integration, automate a project workflow, or connect another interface to a running OpenScience server. Use the CLI's [JSON run mode](/openscience/automation) when a single command is sufficient.
+
+## Start a server for the intended project
+
+```bash
+cd /absolute/path/to/research-project
+openscience serve --port 4096
+```
+
+Use the actual URL printed by the command. Keep the server available while your integration runs. This is the local OpenScience project API; an Ace account is not a hosted substitute for this server.
+
+## Install and connect
+
+```bash
+npm install @synsci/sdk
+```
+
+```typescript
+import { createOpenScienceClient } from "@synsci/sdk/v2"
+
+const client = createOpenScienceClient({
+  baseUrl: "http://localhost:4096",
+  directory: "/absolute/path/to/research-project",
+})
+
+const sessions = await client.session.list({ limit: 10 })
+if (sessions.error) throw new Error("Could not list sessions")
+console.log(sessions.data)
+```
+
+Replace the directory with the same project used to start the server. Keep SDK and OpenScience versions aligned.
+
+## Create a session and send a request
+
+This example creates a conversation and asks for a text response. It uses the configured model, so running it can incur that model's usual usage costs.
+
+```typescript
+import { createOpenScienceClient } from "@synsci/sdk/v2"
+
+const client = createOpenScienceClient({
+  baseUrl: "http://localhost:4096",
+  directory: "/absolute/path/to/research-project",
+})
+
+const created = await client.session.create({ title: "Integration check" })
+if (created.error || !created.data) throw new Error("Could not create session")
+
+const response = await client.session.prompt({
+  sessionID: created.data.id,
+  parts: [{ type: "text", text: "Reply with a short greeting. Do not use tools." }],
+})
+if (response.error) throw new Error("The request failed")
+console.log(response.data)
+```
+
+For a tool-using integration, implement the relevant permission and user-question handling before submitting substantial work. A prompt asking to avoid tools is an instruction, not a programmatic permission policy.
+
+## Common SDK surfaces
+
+| Task | SDK surface |
+| --- | --- |
+| List, create, inspect, or remove conversations | `client.session` |
+| Read messages or send a prompt | `client.session.messages`, `client.session.prompt` |
+| Stop an active response | `client.session.abort` |
+| Fork an existing conversation | `client.session.fork` |
+| Inspect project files | `client.file` |
+| Find project material | `client.find` |
+| Inspect configured model providers | `client.provider` |
+| Read available commands | `client.command` |
+
+Use generated types for the exact parameters in your installed version. Do not guess endpoint paths or assume a v1 example has the same calling convention as v2.
+
+## Errors and long-running work
+
+Inspect `error` before using returned `data`. Preserve the session identifier so a failed client request can be investigated without starting duplicate work. A timeout does not prove the server performed no action.
+
+Use the SDK's generated event and asynchronous methods when your interface needs live progress, and match the event types to the same SDK version. For a batch process, [Automation](/openscience/automation) documents the CLI event contract and exit handling.
+
+## Reference and extensions
+
+The [generated API reference](https://github.com/synthetic-sciences/openscience/blob/main/tooling/sdk/openapi.json) contains the complete request and response contract. The [v2 SDK implementation](https://github.com/synthetic-sciences/openscience/blob/main/tooling/sdk/js/src/v2/gen/sdk.gen.ts) shows methods and parameters.
+
+Use [custom tools](/openscience/custom-tools) or [plugins and editors](/openscience/extensions) when the integration belongs inside the agent instead of outside it.

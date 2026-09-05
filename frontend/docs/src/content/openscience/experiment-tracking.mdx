@@ -1,0 +1,58 @@
+---
+title: "Experiment plans and evidence"
+description: "Keep the objective, planned checks, trial outcomes, and lessons tied to concrete research outputs."
+---
+
+For a multi-stage investigation, ask OpenScience to maintain an explicit research plan with deliverables and checks. This is useful when you compare several candidates, reproduce a claim, or need to explain why a result counts as progress.
+
+## Define the work before running it
+
+```text
+Define the objective and required deliverables for this experiment.
+Record the baseline, primary metric, direction of improvement, validation
+checks, and stopping criteria. Keep the plan with the project and show it
+to me before starting trials.
+```
+
+Use exact ceilings when you have a hard time, token, call, or cost limit. A research instruction does not replace external account spending controls. See [Pricing](/openscience/pricing) and [Planning](/openscience/planning).
+
+## Save the plan before observing outcomes
+
+When the task calls for preregistration, ask OpenScience to save the empirical plan as a Result and register that saved plan before running trials. Keep the objective, dataset or sample selection, primary comparison, metric, and decision rule in the plan.
+
+A local preregistered plan preserves the intended order within this workflow. It is not automatically a registration in an external scientific registry.
+
+## Track stages and checks separately
+
+A stage describes progress through the workflow. A verification check describes whether evidence supports a requirement. Marking a stage complete is not enough to establish that a statistical result, file, or implementation passed its check.
+
+```text
+Update the experiment status. For each required check, identify the
+actual output or execution that supports pass or fail. Mark anything
+not run as pending or not tested rather than assuming success.
+```
+
+## Record trials and failures
+
+Give each candidate a unique label and record its observed outcome, metric, baseline, and supporting outputs. Include failed attempts and explain the relevant failure.
+
+```text
+Compare the baseline and candidate runs using the same evaluation data.
+Record their measured metrics, link the output files, and state whether
+the candidate improved, regressed, or remains unresolved. Include the
+failed run and what prevented a valid comparison.
+```
+
+Keep a model's explanation separate from the measurement that supports the conclusion.
+
+## Retain useful lessons
+
+Ask OpenScience to record a lesson only when a verified trial supports it. State the situation in which the lesson applies and the evidence behind it. If later results contradict the lesson, record the counterevidence and revise it.
+
+A lesson about one dataset or environment should not be generalized to unrelated work without further checks.
+
+## Review the investigation
+
+Use `/status` and ask for the objective, active stage, completed checks, trials, failures, required outputs, and unresolved questions. Before handing off, save a readable report and [continuation note](/openscience/context).
+
+Use [Compute jobs](/openscience/jobs) for execution, [Reproduction](/openscience/reproduction) for matching an existing result, and [Saved Results](/openscience/results) for retaining evidence files.

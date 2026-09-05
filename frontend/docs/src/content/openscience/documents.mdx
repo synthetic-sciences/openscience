@@ -1,0 +1,60 @@
+---
+title: "Reading and extracting documents"
+description: "Work through papers, protocols, PDFs, and reports with checkable source references."
+---
+
+Give OpenScience a document and a specific question: explain a method, compare claims, extract a table, or turn a protocol into an analysis plan. Keep the original document available so you can verify the answer.
+
+## Open or attach a document
+
+Attach a supported PDF, Markdown, or text file, reference an existing project path, or provide a known accessible URL. Open a saved PDF through Files to inspect the page preview.
+
+```text
+Read papers/study.pdf. Summarize its research question, dataset, method,
+main findings, and limitations. For each key claim, give the page or
+section location and distinguish the authors' result from your inference.
+```
+
+Model input support and available extraction tools affect how the document is read. If the text cannot be extracted, ask for the specific pages or a readable conversion instead of accepting a summary based only on its title or abstract.
+
+## Compare multiple papers
+
+Define the comparison before searching or reading:
+
+```text
+Compare the PDFs in papers/ on sample selection, measurement method,
+validation, and the main limitation. Build results/evidence.csv with one
+row per study, include source locations, and use not reported when a
+field is absent. Save a narrative synthesis separately.
+```
+
+Check whether two papers report the same cohort or dataset before treating them as independent evidence. A disagreement can come from definitions or methods rather than a direct contradiction.
+
+## Extract a table
+
+Specify the output columns and handling of missing information:
+
+```text
+Extract the experimental conditions in papers/protocol.pdf into
+results/conditions.csv: experiment, sample, concentration, concentration
+unit, temperature, duration, source page, and notes. Preserve ranges and
+inequalities. Mark unreadable values for review; do not guess them.
+```
+
+Inspect merged cells, superscripts, decimal separators, footnotes, and units in the original. Keep extracted values separate from conversions or calculated values.
+
+## Scanned pages and complex layouts
+
+Scanned PDFs may require OCR; equations, multi-column text, charts, and tables can need additional handling. Check **Customize → Tools** for available document tools and the [tool catalog](/openscience/tool-catalog).
+
+Ask for a sample extraction before processing a large collection. State which pages were successfully read and which need manual review. A PDF preview is a viewing feature, not a guarantee of complete text extraction.
+
+## Read a known web page
+
+For an exact URL, ask OpenScience to read the page and cite the sections it used. For discovery across many sites, use [Research search](/openscience/research-search). If a page requires a login or is not accessible, provide an authorized export or an alternative source.
+
+A page can change after the analysis. Save the source URL, access date, document version, and any permitted local copy with the project.
+
+## Save an evidence package
+
+A useful output includes a readable summary, a structured extraction where appropriate, a source list, and a record of uncertainty. Save the final report as a [Result](/openscience/results), and use [Literature review](/openscience/literature-review) for a search-and-screen workflow or [Writing](/openscience/writing) for a manuscript draft.

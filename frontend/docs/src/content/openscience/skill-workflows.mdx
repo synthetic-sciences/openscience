@@ -1,0 +1,86 @@
+---
+title: "Skill recipes"
+description: "Choose a reusable procedure, provide the right input, and ask for a concrete deliverable."
+---
+
+Use skills to bring a repeatable method into a task. Open **Customize → Skills**, search the name or subject, enable the relevant entry, and select it through `/` or name it in your request.
+
+The [complete directory](/openscience/skill-library) describes every bundled skill and links to its instructions. The installed version is authoritative when names or availability differ.
+
+## Plan and challenge an idea
+
+Use scientific brainstorming for open-ended ideas, hypothesis generation for observations that need a testable explanation, and scientific critical thinking for evaluating a claim.
+
+```text
+Use hypothesis-generation on the observations in notes/pilot.md. Propose
+three competing explanations, the evidence each predicts, and a small
+experiment that distinguishes them. Save the comparison in methods/.
+```
+
+Choose an output that can be checked, rather than requesting more ideas without selection criteria.
+
+## Review a manuscript or result
+
+```text
+Use peer-review on drafts/manuscript.md. Separate major methodological
+concerns from presentation issues, cite the relevant sections, and list
+the evidence or analysis needed to resolve each major concern.
+```
+
+For a specific implementation or result, the `review` and `verify` procedures help organize findings and checks. Verification should state pass, fail, or not tested and name the evidence.
+
+## Audit sources
+
+```text
+Use sources on results/report.md. Check each important claim against its
+cited source, distinguish primary from secondary evidence, and save a
+table of supported, contradicted, and unresolved claims.
+```
+
+Ask for source locations and access failures. A bibliography entry alone does not prove that the source supports the sentence.
+
+## Reproduce and compare
+
+```text
+Use reproduce for the target result in papers/study.pdf. Inventory the
+available code and data, identify missing inputs, define a success
+criterion, and propose a small pilot before the full run.
+```
+
+After runs complete:
+
+```text
+Use compare on the saved run reports. Compare the same metric, dataset,
+split, and resource assumptions. Include failed runs and explain which
+conclusions the evidence can support.
+```
+
+See [Reproduction](/openscience/reproduction) for the full workflow.
+
+## Package a deliverable
+
+```text
+Use export to package the final report, source list, figures, tables,
+reproduction command, and limitations. Verify every referenced file and
+write a README for someone who did not see this conversation.
+```
+
+Use [Results](/openscience/results) to retain selected completed outputs and [Team workflows](/openscience/team-workflows) for a handoff.
+
+## Add domain expertise
+
+Search the directory for the actual method or data type: single-cell analysis, sequence processing, molecular descriptors, statistical modeling, quantum simulation, training, or scientific writing. Read the linked instructions to check input formats, software, and account requirements.
+
+Combine a domain skill with a concrete task:
+
+```text
+Use the relevant sequence-analysis skill for data/sequences.fasta. First
+check readiness and input validity, then propose the method and expected
+outputs. Preserve source records and report failed cases separately.
+```
+
+A skill may reference software that is not installed or a service you have not connected. Resolve the prerequisite or choose another method before expecting the output.
+
+## Create your own procedure
+
+For a recurring lab protocol, start from [Writing a skill](/openscience/skills#write-a-skill). Keep the instructions specific about input, steps, validation, output, and failure reporting. Version the skill beside the protocol it implements.

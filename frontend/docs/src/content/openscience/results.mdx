@@ -1,0 +1,60 @@
+---
+title: "Saved Results"
+description: "Retain a completed output, download its exact file, and manage saved research results."
+---
+
+A **Result** is a retained copy of a file you choose to keep from a conversation. Use it for a finished figure, table, report, or other deliverable that should remain available even as the working file changes.
+
+## Files and Results serve different purposes
+
+| Item | Use it for |
+| --- | --- |
+| Project file | Editable inputs, scripts, and final project documents. |
+| Session scratch file | Intermediate work belonging to the current conversation. |
+| Saved Result | A retained output with its own record and downloadable file. |
+| Conversation export | A separate copy of session history. |
+
+Saving a Result does not automatically package every dependency, dataset, and script used to produce it. Save those supporting files as part of the project when reproducibility matters.
+
+## Save a file as a Result
+
+1. Open the file from the conversation or **Files**.
+2. Check the preview and confirm it is the intended output.
+3. If you edited the source, choose **Save file** first.
+4. Choose **Save as Result** when the action is available for the conversation.
+5. Give the Result a useful title and verify that it opens.
+
+You can also ask directly:
+
+```text
+Verify results/comparison.csv has the expected rows and columns, then
+save it as a Result titled Treatment comparison. Keep the analysis script
+and methods note in the project too.
+```
+
+The saved copy preserves the output at that point. Editing a working file later does not rewrite an already saved copy.
+
+## Inspect and download
+
+Open the Result to inspect its available preview. Use **Download** to obtain the stored file. A large file or unsupported preview can still be downloaded without conversion.
+
+Check the filename and format before sharing it. A PNG is a rendered image; it does not contain the plotting code. A CSV contains a table; it does not explain the study design by itself.
+
+## Rename, remove, and restore
+
+Open **Manage Result** to rename a Result or move it to Trash. The displayed confirmation states that a trashed Result remains recoverable from Files for **30 days**. Restore it from Files during that period if needed.
+
+Renaming a Result changes its display title. Use ordinary file editing when you need to revise the underlying document, then save the revised output as another Result.
+
+## Save a research package
+
+For an analysis worth keeping, ask for these deliverables together:
+
+```text
+Prepare results/report.md, results/metrics.csv, results/figure.png, and
+scripts/reproduce.py. Verify every file opens, record the input paths,
+parameters, versions, and limitations, and save the report and figure as
+Results. State the command needed to rerun the analysis.
+```
+
+A complete handoff also includes any inputs that the recipient can legally access, environment requirements, and credentials they must configure for themselves. See [Team workflows](/openscience/team-workflows).

@@ -1,0 +1,64 @@
+---
+title: "Searching scientific databases"
+description: "Discover a database, query its records, fetch supported files, and retain source identifiers."
+---
+
+OpenScience provides a common way to search its registered scientific databases. The [database directory](/openscience/databases) lists every included source and the formats it declares.
+
+## Discover the right source
+
+Ask which databases are available for your domain and which one fits the question. The agent can inspect the current catalog before choosing a database identifier.
+
+```text
+List available protein and structure databases. Explain which one should
+supply a reference sequence and which one should supply an experimental
+structure for the protein I am studying.
+```
+
+A general web search and a structured database query answer different questions. Use the direct database when exact identifiers, organisms, versions, or downloadable records matter.
+
+## Search with explicit identifiers and constraints
+
+```text
+Search UniProt for human insulin. Return the accession, organism, record
+title, source URL, and any ambiguity. Do not fetch a structure until we
+have selected the intended protein record.
+```
+
+Queries use the source's native syntax. Organism filters apply where the source supports them. Search requests return a bounded set of hits, up to 50, so a single search is not a full database export.
+
+Use accession identifiers from the returned records rather than inventing one from a protein or compound name. Similar names can refer to different isoforms, organisms, structures, or chemical forms.
+
+## Fetch a record or a file
+
+Once you select a result, ask for its structured record or a declared file format:
+
+```text
+Fetch the selected accession in FASTA format if the database supports it.
+Keep the database name, accession, retrieval date, and source URL beside
+the downloaded file. Show the output path and inspect the sequence.
+```
+
+Common declared formats include FASTA, PDB, CIF, and SDF, depending on the database. Some sources support only structured metadata. A catalog entry does not guarantee that every record has every advertised format.
+
+## Validate the retrieved material
+
+| Material | Checks to request |
+| --- | --- |
+| Sequence | Organism, accession/version, alphabet, length, record count. |
+| Structure | Record identity, chains, ligands, experimental versus predicted origin. |
+| Compound | Identifier, chemical form, stereochemistry, units and property provenance. |
+| Literature record | Title, authors, year, identifier, and available full-text link. |
+| Dataset record | Version, access conditions, size, files, and whether data were actually downloaded. |
+
+A metadata record is useful evidence that a resource exists; it is not the same as having its underlying dataset or complete paper.
+
+## Recover from source problems
+
+Rate limits and source errors are reported separately from an empty search. Wait and retry a bounded request when a source is temporarily unavailable. If the format or operation is unsupported, use a supported alternative or the source's own authorized download process.
+
+Keep failed retrievals in the task report when they affect coverage. Do not silently substitute a different accession or omit failed inputs from a comparison.
+
+## Build a reproducible collection
+
+Ask OpenScience to save a manifest containing database, accession, format, URL, retrieval date, local path, and any error. Then use [Scientific viewers](/openscience/scientific-viewers) to inspect the files and the relevant [research workflow](/openscience/workflow-examples) for analysis.

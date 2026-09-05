@@ -1,0 +1,49 @@
+---
+title: "Share and hand off research"
+description: "Package files, instructions, and results so another person can continue the work."
+---
+
+OpenScience projects can produce a self-contained research handoff: inputs the recipient may access, scripts, results, instructions, and a clear account of what remains. A shared funding workspace and a shared research folder are different things.
+
+## Prepare a handoff package
+
+```text
+Prepare a handoff for this analysis. Include a README with the objective,
+input requirements, setup, exact reproduction command, output paths,
+completed checks, and known limitations. Include a methods note and the
+final tables and figures. Do not include credentials or restricted data.
+```
+
+Keep large or restricted datasets in their appropriate storage and document how an authorized recipient obtains them. Do not assume a conversation export includes the data.
+
+## Preserve project conventions
+
+Share [AGENTS.md](/openscience/instructions), relevant project commands, and reviewed skills with the code. Pin dependency and procedure revisions when the analysis needs to be repeated exactly.
+
+Each person should configure their own model and service access unless the account workspace explicitly supplies a shared connection. Avoid committing personal keys or device-specific absolute paths into a shared setup.
+
+## Export the conversation separately
+
+```bash
+openscience session list
+openscience export <session-id> > session.json
+```
+
+Review the export before sharing because the conversation can contain project material and tool outputs. The recipient can use [session import](/openscience/sessions), but still needs the project files and their own available tools and accounts.
+
+## Share completed Results
+
+Download a reviewed Result or share the corresponding project files through your normal collaboration tools. Include captions, definitions, units, and source references so the output is meaningful outside the original conversation.
+
+A saved Result is not automatically a public share link or a collaborative document editor.
+
+## Continue in a fresh conversation
+
+```text
+Read README.md and methods/handoff.md. Verify the required files and
+available tools, summarize the completed work, and identify the first
+remaining step. Do not rerun the full experiment until the setup check
+and small reproduction test pass.
+```
+
+For long work in the same project, use [Context and handoffs](/openscience/context). For team-paid model access, see [Ace and your account](/openscience/ace).

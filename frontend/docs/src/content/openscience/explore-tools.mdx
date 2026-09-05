@@ -1,0 +1,60 @@
+---
+title: "Explore tools"
+description: "Browse research tools, scientific software, databases, and connected services, with setup and usage guides."
+---
+
+Find a tool by the work you need to do. OpenScience includes everyday research tools, a scientific software catalog, direct scientific database connections, and support for external tools you add.
+
+<Columns cols={2}>
+  <Card title="Built-in research tools" href="/openscience/built-in-tools">
+    File search and editing, code execution, web research, delegation, jobs, and saved outputs.
+  </Card>
+  <Card title="Scientific tool catalog" href="/openscience/tool-catalog">
+    Every listed scientific package and connected prediction tool, with support status and source links.
+  </Card>
+  <Card title="Scientific databases" href="/openscience/databases">
+    Every registered scientific source, its identifier, purpose, and declared formats.
+  </Card>
+  <Card title="External connectors" href="/openscience/connectors">
+    Connect an MCP server and make its available tools accessible to a project.
+  </Card>
+</Columns>
+
+## Choose a task
+
+| I want to | Tool or workflow | What to supply |
+| --- | --- | --- |
+| Find papers and current information | [Research search](/openscience/research-search) | Question, sources, dates, and inclusion criteria. |
+| Retrieve a scientific record | [Database workflows](/openscience/database-workflows) | Database, organism, accession, and required format. |
+| Inspect a dataset | [Table explorer](/openscience/tables) | A supported table and its column meanings. |
+| Run calculations or statistics | [Python and R](/openscience/python-r) | Input files, proposed method, and output paths. |
+| View structures or genomic data | [Scientific viewers](/openscience/scientific-viewers) | Scientific files and reference/coordinate information. |
+| Read or extract a document | [Documents](/openscience/documents) | Original document, target fields, and source-location requirements. |
+| Generate or edit an illustration | [Image generation](/openscience/image-generation) | Visual brief, optional existing image, and destination. |
+| Run an experiment on another machine | [Compute jobs](/openscience/jobs) | Connected target, resources, command, inputs, and outputs. |
+| Save a completed deliverable | [Results](/openscience/results) | A verified output file and a useful title. |
+| Add my own operation | [Custom tools](/openscience/custom-tools) | Typed arguments, implementation, and behavioral checks. |
+
+## Use a tool from a conversation
+
+Describe the outcome and let OpenScience choose available tools, or name the operation explicitly:
+
+```text
+Check the available tools for this task. Use Python to inspect
+measurements.csv, save a missing-value report and histogram, and show me
+the outputs. Explain any setup requirement before proceeding.
+```
+
+The agent's tool activity shows the operation and its result. Verify the output rather than assuming a request completed because the tool was selected.
+
+## Check readiness
+
+Open **Customize → Tools** for scientific-tool status. The catalog distinguishes supported setup paths, connected services, reference entries, and unavailable entries. A named scientific package is not automatically installed or runnable.
+
+Use **Credentials**, **Connectors**, or **Compute** for the corresponding account or service setup. A successful model connection does not configure every research tool.
+
+## Tools and skills
+
+A tool performs an operation. A skill supplies a reusable procedure that may use several tools. For example, a literature-review skill can search, read sources, build an evidence table, and write a report.
+
+Browse the dedicated **Skills** tab for the [full skill directory](/openscience/skill-library), [usage and installation](/openscience/skills), and [skill recipes](/openscience/skill-workflows).

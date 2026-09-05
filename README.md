@@ -101,6 +101,8 @@ A skill describes a procedure; it does not mean every referenced tool or service
 
 ## Documentation
 
+Browse the [capability map](https://openscience.sh/docs/#/openscience/capabilities), [Explore tools](https://openscience.sh/docs/#/openscience/explore-tools), and [Skills directory](https://openscience.sh/docs/#/openscience/skill-library). Each catalog explains what an entry does and links to setup or usage instructions. The [workflow cookbook](https://openscience.sh/docs/#/openscience/workflow-examples) provides complete requests with expected deliverables.
+
 | Topic              | Guide                                                                                                                                                                                                                                                                                             |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | First use          | [Quickstart](https://openscience.sh/docs/#/openscience/quickstart), [Workspace](https://openscience.sh/docs/#/openscience/workspace)                                                                                                                                                              |

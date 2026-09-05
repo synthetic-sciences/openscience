@@ -52,7 +52,7 @@ export function resolveLink(href: string | undefined, current: Route): string | 
   return pageHref(route.section, route.path.replace(/\.(mdx|md)$/, ""), route.anchor)
 }
 
-export function headings(markdown: string): string[] {
+export function headings(markdown: string, depth = 2): string[] {
   const state = { fence: "" }
   return markdown.split("\n").flatMap((line) => {
     const fence = line.match(/^\s*([\x60]{3,}|~{3,})/)
@@ -61,7 +61,8 @@ export function headings(markdown: string): string[] {
       else if (fence[1][0] === state.fence[0] && fence[1].length >= state.fence.length) state.fence = ""
       return []
     }
-    if (state.fence || !line.startsWith("## ")) return []
-    return [line.slice(3).trim()]
+    const heading = line.match(/^(#{2,3}) (.+)$/)
+    if (state.fence || !heading || heading[1].length > depth) return []
+    return [heading[2].trim()]
   })
 }

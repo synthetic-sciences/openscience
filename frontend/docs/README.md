@@ -1,6 +1,6 @@
 # OpenScience documentation
 
-The user documentation at [openscience.sh/docs](https://openscience.sh/docs) is a Vite and React app. Content lives in `src/content/openscience/*.mdx`, and `docs.json` controls its two navigation tabs.
+The user documentation at [openscience.sh/docs](https://openscience.sh/docs) is a Vite and React app. Content lives in `src/content/openscience/*.mdx`, and `docs.json` controls five navigation tabs: Guides, Workflows, Explore tools, Skills, and Reference.
 
 ## Develop and verify
 
@@ -32,7 +32,7 @@ The Playwright suite builds and serves the production app, visits every guide, c
 1. Create an MDX file with quoted `title` and `description` frontmatter.
 2. Add its filename without the extension to exactly one group in `docs.json`.
 3. Use Markdown for headings, tables, examples, and links. The renderer also supports the existing Card/Columns components; arbitrary MDX components are not compiled.
-4. Use `/openscience/<page>` links and `/openscience/<page>#<heading>` for sections. A same-page section link is `#<heading>`.
+4. Use `/openscience/<page>` links and `/openscience/<page>#<heading>` for sections. A same-page section link is `#<heading>`. Both second- and third-level headings support anchors; the table of contents stays at the second level. Do not use a page name reserved by a legacy alias.
 5. Run the checks and inspect the rendered page.
 
 The source map in [documentation-map.md](../../docs/notes/documentation-map.md) identifies the implementation and tests behind each guide. Verify behavior there and through current CLI help before copying an old page's claim.
@@ -55,9 +55,11 @@ bun run --cwd frontend/docs check
 bun run --cwd frontend/docs export
 ```
 
-`script/catalog.ts` generates `skill-library.mdx` from all bundled SKILL.md files and `databases.mdx` from the registered scientific database catalog. Regenerate after changing either inventory; the checker rejects stale output.
+`script/catalog.ts` generates `skill-library.mdx` from all bundled SKILL.md files, `databases.mdx` from the registered scientific database catalog, and `tool-catalog.mdx` from all scientific capability manifests. Regenerate after changing these inventories; the checker rejects stale output.
 
 `script/check.ts` validates page coverage, redirects, internal links, section anchors, repository file links, and JSON examples against the product configuration or run-event schema.
+
+`script/examples.ts` typechecks every TypeScript example against the current SDK and plugin APIs using virtual source files. It does not run example requests.
 
 `script/export.ts` produces `public/llms.txt` and `public/llms-full.txt`. These are generated during builds and ignored by Git.
 

@@ -1,0 +1,56 @@
+---
+title: "Machine learning experiments"
+description: "Build baselines, compare models, and preserve an evaluation that can be repeated."
+---
+
+Use OpenScience to inspect a machine-learning dataset, define a baseline, implement experiments, and compare results. The bundled [skill library](/openscience/skill-library) covers training, inference, data engineering, evaluation, and related workflows; runnable software and compute still need setup.
+
+## Define the task and evaluation
+
+State the target, prediction unit, available features, metric, and intended use. Explain groups or time ordering that must be respected in the split.
+
+```text
+Plan a classifier for data/samples.csv. Split by patient so measurements
+from one patient cannot appear in both training and evaluation. Identify
+possible label leakage, choose a simple baseline, and justify metrics
+before training.
+```
+
+Keep the final evaluation set separate from model selection. Save the split definition so comparisons use the same observations.
+
+## Start with a baseline
+
+Ask for a small, interpretable baseline before expensive tuning. Check class balance, missing-value treatment, preprocessing, and metric implementation.
+
+```text
+Run the agreed baseline on a small pilot. Save the preprocessing and
+model code, split identifiers, metrics, and confusion matrix. Record
+runtime and memory needs before expanding the experiment.
+```
+
+The [scientific tool catalog](/openscience/tool-catalog) includes scikit-learn and domain-specific tools. A listed skill or package does not mean GPU training is already configured.
+
+## Compare experiments fairly
+
+| Record | Examples |
+| --- | --- |
+| Data | Dataset version, selection rules, split identifiers. |
+| Method | Model family, preprocessing, hyperparameters. |
+| Reproducibility | Seed, package versions, training command. |
+| Evaluation | Metrics, uncertainty where appropriate, subgroup performance. |
+| Resources | Target, duration, resource request, observed cost where available. |
+| Outputs | Model checkpoint, predictions, tables, and figures. |
+
+Ask for a comparison table that includes failed runs and explains why they failed. A successful run with worse performance is still useful evidence.
+
+## Use larger compute when justified
+
+After the pilot, select [remote compute](/openscience/remote-compute) if the workload requires it. Agree on the resource request, budget, time limit, and checkpoint strategy. Follow the [job lifecycle](/openscience/jobs) through output delivery.
+
+For long training runs, save checkpoints explicitly and test the resume command before depending on it.
+
+## Review before using the model
+
+Ask for leakage checks, error examples, subgroup results, and a statement of the data the model was not evaluated on. Keep training performance separate from held-out evaluation.
+
+Save the model file with the exact loading and prediction procedure. A metric reported in chat is not a deployable or independently validated model.

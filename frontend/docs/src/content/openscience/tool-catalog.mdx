@@ -1,0 +1,495 @@
+---
+title: "Scientific tool catalog"
+description: "Every scientific catalog entry, with a purpose, documentation link, and setup or availability details."
+---
+
+This version lists 54 scientific capabilities. The catalog includes supported local setup paths, connected scientific tools, reference entries, and unavailable entries. These are different levels of support; the list is not a count of ready-to-run tools.
+
+## Start with availability
+
+Open **Customize → Tools** and search the name. Check readiness, follow a supported setup or connection action, and validate a small known input before a larger run. The supported integrations remain experimental in this catalog; inspect the current app status and output checks.
+
+Try: "Check whether RDKit is ready. If it is, validate the SMILES in data/molecules.csv and save molecular weights, invalid records, and the script in the project."
+
+For reference entries, the source link explains the underlying software. Use a separately configured environment or an appropriate skill if you choose to work with it; a reference entry alone does not make it available to the agent.
+
+## Find a tool
+
+- **analysis:** [Cantera](#cantera) · [ChemPy](#chempy) · [lmfit-py](#lmfit-py) · [nmrglue](#nmrglue) · [PyAlex](#pyalex) · [pybaselines](#pybaselines) · [scikit-learn](#scikit-learn) · [SciPy](#scipy) · [statsmodels](#statsmodels) · [thermo](#thermo)
+- **bioinformatics:** [Biopython](#biopython) · [ESM-2](#esm-2) · [MSA Search](#msa-search)
+- **cheminformatics:** [Chemprop](#chemprop) · [DeepChem](#deepchem) · [GenMol](#genmol) · [molmass](#molmass) · [MolMIM](#molmim) · [Mordred](#mordred) · [Open Babel](#open-babel) · [PubChemPy](#pubchempy) · [RDKit](#rdkit)
+- **chromatography:** [hplc-py](#hplc-py)
+- **docking:** [AutoDock Vina](#autodock-vina) · [DiffDock](#diffdock)
+- **document:** [chemdataextractor2](#chemdataextractor2) · [Marker](#marker) · [paper-qa](#paper-qa)
+- **genomics:** [Evo 2](#evo-2)
+- **mass spectrometry:** [matchms](#matchms) · [OpenMS](#openms) · [Pyteomics](#pyteomics)
+- **molecular modeling:** [OpenMM](#openmm) · [pymatgen](#pymatgen)
+- **protein design:** [ProteinMPNN](#proteinmpnn) · [RFdiffusion](#rfdiffusion)
+- **quantum:** [cclib](#cclib) · [CREST](#crest) · [GoodVibes](#goodvibes) · [NWChem](#nwchem) · [Psi4](#psi4) · [PySCF](#pyscf) · [xtb](#xtb)
+- **structure:** [AlphaFold2](#alphafold2) · [AlphaFold2-Multimer](#alphafold2-multimer) · [Boltz-2](#boltz-2) · [cctbx_project](#cctbx-project) · [ESMFold](#esmfold) · [Gemmi](#gemmi) · [OpenFold2](#openfold2) · [OpenFold3](#openfold3)
+- **synthesis:** [AiZynthFinder](#aizynthfinder) · [Syntheseus](#syntheseus)
+- **visualization:** [Matplotlib](#matplotlib)
+
+## Analysis
+
+### Cantera
+
+Chemical kinetics, thermodynamics, and transport simulations.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/Cantera/3.2.0/) · Catalog identifier: `cantera`
+
+### ChemPy
+
+Chemical-reaction, equilibrium, kinetics, and formula calculations.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/chempy/0.10.1/) · Catalog identifier: `chempy`
+
+### lmfit-py
+
+Nonlinear least-squares minimization and curve fitting.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/lmfit/1.3.4/) · Catalog identifier: `lmfit`
+
+### nmrglue
+
+Reading, processing, and converting NMR spectroscopy data.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/nmrglue/0.12/) · Catalog identifier: `nmrglue`
+
+### PyAlex
+
+Analysis tooling represented by the audited PyPI project.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/pyalex/0.21/) · Catalog identifier: `pyalex`
+
+### pybaselines
+
+Baseline correction algorithms for experimental signals.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/pybaselines/1.2.1/) · Catalog identifier: `pybaselines`
+
+### scikit-learn
+
+Classical machine-learning models, preprocessing, model selection, and metrics in Python.
+
+**How to use:** Check readiness in Tools, follow setup, and request a small validated calculation. [Setup guide](/openscience/scientific-tools).
+
+[Documentation and source](https://pypi.org/project/scikit-learn/1.9.0/) · Catalog identifier: `scikit-learn`
+
+### SciPy
+
+Numerical optimization, integration, signal processing, and scientific statistics in Python.
+
+**How to use:** Check readiness in Tools, follow setup, and request a small validated calculation. [Setup guide](/openscience/scientific-tools).
+
+[Documentation and source](https://pypi.org/project/scipy/1.18.1/) · Catalog identifier: `scipy`
+
+### statsmodels
+
+Statistical models, tests, and econometric analysis in Python.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/statsmodels/0.15.0/) · Catalog identifier: `statsmodels`
+
+### thermo
+
+Chemical engineering thermodynamics and property calculations.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/thermo/0.6.1/) · Catalog identifier: `thermo`
+
+## Bioinformatics
+
+### Biopython
+
+Sequence, alignment, structure-file, and common bioinformatics data handling in Python.
+
+**How to use:** Check readiness in Tools, follow setup, and request a small validated calculation. [Setup guide](/openscience/scientific-tools).
+
+[Documentation and source](https://pypi.org/project/biopython/1.88/) · Catalog identifier: `biopython`
+
+### ESM-2
+
+Protein language-model embeddings and sequence representations.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/fair-esm/2.0.0/) · Catalog identifier: `esm-2`
+
+### MSA Search
+
+multiple-sequence-alignment search.
+
+**How to use:** Connect the required personal scientific-service account, check accepted inputs and cost, then try a small case. [Connection guide](/openscience/service-credentials).
+
+[Documentation and source](https://docs.api.nvidia.com/nim/reference/colabfold-msa-search-infer) · Catalog identifier: `msa-search`
+
+## Cheminformatics
+
+### Chemprop
+
+Message-passing neural networks for molecular property prediction.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/chemprop/2.3.1/) · Catalog identifier: `chemprop`
+
+### DeepChem
+
+Machine-learning components for molecular and materials workflows.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/deepchem/2.8.0/) · Catalog identifier: `deepchem`
+
+### GenMol
+
+molecular generation.
+
+**How to use:** Connect the required personal scientific-service account, check accepted inputs and cost, then try a small case. [Connection guide](/openscience/service-credentials).
+
+[Documentation and source](https://docs.api.nvidia.com/nim/reference/nvidia-genmol-infer) · Catalog identifier: `genmol`
+
+### molmass
+
+Molecular-mass and elemental-composition calculations.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/molmass/2026.8.15/) · Catalog identifier: `molmass`
+
+### MolMIM
+
+molecule generation and optimization.
+
+**How to use:** Connect the required personal scientific-service account, check accepted inputs and cost, then try a small case. [Connection guide](/openscience/service-credentials).
+
+[Documentation and source](https://docs.api.nvidia.com/nim/reference/nvidia-molmim-infer) · Catalog identifier: `molmim`
+
+### Mordred
+
+Molecular descriptor calculation.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/mordred/1.2.0/) · Catalog identifier: `mordred`
+
+### Open Babel
+
+Chemical file conversion, filtering, and molecular operations.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://github.com/openbabel/openbabel/tree/openbabel-3-2-1) · Catalog identifier: `open-babel`
+
+### PubChemPy
+
+Python client access to PubChem records and searches.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/PubChemPy/1.0.5/) · Catalog identifier: `pubchempy`
+
+### RDKit
+
+Molecular parsing, descriptors, fingerprints, conformers, and cheminformatics workflows.
+
+**How to use:** Check readiness in Tools, follow setup, and request a small validated calculation. [Setup guide](/openscience/scientific-tools).
+
+[Documentation and source](https://pypi.org/project/rdkit/2026.3.5/) · Catalog identifier: `rdkit`
+
+## Chromatography
+
+### hplc-py
+
+HPLC chromatogram baseline correction, peak fitting, and quantification.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/hplc-py/0.2.8/) · Catalog identifier: `hplc-py`
+
+## Docking
+
+### AutoDock Vina
+
+Molecular docking and virtual-screening command-line workflows.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://github.com/ccsb-scripps/AutoDock-Vina/tree/v1.2.7) · Catalog identifier: `autodock-vina`
+
+### DiffDock
+
+protein-ligand pose generation.
+
+**How to use:** Connect the required personal scientific-service account, check accepted inputs and cost, then try a small case. [Connection guide](/openscience/service-credentials).
+
+[Documentation and source](https://docs.api.nvidia.com/nim/reference/mit-diffdock-infer) · Catalog identifier: `diffdock`
+
+## Document
+
+### chemdataextractor2
+
+Chemical information extraction from scientific text.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/chemdataextractor2/2.4.0/) · Catalog identifier: `chemdataextractor2`
+
+### Marker
+
+Document conversion to structured Markdown and related formats.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/marker-pdf/2.0.0/) · Catalog identifier: `marker`
+
+### paper-qa
+
+Question answering and evidence synthesis over scientific papers.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/paper-qa/2026.8.12/) · Catalog identifier: `paper-qa`
+
+## Genomics
+
+### Evo 2
+
+DNA sequence generation.
+
+**How to use:** Connect the required personal scientific-service account, check accepted inputs and cost, then try a small case. [Connection guide](/openscience/service-credentials).
+
+[Documentation and source](https://docs.api.nvidia.com/nim/reference/arc-evo2-40b-infer) · Catalog identifier: `evo2`
+
+## Mass spectrometry
+
+### matchms
+
+Mass-spectrum import, filtering, similarity, and matching.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/matchms/0.33.1/) · Catalog identifier: `matchms`
+
+### OpenMS
+
+Proteomics and metabolomics mass-spectrometry processing.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/pyopenms/3.5.0/) · Catalog identifier: `openms`
+
+### Pyteomics
+
+Proteomics and mass-spectrometry data parsing and calculations.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/pyteomics/5.0.1/) · Catalog identifier: `pyteomics`
+
+## Molecular modeling
+
+### OpenMM
+
+Molecular simulation with CPU and GPU backends.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/OpenMM/8.6.0/) · Catalog identifier: `openmm`
+
+### pymatgen
+
+Materials structures, transformations, and analysis.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/pymatgen/2026.5.4/) · Catalog identifier: `pymatgen`
+
+## Protein design
+
+### ProteinMPNN
+
+structure-conditioned protein sequence design.
+
+**How to use:** Connect the required personal scientific-service account, check accepted inputs and cost, then try a small case. [Connection guide](/openscience/service-credentials).
+
+[Documentation and source](https://docs.api.nvidia.com/nim/reference/ipd-proteinmpnn-infer) · Catalog identifier: `proteinmpnn`
+
+### RFdiffusion
+
+protein backbone generation.
+
+**How to use:** Connect the required personal scientific-service account, check accepted inputs and cost, then try a small case. [Connection guide](/openscience/service-credentials).
+
+[Documentation and source](https://docs.api.nvidia.com/nim/reference/ipd-rfdiffusion-infer) · Catalog identifier: `rfdiffusion`
+
+## Quantum
+
+### cclib
+
+Parsing and analysis of computational-chemistry log files.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/cclib/1.8.1/) · Catalog identifier: `cclib`
+
+### CREST
+
+Conformer-rotamer ensemble sampling around the xtb electronic-structure engine.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://github.com/crest-lab/crest/tree/v3.0.2) · Catalog identifier: `crest`
+
+### GoodVibes
+
+Thermochemical corrections and analysis for quantum-chemistry outputs.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/goodvibes/4.3.0/) · Catalog identifier: `goodvibes`
+
+### NWChem
+
+Large-scale computational chemistry workflows.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://github.com/nwchemgit/nwchem/tree/v7.3.1-release) · Catalog identifier: `nwchem`
+
+### Psi4
+
+Open-source quantum chemistry calculations.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://github.com/psi4/psi4/tree/v1.11) · Catalog identifier: `psi4`
+
+### PySCF
+
+Python-based quantum-chemistry calculations.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/pyscf/2.14.0/) · Catalog identifier: `pyscf`
+
+### xtb
+
+Semiempirical extended tight-binding calculations.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://github.com/grimme-lab/xtb/tree/v6.7.1) · Catalog identifier: `xtb`
+
+## Structure
+
+### AlphaFold2
+
+Protein structure prediction requiring reviewed weights, databases, storage, licensing, and a GPU runtime.
+
+**How to use:** Unavailable in this catalog. Review prerequisites in the linked source; choose another supported tool.
+
+[Documentation and source](https://github.com/google-deepmind/alphafold/tree/v2.3.2) · Catalog identifier: `alphafold2`
+
+### AlphaFold2-Multimer
+
+Multimeric protein structure prediction with AlphaFold model weights and databases.
+
+**How to use:** Unavailable in this catalog. Review prerequisites in the linked source; choose another supported tool.
+
+[Documentation and source](https://github.com/google-deepmind/alphafold/tree/v2.3.2) · Catalog identifier: `alphafold2-multimer`
+
+### Boltz-2
+
+biomolecular structure and affinity prediction.
+
+**How to use:** Connect the required personal scientific-service account, check accepted inputs and cost, then try a small case. [Connection guide](/openscience/service-credentials).
+
+[Documentation and source](https://docs.api.nvidia.com/nim/reference/mit-boltz2-infer) · Catalog identifier: `boltz2`
+
+### cctbx_project
+
+Computational crystallography libraries and command-line programs.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://github.com/cctbx/cctbx_project/tree/v2026.7) · Catalog identifier: `cctbx-project`
+
+### ESMFold
+
+Protein structure prediction using ESMFold model weights.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/fair-esm/2.0.0/) · Catalog identifier: `esmfold`
+
+### Gemmi
+
+Crystallographic structure and reflection data handling.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/gemmi/0.7.5/) · Catalog identifier: `gemmi`
+
+### OpenFold2
+
+monomer structure prediction from MSA and templates.
+
+**How to use:** Connect the required personal scientific-service account, check accepted inputs and cost, then try a small case. [Connection guide](/openscience/service-credentials).
+
+[Documentation and source](https://docs.api.nvidia.com/nim/reference/openfold-openfold2-infer) · Catalog identifier: `openfold2`
+
+### OpenFold3
+
+multimolecule structure prediction.
+
+**How to use:** Connect the required personal scientific-service account, check accepted inputs and cost, then try a small case. [Connection guide](/openscience/service-credentials).
+
+[Documentation and source](https://docs.api.nvidia.com/nim/reference/openfold-openfold3-infer) · Catalog identifier: `openfold3`
+
+## Synthesis
+
+### AiZynthFinder
+
+Retrosynthetic route planning.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/aizynthfinder/4.4.1/) · Catalog identifier: `aizynthfinder`
+
+### Syntheseus
+
+Retrosynthesis algorithm benchmarking and route search.
+
+**How to use:** Reference entry: this release does not install or execute it through Tools. Follow the linked source for your own setup and use compatible skills or scripts.
+
+[Documentation and source](https://pypi.org/project/syntheseus/0.8.0/) · Catalog identifier: `syntheseus`
+
+## Visualization
+
+### Matplotlib
+
+Static scientific plotting and publication-oriented figure generation in Python.
+
+**How to use:** Check readiness in Tools, follow setup, and request a small validated calculation. [Setup guide](/openscience/scientific-tools).
+
+[Documentation and source](https://pypi.org/project/matplotlib/3.11.1/) · Catalog identifier: `matplotlib`
+
+## Related tools
+
+Use [Built-in research tools](/openscience/built-in-tools) for file operations, Python, R, search, and jobs. Use [Scientific databases](/openscience/databases) for records, [Scientific viewers](/openscience/scientific-viewers) to inspect data, and the [Skill directory](/openscience/skill-library) for research procedures.

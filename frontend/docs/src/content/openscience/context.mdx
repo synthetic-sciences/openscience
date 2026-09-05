@@ -1,0 +1,69 @@
+---
+title: "Context, checkpoints, and handoffs"
+description: "Keep long investigations understandable and recoverable as a conversation grows."
+---
+
+A conversation has a finite context window. OpenScience can summarize earlier work to make room for new steps, while your project files remain the place to keep detailed methods, results, and decisions.
+
+## Inspect context usage
+
+Use `/context` to inspect the current context composition, available capacity, and compaction state. Large attachments, long tool outputs, instructions, and conversation history all contribute to the material available to the model.
+
+```text
+/context
+```
+
+Context capacity differs by model. Switching models can change how much material fits; see [Models](/openscience/models).
+
+## Compact a conversation
+
+Use `/compact` when earlier discussion is crowding out the next task. Provide a focus when the next stage depends on particular information:
+
+```text
+/compact Preserve the study design, exclusions, input paths, chosen model,
+validation results, and unresolved questions. The next step is writing.
+```
+
+Compaction summarizes earlier context. Keep exact parameter values, code, source references, and detailed tables in files rather than relying on a summary to preserve every detail.
+
+## Adjust automatic compaction
+
+Open **Customize → General → Context** and use **Auto-compact when context exceeds** to choose an available threshold. The setting controls when conversation summarization is considered; it does not increase a model's context limit.
+
+If automatic compaction is disabled in configuration, use the guidance shown in General and compact deliberately before the conversation becomes too large.
+
+## Save a checkpoint
+
+Use `/checkpoint` when available to capture a local recovery point before a large change or interruption. Give it a meaningful label, then inspect the response for what was saved.
+
+A checkpoint is useful context for recovery, but it does not replace backups of original data, remote resources, or independent project files. For a risky file change, preserve the files through version control or your normal backup process too.
+
+## Write a handoff
+
+Use `/handoff` when available to save a continuation note and compact the conversation. For a handoff to a new conversation or colleague, specify the content you need:
+
+```text
+Write methods/handoff.md with the objective, completed work, exact input
+and output paths, commands that passed or failed, current decisions,
+remaining tasks, and the next concrete step. Include no credentials.
+```
+
+A new conversation can start with:
+
+```text
+Read methods/handoff.md and the referenced results. Verify that the files
+exist, summarize the current state, and continue with the next step.
+```
+
+## Choose the right recovery action
+
+| Need | Action |
+| --- | --- |
+| More space in the same discussion | Compact with a clear focus. |
+| A local recovery point | Save a checkpoint and review its scope. |
+| A human-readable continuation note | Write a handoff file. |
+| A copy of conversation history | Use [session export](/openscience/sessions). |
+| A durable deliverable | Save a [Result](/openscience/results) and its supporting files. |
+| Return to an earlier supported turn | Use Undo and review affected changes. |
+
+Commands surfaced as skills need those skills enabled. Check [Slash commands](/openscience/slash-commands) if an action is not offered in the picker.

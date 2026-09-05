@@ -2,7 +2,7 @@
 
 This inventory groups every tracked or newly authored, non-ignored file in the working tree by package and source area. It is a navigation index, not a claim that every file needs a public documentation page. The [documentation source map](documentation-map.md) connects supported product behavior to the user guides.
 
-Snapshot: 2026-09-05. 4895 files indexed. Generated outputs, dependencies, and ignored local data are excluded.
+Snapshot: 2026-09-05. 4929 files indexed. Generated outputs, dependencies, and ignored local data are excluded.
 
 | Area                                                                                                     | Files |
 | -------------------------------------------------------------------------------------------------------- | ----: |
@@ -166,8 +166,8 @@ Snapshot: 2026-09-05. 4895 files indexed. Generated outputs, dependencies, and i
 | [frontend/docs](../../frontend/docs)                                                                     |     8 |
 | [frontend/docs/e2e](../../frontend/docs/e2e)                                                             |     1 |
 | [frontend/docs/public](../../frontend/docs/public)                                                       |     4 |
-| [frontend/docs/script](../../frontend/docs/script)                                                       |     3 |
-| [frontend/docs/src](../../frontend/docs/src)                                                             |    38 |
+| [frontend/docs/script](../../frontend/docs/script)                                                       |     4 |
+| [frontend/docs/src](../../frontend/docs/src)                                                             |    71 |
 | [frontend/docs/test](../../frontend/docs/test)                                                           |     1 |
 | [frontend/landing](../../frontend/landing)                                                               |    14 |
 | [frontend/landing/public](../../frontend/landing/public)                                                 |    60 |

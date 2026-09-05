@@ -1,0 +1,52 @@
+---
+title: "Code, repositories, and the terminal"
+description: "Explore research code, make reviewable changes, and run project commands."
+---
+
+OpenScience can read a project, find relevant files, edit code, and run commands with the tools and access available to the session. Use it to understand an unfamiliar analysis repository or improve the code supporting your research.
+
+## Map an unfamiliar repository
+
+```text
+Read the README, project instructions, and dependency files. Map the main
+entrypoints, data inputs, analysis steps, outputs, and tests. Save a short
+project guide with exact paths. Do not install dependencies or change
+code until we agree on the next task.
+```
+
+A local code map comes from reading and searching the project. It does not imply that a separate hosted repository index has been created.
+
+## Ask for a focused change
+
+Provide the observed behavior, expected behavior, and reproduction command:
+
+```text
+The analysis command fails when a sample has a missing batch label.
+Reproduce the issue with the existing fixture, fix the behavior, and run
+the relevant tests. Explain how missing labels are handled in the output.
+```
+
+Ask for a diff and validation results before using the updated analysis. Keep changes to unrelated files out of a focused repair.
+
+## Use the project terminal
+
+Open **Terminal** in the project or use **Open project terminal** from the command palette. You can run commands yourself while following the research conversation.
+
+Use Control+backtick to open or close the terminal and Control+Shift+backtick for a new terminal when available. See [Keyboard shortcuts](/openscience/keyboard-shortcuts).
+
+Confirm the working directory and selected environment before running a command. The terminal's environment need not contain every package available to the agent's Python or R analysis environment.
+
+## Keep version control deliberate
+
+Ask OpenScience to inspect the working tree before modifying an existing repository. Describe whether you want a local change, commit, branch, or pull request, and which actions require your review.
+
+```text
+Implement the fix on a new branch. Preserve existing uncommitted work,
+run the relevant tests, and show the diff. Do not push until I ask.
+```
+
+Project instructions in [AGENTS.md](/openscience/instructions) can record routine checks and conventions. A branch or commit is useful for code history; it is not a backup of external data or services.
+
+## Reproduce the final state
+
+The report should include changed behavior, files, commands run, test results, and limitations. For a research script, also record data and dependency versions. Use [Automation](/openscience/automation) when the same bounded task should run through a script or CI job.

@@ -1,0 +1,74 @@
+---
+title: "Compute jobs and output recovery"
+description: "Plan a run, launch it on an available target, follow status, and retrieve its outputs."
+---
+
+A compute job runs a defined workload separately from a single interactive code call. OpenScience can plan and run jobs locally or on supported resources you connect, then inspect progress and collect the resulting files.
+
+## Discover targets and plan a run
+
+Start by asking which targets are currently available. A saved credential or host entry is not proof that the machine is ready.
+
+```text
+List the compute targets available to this project. Prepare, but do not
+launch, a plan for scripts/analyze.py using data/samples.csv. Show the
+command, target, resource request, input files, time limit, and outputs.
+```
+
+The plan should explain why that target is appropriate. Small CPU tasks usually need fewer resources than training or structure prediction.
+
+## Launch a bounded pilot
+
+```text
+Run the approved pilot on the selected target using the small sample.
+Save results/pilot.csv and results/pilot-report.md. Stop after the pilot
+and compare observed runtime and outputs with the plan.
+```
+
+A job can specify a working directory, packages, resource requirements, output paths, and a checkpoint path when the workload supports one. Refer to relative project paths consistently, and ensure remote inputs are actually available on the selected target.
+
+## Follow the job
+
+Use the project **Compute** view or ask about the job identifier:
+
+```text
+Check the existing job. Report its current state, recent command output,
+expected output files, and any failure. Wait for meaningful progress
+rather than starting another copy of the experiment.
+```
+
+Keep separate questions in mind: did the command run successfully, and were its results delivered successfully? A finished command can still need output recovery.
+
+## Retrieve and inspect outputs
+
+Ask OpenScience to compare expected and delivered files, then open a representative output. For a table, check dimensions and content. For a figure, inspect the rendering. For a model checkpoint, record its path and how it is loaded.
+
+```text
+Retrieve the finished job's outputs. Verify all expected files, summarize
+missing or unreadable results, and save the final report as a Result.
+```
+
+For supported Modal jobs with retained outputs, failed delivery can be retried without rerunning the computation. Ask for output-delivery recovery before launching another expensive run.
+
+## Cancel a job
+
+Stopping the conversation does not establish that the underlying job has stopped. Identify the job and explicitly ask to cancel it. Review the action when approval is requested and verify its final state afterward.
+
+External services can still bill for resources already used. See [Pricing](/openscience/pricing).
+
+## Release retained resources
+
+Some remote runs retain resources or outputs for recovery. After verifying delivery and saving what you need, ask whether any retained resources should be released. Release can discard the remaining remote copy, so review its effect first.
+
+## Diagnose failure before retrying
+
+| Symptom | Next check |
+| --- | --- |
+| No available target | [Compute setup](/openscience/compute) and [Remote compute](/openscience/remote-compute). |
+| Input file missing | Selected working directory and staged input paths. |
+| Package or executable missing | Target environment and installation plan. |
+| Command failed | Recent output, exit status, and minimal reproduction. |
+| Command succeeded but outputs are missing | Expected paths, delivery state, and retained outputs. |
+| Job seems stuck | Target status, scheduler queue, resource request, and timeout. |
+
+Record the failed attempt and job identifier so the next run can change the relevant condition instead of repeating it.

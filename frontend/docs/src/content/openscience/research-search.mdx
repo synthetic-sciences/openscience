@@ -1,0 +1,68 @@
+---
+title: "Research search"
+description: "Find web and scholarly material, apply source filters, and inspect what a search actually returned."
+---
+
+Use research search to discover material across the web. Use a known URL when you already have the source, and a scientific database when you need structured records, accession identifiers, or a supported download format.
+
+## Choose the search surface
+
+| Surface | Use it for |
+| --- | --- |
+| Web | General web pages and documentation. |
+| Research | Academic and research websites; these results are web pages. |
+| News | Recent reporting and announcements. |
+| Developer | Technical and developer-oriented sources. |
+| [Scientific databases](/openscience/database-workflows) | Direct searches in registered scientific collections. |
+
+```text
+Search research sources for recent comparisons of spatial-transcriptomics
+normalization methods. Return the source links, dates when available,
+what was compared, and whether each result is a paper, preprint, or review.
+```
+
+## Specify scope and exclusions
+
+Tell OpenScience the question, date range, source type, and inclusion criteria. Domain filters can either include particular hostnames or exclude them; both filter types cannot be combined in one search request.
+
+```text
+Search only nature.com and academic.oup.com for papers published during
+2025 about this method. Record the query and filters, and flag missing
+full text before drawing conclusions.
+```
+
+Date bounds rely on reported absolute dates. Results with missing or relative dates may be omitted by a date-filtered search. Verify important publication dates at the source.
+
+## Choose how much content to retrieve
+
+Search supports fast, balanced, and deep modes. Deep requests additional page content for up to three results; it does not mean an exhaustive literature review or a second ranking pass.
+
+A request for top-page content also limits enrichment to a small number of results. Page content can be missing or truncated. Read the returned warnings and counts, and request a known page directly when you need more of that source.
+
+```text
+Search for the method, then read the three most relevant primary sources.
+For each, distinguish search-summary information from details verified in
+the page or paper. Save the source list and unanswered questions.
+```
+
+## Understand access and cost
+
+Managed search uses the selected Ace funding workspace. A connected personal search account uses that account's access. A limited fallback may be available when funded search is unavailable; its coverage should not be treated as equivalent to a completed search.
+
+Search cost is separate from the selected chat model. Using a local model does not make a paid search service free. See [Pricing](/openscience/pricing) and [Credentials](/openscience/service-credentials).
+
+## Interpret partial results
+
+| Result | What to do |
+| --- | --- |
+| A completed search with no matches | Broaden the query, check terminology, or choose another source. |
+| A source or access error | Resolve access or retry the specific failed source. |
+| Fewer results than requested | Inspect filters, limits, and returned warnings. |
+| A snippet without the needed detail | Open the source before citing that detail. |
+| A limited fallback | State the coverage limitation and supplement the search. |
+
+A failed search is not evidence that the literature contains no relevant work.
+
+## Keep a search record
+
+For a review, save queries, dates, filters, sources searched, access failures, and inclusion/exclusion decisions. Keep retrieved statements separate from your synthesis. Continue with [Literature review](/openscience/literature-review) for screening and evidence tables.

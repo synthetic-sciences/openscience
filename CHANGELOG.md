@@ -11,7 +11,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 ### Changed
 
 - Rebuild the public documentation around current installation, Ace pricing,
-  provider keys, local models, research workflows, and troubleshooting.
+  provider keys, local models, research workflows, and troubleshooting. Add
+  Explore tools and Skills tabs with complete catalogs, usage guides, and
+  source links, plus detailed project, scientific-viewer, and compute workflows.
 
 - Update the homepage closing headline, simplify the photo wordmark, and add
   LinkedIn with external-link arrows to the footer’s Connect links.

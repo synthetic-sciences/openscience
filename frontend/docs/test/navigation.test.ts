@@ -44,3 +44,9 @@ test("all real headings are indexed, but example headings are excluded", () => {
   ].join("\n")
   expect(headings(document)).toEqual([...lines.map((line) => line.slice(3)), "Last"])
 })
+
+test("tool entries have deep links without filling the page contents with subsections", () => {
+  const source = "## Analysis\n### SciPy\n### Matplotlib\n"
+  expect(headings(source)).toEqual(["Analysis"])
+  expect(headings(source, 3).map((value) => value.toLowerCase())).toEqual(["analysis", "scipy", "matplotlib"])
+})

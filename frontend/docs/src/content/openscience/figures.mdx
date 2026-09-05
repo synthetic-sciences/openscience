@@ -1,0 +1,52 @@
+---
+title: "Scientific figures and visualization"
+description: "Turn data into clear plots with inspectable code, captions, and export checks."
+---
+
+Ask OpenScience to create figures from the actual data and save the plotting code. Use an image-generation workflow for conceptual illustrations; use plotting tools for measured or simulated values.
+
+## Specify the message and source
+
+```text
+Create a figure from results/effects.csv comparing treatment effects with
+95% intervals. Label the outcome units, use a colorblind-friendly palette,
+and show the sample size for each group. Save the plotting script, an
+SVG, a PNG, and a caption in results/.
+```
+
+Name the data source and the relationship the figure should communicate. Explain whether values are raw observations, aggregates, predictions, or uncertainty estimates.
+
+## Choose an appropriate display
+
+| Question | Possible starting point |
+| --- | --- |
+| How are values distributed? | Histogram, density, or empirical distribution with clear binning. |
+| How do groups differ? | Raw points and group summaries with uncertainty. |
+| How does a value change with time? | Time-series plot with missing periods and units explicit. |
+| How well do predictions agree with observations? | Observed-versus-predicted and residual plots. |
+| What is the effect and its uncertainty? | Effect plot with interval estimates. |
+| What does a structure or sequence show? | [Scientific viewers](/openscience/scientific-viewers) plus a labeled exported view. |
+
+Treat these as choices to discuss, not automatic rules. The study design and intended audience determine the right figure.
+
+## Inspect the rendering
+
+Open the saved image and check labels, units, scales, colors, legends, overlapping text, and cropped elements. Ask for axis limits and transformations to be justified.
+
+For a multi-panel figure, use consistent labels and explain panels in order. Identify uncertainty intervals, sample counts, and any omitted observations in the caption.
+
+## Export for the intended use
+
+Request a vector format such as SVG or PDF when supported by the plotting tool, and a raster preview such as PNG. State the required dimensions, resolution, and background if a journal or presentation has specific requirements.
+
+A large pixel count does not repair unclear labels or a misleading scale. Review the figure at the size the reader will actually see.
+
+## Keep the figure reproducible
+
+```text
+Rerun the plotting script from the saved table. Confirm the figure opens,
+record the command and library versions, and save the reviewed PNG as a
+Result. Keep the vector file and caption beside it.
+```
+
+Use [Writing](/openscience/writing) to integrate the figure into a report and [Saved Results](/openscience/results) to retain the approved output.

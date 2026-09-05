@@ -1,0 +1,60 @@
+---
+title: "Projects and source folders"
+description: "Create a workspace, connect existing material, and keep related research organized."
+---
+
+A project groups conversations and research files. It can begin as a named workspace with no source folders, or include folders that already contain your papers, data, and code.
+
+## Create a project
+
+1. From the project home, choose **Create project**.
+2. Enter a descriptive project name.
+3. Optionally choose **Add source folders** and select the folders you want to work with.
+4. Review the selected paths, then create the project.
+5. Start a conversation and ask for an inventory before making changes to unfamiliar material.
+
+```text
+Map the folders connected to this project. Identify datasets, analysis
+scripts, protocols, and existing results. Save a short project guide with
+paths and suggest the first task. Ask before editing original inputs.
+```
+
+The source-folder form supports up to ten selected folders. Connected folders are working material, so choose deliberately and keep backups of original inputs.
+
+## Open an existing folder from the CLI
+
+```bash
+openscience ~/research/experiment-a
+```
+
+Use the path that contains the project you intend to work on. Running `openscience` with no path uses the current directory.
+
+If a folder has moved or is on a disconnected drive, restore its availability before continuing. A stale project entry does not mean its files have been copied into a new location.
+
+## Separate projects from conversations
+
+| Create a new project when | Create a new conversation when |
+| --- | --- |
+| The work uses a different set of source folders. | You are asking a separate question about the same material. |
+| You want independent project instructions and outputs. | You want a clean discussion for a new analysis or review. |
+| You are moving to another repository or research study. | You are continuing from a saved report or handoff. |
+
+Separate conversations share access to project material, but they are not a single unlimited shared memory. Refer to the relevant files and decisions when starting a new one.
+
+## Organize active and completed work
+
+Pin frequently used projects on the home page. Archive projects you want to remove from the active list and restore them from the archived view when needed.
+
+Within a project, use descriptive session names, pin important conversations, and archive completed ones. Closing a conversation tab is different from deleting its saved history. Review the confirmation before using a deletion action.
+
+## Establish a working agreement
+
+Create [AGENTS.md](/openscience/instructions) with the project's conventions: original-data locations, output paths, preferred languages, analysis checks, and decisions that need review.
+
+```text
+Treat data/raw/ as original input. Save reusable code in scripts/ and
+outputs in results/. Include units and random seeds. Before a costly
+experiment, propose a small pilot and wait for approval.
+```
+
+Use [planning](/openscience/planning) for the first substantial task, [Files](/openscience/files) to review material, and [team workflows](/openscience/team-workflows) to package a project for someone else.

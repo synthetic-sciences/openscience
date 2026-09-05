@@ -1,0 +1,57 @@
+---
+title: "Tables and datasets"
+description: "Inspect columns, filter and sort rows, explore distributions, and export a useful subset."
+---
+
+Open a CSV, TSV, JSON array, JSONL, or NDJSON file from **Files** to inspect supported tabular data. The explorer helps you understand a dataset before asking OpenScience to transform or model it.
+
+## Inspect a dataset
+
+1. Open the file and check the reported dimensions.
+2. Choose **Schema** to inspect inferred column types and missing-value summaries.
+3. Use **Filter every column…** to find matching rows.
+4. Click a column heading to sort its displayed values.
+5. Choose a numeric column and **Distribution** to inspect its histogram and summary.
+
+Filtering and sorting the preview do not rewrite the source dataset. A numeric-looking identifier can still be a category; use the data dictionary to interpret inferred types.
+
+## Export a subset
+
+Choose **Export filtered** to download the currently filtered data. Preserve the original file, and record the filtering rule if the subset will be used in an analysis.
+
+For transformations that need to be repeatable, ask for code instead of relying only on a manual export:
+
+```text
+Create scripts/filter_samples.py that reads data/samples.csv, retains
+rows where the recorded quality flag is pass, and writes a new CSV in
+results/. Report retained and excluded counts and keep the original.
+```
+
+## Ask for a data audit
+
+```text
+Inspect data/measurements.csv. Report row and column counts, inferred
+types, missingness, duplicate sample IDs, units, and impossible values.
+Do not remove or impute anything yet. Save the audit and a data dictionary
+in results/ and ask about ambiguous column meanings.
+```
+
+A useful audit explains whether missing values mean not measured, not applicable, below detection, or a parsing problem. These cases can require different analysis choices.
+
+## Work with large or unusual files
+
+A preview can be bounded or truncated. Read any limit notice before treating displayed counts, distributions, or records as a full-dataset result. Ask Python or R to compute full-file statistics when needed.
+
+For an unfamiliar delimiter, encoding, nested record structure, or spreadsheet workbook, first ask OpenScience to identify the format and produce a small readable sample. Preserve the original and record how the sample or conversion was made.
+
+## From inspection to analysis
+
+| Goal | Next step |
+| --- | --- |
+| Clean a dataset reproducibly | [Data analysis](/openscience/data-analysis). |
+| Compare groups or estimate an effect | [Statistics](/openscience/statistics). |
+| Train and evaluate a model | [Machine learning](/openscience/machine-learning). |
+| Make a presentation or publication figure | [Figures](/openscience/figures). |
+| Inspect variants, reads, or single-cell data | [Scientific viewers](/openscience/scientific-viewers). |
+
+Before reporting a result, confirm that the analysis used the full intended input, the right unit of observation, and a documented selection rule.

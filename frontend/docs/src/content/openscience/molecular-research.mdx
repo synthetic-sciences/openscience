@@ -1,0 +1,52 @@
+---
+title: "Molecular and structural research"
+description: "Inspect molecules and structures, calculate properties, and prepare supported scientific workflows."
+---
+
+Start with a defined molecule, sequence, structure, or experimental table. OpenScience can help retrieve reference data, inspect structures, calculate properties with available tools, and plan more demanding molecular work.
+
+## Choose an input and question
+
+| Input | Example question |
+| --- | --- |
+| SMILES or SDF collection | Which records are valid, and how do calculated descriptors compare? |
+| Protein structure | Which chains and ligands are present, and what preparation is needed? |
+| Protein sequence | What reference record matches it, and which analysis is appropriate? |
+| Assay table | Are units, concentrations, batches, and replicate identities consistent? |
+| Simulation or spectroscopy output | Which supported parser can extract the required quantities? |
+
+Use [Scientific viewers](/openscience/scientific-viewers) for inspection and [Databases](/openscience/databases) for available source collections.
+
+## Begin with a small property calculation
+
+```text
+Check whether RDKit is ready. Read data/molecules.csv, preserve the input
+SMILES and identifiers, and calculate molecular weights for valid rows.
+Save invalid rows with the parsing error instead of dropping them. Save
+the script and output table in the project.
+```
+
+Check stereochemistry, salts, tautomers, and units before treating two records as equivalent. A computed descriptor is conditional on the molecular representation supplied.
+
+## Prepare a structure workflow
+
+```text
+Inspect structures/target.pdb. Identify chains, ligands, missing regions,
+and preparation questions. Propose a workflow for the stated binding-site
+question, including software readiness and required input files. Do not
+launch a prediction or docking run yet.
+```
+
+Structure prediction, docking, sequence design, and simulation require different inputs and validation. Use the [tool catalog](/openscience/tool-catalog) to check the actual support state; reference entries are not automatically runnable integrations.
+
+## Use connected scientific tools
+
+The catalog includes connected prediction and design tools where supported. Configure the required personal service access, inspect readiness, and start with a small documented input. Ask for the accepted parameters, expected output files, and cost before a larger task.
+
+Keep predictions, scoring functions, confidence measures, and experimental measurements distinct. A plausible-looking structure or pose is not experimental validation.
+
+## Inspect and retain outputs
+
+Save the exact input representation, tool and version when available, parameters, source records, warnings, and output paths. Open generated structures and tables and report failed cases.
+
+For comparisons, use the same preparation and evaluation rules across candidates. Package code, result tables, and a methods note using [Saved Results](/openscience/results) and [Team workflows](/openscience/team-workflows).

@@ -1,0 +1,59 @@
+---
+title: "Statistical analysis"
+description: "Build a transparent analysis from the study design through uncertainty and sensitivity checks."
+---
+
+OpenScience can help inspect a dataset, implement statistical methods in Python or R, and explain the results. Begin with the study design so the analysis answers the intended question.
+
+## Describe the observation and comparison
+
+Provide the outcome, units, treatment or predictor, grouping variables, and repeated measurements. Explain how samples were collected and whether the analysis was planned before observing results.
+
+```text
+Plan an analysis of data/assay.csv. Each biological sample has three
+technical repeats, and samples were measured across two batches. Compare
+the treatment groups without treating technical repeats as independent
+biological samples. Ask about missing design details before fitting.
+```
+
+## Inspect before modeling
+
+Ask for missingness, duplicate identifiers, distributions, extreme values, and group sizes. Preserve the original data and record proposed exclusions separately.
+
+Use [Tables](/openscience/tables) for interactive inspection and [Python and R](/openscience/python-r) for full-file calculations.
+
+## Choose and explain a method
+
+Ask OpenScience to explain the estimand, model or test, assumptions, covariates, and validation strategy. If several methods are plausible, compare their assumptions before choosing one.
+
+```text
+Propose the primary analysis and one sensitivity analysis. Explain which
+assumptions can be checked, which depend on study design, and what the
+method cannot establish. Do not choose a method only because it gives a
+smaller p-value.
+```
+
+## Request interpretable outputs
+
+| Output | Why it matters |
+| --- | --- |
+| Sample and exclusion counts | Shows which observations support the result. |
+| Effect estimate and units | States the size and direction of the comparison. |
+| Interval estimate | Communicates uncertainty under the chosen method. |
+| Diagnostics | Exposes model fit or assumption problems. |
+| Sensitivity analysis | Shows dependence on defensible analytical choices. |
+| Reproducible script | Makes transformations and calculations inspectable. |
+
+For multiple comparisons, ask how multiplicity was handled. For observational data, keep association and causal interpretation separate.
+
+## Run and package the analysis
+
+```text
+Implement the agreed analysis, set seeds where randomness is used, and
+save the script, effect table, diagnostic plots, and a methods note.
+Rerun from the original inputs and report whether the result matches.
+```
+
+The output should state unresolved assumptions and data limitations alongside the result. Statistical software completing successfully is not evidence that the method fits the study design.
+
+Continue with [Figures](/openscience/figures) and [Writing](/openscience/writing) to communicate the result.

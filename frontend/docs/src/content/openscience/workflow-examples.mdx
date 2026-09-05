@@ -1,0 +1,93 @@
+---
+title: "Workflow cookbook"
+description: "Start with a complete request and know what a useful result should contain."
+---
+
+Adapt these examples to files you actually have. Each workflow names the input, output, and check that makes completion meaningful. OpenScience will need the appropriate model, tools, data, and service access.
+
+## Literature question to evidence table
+
+```text
+Investigate whether method A improves measurement reliability over
+method B for my stated population. Agree on inclusion criteria, search
+primary sources, and save an evidence table with study design, sample
+size, outcome, limitations, source URL, and reading status. Write a short
+synthesis and list gaps in the search.
+```
+
+Check that each conclusion has supporting evidence and that inaccessible full text is marked. Continue with [Literature review](/openscience/literature-review).
+
+## Raw table to reproducible analysis
+
+```text
+Inspect data/measurements.csv and methods/data-dictionary.md. Audit types,
+missingness, duplicates, units, and group structure. Propose cleaning
+before changing anything. Then save a script, cleaned table, diagnostic
+figure, and methods note, and verify a rerun from the original inputs.
+```
+
+Check input and output counts and the exclusion record. See [Data analysis](/openscience/data-analysis) and [Statistics](/openscience/statistics).
+
+## Paper to a bounded reproduction
+
+```text
+Use papers/study.pdf and the connected code folder to reproduce its main
+reported metric. Identify exact and missing inputs, select a testable
+acceptance criterion, and run a small pilot. Ask before paid compute.
+Report matched results, deviations, and unavailable checks separately.
+```
+
+Check that partial reproduction is described accurately. See [Reproduction](/openscience/reproduction).
+
+## Molecule collection to a property table
+
+```text
+Check RDKit readiness, validate data/molecules.csv, and compute the agreed
+descriptors. Keep original identifiers and SMILES, save invalid rows with
+reasons, and produce a comparison table, script, and visual summary.
+```
+
+Check representation choices and failed molecules. See [Molecular research](/openscience/molecular-research).
+
+## Sequence file to a quality report
+
+```text
+Inspect data/sequences.fasta. Report record counts, lengths, alphabet,
+duplicates, gaps, and malformed records. Preserve the source and propose
+an alignment or downstream analysis only after the quality report.
+```
+
+Check whether a preview is sampled and whether an existing alignment is valid. See [Genomics](/openscience/genomics).
+
+## Dataset to a model baseline
+
+```text
+Plan a baseline for data/training.csv. Define the prediction unit,
+leakage-safe split, metrics, and resource budget. Run a pilot, then save
+the code, split identifiers, predictions, metrics, and model-loading
+instructions. Keep the final evaluation set out of tuning.
+```
+
+Check the split and held-out evaluation. See [Machine learning](/openscience/machine-learning).
+
+## Finished analysis to a report
+
+```text
+Use the verified files in results/ to draft a report with question,
+methods, findings, figures, limitations, and sources. Link every figure
+and table to its input or script. Do not add results that were not run.
+Render the deliverable with available tools and inspect the final file.
+```
+
+Check captions, references, output rendering, and unsupported claims. See [Writing](/openscience/writing) and [Figures](/openscience/figures).
+
+## Long experiment to a reliable handoff
+
+```text
+Inspect the existing compute job before starting anything new. Recover
+its outputs, verify expected files, save completed Results, and write a
+handoff with the job identifier, commands, findings, failures, and next
+step. Identify any remote resources still requiring attention.
+```
+
+Check delivery separately from command completion. See [Jobs](/openscience/jobs) and [Context](/openscience/context).

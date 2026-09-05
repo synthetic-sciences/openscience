@@ -1,0 +1,82 @@
+---
+title: "Built-in research tools"
+description: "See the operations available to the agent and learn how to request useful, checkable work."
+---
+
+You normally use these tools through a conversation rather than calling them yourself. State the input, intended output, and limits. Tool availability depends on the agent, model, configuration, and project permissions.
+
+## Read, search, and edit files
+
+| Operation | Tool names you may see | Example request |
+| --- | --- | --- |
+| Read a file | `read` | Read methods/protocol.md and summarize the assay steps. |
+| Find paths | `glob` | Find analysis scripts and data dictionaries in this project. |
+| Search file contents | `grep` | Find every place the analysis applies a sample exclusion. |
+| Edit a file | `edit`, `apply_patch` | Correct the unit conversion and show the resulting diff. |
+| Write a file | `write` | Save the agreed methods note to results/methods.md. |
+| Run a command | `bash` | Run the project's documented tests and report failures. |
+
+Give exact paths for important inputs, and preserve original data. Use [Code and terminal](/openscience/code) for repository work and [Files](/openscience/files) for locations and editing.
+
+## Calculate and run experiments
+
+| Operation | Tool names | Usage guide |
+| --- | --- | --- |
+| Python execution | `python` | [Run calculations, inspect values, and save plots](/openscience/python-r). |
+| R execution | `r` | [Analyze with R and save reproducible scripts](/openscience/python-r). |
+| Scientific readiness and supported execution | `scientific_capability` | [Check the scientific catalog and setup state](/openscience/tool-catalog). |
+| Planned and detached compute jobs | `compute_job` | [Plan, start, inspect, cancel, and recover outputs](/openscience/jobs). |
+| Supported provider account/status checks | `provider_compute` | [Connect remote resources and understand scope](/openscience/remote-compute). |
+
+```text
+Prepare a compute plan for the existing analysis script. Verify input
+paths and expected outputs, show the target and resource request, and
+wait for approval before launching the job.
+```
+
+## Search and retrieve information
+
+| Operation | Tool names | Usage guide |
+| --- | --- | --- |
+| Web, research, news, and developer search | `research_search` | [Choose source, filters, and content depth](/openscience/research-search). |
+| Read a known web URL | `webfetch` | [Read and verify source documents](/openscience/documents). |
+| Search technical reference material | `codesearch` | [Use source-grounded code and repository workflows](/openscience/code). |
+| Discover scientific databases | `science_list_dbs` | [Choose a source by domain](/openscience/database-workflows). |
+| Search a scientific database | `science_search` | [Use native queries and source identifiers](/openscience/database-workflows). |
+| Fetch a record or supported scientific file | `science_fetch` | [Retrieve and validate the selected record](/openscience/database-workflows). |
+
+## Specialized biological queries
+
+The agent also has targeted query tools for common biological sources:
+
+| Source | Tool | Ask for |
+| --- | --- | --- |
+| UniProt | `query_uniprot` | Protein records and accession-based information. |
+| Ensembl | `query_ensembl` | Supported gene, transcript, and genomic lookups. |
+| KEGG | `query_kegg` | Supported pathway and biological record queries. |
+| PubMed | `query_pubmed` | Literature records for a focused scientific query. |
+| NCBI Gene | `query_ncbi_gene` | Gene records with the intended organism and identifiers. |
+| STRING | `query_string` | Supported protein-association queries with organism context. |
+| PDB | `query_pdb` | Structure records and identifiers. |
+
+Use identifiers returned by the source, confirm the organism, and distinguish an association or prediction from an experimentally established mechanism. The [database directory](/openscience/databases) links each registered source.
+
+## Plan, delegate, and retain outputs
+
+OpenScience can track work, ask questions, delegate a bounded task, load a skill, and save a file as a Result. These operations support the workflow you request; they do not define its scientific acceptance criteria for you.
+
+| Capability | How to request it |
+| --- | --- |
+| Track steps and progress | Define a [plan or goal](/openscience/planning), then inspect `/status`. |
+| Ask about missing information | Choose the appropriate [independence setting](/openscience/agents) and state important uncertainties. |
+| Delegate independent work | Enable delegation and give separable questions with a shared output format. |
+| Load a procedure | Select a [skill](/openscience/skills) and describe its task. |
+| Generate or edit an image | Use the [image tool](/openscience/image-generation) with an output path. |
+| Retain a file | Ask to save the verified output as a [Result](/openscience/results). |
+| Keep sources and evidence | Ask for a source list and claim-level evidence in the research deliverables. |
+
+Optional language-service or batch operations can appear in configurations that enable them. External MCP servers, plugins, and project tools add their own operations; inspect their documentation and availability before relying on them.
+
+## Read tool results carefully
+
+A tool result can report success, a partial result, a prerequisite, or failure. Check the output file, source coverage, job state, or validation result appropriate to the operation. If a run was interrupted, inspect existing work before retrying it.

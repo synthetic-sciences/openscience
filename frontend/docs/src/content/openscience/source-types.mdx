@@ -1,0 +1,77 @@
+---
+title: "Source and file types"
+description: "Choose the right way to bring papers, tables, code, images, and scientific data into a project."
+---
+
+You can work from a project folder, connect source folders, attach supported files to a conversation, or give OpenScience a URL or database identifier. Choose the path that preserves the original material and gives the task enough context.
+
+## Ways to provide material
+
+| Method | Best for | Start here |
+| --- | --- | --- |
+| Connect a source folder | Existing research collections and code | [Projects](/openscience/projects). |
+| Attach a file | A small input for the current conversation | Use the composer's attachment picker. |
+| Mention a project path | Material already available to the project | Select a file through `@` or state its exact path. |
+| Give a URL | A known paper, page, or documentation reference | [Documents](/openscience/documents) and [Research search](/openscience/research-search). |
+| Give a database and accession | Scientific records and downloadable formats | [Database workflows](/openscience/database-workflows). |
+| Connect an external service | Tools or records supplied through that integration | [MCP connectors](/openscience/connectors). |
+
+The attachment picker accepts supported files up to **20 MiB per file**. For larger datasets or collections, use project/source folders and ask for a bounded inspection first. An accepted file type is not a guarantee that the selected model directly understands every part of its contents.
+
+## Documents and images
+
+| Type | Working with it |
+| --- | --- |
+| PDF | Read and compare papers; open the page preview to verify source material. Scanned pages may need text extraction. |
+| Markdown and plain text | Protocols, notes, handoffs, reports, and instructions; inspect source or rendered Markdown. |
+| HTML | Preview an available local document and inspect its source. |
+| LaTeX | Edit source and inspect mathematical expressions; producing a complete PDF requires a suitable compiler. |
+| PNG, JPEG, GIF, WebP | Attach supported images; interpretation depends on the selected model and available tools. |
+| Other supported image previews | Files can also preview formats such as SVG, BMP, and AVIF. Preview support and attachment support are different. |
+
+Use [Reading and extracting documents](/openscience/documents) for extraction, and [Figures](/openscience/figures) for data-driven visuals.
+
+## Tables, notebooks, and code
+
+| Type | Working with it |
+| --- | --- |
+| CSV, TSV | Explore rows, columns, missing values, and numeric distributions. |
+| JSON arrays, JSONL, NDJSON | Inspect record-oriented data in the table explorer. Other JSON opens as source. |
+| Python, R, Julia, and other source files | Read, edit, and run with the relevant available language tools. |
+| Jupyter notebooks | Inspect notebook content and saved outputs; ask to reproduce execution and dependencies separately. |
+| YAML, TOML, XML, and text configuration | Inspect and edit source with the schema or application requirements in mind. |
+| Excel or another application-specific format | Keep the original and use available analysis software to read or convert it. Native spreadsheet editing is not the table preview's role. |
+
+Specify delimiters, encoding, sheet names, dates, and missing-value markers when known. See [Tables and datasets](/openscience/tables).
+
+## Scientific formats
+
+| Material | Recognized formats or views |
+| --- | --- |
+| Protein structures | PDB, ENT, CIF/mmCIF, PDBQT, GRO. |
+| Small molecules | SDF, MOL, MOL2, XYZ; SMILES for 2D depictions. |
+| Sequences and alignments | FASTA-family sequence files; equal-length multiple records can open as an alignment. |
+| Sequencing reads | FASTQ/FQ summary and quality inspection. |
+| Variants and annotations | VCF, BED, GFF/GFF3, GTF. |
+| Alignments | SAM summaries; BAM and CRAM inspection with required local tools. |
+| Single-cell data | H5AD and Loom inspection; available stored embeddings can be visualized. |
+| Mass spectrometry | mzML summary inspection. |
+
+[Scientific viewers](/openscience/scientific-viewers) explains what each view actually shows, prerequisites, and when a preview represents only a sample.
+
+## Make an input usable
+
+Include its meaning, not just its filename:
+
+```text
+Read data/assay.tsv. Each row is one biological sample; concentration is
+in micromolar and response is background-corrected fluorescence. The
+column batch identifies the experiment day. Preserve the source file and
+report missing values before fitting anything.
+```
+
+For a collection of papers, include the question and inclusion criteria. For code, include the command that failed and expected behavior. For a structure, include the organism, chain or ligand of interest, and the scientific question.
+
+## Keep source and derived files separate
+
+Save transformations as new files with the script that produced them. Keep original accession identifiers, download dates, units, and reference versions in a methods note. Use [Saved Results](/openscience/results) for outputs you want to retain and [Files and storage](/openscience/files) for backup and export.

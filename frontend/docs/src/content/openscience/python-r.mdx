@@ -1,0 +1,71 @@
+---
+title: "Python and R analysis"
+description: "Run calculations, retain working variables, inspect plots, and turn an interactive analysis into reusable code."
+---
+
+OpenScience can execute Python and R during a research conversation. Use natural-language requests to build an analysis, inspect intermediate outputs, and save code and results as files.
+
+## Prepare the environment
+
+Open **Customize → Compute** and check **Python starter** and **R starter**. Follow the available setup or repair action before a substantial analysis.
+
+The Python starter includes NumPy, pandas, SciPy, Matplotlib, Seaborn, and Pillow. The R starter includes tidyverse, ggplot2, and jsonlite. Additional scientific packages have separate setup requirements; use [Tools](/openscience/scientific-tools) to check them.
+
+```text
+Check that the Python analysis environment can import pandas and
+Matplotlib. Read the first rows of data/samples.csv and report its columns
+before attempting the full analysis.
+```
+
+## Analyze incrementally
+
+Variables can persist across executions within the conversation's active environment. This lets you inspect a dataframe and then plot it without reloading it in every step.
+
+```text
+Load data/samples.csv in Python. Report missing values by column. Then
+plot the distribution of the response, grouped by treatment, without
+modifying the input file.
+```
+
+Python calculations can return values and inline Matplotlib figures. Ask to save the plot as a named file when you want to reuse it.
+
+For R:
+
+```text
+Use R to inspect data/samples.csv. Summarize the response by treatment and
+batch, then save a ggplot figure and the R script in the project.
+```
+
+## Make outputs durable
+
+Relative output paths can point to the conversation's scratch area. State that final code and results belong in **Project files**, and ask for their exact paths.
+
+```text
+Save scripts/analyze.py and results/summary.csv in Project files. Save
+the figure as results/response.png and confirm that each file opens.
+```
+
+Use [Saved Results](/openscience/results) for selected completed deliverables.
+
+## Add dependencies deliberately
+
+Ask for the missing package, why it is needed, and where it will be installed before accepting a setup change. Installing packages can restart an analysis environment and clear its variables.
+
+Keep loading and preprocessing steps in a script so they can be rerun after a restart. A variable existing in the current session does not make the analysis reproducible on another machine.
+
+## Stop or recover an execution
+
+If code takes too long, inspect progress and the last output before stopping it. Ask to stop the relevant execution and describe any partial files left behind. A stopped environment may need its variables rebuilt.
+
+For a longer detached workload, use [Compute jobs](/openscience/jobs) instead of assuming an interactive call should run indefinitely.
+
+## Verify the final analysis from a fresh state
+
+```text
+Turn the completed analysis into a script that starts from the original
+inputs. Record the seed and package versions, run it without relying on
+previous variables, and compare the resulting tables and figures with
+the reviewed outputs. Report any mismatch.
+```
+
+Choose [Statistics](/openscience/statistics), [Machine learning](/openscience/machine-learning), or [Figures](/openscience/figures) for method-specific guidance.

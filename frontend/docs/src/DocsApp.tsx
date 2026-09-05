@@ -337,6 +337,9 @@ function CopyButton({ text }: { text: string }) {
 }
 
 const markdownComponents: Components = {
+  h3({ children }) {
+    return <h3 id={slug(extractCodeText(children))}>{children}</h3>
+  },
   h2({ children }) {
     const id = slug(extractCodeText(children))
     return <h2 id={id}>{children}</h2>

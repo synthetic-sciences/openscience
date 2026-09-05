@@ -19,7 +19,7 @@ for (const file of files) {
     report(file, "Expected a quoted title and description in frontmatter")
   }
   const body = source.slice(frontmatter?.[0].length ?? 0)
-  const sections = headings(body).map(slug)
+  const sections = headings(body, 3).map(slug)
   if (new Set(sections).size !== sections.length) report(file, "Duplicate heading anchors")
   pages.set(file.replace(/\.mdx$/, ""), { body, headings: sections })
   for (const match of body.matchAll(/```json\n([\s\S]*?)\n```/g)) {
@@ -35,8 +35,10 @@ const order = config.navigation.tabs.flatMap((tab) => tab.groups.flatMap((group)
 for (const page of order) if (!pages.has(page)) report("docs.json", "Missing page " + page)
 if (new Set(order).size !== order.length) report("docs.json", "A page is listed more than once")
 for (const page of pages.keys()) if (!order.includes(page)) report(page, "Page is missing from navigation")
-for (const [alias, target] of Object.entries(aliases))
+for (const [alias, target] of Object.entries(aliases)) {
   if (!pages.has(target)) report(alias, "Missing redirect target " + target)
+  if (pages.has(alias)) report(alias, "A legacy redirect shadows this page; choose a different page path")
+}
 
 for (const [page, document] of pages) {
   const prose = document.body.replace(/```[\s\S]*?```/g, "")
