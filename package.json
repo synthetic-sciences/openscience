@@ -82,9 +82,7 @@
     "turbo": "2.10.12"
   },
   "dependencies": {
-    "@synsci/plugin": "workspace:*",
     "@synsci/script": "workspace:*",
-    "@synsci/sdk": "workspace:*",
     "typescript": "catalog:"
   },
   "repository": {
