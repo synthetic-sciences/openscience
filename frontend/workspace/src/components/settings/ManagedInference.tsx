@@ -402,9 +402,9 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
                 when={state.wallet?.aceEnabled && contract().reloadControlledByAce}
                 fallback={<span>Authorization & reload details</span>}
               >
-                <span>Auto-reload on</span>
+                <span>Auto-reload</span>
                 <span class="models-routing__terms-value">
-                  ${contract().reloadAmountUsd} below ${contract().reloadThresholdUsd}
+                  adds ${contract().reloadAmountUsd} when the balance drops below ${contract().reloadThresholdUsd}
                 </span>
               </Show>
             </summary>
