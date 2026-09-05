@@ -173,7 +173,7 @@ export default function Landing() {
             </figcaption>
           </figure>
         </section>
-        <section className="institutions paper" aria-label="Research community">
+        <section className="institutions" aria-label="Research community">
           <div className="marquee-heading">
             <p className="eyebrow">Used by researchers at</p>
             <button className="motion-control" type="button" aria-pressed={paused} onClick={() => setPaused(!paused)}>
@@ -201,9 +201,9 @@ export default function Landing() {
             </div>
           </div>
         </section>
-        <section id="research" className="research section">
+        <section id="research" className="research paper section" aria-labelledby="research-title">
           <div className="research-heading">
-            <h2>
+            <h2 id="research-title">
               Your research
               <br />
               workspace.
@@ -304,47 +304,47 @@ export default function Landing() {
               </div>
             </div>
           </div>
-          <div id="skills" className="capabilities">
-            <div className="capability-heading">
-              <h2>Research tools.</h2>
-            </div>
-            <div className="skill-index">
-              {RESEARCH.map((field) => (
-                <details key={field.title} name="research-fields">
-                  <summary>
-                    <h3>{field.title}</h3>
-                    <span className="skill-detail">{field.detail}</span>
-                    <span className="detail-toggle" aria-hidden="true">
-                      +
-                    </span>
-                  </summary>
-                  <div className="field-content">
-                    <div className="field-tasks">
-                      {field.tasks.map((task) => (
-                        <div key={task[0]}>
-                          <h4>{task[0]}</h4>
-                          <p>{task[1]}</p>
-                        </div>
+        </section>
+        <section id="skills" className="capabilities section" aria-labelledby="skills-title">
+          <div className="capability-heading">
+            <h2 id="skills-title">Research tools.</h2>
+          </div>
+          <div className="skill-index">
+            {RESEARCH.map((field) => (
+              <details key={field.title} name="research-fields">
+                <summary>
+                  <h3>{field.title}</h3>
+                  <span className="skill-detail">{field.detail}</span>
+                  <span className="detail-toggle" aria-hidden="true">
+                    +
+                  </span>
+                </summary>
+                <div className="field-content">
+                  <div className="field-tasks">
+                    {field.tasks.map((task) => (
+                      <div key={task[0]}>
+                        <h4>{task[0]}</h4>
+                        <p>{task[1]}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="field-skills">
+                    <span className="eyebrow">Included skills</span>
+                    <div>
+                      {field.skills.map((skill) => (
+                        <a key={skill[0]} href={`${GITHUB}/tree/main/backend/cli/skills/${skill[1]}`}>
+                          {skill[0]}
+                        </a>
                       ))}
                     </div>
-                    <div className="field-skills">
-                      <span className="eyebrow">Included skills</span>
-                      <div>
-                        {field.skills.map((skill) => (
-                          <a key={skill[0]} href={`${GITHUB}/tree/main/backend/cli/skills/${skill[1]}`}>
-                            {skill[0]}
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="field-example">
-                      <span className="eyebrow">Try asking</span>
-                      <p>“{field.example}”</p>
-                    </div>
                   </div>
-                </details>
-              ))}
-            </div>
+                  <div className="field-example">
+                    <span className="eyebrow">Try asking</span>
+                    <p>“{field.example}”</p>
+                  </div>
+                </div>
+              </details>
+            ))}
           </div>
         </section>
         <section id="databases" className="databases paper section" aria-labelledby="databases-title">

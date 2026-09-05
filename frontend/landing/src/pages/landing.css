@@ -10,7 +10,7 @@
   line-height: 1.6;
 }
 .landing.home-page {
-  --paper: #f5f5f5;
+  --paper: #fff;
 }
 .landing * {
   box-sizing: border-box;
@@ -237,15 +237,16 @@
   opacity: 0.8;
 }
 .landing .institutions {
-  padding: 29px 0 37px;
+  padding: 35px 0 42px;
+  border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
 }
 .landing .marquee-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 0 4.4% 29px;
-  color: #555;
+  margin: 0 6.25% 29px;
+  color: #aaa;
 }
 .landing .motion-control {
   display: inline-flex;
@@ -304,6 +305,9 @@
 .landing .section {
   padding: 67px 6.25% 75px;
 }
+.landing.home-page .section {
+  padding-block: clamp(56px, 6.8vw, 104px);
+}
 .landing .paper {
   background: var(--paper);
   color: var(--ink);
@@ -329,18 +333,17 @@
   grid-template-columns: 1fr 16px;
   gap: 16px;
   padding: 28px 0;
-  border-top: 1px solid #3a3a3a;
+  border-top: 1px solid var(--rule);
   text-align: left;
-  color: #aaa;
-  opacity: 1;
-  transition: opacity 0.25s;
+  color: #666;
+  transition: color 0.2s;
 }
 .landing .chapter:last-child {
-  border-bottom: 1px solid #3a3a3a;
+  border-bottom: 1px solid var(--rule);
 }
 .landing .chapter:hover,
 .landing .chapter.selected {
-  color: var(--paper);
+  color: var(--ink);
 }
 .landing .chapter strong {
   font-weight: 400;
@@ -350,16 +353,21 @@
 }
 .landing .chapter-description {
   font-size: 14px;
-  color: #aaa;
+  color: #606060;
   display: block;
   margin-top: 12px;
 }
 .landing .workspace {
-  background: #181818;
-  color: #c9c9c9;
-  border: 1px solid #404040;
-  font-size: 10px;
-  box-shadow: 0 24px 45px #00000012;
+  --rule: #dedede;
+  --quiet: #616161;
+  background: #fff;
+  color: #333;
+  border: 1px solid var(--rule);
+  font-size: 11px;
+}
+.landing .workspace .science-mark {
+  filter: brightness(0);
+  mix-blend-mode: normal;
 }
 .landing .workspace-chrome {
   min-height: 44px;
@@ -368,24 +376,24 @@
   justify-content: space-between;
   gap: 16px;
   padding: 0 17px;
-  border-bottom: 1px solid #363636;
-  font-size: 8px;
-  color: #949494;
+  border-bottom: 1px solid var(--rule);
+  font-size: 9px;
+  color: var(--quiet);
 }
 .landing .workspace-chrome > span:first-child {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #eee;
+  color: var(--ink);
   font-family: "CMU Concrete", Georgia, serif;
-  font-size: 11px;
+  font-size: 13px;
 }
 .landing .workspace-chrome .science-mark {
   width: 13px;
   height: 13px;
 }
 .landing .workspace-status {
-  border: 1px solid #494949;
+  border: 1px solid var(--rule);
   padding: 2px 6px;
 }
 .landing .workspace-body {
@@ -395,35 +403,35 @@
 }
 .landing .workspace-files {
   padding: 24px 12px;
-  border-right: 1px solid #333;
+  border-right: 1px solid var(--rule);
   display: flex;
   flex-direction: column;
   gap: 16px;
-  background: #141414;
+  background: #fafafa;
   overflow-wrap: anywhere;
-  font-size: 9px;
+  font-size: 10px;
 }
 .landing .workspace-files .eyebrow {
   margin-bottom: 8px;
-  color: #777;
-  font-size: 8px;
+  color: var(--quiet);
+  font-size: 9px;
 }
 .landing .workspace-files-bottom {
   margin-top: auto;
-  color: #888;
+  color: var(--quiet);
 }
 .landing .workspace-conversation {
   padding: 22px;
   animation: chapter-in 0.35s both;
 }
 .landing .example-label {
-  color: #888;
-  font-size: 8px;
+  color: var(--quiet);
+  font-size: 9px;
   letter-spacing: 0.05em;
 }
 .landing .example-prompt {
   margin-top: 12px !important;
-  background: #262626;
+  background: #f4f4f4;
   padding: 13px 15px;
   line-height: 1.6;
 }
@@ -439,15 +447,15 @@
   height: 13px;
 }
 .landing .example-response h3 {
-  font-size: 12px;
-  color: #eee;
+  font-size: 14px;
+  color: var(--ink);
   font-family: "CMU Concrete", Georgia, serif;
   letter-spacing: 0;
 }
 .landing .example-response > p {
   margin-top: 10px;
-  color: #aaa;
-  font-size: 10px;
+  color: var(--quiet);
+  font-size: 11px;
 }
 .landing .example-response ul {
   list-style: none;
@@ -455,7 +463,7 @@
   margin: 0;
   display: grid;
   gap: 8px;
-  font-size: 9px;
+  font-size: 10px;
 }
 .landing .example-response li span {
   display: inline-block;
@@ -467,9 +475,9 @@
   justify-content: space-between;
   align-items: center;
   padding: 10px 12px;
-  border: 1px solid #444;
-  color: #888;
-  font-size: 9px;
+  border: 1px solid #ccc;
+  color: var(--quiet);
+  font-size: 10px;
 }
 .landing .example-composer > span:last-child {
   background: #ddd;
@@ -480,24 +488,24 @@
   font-size: 13px;
 }
 .landing .workspace-document {
-  border-top: 1px solid #3a3a3a;
-  background: #202020;
+  border-top: 1px solid var(--rule);
+  background: #fafafa;
 }
 .landing .workspace-document > div {
   display: flex;
   justify-content: space-between;
   padding: 9px 17px;
-  border-bottom: 1px solid #373737;
-  font-size: 8px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 9px;
 }
 .landing .workspace-document > div > span:last-child {
-  color: #939393;
+  color: var(--quiet);
 }
 .landing .workspace-document pre {
   margin: 0;
   padding: 17px 25px;
-  color: #aaa;
-  font-size: 9px;
+  color: #555;
+  font-size: 10px;
   line-height: 1.7;
   min-height: 160px;
   font-family: var(--font-terminal);
@@ -513,12 +521,6 @@
 }
 .landing .text-link:hover {
   border-bottom-color: currentColor;
-}
-.landing .capabilities {
-  padding-top: 45px;
-  margin-top: 70px;
-  border-top: 1px solid #333;
-  scroll-margin-top: 30px;
 }
 .landing .capability-heading {
   display: grid;
@@ -1282,7 +1284,7 @@
   }
 }
 .landing .institution-marquee img {
-  filter: grayscale(1) brightness(0);
+  filter: grayscale(1) brightness(0) invert(1);
 }
 .landing .institution-marquee img[data-institution="yale"],
 .landing .institution-marquee img[data-institution="oxford"],
@@ -1424,17 +1426,13 @@
   align-items: center;
   margin-bottom: 12px;
 }
-.landing .databases h2,
-.landing .capability-heading h2 {
-  font-size: clamp(36px, 4.2vw, 60px);
-}
 @media (max-width: 760px) {
   .landing .databases .toolkit-heading {
     align-items: start;
   }
   .landing .databases h2 {
     max-width: 220px;
-    font-size: 34px;
+    font-size: clamp(32px, 10vw, 44px);
   }
   .landing .database-more {
     margin-top: 4px;
