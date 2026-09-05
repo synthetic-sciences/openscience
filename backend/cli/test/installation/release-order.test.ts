@@ -19,8 +19,14 @@ test("pull requests use one fast product-level lane", async () => {
   expect(workflow).toContain("--cache-strategy content")
   expect(workflow).not.toContain("bun run --cwd backend/cli test")
   expect(workflow).not.toContain("matrix:")
-  // Branch protection requires these exact check names; none may be skipped.
-  expect(Object.values(parsed.jobs).map((job) => job.name)).toEqual(["Typecheck", "Format", "Build (web)", "Test"])
+  // Branch protection requires the first four check names; none may be skipped.
+  expect(Object.values(parsed.jobs).map((job) => job.name)).toEqual([
+    "Typecheck",
+    "Format",
+    "Build (web)",
+    "Frontend unit tests",
+    "Test",
+  ])
   for (const job of Object.values(parsed.jobs)) expect(job.if).toBeUndefined()
 })
 
