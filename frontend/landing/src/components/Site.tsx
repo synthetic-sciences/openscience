@@ -67,7 +67,7 @@ export function Footer() {
             links: [
               ["Synthetic Sciences", "https://syntheticsciences.ai"],
               ["X / Twitter", "https://x.com/SynScience"],
-              ["Contribute", `${GITHUB}/blob/main/CONTRIBUTING.md`],
+              ["LinkedIn", "https://www.linkedin.com/company/synsci/"],
               ["License", `${GITHUB}/blob/main/LICENSE`],
             ],
           },
@@ -77,6 +77,11 @@ export function Footer() {
             {group.links.map((link) => (
               <a key={link[0]} href={link[1]}>
                 {link[0]}
+                {group.title === "Connect" && link[0] !== "License" && (
+                  <span className="footer-arrow" aria-hidden="true">
+                    ↗
+                  </span>
+                )}
               </a>
             ))}
           </nav>

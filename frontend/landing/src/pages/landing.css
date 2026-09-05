@@ -648,6 +648,10 @@
   color: #8b8b8b;
   margin-bottom: 9px;
 }
+.landing .footer-arrow {
+  margin-left: 8px;
+  font-family: "Helvetica Neue", Helvetica, sans-serif;
+}
 .landing .footer-meta {
   display: flex;
   justify-content: space-between;
@@ -1418,10 +1422,6 @@
   }
 }
 
-.landing .photograph-brand .science-mark {
-  width: 0.78em;
-  height: 0.78em;
-}
 .landing .databases .toolkit-heading {
   align-items: center;
   margin-bottom: 12px;

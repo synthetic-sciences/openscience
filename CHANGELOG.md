@@ -10,6 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Update the homepage closing headline, simplify the photo wordmark, and add
+  LinkedIn with external-link arrows to the footer’s Connect links.
+
 - Keep all readable provider reasoning and individual tool calls visible in
   chronological order, without Detailed/Compact modes or a shared activity
   disclosure. Omit empty encrypted-only rows instead of repeating unavailable

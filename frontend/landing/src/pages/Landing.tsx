@@ -162,7 +162,6 @@ export default function Landing() {
               {...{ fetchpriority: "high" }}
             />
             <div className="photograph-brand" aria-hidden="true">
-              <Mark />
               <span>OpenScience</span>
             </div>
             <figcaption>
@@ -404,7 +403,11 @@ export default function Landing() {
           </div>
         </section>
         <section className="closing paper">
-          <h2>Get OpenScience.</h2>
+          <h2>
+            A home for
+            <br />
+            your research.
+          </h2>
           <a className="button button-dark" href="/download">
             Download <span className="button-dot" aria-hidden="true" />
           </a>
