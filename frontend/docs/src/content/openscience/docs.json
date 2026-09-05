@@ -7,47 +7,23 @@
         "groups": [
           {
             "group": "Get started",
-            "pages": [
-              "index",
-              "quickstart",
-              "installation",
-              "workspace"
-            ]
+            "pages": ["index", "quickstart", "installation", "workspace"]
           },
           {
             "group": "Models and account",
-            "pages": [
-              "models",
-              "ace",
-              "pricing",
-              "local-models",
-              "custom-providers"
-            ]
+            "pages": ["models", "ace", "pricing", "local-models", "custom-providers"]
           },
           {
             "group": "Research workflows",
-            "pages": [
-              "literature-review",
-              "data-analysis",
-              "reproduction",
-              "writing"
-            ]
+            "pages": ["literature-review", "data-analysis", "reproduction", "writing"]
           },
           {
             "group": "Working in a project",
-            "pages": [
-              "agents",
-              "sessions",
-              "files",
-              "compute"
-            ]
+            "pages": ["agents", "sessions", "files", "compute"]
           },
           {
             "group": "Help",
-            "pages": [
-              "troubleshooting",
-              "faq"
-            ]
+            "pages": ["troubleshooting", "faq"]
           }
         ]
       },
@@ -56,30 +32,15 @@
         "groups": [
           {
             "group": "Research capabilities",
-            "pages": [
-              "skills",
-              "skill-library",
-              "databases",
-              "scientific-tools",
-              "connectors"
-            ]
+            "pages": ["skills", "skill-library", "databases", "scientific-tools", "connectors"]
           },
           {
             "group": "Customize",
-            "pages": [
-              "instructions",
-              "configuration",
-              "slash-commands",
-              "permissions"
-            ]
+            "pages": ["instructions", "configuration", "slash-commands", "permissions"]
           },
           {
             "group": "Develop and automate",
-            "pages": [
-              "commands",
-              "automation",
-              "extensions"
-            ]
+            "pages": ["commands", "automation", "extensions"]
           }
         ]
       }

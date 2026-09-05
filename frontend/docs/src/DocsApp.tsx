@@ -13,6 +13,8 @@ import {
   GitBranch,
   Layers,
   Moon,
+  Menu,
+  X,
   PackageCheck,
   Rocket,
   Search,
@@ -22,6 +24,7 @@ import {
   Terminal,
 } from "lucide-react"
 import { useTheme } from "./theme"
+import { headings, pageHref, parseRoute, resolveLink, slug, type Route } from "./navigation"
 
 const mono = `"JetBrains Mono", "SF Mono", ui-monospace, monospace`
 
@@ -149,14 +152,6 @@ function parseFrontmatter(source: string): { title: string; description: string;
   }
 }
 
-function extractHeadings(markdown: string): string[] {
-  return markdown
-    .split("\n")
-    .filter((line) => line.startsWith("## "))
-    .map((line) => line.replace(/^##\s+/, "").trim())
-    .slice(0, 10)
-}
-
 function flattenPages(items: Array<string | { group: string; pages: string[] }>): string[] {
   return items.flatMap((item) => (typeof item === "string" ? [item] : item.pages))
 }
@@ -179,7 +174,7 @@ function buildSectionPages(section: SectionKey): Record<string, DocsPage> {
       description: parsed.description,
       icon: iconForPath(path, section),
       body: parsed.body,
-      headings: extractHeadings(parsed.body),
+      headings: headings(parsed.body),
     }
   }
   return pages
@@ -193,99 +188,16 @@ const SECTION_CONFIGS: Record<SectionKey, DocsConfig> = {
   openscience: RAW_CONFIGS["./content/openscience/docs.json"],
 }
 
-function pageExists(section: SectionKey, path: string): boolean {
-  return Boolean(SECTION_DOC_PAGES[section]?.[path])
-}
-
-// Retired first URL segments that redirect into the openscience scheme.
-const SECTION_ALIASES: Record<string, SectionKey> = {
-  "agent-cli": "openscience",
-}
-
-// Old CLI page names that moved during the OpenScience rebuild.
-const PAGE_ALIASES: Record<string, string> = {
-  "first-session": "sessions",
-  "sub-agents": "agents",
-  "web-ui": "workspace",
-  credentials: "gateway",
-}
-
-// Redirects from the oldest single-segment URLs to the #/<section>/<page> scheme.
-const LEGACY_REDIRECTS: Record<string, { section: SectionKey; path: string }> = {
-  "cli:index": { section: "openscience", path: "index" },
-  "cli:installation": { section: "openscience", path: "quickstart" },
-  "cli:quickstart": { section: "openscience", path: "quickstart" },
-  "cli:first-session": { section: "openscience", path: "sessions" },
-  "cli:sessions": { section: "openscience", path: "sessions" },
-  "cli:models": { section: "openscience", path: "models" },
-  "cli:codex": { section: "openscience", path: "models" },
-  "cli:sub-agents": { section: "openscience", path: "agents" },
-  "cli:skills": { section: "openscience", path: "skills" },
-  "cli:cli-runtime": { section: "openscience", path: "commands" },
-  "cli:connect": { section: "openscience", path: "gateway" },
-  "cli:credentials": { section: "openscience", path: "gateway" },
-  "cli:security": { section: "openscience", path: "security" },
-  "cli:feature-map": { section: "openscience", path: "commands" },
-  "cli:commands": { section: "openscience", path: "commands" },
-  "cli:web-ui": { section: "openscience", path: "workspace" },
-  "cli:server-mode": { section: "openscience", path: "workspace" },
-}
-
-type Route = { section: SectionKey; path: string }
-
-function defaultRoute(): Route {
-  return { section: "openscience", path: "index" }
-}
-
 function routeFromHash(): Route {
-  if (typeof window === "undefined") return defaultRoute()
-  const raw = decodeURIComponent(window.location.hash.replace(/^#\/?/, "")).replace(/\/$/, "")
-  if (!raw) return defaultRoute()
-  const segments = raw.split("/")
-  const maybeSection = segments[0] as SectionKey
-  if (SECTION_KEYS.includes(maybeSection)) {
-    const rawPath = segments.slice(1).join("/") || "index"
-    const path = PAGE_ALIASES[rawPath] ?? rawPath
-    if (pageExists(maybeSection, path)) return { section: maybeSection, path }
-    return { section: maybeSection, path: "index" }
-  }
-  // Retired section names redirect into the openscience scheme.
-  const aliasSection = SECTION_ALIASES[segments[0]]
-  if (aliasSection) {
-    const rawPath = segments.slice(1).join("/") || "index"
-    const path = PAGE_ALIASES[rawPath] ?? rawPath
-    if (pageExists(aliasSection, path)) return { section: aliasSection, path }
-    return { section: aliasSection, path: "index" }
-  }
-  // Legacy single-segment URL from the old CLI docs.
-  const redirect = LEGACY_REDIRECTS[`cli:${raw}`]
-  if (redirect && pageExists(redirect.section, redirect.path)) return redirect
-  return defaultRoute()
+  return parseRoute(typeof window === "undefined" ? "" : window.location.hash)
 }
 
-function pageHref(section: SectionKey, path: string): string {
-  return `#/${section}/${path}`
-}
-
-// Module-level pointers updated on each render so the markdown renderer (which
-// can't take props through react-markdown) can resolve links and card icons.
+// The renderer uses the current route for page-relative Markdown links.
+let CURRENT_ROUTE: Route = { section: "openscience", path: "index" }
 let CURRENT_SECTION: SectionKey = "openscience"
 
 function resolveHref(href: string | undefined): string | undefined {
-  if (!href) return href
-  if (href.startsWith("http") || href.startsWith("#") || href.startsWith("mailto:")) return href
-  if (href.startsWith("/")) {
-    const clean = href.slice(1).replace(/\/$/, "")
-    if (!clean) return pageHref(CURRENT_SECTION, "index")
-    const segments = clean.split("/")
-    const maybeSection = segments[0] as SectionKey
-    if (SECTION_KEYS.includes(maybeSection)) {
-      const path = segments.slice(1).join("/") || "index"
-      if (pageExists(maybeSection, path)) return pageHref(maybeSection, path)
-    }
-    if (pageExists(CURRENT_SECTION, clean)) return pageHref(CURRENT_SECTION, clean)
-  }
-  return href
+  return resolveLink(href, CURRENT_ROUTE)
 }
 
 function sectionForHref(href: string): SectionKey {
@@ -403,31 +315,30 @@ function GitHubStars() {
 }
 
 function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
+  const [status, setStatus] = useState("")
   return (
     <button
       type="button"
       className="docs-copy"
-      onClick={() => {
-        void navigator.clipboard.writeText(text)
-        setCopied(true)
-        window.setTimeout(() => setCopied(false), 1200)
+      onClick={async () => {
+        const copied = await navigator.clipboard?.writeText(text).then(
+          () => true,
+          () => false,
+        )
+        setStatus(copied ? "Copied" : "Select code to copy")
       }}
-      aria-label="copy code"
-      title="copy code"
+      aria-label="Copy code"
+      title="Copy code"
     >
-      {copied ? <Check size={13} strokeWidth={1.8} /> : <Copy size={13} strokeWidth={1.8} />}
-      <span>{copied ? "copied" : "copy"}</span>
+      {status === "Copied" ? <Check size={13} /> : <Copy size={13} />}
+      <span aria-live="polite">{status || "Copy"}</span>
     </button>
   )
 }
 
 const markdownComponents: Components = {
   h2({ children }) {
-    const id = String(children)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
+    const id = slug(extractCodeText(children))
     return <h2 id={id}>{children}</h2>
   },
   a({ href, children }) {
@@ -455,7 +366,7 @@ const markdownComponents: Components = {
   },
   table({ children }) {
     return (
-      <div className="docs-table-wrap">
+      <div className="docs-table-wrap" role="region" aria-label="Scrollable table" tabIndex={0}>
         <table>{children}</table>
       </div>
     )
@@ -593,12 +504,22 @@ export function DocumentationPage() {
   const [route, setRouteState] = useState<Route>(() => routeFromHash())
   const section = route.section
   CURRENT_SECTION = section
+  CURRENT_ROUTE = route
   const docPages = SECTION_DOC_PAGES[section]
   const config = SECTION_CONFIGS[section]
   const sectionMeta = SECTIONS.find((entry) => entry.key === section) ?? SECTIONS[0]
-  const activePage = docPages[route.path] ?? docPages.index
+  const activePage: DocsPage = docPages[route.path] ?? {
+    path: route.path,
+    title: "Page not found",
+    description: "This documentation page does not exist or has moved.",
+    body: "Use search to find the topic, or return to the [documentation home](/openscience/index).",
+    headings: [],
+    icon: <BookOpen size={17} />,
+  }
   const [query, setQuery] = useState("")
   const [searchOpen, setSearchOpen] = useState(false)
+  const [searchIndex, setSearchIndex] = useState(0)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const navTabs = config.navigation.tabs
   const orderedPaths = useMemo(
@@ -643,18 +564,28 @@ export function DocumentationPage() {
     if (!normalizedQuery) {
       return all.filter((page) => page.section === section).slice(0, 6)
     }
+    const terms = normalizedQuery.split(/\s+/)
     return all
-      .filter((page) => {
+      .map((page) => {
+        const title = page.title.toLowerCase()
         const body = SECTION_DOC_PAGES[page.section][page.path]?.body ?? ""
-        const haystack = `${page.title} ${page.description} ${page.sectionLabel} ${body}`.toLowerCase()
-        return haystack.includes(normalizedQuery)
+        const haystack = (title + " " + page.description + " " + body).toLowerCase()
+        const score = terms.every((term) => haystack.includes(term))
+          ? 1 + terms.filter((term) => title.includes(term)).length * 10 + (title.includes(normalizedQuery) ? 20 : 0)
+          : 0
+        return { page, score }
       })
+      .filter((result) => result.score > 0)
+      .sort((a, b) => b.score - a.score)
       .slice(0, 8)
+      .map((result) => result.page)
   }, [query, section])
 
   const navigate = (next: Route) => {
-    window.location.hash = pageHref(next.section, next.path)
+    window.location.hash = pageHref(next.section, next.path, next.anchor)
     setRouteState(next)
+    setMenuOpen(false)
+    setSearchOpen(false)
   }
 
   useEffect(() => {
@@ -665,11 +596,25 @@ export function DocumentationPage() {
 
   // Keep the URL canonical (legacy + bare hashes resolve to #/<section>/<page>).
   useEffect(() => {
-    const canonical = pageHref(route.section, route.path)
+    const canonical = pageHref(route.section, route.path, route.anchor)
     if (window.location.hash !== canonical) {
       window.history.replaceState(null, "", canonical)
     }
-  }, [route.section, route.path])
+  }, [route])
+
+  useEffect(() => {
+    setMenuOpen(false)
+    const frame = window.requestAnimationFrame(() => {
+      if (route.anchor) document.getElementById(route.anchor)?.scrollIntoView()
+      else window.scrollTo(0, 0)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [route.path, route.anchor])
+
+  useEffect(() => {
+    document.title = activePage.title + " · OpenScience Docs"
+    document.querySelector('meta[name="description"]')?.setAttribute("content", activePage.description)
+  }, [activePage.title, activePage.description])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -685,6 +630,17 @@ export function DocumentationPage() {
 
   return (
     <div className="docs-page">
+      <a
+        className="docs-skip"
+        href="#docs-content"
+        onClick={(event) => {
+          event.preventDefault()
+          document.getElementById("docs-content")?.focus()
+          document.getElementById("docs-content")?.scrollIntoView()
+        }}
+      >
+        Skip to content
+      </a>
       <header className="docs-topbar">
         <a href="https://openscience.sh" className="docs-brand">
           <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
@@ -698,10 +654,36 @@ export function DocumentationPage() {
           <input
             className="docs-search-input"
             aria-label="Search documentation"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={searchOpen}
+            aria-controls="docs-search-results"
+            aria-activedescendant={searchOpen && searchResults[searchIndex] ? "docs-result-" + searchIndex : undefined}
             value={query}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setSearchOpen(false)
+                return
+              }
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault()
+                setSearchOpen(true)
+                setSearchIndex((index) =>
+                  Math.max(0, Math.min(searchResults.length - 1, index + (event.key === "ArrowDown" ? 1 : -1))),
+                )
+              }
+              if (event.key === "Enter" && searchOpen && searchResults[searchIndex]) {
+                event.preventDefault()
+                const page = searchResults[searchIndex]
+                navigate({ section: page.section, path: page.path })
+                setQuery("")
+                event.currentTarget.blur()
+              }
+            }}
             onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
             onChange={(event) => {
               setQuery(event.target.value)
+              setSearchIndex(0)
               setSearchOpen(true)
             }}
             onFocus={() => setSearchOpen(true)}
@@ -710,15 +692,23 @@ export function DocumentationPage() {
           />
           <kbd>⌘K</kbd>
           {searchOpen ? (
-            <div className="docs-search-results" role="listbox" aria-label="documentation search results">
+            <div
+              id="docs-search-results"
+              className="docs-search-results"
+              role="listbox"
+              aria-label="documentation search results"
+            >
               {searchResults.length > 0 ? (
-                searchResults.map((page) => (
+                searchResults.map((page, index) => (
                   <a
                     key={`${page.section}/${page.path}`}
                     href={pageHref(page.section, page.path)}
+                    id={"docs-result-" + index}
                     role="option"
-                    aria-selected={section === page.section && route.path === page.path}
-                    onMouseDown={(event) => {
+                    tabIndex={-1}
+                    aria-selected={searchIndex === index}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={(event) => {
                       event.preventDefault()
                       navigate({ section: page.section, path: page.path })
                       setQuery("")
@@ -758,7 +748,17 @@ export function DocumentationPage() {
       </header>
 
       <div className="docs-shell">
-        <aside className="docs-sidebar" aria-label="documentation navigation">
+        <button
+          type="button"
+          className="docs-menu-toggle"
+          aria-expanded={menuOpen}
+          aria-controls="docs-navigation"
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          {menuOpen ? <X size={16} /> : <Menu size={16} />}
+          Browse documentation
+        </button>
+        <aside id="docs-navigation" className="docs-sidebar" data-open={menuOpen} aria-label="documentation navigation">
           <div className="docs-sidebar-title">
             <span>{sectionMeta.label}</span>
             <small>{sectionMeta.tagline}</small>
@@ -795,6 +795,7 @@ export function DocumentationPage() {
                         key={path}
                         href={pageHref(section, path)}
                         className={route.path === path ? "active" : undefined}
+                        aria-current={route.path === path ? "page" : undefined}
                         onClick={() => navigate({ section, path })}
                       >
                         <span>{page.icon}</span>
@@ -808,7 +809,7 @@ export function DocumentationPage() {
           ) : null}
         </aside>
 
-        <main className="docs-main">
+        <main id="docs-content" className="docs-main" tabIndex={-1}>
           <nav className="docs-breadcrumbs" aria-label="breadcrumbs">
             <a href={pageHref(section, "index")}>{sectionMeta.label}</a>
             <ChevronRight size={13} strokeWidth={1.8} />
@@ -820,6 +821,23 @@ export function DocumentationPage() {
           </section>
 
           <article className="docs-markdown">{renderMintlifyContent(activePage.body)}</article>
+
+          {docPages[route.path] ? (
+            <div className="docs-page-resources">
+              <a
+                href={
+                  "https://github.com/synthetic-sciences/openscience/edit/main/frontend/docs/src/content/openscience/" +
+                  route.path +
+                  ".mdx"
+                }
+                target="_blank"
+                rel="noreferrer"
+              >
+                Edit this page <ArrowUpRight size={12} />
+              </a>
+              <a href={import.meta.env.BASE_URL + "llms.txt"}>Documentation index</a>
+            </div>
+          ) : null}
 
           <nav className="docs-pagination" aria-label="documentation pagination">
             {previousPage ? (
@@ -854,13 +872,7 @@ export function DocumentationPage() {
           <span>On this page</span>
           {activePage.headings.length > 0 ? (
             activePage.headings.map((heading) => (
-              <a
-                key={heading}
-                href={`#${heading
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]+/g, "-")
-                  .replace(/^-|-$/g, "")}`}
-              >
+              <a key={heading} href={pageHref(section, route.path, slug(heading))}>
                 {heading}
               </a>
             ))
@@ -869,7 +881,7 @@ export function DocumentationPage() {
           )}
           {(config.navigation.global?.anchors ?? []).length > 0 ? (
             <div className="docs-agent-links">
-              <span>Agent resources</span>
+              <span>Resources</span>
               {(config.navigation.global?.anchors ?? []).map((anchor) => (
                 <a
                   key={anchor.href}
@@ -892,6 +904,13 @@ export function DocumentationPage() {
 }
 
 const docsCss = `
+  .docs-skip { position: fixed; top: -100px; left: 16px; z-index: 100; padding: 12px; background: var(--color-bg-elevated); color: var(--color-text); }
+  .docs-skip:focus { top: 12px; }
+  .docs-page a:focus-visible, .docs-page button:focus-visible, .docs-page input:focus-visible { outline: 2px solid var(--docs-accent); outline-offset: 3px; }
+  .docs-menu-toggle { display: none; align-items: center; gap: 8px; width: 100%; padding: 12px; margin-bottom: 18px; border: 1px solid var(--color-border); border-radius: 6px; color: var(--color-text); background: var(--color-bg-elevated); font: inherit; cursor: pointer; }
+  .docs-page-resources { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 36px; font-size: 13px; color: var(--color-text-muted); }
+  .docs-page-resources a { display: inline-flex; align-items: center; gap: 4px; }
+  .docs-search-results a[aria-selected="true"] { background: var(--color-bg-subtle); }
   .docs-page {
     --color-bg: #fafbfc;
     --color-bg-subtle: #f1f3f5;
@@ -1737,14 +1756,18 @@ const docsCss = `
 
   @media (max-width: 860px) {
     .docs-topbar {
+      height: auto;
+      min-height: 108px;
       grid-template-columns: minmax(0, 1fr) auto;
-      padding: 0 16px;
+      gap: 8px;
+      padding: 8px 16px;
     }
 
     .docs-search {
       grid-column: 1 / -1;
       order: 2;
-      display: none;
+      display: flex;
+      width: 100%;
     }
 
     .docs-topbar nav a:not(.docs-topbar-cta) {
@@ -1757,6 +1780,7 @@ const docsCss = `
     }
 
     .docs-sidebar {
+      display: none;
       position: static;
       border: 1px solid var(--color-border);
       border-radius: 10px;
@@ -1765,6 +1789,9 @@ const docsCss = `
       max-height: none;
     }
 
+    .docs-sidebar[data-open="true"] { display: block; }
+    .docs-menu-toggle { display: flex; }
+    .docs-markdown h2 { scroll-margin-top: 125px; }
     .docs-hero h1 {
       font-size: 34px;
     }

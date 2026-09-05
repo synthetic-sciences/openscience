@@ -20,9 +20,10 @@
     "test:ui": "cd frontend/ui && bun test",
     "test:workspace": "cd frontend/workspace && bun test",
     "test:sdk": "cd tooling/sdk/js && bun test",
-    "check": "bun run format:check && bun run typecheck && bun run test && bun run test:ui && bun run test:workspace && bun run test:sdk",
+    "check": "bun run format:check && bun run typecheck && bun run test && bun run test:ui && bun run test:workspace && bun run test:sdk && bun run test:docs",
     "check:fast": "bun run format:check && turbo typecheck --filter=@synsci/openscience",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:docs": "bun run --cwd frontend/docs check && bun run --cwd frontend/docs test"
   },
   "workspaces": {
     "packages": [

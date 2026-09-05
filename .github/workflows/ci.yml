@@ -14,10 +14,11 @@ permissions:
   contents: read
 
 # Keep the merge loop intentionally small. Platform ownership tests, the full
-# backend suite, docs, landing, and browser E2E run outside the PR critical
+# backend suite, landing, and browser E2E run outside the PR critical
 # path in Deep CI / E2E. This lane proves the monorepo still types, release
 # entrypoints still parse, the user-facing workspace bundles, and the backend
-# tests a change can affect still pass. Branch protection requires the job
+# tests a change can affect still pass, including documentation checks.
+# Branch protection requires the job
 # names Typecheck, Test, and Build (web).
 jobs:
   typecheck:
@@ -92,6 +93,8 @@ jobs:
         run: bun run test:workspace
       - name: SDK
         run: bun run test:sdk
+      - name: Documentation
+        run: bun run test:docs && bun run --cwd frontend/docs build
 
   test:
     name: Test
