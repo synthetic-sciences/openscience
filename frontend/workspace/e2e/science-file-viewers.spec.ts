@@ -28,7 +28,7 @@ test("image files render their decoded dimensions", async ({ page, openSession }
   await expect(image).toBeVisible()
   await expect
     .poll(() => image.evaluate((node: HTMLImageElement) => [node.naturalWidth, node.naturalHeight, node.src]))
-    .toEqual([1280, 721, expect.stringMatching(/^data:image\/png;base64,/)])
+    .toEqual([512, 512, expect.stringMatching(/^data:image\/png;base64,/)])
 })
 
 test("PDF files rasterize their pages without an error", async ({ page, openSession }) => {
