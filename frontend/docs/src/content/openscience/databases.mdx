@@ -1,0 +1,95 @@
+---
+title: "Scientific databases"
+description: "Find the scientific records and literature sources available to the agent."
+---
+
+The built-in directory contains 42 database connectors in this version. Ask OpenScience to search a named database or retrieve a record by its identifier.
+
+For example: "Find the UniProt record for human BRCA1, report its accession, and link the source." Include the organism, reference assembly, or identifier version when it matters.
+
+Public records may be accessible without a key, but availability, rate limits, licensing, and full-text access depend on the source. Some databases require credentials or a local dataset. A missing result is not proof that a record does not exist.
+
+These are built-in database connections. Use [Connectors and MCP](/openscience/connectors) for external tool servers, [Skills](/openscience/skills) for procedures, and [Literature reviews](/openscience/literature-review) for a review workflow.
+
+## Biology
+
+| Source | Identifier | Records and uses |
+| --- | --- | --- |
+| [KEGG](https://www.kegg.jp) | `kegg` | KEGG pathway maps, modules, orthologs, compounds, and reactions. |
+| [Reactome](https://reactome.org) | `reactome` | Curated biological pathways, reactions, and molecular events. |
+| [WikiPathways](https://www.wikipathways.org) | `wikipathways` | Community-curated biological pathways across many species. |
+
+## Chemistry
+
+| Source | Identifier | Records and uses |
+| --- | --- | --- |
+| [BindingDB](https://www.bindingdb.org) | `bindingdb` | Measured protein-ligand binding affinities; query by UniProt accession. |
+| [ChEBI](https://www.ebi.ac.uk/chebi) | `chebi` | Chemical Entities of Biological Interest ontology terms (EMBL-EBI). |
+| [ChEMBL](https://www.ebi.ac.uk/chembl) | `chembl` | Bioactive drug-like small molecules with curated bioactivity data (EMBL-EBI). |
+| [Guide to PHARMACOLOGY](https://www.guidetopharmacology.org) | `gtopdb` | IUPHAR/BPS ligands, drugs, and their molecular targets. |
+| [PubChem](https://pubchem.ncbi.nlm.nih.gov) | `pubchem` | Chemical compounds, structures, and properties from NCBI PubChem. |
+| [SureChEMBL](https://www.surechembl.org) | `surechembl` | Chemistry extracted from the patent literature (EMBL-EBI). |
+
+## Clinical
+
+| Source | Identifier | Records and uses |
+| --- | --- | --- |
+| [ClinVar](https://www.ncbi.nlm.nih.gov/clinvar) | `clinvar` | Clinically-interpreted variants: pathogenicity classification, conditions, and gene. |
+
+## Genomics
+
+| Source | Identifier | Records and uses |
+| --- | --- | --- |
+| [ArrayExpress / BioStudies](https://www.ebi.ac.uk/biostudies/arrayexpress) | `arrayexpress` | Functional genomics experiments (microarray & sequencing) archived on EMBL-EBI BioStudies. |
+| [DepMap](https://depmap.org) | `depmap` | Cancer Dependency Map — CRISPR/RNAi dependencies, omics, and drug-sensitivity datasets. |
+| [Ensembl](https://www.ensembl.org) | `ensembl` | Genes, transcripts, and cross-references by symbol or Ensembl stable id. |
+| [Expression Atlas](https://www.ebi.ac.uk/gxa) | `expression-atlas` | Bulk gene & protein expression across tissues, conditions, and species (EMBL-EBI GXA). |
+| [gnomAD](https://gnomad.broadinstitute.org) | `gnomad` | Population allele frequencies (genome/exome) for genes and variants. |
+| [GTEx](https://gtexportal.org) | `gtex` | Genotype-Tissue Expression — median gene expression across human tissues. |
+| [MyGene.info](https://mygene.info) | `mygene` | Gene annotation lookup (symbol, name, Entrez/Ensembl ids) across species. |
+| [MyVariant.info](https://myvariant.info) | `myvariant` | Aggregated variant annotation (dbSNP, ClinVar, CADD, dbNSFP) by HGVS or rsID. |
+| [NCBI dbSNP](https://www.ncbi.nlm.nih.gov/snp) | `dbsnp` | Reference SNP (rsID) records: alleles, position, function class, and clinical significance. |
+| [NCBI Gene](https://www.ncbi.nlm.nih.gov/gene) | `ncbi-gene` | Gene records (symbol, aliases, locus, summary) from NCBI Entrez Gene. |
+| [NCBI GEO](https://www.ncbi.nlm.nih.gov/geo/) | `geo` | Gene Expression Omnibus — functional genomics Series, DataSets, and platforms. |
+| [Open Targets](https://platform.opentargets.org) | `opentargets` | Target-disease-drug associations for drug target identification. |
+| [Single Cell Expression Atlas](https://www.ebi.ac.uk/gxa/sc) | `single-cell-atlas` | Single-cell RNA-seq experiments with cell-type expression across species (EMBL-EBI GXA sc). |
+| [UCSC Genome Browser](https://genome.ucsc.edu) | `ucsc` | Search genome assemblies for genes/positions and retrieve reference sequence. |
+
+## Literature
+
+| Source | Identifier | Records and uses |
+| --- | --- | --- |
+| [arXiv](https://arxiv.org) | `arxiv` | Open-access preprints in physics, math, CS, quantitative biology, and more. |
+| [bioRxiv / medRxiv](https://www.biorxiv.org) | `biorxiv` | Biology and health-sciences preprints (bioRxiv + medRxiv) via Cold Spring Harbor. |
+| [Crossref](https://www.crossref.org) | `crossref` | Cross-publisher DOI metadata: titles, authors, venues, references, and citations. |
+| [Europe PMC](https://europepmc.org) | `europepmc` | Life-science literature and full-text (PubMed, PMC, Agricola, patents) via EBI. |
+| [OpenAlex](https://openalex.org) | `openalex` | Open scholarly graph of works, authors, venues, and concepts (successor to MAG). |
+| [PubMed](https://pubmed.ncbi.nlm.nih.gov) | `pubmed` | Biomedical literature abstracts and citations from NCBI (MEDLINE/PubMed). |
+| [Semantic Scholar](https://www.semanticscholar.org) | `semantic-scholar` | AI-powered academic graph: abstracts, citations, references, and influence. |
+
+## Proteomics
+
+| Source | Identifier | Records and uses |
+| --- | --- | --- |
+| [BioGRID](https://thebiogrid.org) | `biogrid` | Curated protein and genetic interactions (needs a free BioGRID access key). |
+| [Human Protein Atlas](https://www.proteinatlas.org) | `hpa` | Tissue, cell, pathology, and subcellular protein expression across the human proteome. |
+| [IntAct](https://www.ebi.ac.uk/intact) | `intact` | EMBL-EBI molecular interaction database (protein, RNA, small molecule). |
+| [InterPro](https://www.ebi.ac.uk/interpro) | `interpro` | Integrated protein families, domains, and functional sites with GO annotations. |
+| [Pfam](https://www.ebi.ac.uk/interpro/entry/pfam) | `pfam` | Pfam protein families and domains (member database of InterPro). |
+| [STRING](https://string-db.org) | `string-db` | Known and predicted protein-protein interaction networks. |
+| [UniProt](https://www.uniprot.org) | `uniprot` | Protein sequences with function, GO terms, domains, and pathways (UniProtKB). |
+
+## Structure
+
+| Source | Identifier | Records and uses |
+| --- | --- | --- |
+| [AlphaFold DB](https://alphafold.ebi.ac.uk) | `alphafold` | AlphaFold-predicted protein structures with per-residue confidence (pLDDT). |
+| [PDBe](https://www.ebi.ac.uk/pdbe) | `pdbe` | Protein Data Bank in Europe — 3D structures with EBI annotations and cross-references. |
+| [RCSB PDB](https://www.rcsb.org) | `rcsb-pdb` | Experimentally determined 3D structures of proteins, nucleic acids, and complexes. |
+| [SIFTS](https://www.ebi.ac.uk/pdbe/docs/sifts) | `sifts` | UniProt↔PDB residue-level structure mappings (best PDB structures per protein). |
+
+## Check source records
+
+Ask for the exact accession, DOI, or source URL and the retrieval date. Confirm whether a result is a record, abstract, full text, prediction, or experimental observation before citing it.
+
+If access fails, narrow the query, check identifiers, and inspect the reported source error. Do not replace a missing record with an uncited guess.

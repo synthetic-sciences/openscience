@@ -1,0 +1,75 @@
+---
+title: "Plugins, SDK, and editors"
+description: "Extend OpenScience or connect it to your own application."
+---
+
+Use [Skills](/openscience/skills) for procedures and [MCP connectors](/openscience/connectors) for external tools. Plugins and the SDK are for integrations that need code.
+
+## Install a plugin
+
+Add a reviewed plugin to your global `openscience.json`:
+
+```json
+{
+  "plugin": ["your-openscience-plugin@1.2.0"]
+}
+```
+
+The package name is an example. Use an actual compatible package and pin a version for a repeatable setup. Restart OpenScience after changing plugin configuration.
+
+A local module can be referenced with a `file:///absolute/path/to/plugin.ts` URL. Remove its entry and restart to stop loading it.
+
+Plugins execute code with access to the application context. Install ones you trust. Organization or project policy may prevent a plugin from loading; use the reported error to resolve that setup.
+
+The [plugin authoring guide](https://github.com/synthetic-sciences/openscience/blob/main/docs/notes/writing-a-plugin.md) documents the typed extension contract.
+
+## Connect with the TypeScript SDK
+
+Install the SDK in your integration project:
+
+```bash
+npm install @synsci/sdk
+```
+
+Start OpenScience in the project you want to access:
+
+```bash
+openscience serve --port 4096
+```
+
+Use the v2 client with the same project directory:
+
+```typescript
+import { createOpenScienceClient } from "@synsci/sdk/v2"
+
+const client = createOpenScienceClient({
+  baseUrl: "http://localhost:4096",
+  directory: "/absolute/path/to/research-project",
+})
+
+const sessions = await client.session.list({ limit: 10 })
+if (sessions.error) throw new Error("Could not list sessions")
+console.log(sessions.data)
+```
+
+Replace the directory with the project path and use the server's actual URL. This example only lists sessions; sending prompts requires a configured model and suitable permission handling.
+
+The SDK version should match the installed OpenScience version. See the [SDK source and types](https://github.com/synthetic-sciences/openscience/tree/main/tooling/sdk/js) for current methods. The generated [API reference](https://github.com/synthetic-sciences/openscience/blob/main/tooling/sdk/openapi.json) describes request and response schemas.
+
+## Editor integration with ACP
+
+Editors that support the Agent Client Protocol can start OpenScience as an external agent:
+
+```bash
+openscience acp --cwd /absolute/path/to/research-project
+```
+
+Configure that executable and its arguments in your editor's agent settings. The editor supplies the interactive interface; your model connections and project configuration still apply.
+
+Refer to the editor's documentation for its exact configuration format.
+
+## Contribute to OpenScience
+
+Use the [contributor guide](https://github.com/synthetic-sciences/openscience/blob/main/CONTRIBUTING.md) for repository setup and checks. The [architecture guide](https://github.com/synthetic-sciences/openscience/blob/main/ARCHITECTURE.md) maps the codebase.
+
+For a documentation correction, use the page's edit link and describe the observed behavior, installed version, and source of the correction.

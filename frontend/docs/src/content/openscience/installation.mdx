@@ -1,0 +1,86 @@
+---
+title: "Installation and updates"
+description: "Install the desktop app or CLI, check your version, and keep your work when updating."
+---
+
+## Desktop app
+
+Open the [download page](https://openscience.sh/download) and choose your operating system and processor.
+
+| Platform | Download |
+| --- | --- |
+| macOS, Apple Silicon | ARM64 disk image |
+| macOS, Intel | x64 disk image |
+| Windows, 64-bit | Windows installer |
+| Linux, x86_64 or ARM64 | Matching AppImage |
+
+On macOS, open the disk image and move OpenScience to Applications. On Windows, run the installer. On Linux, make the downloaded AppImage executable and open it. Check the [latest release](https://github.com/synthetic-sciences/openscience/releases/latest) for the files and release-specific installation notes.
+
+Open the app, create or open a project, and follow [Quickstart](/openscience/quickstart) to connect a model.
+
+## Command-line app
+
+With Node.js and npm installed:
+
+```bash
+npm install -g @synsci/openscience
+openscience --version
+openscience
+```
+
+The command opens the browser workspace. To open an existing folder, pass its path:
+
+```bash
+openscience ~/research/my-project
+```
+
+You can also use `npx synsci`, which installs and launches OpenScience. For a standalone install on macOS or Linux:
+
+```bash
+curl -fsSL https://openscience.sh/install | bash
+```
+
+Open a new terminal if `openscience` is not found after installation. The standalone install uses `~/.openscience/bin`; follow the installer's PATH instructions.
+
+For Linux compatibility requirements and platform-specific CLI archives, check the release notes. Choose the build that matches your architecture and distribution.
+
+## Verify the installation
+
+```bash
+openscience --version
+openscience doctor
+openscience models
+```
+
+`doctor` reports what is configured and what still needs attention. An installed app still needs a model connection before it can answer a research request.
+
+## Update
+
+Use the update controls in **Customize → General**. Follow the app's restart prompt when an update is ready. If an in-app update is unavailable on your platform, install the current desktop download.
+
+For the CLI:
+
+```bash
+openscience upgrade
+```
+
+Or update an npm installation through npm:
+
+```bash
+npm install -g @synsci/openscience@latest
+```
+
+Check `openscience --version` after updating and reopen the workspace. Read the [changelog](https://github.com/synthetic-sciences/openscience/blob/main/CHANGELOG.md) for behavior changes.
+
+## Uninstall
+
+Preview removal first:
+
+```bash
+openscience uninstall --dry-run
+openscience uninstall
+```
+
+The CLI keeps your work and settings by default. `--purge` also deletes OpenScience configuration and user data; export important sessions and back up project files before choosing it.
+
+See [Files and storage](/openscience/files) for export and backup guidance, and [Troubleshooting](/openscience/troubleshooting) if installation or startup fails.

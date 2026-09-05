@@ -1,0 +1,56 @@
+---
+title: "Figures and writing"
+description: "Turn checked analysis into figures, methods, and research documents."
+---
+
+## Start from saved evidence
+
+Give OpenScience the analysis files and the intended audience. Ask it to identify missing evidence before drafting claims.
+
+```text
+Use results/comparison.csv and results/methods.md to draft a short
+results section. Keep measured findings separate from interpretation.
+Do not add numerical claims that are absent from the saved results.
+```
+
+A writing request does not validate the underlying experiment. Review the analysis first.
+
+## Make a figure
+
+Specify the data, comparison, labels, units, uncertainty, and export format.
+
+```text
+Plot results/comparison.csv for a two-column paper. Label the axes with
+units, show the agreed uncertainty intervals, use colors distinguishable
+in grayscale, and save both the figure and its plotting script.
+```
+
+Ask for vector output when your publishing workflow needs it, and a raster preview for quick review. The available formats depend on the plotting tool.
+
+Check axis scales, group order, legend meaning, and whether the plotted uncertainty matches the methods.
+
+## Draft a document
+
+The skill library includes scientific writing, LaTeX, citations, and document workflows. Search **Customize → Skills** for the format or procedure you need.
+
+Give the expected structure and output path:
+
+```text
+Prepare a methods draft from methods/protocol.md and scripts/analyze.py.
+Include software versions, preprocessing, exclusions, and limitations.
+Save it to results/methods-draft.md and mark unresolved details.
+```
+
+For LaTeX or another compiled format, ask OpenScience to build and inspect the output if the required software is available. If it cannot, the response should say which source files were saved and what remains to be checked.
+
+## Check citations
+
+Ask for a bibliography built from sources actually consulted. Verify titles, authors, dates, and identifiers, and check that each citation supports the adjacent claim.
+
+Do not treat a plausible reference as verified just because it is formatted correctly. See [Literature reviews](/openscience/literature-review).
+
+## Review and share
+
+Open the final files. Check layout, figures, labels, citations, and unresolved placeholders before sharing.
+
+Keep the source document and the exported copy together. Use explicit filenames so collaborators know which file is the draft and which is the reviewed version. [Files and storage](/openscience/files) explains how to keep the deliverables with their inputs.

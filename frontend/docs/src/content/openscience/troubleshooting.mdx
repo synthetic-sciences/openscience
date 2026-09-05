@@ -1,0 +1,96 @@
+---
+title: "Troubleshooting"
+description: "Resolve installation, model access, account, file, and research-tool problems."
+---
+
+Start with the error shown in the app and the installed version. Check the relevant section below before changing several settings at once.
+
+```bash
+openscience --version
+openscience doctor
+```
+
+## Command not found or app will not open
+
+Open a new terminal after installing. For a standalone CLI install, confirm that `~/.openscience/bin` is on PATH. For npm, check that your npm global executable directory is on PATH.
+
+Download the desktop build that matches your operating system and processor. If an older desktop download fails, try the current official release and read its platform notes. Avoid mixing files from different releases.
+
+See [Installation and updates](/openscience/installation).
+
+## No models available
+
+Open **Customize → Models** and check the selected access mode.
+
+- For Ace, sign in and verify the funding workspace and Wallet access.
+- For BYOK / Subscription, reconnect the provider and check API or subscription access.
+- For a local model, confirm that its server is running and the model is registered.
+
+Use `openscience models --flat` for exact IDs. A key supplied to one provider does not enable a different provider's model.
+
+## A key works in a terminal but not the desktop app
+
+The desktop app may not inherit environment variables exported in a shell. Save the key through **Customize → Models**, or launch the CLI from the shell where the variable is set.
+
+If a removed key still appears active, check environment variables and shared workspace access as well as saved local credentials.
+
+## Ace is unavailable or uses the wrong balance
+
+Check **Customize → General → Funding workspace**. A project name and an account workspace name can differ.
+
+Complete workspace switching in the browser, return to the app, and use **Sync now**. If access was revoked, an administrator may need to restore membership or the shared connection.
+
+A pending reservation can reduce available funds before the final charge appears. See [Pricing](/openscience/pricing). Changing the model to BYOK does not disable automatic Wallet reloads.
+
+## A response is slow or times out
+
+Check whether the app is connecting, waiting for output, receiving output, or running a tool. A wait before the first response can include connection and service processing time.
+
+Start with a short request and verify the selected model. For a self-hosted model, check server load, memory, context size, and whether it can complete a request directly.
+
+Received output remains in the conversation after a timeout. Review completed tools and files before retrying, especially for a paid request. Configurable deadlines are described in [Custom providers](/openscience/custom-providers).
+
+## Local model discovery is empty
+
+Check that the runtime is running, a model is downloaded or loaded, and you used the correct base URL.
+
+```bash
+curl http://localhost:11434/v1/models
+openscience local list
+```
+
+For Ollama, start `ollama serve` if needed. For LM Studio, start its local server after loading a model. Rescan in **Customize → Local models**.
+
+If a `--bare` request works but research tasks fail, verify tool calling and reduce the input or context size. See [Local models](/openscience/local-models).
+
+## Files are missing or the wrong copy opens
+
+Confirm that you opened the intended project. In Files, check **Project files** and **Session scratch** separately. Read the location shown in the preview.
+
+For protected folders on macOS, grant the folder access the operating system requests to the app or terminal you are using, then reopen the folder. A project path must exist and be accessible on the machine running OpenScience.
+
+Use [Files and storage](/openscience/files) for data locations and backups.
+
+## A scientific tool needs setup
+
+Open **Customize → Tools** and **Customize → Compute**. Complete the relevant installation or connection action and test a small input.
+
+A skill's presence does not mean its dependencies are installed. A saved service key does not mean your account has access to every model or resource. Preserve the reported error and job identifier instead of repeatedly starting the same job.
+
+## A connector will not connect
+
+In **Customize → Connectors**, check whether it is saved but off, awaiting authorization, or reporting an error.
+
+For a local connection, verify the executable and dependencies. For a remote one, verify the HTTPS endpoint and finish authorization. See [Connectors](/openscience/connectors).
+
+## A terminal task exits immediately
+
+Use the [exit-code table](/openscience/sessions#exit-codes). Code 2 usually means invalid arguments or missing configuration. Code 3 indicates a rejected permission or question; noninteractive runs reject prompts by default.
+
+Provide the missing information and choose an appropriate run policy. Do not automatically enable all actions just to suppress an unexplained failure.
+
+## Report a reproducible problem
+
+Use [GitHub Issues](https://github.com/synthetic-sciences/openscience/issues) for product bugs. Include the version, operating system, access mode, exact error, and the smallest steps or sample that reproduce it.
+
+Remove API keys, private datasets, and unrelated conversation content. For account or payment details, use support through your billing account instead of a public issue. For a security vulnerability, follow the [security reporting policy](https://github.com/synthetic-sciences/openscience/blob/main/SECURITY.md).

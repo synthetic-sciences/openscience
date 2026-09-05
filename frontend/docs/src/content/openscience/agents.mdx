@@ -1,91 +1,102 @@
 ---
-title: "Agents"
-description: "One adaptive Research agent, model-directed internal task profiles, a read-only plan mode, and custom agent profiles."
-icon: "bot"
+title: "Research controls"
+description: "Plan a task, choose research effort, and decide when OpenScience should ask you."
 ---
 
-`research` is the single user-facing built-in agent. It owns the whole loop: literature review, hypothesis, code, experiments on real compute, analysis, and write-up. It loads narrow domain skills when they help and delegates genuinely independent work when it improves the result.
+**Research** is the default agent. It can search the literature, analyze data, write code, run experiments, and prepare a report. Skills supply procedures for particular domains.
 
-## Built-in roster
+Start with a clear goal, the inputs, an output location, and any limits on time or spending.
 
-| Agent | Role | What it does |
-| --- | --- | --- |
-| `research` | Default | Scientific research across the full skill library — literature, data analysis, compute, and synthesis. |
-| `plan` | Mode | Read-only planning. Edit tools are disabled except for plan files. |
+## Plan before execution
 
-Research has two canonical internal task profiles. They are hidden from the picker and selected by the kind of work, not by a user-facing persona:
-
-| Profile | What it does |
-| --- | --- |
-| Explore | Read/search work: inspect a codebase, source set, or project state. |
-| Execute | Implementation or computation using the active project permissions. |
-
-Older domain and helper names remain as hidden compatibility profiles so existing config and sessions keep working; they are not the product roster. Run `openscience agent list` to inspect the complete registry on your install, including hidden compatibility and system profiles.
-
-## Choose Research effort
-
-```bash
-# focused by default
-openscience run "Fit the dispersion relation in data/spectra.csv"
-
-# wider investigation when independent branches justify it
-openscience run --effort ultra "Compare three defensible fitting approaches"
-```
-
-Normal and Ultra use the same Research harness. Ultra asks the model to investigate additional branches when they could change the result; it does not switch personas or impose a worker count. In the workspace, delegation posture is separate: Off, Low, Normal, and High guide how readily the lead parallelizes work, while Independence controls when the lead and workers ask clarifying questions. Runtime machine capacity queues concurrent workers rather than turning those controls into quotas. Plan mode is available when you want to agree on method, spend, or consequential actions before execution.
-
-Custom agents remain available for teams with a deliberate specialized workflow. Set a custom agent with mode `primary` or `all` as `default_agent` in `openscience.json`; `subagent` profiles are reachable only by delegation.
-
-## Create a custom agent
-
-`openscience agent create` walks you through it interactively. The non-interactive form:
-
-```bash
-openscience agent create \
-  --path .openscience \
-  --description "Reviews analysis notebooks for data leakage and unsound statistics" \
-  --mode subagent \
-  --tools "read,grep,glob" \
-  --model anthropic/claude-sonnet-5
-```
-
-| Flag | Use |
-| --- | --- |
-| `--path <dir>` | Where to write the definition; an `agent/` folder is created inside it. Omit to choose project or global interactively. |
-| `--description <text>` | What the agent is for. A model expands this into the name, system prompt, and delegation description. |
-| `--mode <all\|primary\|subagent>` | `primary`: leads a session. `subagent`: only reachable by delegation. `all`: both. |
-| `--tools <tool[,tool...]>` | Allow-list of tools. Anything left off the list is disabled. |
-| `--model <provider/model>` | Default model for this agent. |
-
-The result is a Markdown file: YAML frontmatter (description, mode, tools) plus a body that is the system prompt. Edit it like any prose file.
-
-## Tool restrictions
-
-`--tools "read,grep,glob"` produces a read-only agent that cannot be tricked into editing files. The available tools are `bash`, `read`, `write`, `edit`, `list`, `glob`, `grep`, `webfetch`, `task`, `todowrite`, and `todoread` — run `openscience agent create --help` for the list on your version.
-
-## Where agents live
+Use `/plan` when you want to agree on an approach before implementation:
 
 ```text
-.openscience/agent/             # project-scoped
-~/.config/openscience/agent/    # user-global
-<bundled>                       # ships with OpenScience
+/plan Compare these treatment groups. Identify assumptions, possible
+confounders, the statistical test, and the outputs we should save.
 ```
 
-Resolution is project-local, then user-global, then built-in.
+Plan mode inspects the available material and prepares a plan. It does not carry out the proposed analysis or edit project files, apart from its plan files. After reviewing the plan, return to Research and ask it to execute the agreed steps.
 
-## What's next
+## Normal and Ultra effort
 
-<Columns cols={2}>
-  <Card title="Skills" icon="book-open" href="/openscience/skills">
-    The 312-skill library Research draws on.
-  </Card>
-  <Card title="Sessions" icon="terminal" href="/openscience/sessions">
-    Start, resume, and share sessions with any agent.
-  </Card>
-  <Card title="Models" icon="package-check" href="/openscience/models">
-    Per-agent default models and provider routing.
-  </Card>
-  <Card title="Commands" icon="terminal" href="/openscience/commands">
-    Full `agent create` and `agent list` reference.
-  </Card>
-</Columns>
+| Effort | Use it for |
+| --- | --- |
+| Normal | Focused questions, a known analysis, or a small implementation. |
+| Ultra | Investigations where comparing additional approaches could change the conclusion. |
+
+Ultra can involve more work and model usage. It does not guarantee a better answer or a fixed number of parallel workers.
+
+```bash
+openscience run --effort normal "Check the assumptions in results/analysis.md"
+openscience run --effort ultra "Compare defensible approaches to the missing data in this project"
+```
+
+A model's reasoning tier is a separate setting; see [Models](/openscience/models).
+
+## Delegation and independence
+
+In the research controls, delegation determines how readily OpenScience divides independent work:
+
+| Delegation | Behavior |
+| --- | --- |
+| Off | Keep the task with the lead agent. |
+| Auto | Delegate when separate work would help. |
+| High | Prefer more delegation when the task can benefit from it. |
+
+**Independence** controls how often the agent asks you to resolve choices:
+
+- **Interactive:** plan together and discuss consequential choices.
+- **Balanced:** ask about meaningful ambiguities while continuing routine work.
+- **Independent:** proceed within the task's constraints and ask when blocked.
+
+These settings guide collaboration. They do not replace your action-approval settings or a service's spending controls.
+
+## Action approval
+
+Choose how much oversight you want from the composer's research controls. **Ask always**, **Ask risky**, and **Full access** offer progressively fewer routine approval prompts.
+
+Keep your request specific about changes or costs you want to review. See [Permissions and control](/openscience/permissions) for choosing an approval mode and understanding a request.
+
+## Persistent goals and progress
+
+Use `/goal` for an objective you want to pursue across multiple steps:
+
+```text
+/goal Produce a reproducible analysis of data/samples.csv, with code,
+a figure, a methods note, and a list of unresolved limitations.
+```
+
+Use `/status` to inspect progress. `/checkpoint` captures a recovery point; `/handoff` saves a continuation note and compacts the conversation. Commands offered as skills must be enabled in your setup.
+
+A persistent goal does not mean OpenScience can keep working while your computer or app is off. Save a checkpoint before interrupting a long task.
+
+## Custom agents
+
+Create a reusable specialist when you need a consistent role across projects:
+
+```bash
+openscience agent create
+openscience agent list
+```
+
+The creation wizard produces a Markdown definition you can review and edit. Custom agents live in `.openscience/agent/` for a project or `~/.config/openscience/agent/` for your user account.
+
+For a manually authored reviewer:
+
+```markdown
+---
+description: Review analysis plans for confounding and data leakage
+mode: primary
+permission:
+  edit: deny
+  bash: deny
+---
+
+Review the analysis plan and identify unsupported assumptions.
+Explain each concern and suggest a check before the analysis runs.
+```
+
+Save it as `analysis-reviewer.md` in the agent directory. Select it with `--agent analysis-reviewer`. A `primary` agent can lead a session, a `subagent` is for delegated tasks, and `all` supports both.
+
+Custom definitions change the agent's instructions and permitted actions. Test a new profile on a small task before relying on it.

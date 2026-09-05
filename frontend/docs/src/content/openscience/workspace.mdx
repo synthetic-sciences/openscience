@@ -1,102 +1,99 @@
 ---
 title: "Workspace"
-description: "The bare openscience command opens the browser workspace: files, editor, sessions, and inline scientific rendering."
-icon: "app-window"
+description: "Find your projects, follow a conversation, and review the files OpenScience produces."
 ---
 
-The workspace is how you use OpenScience. Run the bare command and it starts a local server, opens your browser, and gives you the full research surface: a file tree, an editor, session history, and inline rendering for molecules, structures, genomes, and plots.
+The desktop app and browser workspace give you the same research workflow: open a project, choose a model, and work through a question in a conversation.
 
 ```bash
-openscience                    # open the workspace in the current directory
-openscience ~/code/my-project  # open it in a specific project
+openscience
+openscience ~/research/my-project
 ```
 
-The server is local by design: it binds `127.0.0.1`, holds the agent in its own process, and serves the UI from the same port (`http://localhost:4096` by default; if 4096 is taken it falls back to a free port and prints the URL). Closing the browser tab does not kill the agent — reopen the URL to pick up where you left off.
+The first command opens the current folder; the second opens the folder you specify.
 
-| Flag | Use |
+## Projects and conversations
+
+A project groups related work and files. A conversation, also called a session, holds the requests and results for one task. Start a new conversation for a separate question, or reopen an existing one to continue its work.
+
+Give files descriptive names and tell OpenScience where to save outputs. A new conversation does not automatically know every detail of another conversation; refer to the relevant saved report or handoff when continuing across sessions.
+
+## Find your way around
+
+| Area | What it is for |
 | --- | --- |
-| `--port <n>` | Bind a specific local port instead of the default 4096. |
-| `--cors <origin>` | Allow an extra CORS origin (repeatable). |
+| Conversation | Requests, responses, tool activity, and results. |
+| Model picker | Choose an available model and its options. |
+| Files | Browse project documents and the current conversation's working files. |
+| Terminal | Run project commands yourself. |
+| Compute | Check analysis work and jobs. |
+| Customize | Configure model access, skills, tools, connectors, and app settings. |
 
-The server always binds localhost — the deprecated `server.hostname` / `server.mdns` config keys are parsed but ignored. Persistent settings live in `~/.config/openscience/openscience.json` under `server.port` and `server.cors`.
+Use the command palette to find actions such as **Open project files**, **Open project terminal**, **Open settings**, and **New session**. On narrow windows, workspace actions may appear in a menu.
 
-## What the workspace gives you
+## Add context
 
-- **File tree and editor.** Browse and edit the project the agent is working in; edits and diffs render inline.
-- **Project terminal.** Run commands alongside the conversation in the workspace terminal, or use your system terminal.
-- **Session history.** Every conversation is a session; switch between them without losing context.
-- **Inline scientific rendering.** Molecules, protein structures, genomes, and plots render directly in the transcript instead of as file paths.
-- **Prompt queueing.** Type your next prompt while the agent is still streaming; queued prompts run in order.
-- **Undo from here.** Roll the session back to any message and take a different path from that point.
-- **Model selector and credentials panel.** Pick any configured model per session and add provider keys without leaving the browser. See [Models](/openscience/models).
-- **Customize panels.** Manage models, connectors, research tools, skills, compute, and local storage without leaving the workspace.
+Mention the input files and the outcome in your request. The file picker and attachments let you provide material directly. You can also use `@file` references where the composer offers them.
 
-## Project files and session scratch
+```text
+Use data/samples.csv and methods/protocol.md. Check whether the sample
+labels match the protocol, and save discrepancies in results/labels.md.
+```
 
-Project files are the project's durable documents. Session scratch is a separate
-working area for one conversation; the two locations can contain different files
-with the same name. Check the preview's location before treating a scratch copy as
-the project document. You can open the durable copy directly from **Files → Project
-files**.
+Only refer to material you have permission to use. For large files, first ask for the schema or a bounded sample.
 
-When a completed file-writing tool records one exact path for a bare filename,
-the chat link uses that path. A filename alone is not proof of which copy a shell
-command wrote: older Bash-generated links may still open scratch. Choose the
-known project copy from Project files rather than relying on modification times.
+## Follow progress and steer the task
 
-Chat links can open documents already saved in a managed project's Project files
-without moving them into scratch. This preview is read-only and verifies the
-project and session on each read. It does not grant the agent access to more
-folders. Connected files still require their existing filesystem permission, and
-links into another project or outside an authorized root remain blocked.
+The conversation shows the activity and tool results supplied during the run. Open an individual tool result when you need its inputs or output.
 
-## Scientific environments
+You can queue follow-up prompts while a response is running. Stop the current response when you need to change direction immediately. Inspect any files already written before asking it to retry or redo the work.
 
-The first authenticated launch prepares two app-owned starter environments under `~/.openscience/conda` without changing your system Python, R, Conda configuration, or shell:
+Use [Research controls](/openscience/agents) to choose planning, research effort, delegation, and when the agent asks for your input.
 
-- **Python 3.11:** NumPy, pandas, SciPy, Matplotlib, Seaborn, Pillow, and pip.
-- **R:** tidyverse, ggplot2, and jsonlite.
+## Review files and scientific results
 
-Python and R run in persistent per-conversation kernels, so variables and imports remain available between steps. Idle kernels stop after about 30 minutes. When a task needs additional Python packages, an approved package change can create a named environment that is reused across projects on the same machine. Starter setup and repair status appears in **Settings → Customize → Compute**.
+Open an output link in the conversation or choose **Files**. Supported scientific formats can display as plots, molecules, structures, or genomic views.
 
-Remote credentials for Modal, GPU providers, and major clouds can be connected either in that Compute panel or in the dashboard Integrations page. Account-connected credentials follow the signed-in user across devices, but execution still goes directly to the user's provider account; Synthetic Sciences does not resell remote compute.
+**Project files** and **Session scratch** are different locations. They can contain files with the same name. Check the preview's location, especially when opening an older conversation, and save final deliverables to the project.
 
-## Headless server
+Ask for a text explanation alongside a visual result: what was measured, what the axes or colors mean, and where the source data came from. See [Files and storage](/openscience/files).
 
-`openscience serve` starts the same server without opening a browser — useful for keeping a long-lived agent running that other terminals attach to. It takes the same `--port` and `--cors` flags and is loopback-only (`127.0.0.1`).
+## Undo and restore
+
+After a response finishes, use **Undo from here** or `/undo` to return to an earlier point. Review the confirmation, which identifies affected work and file changes. A restore action is available for reverted work.
+
+Undo is useful for trying a different analysis path. It does not reverse external payments, messages, or changes in a connected service. Use version control or backups for files you need to retain independently of conversation history.
+
+## Customize your setup
+
+Open **Customize** to manage:
+
+- **Models** and **Local models** for model access.
+- **Skills** for reusable instructions.
+- **Tools** for scientific capability availability.
+- **Connectors** for external tools and services.
+- **Compute** for local analysis and your own remote resources.
+- **Storage** and **General** for app data, account selection, appearance, and updates.
+
+[Configuration](/openscience/configuration) covers file-based settings for repeatable setups.
+
+## Browser and terminal sessions
+
+The CLI prints a local workspace URL. If you close the browser tab while the command is still running, reopen that URL. Stopping the CLI stops that running workspace; saved conversations remain available next time.
+
+To choose a port:
+
+```bash
+openscience web --port 4096
+```
+
+For a browser-free server and a request from another terminal:
 
 ```bash
 openscience serve --port 4096
-openscience run --attach http://localhost:4096 "Continue the ablation sweep"
+openscience run --attach http://localhost:4096 "Summarize the current project"
 ```
 
-There is no separate attach subcommand: `openscience run --attach <url>` sends a one-shot prompt to the running server. See [Sessions](/openscience/sessions).
+Use the actual URL printed at startup. The workspace is for local access; it does not provide public remote hosting.
 
-<Warning>
-The workspace is intended for local use on a machine you control. The server binds `127.0.0.1` only and has no remote-access mode; do not reverse-proxy it to the public internet.
-</Warning>
-
-## macOS Full Disk Access
-
-On macOS, launching the workspace probes whether the binary can read `~/Desktop`. Without Full Disk Access, macOS silently returns empty listings for `~/Desktop`, `~/Documents`, and `~/Downloads`, so the folder picker and file tree look empty. If the probe fails, OpenScience opens System Settings on the Privacy & Security pane and prints the binary path to add:
-
-1. In **Full Disk Access**, click **+**, press ⌘⇧G, and paste the printed path.
-2. Toggle the `openscience` entry on.
-3. Quit (Ctrl+C) and relaunch `openscience`.
-
-## What's next
-
-<Columns cols={2}>
-  <Card title="Sessions" icon="layers" href="/openscience/sessions">
-    Resume, attach, export, and one-shot runs.
-  </Card>
-  <Card title="Models" icon="package-check" href="/openscience/models">
-    BYOK providers and per-session model switching.
-  </Card>
-  <Card title="Agents" icon="bot" href="/openscience/agents">
-    The Research harness and its bounded internal task profiles.
-  </Card>
-  <Card title="Security" icon="shield-check" href="/openscience/security">
-    The trust boundary and credential handling.
-  </Card>
-</Columns>
+See [Sessions](/openscience/sessions) for continuing, exporting, and importing conversations.

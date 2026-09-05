@@ -1,0 +1,60 @@
+---
+title: "Compute"
+description: "Prepare analysis tools and connect your own resources for larger experiments."
+---
+
+OpenScience can run analysis on your machine or use resources you connect. Model access and compute are separate: an Ace Wallet does not include unlimited experiments on external machines.
+
+## Local analysis
+
+Open **Customize → Compute** and check the Python and R starter setup. If either needs setup or repair, use the offered action and wait for it to finish.
+
+The Python starter includes common analysis libraries such as NumPy, pandas, SciPy, and Matplotlib. The R starter includes tidyverse, ggplot2, and jsonlite. Additional tools may need a separate installation or account.
+
+Try a small task first:
+
+```text
+Check that Python can read data/samples.csv and save a histogram to
+results/sample-counts.png. Explain any missing dependency before changing
+the environment.
+```
+
+## Scientific tools
+
+Open **Customize → Tools** to see which scientific tools are available on the device or through a connected account. Follow a tool's setup action when offered.
+
+A skill can describe how to use a package without that package being installed. See [Scientific tools](/openscience/scientific-tools) for availability and limitations.
+
+## Connect your own remote resources
+
+The Compute panel supports configured services and SSH hosts. Use your own account or machine credentials, then test the connection.
+
+For an SSH host, supply the host details or import an existing SSH configuration, verify the connection, and record any scheduler or working-directory requirements. Supported scheduler choices are shown in the panel.
+
+For a connected compute service, review its resource defaults and timeout before asking for a job. Saving a credential alone does not guarantee that every service feature is supported.
+
+## Approve a concrete run
+
+Before launching a paid or substantial experiment, ask OpenScience to state the inputs, resources, duration, output files, and estimated cost if available.
+
+```text
+Prepare a pilot using the configured remote host. Show the command,
+resource request, input files, and expected output location. Ask before
+launching, and stop after the pilot so we can review the result.
+```
+
+Use the external service's spending controls as well as a task budget. Its charges are governed by that service's terms.
+
+## Follow progress and collect outputs
+
+Use the project's **Compute** view to inspect jobs. Ask for current status, failures, and saved outputs when a task is long-running.
+
+If a response is interrupted, check whether the job is still running before starting another. Stopping a chat response is not proof that every external job has stopped.
+
+After completion, ask OpenScience to retrieve the output files, verify that they are readable, and report the exact project paths. A remote job marked complete is only useful if its results are available for review.
+
+## When setup fails
+
+Check the error shown by Compute, available disk space, network access, credentials, and the requested resource type. Keep the failed job identifier when asking for help.
+
+For a tool marked unavailable, choose a supported alternative or resolve the stated prerequisite. Do not assume that a different model can remove a missing dependency or account requirement.

@@ -1,156 +1,111 @@
 ---
-title: "Sessions & one-shot runs"
-description: "One agent conversation: history, tool calls, and a working directory. Create, resume, attach, and export."
-icon: "layers"
+title: "Sessions and terminal runs"
+description: "Start, continue, export, and import a research conversation."
 ---
 
-A **session** is a single agent conversation: a thread of prompts and replies, the tool calls the agent made, and the working directory those calls ran against. Sessions remain stored on disk.
+A session is one conversation: your requests, the responses, and the recorded tool activity. OpenScience saves sessions so you can return to a task.
 
 ## Start a session
 
-| Entrypoint | Use |
-| --- | --- |
-| `openscience` | Open the [browser workspace](/openscience/workspace) in the current directory. |
-| `openscience run [message..]` | Send one prompt from the terminal, stream the result, and exit. Good for pipelines, CI, and git hooks. |
-| `openscience serve` | Start a headless server (no browser) for `run --attach` to target. |
-
-The workspace is interactive; `openscience run` is the one to script. Each produces a session you can resume from either surface.
-
-## One-shot runs
+Open the workspace with `openscience`, or send a single request from a terminal:
 
 ```bash
-openscience run "Set up a DFT optimization for this structure" -f data/sample.cif
-git diff | openscience run "Review this diff for race conditions"
+openscience run "Review the analysis plan in this project"
 ```
 
-Piped stdin is appended to the message. `openscience run` supports:
+Use `--title` to make the session easy to find later:
 
-| Flag | Use |
+```bash
+openscience run --title "Sample quality checks" "Inspect data/samples.csv for missing values"
+```
+
+## Attach files or pipe input
+
+```bash
+openscience run "Explain this protocol and identify missing details" --file methods/protocol.md
+git diff | openscience run "Review this diff for likely bugs"
+```
+
+Repeat `--file` for multiple files. Piped input is appended to your message.
+
+`--file` attaches a file. `--attach` connects to an already running OpenScience server.
+
+## Continue existing work
+
+```bash
+openscience session list
+openscience session list -n 10 --format json
+openscience run --continue "Now create a plot of the missing-value counts"
+openscience run --session <session-id> "Explain the limitations of the analysis"
+```
+
+Replace `<session-id>` with an ID from the session list. `--continue` chooses the latest session; use an explicit ID when several tasks are active.
+
+In the workspace, open the saved conversation in project history. Queued prompts and follow-up messages continue that conversation.
+
+## Choose model and research settings
+
+| Flag | Purpose |
 | --- | --- |
-| `-c, --continue` | Continue the most recent session. |
-| `-s, --session <id>` | Continue a specific session by id. |
-| `-m, --model <provider/model>` | Model for this run, e.g. `anthropic/claude-opus-4-8`. An unknown or disconnected model exits 2 before anything runs; there is no silent fallback. See [Models](/openscience/models). |
-| `--agent <name>` | Primary agent to run (default `research`). |
-| `--variant <tier>` | Reasoning-effort tier (`high`, `max`, `minimal`; model-dependent). |
-| `--effort <normal\|ultra>` | Research breadth. Normal is focused; Ultra permits a wider bounded investigation. |
-| `--command <name>` | Run a custom command, with the message as its arguments. |
-| `-f, --file <path>` | Attach a local file to the message (repeatable). |
-| `--title <text>` | Title for the session in `session list`. |
-| `--format <default\|json>` | `json` emits one JSON event per line, tagged with the session id; see [JSON events](#json-events). |
-| `--auto-approve` | Approve every permission request for this run (alias `--dangerously-skip-permissions`). Replies are per request and never persisted; delegation is off so the whole run is one visible session. |
-| `--deny-prompts` | Reject every permission request for this run. This is the default whenever stdin is not a terminal. |
-| `--attach <url>` | Send the prompt to a running server instead of starting one. |
+| `--model <provider>/<model>`, `-m` | Select an exact configured model. |
+| `--agent <name>` | Select a primary agent; defaults to Research. |
+| `--variant <tier>` | Select a reasoning tier supported by that model. |
+| `--effort normal` or `--effort ultra` | Choose research breadth. |
+| `--bare` | Answer without tools; useful for testing a model connection. |
+| `--command <name>` | Run a custom command with the message as its arguments. |
+| `--format json` | Write one JSON event per line. |
 
-To pick up a file, always use `-f`; `--attach` targets a server, it does not fetch documents.
+See [Models](/openscience/models) and [Research controls](/openscience/agents).
 
-`--auto-approve` and `--deny-prompts` are mutually exclusive. Without either, `run` prompts in the terminal when stdin is a TTY and rejects when it is not, so `git diff | openscience run ...` never blocks. Either way `run` never answers the agent's questions: the session denies the `question` tool, and a stray question is rejected instead of hanging the run. A rejection ends the turn unless `experimental.continue_loop_on_deny` is set in your config.
+## Permissions in terminal runs
 
-### Exit codes
+An interactive terminal run can ask for permission. Without a terminal, permission prompts are rejected by default so a pipeline does not wait forever.
+
+| Flag | Behavior |
+| --- | --- |
+| `--deny-prompts` | Reject permission requests for this run. |
+| `--auto-approve` | Approve permission requests for this run and disable delegation. |
+| `--dangerously-skip-permissions` | Alias for `--auto-approve`. |
+
+The two policies are mutually exclusive. They do not persist as app settings.
+
+Use automatic approval only for a task whose allowed work you have already reviewed. A terminal run cannot conduct an interactive clarification conversation; include the needed assumptions and constraints in its prompt.
+
+## Exit codes
 
 | Code | Meaning |
 | --- | --- |
 | `0` | The turn completed. |
-| `1` | The session reported an error (provider, tool, or agent failure). |
-| `2` | Usage or configuration error: unknown model or command, no provider available, missing message or file. |
-| `3` | Stopped by a rejected permission or question. |
+| `1` | The session reported an error. |
+| `2` | A usage or configuration error prevented the request. |
+| `3` | A permission request or question was rejected. |
 
-### JSON events
+A completed turn is not proof that a scientific claim is correct. Inspect the output and run the relevant checks.
 
-With `--format json`, stdout carries only events, one JSON object per line, each with `type`, `timestamp` (ms), and `sessionID`. Warnings and logs go to stderr. The schema lives in `backend/cli/src/cli/run-events.ts`.
+## Attach to a running workspace
 
-| Event | Payload | When |
-| --- | --- | --- |
-| `user` | `parts` (text and file parts), `command` | Once, before the session starts. |
-| `step_start` / `step_finish` | `part` | Around each model call; `step_finish.part` carries `tokens` and `cost`. |
-| `text` | `part` | One per finished text part. |
-| `reasoning` | `part` | One per finished reasoning part. |
-| `tool_use` | `part` | One per tool call once it completes or fails (`part.state.status`). |
-| `permission` | `request` (`id`, `sessionID`, `permission`, `patterns`), `reply` | Each time `run` answers a permission request, including from delegated sessions. |
-| `error` | `error` (`name`, `data`) | A session error. |
-| `done` | `status` (`completed`, `error`, `rejected`), `exitCode`, `tokens` summed over steps, `cost` | Last event, always. |
-
-## Headless and container runs
-
-`openscience run` is the entrypoint for benchmark harnesses and containers (the [Harbor adapter](https://github.com/synthetic-sciences/openscience/tree/main/tooling/harbor) is built on it). Nothing in it needs a browser, a terminal, or an account: with a provider key in the environment and `--auto-approve`, a fresh data directory never contacts Synthetic Sciences. The knobs below already exist; set them in the container's environment.
-
-| Variable | Use |
-| --- | --- |
-| `OPENSCIENCE_DATA_DIR` | Sessions, snapshots, and user skills. Point it at a collected log directory. |
-| `OPENSCIENCE_CONFIG_DIR` | Location of `openscience.json` (see below). |
-| `OPENSCIENCE_SKIP_ENVIRONMENT_BOOTSTRAP=1` | Do not provision the app-owned Python and R environments (a micromamba download) on startup. |
-| `OPENSCIENCE_DISABLE_AUTOUPDATE=1` | No release checks. |
-| `OPENSCIENCE_DISABLE_LSP_DOWNLOAD=1` | No language-server downloads. |
-| `OPENSCIENCE_DISABLE_PROJECT_CONFIG=1` | Ignore `openscience.json` files inside the task directory, so a task repository cannot inject configuration. |
-| `OPENSCIENCE_DISABLE_MODELS_FETCH=1` | Only when models.dev is unreachable and the model is in the bundled snapshot; otherwise leave it unset. |
-| `OPENSCIENCE_PERMISSION` | JSON permission rules merged into the config, an alternative to the file below. |
-
-Do not set `OPENSCIENCE_FAKE_VCS`: it makes every step snapshot the whole working tree for the workspace's undo and diff views, which a headless run does not use.
-
-Write `$OPENSCIENCE_CONFIG_DIR/openscience.json` to turn containment off (task containers rarely have bubblewrap, and `sandbox.onUnavailable` defaults to `error`) and to keep the agent away from tools that need a Synthetic Sciences account or paid remote compute:
-
-```jsonc
-{
-  "sandbox": { "enabled": false },
-  "permission": {
-    "*": "allow",
-    "research_search": "deny",
-    "atlas": "deny",
-    "atlas_write": "deny",
-    "remote_compute": "deny",
-    "modal": "deny",
-    "provider_compute": "deny",
-    "compute_job": "deny"
-  },
-  // With --deny-prompts, keep the turn going after a rejection instead of ending it.
-  "experimental": { "continue_loop_on_deny": true }
-}
-```
-
-The sandbox policy is read only from that file (or a managed config directory): `OPENSCIENCE_CONFIG_CONTENT` merges into the rest of the configuration but cannot change `sandbox`.
-
-## Continue or resume
+Start a server in one terminal:
 
 ```bash
-openscience session list                       # recent sessions (-n 10 to cap, --format json)
-openscience run -c "Now add tests for the refactored module"
-openscience run -s ses_8f2ka91xk "Rerun the sweep with lr=3e-4"
+openscience serve --port 4096
 ```
 
-`session list` prints a table of ids, titles, and update times (paged through `less` in a terminal). In the workspace, the same sessions appear in the session history pane, where you can also queue prompts and undo from any message.
-
-## Attach to a running server
-
-Leave `openscience serve` (or the workspace) running and drive it from another terminal:
+Send a request from another:
 
 ```bash
-openscience run --attach http://localhost:4096 "Summarize today's results"      # new session on the server
-openscience run --attach http://localhost:4096 -s ses_8f2ka91xk "Continue"      # a specific session (-c: latest)
+openscience run --attach http://localhost:4096 "Summarize the project"
+openscience run --attach http://localhost:4096 --session <session-id> "Continue the analysis"
 ```
 
-The run shares the server's sessions, so work started in the browser continues from the terminal and vice versa.
+Use the server's actual printed URL and the same project context. The server must remain running.
 
 ## Export and import
 
 ```bash
-openscience export ses_8f2ka91xk > session.json   # no id: interactive picker
+openscience export <session-id> > session.json
 openscience import session.json
 ```
 
-`export` writes the full session as JSON to stdout; `import` loads it on another machine. Useful for sharing reproductions or attaching a transcript to an issue.
+An export contains the conversation record. It is not a complete project backup: copy the datasets, source files, and result files separately. Review the transcript before sharing it because it can include private research content.
 
-## What's next
-
-<Columns cols={2}>
-  <Card title="Workspace" icon="app-window" href="/openscience/workspace">
-    The browser surface for the same sessions.
-  </Card>
-  <Card title="Models" icon="package-check" href="/openscience/models">
-    Per-run and per-session model choice.
-  </Card>
-  <Card title="Agents" icon="bot" href="/openscience/agents">
-    The Research harness, effort levels, and plan mode.
-  </Card>
-  <Card title="Commands" icon="terminal" href="/openscience/commands">
-    The full command reference.
-  </Card>
-</Columns>
+For recovery during long work, use `/checkpoint` or `/handoff` in the workspace. For machine-readable output and CI, see [Automation and JSON output](/openscience/automation).

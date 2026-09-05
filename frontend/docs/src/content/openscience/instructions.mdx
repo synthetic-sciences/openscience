@@ -1,0 +1,58 @@
+---
+title: "Project instructions"
+description: "Teach OpenScience the conventions, methods, and limits of a project."
+---
+
+Put instructions that apply to the whole project in an `AGENTS.md` file at its root. Use ordinary Markdown and keep the rules specific enough to follow.
+
+## Start with useful rules
+
+```markdown
+# Research project
+
+- Keep original files in data/ unchanged.
+- Save analysis scripts in scripts/ and outputs in results/.
+- Record data versions, package versions, and random seeds.
+- Explain exclusions and missing values before fitting a model.
+- Ask before using paid external services.
+- Run the project's validation command before reporting completion.
+```
+
+Add the actual validation command, identifier conventions, and relevant protocols for your project. Avoid aspirational instructions such as "make everything perfect" when a measurable check is possible.
+
+## Generate a first draft
+
+Use `/init` in the workspace to ask OpenScience to create or update project instructions. Review the resulting file before keeping it.
+
+Ask it to document what exists in the project, especially the input locations, how to run an analysis, and what a successful check looks like.
+
+## Include existing protocols
+
+Reference instruction files in configuration:
+
+```json
+{
+  "instructions": ["methods/protocol.md", "methods/reporting.md"]
+}
+```
+
+This avoids duplicating a long protocol in multiple places. Keep referenced files in the project when teammates need the same setup.
+
+OpenScience also recognizes `CLAUDE.md` for compatibility. Prefer one clear source of project rules rather than conflicting copies.
+
+## Personal instructions
+
+Use `AGENTS.md` in the global OpenScience configuration directory for preferences that apply across projects. Run `openscience debug paths` to find the directory.
+
+Personal preferences should not silently change a shared scientific protocol. Keep study-specific methods and exclusions in the project.
+
+## Instructions, skills, and commands
+
+| Mechanism | Use it for |
+| --- | --- |
+| Project instructions | Rules that should apply throughout the project. |
+| [Skills](/openscience/skills) | A detailed procedure loaded when relevant. |
+| [Custom commands](/openscience/slash-commands) | A reusable request you invoke by name. |
+| [Custom agents](/openscience/agents) | A specialized role with its own instructions and action rules. |
+
+Instructions guide the agent. They do not install software, connect an account, or establish a hard financial limit.

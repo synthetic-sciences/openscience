@@ -1,0 +1,53 @@
+---
+title: "Scientific tools"
+description: "Check which analysis tools can run and what setup they need."
+---
+
+Open **Customize → Tools** to inspect the scientific tools offered for your device and connected accounts. The panel separates local tools from connected services.
+
+## Understand availability
+
+| Status | What to do |
+| --- | --- |
+| Ready | Start with a small, known input. |
+| Connected | Confirm the account and any service charges before use. |
+| Not installed / Setup needed | Follow the setup or connection action. |
+| Needs attention | Open the reported problem and resolve it before retrying. |
+| Unavailable | Use another supported tool or resolve the missing prerequisite. |
+
+Availability can differ across machines, operating systems, and accounts. An experimental tool should be checked on a small case with an expected result before larger work.
+
+## Local scientific workflows
+
+Supported setup paths include common numerical, plotting, machine-learning, sequence-analysis, and cheminformatics tools such as SciPy, Matplotlib, scikit-learn, Biopython, and RDKit.
+
+```text
+Check whether RDKit is ready. If it is, calculate molecular weights for
+the SMILES in data/molecules.csv and save the results. Report invalid
+structures separately instead of discarding them.
+```
+
+If setup is needed, review the proposed installation and confirm where the outputs will be saved.
+
+## Connected scientific services
+
+Some structural-biology, sequence, and molecular-design workflows require your own service account or key. Use the connection shown for that tool and check its requirements.
+
+A service connection does not imply unrestricted access, included compute, or a validated scientific prediction. Read the service's model and data terms when relevant to your work.
+
+## Skills, databases, and tools
+
+| Capability | Purpose |
+| --- | --- |
+| [Skills](/openscience/skills) | Instructions and procedures for a workflow. |
+| [Databases](/openscience/databases) | Search and retrieve scientific records. |
+| Scientific tools | Perform analysis or prediction with configured software. |
+| [Connectors](/openscience/connectors) | Add tools and services through an external connection. |
+
+A package mentioned by a skill is not necessarily installed or available as a runnable tool. Ask OpenScience to check readiness before promising an output.
+
+## Verify results
+
+Specify input formats, identifiers, units, and expected checks. Preserve failed inputs and warnings.
+
+Ask for the tool version when available, parameters, output files, and limitations. For predictions, distinguish the model's output from experimental evidence.

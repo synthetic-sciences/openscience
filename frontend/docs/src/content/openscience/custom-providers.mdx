@@ -1,0 +1,94 @@
+---
+title: "Custom providers"
+description: "Connect a compatible model service that is not in the provider picker."
+---
+
+Use a custom provider when your service exposes a compatible chat API and supplies its base URL, model IDs, authentication method, and capabilities. For common local runtimes, start with [Local models](/openscience/local-models).
+
+## Configure the endpoint
+
+Add a provider block to `openscience.json`:
+
+```json
+{
+  "provider": {
+    "my-provider": {
+      "name": "My provider",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://models.example.org/v1",
+        "apiKey": "{env:MY_PROVIDER_API_KEY}"
+      },
+      "models": {
+        "my-model": {
+          "name": "My model",
+          "tool_call": false,
+          "reasoning": false,
+          "limit": {
+            "context": 32768,
+            "output": 4096
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+The URL and model name are placeholders. Replace them with values from your service's documentation. Set the environment variable before starting OpenScience, and replace the limits with those of the actual model.
+
+The adapter package identifies the API format. It does not determine who hosts the model or pays for the request; those depend on your endpoint and account.
+
+## Check a text-only request
+
+```bash
+openscience models my-provider
+openscience run --model my-provider/my-model --bare "Reply with one sentence confirming the connection"
+```
+
+The example starts with tool calling and reasoning disabled. A successful text response does not verify tool calling, file inputs, images, or reasoning controls.
+
+If a service requires a different API format, use the supported provider integration for that format instead of assuming compatibility.
+
+## Enable only supported capabilities
+
+Set `tool_call: true` only when the selected model and endpoint support tool use. Then test a small read-only task, such as listing the files in a sample project.
+
+Set reasoning options only when the service documents them. Do not infer capability from the model's name.
+
+Prefer an exact model ID for reproducible work. A provider's moving alias can change the model without changing your configuration.
+
+## Keep custom entries current
+
+A custom model entry does not automatically import an arbitrary provider's full catalog. Review its identifiers, limits, capabilities, and prices when that service changes.
+
+A context limit in configuration describes what OpenScience should expect. For self-hosted models, configure the actual server limit separately.
+
+## Adjust a slow connection
+
+Provider options support request deadlines in milliseconds:
+
+| Option | Default |
+| --- | --- |
+| `connectTimeout` | 120000: waiting for response headers. |
+| `idleTimeout` | 300000: no response data. |
+| `outputIdleTimeout` | 600000: no new readable output or tool-call activity. |
+| `timeout` | No total-duration limit by default. |
+
+For a slow endpoint, merge an override into that provider's options:
+
+```json
+{
+  "provider": {
+    "my-provider": {
+      "options": {
+        "outputIdleTimeout": 1200000
+      }
+    }
+  }
+}
+```
+
+This allows twenty minutes without new readable output. Set an individual option to `false` to disable that deadline. Disabling `timeout` does not disable the other deadlines. These settings cannot extend limits imposed by the service itself.
+
+Review partial results before retrying a timed-out request. Your service may already have processed part of it.

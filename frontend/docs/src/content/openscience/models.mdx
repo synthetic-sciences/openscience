@@ -1,22 +1,27 @@
 ---
-title: "Models & providers"
-description: "Choose Ace, your provider account, or a local model for each run."
-icon: "package-check"
+title: "Models and providers"
+description: "Choose Ace, connect your own provider access, and select a model for each task."
 ---
 
-Choose **BYOK / Subscription** or **Ace** in **Customize → Models**. BYOK uses your own provider access; Ace uses the selected workspace's purchased Wallet through the Synthetic Sciences gateway. Local models use neither.
+Open **Customize → Models** to choose model access and manage your connections. The model picker shows the models available with your current setup.
+
+| Access | Setup | Good fit |
+| --- | --- | --- |
+| Ace | Sign in and use a funded Wallet. | Managed models without individual provider keys. |
+| BYOK / Subscription | Connect a provider API key or supported sign-in. | Existing provider accounts and subscriptions. |
+| Local model | Add a running endpoint in **Customize → Local models**. | Models on your machine or infrastructure you manage. |
+
+See [Pricing](/openscience/pricing) before starting paid work. A model's presence in a public catalog does not guarantee that your account can use it.
 
 ## Use Ace
 
-Sign in from the Ace panel, select your workspace, and add Wallet funds or authorize Ace reloads. The model picker shows the available managed catalog and pricing for its actual upstream route.
+Select **Ace** in **Customize → Models**. Sign in when prompted, check the funding workspace, then add purchased Wallet funds or authorize automatic reloads. Select an available model and return to your conversation.
 
-Managed models currently use OpenRouter through the Synthetic Sciences gateway. Your own connected provider keys and eligible subscriptions use their separate direct routes; they are not charged to your Ace Wallet.
+The Wallet control opens account and funding details. Changing model access to BYOK does not cancel automatic reloads; manage them in Wallet. See [Ace and your account](/openscience/ace).
 
-The model's context capacity and its pricing thresholds are different numbers. Open a model's options for its context limit, input/output rates, cache rates, and supported reasoning tiers. See [Pricing](/openscience/pricing).
+## Connect your own API key
 
-## Connect a provider
-
-Use **Customize → Models** or the CLI:
+Select **BYOK / Subscription**, choose your provider, and follow its connection form. You can also connect from a terminal:
 
 ```bash
 openscience keys add
@@ -24,153 +29,72 @@ openscience keys list
 openscience models
 ```
 
-You can sign in where a provider supports OAuth or save an API key locally. Environment variables work too:
+Use an API key issued by the provider you choose. A consumer chat subscription and an API account may have separate billing and access.
+
+For terminal sessions, supported provider environment variables are another option:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY, ...
+export ANTHROPIC_API_KEY="your-provider-api-key"
 openscience
 ```
 
-Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI, Meta, DeepSeek, and other providers use this local flow. Access depends on your provider account. Shared workspace credentials can fill a missing connection without replacing a key or sign-in already saved on your device. See [Ace & connections](/openscience/gateway).
+Other examples include `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `DEEPSEEK_API_KEY`. Set the variable required by your provider. Desktop apps launched from an application launcher may not inherit a terminal's environment; use the connection form for that setup.
 
-## Local models
+Remove a saved connection in Customize or with `openscience keys rm`. If a key is still present in your environment or shared workspace, remove that source too.
 
-OpenScience talks to OpenAI-compatible endpoints on your machine, including Ollama, LM Studio, llama.cpp, and vLLM:
+## Use a supported provider sign-in
+
+Where a connection offers browser sign-in, follow that flow instead of entering an API key. For supported ChatGPT access:
 
 ```bash
-openscience local add
-openscience run --model ollama/llama3.1 "hello"
+openscience keys signin
 ```
 
-See **[Local models](/openscience/local-models)** for setup details.
+Complete the browser sign-in and select an available model. Access and limits depend on your provider account. Signing into a provider does not add funds to Ace.
 
-## Mammouth API (custom provider)
+To disconnect that connection:
 
-Mammouth documents an [OpenAI-compatible chat endpoint](https://info.mammouth.ai/docs/api-quick-start/)
-at `https://api.mammouth.ai/v1`. You can configure it without a native provider
-integration. Merge this block into `openscience.json`; keep your actual key in
-the `MAMMOUTH_API_KEY` environment variable, not the project file:
+```bash
+openscience disconnect codex
+```
+
+## Select a model
+
+Use the conversation's model picker. For a terminal run, copy an exact identifier from `openscience models --flat`:
+
+```bash
+openscience models --flat
+openscience run --model <provider>/<model> "Review the analysis in this project"
+```
+
+Replace `<provider>/<model>` with an identifier from your list. An unknown or disconnected model produces an error; connect it before retrying.
+
+To set a default in `openscience.json`:
 
 ```json
 {
-  "provider": {
-    "mammouth": {
-      "name": "Mammouth",
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
-        "baseURL": "https://api.mammouth.ai/v1",
-        "apiKey": "{env:MAMMOUTH_API_KEY}"
-      },
-      "models": {
-        "mammouth-recommended": {
-          "name": "Mammouth Recommended",
-          "tool_call": false,
-          "reasoning": false
-        }
-      }
-    }
-  }
+  "model": "provider/model-id"
 }
 ```
 
-The `mammouth-recommended` alias follows Mammouth's current recommendation, so
-the underlying model can change without editing this entry. For reproducible
-runs, choose an exact model ID from Mammouth's [Model Explorer](https://model-explorer.mammouth.ai/).
-Its [public catalog](https://api.mammouth.ai/public/models) supplies current IDs,
-input/output limits and rates. OpenScience does **not** automatically import or
-refresh that catalog; review the selected model's limits and pricing when using
-a custom entry. Requests use your Mammouth account, not your Ace Wallet.
+Replace the example value with your configured model. See [Configuration](/openscience/configuration) for file locations.
 
-This conservative example is for chat: it does not advertise unverified tool
-calling or reasoning controls. The public catalog does not declare those
-capabilities, and this is not a verified agent/tool-model integration. Enable
-capabilities only when the chosen Mammouth route's contract supports them.
-Native Mammouth discovery remains a separate feature request.
+## Reasoning, context, and rates
 
-## Choose a model per run
+Open a model's options to see its supported reasoning tiers, context capacity, and **Rates and limits**. Available tiers depend on the selected model; there is no universal list.
 
-```bash
-openscience run --model anthropic/claude-opus-5 --variant xhigh "Design the ablation study"
-openscience run --model openai/gpt-5.6-terra --variant max "Review the analysis"
-openscience run --model moonshotai/kimi-k3 "Implement the pipeline"
-```
+`openscience run --variant <tier>` selects a supported reasoning tier for that run. Research effort, selected with `--effort normal` or `--effort ultra`, is a separate control for how broadly to investigate the task.
 
-`--model <provider>/<model>` overrides the default for one run. `--variant` selects a provider-supported reasoning tier such as `minimal`, `high`, `xhigh`, or `max`.
+The conversation displays readable reasoning and tool activity when the model supplies them. Some models return only a final answer or a reasoning summary. The visible activity is useful for following progress, but the saved outputs and cited evidence are what you should verify.
 
-## Reasoning and activity
+## Local and custom endpoints
 
-The workspace shows every readable reasoning passage the provider sends, alongside
-individual tool calls in their recorded order. Reasoning stays visible during
-streaming, after completion, and when you reopen the session. There is no
-Detailed/Compact selector. You can still open each tool's inputs and outputs.
+Use [Local models](/openscience/local-models) for Ollama, LM Studio, and self-hosted endpoints. For a service not listed in the connection picker, see [Custom providers](/openscience/custom-providers).
 
-Readable reasoning depends on the provider. OpenAI supplies
-[reasoning summaries, not its private reasoning tokens](https://developers.openai.com/api/docs/guides/reasoning#reasoning-summaries).
-OpenScience requests its most detailed available summary with `auto`; headings
-inside that text come from the provider. OpenScience does not shorten those
-passages or generate replacement summaries. Encrypted continuation metadata is
-not readable text and does not create a blank reasoning row.
+Choose a model that supports tool calling for tasks that read files, search, or run code. A chat-only endpoint can answer text requests but cannot perform the full research workflow.
 
-## Slow or stalled requests
+## When a connection fails
 
-The request status distinguishes local preparation, connecting, waiting for the first readable output, and receiving output. A connection delay can include network setup, gateway admission, and provider processing; it does not mean the model has been thinking for that whole interval. A stream can also remain open after its last output.
+Check the selected access mode, model ID, and account access. For Ace, also check the funding workspace and available Wallet balance. For your own provider, check key validity, API access, and that provider's usage limits.
 
-OpenScience stops a request that exceeds one of these default waits:
-
-| Setting | Default | What it limits |
-| --- | --- | --- |
-| `connectTimeout` | 2 minutes | Waiting for response headers. |
-| `idleTimeout` | 5 minutes | Waiting for the next response-body data, including transport keepalives. |
-| `outputIdleTimeout` | 10 minutes | Waiting for new readable text, reasoning, or tool-call activity. Keepalives do not count. This timer pauses during local processing and tool execution. |
-| `timeout` | No limit | Optional total request duration, even while output continues. |
-
-There is no default total-generation limit. If your provider needs longer for private reasoning or a slow local model, merge an override into that provider's `options` in `openscience.json`. For example, this allows 20 minutes without readable output from your OpenRouter connection:
-
-```json
-{
-  "provider": {
-    "openrouter": {
-      "options": {
-        "outputIdleTimeout": 1200000
-      }
-    }
-  }
-}
-```
-
-Values are milliseconds. Set an individual option to `false` to disable that deadline; `timeout: false` does not disable the other three. Use the provider ID shown by `openscience models`, including the managed provider ID when configuring Ace.
-
-Local overrides do not extend a gateway or provider's own limits. Ace also enforces server-side progress deadlines; disabling a desktop deadline cannot keep an idle managed request open indefinitely.
-
-After a timeout, received output stays in your session. OpenScience does not automatically resend the model request: the provider may already have processed it, and a replacement can incur another charge. Review partial output and any completed tools before continuing yourself.
-
-## Route ownership
-
-| Route | Where requests go | Account used |
-| --- | --- | --- |
-| Provider key | Directly to that provider | Your provider account |
-| Provider OAuth | Directly through that provider's supported sign-in | Your subscription or provider account |
-| Workspace-shared provider key | Directly to that provider | The workspace's connected provider account |
-| Ace | Synthetic Sciences gateway, then the catalog's declared upstream | The selected workspace's purchased Wallet |
-| Local model | Your local endpoint | None |
-
-## Key hygiene
-
-Saved local credentials live in the per-user data root, not a project's `.openscience/` directory. Shared credentials use a separate encrypted, expiring overlay. General kernels receive a minimal environment, and credential-shaped secrets are redacted from output. Your local provider keys are not uploaded merely by signing in to Ace.
-
-## What's next
-
-<Columns cols={2}>
-  <Card title="Quickstart" icon="rocket" href="/openscience/quickstart">
-    First provider to first result.
-  </Card>
-  <Card title="Ace & connections" icon="link" href="/openscience/gateway">
-    Configure managed, personal, and workspace-shared access.
-  </Card>
-  <Card title="Local models" icon="cpu" href="/openscience/local-models">
-    Run an OpenAI-compatible model on your machine.
-  </Card>
-  <Card title="Security" icon="shield-check" href="/openscience/security">
-    Review local storage and process boundaries.
-  </Card>
-</Columns>
+If a request times out, the output already received stays in the conversation. Review it before resending the request. [Troubleshooting](/openscience/troubleshooting) covers stalled requests, missing models, and local endpoint checks.

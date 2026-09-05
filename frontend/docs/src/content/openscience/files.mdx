@@ -1,0 +1,85 @@
+---
+title: "Files and storage"
+description: "Keep inputs, working files, and final results organized and recoverable."
+---
+
+Open **Files** in a project to browse its documents and the current conversation's working files. OpenScience can read inputs, write analyses, and show previews of supported formats.
+
+## Organize a project
+
+A simple structure makes a research task easier to reproduce:
+
+```text
+my-project/
+  data/       original inputs
+  scripts/    analysis code
+  results/    figures, tables, and reports
+  methods/    protocols and assumptions
+  AGENTS.md   project instructions
+```
+
+This is a suggested layout, not a required one. Tell OpenScience which files are original inputs and where it should write results.
+
+```text
+Keep data/ unchanged. Save the cleaning script in scripts/, cleaned data
+and plots in results/, and explain every exclusion in results/methods.md.
+```
+
+## Project files and session scratch
+
+**Project files** hold durable project documents. **Session scratch** is a working area for one conversation. A file named `report.md` can exist in both.
+
+Check the location shown in the preview. To open a known final copy, use **Files → Project files**. Ask OpenScience to save final deliverables there and confirm the exact path in its response.
+
+An older chat link may not identify the intended copy clearly. Use the file browser when the filename is ambiguous.
+
+## Previews
+
+Depending on the file, the workspace can show documents, images, tables, code, and scientific views. Molecules, protein structures, and genomic data use supported scientific renderers.
+
+If a format cannot be previewed, open it with a suitable local application or ask for a derived preview while keeping the original. For a large dataset, request a summary or sample first.
+
+A rendered figure alone is not enough to reproduce an analysis. Keep its source data, plotting code, labels, and units.
+
+## Save useful deliverables
+
+Ask for named files and enough context to use them later:
+
+```text
+Save results/summary.md, results/comparison.csv, and results/figure.png.
+Include the input filenames, analysis command, random seed, package
+versions, and any results that failed validation.
+```
+
+Open the saved files and check that they contain the actual outputs, rather than instructions for producing them.
+
+## Back up and export
+
+Use your normal backup system or version control for project files. To preserve a conversation separately:
+
+```bash
+openscience session list
+openscience export <session-id> > session.json
+```
+
+Copy project files as well as the export when moving work to another machine. Importing a conversation does not recreate external accounts, downloaded models, or every input file.
+
+## Manage app storage
+
+Open **Customize → Storage** to see the active data location and disk usage. Use its location controls when moving OpenScience's saved data. Wait for a move to finish before deleting the previous copy.
+
+If a move is interrupted, return to Storage and follow the recovery action. Avoid manually moving the active data directory while the app is writing to it.
+
+For the resolved paths on your installation:
+
+```bash
+openscience debug paths
+```
+
+The default app data location is `~/.openscience`. Configuration, cache, and state may use different locations; use the displayed paths instead of assuming they are all in the project.
+
+## Delete or undo work carefully
+
+Undo can restore supported file changes associated with a conversation, but it does not replace a backup. Read the affected-file preview before confirming an undo or deletion.
+
+The CLI's ordinary uninstall keeps work and settings. A purge deletes application data too. See [Installation and updates](/openscience/installation) before uninstalling.

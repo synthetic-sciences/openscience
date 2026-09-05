@@ -1,0 +1,60 @@
+---
+title: "Reproduce a result"
+description: "Turn a paper or repository into a bounded experiment with explicit success criteria."
+---
+
+## Pick a claim
+
+Give OpenScience the paper, repository, and one result to reproduce. Be specific about the table, figure, dataset, and metric.
+
+```text
+/plan Reproduce the baseline in Table 2 of the attached paper using its
+linked repository. Identify the data, model version, metric, and expected
+resources. Propose a small pilot before any full training run.
+```
+
+A small-scale test is useful, but it is not an exact reproduction of a larger experiment. Ask it to identify every departure from the published setup.
+
+## Check prerequisites
+
+Before execution, establish the source revision, licenses or access requirements, dependencies, input data, and available compute.
+
+Ask OpenScience to identify missing artifacts instead of substituting them silently. If the original model weights or data are unavailable, decide whether a partial replication still answers your question.
+
+## Set a budget and stopping point
+
+State the maximum resources and what requires approval:
+
+```text
+Run only the pilot on the configured machine. Stop if setup requires
+paid resources or more than 30 minutes of computation. Save partial
+results and explain the blocker before proposing another run.
+```
+
+Prompt instructions help bound the task. Use the connected service's account and resource controls for enforceable spending limits.
+
+## Execute and compare
+
+Ask for commands and saved outputs, then compare the measured result with the target.
+
+| Record | Why it matters |
+| --- | --- |
+| Source revision | Identifies the implementation used. |
+| Data version and split | Makes the comparison interpretable. |
+| Configuration and random seeds | Captures experimental choices. |
+| Environment and hardware | Explains relevant setup differences. |
+| Metric implementation | Avoids comparing different definitions. |
+| Raw results and failures | Preserves evidence beyond the final summary. |
+
+## Report what happened
+
+```text
+Write results/reproduction.md. Compare our metric with the paper,
+identify setup differences, include failed attempts, and say whether
+the evidence supports an exact reproduction, a partial replication,
+or an unresolved result. Link the scripts and output files.
+```
+
+Keep negative and inconclusive outcomes. Do not ask the agent to keep changing the method until it matches a desired number.
+
+Use [Compute](/openscience/compute) for resource setup and [Sessions](/openscience/sessions) to checkpoint or continue the work.

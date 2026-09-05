@@ -1,0 +1,85 @@
+---
+title: "Connectors and MCP"
+description: "Add external tools and services to your research workflow."
+---
+
+Connectors let OpenScience use tools, resources, and prompts supplied by another service. Open **Customize → Connectors** to inspect the catalog and manage configured connections.
+
+Built-in scientific database search is covered separately in [Databases](/openscience/databases).
+
+## Add a connection
+
+Choose a catalog entry or add a custom connection. Review the endpoint, account, and tools it exposes. Complete browser authorization or enter the required credentials when prompted.
+
+Some presets are saved with the connection off until you review and enable them. A saved configuration is not necessarily an active connection.
+
+After connecting, inspect its available tools and try a small read-only request before using actions that publish, modify, or spend.
+
+## Remote MCP server
+
+MCP is the Model Context Protocol, a way for tools to connect to an agent. For a remote server, use the HTTPS endpoint supplied by its operator.
+
+```json
+{
+  "mcp": {
+    "lab-docs": {
+      "type": "remote",
+      "url": "https://mcp.example.org/mcp",
+      "enabled": false
+    }
+  }
+}
+```
+
+Replace the example URL with your server's actual endpoint. Enable the connection after reviewing it. If the server requires sign-in, use the offered authorization flow.
+
+For a service that documents token authentication, add its required header through the form or an environment reference. Do not put private credentials in a URL.
+
+## Local MCP server
+
+A local connection starts a command on your machine:
+
+```json
+{
+  "mcp": {
+    "lab-tools": {
+      "type": "local",
+      "command": ["python", "/absolute/path/to/lab_mcp_server.py"],
+      "enabled": false
+    }
+  }
+}
+```
+
+Replace the example command with an installed MCP server that supports the expected transport. Use separate array entries for the executable and each argument.
+
+The required language runtime and dependencies must be available. A local server is software you choose to run; review it before enabling it.
+
+## CLI commands
+
+```bash
+openscience mcp add
+openscience mcp list
+openscience mcp auth <name>
+openscience mcp auth list
+openscience mcp logout <name>
+openscience mcp remove <name>
+```
+
+`openscience tools` is another name for `openscience mcp`. `mcp debug <name>` provides authorization troubleshooting when a connection fails.
+
+Logout removes authorization while keeping configuration. Remove deletes the configured connection. Neither deletes the external service account.
+
+## Understand access and cost
+
+A connector can offer read and write tools with different consequences. A connection alone does not authorize every action you might ask it to perform. Check the tool request and selected account before publishing or changing external records.
+
+A catalog listing does not mean every feature of that service is supported. Use the capability details shown for the active connection.
+
+Services can require subscriptions, paid API usage, or organization approval. Their terms are separate from OpenScience's workbench license and Ace model access.
+
+## Troubleshooting
+
+For a remote connection, check the endpoint, authorization, and account access. For a local connection, run its documented startup command in a terminal to check installation errors.
+
+If a connection is saved but off, enable it. If it is connected but has no relevant tool, inspect the service's actual capabilities rather than assuming the missing action exists.

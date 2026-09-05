@@ -1,0 +1,94 @@
+---
+title: "Automation and JSON output"
+description: "Run repeatable terminal tasks and consume their results programmatically."
+---
+
+Use `openscience run` for a single terminal task. An external scheduler or CI system can invoke it repeatedly; this command does not create a recurring schedule by itself.
+
+## Run a bounded task
+
+```bash
+openscience run --deny-prompts --format json "Summarize the project README" > run.jsonl
+```
+
+This emits newline-delimited JSON. A rejected permission request can stop the run with exit code 3.
+
+For work you have already reviewed and authorized, `--auto-approve` approves the run's permission requests and disables delegation. It is mutually exclusive with `--deny-prompts`.
+
+```bash
+openscience run --auto-approve --format json "Run the existing data validation script and report failures" > run.jsonl
+```
+
+Use a clearly scoped project and request. The command's ability to run still depends on installed tools, account access, and applicable policy.
+
+## Read events
+
+Each event has `type`, `timestamp` in milliseconds, and `sessionID`.
+
+| Event | Main content |
+| --- | --- |
+| `user` | Input `parts` and an optional command. |
+| `step_start` / `step_finish` | A model step; finished steps include usage. |
+| `text` | A completed text part. |
+| `reasoning` | A completed readable reasoning part, when available. |
+| `tool_use` | A completed or failed tool call; inspect `part.state.status`. |
+| `permission` | The permission request and reply. |
+| `error` | An error name and data. |
+| `done` | Final `status`, `exitCode`, `tokens`, and `cost`. |
+
+Example completion event:
+
+```json
+{
+  "type": "done",
+  "timestamp": 1788600000000,
+  "sessionID": "ses_example",
+  "status": "completed",
+  "exitCode": 0,
+  "tokens": {
+    "input": 120,
+    "output": 40,
+    "reasoning": 0,
+    "cache": { "read": 0, "write": 0 }
+  },
+  "cost": 0
+}
+```
+
+The numbers are illustrative. Usage summaries are not payment receipts.
+
+## Handle failures
+
+Check both the process exit code and the final event. A process can fail before a session starts, so do not wait indefinitely for `done` after an early usage error, termination, or crash.
+
+| Exit code | Interpretation |
+| --- | --- |
+| 0 | Completed turn. |
+| 1 | Session error. |
+| 2 | Invalid usage or missing configuration. |
+| 3 | Rejected permission or question. |
+
+Use the failed tool's status and saved output to decide what to retry. Avoid automatically replaying a paid request after an uncertain failure.
+
+## Configure a CI environment
+
+Supply provider credentials through the CI system's secret settings. Install the OpenScience version you intend to use, prepare the required data and software, and set the working directory explicitly.
+
+Useful environment settings include:
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENSCIENCE_DATA_DIR` | Use a dedicated directory for this installation's saved data. |
+| `OPENSCIENCE_CONFIG_DIR` | Point to a dedicated configuration directory. |
+| `OPENSCIENCE_DISABLE_AUTOUPDATE=1` | Keep the chosen version during a job. |
+| `OPENSCIENCE_DISABLE_PROJECT_CONFIG=1` | Ignore configuration supplied by the task repository. |
+
+Do not assume a fresh runner can run every scientific tool. Validate the environment and a small task before adding it to a pipeline.
+
+Collect `run.jsonl` and the files the task produced. Review what they contain before exposing them as public CI artifacts.
+
+## Schedule outside OpenScience
+
+Use your existing scheduler to launch the same tested command. Decide how overlapping runs, timeouts, credentials, and result retention should work.
+
+See [Sessions](/openscience/sessions) for continuing a particular session and [SDK](/openscience/extensions) for programmatic integration.

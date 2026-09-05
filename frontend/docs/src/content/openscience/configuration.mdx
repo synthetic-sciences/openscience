@@ -1,0 +1,91 @@
+---
+title: "Configuration"
+description: "Save repeatable model, instruction, skill, and tool settings."
+---
+
+Use Customize for everyday settings. Configuration files are useful when you want to review settings as text or share a project setup.
+
+## File locations
+
+| Scope | Location |
+| --- | --- |
+| Your account on this machine | `~/.config/openscience/openscience.json` or `openscience.jsonc`. |
+| Project | `openscience.json` or `openscience.jsonc` in the project. |
+| Project customization folder | `.openscience/` for agents, commands, skills, and related configuration. |
+
+The resolved global location can differ with your platform or environment. Run `openscience debug paths` to find it.
+
+JSONC permits comments and trailing commas. Use one main config file per scope to avoid conflicting settings spread across both formats.
+
+## A small project configuration
+
+```json
+{
+  "instructions": ["methods/protocol.md"],
+  "skills": {
+    "paths": ["./skills"]
+  },
+  "command": {
+    "check-data": {
+      "description": "Inspect data quality before analysis",
+      "template": "Inspect $ARGUMENTS for missing values, duplicate rows, units, and label consistency. Keep the input unchanged."
+    }
+  }
+}
+```
+
+Use `/check-data data/samples.csv` in the workspace, or `openscience run --command check-data "data/samples.csv"`.
+
+## Common settings
+
+| Key | Purpose |
+| --- | --- |
+| `model` | Default model in `provider/model` form. |
+| `small_model` | Model for smaller helper tasks such as title generation. |
+| `default_agent` | Default primary agent; Research is the normal default. |
+| `provider` | Provider connections, custom endpoints, and model overrides. |
+| `instructions` | Additional instruction files or patterns. |
+| `skills.paths` | Extra skill directories. |
+| `skills.disabled` | Skills excluded from discovery without uninstalling. |
+| `command` | Reusable named prompt templates. |
+| `mcp` | External tool connections. |
+| `plugin` | Plugin packages or local module URLs. |
+| `permission` | Action rules such as `ask`, `allow`, and `deny`. |
+| `server.port` | Port for the local workspace or server. |
+| `autoupdate` | Update preference: `true`, `false`, or `"notify"`. |
+
+Provider and model identifiers must match the configured catalog. Use `openscience models --flat` to find them.
+
+## Scope and overrides
+
+Global configuration supplies defaults; project configuration can override project-specific settings. Options are combined, so adding a project setting does not mean every global setting is removed.
+
+Some executable project customizations require approval before they become active, and administrator policy can restrict available settings. If a value seems ignored, check the setting in Customize and the applicable project or administrator configuration.
+
+Use explicit per-run flags such as `--model` when you need to override a default for a single terminal request.
+
+## Reference a secret
+
+Supported configuration strings can reference an environment variable:
+
+```json
+{
+  "provider": {
+    "my-provider": {
+      "options": {
+        "apiKey": "{env:MY_PROVIDER_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+This snippet shows secret substitution for an existing provider. It does not define a complete custom provider. See [Custom providers](/openscience/custom-providers).
+
+Use a connection form or environment reference instead of committing a real key. A variable must be available to the process that starts OpenScience.
+
+## Check changes
+
+After editing configuration, reopen the project or restart the app if the setting does not refresh automatically. Use `openscience doctor` to check setup and read any configuration error for the file and field that need correction.
+
+For project rules, use [Project instructions](/openscience/instructions). For external tools, use [Connectors](/openscience/connectors).

@@ -1,5 +1,4 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
   "name": "OpenScience",
   "navigation": {
     "tabs": [
@@ -7,12 +6,48 @@
         "tab": "Guides",
         "groups": [
           {
-            "group": "Start",
-            "pages": ["index", "quickstart", "workspace"]
+            "group": "Get started",
+            "pages": [
+              "index",
+              "quickstart",
+              "installation",
+              "workspace"
+            ]
           },
           {
-            "group": "Use the agent",
-            "pages": ["agents", "models", "local-models", "skills", "sessions", "gateway", "pricing"]
+            "group": "Models and account",
+            "pages": [
+              "models",
+              "ace",
+              "pricing",
+              "local-models",
+              "custom-providers"
+            ]
+          },
+          {
+            "group": "Research workflows",
+            "pages": [
+              "literature-review",
+              "data-analysis",
+              "reproduction",
+              "writing"
+            ]
+          },
+          {
+            "group": "Working in a project",
+            "pages": [
+              "agents",
+              "sessions",
+              "files",
+              "compute"
+            ]
+          },
+          {
+            "group": "Help",
+            "pages": [
+              "troubleshooting",
+              "faq"
+            ]
           }
         ]
       },
@@ -20,26 +55,60 @@
         "tab": "Reference",
         "groups": [
           {
-            "group": "CLI",
-            "pages": ["commands", "security", "sandbox"]
+            "group": "Research capabilities",
+            "pages": [
+              "skills",
+              "skill-library",
+              "databases",
+              "scientific-tools",
+              "connectors"
+            ]
+          },
+          {
+            "group": "Customize",
+            "pages": [
+              "instructions",
+              "configuration",
+              "slash-commands",
+              "permissions"
+            ]
+          },
+          {
+            "group": "Develop and automate",
+            "pages": [
+              "commands",
+              "automation",
+              "extensions"
+            ]
           }
         ]
       }
     ],
     "global": {
       "anchors": [
-        { "anchor": "openscience.sh", "href": "https://openscience.sh" },
-        { "anchor": "GitHub", "href": "https://github.com/synthetic-sciences/openscience" },
-        { "anchor": "npm", "href": "https://www.npmjs.com/package/@synsci/openscience" },
-        { "anchor": "Releases", "href": "https://github.com/synthetic-sciences/openscience/releases" }
+        {
+          "anchor": "Download",
+          "href": "https://openscience.sh/download"
+        },
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/synthetic-sciences/openscience"
+        },
+        {
+          "anchor": "Releases",
+          "href": "https://github.com/synthetic-sciences/openscience/releases"
+        },
+        {
+          "anchor": "Report an issue",
+          "href": "https://github.com/synthetic-sciences/openscience/issues"
+        }
       ]
     }
   },
   "navbar": {
     "primary": {
-      "type": "button",
-      "label": "Star on GitHub",
-      "href": "https://github.com/synthetic-sciences/openscience"
+      "label": "Get OpenScience",
+      "href": "https://openscience.sh/download"
     }
   }
 }

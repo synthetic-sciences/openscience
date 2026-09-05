@@ -1,0 +1,60 @@
+---
+title: "Permissions and control"
+description: "Choose when the agent asks and review consequential actions before they happen."
+---
+
+OpenScience can edit files, run commands, and use connected services. Choose the level of oversight that fits the task from the composer's research controls.
+
+## Choose an approval mode
+
+| Mode | Intended use |
+| --- | --- |
+| Ask always | Review actions that change files, use the network, run compute, or incur provider costs. |
+| Ask risky | Let routine reversible work proceed and review external, costly, or hard-to-reverse actions. |
+| Full access | Run without routine prompts, subject to provider and system restrictions. |
+
+An organization's policy may restrict the modes available. Use the more interactive option while learning a new project or reviewing unfamiliar inputs.
+
+## Read an action request
+
+Before approving, check the affected files, external service, requested resources, and expected outcome. If the scope is unclear, ask OpenScience to narrow the action or explain it.
+
+State important constraints at the start:
+
+```text
+Read the source data without changing it. Save outputs in results/.
+Ask before deleting files, publishing anything, or launching paid jobs.
+```
+
+A prompt communicates your intent. Use account controls for spending limits and your normal backups for data recovery.
+
+## Give the task only what it needs
+
+Attach relevant files or open the intended project folder. Connect external services when the task needs them, and check the selected account before an action that writes to that service.
+
+A scientific search result and a third-party skill can contain instructions of their own. Review scripts and consequential actions before running unfamiliar material.
+
+## Configure action rules
+
+For a repeatable setup, use `permission` in configuration:
+
+```json
+{
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+This asks before these classes of action. `allow`, `ask`, and `deny` are supported rule values. A particular rule is not a claim that all other actions are blocked.
+
+See [Configuration](/openscience/configuration) for scope and [Sessions](/openscience/sessions) for terminal-run policies.
+
+## Stop, undo, and disconnect
+
+Stop the response when it is going in the wrong direction. Check any external jobs separately, because stopping conversation generation does not prove that every external operation ended.
+
+Use Undo for supported conversation file changes. External payments, published content, and service-side changes need their own recovery process.
+
+Disconnect a service in Customize when you no longer need it. Revoking access in OpenScience does not delete the external account or reverse previous actions.

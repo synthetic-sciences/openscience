@@ -1,0 +1,76 @@
+---
+title: "Ace and your account"
+description: "Set up managed access, choose a funding workspace, and manage your Wallet."
+---
+
+Ace provides managed models and research search through one purchased Wallet. You do not need separate model-provider keys to use it.
+
+Your research project is where you work with conversations and files. Your **funding workspace** is the account workspace that pays for Ace usage. Check both when working across personal and team projects.
+
+## Set up Ace
+
+1. Open **Customize → Models** and select **Ace**.
+2. Sign in in your browser when prompted.
+3. Confirm the workspace you want to use.
+4. Add purchased Wallet funds or enable Ace automatic reloads.
+5. Select an available model and start a conversation.
+
+Review [Pricing and usage](/openscience/pricing) before enabling reloads. Turning on Ace is a $0 authorization; usage is pay as you go.
+
+For account setup from a terminal:
+
+```bash
+openscience login
+openscience status
+openscience wallet show
+```
+
+On a machine without a browser, `openscience login --no-browser` prints the sign-in instructions. Complete them from a browser you can access.
+
+## Choose a funding workspace
+
+Open **Customize → General → Funding workspace**. If you belong to more than one workspace, use **Switch workspace** and complete the browser approval.
+
+Each workspace has its own Wallet. If the selected workspace is unavailable or lacks funds, the request does not silently switch to another workspace. Changing workspaces on the website alone does not change the funding selection in the app.
+
+Requests already in progress keep their original funding workspace. Confirm the new selection before starting the next paid request.
+
+## Manage funds and automatic reloads
+
+Open **Wallet** in the Models panel, or visit [billing](https://app.syntheticsciences.ai/billing).
+
+While automatic reloads are enabled, a purchased balance below $5 triggers a $20 reload. Processing fees are shown separately before payment. Account controls let you set a monthly usage limit and turn off future reloads.
+
+Switching to BYOK / Subscription changes model access. It does **not** turn off automatic reloads. Use Wallet to change that authorization.
+
+## Shared connections
+
+Your selected account workspace may provide shared provider or service connections. These can supply access when you have not connected your own account on the device.
+
+Your saved local provider key, explicit environment key, or provider sign-in takes precedence over a shared connection. Connecting your own key does not automatically publish it to the team.
+
+Use **Customize → General → Sync now**, or run:
+
+```bash
+openscience sync
+```
+
+If access still fails, confirm workspace membership and ask its administrator to check the shared connection. Switching workspaces or signing out removes access supplied by that workspace; it does not remove your own provider accounts.
+
+## Sign out
+
+```bash
+openscience logout
+```
+
+Sign-out disconnects this device from your OpenScience account. Your locally saved research remains, and your own provider connections can still be used. To revoke a provider key, remove it separately in **Customize → Models** or at that provider.
+
+Signing out is not a billing cancellation. Manage future Ace reloads in your billing account.
+
+## Resolve account problems
+
+If sign-in completes in the browser but the app still shows signed out, return to the app and refresh account status. Check the selected funding workspace before retrying a paid task.
+
+For an unexpected charge, keep the time, request identifier if shown, and funding workspace. Use your account's support options. Do not include API keys or full private research files in a public issue.
+
+See [Troubleshooting](/openscience/troubleshooting) for connection failures and [Pricing](/openscience/pricing) for pending amounts.

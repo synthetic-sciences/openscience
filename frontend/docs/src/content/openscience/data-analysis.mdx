@@ -1,0 +1,56 @@
+---
+title: "Data analysis"
+description: "Inspect inputs, agree on an analysis, and save code and results together."
+---
+
+## Inspect before transforming
+
+Start by asking for the data structure, units, missingness, and suspicious values.
+
+```text
+Inspect data/measurements.csv. Describe the columns and units, count
+missing and duplicate rows, and flag values that need review.
+Keep the original file unchanged.
+```
+
+Provide a data dictionary or protocol when available. Ask about ambiguous units, group labels, or missing-value codes before fitting a model.
+
+## Agree on the method
+
+Use `/plan` to compare methods and assumptions. State the question you want the analysis to answer.
+
+```text
+/plan Compare treatment and control while accounting for repeated
+measurements from the same subject. Explain the assumptions, uncertainty
+estimate, and sensitivity checks. Ask before excluding observations.
+```
+
+Specify the outcome and evaluation criteria before examining many alternatives. Tell OpenScience which decisions are fixed by the study design.
+
+## Run a small analysis
+
+Open **Customize → Compute** if Python or R setup needs attention. Start with a small sample when the dataset or analysis is expensive.
+
+```text
+Run the agreed analysis. Save the script in scripts/analyze.py, the
+summary table in results/comparison.csv, and the methods in
+results/methods.md. Record package versions and the random seed.
+```
+
+OpenScience can use Python and R for analysis. Availability depends on the tools installed or configured on your machine; a bundled skill does not install every library it describes.
+
+## Check the result
+
+Ask for checks that could reveal a wrong answer, such as inconsistent units, leakage between training and test data, sensitivity to exclusions, or an implausible baseline.
+
+Read the generated code and inspect intermediate tables. A successful command means the program ran; it does not establish that the method is appropriate.
+
+For biological analyses, state the organism, reference assembly, accession versions, and expected identifier types. For molecular data, include structure conventions and units.
+
+## Save reproducible outputs
+
+Keep the original data, analysis code, figures, and methods together. Ask for a command that reruns the analysis from those inputs.
+
+For an analysis with stochastic steps, request repeated runs and an uncertainty estimate appropriate to the study. The right number of runs depends on the question and budget.
+
+See [Figures and writing](/openscience/writing) to prepare outputs for collaborators and [Files and storage](/openscience/files) for organizing them.

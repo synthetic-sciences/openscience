@@ -1,0 +1,62 @@
+---
+title: "Literature reviews"
+description: "Search with a clear scope, compare evidence, and save a review you can check."
+---
+
+## Define the question
+
+Give OpenScience a question, date range, sources, and inclusion criteria. Start in plan mode if those choices are not settled.
+
+```text
+/plan Review protein language models for predicting mutation effects.
+Cover work published since 2022. Include experimental validation and
+separate preprints from peer-reviewed papers. Propose the search terms
+and inclusion criteria before searching.
+```
+
+A broad request such as "find everything about cancer" is hard to verify. Narrow it to an organism, method, outcome, or comparison.
+
+## Search and collect evidence
+
+After reviewing the plan, ask OpenScience to search and save a source table:
+
+```text
+Run the agreed search. Save results/sources.csv with title, authors,
+year, DOI or source URL, publication status, method, dataset, and the
+reason each paper was included. Record the search date and queries.
+```
+
+Available literature databases include PubMed, Europe PMC, arXiv, bioRxiv/medRxiv, OpenAlex, Crossref, and Semantic Scholar. The [database directory](/openscience/databases) lists the built-in sources.
+
+Search access and full-text access are different. A title or abstract result does not mean the full paper was read. Ask OpenScience to identify abstract-only evidence and inaccessible sources explicitly.
+
+## Compare findings
+
+```text
+Group the included papers by evaluation method. Compare datasets,
+baselines, reported metrics, and failure cases. Cite a source for every
+numerical claim and distinguish author claims from your interpretation.
+```
+
+OpenScience can synthesize the material it retrieves, but a polished summary can still contain errors. Check the most important claims against the linked source.
+
+## Save a review packet
+
+Ask for a report, a source table, and a bibliography. Keep excluded papers and their reasons when the workflow requires a reproducible screening record.
+
+Suggested outputs:
+
+| File | Contents |
+| --- | --- |
+| `results/review.md` | Findings, disagreements, limitations, and open questions. |
+| `results/sources.csv` | Included sources and extracted evidence. |
+| `results/references.bib` | Bibliographic records you have checked. |
+| `results/search-methods.md` | Queries, sources, dates, and inclusion criteria. |
+
+These are requested deliverables, not automatic outputs of every search.
+
+## Revisit the review
+
+Reopen the session, refer to the saved source table, and state the new cutoff date. Ask it to report additions and changes instead of silently replacing earlier conclusions.
+
+For a formal systematic review, agree on the applicable screening and reporting process with your team. OpenScience can assist with the work; a search alone does not establish completeness.
