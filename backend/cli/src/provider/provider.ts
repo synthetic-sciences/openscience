@@ -985,7 +985,13 @@ export namespace Provider {
     // https://platform.claude.com/docs/en/models/fable-5-1/migration-guide
     return {
       ...value,
-      thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } },
+      thinking: {
+        type: "adaptive",
+        // The provider otherwise omits readable reasoning and between-tool
+        // progress. Request its supplied text; never summarize it locally.
+        display: "summarized",
+        block_binding: { prefix_mismatch_behavior: "drop_block" },
+      },
     }
   }
 
@@ -1965,7 +1971,10 @@ export namespace Provider {
       headers: model.headers ?? {},
       options: model.options ?? {},
       modes: modelModes(provider, model),
-      reasoningOptions: model.reasoning_options,
+      reasoningOptions:
+        provider.id === "anthropic" && model.id === FABLE51.id
+          ? FABLE51.reasoning_options.map((option) => ({ ...option, default: "high" }))
+          : model.reasoning_options,
       cost: {
         input: model.cost?.input ?? 0,
         output: model.cost?.output ?? 0,
@@ -2035,10 +2044,7 @@ export namespace Provider {
         : provider.id === "anthropic"
           ? [FABLE51]
           : provider.id === "openrouter"
-            ? [
-                { ...ASTRA, id: "openai/gpt-6-astra", provider: { npm: "@openrouter/ai-sdk-provider" } },
-                { ...FABLE51, id: "anthropic/claude-fable-5.1", provider: { npm: "@openrouter/ai-sdk-provider" } },
-              ]
+            ? [{ ...ASTRA, id: "openai/gpt-6-astra", provider: { npm: "@openrouter/ai-sdk-provider" } }]
             : []
     const models =
       (provider.id === "zai" || provider.id === "zhipuai") && !provider.models[GLM53.id]
@@ -2047,6 +2053,10 @@ export namespace Provider {
     for (const model of reviewed) {
       models[model.id] = { ...provider.models[model.id], ...model, experimental: undefined }
     }
+    // OpenRouter's changed-prefix thinking replay is not verified yet. Do not
+    // advertise it from a generic catalog. Explicit BYOK config may add it;
+    // the managed route is synthesized only after gateway approval below.
+    if (provider.id === "openrouter") delete models["anthropic/claude-fable-5.1"]
     return {
       id: provider.id,
       source: "custom",
