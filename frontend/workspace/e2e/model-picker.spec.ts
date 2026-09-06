@@ -1,5 +1,6 @@
 import { test, expect } from "./fixtures"
 import { modelPopoverSelector, modelRowValue, modelTriggerSelector, setModelEffort } from "./utils"
+import { COMPOSER_MODEL_ROSTER } from "../src/context/model-catalog"
 
 test("smoke model selection updates the composer trigger", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -33,13 +34,24 @@ test("effort selection closes cleanly and Manage models opens Customize", async 
   const picker = page.locator(modelPopoverSelector)
   await setModelEffort(page, "high")
   await expect(modelRowValue(page, "effort")).resolves.toBe("High")
+  const current = (await trigger.locator(":scope > .truncate").innerText()).trim()
+  expect(current).not.toBe("")
 
   await trigger.click()
   await expect(picker).toHaveAttribute("data-model-settings-view", "root")
   await expect(picker.getByRole("radiogroup", { name: "Model", exact: true })).toBeVisible()
-  const quickCount = await picker.locator("[data-model-quick]").count()
-  expect(quickCount).toBeGreaterThan(0)
-  expect(quickCount).toBeLessThanOrEqual(10)
+  // An explicitly selected model outside the roster (the isolated Echo model,
+  // for example) stays reachable without leaking the full provider catalog.
+  const roster: string[] = COMPOSER_MODEL_ROSTER.map((model) => model.label)
+  const expected = roster.includes(current) ? roster : [...roster, current]
+  await expect(picker.locator("[data-model-quick] .model-settings-model > strong")).toHaveText(expected)
+  const selected = picker.locator('[data-model-quick][aria-checked="true"]')
+  await expect(selected).toHaveCount(1)
+  await expect(selected.locator(".model-settings-model > strong")).toHaveText(current)
+  const choices = await picker
+    .locator("[data-model-quick][data-model-choice]")
+    .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-model-choice")))
+  expect(new Set(choices).size).toBe(choices.length)
   await expect.poll(() => picker.evaluate((element) => element.scrollTop)).toBe(0)
 
   await picker.locator('[data-model-menu-row="model"]').click()
