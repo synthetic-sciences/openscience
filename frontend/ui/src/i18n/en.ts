@@ -7,6 +7,8 @@ export const dict = {
   "ui.lineComment.submit": "Comment",
 
   "ui.sessionTurn.trace.title": "Reasoning and activity",
+  "ui.sessionTurn.reasoning.show": "Show reasoning",
+  "ui.sessionTurn.reasoning.hide": "Hide reasoning",
   "ui.sessionTurn.trace.detail": "Provider-visible reasoning and recorded tool activity.",
   "ui.sessionTurn.summary.response": "Response",
   "ui.sessionTurn.diff.showMore": "Show more changes ({{count}})",

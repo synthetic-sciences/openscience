@@ -88,13 +88,18 @@ describe("literal research trace", () => {
     ["short", "Okay"],
     ["status-shaped", "Planning source retrieval"],
     ["headed", "**Thinking**\n\nI should compare both controls before changing the design."],
-    ["former placeholder", "Considering next steps"],
     ["whitespace", "  Original whitespace\n\nand headings remain unchanged.  "],
     ["long", "Full provider prose. ".repeat(2000)],
   ])("retains nonempty %s reasoning unchanged", (_label, text) => {
     const item = narrative("reason", "reasoning", text)
     expect(visibleResearchTrace([item])).toEqual([item])
     expect(visibleResearchTrace([item])[0]).toBe(item)
+  })
+
+  test("omits standalone generic status labels without deleting their saved source", () => {
+    const item = narrative("status", "reasoning", "Considering next steps")
+    expect(visibleResearchTrace([item])).toEqual([])
+    expect(item.part).toMatchObject({ text: "Considering next steps" })
   })
 
   test.each(["read", "bash", "websearch", "edit", "skill"])(

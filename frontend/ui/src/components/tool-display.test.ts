@@ -265,8 +265,11 @@ describe("provider reasoning presentation", () => {
   const titanic =
     "**Evaluating Titanic dataset analysis**\n\nThe user asks for an analysis. Let's get started!**Choosing a reputable Titanic dataset**\n\nI need a reputable source.**Simplifying analysis steps**\n\nI can keep the work focused.[REDACTED]"
 
-  test("keeps every provider heading and passage without rewriting their boundaries", () => {
-    expect(reasoningDisplayText(titanic)).toBe(titanic.replace("[REDACTED]", ""))
+  test("removes structural phase headings, including concatenated phases, without shortening prose", () => {
+    expect(reasoningDisplayText(titanic)).toBe(
+      "The user asks for an analysis. Let's get started!\n\nI need a reputable source.\n\nI can keep the work focused.",
+    )
+    expect(titanic).toContain("**Choosing a reputable Titanic dataset**")
   })
 
   test("leaves ordinary readable reasoning unchanged", () => {
@@ -278,19 +281,37 @@ describe("provider reasoning presentation", () => {
     )
   })
 
-  test("preserves plain provider phase labels in the transcript", () => {
+  test("suppresses exact status-only labels without guessing which standalone passages are labels", () => {
+    expect(reasoningDisplayText("Planning")).toBe("")
+    expect(reasoningDisplayText("  Considering next steps[REDACTED]\n")).toBe("")
     expect(reasoningDisplayText("Planning comprehensive research workflow")).toBe(
       "Planning comprehensive research workflow",
     )
     expect(reasoningDisplayText("Analyzing the source revealed three incompatible assay formats.")).toBe(
       "Analyzing the source revealed three incompatible assay formats.",
     )
+    expect(reasoningDisplayText("Checking the source exposed conflicting values")).toBe(
+      "Checking the source exposed conflicting values",
+    )
   })
 
-  test("preserves provider headings when the bridge omits the blank line", () => {
+  test("removes structural headings when the bridge omits the blank line", () => {
     expect(reasoningDisplayText("**Inspecting assay quality**\nThe substantive analysis remains visible.")).toBe(
-      "**Inspecting assay quality**\nThe substantive analysis remains visible.",
+      "The substantive analysis remains visible.",
     )
+  })
+
+  test("normalizes the reported cost-analysis phases while retaining every cost passage", () => {
+    const phases = [
+      "Researching cost distribution",
+      "Optimizing request handling",
+      "Streamlining hardware utilization",
+      "Refining task management",
+      "Rethinking cost strategy for Sol",
+    ]
+    const passages = phases.map((_, index) => `Complete analysis passage ${index + 1}.`)
+    const text = phases.map((phase, index) => `**${phase}**\n\n${passages[index]}`).join("")
+    expect(reasoningDisplayText(text)).toBe(passages.join("\n\n"))
   })
 
   test("preserves ordinary bold reasoning prose", () => {
@@ -305,6 +326,77 @@ describe("provider reasoning presentation", () => {
   test("preserves arbitrary headings without classifying their content", () => {
     const heading = "**Feature counts requirement**\nThe explanation remains below it."
     expect(reasoningDisplayText(heading)).toBe(heading)
+  })
+
+  test("does not strip an action phrase used as inline emphasis or a complete bold statement", () => {
+    const inline = "We should keep **Checking assay quality**\nvisible as part of this sentence."
+    expect(reasoningDisplayText(inline)).toBe(inline)
+    const statement =
+      "**Checking the source exposed three incompatible values.**\nThe experiment must account for each."
+    expect(reasoningDisplayText(statement)).toBe(statement)
+  })
+
+  test("preserves heading-looking text in fenced and indented code", () => {
+    for (const fence of ["```", "~~~~"]) {
+      const code = `${fence}md\n**Checking sources**\n\nPreserve this example.\n${fence}`
+      expect(reasoningDisplayText(code)).toBe(code)
+      expect(reasoningDisplayText(`${code}\n\n**Evaluating sources**\n\nThe actual analysis.`)).toBe(
+        `${code}\n\nThe actual analysis.`,
+      )
+    }
+    const indented = "    **Checking sources**\n    Preserve this example."
+    expect(reasoningDisplayText(indented)).toBe(indented)
+  })
+
+  test("preserves inline code and math even across line breaks", () => {
+    for (const [open, close] of [
+      ["`", "`"],
+      ["``", "``"],
+      ["$$", "$$"],
+      ["\\[", "\\]"],
+      ["\\(", "\\)"],
+    ]) {
+      const literal = `${open}\n**Checking sources**\nPreserve this example.\n${close}`
+      expect(reasoningDisplayText(literal)).toBe(literal)
+    }
+    const equation = "**Evaluating $W_l$**\n\nThe mathematical heading remains meaningful."
+    expect(reasoningDisplayText(equation)).toBe(equation)
+    const code = "``Example with a ``` run\n**Checking sources**\nPreserve this example.\n``"
+    expect(reasoningDisplayText(code)).toBe(code)
+    const escaped = "$\\text{cost \\$}\n**Checking sources**\nPreserve this example.\n$"
+    expect(reasoningDisplayText(escaped)).toBe(escaped)
+  })
+
+  test("preserves raw code elements and comments containing heading-looking examples", () => {
+    for (const [open, close] of [
+      ["<pre>", "</pre>"],
+      ["<code class='md'>", "</code>"],
+      ["<!--", "-->"],
+    ]) {
+      const literal = `${open}\n**Checking sources**\nPreserve this example.\n${close}`
+      expect(reasoningDisplayText(literal)).toBe(literal)
+    }
+  })
+
+  test("keeps partial headings and incomplete literals during streaming", () => {
+    for (const partial of [
+      "**Evaluating",
+      "**Evaluating sources**",
+      "**Evaluating sources**\n\n",
+      "```md\n**Checking sources**\nExample.",
+      "`\n**Checking sources**\nExample.",
+    ]) {
+      expect(reasoningDisplayText(partial)).toBe(partial)
+    }
+    expect(reasoningDisplayText("**Evaluating sources**\n\nFirst substantive words")).toBe("First substantive words")
+  })
+
+  test("retains prose whitespace and CRLF paragraph boundaries without normalizing code", () => {
+    expect(
+      reasoningDisplayText("**Checking sources**\r\n\r\n  First passage.**Revising the plan**\r\nSecond passage.\r\n"),
+    ).toBe("  First passage.\r\n\r\nSecond passage.\r\n")
+    const code = "```md\n\n\n**Checking sources**\n\n\nExample.\n```"
+    expect(reasoningDisplayText(code)).toBe(code)
   })
 })
 

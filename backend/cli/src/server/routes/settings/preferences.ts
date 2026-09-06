@@ -3,9 +3,7 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import path from "path"
 import { randomUUID } from "node:crypto"
 import z from "zod"
-import { Config } from "../../../config/config"
 import { Global } from "../../../global"
-import { CompactionSettings } from "../../../session/compaction-settings"
 import { lazy } from "@synsci/util/lazy"
 import { Log } from "../../../util/log"
 import { JsonStore } from "../../../util/jsonstore"
@@ -72,22 +70,7 @@ const Stored = z.object({
 })
 type Stored = z.infer<typeof Stored>
 
-// Context-management rows are config, not app preferences: the session loop reads
-// `compaction.*` through Config, so they live in the global openscience.json. The
-// route exposes the effective values (defaults applied) so the workspace can read
-// and write them without hand-editing the config file. Defaults mirror
-// CompactionSettings.resolve so `Preferences.parse({})` equals a fresh install.
-const Compaction = z.object({
-  compaction_auto: z.boolean().default(true).describe("Automatic compaction when context is full (compaction.auto)"),
-  compaction_threshold: z
-    .number()
-    .min(0)
-    .max(1)
-    .default(CompactionSettings.DEFAULT_THRESHOLD)
-    .describe("Fraction of the model window that triggers automatic compaction (compaction.threshold)"),
-})
-
-export const Preferences = Stored.extend(Compaction.shape)
+export const Preferences = Stored
 export type Preferences = z.infer<typeof Preferences>
 
 const PreferencesPatch = z.object({
@@ -104,8 +87,6 @@ const PreferencesPatch = z.object({
   delegation_worker_model: Stored.shape.delegation_worker_model.removeDefault().optional(),
   delegation_autonomy: Stored.shape.delegation_autonomy.removeDefault().optional(),
   delegation_diversity: Stored.shape.delegation_diversity.removeDefault().optional(),
-  compaction_auto: Compaction.shape.compaction_auto.removeDefault().optional(),
-  compaction_threshold: Compaction.shape.compaction_threshold.removeDefault().optional(),
 })
 
 const OnboardingOperationInput = z.object({
@@ -138,25 +119,6 @@ async function stored(): Promise<Stored> {
   return parsed.data
 }
 
-// Effective compaction settings from the global config scope. Settings requests are
-// not tied to a project Instance, so read the same scope the PATCH below writes.
-async function compaction() {
-  const config = await Config.getGlobal().catch((error) => {
-    log.warn("global config unavailable; serving default compaction settings", { error: `${error}` })
-    return {} as Config.Info
-  })
-  const effective = CompactionSettings.resolve(config)
-  return {
-    compaction_auto: effective.auto,
-    compaction_threshold: effective.threshold,
-  }
-}
-
-async function read(): Promise<Preferences> {
-  const [current, context] = await Promise.all([stored(), compaction()])
-  return { ...current, ...context }
-}
-
 async function mutate(fn: (current: Stored) => Stored): Promise<Stored> {
   let result: Stored | undefined
   await JsonStore.update(filepath, (raw) => {
@@ -185,7 +147,7 @@ export const SettingsPreferencesRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => c.json(await read()),
+      async (c) => c.json(await stored()),
     )
     .patch(
       "/",
@@ -203,18 +165,10 @@ export const SettingsPreferencesRoutes = lazy(() =>
       async (c) => {
         const patch = normalizeDelegation(c.req.valid("json")) as Partial<Preferences>
         log.info("update", { keys: Object.keys(patch) })
-        const context = {
-          ...(patch.compaction_auto === undefined ? {} : { auto: patch.compaction_auto }),
-          ...(patch.compaction_threshold === undefined ? {} : { threshold: patch.compaction_threshold }),
-        }
-        const rows = Object.fromEntries(Object.entries(patch).filter(([key]) => !(key in Compaction.shape)))
-        // Preserve instances: Config.state() re-reads on the global revision bump, so an
-        // active session picks the new threshold up on its next turn without a teardown.
-        if (Object.keys(context).length > 0) {
-          await Config.updateGlobal({ compaction: context }, { preserveInstances: true })
-        }
-        if (Object.keys(rows).length > 0) await mutate((current) => Stored.parse({ ...current, ...rows }))
-        return c.json(await read())
+        // Retired compaction fields from older clients are stripped by the schema.
+        // App preference updates never rewrite the user's openscience.json.
+        if (Object.keys(patch).length > 0) await mutate((current) => Stored.parse({ ...current, ...patch }))
+        return c.json(await stored())
       },
     )
     .post(

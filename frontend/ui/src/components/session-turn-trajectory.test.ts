@@ -140,32 +140,29 @@ describe("reasoning rows", () => {
     time,
   })
 
-  test("keeps all streamed reasoning inline through completion and remounts without a toggle", async () => {
+  test("keeps full reasoning prose inline through streaming and remounts without per-part clocks or phase headings", async () => {
     const [message, setMessage] = reactive.createStore<AssistantMessage>(assistant())
     const [part, setPart] = reactive.createStore<ReasoningPart>(reasoning("prt_reason", { start: Date.now() - 12_300 }))
     const host = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
     await settle()
     const row = host.querySelector('[data-component="reasoning-part"]')!
-    const header = row.querySelector('[data-slot="reasoning-part-header"]')!
     expect(row.getAttribute("data-live")).toBe("true")
     expect(row.querySelector("button")).toBeNull()
-    expect(header.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning (12s)")
-    expect(header.querySelector('[data-component="spinner"]')).not.toBeNull()
+    expect(row.querySelector('[data-slot="reasoning-part-header"]')).toBeNull()
     await ready(() => row.querySelector('[data-slot="reasoning-part-body"] p') !== null)
     const body = row.querySelector('[data-slot="reasoning-part-body"]')!
     setPart("text", part.text + "\n\n**Researching cost distribution**\n\nThe entire next passage stays visible.")
     await ready(() => body.textContent?.includes("The entire next passage stays visible.") === true)
     expect(row.querySelector('[data-slot="reasoning-part-body"]')).toBe(body)
-    expect(body.querySelector("strong")?.textContent).toBe("Researching cost distribution")
+    expect(body.textContent).not.toContain("Researching cost distribution")
     expect(row.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain("Comparing the two assay")
 
-    // The turn completes: the clock freezes on the final duration and the row stays open.
+    // Completion does not replace or summarize the streamed prose.
     setPart("time", { start: part.time.start, end: part.time.start + 15_000 })
     setMessage("time", "completed", Date.now())
     await settle()
     expect(row.getAttribute("data-live")).toBeNull()
-    expect(header.querySelector('[data-component="spinner"]')).toBeNull()
-    expect(header.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning (15s)")
+    expect(row.querySelector('[data-component="spinner"]')).toBeNull()
     expect(body.textContent).toContain("The entire next passage stays visible.")
 
     // Hydrating a completed turn keeps the full provider text visible too.
@@ -180,16 +177,16 @@ describe("reasoning rows", () => {
     expect(again.querySelector('[data-slot="reasoning-part-toggle"]')).toBeNull()
   })
 
-  test("an aborted turn shows a plain Reasoning label when reasoning never reported its end", async () => {
+  test("an aborted turn preserves reasoning without a misleading thinking clock", async () => {
     const message = assistant(Date.now())
     const part = reasoning("prt_aborted", { start: Date.now() - 40_000 })
     const host = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
     await settle()
     const row = host.querySelector('[data-component="reasoning-part"]')!
-    const header = row.querySelector('[data-slot="reasoning-part-header"]')!
     expect(row.getAttribute("data-live")).toBeNull()
-    expect(header.querySelector('[data-component="spinner"]')).toBeNull()
-    expect(header.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning")
+    expect(row.querySelector('[data-component="spinner"]')).toBeNull()
+    await ready(() => row.querySelector('[data-slot="reasoning-part-body"] p') !== null)
+    expect(row.textContent).toContain(part.text)
   })
 
   test("completed reasoning is visible without a stored presentation preference", async () => {
@@ -197,9 +194,7 @@ describe("reasoning rows", () => {
     const part = reasoning("prt_folded", { start: 1_000, end: 1_800 })
     const host = mount(() => parts.Part({ part, message, hideCopy: true }), empty())
     await settle()
-    const header = host.querySelector('[data-slot="reasoning-part-header"]')!
-    // Under one second the clock stays quiet rather than reading "Thinking (0s)".
-    expect(header.querySelector('[data-slot="reasoning-part-title"]')?.textContent).toBe("Reasoning")
+    expect(host.querySelector('[data-slot="reasoning-part-header"]')).toBeNull()
     await ready(() => host.querySelector('[data-slot="reasoning-part-body"] p') !== null)
     expect(host.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain(part.text)
   })
@@ -210,6 +205,94 @@ describe("reasoning rows", () => {
     await settle()
     expect(host.textContent).toBe("")
     expect(host.querySelector('[data-component="reasoning-part"]')).toBeNull()
+  })
+
+  test("show/hide reasoning preserves live text, tool disclosure, and the saved visibility choice", async () => {
+    const message = assistant()
+    const reason = reasoning("prt_reason", { start: Date.now() })
+    const command = read("prt_read", "/research/protocol.md", 1_000)
+    const answer: TextPart = {
+      id: "prt_answer",
+      sessionID,
+      messageID: message.id,
+      type: "text",
+      text: "Checking the result.",
+    }
+    const [store, setStore] = reactive.createStore<Store>({
+      ...empty(),
+      session_status: { [sessionID]: { type: "busy" } },
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [reason, command, answer] },
+    })
+    const [preference, setPreference] = reactive.createStore({ show: true })
+    const view = () =>
+      turn.SessionTurn({
+        sessionID,
+        messageID: user.id,
+        lastUserMessageID: user.id,
+        get showReasoning() {
+          return preference.show
+        },
+        onShowReasoningChange: (show) => setPreference("show", show),
+      })
+    const host = mount(view, store)
+    await ready(() => host.querySelector('[data-slot="reasoning-part-body"] p') !== null)
+    const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-reasoning-toggle"]')!
+    expect(toggle.textContent).toContain("Hide reasoning")
+    expect(toggle.getAttribute("aria-expanded")).toBe("true")
+    const tool = host.querySelector('[data-component="tool-part-wrapper"]')!
+    const disclosure = tool.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!
+    disclosure.click()
+    await ready(() => disclosure.getAttribute("aria-expanded") === "true")
+
+    toggle.click()
+    await ready(() => host.querySelector('[data-component="reasoning-part"]') === null)
+    expect(preference.show).toBe(false)
+    expect(toggle.textContent).toContain("Show reasoning")
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    expect(host.textContent).toContain(answer.text)
+    expect(host.querySelector('[data-component="tool-part-wrapper"]')).toBe(tool)
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true")
+    const continued = reason.text + "\n\nNew streamed evidence."
+    setStore("part", message.id, 0, { ...reason, text: continued })
+    await settle()
+    expect(host.textContent).not.toContain("New streamed evidence.")
+    toggle.click()
+    await ready(
+      () =>
+        host.querySelector('[data-slot="reasoning-part-body"]')?.textContent?.includes("New streamed evidence.") ===
+        true,
+    )
+    expect(host.querySelector('[data-component="tool-part-wrapper"]')).toBe(tool)
+
+    toggle.click()
+    setStore("message", sessionID, 1, { ...message, time: { ...message.time, completed: Date.now() } })
+    cleanups.splice(0).forEach((cleanup) => cleanup())
+    document.body.replaceChildren()
+    const again = mount(view, store)
+    await ready(() => again.querySelector('[data-slot="session-turn-reasoning-toggle"]') !== null)
+    expect(again.querySelector('[data-component="reasoning-part"]')).toBeNull()
+    again.querySelector<HTMLButtonElement>('[data-slot="session-turn-reasoning-toggle"]')!.click()
+    await ready(() => again.textContent?.includes("New streamed evidence.") === true)
+    expect(store.part[message.id][0]).toMatchObject({ text: continued })
+    expect(again.textContent).not.toContain("Detailed")
+    expect(again.textContent).not.toContain("Compact")
+  })
+
+  test("visibility works for consumers without a settings callback", async () => {
+    const message = assistant(2_000)
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [reasoning("prt_reason", { start: 1_000, end: 2_000 })] },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    await ready(() => host.querySelector('[data-component="reasoning-part"]') !== null)
+    const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-reasoning-toggle"]')!
+    toggle.click()
+    await ready(() => host.querySelector('[data-component="reasoning-part"]') === null)
+    toggle.click()
+    await ready(() => host.querySelector('[data-component="reasoning-part"]') !== null)
   })
 
   test("interleaved encrypted parts do not add blank rows or repeated notices to a completed turn", async () => {

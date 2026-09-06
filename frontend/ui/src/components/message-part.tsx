@@ -754,42 +754,19 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   )
 }
 
-// Render every readable provider passage without an app-generated summary or
-// folding state. Signed/encrypted continuation stays untouched in the message.
+// Display normalization and visibility never alter stored provider continuation.
 
 function completedAt(message: MessageType) {
   return message.role === "assistant" ? (message as AssistantMessage).time.completed : undefined
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
-  const i18n = useI18n()
   const part = props.part as ReasoningPart
   const text = () => reasoningDisplayText(part.text)
   const live = () => !part.time?.end && !completedAt(props.message)
-  const now = useClock(() => live() && !!part.time?.start)
-  // A completed message whose reasoning never reported an end (an aborted
-  // turn) shows the plain label rather than the rest of the turn as thinking.
-  const duration = () => {
-    const start = part.time?.start
-    const end = live() ? now() : part.time?.end
-    if (!start || !end) return ""
-    return end - start >= 1000 ? elapsedLabel(end - start) : ""
-  }
-  const title = () =>
-    duration()
-      ? i18n.t("ui.messagePart.reasoning.thinking", { duration: duration() })
-      : i18n.t("ui.messagePart.reasoning.label")
   return (
     <Show when={text()}>
       <div data-component="reasoning-part" data-origin="provider-reasoning" data-live={live() ? "true" : undefined}>
-        <div data-slot="reasoning-part-header" title={i18n.t("ui.messagePart.reasoning.elapsedHint")}>
-          <span data-slot="reasoning-part-glyph">
-            <Show when={live()} fallback={<Icon name="brain" size="small" />}>
-              <Spinner />
-            </Show>
-          </span>
-          <span data-slot="reasoning-part-title">{title()}</span>
-        </div>
         <div data-slot="reasoning-part-body">
           <Markdown text={text()} cacheKey={part.id} />
         </div>

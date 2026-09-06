@@ -1111,7 +1111,7 @@ export namespace Config {
             ])
             .optional()
             .describe(
-              "Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. Use connectTimeout, idleTimeout, and outputIdleTimeout to bound stalled requests without capping active generations.",
+              "Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. The response stays open until completion, explicit cancellation, or a configured deadline; connectTimeout separately bounds the wait for response headers.",
             ),
           idleTimeout: z
             .union([
@@ -1121,13 +1121,13 @@ export namespace Config {
                 .positive()
                 .max(2_147_483_647)
                 .describe(
-                  "Maximum provider response-body inactivity in milliseconds. Defaults to 300000 (5 minutes); resets on every body chunk, including keepalives.",
+                  "Optional maximum provider response-body inactivity in milliseconds; resets on every body chunk, including keepalives. Disabled by default because a quiet response can still be generating private reasoning.",
                 ),
               z.literal(false).describe("Disable the provider inactivity watchdog."),
             ])
             .optional()
             .describe(
-              "Maximum provider response-body inactivity in milliseconds. Defaults to 300000 (5 minutes). Set false to disable; this does not cap total generation time.",
+              "Optional maximum provider response-body inactivity in milliseconds. Disabled by default. A configured deadline cancels even a healthy but quiet generation; set false to disable.",
             ),
           connectTimeout: z
             .union([z.number().int().positive().max(2_147_483_647), z.literal(false)])
@@ -1139,7 +1139,7 @@ export namespace Config {
             .union([z.number().int().positive().max(2_147_483_647), z.literal(false)])
             .optional()
             .describe(
-              "Maximum wait for new readable model output or tool-call activity in milliseconds. Defaults to 600000 (10 minutes); transport keepalives do not reset it. Suspended during tool execution and local processing. Set false to disable.",
+              "Optional maximum wait for new readable model output or tool-call activity in milliseconds. Disabled by default because providers can reason without publishing text. When configured, transport keepalives do not reset it; tool execution and local processing suspend it. Set false to disable.",
             ),
         })
         .catchall(z.any())
@@ -1322,7 +1322,7 @@ export namespace Config {
             .min(0)
             .max(1)
             .optional()
-            .describe("Compact when context exceeds this fraction of the model window (default: 0.75)"),
+            .describe("@deprecated Ignored. Automatic compaction uses the model's usable context capacity."),
           fallbackContext: z
             .number()
             .int()

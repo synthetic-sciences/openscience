@@ -33,6 +33,7 @@ import { useDialog } from "@synsci/ui/context/dialog"
 import { DropdownMenu } from "@synsci/ui/dropdown-menu"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { useSettings } from "@/context/settings"
 import { confirmDialog } from "@/atlas/dialogs"
 import { DialogSettings } from "@/components/dialog-settings"
 import { SessionSidebarActions, SidebarAction, type SessionContext } from "@/pages/session-sidebar-action"
@@ -141,6 +142,7 @@ export default function Page(): JSX.Element {
   const terminal = useTerminal()
   const server = useServer()
   const platform = usePlatform()
+  const settings = useSettings()
   const dialog = useDialog()
   const [creating, setCreating] = createSignal(false)
   const pending: { value?: Promise<string | undefined>; context?: SessionContext } = {}
@@ -1304,6 +1306,8 @@ export default function Page(): JSX.Element {
                                   sessionID={params.id!}
                                   messageID={message.id}
                                   lastUserMessageID={lastUserMessage()?.id}
+                                  showReasoning={settings.general.showReasoning()}
+                                  onShowReasoningChange={settings.general.setShowReasoning}
                                   classes={{
                                     root: "min-w-0 w-full relative",
                                     content: "flex flex-col justify-between !overflow-visible",

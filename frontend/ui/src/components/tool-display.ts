@@ -29,9 +29,61 @@ export function stripRedactedReasoning(text: string): string {
   return visible.trim() ? visible : ""
 }
 
-/** Provider-readable text, not a locally rewritten or shortened transcript. */
+const reasoningPhase =
+  /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|considering|choosing|simplifying|determining|revising|parsing|researching|optimizing|streamlining|refining|rethinking)\b[\p{L}\p{N} ,'/()_-]*$/iu
+const reasoningStatus =
+  /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|thinking|considering next steps)$/i
+
+/** Display-only phase-label cleanup; the persisted provider text is never changed. */
 export function reasoningDisplayText(text: string): string {
-  return stripRedactedReasoning(text)
+  const visible = stripRedactedReasoning(text)
+  if (!visible || reasoningStatus.test(visible.trim())) return ""
+  if (!visible.includes("**")) return visible
+
+  // Do not interpret heading-like text inside code or math, including an
+  // unfinished literal arriving over the stream. This deliberately errs on the
+  // side of retaining labels rather than deleting potentially meaningful text.
+  const literals: { start: number; end: number }[] = []
+  const delimiters = /^ {0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)|`+|\${1,2}|\\[[(]|<(pre|code)\b[^>]*>|<!--/gim
+  for (const match of visible.matchAll(delimiters)) {
+    if ((literals.at(-1)?.end ?? -1) > match.index) continue
+    const delimiter = match[1] ?? match[0]
+    const start = match.index + match[0].length
+    const closing = match[1]
+      ? new RegExp(`^ {0,3}${delimiter[0]}{${delimiter.length},}[ \\t]*(?:\\r?\\n|$)`, "gm")
+      : match[2]
+        ? new RegExp(`</${match[2]}\\s*>`, "gi")
+        : delimiter.startsWith("`")
+          ? new RegExp("(?<!`)`{" + delimiter.length + "}(?!`)", "g")
+          : delimiter.startsWith("$")
+            ? new RegExp("(?<!\\\\)\\${" + delimiter.length + "}", "g")
+            : undefined
+    if (closing) closing.lastIndex = start
+    const ending = delimiter === "\\[" ? "\\]" : delimiter === "\\(" ? "\\)" : delimiter === "<!--" ? "-->" : delimiter
+    const end = closing ? closing.exec(visible) : undefined
+    const index = closing ? (end?.index ?? -1) : visible.indexOf(ending, start)
+    literals.push({ start: match.index, end: index < 0 ? visible.length : index + (end?.[0].length ?? ending.length) })
+  }
+
+  const headings = /(^ {0,3}|[.!?])\*\*([^*\r\n]+)\*\*[ \t]*\r?\n(?:[ \t]*\r?\n)*/gm
+  const end = visible.trimEnd().length
+  return visible.replace(headings, (match: string, prefix: string, label: string, offset: number) => {
+    if (
+      label.length > 100 ||
+      label.trim().split(/\s+/).length > 12 ||
+      !reasoningPhase.test(label.trim()) ||
+      offset + match.length >= end ||
+      literals.some((literal) => offset >= literal.start && offset < literal.end)
+    ) {
+      return match
+    }
+    // A bridge can concatenate phases (`...done.**Checking sources**\n...`).
+    // Keep every prose character and insert only the missing paragraph break.
+    const newline = match.includes("\r\n") ? "\r\n" : "\n"
+    if (prefix.trim()) return prefix + newline + newline
+    if (!offset || visible.slice(0, offset).endsWith(newline + newline)) return ""
+    return newline
+  })
 }
 
 export type ToolOutcome = "pending" | "running" | "done" | "error" | "cancelled"

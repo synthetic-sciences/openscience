@@ -23,6 +23,7 @@ import {
   artifactActions,
   generatedArtifacts,
   sessionErrorDisplay,
+  reasoningDisplayText,
   stripRedactedReasoning,
   writtenFiles,
 } from "./tool-display"
@@ -125,7 +126,7 @@ function isGeneratedTool(part: PartType | undefined): part is ToolPart {
   return part?.type === "tool" && part.tool === "artifact" && part.state.status === "completed"
 }
 
-function AssistantTrace(props: { messages: AssistantMessage[] }) {
+function AssistantTrace(props: { messages: AssistantMessage[]; showReasoning: boolean }) {
   const data = useData()
   const emptyParts: PartType[] = []
   const trace = createMemo(() =>
@@ -134,7 +135,10 @@ function AssistantTrace(props: { messages: AssistantMessage[] }) {
         (data.store.part[message.id] ?? emptyParts).map((part) => ({
           message,
           part,
-          hidden: (part?.type === "tool" && part.tool === "todoread") || isGeneratedTool(part),
+          hidden:
+            (!props.showReasoning && part.type === "reasoning") ||
+            (part.type === "tool" && part.tool === "todoread") ||
+            isGeneratedTool(part),
         })),
       ),
     ),
@@ -184,6 +188,8 @@ export function SessionTurn(
     sessionTitle?: string
     messageID: string
     lastUserMessageID?: string
+    showReasoning?: boolean
+    onShowReasoningChange?: (show: boolean) => void
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -288,13 +294,21 @@ export function SessionTurn(
 
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
 
+  const hasReasoning = createMemo(() =>
+    assistantMessages().some((message) =>
+      (data.store.part[message.id] ?? emptyParts).some(
+        (part) => part.type === "reasoning" && !!reasoningDisplayText(part.text),
+      ),
+    ),
+  )
+
   const hasSteps = createMemo(() => {
     for (const m of assistantMessages()) {
       const msgParts = data.store.part[m.id]
       if (!msgParts) continue
       for (const p of msgParts) {
         if (p?.type === "tool") return true
-        if (p?.type === "reasoning" && stripRedactedReasoning(p.text ?? "")) return true
+        if (p?.type === "reasoning" && reasoningDisplayText(p.text ?? "")) return true
       }
     }
     return false
@@ -533,6 +547,7 @@ export function SessionTurn(
   const diffBatch = 20
 
   const [store, setStore] = createStore({
+    showReasoning: true,
     retrySeconds: 0,
     now: Date.now(),
     diffsOpen: [] as string[],
@@ -541,6 +556,14 @@ export function SessionTurn(
     artifacts: {} as Record<string, { state: "saving" | "saved" | "error"; error?: string }>,
     duration: duration(),
   })
+
+  const showReasoning = () => props.showReasoning ?? store.showReasoning
+  const toggleReasoning = () => {
+    const show = !showReasoning()
+    setStore("showReasoning", show)
+    props.onShowReasoningChange?.(show)
+    props.onUserInteracted?.()
+  }
 
   createEffect(
     on(
@@ -685,6 +708,19 @@ export function SessionTurn(
                               </span>
                             </Show>
                           </div>
+                          <Show when={hasReasoning()}>
+                            <button
+                              type="button"
+                              data-slot="session-turn-reasoning-toggle"
+                              aria-expanded={showReasoning()}
+                              onClick={toggleReasoning}
+                            >
+                              <Icon name="chevron-down" size="small" />
+                              {i18n.t(
+                                showReasoning() ? "ui.sessionTurn.reasoning.hide" : "ui.sessionTurn.reasoning.show",
+                              )}
+                            </button>
+                          </Show>
                           <Show when={working() && phase()?.hint}>
                             {(hint) => (
                               <div data-slot="session-turn-progress-hint" role="status" aria-live="polite">
@@ -698,7 +734,7 @@ export function SessionTurn(
                     <Show when={assistantMessages().length > 0}>
                       <div data-slot="session-turn-response-section">
                         <MarkdownFileScope paths={linkedFiles()}>
-                          <AssistantTrace messages={assistantMessages()} />
+                          <AssistantTrace messages={assistantMessages()} showReasoning={showReasoning()} />
                         </MarkdownFileScope>
                         <Show when={response()}>
                           <div

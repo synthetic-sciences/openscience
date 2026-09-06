@@ -227,56 +227,16 @@
   opacity: 0.35;
 }
 
-/* Reasoning follows the activity preference. The disclosure remains available
-   while streaming, and its clock measures the received reasoning phase. */
+/* Plain provider prose; visibility is controlled once for the conversation. */
 [data-component="reasoning-part"] {
   width: 100%;
   color: var(--text-base);
   font-size: var(--font-size-medium);
   line-height: 20px;
 
-  [data-slot="reasoning-part-header"] {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px 8px 12px;
-    color: var(--text-weak);
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
-    text-align: left;
-  }
-
-  [data-slot="reasoning-part-glyph"] {
-    flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--icon-weak);
-
-    [data-component="spinner"] {
-      width: 12px;
-      height: 12px;
-    }
-  }
-
-  [data-slot="reasoning-part-title"] {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-  }
-
   [data-slot="reasoning-part-body"] {
-    margin: 0 0 6px 19px;
-    padding: 4px 12px 8px;
+    margin: 0 0 6px 12px;
+    padding: 4px 12px;
     border-left: 1px solid var(--border-weaker-base);
     color: var(--text-weak);
   }

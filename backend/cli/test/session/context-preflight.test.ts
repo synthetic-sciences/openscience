@@ -348,7 +348,7 @@ describe("current-turn context preflight", () => {
             modelID: model.modelID,
             providerID: model.providerID,
             cost: 0,
-            tokens: { input: 12_000, output: 12, reasoning: 0, cache: { read: 0, write: 0 } },
+            tokens: { input: 16_000, output: 12, reasoning: 0, cache: { read: 0, write: 0 } },
             finish: "stop",
             time: { created: Date.now(), completed: Date.now() },
           })

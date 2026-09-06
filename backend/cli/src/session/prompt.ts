@@ -179,9 +179,8 @@ export namespace SessionPrompt {
       }, 0)
   }
 
-  /** Estimate the complete provider input assembled for this turn. The hard
-   * limit keeps explicit headroom for provider-specific wrappers and tokenizers;
-   * the softer threshold decides when reducible history should be compacted. */
+  /** Estimate the complete provider input assembled for this turn, retaining
+   * headroom for provider-specific wrappers and tokenizer estimation error. */
   export async function contextPreflight(input: {
     messages: MessageV2.WithParts[]
     current: MessageV2.User
@@ -193,10 +192,6 @@ export namespace SessionPrompt {
     const config = await Config.get()
     const usable = SessionCompaction.usableContext(input.model, config).usable
     const hard = Math.max(1, Math.floor(usable * CONTEXT_PREFLIGHT_MARGIN))
-    const soft = Math.min(
-      hard,
-      Math.max(1, Math.floor(usable * (config.compaction?.threshold ?? SessionCompaction.DEFAULT_THRESHOLD))),
-    )
     const tools = await toolTokens(input.tools)
     const extra = input.extra ? Token.estimate(input.extra) : 0
     const composition = MessageV2.composition(input.messages, { system: input.system })
@@ -209,7 +204,9 @@ export namespace SessionPrompt {
       newest,
       history: Math.max(0, total - newest),
       usable,
-      soft,
+      // Retain the telemetry field for existing clients; there is one automatic
+      // preflight budget now, with no user-selected percentage below it.
+      soft: hard,
       hard,
       composition,
     }
@@ -1597,9 +1594,8 @@ export namespace SessionPrompt {
         )
         break
       }
-      const target = preflight.total > preflight.hard ? preflight.hard : preflight.soft
-      const reducible = preflight.history > 0 && preflight.newest <= target
-      if (preflight.total > preflight.soft && config.compaction?.auto !== false && reducible) {
+      const reducible = preflight.history > 0 && preflight.newest <= preflight.hard
+      if (preflight.total > preflight.hard && config.compaction?.auto !== false && reducible) {
         const reclaimed = await SessionCompaction.prune({ sessionID })
         if (reclaimed > 0) {
           SessionTelemetry.recordCompaction({

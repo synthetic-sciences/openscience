@@ -2,6 +2,8 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict: Record<Keys, string> = {
+  "ui.sessionTurn.reasoning.show": "Vis resonnering",
+  "ui.sessionTurn.reasoning.hide": "Skjul resonnering",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",

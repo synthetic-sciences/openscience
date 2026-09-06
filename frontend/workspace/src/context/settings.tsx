@@ -21,6 +21,7 @@ export interface Settings {
   general: {
     autoSave: boolean
     releaseNotes: boolean
+    showReasoning: boolean
   }
   updates: {
     startup: boolean
@@ -44,6 +45,7 @@ const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
+    showReasoning: true,
   },
   updates: {
     startup: true,
@@ -114,6 +116,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         return store
       },
       general: {
+        showReasoning: createMemo(() => store.general?.showReasoning ?? defaultSettings.general.showReasoning),
+        setShowReasoning(value: boolean) {
+          setStore("general", "showReasoning", value)
+        },
         autoSave: createMemo(() => store.general?.autoSave ?? defaultSettings.general.autoSave),
         setAutoSave(value: boolean) {
           setStore("general", "autoSave", value)

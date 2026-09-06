@@ -153,8 +153,7 @@ function responseTokens(scenario: StressScenario, count: number) {
   if (scenario.category !== "compaction" || count !== 1 || !Number.isFinite(context) || context <= 0) return 12
   const output = Math.min(4_096, Math.floor(context / 2))
   const usable = context - output
-  const threshold = Number(scenario.config?.threshold ?? 0.75)
-  return Math.floor(usable * threshold) + 250
+  return usable + 250
 }
 
 function toolInput(

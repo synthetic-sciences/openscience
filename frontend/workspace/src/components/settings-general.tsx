@@ -190,6 +190,16 @@ export const AppearanceSections: Component = () => {
               triggerVariant="settings"
             />
           </SettingsRow>
+          <SettingsRow
+            title={language.t("settings.general.reasoning.title")}
+            description={language.t("settings.general.reasoning.description")}
+          >
+            <Switch
+              checked={settings.general.showReasoning()}
+              onChange={settings.general.setShowReasoning}
+              aria-label={language.t("settings.general.reasoning.title")}
+            />
+          </SettingsRow>
         </div>
       </SettingsSection>
 

@@ -30,6 +30,34 @@
     min-width: 0;
   }
 
+  [data-slot="session-turn-reasoning-toggle"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 32px;
+    padding: 4px 8px;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: transparent;
+    color: var(--text-weak);
+    font-size: var(--font-size-small);
+    cursor: pointer;
+
+    &[aria-expanded="true"] [data-slot="icon-svg"] {
+      transform: rotate(180deg);
+    }
+
+    &:hover {
+      background: var(--surface-raised-base);
+      color: var(--text-base);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-focus);
+      outline-offset: 1px;
+    }
+  }
+
   [data-slot="session-turn-progress-hint"] {
     flex-basis: 100%;
     color: var(--text-weak);

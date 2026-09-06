@@ -1804,11 +1804,11 @@ export type ProviderConfig = {
      */
     setCacheKey?: boolean
     /**
-     * Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. Use connectTimeout, idleTimeout, and outputIdleTimeout to bound stalled requests without capping active generations.
+     * Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. The response stays open until completion, explicit cancellation, or a configured deadline; connectTimeout separately bounds the wait for response headers.
      */
     timeout?: number | false
     /**
-     * Maximum provider response-body inactivity in milliseconds. Defaults to 300000 (5 minutes). Set false to disable; this does not cap total generation time.
+     * Optional maximum provider response-body inactivity in milliseconds. Disabled by default. A configured deadline cancels even a healthy but quiet generation; set false to disable.
      */
     idleTimeout?: number | false
     /**
@@ -1816,7 +1816,7 @@ export type ProviderConfig = {
      */
     connectTimeout?: number | false
     /**
-     * Maximum wait for new readable model output or tool-call activity in milliseconds. Defaults to 600000 (10 minutes); transport keepalives do not reset it. Suspended during tool execution and local processing. Set false to disable.
+     * Optional maximum wait for new readable model output or tool-call activity in milliseconds. Disabled by default because providers can reason without publishing text. When configured, transport keepalives do not reset it; tool execution and local processing suspend it. Set false to disable.
      */
     outputIdleTimeout?: number | false
     [key: string]: unknown
@@ -2100,7 +2100,7 @@ export type Config = {
      */
     prune?: boolean
     /**
-     * Compact when context exceeds this fraction of the model window (default: 0.75)
+     * @deprecated Ignored. Automatic compaction uses the model's usable context capacity.
      */
     threshold?: number
     /**
@@ -8681,14 +8681,6 @@ export type SettingsPreferencesGetResponses = {
     } | null
     delegation_autonomy?: "interactive" | "balanced" | "autonomous"
     delegation_diversity?: "focused" | "balanced" | "exploratory"
-    /**
-     * Automatic compaction when context is full (compaction.auto)
-     */
-    compaction_auto?: boolean
-    /**
-     * Fraction of the model window that triggers automatic compaction (compaction.threshold)
-     */
-    compaction_threshold?: number
   }
 }
 
@@ -8712,8 +8704,6 @@ export type SettingsPreferencesUpdateData = {
     } | null
     delegation_autonomy?: "interactive" | "balanced" | "autonomous"
     delegation_diversity?: "focused" | "balanced" | "exploratory"
-    compaction_auto?: boolean
-    compaction_threshold?: number
   }
   path?: never
   query?: never
@@ -8747,14 +8737,6 @@ export type SettingsPreferencesUpdateResponses = {
     } | null
     delegation_autonomy?: "interactive" | "balanced" | "autonomous"
     delegation_diversity?: "focused" | "balanced" | "exploratory"
-    /**
-     * Automatic compaction when context is full (compaction.auto)
-     */
-    compaction_auto?: boolean
-    /**
-     * Fraction of the model window that triggers automatic compaction (compaction.threshold)
-     */
-    compaction_threshold?: number
   }
 }
 

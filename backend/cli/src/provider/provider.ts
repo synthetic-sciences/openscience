@@ -58,8 +58,11 @@ export namespace Provider {
   const log = Log.create({ service: "provider" })
   const MAX_TIMER_MS = 2_147_483_647
   export const DEFAULT_CONNECT_TIMEOUT_MS = 120_000
-  export const DEFAULT_IDLE_TIMEOUT_MS = 300_000
-  export const DEFAULT_OUTPUT_IDLE_TIMEOUT_MS = 600_000
+  // A quiet response can still be generating private reasoning. Silence alone
+  // cannot distinguish that from a stalled provider, so response deadlines are
+  // opt-in; request progress and explicit cancellation remain active.
+  export const DEFAULT_IDLE_TIMEOUT_MS = false
+  export const DEFAULT_OUTPUT_IDLE_TIMEOUT_MS = false
 
   export type RequestContext = {
     sessionID: string
@@ -153,7 +156,7 @@ export namespace Provider {
     }
   }
 
-  function resolveTimeout(value: unknown, fallback: number): number | false {
+  function resolveTimeout(value: unknown, fallback: number | false): number | false {
     if (value === false) return false
     if (typeof value === "number" && Number.isFinite(value) && value > 0) {
       return Math.min(Math.floor(value), MAX_TIMER_MS)
@@ -370,9 +373,9 @@ export namespace Provider {
     }
   }
 
-  /** Apply a hard inactivity limit to connection and response-body reads. The
-   * timer resets on every network chunk, so a long active generation is never
-   * cut off. Explicit provider `timeout` remains a separate total-request cap. */
+  /** Bound the wait for response headers, then observe the response until it
+   * finishes or is cancelled. Optional body-idle and total deadlines remain
+   * available, but a quiet established response is not an error by default. */
   export async function fetchWithIdleWatchdog(
     fetchFn: (input: any, init?: BunFetchRequestInit) => Promise<Response>,
     fetchInput: any,

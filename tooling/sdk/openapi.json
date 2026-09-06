@@ -21154,18 +21154,6 @@
                         "balanced",
                         "exploratory"
                       ]
-                    },
-                    "compaction_auto": {
-                      "description": "Automatic compaction when context is full (compaction.auto)",
-                      "default": true,
-                      "type": "boolean"
-                    },
-                    "compaction_threshold": {
-                      "description": "Fraction of the model window that triggers automatic compaction (compaction.threshold)",
-                      "default": 0.75,
-                      "type": "number",
-                      "minimum": 0,
-                      "maximum": 1
                     }
                   }
                 }
@@ -21312,18 +21300,6 @@
                         "balanced",
                         "exploratory"
                       ]
-                    },
-                    "compaction_auto": {
-                      "description": "Automatic compaction when context is full (compaction.auto)",
-                      "default": true,
-                      "type": "boolean"
-                    },
-                    "compaction_threshold": {
-                      "description": "Fraction of the model window that triggers automatic compaction (compaction.threshold)",
-                      "default": 0.75,
-                      "type": "number",
-                      "minimum": 0,
-                      "maximum": 1
                     }
                   }
                 }
@@ -21430,14 +21406,6 @@
                       "balanced",
                       "exploratory"
                     ]
-                  },
-                  "compaction_auto": {
-                    "type": "boolean"
-                  },
-                  "compaction_threshold": {
-                    "type": "number",
-                    "minimum": 0,
-                    "maximum": 1
                   }
                 }
               }
@@ -57337,7 +57305,7 @@
                 "type": "boolean"
               },
               "timeout": {
-                "description": "Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. Use connectTimeout, idleTimeout, and outputIdleTimeout to bound stalled requests without capping active generations.",
+                "description": "Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default. The response stays open until completion, explicit cancellation, or a configured deadline; connectTimeout separately bounds the wait for response headers.",
                 "anyOf": [
                   {
                     "description": "Optional total wall-clock timeout in milliseconds for a provider request. No total timeout is applied by default; active long-running generations are allowed to finish.",
@@ -57353,10 +57321,10 @@
                 ]
               },
               "idleTimeout": {
-                "description": "Maximum provider response-body inactivity in milliseconds. Defaults to 300000 (5 minutes). Set false to disable; this does not cap total generation time.",
+                "description": "Optional maximum provider response-body inactivity in milliseconds. Disabled by default. A configured deadline cancels even a healthy but quiet generation; set false to disable.",
                 "anyOf": [
                   {
-                    "description": "Maximum provider response-body inactivity in milliseconds. Defaults to 300000 (5 minutes); resets on every body chunk, including keepalives.",
+                    "description": "Optional maximum provider response-body inactivity in milliseconds; resets on every body chunk, including keepalives. Disabled by default because a quiet response can still be generating private reasoning.",
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "maximum": 2147483647
@@ -57383,7 +57351,7 @@
                 ]
               },
               "outputIdleTimeout": {
-                "description": "Maximum wait for new readable model output or tool-call activity in milliseconds. Defaults to 600000 (10 minutes); transport keepalives do not reset it. Suspended during tool execution and local processing. Set false to disable.",
+                "description": "Optional maximum wait for new readable model output or tool-call activity in milliseconds. Disabled by default because providers can reason without publishing text. When configured, transport keepalives do not reset it; tool execution and local processing suspend it. Set false to disable.",
                 "anyOf": [
                   {
                     "type": "integer",
@@ -57962,7 +57930,7 @@
                 "type": "boolean"
               },
               "threshold": {
-                "description": "Compact when context exceeds this fraction of the model window (default: 0.75)",
+                "description": "@deprecated Ignored. Automatic compaction uses the model's usable context capacity.",
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1

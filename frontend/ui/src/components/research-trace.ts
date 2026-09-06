@@ -1,5 +1,5 @@
 import type { AssistantMessage, Part } from "@synsci/sdk/v2/client"
-import { stripRedactedReasoning } from "./tool-display"
+import { reasoningDisplayText } from "./tool-display"
 
 export type ResearchTraceEntry = {
   message: AssistantMessage
@@ -84,7 +84,7 @@ export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTra
   }
   return deduped.filter((entry) => {
     if (entry.hidden || lifecycle(entry.part)) return false
-    return entry.part.type !== "reasoning" || !!stripRedactedReasoning(entry.part.text ?? "")
+    return entry.part.type !== "reasoning" || !!reasoningDisplayText(entry.part.text ?? "")
   })
 }
 

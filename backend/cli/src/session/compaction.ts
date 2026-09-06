@@ -19,7 +19,7 @@ import path from "node:path"
 import fs from "node:fs/promises"
 import { SessionFilesystem } from "./filesystem"
 import { SessionLoopState } from "./loop-state"
-import { CompactionSettings } from "./compaction-settings"
+import { TokenUsage } from "@synsci/util/token-usage"
 import { NamedError } from "@synsci/util/error"
 
 export namespace SessionCompaction {
@@ -34,11 +34,7 @@ export namespace SessionCompaction {
     ),
   }
 
-  // User-facing compaction settings (auto, threshold) and their defaults live in the
-  // import-free CompactionSettings leaf so the settings route can share them without
-  // a module cycle. Re-exported here for existing callers.
-  export const DEFAULT_THRESHOLD = CompactionSettings.DEFAULT_THRESHOLD
-  export const settings = CompactionSettings.resolve
+  const COMPACTION_BUFFER = 20_000
 
   // Assumed context window when a provider reports 0 (local / OpenAI-compatible
   // / Codex). Matches the existing unknown-model fallback at provider.ts:770.
@@ -58,27 +54,27 @@ export namespace SessionCompaction {
   // with context-composition telemetry); re-exported here for the prune math.
   export const IMAGE_TOKEN_ESTIMATE = MessageV2.IMAGE_TOKENS
 
-  // Usable context window for a model: total context minus the output reserve. Single
-  // source of truth for both the overflow trigger (isOverflow) and the tail budget
-  // (process) so the two can never drift. Never reserve more than half the window for
-  // output — on a small model (or a small fallbackContext like the 8k the config text
-  // recommends) the 32k default output cap exceeds the whole context, so `context - output`
-  // goes negative and `count > usable*threshold` is true for ANY count (compact every turn).
+  // OpenCode's automatic budget: leave a response reserve, or a 20k buffer below
+  // an explicit input cap. Unknown/small local model windows retain their fallback
+  // and half-window clamp so missing metadata cannot cause compaction every turn.
   export function usableContext(model: Provider.Model, config: Config.Info): { context: number; usable: number } {
     const context = model.limit.context || config.compaction?.fallbackContext || FALLBACK_CONTEXT
     const cap = Math.min(model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
     const output = Math.min(cap, Math.floor(context / 2))
-    const usable = model.limit.input || context - output
+    const usable = model.limit.input
+      ? Math.min(
+          model.limit.input - Math.min(COMPACTION_BUFFER, output, Math.floor(model.limit.input / 2)),
+          context - output,
+        )
+      : context - output
     return { context, usable }
   }
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
-    const effective = settings(config)
-    if (!effective.auto) return false
+    if (config.compaction?.auto === false) return false
     const { usable } = usableContext(input.model, config)
-    const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    return count > usable * effective.threshold
+    return TokenUsage.total(input.tokens) >= usable
   }
 
   // Circuit breaker (P2.5). A compaction that reclaims less than this fraction of the

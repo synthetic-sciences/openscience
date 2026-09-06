@@ -10,6 +10,18 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Restore a saved Show/Hide reasoning control without Detailed/Compact modes.
+  Display reasoning as plain prose, omit routine provider phase headings, and
+  remove per-part thinking clocks that counted silence as reasoning. Keep the
+  original provider text and tool results intact.
+- Remove the Context percentage selector and automatically compact at the usable
+  model capacity with output headroom, following OpenCode's default. Legacy
+  percentage preferences no longer override automatic context management.
+- Restore unlimited waiting for an opened model response by default. Remove the
+  recently introduced five-minute body-idle and ten-minute output-idle cutoffs;
+  retain connection limits, explicit timeout overrides, Stop, and protections
+  against retrying unknown paid outcomes.
+
 - Use the Synthetic Sciences mark consistently in documentation, website and
   workspace favicons, workspace headers, model settings, and social previews.
 

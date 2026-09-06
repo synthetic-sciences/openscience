@@ -1,10 +1,64 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Provider } from "../../src/provider/provider"
 import { SessionProcessor } from "../../src/session/processor"
+import { outputWatchdog } from "../../src/session/output-watchdog"
 
 const encoder = new TextEncoder()
 const context = { sessionID: "ses_watchdog", messageID: "msg_watchdog", attempt: 2 }
+
+/** Advance the real watchdogs without spending minutes on a silent fixture.
+ * Tests are serial and restore these process-local clocks in every finally. */
+function clock() {
+  const schedule = globalThis.setTimeout
+  const cancel = globalThis.clearTimeout
+  const origin = Date.now()
+  let now = 0
+  const timers = new Map<ReturnType<typeof setTimeout>, { at: number; run: () => void }>()
+  const timeout = spyOn(globalThis, "setTimeout").mockImplementation(
+    Object.assign(
+      (run: TimerHandler, delay = 0, ...args: unknown[]) => {
+        if (typeof run !== "function") throw new TypeError("The fixture clock only accepts function callbacks")
+        const handle = schedule(() => {}, 2_147_483_647).unref()
+        timers.set(handle, { at: now + delay, run: () => run(...args) })
+        return handle
+      },
+      { __promisify__: schedule.__promisify__ },
+      // Bun returns timer handles; the merged DOM overload also declares a number.
+    ) as unknown as typeof setTimeout,
+  )
+  const clear = spyOn(globalThis, "clearTimeout").mockImplementation((handle) => {
+    timers.delete(handle as ReturnType<typeof setTimeout>)
+    cancel(handle as ReturnType<typeof setTimeout>)
+  })
+  const date = spyOn(Date, "now").mockImplementation(() => origin + now)
+  const performanceClock = spyOn(performance, "now").mockImplementation(() => now)
+  return {
+    async advance(milliseconds: number) {
+      const target = now + milliseconds
+      // ReadableStream pull jobs must enter their wait before the clock moves.
+      await Bun.sleep(0)
+      while (true) {
+        const next = [...timers].filter(([, item]) => item.at <= target).sort((a, b) => a[1].at - b[1].at)[0]
+        if (!next) break
+        now = next[1].at
+        timers.delete(next[0])
+        cancel(next[0])
+        next[1].run()
+        await Bun.sleep(0)
+      }
+      now = target
+      await Bun.sleep(0)
+    },
+    restore() {
+      for (const handle of timers.keys()) cancel(handle)
+      timeout.mockRestore()
+      clear.mockRestore()
+      date.mockRestore()
+      performanceClock.mockRestore()
+    },
+  }
+}
 
 type Settled<T> = { type: "resolved"; value: T } | { type: "rejected"; error: unknown } | { type: "hung" }
 
@@ -70,16 +124,181 @@ describe("provider activity watchdog", () => {
     expect(serialized).not.toContain("funding")
   })
 
-  test("bounds silent request stages by default and preserves explicit escape hatches", () => {
+  test("bounds headers by default but makes response inactivity limits opt-in", () => {
     expect(Provider.resolveConnectTimeout(undefined)).toBe(120_000)
-    expect(Provider.resolveIdleTimeout(undefined)).toBe(300_000)
-    expect(Provider.resolveOutputIdleTimeout(undefined)).toBe(600_000)
+    expect(Provider.resolveIdleTimeout(undefined)).toBe(false)
+    expect(Provider.resolveOutputIdleTimeout(undefined)).toBe(false)
     expect(Provider.resolveConnectTimeout(false)).toBe(false)
     expect(Provider.resolveIdleTimeout(false)).toBe(false)
     expect(Provider.resolveOutputIdleTimeout(false)).toBe(false)
     expect(Provider.resolveIdleTimeout(12_345.9)).toBe(12_345)
+    expect(Provider.resolveOutputIdleTimeout(600_000)).toBe(600_000)
     expect(Provider.resolveIdleTimeout(Number.MAX_SAFE_INTEGER)).toBe(2_147_483_647)
   })
+
+  for (const partial of [false, true]) {
+    test(`default quiet response resumes after fifteen minutes ${partial ? "after partial output" : "before first output"}`, async () => {
+      const time = clock()
+      const user = new AbortController()
+      const transport = new AbortController()
+      const watchdog = outputWatchdog({
+        timeout: Provider.resolveOutputIdleTimeout(undefined),
+        signal: user.signal,
+        expire: () => new Provider.RequestTimeoutError("output", 600_000),
+        onTimeout: (reason) => transport.abort(reason),
+      })
+      let source!: ReadableStreamDefaultController<Uint8Array>
+      let signal: AbortSignal | undefined
+      let requests = 0
+      const timings: Provider.RequestTiming[] = []
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+      try {
+        const response = await Provider.withRequestContext({ ...context, abort: transport.signal }, () =>
+          Provider.fetchWithIdleWatchdog(
+            async (_input, init) => {
+              requests++
+              signal = init?.signal ?? undefined
+              return new Response(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    source = controller
+                    if (partial) controller.enqueue(encoder.encode("partial reasoning"))
+                  },
+                }),
+              )
+            },
+            "https://provider.test/no-network",
+            { signal: user.signal },
+            { providerID: "test", modelID: "test", onTiming: (item) => timings.push(item) },
+          ),
+        )
+        reader = response.body!.getReader()
+        watchdog.start()
+        if (partial) {
+          expect(new TextDecoder().decode((await watchdog.next(() => reader!.read())).value)).toBe("partial reasoning")
+          watchdog.progress()
+        }
+        let settled = false
+        const pending = watchdog.next(() => reader!.read())
+        void pending.then(
+          () => (settled = true),
+          () => (settled = true),
+        )
+        await time.advance(900_001)
+        expect(settled).toBe(false)
+        expect(signal?.aborted).toBe(false)
+        expect(timings).toHaveLength(0)
+        source.enqueue(encoder.encode("resumed output"))
+        source.close()
+        expect(new TextDecoder().decode((await pending).value)).toBe("resumed output")
+        watchdog.progress()
+        expect((await watchdog.next(() => reader!.read())).done).toBe(true)
+        expect(requests).toBe(1)
+        expect(timings).toHaveLength(1)
+        expect(timings[0]).toMatchObject({ outcome: "completed", idleTimeoutMs: false, connectTimeoutMs: 120_000 })
+        expect(timings[0].completedAt - timings[0].startedAt).toBeGreaterThan(900_000)
+      } finally {
+        user.abort(new DOMException("fixture cleanup", "AbortError"))
+        await reader?.cancel().catch(() => {})
+        watchdog.dispose()
+        time.restore()
+      }
+    })
+  }
+
+  test("default quiet response still cancels its reader immediately when the user stops", async () => {
+    const time = clock()
+    const user = new AbortController()
+    const reason = new DOMException("User stopped", "AbortError")
+    let cancelled: unknown
+    let signal: AbortSignal | undefined
+    const { response, timings } = watched(
+      async (_input, init) => {
+        signal = init?.signal ?? undefined
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            cancel(value) {
+              cancelled = value
+            },
+          }),
+        )
+      },
+      { idleTimeout: undefined, connectTimeout: undefined },
+      { signal: user.signal },
+    )
+    try {
+      const body = (await response).text()
+      void body.catch(() => {})
+      await time.advance(900_001)
+      expect(signal?.aborted).toBe(false)
+      user.abort(reason)
+      await expect(body).rejects.toBe(reason)
+      expect(signal?.reason).toBe(reason)
+      expect(cancelled).toBe(reason)
+      expect(timings).toHaveLength(1)
+      expect(timings[0]).toMatchObject({ outcome: "aborted", idleTimeoutMs: false })
+    } finally {
+      user.abort(reason)
+      time.restore()
+    }
+  })
+
+  for (const phase of ["stream", "output"] as const) {
+    test(`an explicitly configured ${phase} deadline still aborts without making the paid outcome retryable`, async () => {
+      const time = clock()
+      const user = new AbortController()
+      const transport = new AbortController()
+      const duration = phase === "stream" ? 300_000 : 600_000
+      const watchdog = outputWatchdog({
+        timeout: Provider.resolveOutputIdleTimeout(phase === "output" ? duration : undefined),
+        signal: user.signal,
+        expire: () => new Provider.RequestTimeoutError("output", duration),
+        onTimeout: (reason) => transport.abort(reason),
+      })
+      let requests = 0
+      let cancelled: unknown
+      let signal: AbortSignal | undefined
+      try {
+        const response = await Provider.withRequestContext({ ...context, abort: transport.signal }, () =>
+          Provider.fetchWithIdleWatchdog(
+            async (_input, init) => {
+              requests++
+              signal = init?.signal ?? undefined
+              return new Response(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    controller.enqueue(encoder.encode("saved partial output"))
+                  },
+                  cancel(reason) {
+                    cancelled = reason
+                  },
+                }),
+              )
+            },
+            "https://provider.test/no-network",
+            { signal: user.signal },
+            { providerID: "test", modelID: "test", idleTimeout: phase === "stream" ? duration : undefined },
+          ),
+        )
+        const reader = response.body!.getReader()
+        watchdog.start()
+        expect(new TextDecoder().decode((await watchdog.next(() => reader.read())).value)).toBe("saved partial output")
+        watchdog.progress()
+        const pending = watchdog.next(() => reader.read())
+        void pending.catch(() => {})
+        await time.advance(duration + 1)
+        await expect(pending).rejects.toMatchObject({ phase, timeoutMs: duration })
+        expect(signal?.aborted).toBe(true)
+        expect(Provider.requestTimeout(cancelled)).toMatchObject({ phase, timeoutMs: duration })
+        expect(SessionProcessor.retryableProviderError(cancelled, {} as never)).toBeUndefined()
+        expect(requests).toBe(1)
+      } finally {
+        user.abort(new DOMException("fixture cleanup", "AbortError"))
+        watchdog.dispose()
+        time.restore()
+      }
+    })
+  }
 
   test("provider timeout config separates total and idle contracts", () => {
     const parsed = Config.Provider.parse({
@@ -93,6 +312,28 @@ describe("provider activity watchdog", () => {
     expect(() => Config.Provider.parse({ options: { timeout: 2_147_483_648 } })).toThrow()
     expect(() => Config.Provider.parse({ options: { connectTimeout: 0 } })).toThrow()
     expect(() => Config.Provider.parse({ options: { outputIdleTimeout: 2_147_483_648 } })).toThrow()
+  })
+
+  test("the default header deadline remains finite when fetch never responds", async () => {
+    const time = clock()
+    let signal: AbortSignal | undefined
+    const { response, timings } = watched(
+      async (_input, init) => {
+        signal = init?.signal ?? undefined
+        return new Promise<Response>(() => {})
+      },
+      { idleTimeout: undefined, connectTimeout: undefined },
+    )
+    void response.catch(() => {})
+    try {
+      await time.advance(120_001)
+      await expect(response).rejects.toMatchObject({ phase: "connect", timeoutMs: 120_000 })
+      expect(signal?.aborted).toBe(true)
+      expect(timings).toHaveLength(1)
+      expect(timings[0]).toMatchObject({ outcome: "idle_timeout", timeoutPhase: "connect", idleTimeoutMs: false })
+    } finally {
+      time.restore()
+    }
   })
 
   test("uses a distinct header deadline and aborts the underlying fetch", async () => {

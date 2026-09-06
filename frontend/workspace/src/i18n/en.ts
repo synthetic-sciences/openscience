@@ -1,4 +1,7 @@
 export const dict = {
+  "settings.general.reasoning.title": "Show reasoning",
+  "settings.general.reasoning.description":
+    "Display the readable reasoning supplied by the model. Tool activity stays visible.",
   "command.category.suggested": "Suggested",
   "command.category.view": "View",
   "command.category.project": "Project",
@@ -475,15 +478,6 @@ export const dict = {
   "settings.general.section.updates": "Updates",
   "settings.general.section.layout": "Layout",
   "settings.general.section.sounds": "Sound effects",
-  "settings.general.section.context": "Context",
-  "settings.general.section.context.description":
-    "How much conversation history OpenScience carries into each turn. Saved to compaction.threshold in openscience.json.",
-  "settings.general.context.threshold.title": "Auto-compact when context exceeds",
-  "settings.general.context.threshold.description":
-    "Share of the model window that triggers automatic compaction. A compaction.threshold set in a project's openscience.json takes precedence inside that project.",
-  "settings.general.context.threshold.off":
-    "Automatic compaction is off (compaction.auto is false). This share applies once it is on.",
-
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenScience",
   "settings.general.row.appearance.title": "Appearance",

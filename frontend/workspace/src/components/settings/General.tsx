@@ -6,13 +6,10 @@ import { confirmDialog } from "@/atlas/dialogs"
 import { URLS } from "@/config/urls"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
-import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { AppearanceSections } from "../settings-general"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { settingsApi } from "./api"
-import { thresholdOptions, type ContextPreferences } from "./context-preferences"
-import { commitPreference } from "./preference-write"
 import { walletBalanceLabel } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
 import { ACCOUNT_DEADLINE_MS, withAccountDeadline } from "./account-deadline"
@@ -226,34 +223,6 @@ export default function General() {
     return account()!.refreshing ? `${label} · Refreshing…` : label
   }
 
-  // The context row reads and writes the effective compaction settings the backend
-  // serves from openscience.json through /settings/preferences.
-  const language = useLanguage()
-  const [context, setContext] = createSignal<ContextPreferences>()
-  const [contextBusy, setContextBusy] = createSignal(false)
-  onMount(() => {
-    void settingsApi<ContextPreferences>(sdk.url, fetchFn, "/settings/preferences")
-      .then((preferences) => setContext(preferences))
-      .catch((cause) => setError(errorMessage(cause)))
-  })
-  const saveContext = async (patch: Partial<ContextPreferences>) => {
-    if (contextBusy()) return
-    setContextBusy(true)
-    setError(undefined)
-    const result = await commitPreference(
-      () =>
-        settingsApi<ContextPreferences>(sdk.url, fetchFn, "/settings/preferences", {
-          method: "PATCH",
-          body: JSON.stringify(patch),
-        }),
-      (saved) => setContext(saved),
-    )
-    setContextBusy(false)
-    if (!result.ok) setError(result.error)
-  }
-  const thresholds = createMemo(() => thresholdOptions(context()?.compaction_threshold))
-  const threshold = createMemo(() => thresholds().find((option) => option.value === context()?.compaction_threshold))
-
   return (
     <PanelScroll>
       <div class="settings-preferences-panel settings-preferences-panel--general">
@@ -376,39 +345,6 @@ export default function General() {
                   </Show>
                 </AccountRow>
               </Show>
-            </div>
-          </Section>
-
-          <Section
-            id="context"
-            title={language.t("settings.general.section.context")}
-            description={language.t("settings.general.section.context.description")}
-          >
-            <div class="settings-card settings-preferences-card">
-              <AccountRow
-                title={language.t("settings.general.context.threshold.title")}
-                description={
-                  context()?.compaction_auto === false
-                    ? language.t("settings.general.context.threshold.off")
-                    : language.t("settings.general.context.threshold.description")
-                }
-              >
-                <Select
-                  aria-label={language.t("settings.general.context.threshold.title")}
-                  options={thresholds()}
-                  current={threshold()}
-                  value={(option) => String(option.value)}
-                  label={(option) => option.label}
-                  disabled={!context() || contextBusy()}
-                  onSelect={(option) => {
-                    if (!option || option.value === context()?.compaction_threshold) return
-                    void saveContext({ compaction_threshold: option.value })
-                  }}
-                  variant="secondary"
-                  size="small"
-                  triggerVariant="settings"
-                />
-              </AccountRow>
             </div>
           </Section>
 

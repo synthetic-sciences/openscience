@@ -26,11 +26,11 @@ validation results, and unresolved questions. The next step is writing.
 
 Compaction summarizes earlier context. Keep exact parameter values, code, source references, and detailed tables in files rather than relying on a summary to preserve every detail.
 
-## Adjust automatic compaction
+## Automatic compaction
 
-Open **Customize → General → Context** and use **Auto-compact when context exceeds** to choose an available threshold. The setting controls when conversation summarization is considered; it does not increase a model's context limit.
+OpenScience automatically compacts a conversation as it approaches the model's usable input capacity, reserving room for the response. You do not need to choose a percentage in settings. The context indicator still shows how much of the window is in use, and `/compact` remains available whenever you want to summarize earlier work sooner.
 
-If automatic compaction is disabled in configuration, use the guidance shown in General and compact deliberately before the conversation becomes too large.
+Old `compaction.threshold` and warning-level preferences are ignored. If you explicitly set `compaction.auto` to `false` in configuration, use `/compact` before the conversation becomes too large.
 
 ## Save a checkpoint
 
