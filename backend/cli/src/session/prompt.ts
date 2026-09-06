@@ -11,6 +11,7 @@ import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { asSchema, type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
 import { SessionCompaction } from "./compaction"
+import { TokenUsage } from "@synsci/util/token-usage"
 import { SessionTelemetry } from "./telemetry"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
@@ -190,7 +191,7 @@ export namespace SessionPrompt {
     extra?: string
   }) {
     const config = await Config.get()
-    const usable = SessionCompaction.usableContext(input.model, config).usable
+    const usable = SessionCompaction.usableContext(input.model, config, input.current.context).usable
     const hard = Math.max(1, Math.floor(usable * CONTEXT_PREFLIGHT_MARGIN))
     const tools = await toolTokens(input.tools)
     const extra = input.extra ? Token.estimate(input.extra) : 0
@@ -1359,7 +1360,7 @@ export namespace SessionPrompt {
       const overThreshold =
         !!lastFinished &&
         lastFinished.summary !== true &&
-        (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
+        (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model, context: lastUser.context }))
       // Circuit breaker: once repeated compactions have proven ineffective for this
       // session (fixed overhead already exceeds the threshold), stop proactively
       // compacting — it only burns tokens/latency. The reactive overflow-error path is
@@ -1380,7 +1381,7 @@ export namespace SessionPrompt {
           msgs = await readMessages()
           // `before` is the last finished turn's real token usage (the reason we tripped
           // the threshold); prune's return value is the estimated reclaim.
-          const before = lastFinished!.tokens.input + lastFinished!.tokens.cache.read + lastFinished!.tokens.output
+          const before = TokenUsage.total(lastFinished!.tokens)
           SessionTelemetry.recordCompaction({ sessionID, trigger: "proactive", mechanism: "prune", before, reclaimed })
           await SessionCompaction.persistBreaker({
             sessionID,

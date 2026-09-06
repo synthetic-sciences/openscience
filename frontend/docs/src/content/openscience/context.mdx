@@ -30,6 +30,8 @@ Compaction summarizes earlier context. Keep exact parameter values, code, source
 
 OpenScience automatically compacts a conversation as it approaches the model's usable input capacity, reserving room for the response. You do not need to choose a percentage in settings. The context indicator still shows how much of the window is in use, and `/compact` remains available whenever you want to summarize earlier work sooner.
 
+If the model offers a smaller context-window choice, that choice is retained through compaction and continuation. Automatic compaction uses that selected capacity, bounded by the model's supported limits, rather than silently expanding back to the full window.
+
 Old `compaction.threshold` and warning-level preferences are ignored. If you explicitly set `compaction.auto` to `false` in configuration, use `/compact` before the conversation becomes too large.
 
 ## Save a checkpoint

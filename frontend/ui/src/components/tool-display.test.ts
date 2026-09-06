@@ -314,6 +314,14 @@ describe("provider reasoning presentation", () => {
     expect(reasoningDisplayText(text)).toBe(passages.join("\n\n"))
   })
 
+  test("normalizes the comparison phase without deleting an inline scientific comparison", () => {
+    expect(reasoningDisplayText("**Comparing the assay controls**\n\nThe **same evaluation conditions** apply.")).toBe(
+      "The **same evaluation conditions** apply.",
+    )
+    const prose = "**Comparing the assays revealed a confound.**\nThe conditions differed."
+    expect(reasoningDisplayText(prose)).toBe(prose)
+  })
+
   test("preserves ordinary bold reasoning prose", () => {
     const prose =
       "Let me also make sure about **featureCounts GTF requirement**: featureCounts works best with a GFF/GTF."

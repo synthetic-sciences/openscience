@@ -57,23 +57,39 @@ export namespace SessionCompaction {
   // OpenCode's automatic budget: leave a response reserve, or a 20k buffer below
   // an explicit input cap. Unknown/small local model windows retain their fallback
   // and half-window clamp so missing metadata cannot cause compaction every turn.
-  export function usableContext(model: Provider.Model, config: Config.Info): { context: number; usable: number } {
-    const context = model.limit.context || config.compaction?.fallbackContext || FALLBACK_CONTEXT
-    const cap = Math.min(model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
+  export function usableContext(
+    model: Provider.Model,
+    config: Config.Info,
+    requestedContext?: number,
+  ): { context: number; usable: number } {
+    const positive = (value: number | undefined) =>
+      value !== undefined && Number.isSafeInteger(value) && value > 0 ? value : undefined
+    if (requestedContext !== undefined && positive(requestedContext) === undefined) {
+      throw new Error("The selected context size must be a positive whole number of tokens.")
+    }
+    // Custom/OpenAI-compatible model metadata is less strict than per-turn
+    // context input. Invalid limits must not enlarge a budget or make it zero.
+    const capacity = positive(model.limit.context) ?? positive(config.compaction?.fallbackContext) ?? FALLBACK_CONTEXT
+    const context = Math.min(capacity, requestedContext ?? capacity)
+    const maximum = positive(SessionPrompt.OUTPUT_TOKEN_MAX) ?? 32_000
+    const cap = Math.min(positive(model.limit.output) ?? maximum, maximum)
     const output = Math.min(cap, Math.floor(context / 2))
-    const usable = model.limit.input
-      ? Math.min(
-          model.limit.input - Math.min(COMPACTION_BUFFER, output, Math.floor(model.limit.input / 2)),
-          context - output,
-        )
+    const inputLimit = positive(model.limit.input)
+    const input = inputLimit ? Math.min(inputLimit, context) : undefined
+    const usable = input
+      ? Math.min(input - Math.min(COMPACTION_BUFFER, output, Math.floor(input / 2)), context - output)
       : context - output
     return { context, usable }
   }
 
-  export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
+  export async function isOverflow(input: {
+    tokens: MessageV2.Assistant["tokens"]
+    model: Provider.Model
+    context?: number
+  }) {
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
-    const { usable } = usableContext(input.model, config)
+    const { usable } = usableContext(input.model, config, input.context)
     return TokenUsage.total(input.tokens) >= usable
   }
 
@@ -597,7 +613,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
     const convModel = agent.model
       ? await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
       : model
-    const { usable } = usableContext(convModel, cfg)
+    const { usable } = usableContext(convModel, cfg, userMessage.context)
     const tailTurns = cfg.compaction?.tailTurns ?? TAIL_TURNS
     const tailTokens =
       cfg.compaction?.tailTokens ?? Math.min(TAIL_TOKENS_MAX, Math.max(TAIL_TOKENS_MIN, Math.floor(usable * 0.2)))

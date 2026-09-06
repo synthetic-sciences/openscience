@@ -10,6 +10,14 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Honor Stop even when it arrives just before retry backoff. Preserve the
+  selected model context window through compaction and continuation, and include
+  cached writes when assessing whether pruning made enough room.
+- Recheck the current OAuth callback listener when two local processes connect
+  simultaneously. Avoid stale pooled connections to a stopped runtime without
+  accepting a different data profile or taking over another service's port.
+- Make the reasoning setting keyboard- and screen-reader-accessible, and verify
+  that Show/Hide survives reloads without hiding tool results or shortening prose.
 - Restore a saved Show/Hide reasoning control without Detailed/Compact modes.
   Display reasoning as plain prose, omit routine provider phase headings, and
   remove per-part thinking clocks that counted silence as reasoning. Keep the

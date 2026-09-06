@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, spyOn, test } from "bun:test"
+import { createHash } from "node:crypto"
 import path from "node:path"
 import os from "node:os"
 import fs from "node:fs/promises"
@@ -191,5 +192,87 @@ test("simultaneous same-profile processes share the callback owner bind race", a
     children.forEach((child) => child.kill("SIGTERM"))
     await Promise.all(children.map((child) => child.exited))
     await Promise.all(files.map((file) => fs.rm(file, { force: true })))
+  }
+})
+
+test.each(["same", "different", "unrelated"] as const)(
+  "rechecks a %s owner appearing between the health probe and port probe",
+  async (owner) => {
+    const root = createHash("sha256")
+      .update(await fs.realpath(Global.Path.data))
+      .digest("hex")
+    let listener: ReturnType<typeof Bun.serve> | undefined
+    const request = globalThis.fetch
+    let first = true
+    // The first health probe sees an empty port. Another process binds before
+    // the subsequent TCP probe; use a real listener to force that ordering.
+    const probe = spyOn(globalThis, "fetch").mockImplementation(
+      Object.assign(
+        async (...args: Parameters<typeof fetch>) => {
+          if (!first) return request(...args)
+          first = false
+          listener = Bun.serve({
+            hostname: "127.0.0.1",
+            port: OAUTH_CALLBACK_PORT,
+            fetch: () =>
+              Response.json({
+                service: owner === "unrelated" ? "another-service" : "openscience-mcp-oauth-callback",
+                version: 1,
+                root: owner === "different" ? "another-profile" : root,
+              }),
+          })
+          throw new TypeError("Connection refused before the other process bound")
+        },
+        { preconnect: request.preconnect },
+      ),
+    )
+    try {
+      if (owner === "same") await expect(McpOAuthCallback.ensureRunning()).resolves.toBeUndefined()
+      else
+        await expect(McpOAuthCallback.ensureRunning()).rejects.toThrow(
+          owner === "different" ? "another OpenScience data profile" : "owned by another service",
+        )
+      // Sharing or rejecting an existing owner must never stop its listener.
+      const response = await fetch(`http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}/health`, {
+        keepalive: false,
+      })
+      expect(response.ok).toBe(true)
+      await response.arrayBuffer()
+    } finally {
+      probe.mockRestore()
+      await listener?.stop(true)
+    }
+  },
+)
+
+test("ownership verification ignores a pooled connection to a gracefully stopped owner", async () => {
+  const root = createHash("sha256")
+    .update(await fs.realpath(Global.Path.data))
+    .digest("hex")
+  const health = `http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}/health`
+  const previous = Bun.serve({
+    hostname: "127.0.0.1",
+    port: OAUTH_CALLBACK_PORT,
+    fetch: () => Response.json({ service: "openscience-mcp-oauth-callback", version: 1, root }),
+  })
+  let replacement: ReturnType<typeof Bun.serve> | undefined
+  try {
+    // A fully consumed health response leaves an HTTP keepalive socket in the
+    // client pool. Graceful stop releases the listening port, not that socket.
+    expect(await (await fetch(health)).json()).toMatchObject({ root })
+    previous.stop()
+    replacement = Bun.serve({
+      hostname: "127.0.0.1",
+      port: OAUTH_CALLBACK_PORT,
+      fetch: () =>
+        Response.json({ service: "openscience-mcp-oauth-callback", version: 1, root: "replacement-profile" }),
+    })
+    await expect(McpOAuthCallback.ensureRunning()).rejects.toThrow("another OpenScience data profile")
+    expect(McpOAuthCallback.isRunning()).toBe(false)
+    const response = await fetch(health, { keepalive: false })
+    expect(await response.json()).toMatchObject({ root: "replacement-profile" })
+  } finally {
+    await replacement?.stop(true)
+    await previous.stop(true)
   }
 })

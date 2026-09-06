@@ -10,6 +10,9 @@ export namespace SessionRetry {
 
   export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Stop can arrive while the caller records retry telemetry. An abort
+      // listener added afterwards will never fire for that completed event.
+      if (signal.aborted) return reject(new DOMException("Aborted", "AbortError"))
       const abortHandler = () => {
         clearTimeout(timeout)
         reject(new DOMException("Aborted", "AbortError"))

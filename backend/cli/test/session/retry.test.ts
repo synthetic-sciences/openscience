@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { APICallError } from "ai"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -85,6 +85,54 @@ describe("session.retry.delay", () => {
 
     process.emitWarning = originalWarn
     expect(warnings.some((w) => w.includes("TimeoutOverflowWarning"))).toBe(false)
+  })
+
+  test("sleep rejects an already-stopped turn without waiting for Retry-After", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const listener = spyOn(controller.signal, "addEventListener")
+    try {
+      const result = await Promise.race([
+        SessionRetry.sleep(100, controller.signal).then(
+          () => "completed",
+          (error: unknown) => error,
+        ),
+        Bun.sleep(30).then(() => "still waiting"),
+      ])
+      expect(result).toBeInstanceOf(DOMException)
+      expect(result).toMatchObject({ name: "AbortError" })
+      expect(listener).not.toHaveBeenCalled()
+    } finally {
+      listener.mockRestore()
+    }
+  })
+
+  test("sleep removes its abort listener after normal completion", async () => {
+    const controller = new AbortController()
+    const added = spyOn(controller.signal, "addEventListener")
+    const removed = spyOn(controller.signal, "removeEventListener")
+    try {
+      await SessionRetry.sleep(1, controller.signal)
+      expect(added).toHaveBeenCalledTimes(1)
+      expect(removed).toHaveBeenCalledWith("abort", added.mock.calls[0][1])
+      controller.abort()
+    } finally {
+      added.mockRestore()
+      removed.mockRestore()
+    }
+  })
+
+  test("sleep clears its pending timer when Stop interrupts backoff", async () => {
+    const controller = new AbortController()
+    const cleared = spyOn(globalThis, "clearTimeout")
+    try {
+      const pending = SessionRetry.sleep(10_000, controller.signal)
+      controller.abort()
+      await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+      expect(cleared).toHaveBeenCalledTimes(1)
+    } finally {
+      cleared.mockRestore()
+    }
   })
 })
 

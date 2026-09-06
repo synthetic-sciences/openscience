@@ -93,9 +93,10 @@ export namespace McpOAuthCallback {
         `OAuth callback port ${OAUTH_CALLBACK_PORT} belongs to another OpenScience data profile; close that profile or finish its authentication first`,
       )
     }
-    if (await isPortInUse()) throw new Error(`OAuth callback port ${OAUTH_CALLBACK_PORT} is owned by another service`)
-
     try {
+      // Ownership can change between the health and TCP probes. Apply the same
+      // profile-verified recovery as a bind collision instead of failing early.
+      if (await isPortInUse()) throw new Error(`OAuth callback port ${OAUTH_CALLBACK_PORT} is owned by another service`)
       server = Bun.serve({
         port: OAUTH_CALLBACK_PORT,
         hostname: "127.0.0.1",
@@ -157,9 +158,9 @@ export namespace McpOAuthCallback {
         },
       })
     } catch (error) {
-      // Two compatible processes can both observe the port as free. If the
-      // winner belongs to this exact physical data root, share it; never turn
-      // that harmless bind race into a failed OAuth flow.
+      // A compatible process can bind after either probe. If the winner belongs
+      // to this exact physical data root, share it; never accept another profile
+      // or stop the existing listener while recovering the race.
       for (let attempt = 0; attempt < 20; attempt++) {
         const raced = await callbackServerOwner(expectedRoot)
         if (raced === "same") return
@@ -255,6 +256,9 @@ export namespace McpOAuthCallback {
   async function callbackServerOwner(expectedRoot: string): Promise<"same" | "different" | "none"> {
     const response = await fetch(`http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}/health`, {
       signal: AbortSignal.timeout(500),
+      // Inspect the listener that currently owns the port, not a pooled socket
+      // to a previous owner that is still draining after graceful shutdown.
+      keepalive: false,
     }).catch(() => undefined)
     if (!response?.ok) return "none"
     const body = (await response.json().catch(() => undefined)) as

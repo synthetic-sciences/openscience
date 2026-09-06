@@ -81,6 +81,7 @@ export namespace SessionLoopState {
       delegationSettings: message.delegationSettings,
       variant: message.variant,
       tier: message.tier,
+      context: message.context,
       inference: message.inference,
     }
   }

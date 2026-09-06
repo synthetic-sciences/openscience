@@ -5,7 +5,7 @@ import { promisify } from "node:util"
 import type { Locator, Page } from "@playwright/test"
 import type { ReasoningPart } from "@synsci/sdk/v2"
 import { test, expect } from "./fixtures"
-import { createSdk } from "./utils"
+import { createSdk, openSettings } from "./utils"
 
 test.skip(
   process.env.OPENSCIENCE_E2E_FAKE_MODEL !== "1",
@@ -162,7 +162,7 @@ async function withArtifact(
   }
 }
 
-test("literal reasoning and artifacts remain visible despite obsolete compact and collapse preferences", async ({
+test("reasoning prose and artifacts respect Show reasoning but ignore obsolete activity preferences", async ({
   page,
   sdk,
   gotoSession,
@@ -177,9 +177,15 @@ test("literal reasoning and artifacts remain visible despite obsolete compact an
     if (!userID) throw new Error("Seeded artifact has no user message")
     const assistant = messages.find((message) => message.info.role === "assistant")
     if (!assistant) throw new Error("Seeded artifact has no assistant message")
+    // Expected prose is independent of the production display normalizer: a
+    // regression that shortens either passage must still fail this test.
+    const prose = [
+      "The recorded control and treatment observations need the same evaluation conditions. I will retain the measured values, the failed observations, and the uncertainty instead of replacing the source with a shorter description. This whole passage should remain readable before the sequence result, including this final sentence.",
+      "The second passage belongs after the first one. The saved sequence is a separate tool result, not a replacement for either passage. A reader should be able to inspect both explanations and the actual sequence without changing an activity mode; hiding reasoning must leave the sequence accessible.",
+    ]
     const passages = [
-      "**Comparing the assay controls**\n\nThe recorded control and treatment observations need the same evaluation conditions. I will retain the measured values, the failed observations, and the uncertainty instead of replacing the source with a shorter description. This whole passage should remain readable before the sequence result, including this final sentence.",
-      "**Checking the transfer condition**\n\nThe second passage belongs after the first one. The saved sequence is a separate tool result, not a replacement for either passage. A reader should be able to inspect both explanations and the actual sequence without changing an activity mode or opening a reasoning disclosure.",
+      `**Comparing the assay controls**\n\n${prose[0].replace("same evaluation conditions", "**same evaluation conditions**")}`,
+      `**Checking the transfer condition**\n\n${prose[1]}`,
     ]
     const reasoning = (id: string, text: string): ReasoningPart => ({
       id,
@@ -220,20 +226,20 @@ test("literal reasoning and artifacts remain visible despite obsolete compact an
     await gotoSession(sessionID)
     const artifact = page.locator('[data-component="science-artifact"][data-kind="sequence"]')
     const reasoningRows = page.locator('[data-component="reasoning-part"]')
+    const toggle = page.locator('[data-slot="session-turn-reasoning-toggle"]')
     await expect(page.getByRole("group", { name: "Activity view", exact: true })).toHaveCount(0)
     await expect(page.locator('[data-slot="session-turn-collapsible-trigger-content"]')).toHaveCount(0)
     await expect(reasoningRows).toHaveCount(2)
     await expect(reasoningRows.locator("button")).toHaveCount(0)
-    await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(
-      passages.map((passage) => passage.replaceAll("**", "")),
-    )
+    await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
+    await expect(reasoningRows.locator("strong")).toHaveText("same evaluation conditions")
+    await expect(toggle).toHaveText("Hide reasoning")
+    await expect(toggle).toHaveAttribute("aria-expanded", "true")
     await expect(artifact).toBeVisible()
     await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
     await page.reload()
     await expect(reasoningRows).toHaveCount(2)
-    await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(
-      passages.map((passage) => passage.replaceAll("**", "")),
-    )
+    await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
     await expect(page.locator('[data-component="reasoning-part"], [data-component="science-artifact"]')).toHaveCount(3)
     expect(
       await page
@@ -242,8 +248,39 @@ test("literal reasoning and artifacts remain visible despite obsolete compact an
     ).toEqual(["reasoning-part", "reasoning-part", "science-artifact"])
     await expect(artifact).toBeVisible()
     await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
+
+    await toggle.click()
+    await expect(reasoningRows).toHaveCount(0)
+    await expect(toggle).toHaveText("Show reasoning")
+    await expect(toggle).toHaveAttribute("aria-expanded", "false")
+    await expect(artifact).toBeVisible()
+    await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
+    await page.reload()
+    await expect(toggle).toHaveText("Show reasoning")
+    await expect(reasoningRows).toHaveCount(0)
+    await expect(artifact).toBeVisible()
+
+    const dialog = await openSettings(page)
+    await dialog.getByRole("button", { name: "General", exact: true }).click()
+    const setting = dialog.getByRole("switch", { name: "Show reasoning", exact: true })
+    await expect(setting).not.toBeChecked()
+    await setting.locator("..").locator('[data-slot="switch-control"]').click()
+    await expect(setting).toBeChecked()
+    await setting.focus()
+    await expect(setting).toBeFocused()
+    await setting.press("Space")
+    await expect(setting).not.toBeChecked()
+    await setting.press("Space")
+    await expect(setting).toBeChecked()
+    await dialog.getByRole("button", { name: "Close", exact: true }).click()
+    await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
+    await expect(toggle).toHaveText("Hide reasoning")
+    await page.reload()
+    await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
+    await expect(artifact).toBeVisible()
+    await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
     await reasoningRows.first().scrollIntoViewIfNeeded()
-    await page.screenshot({ path: test.info().outputPath("literal-trace.png") })
+    await page.screenshot({ path: test.info().outputPath("reasoning-controls.png") })
   } finally {
     await sdk.session.delete({ sessionID }).catch(() => undefined)
   }

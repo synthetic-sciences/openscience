@@ -264,6 +264,54 @@ describe("session.compaction.isOverflow", () => {
     })
   })
 
+  test("a caller-selected smaller context remains the automatic compaction boundary", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 200_000, output: 32_000 })
+        const tokens = { input: 63_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(false)
+        expect(await SessionCompaction.isOverflow({ tokens, model, context: 100_000 })).toBe(true)
+        expect(SessionCompaction.usableContext(model, {}, 100_000)).toEqual({ context: 100_000, usable: 68_000 })
+        expect(SessionCompaction.usableContext(model, {}, 400_000)).toEqual({ context: 200_000, usable: 168_000 })
+      },
+    })
+  })
+
+  test("usable capacity stays positive and within known and selected limits", () => {
+    for (const context of [1, 2, 8_000, 128_000, 1_000_000]) {
+      for (const output of [0, 1, 4_096, 32_000, 128_000]) {
+        for (const input of [undefined, 1, 4_000, context, context * 2]) {
+          for (const requested of [undefined, 1, 8_000, context * 2]) {
+            const budget = SessionCompaction.usableContext(createModel({ context, input, output }), {}, requested)
+            expect(budget.usable).toBeGreaterThan(0)
+            expect(budget.usable).toBeLessThanOrEqual(Math.min(context, input ?? context, requested ?? context))
+          }
+        }
+      }
+    }
+  })
+
+  test("invalid provider limits use safe defaults and invalid caller context is rejected", () => {
+    for (const invalid of [-1, 0, 0.5, NaN, Infinity]) {
+      expect(SessionCompaction.usableContext(createModel({ context: 128_000, output: invalid }), {})).toEqual({
+        context: 128_000,
+        usable: 96_000,
+      })
+      expect(SessionCompaction.usableContext(createModel({ context: invalid, output: 32_000 }), {})).toEqual({
+        context: 128_000,
+        usable: 96_000,
+      })
+      expect(
+        SessionCompaction.usableContext(createModel({ context: 128_000, input: invalid, output: 32_000 }), {}),
+      ).toEqual({ context: 128_000, usable: 96_000 })
+      expect(() =>
+        SessionCompaction.usableContext(createModel({ context: 128_000, output: 32_000 }), {}, invalid),
+      ).toThrow("positive whole number")
+    }
+  })
+
   test("a stale config.compaction.warn_tokens is ignored and never changes the overflow trigger", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -649,6 +697,7 @@ describe("session.compaction.persistHandoff", () => {
         tools: { task: false },
         delegation: false,
         variant: "careful",
+        context: 128_000,
       })
       await Session.updatePart({
         id: Identifier.ascending("part"),
@@ -685,6 +734,7 @@ describe("session.compaction.persistHandoff", () => {
       expect(carrier.info.effort).toBe("ultra")
       expect(carrier.info.delegation).toBe(true)
       expect(carrier.info.variant).toBe("careful")
+      expect(carrier.info.context).toBe(128_000)
     })
   })
 
@@ -805,6 +855,7 @@ describe("session.compaction durable finalization", () => {
         agent: "research",
         model,
         effort: "normal",
+        context: 128_000,
         internal: SessionLoopState.prompt(sourceID),
       })
       await Session.updatePart({
@@ -906,6 +957,7 @@ describe("session.compaction durable finalization", () => {
           message.info.internal.kind === "compaction",
       )
       expect(continuations).toHaveLength(1)
+      expect(continuations[0]?.info.role === "user" && continuations[0].info.context).toBe(128_000)
       expect(continuations[0]?.parts).toEqual([
         expect.objectContaining({
           id: SessionLoopState.partID(continuations[0]!.info.id, "continuation"),

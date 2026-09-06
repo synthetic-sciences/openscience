@@ -66,6 +66,7 @@ describe("current-turn context preflight", () => {
           const oversized = await SessionPrompt.prompt({
             sessionID: session.id,
             model,
+            context: 64_000,
             agent: "research",
             system: `${STRESS_SCENARIO_MARKER}${scenario.id}`,
             parts: [
@@ -104,6 +105,11 @@ describe("current-turn context preflight", () => {
           )
           expect(recoveries).toHaveLength(1)
           expect(carriers).toHaveLength(1)
+          expect(recoveries[0]?.info.role === "user" && recoveries[0].info.context).toBe(64_000)
+          expect(carriers[0]?.info.role === "user" && carriers[0].info.context).toBe(64_000)
+          const parentID = oversized.info.parentID
+          const resumed = history.find((message) => message.info.id === parentID)
+          expect(resumed?.info.role === "user" && resumed.info.context).toBe(64_000)
           expect(rejections).toHaveLength(1)
           expect(SessionLoopState.routing(history)).toContain("genome index")
           expect(requests[main]?.text).toContain("MATRIX_OBJECTIVE")

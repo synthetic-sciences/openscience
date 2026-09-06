@@ -71,12 +71,14 @@ An opened response remains open by default until it completes, fails upstream, o
 
 The output watchdog cancels the provider HTTP request through `RequestContext.abort`, not the session's tool-authority signal. Already-started tools retain their separate lifecycle; an HTTP timeout is not proof that a remote tool or provider computation was rolled back. The transport's own deadlines also abort the underlying fetch, not only the consumer's wait.
 
+User Stop cancels the session as well as its model wait, including an already-aborted signal entering retry backoff. A quiet stream or active tool must settle without automatically starting another model request. Completed tool results and partial transcript output remain saved; cancellation does not undo external work.
+
 ## Focused verification
 
 From `backend/cli`, these tests exercise the actual parser, dispatch observation, phase transitions, split private placeholders, keepalive handling, and activity throttling without paid model calls:
 
 ```bash
-bun test --timeout 15000 ./test/provider/gateway-timing.test.ts ./test/provider/idle-watchdog.test.ts ./test/session/request-progress.test.ts ./test/session/telemetry.test.ts ./test/session/output-watchdog.test.ts ./test/session/stall-recovery.test.ts
+bun test --timeout 15000 ./test/provider/gateway-timing.test.ts ./test/provider/idle-watchdog.test.ts ./test/session/request-progress.test.ts ./test/session/telemetry.test.ts ./test/session/output-watchdog.test.ts ./test/session/stall-recovery.test.ts ./test/session/retry.test.ts ./test/session/stream-stop.test.ts
 ```
 
 When changing the progress schema, regenerate the SDK with `./tooling/repo/generate.ts` from the repository root and update the workspace's phase handling in the same change.

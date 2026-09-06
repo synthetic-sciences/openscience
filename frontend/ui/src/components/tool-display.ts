@@ -30,7 +30,7 @@ export function stripRedactedReasoning(text: string): string {
 }
 
 const reasoningPhase =
-  /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|considering|choosing|simplifying|determining|revising|parsing|researching|optimizing|streamlining|refining|rethinking)\b[\p{L}\p{N} ,'/()_-]*$/iu
+  /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|considering|choosing|simplifying|determining|revising|parsing|researching|optimizing|streamlining|refining|rethinking|comparing)\b[\p{L}\p{N} ,'/()_-]*$/iu
 const reasoningStatus =
   /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|thinking|considering next steps)$/i
 

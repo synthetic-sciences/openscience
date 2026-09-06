@@ -455,6 +455,7 @@ describe("session loop restart state", () => {
     source.info.system = "stay local"
     source.info.variant = "careful"
     source.info.tier = "priority"
+    source.info.context = 128_000
     expect(SessionLoopState.controls(source.info)).toEqual({
       tools: { task: false, bash: false },
       delegation: false,
@@ -465,6 +466,7 @@ describe("session loop restart state", () => {
       system: "stay local",
       variant: "careful",
       tier: "priority",
+      context: 128_000,
       inference: undefined,
     })
   })
