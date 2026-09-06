@@ -809,7 +809,9 @@ export namespace SessionProcessor {
                           start: Date.now(),
                         },
                       },
-                      metadata: value.providerMetadata,
+                      metadata: value.providerExecuted
+                        ? { ...value.providerMetadata, providerExecuted: true }
+                        : value.providerMetadata,
                     })
                     // Some providers omit the terminal tool-result event even
                     // though the execute promise has already settled. The

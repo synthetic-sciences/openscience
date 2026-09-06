@@ -10,6 +10,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Continue after a local tool result even when a provider labels its turn `stop`,
+  so the model can use the result and produce its final answer. Preserve terminal
+  handling for provider-executed tools, interrupted work and configured limits.
+- Document actual Research prompt assembly and the source-verified OpenCode
+  comparison, separating optional model guidance from required API compatibility.
 - Align model workspace guidance with the session's actual isolated or project
   mode and remove the duplicated Research header from Codex requests. Harbor
   trials disable model-generated UI titles through existing configuration and

@@ -135,12 +135,13 @@ test.each(["silence", "keepalive", "private-reasoning"])(
   20_000,
 )
 
-test.each(["finished-stream", "stalled-stream"])(
+test.each(["finished-stream", "stop-with-tool", "stop-with-error", "stalled-stream"])(
   "preserves an actual long-running tool after %s",
   async (mode) => {
     let requests = 0
     let executions = 0
     let cancelled = false
+    const results: string[] = []
     using server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
@@ -156,8 +157,9 @@ test.each(["finished-stream", "stalled-stream"])(
           Array.isArray(body.messages) &&
           body.messages.some((message: { role?: string }) => message.role === "tool")
         ) {
+          results.push(JSON.stringify(body.messages))
           return new Response(
-            `${chunk({ content: "The local tool completed." })}${chunk({}, "stop")}data: [DONE]\n\n`,
+            `${chunk({ content: mode === "stop-with-error" ? "The local tool failed; revise the input." : "The local tool completed." })}${chunk({}, "stop")}data: [DONE]\n\n`,
             { headers: { "content-type": "text/event-stream" } },
           )
         }
@@ -178,7 +180,9 @@ test.each(["finished-stream", "stalled-stream"])(
         return new Response(
           new ReadableStream({
             start(controller) {
-              controller.enqueue(encoder.encode(`${call}${chunk({}, "tool_calls")}`))
+              controller.enqueue(
+                encoder.encode(`${call}${chunk({}, mode.startsWith("stop-with-") ? "stop" : "tool_calls")}`),
+              )
               if (mode === "stalled-stream") return
               controller.enqueue(encoder.encode("data: [DONE]\n\n"))
               controller.close()
@@ -223,6 +227,7 @@ test.each(["finished-stream", "stalled-stream"])(
               executions++
               await Bun.sleep(1100)
               context.abort.throwIfAborted()
+              if (mode === "stop-with-error") throw new Error("LONG_TOOL_FAILURE")
               return { title: "Local wait completed", output: "LONG_TOOL_COMPLETED", metadata: {} }
             },
           }),
@@ -248,19 +253,30 @@ test.each(["finished-stream", "stalled-stream"])(
         const tool = tools[0]
         expect(tool).toMatchObject({
           tool: "stall_fixture",
-          state: { status: "completed", output: expect.stringContaining("LONG_TOOL_COMPLETED") },
+          state:
+            mode === "stop-with-error"
+              ? { status: "error", error: expect.stringContaining("LONG_TOOL_FAILURE") }
+              : { status: "completed", output: expect.stringContaining("LONG_TOOL_COMPLETED") },
         })
         expect(executions).toBe(1)
-        if (tool.type !== "tool" || tool.state.status !== "completed")
-          throw new Error("Expected a completed local tool")
+        if (tool.type !== "tool" || (tool.state.status !== "completed" && tool.state.status !== "error"))
+          throw new Error("Expected a settled local tool")
         expect(tool.state.time.end - tool.state.time.start).toBeGreaterThan(900)
         expect(SessionStatus.get(session.id)).toEqual({ type: "idle" })
         if (result.info.role !== "assistant") throw new Error("Expected an assistant result")
-        if (mode === "finished-stream") {
+        if (mode !== "stalled-stream") {
           expect(result.info.error).toBeUndefined()
           expect(requests).toBe(2)
+          expect(results).toHaveLength(1)
+          expect(results[0]).toContain(mode === "stop-with-error" ? "LONG_TOOL_FAILURE" : "LONG_TOOL_COMPLETED")
           expect(
-            result.parts.some((part) => part.type === "text" && part.text.includes("The local tool completed.")),
+            result.parts.some(
+              (part) =>
+                part.type === "text" &&
+                part.text.includes(
+                  mode === "stop-with-error" ? "The local tool failed; revise the input." : "The local tool completed.",
+                ),
+            ),
           ).toBe(true)
           return
         }

@@ -458,7 +458,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       if (message.info.error) return true
       const finish = message.info.finish
       if (!finish || finish === "compact" || finish === "length") return false
-      const tool = message.parts.some((part) => part.type === "tool")
+      const tool = MessageV2.hasLocalToolResult(message.parts)
       return !MessageV2.isContinuingTurn(finish, tool)
     }
     const answered = new Set(

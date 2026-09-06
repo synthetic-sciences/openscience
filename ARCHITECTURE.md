@@ -80,7 +80,15 @@ The backend is a Bun and TypeScript application compiled to a single native bina
 
 ### Prompt architecture
 
-Prompts are assembled in two layers: a provider-neutral system prompt (`src/session/system.ts` supplies the same product contract to every model), and an agent-level workflow prompt injected by agent name (`src/session/prompt.ts`). See [CLAUDE.md](CLAUDE.md) for the routing details.
+An explicit agent header replaces the generic fallback. Default Research uses the
+short `researchagent-test.txt` header plus response defaults; session assembly adds
+environment, project instructions and applicable mode/skill context. Provider
+transforms then adapt request options, tools, reasoning and message serialization.
+The generic fallback currently ignores model identity, and Research bypasses it.
+Codex OAuth places the Research header once in the API instructions field. See
+[CLAUDE.md](CLAUDE.md) for the actual routing and
+[the OpenCode comparison](docs/notes/opencode-harness-comparison.md) for the proposed
+model-specific interaction layer and its evaluation boundary.
 
 ### Skills
 

@@ -567,25 +567,32 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  // Finish reasons that mean the agent is NOT done — it will call more tools, or the reason
-  // is ambiguous ("unknown") and the loop treats it as "keep going". Everything else ("stop",
-  // "length", …) is a completed turn. The loop uses this to decide whether to keep iterating,
-  // and compaction uses it to decide whether to compact mid-task vs yield after a finished
-  // answer — sharing one predicate so the two can't drift apart.
+  // Provider reasons used for the proactive compaction threshold. The outer
+  // loop also considers settled local tool results through isContinuingTurn.
   export const CONTINUING_FINISH = ["tool-calls", "unknown"]
   export function isContinuing(finish?: string): boolean {
     return !!finish && CONTINUING_FINISH.includes(finish)
   }
 
-  // Whether a completed TURN should keep the agent loop running. Stricter than
-  // isContinuing for the ambiguous "unknown" reason: it only means "keep going"
-  // when the turn actually made a tool call whose result must be fed back. A
-  // text-only turn that finished "unknown" (common with local Ollama models that
-  // don't report a finish reason) produced no continuation signal — re-prompting
-  // the identical context just yields the same text forever (the #176 doom loop),
-  // so treat it as done. Used only by the loop; compaction keeps isContinuing.
-  export function isContinuingTurn(finish: string | undefined, hasToolCall: boolean): boolean {
-    return isContinuing(finish) && (finish !== "unknown" || hasToolCall)
+  /** A settled local result still needs a provider turn even when its finish
+   * reason says "stop". Provider-executed tools and interrupted wrappers have
+   * no local result awaiting interpretation. */
+  export function hasLocalToolResult(parts: readonly Part[]): boolean {
+    return parts.some((part) => {
+      if (part.type !== "tool" || part.metadata?.providerExecuted === true) return false
+      if (part.state.status === "completed") return true
+      if (part.state.status !== "error") return false
+      if (part.state.metadata?.cancelled === true || part.state.metadata?.interrupted === true) return false
+      // Older recovered transcripts predate the explicit interruption marker.
+      return !part.state.error.startsWith("Tool execution was interrupted before completion.")
+    })
+  }
+
+  // A text-only unknown finish is complete; repeating it can loop forever.
+  // Terminal limits and errors stay authoritative even when tools ran.
+  export function isContinuingTurn(finish: string | undefined, hasLocalResult: boolean): boolean {
+    if (finish === "stop") return hasLocalResult
+    return isContinuing(finish) && (finish !== "unknown" || hasLocalResult)
   }
 
   export function outputRecovery(input: {

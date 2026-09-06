@@ -46,7 +46,8 @@ class Provider(BaseHTTPRequestHandler):
         message = {"role": "assistant", "content": "Native fixture completed."}
         reason = "stop"
         if use_tool:
-            reason = "tool_calls"
+            # Exercise providers that report stop despite a local tool call.
+            # Its result must still reach the model before final completion.
             message = {
                 "role": "assistant",
                 "tool_calls": [

@@ -4,8 +4,10 @@ This is a tiny **zero-model-cost compatibility test**, not a scientific benchmar
 or a measure of agent intelligence. It runs the actual candidate Linux OpenScience
 binary through Harbor 0.22.0's installed-agent lifecycle, Docker task environment,
 native instruction and working directory, log collection, and native verifier.
-The loopback provider supplies a deterministic tool call followed by completion;
-the real OpenScience loop executes that tool. Reported provider token counts are
+The loopback provider supplies a deterministic tool call with a `stop` finish
+reason, then a final answer after receiving its result. The real OpenScience loop
+must execute that tool once and continue despite the first finish label.
+Reported provider token counts are
 synthetic protocol fixtures. No inference service or real API key is used.
 
 From the repository root, with the editable adapter installed in a Python 3.12+
@@ -66,6 +68,7 @@ The launcher fails unless all of these hold:
   call, while the provider sees its tool result before final completion.
 - Exactly two provider requests occur: the tool turn and the final answer. UI
   title generation introduces no auxiliary requests in this headless fixture.
+  A `stop` label accompanying the local tool call must not end the run early.
 - Native grader evidence and Harbor's downloaded artifact record the expected
   output and working directory; the container reports x86_64, only loopback with
   the interface-up flag, and no usable IPv4/IPv6 default route. Inactive kernel

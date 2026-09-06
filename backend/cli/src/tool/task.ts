@@ -434,7 +434,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           .findLast((message) => {
             if (message.info.error) return true
             if (!message.info.finish) return false
-            const hasTool = message.parts.some((part) => part.type === "tool")
+            const hasTool = MessageV2.hasLocalToolResult(message.parts)
             return !MessageV2.isContinuingTurn(message.info.finish, hasTool)
           })
         const settled = await TaskAttempt.settle(identity, terminal?.info.time.completed)

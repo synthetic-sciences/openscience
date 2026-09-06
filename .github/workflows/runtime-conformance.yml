@@ -54,6 +54,7 @@ jobs:
           bun run --cwd backend/cli test ./test/runtime ./test/plugin ./test/question ./test/permission ./test/session/prompt-cancellation.test.ts ./test/session/tool-selection.test.ts ./test/tool/registry.test.ts ./test/cli/serve-lifecycle.test.ts ./test/cli/run-workspace.test.ts ./test/installation/headless-build.test.ts
           bun run --cwd backend/cli test ./test/project/trust.test.ts
           bun run --cwd backend/cli test ./test/session/system-environment.test.ts ./test/session/llm.test.ts ./test/session/title-dedupe.test.ts
+          bun run --cwd backend/cli test ./test/session/stop-tool-continuation.test.ts ./test/session/stall-recovery.test.ts ./test/session/text-loop.test.ts ./test/session/compaction.test.ts
           bun run --cwd examples/local-lab-plugin setup
           bun test ./examples/local-lab-plugin
           bun test ./examples/slack-research

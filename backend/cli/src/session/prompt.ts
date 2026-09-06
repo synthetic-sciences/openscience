@@ -653,7 +653,7 @@ export namespace SessionPrompt {
             status: "error",
             input: part.state.input,
             raw: part.state.raw,
-            metadata: part.state.status === "running" ? part.state.metadata : undefined,
+            metadata: { ...(part.state.status === "running" ? part.state.metadata : {}), interrupted: true },
             error:
               "Tool execution was interrupted before completion. Its side effects may have completed; inspect the current state before retrying.",
             time: { start, end: Math.max(start, now) },
@@ -941,7 +941,7 @@ export namespace SessionPrompt {
       // A text-only turn that finished "unknown" (no tool call to feed back) is a
       // completed turn, not a continue — otherwise the loop re-prompts the identical
       // context forever (the #176 doom loop). See MessageV2.isContinuingTurn.
-      const lastAssistantHasTool = lastAssistantMsg?.parts.some((p) => p.type === "tool") ?? false
+      const lastAssistantHasTool = MessageV2.hasLocalToolResult(lastAssistantMsg?.parts ?? [])
       const continuing = MessageV2.isContinuingTurn(lastAssistant?.finish, lastAssistantHasTool)
       const recovery = MessageV2.outputRecovery({
         finish: lastAssistant?.finish,

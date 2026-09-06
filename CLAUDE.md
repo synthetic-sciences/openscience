@@ -15,84 +15,124 @@ help when the shipped agent misbehaves.
 - **Config file**: `openscience.json`
 - **Provider ID**: `synsci` (Atlas wire contract, do not rename)
 
-## Prompt Architecture (Dual-Layer)
+## Prompt architecture
 
-The CLI uses a **dual-layer prompt system**: provider-level system prompts + agent-level workflow prompts.
+In this guide, `src/...` paths are relative to `backend/cli`; prompt paths such as
+`agent/prompt/...` and `session/prompt/...` are relative to `backend/cli/src`.
 
+The Research loop is shared across providers. Prompt selection, scientific context,
+model options and API serialization are separate steps. Do not infer active routing
+from a prompt filename: several files serve hidden compatibility profiles.
+
+```text
+Agent registry + selected model + current user message
+    -> select agent header, otherwise generic fallback
+    -> environment, project instructions, applicable skills and mode reminders
+    -> system-transform plugin, then parameter/header hooks
+    -> provider message/tool normalization and inference options
+    -> provider API
 ```
-User request with agent name (e.g., "research")
-  │
-  ├─ Layer 1: SYSTEM role ← provider-neutral product contract
-  │   src/session/system.ts supplies one contract to every model
-  │
-  └─ Layer 2: USER role injection ← agent prompt (task-specific)
-      src/session/prompt.ts selects by agent name + tier
-```
 
-### Session prompts (`src/session/prompt/`)
+### Header selection
 
-| File                                | Purpose                                  |
-| ----------------------------------- | ---------------------------------------- |
-| `core.txt`                          | Provider-neutral operating contract      |
-| `plan.txt`                          | Read-only Plan mode contract             |
-| `build-switch.txt`, `max-steps.txt` | Mode transition and step-limit utilities |
+`src/agent/agent.ts` currently assigns the default `research` agent
+`SystemPrompt.response(PROMPT_RESEARCH_AGENT_TEST)`: the short
+`agent/prompt/researchagent-test.txt` plus `session/prompt/response.txt`.
+Despite its historical filename, this is the active default Research header.
+`agent/prompt/research.txt` is a longer compatibility workflow; it is not the
+ordinary Research header.
 
-Routing logic: `src/session/system.ts` supplies the same product contract to every model.
+`LLM.prompts` in `src/session/llm.ts` selects an explicit `agent.prompt` first.
+If none exists, `SystemPrompt.provider(model, direct, inspection)` supplies a
+fallback. That fallback currently ignores model identity and selects the common
+core/direct/inspection contract. Adding model routing only inside
+`SystemPrompt.provider` would therefore **not affect default Research**.
 
-### Agent prompts (`src/agent/prompt/`)
+An agent's configured `prompt` replaces its built-in header. Preserve this
+behavior for custom agents and internal title/compaction agents. Model-specific
+interaction profiles are a proposed ablation in
+[the OpenCode harness comparison](docs/notes/opencode-harness-comparison.md);
+they are not enabled by this documentation change.
 
-| File                    | Active role                                    |
-| ----------------------- | ---------------------------------------------- |
-| `research.txt`          | `research`, the single user-facing harness     |
-| `explore.txt`           | Hidden Explore profile and compatibility alias |
-| `biology.txt`           | Hidden domain compatibility profile            |
-| `physics.txt`           | Hidden domain compatibility profile            |
-| `ml.txt`                | Hidden domain compatibility profile            |
-| `write.txt`             | Hidden writing compatibility profile           |
-| `literature-review.txt` | Hidden literature-review compatibility profile |
-| `critique.txt`          | Hidden critique compatibility profile          |
-| `physics-critique.txt`  | Hidden physics-critique compatibility profile  |
-| `compaction.txt`        | Hidden system agent                            |
-| `title.txt`             | Hidden system agent                            |
+### Context and reminders
 
-`execute` uses the shared execution contract rather than a separate prompt file. Plan mode lives in `src/session/prompt/plan.txt`. Routing logic in `src/session/prompt.ts` injects the Research effort contract and preserves the hidden compatibility prompts.
+`src/session/prompt.ts` assembles the current environment, project instructions,
+and applicable reminder context before invoking `LLM.stream`. The filesystem
+snapshot determines whether tools work in isolated scratch or the durable project.
+Minimal Research avoids the generic compute and research-contract preambles.
+Its system skill catalog is included for an explicit slash-skill invocation;
+skill/tool discovery remains available through the existing tool layer.
 
-### Agent registry (`src/agent/agent.ts`)
+`insertReminders` supplies ordinary mode/effort guidance in system context and
+moves old synthetic user reminders into that context when reading saved sessions.
+It preserves the durable history. Domain compatibility profiles can receive their
+longer workflow reminder; default Research receives only its applicable effort
+reminder. This is not a universal second prompt injected as a user message.
 
-Defines built-in agents with `Agent.Info` schema: `name`, `mode` (primary/subagent/all), `hidden`, `model`, `prompt`, `permission`, `temperature`, `steps`.
+Direct and inspection routing also change tool/context selection. Because
+`agent.prompt` wins header selection, those routes do not replace the default
+Research header with `direct.txt` or `inspection.txt`.
 
-**Default harness**: `research` (the single user-facing default; also the plan-exit target)
-**Internal task profiles**: `explore`, `execute` (hidden; selected by work type rather than domain branding)
-**Mode**: `plan` (read-only)
-**Compatibility profiles** (hidden): `task`, `biology`, `physics`, `ml`, `write`, `literature-review`, `critique`, `physics-critique`
-**System agents**: `compaction`, `title`
+### Provider transport and plugins
 
-Custom agents can be added via config file (`openscience.json` → `agent` key). See `src/cli/cmd/agent.ts` for the creation CLI.
+On ordinary routes, `LLM.stream` joins the selected header, caller system context,
+last-user custom system context and applicable plan instructions into a system
+block. `experimental.chat.system.transform` can transform or append blocks. An
+empty replacement restores the original; appended blocks are regrouped when the
+first block is unchanged. `chat.params` and `chat.headers` then adjust inference
+parameters and request headers. `ProviderTransform.message` normalizes both
+streaming and non-streaming SDK requests, including media, tool IDs, reasoning
+replay, cache annotations and provider-option namespaces.
 
-## RCA & Debugging Guide
+The `openai-codex` OAuth route uses a distinct transport: default Research's header
+is sent once through `options.instructions`, and the remaining assembled context
+is sent as a user-role message. For a non-Research agent with its own prompt, that
+agent contract stays in context while the generic instructions occupy the API
+instructions field. Do not duplicate either field or apply this rule to every
+OpenAI-compatible provider. An explicit `chat.params` plugin can change options;
+the actual serialized request remains the evidence.
 
-### Agent misbehaving? Trace the prompt chain:
+Inference settings follow provider defaults, model options, tier options, agent
+options and the selected variant, followed by plugin adjustments. A tier may route
+to another underlying model. Inspect the resolved route and outgoing parameters,
+not only the displayed model name or an effort label.
 
-1. **Which agent is active?** → `src/agent/agent.ts`, find the agent by name, check its `mode`, `model`, `prompt` fields
-2. **Which prompt is injected?** → `src/session/prompt.ts`, follow the `input.agent.name` switch
-3. **Which system prompt?** → `src/session/system.ts`, `SystemPrompt.provider(model)` returns the shared product contract
+### Active prompt files
 
-### Common failure patterns:
+| File                                                                                        | Role                                                             |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `agent/prompt/researchagent-test.txt` + `session/prompt/response.txt`                       | Default Research header and writing defaults                     |
+| `session/prompt/core.txt`                                                                   | Generic fallback for agents without their own header             |
+| `session/prompt/direct.txt`, `inspection.txt`                                               | Narrow generic fallbacks and compatibility routing inputs        |
+| `agent/prompt/research.txt`, `biology.txt`, `physics.txt`, `ml.txt`, `write.txt`            | Longer compatibility workflows selected through reminder routing |
+| `agent/prompt/explore.txt`, `literature-review.txt`, `critique.txt`, `physics-critique.txt` | Explicit hidden-agent headers                                    |
+| `agent/prompt/compaction.txt`, `title.txt`                                                  | Internal summarization and UI-label agents                       |
+| `session/prompt/plan.txt`, `build-switch.txt`, `max-steps.txt`                              | Plan, mode-transition and step-limit guidance                    |
 
-| Symptom                               | Likely cause                                                        | Where to look                                              |
-| ------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Agent over-processes a simple request | Workflow prompt is too procedural                                   | `src/agent/prompt/{agent}.txt`, preserve adaptive behavior |
-| Wrong model used                      | Agent/model config incorrect                                        | `src/agent/agent.ts` + `openscience.json` `agent` config   |
-| Agent delegates excessively           | Delegation posture or independent-work guidance regressed           | `src/tool/task.txt` + `src/session/prompt.ts`              |
-| Delegation loops or stalls            | Task profile, capacity queue, or durable-attempt contract regressed | `src/tool/task.ts` + `src/session/loop-state.ts`           |
-| Sub-agent returns empty               | Context exhaustion, provider failure, or a custom-agent step limit  | `src/agent/agent.ts` + child session trace                 |
-| Custom agent not appearing            | Config not in `openscience.json` or wrong `mode`                    | Config file `agent` key → `src/agent/agent.ts`             |
+## Agent registry
 
-### Key files for prompt debugging (read these first):
+`src/agent/agent.ts` defines built-in profiles and merges configured overrides.
+`research` is the user-facing default and plan-exit target. Explore and Execute
+are hidden task profiles; `plan` is read-only. Domain and older task profiles
+remain hidden compatibility routes. `compaction` and `title` are internal agents.
+A custom agent can be configured under `openscience.json` -> `agent` or created
+through the agent CLI.
 
-```
-src/agent/agent.ts          # Agent definitions, what agents exist and their config
-src/agent/prompt/*.txt      # Agent behavior, what the agent is told to do
-src/session/prompt.ts       # Routing, which prompt gets injected for which agent
-src/session/system.ts       # Provider routing, which system prompt for which model
-```
+## Trace a behavior problem
+
+1. Resolve the active agent, its configured prompt and permissions in
+   `src/agent/agent.ts`; check the actual model/API/auth route.
+2. Follow header selection through `LLM.prompts`, then context and reminders in
+   `src/session/prompt.ts`. Compare the current user turn with resumed history.
+3. Inspect plugin transforms, the exact offered tools and schemas, and the final
+   provider request. `SessionHarness` fingerprints selected contract bytes and
+   schemas; it does not by itself prove the entire final wire payload or billing.
+4. Check `src/provider/transform.ts`, the selected provider/plugin implementation
+   and SDK patches for option names, tool/result formats, cache and reasoning
+   requirements. Prompt prose cannot repair an invalid API request.
+5. For premature stops or repeated turns, inspect actual tool outcomes, terminal
+   errors, cancellation and `src/session/loop-state.ts`. A provider finish label
+   alone is not always a reliable indication that a local tool result was consumed.
+
+Use local request fixtures before paid model comparisons. Keep model-specific
+prompt quality experiments separate from required transport and lifecycle fixes.

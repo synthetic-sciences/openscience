@@ -5,6 +5,14 @@ The detachable runtime and the small refinements below exist in source. Winning
 the five target benchmarks is an objective, not an observed result. A deterministic
 Harbor fixture proves an execution contract; it measures no scientific ability.
 
+The subsequent [OpenCode harness comparison](opencode-harness-comparison.md)
+traces all active model-family prompts, provider adapters and both session loops.
+It refines this design: share the scientific contract, evaluate small optional
+model interaction profiles, and keep mandatory API compatibility separate. Default
+Research currently has an explicit agent prompt, so adding routing only to the
+generic provider fallback would miss it. Provider profiles remain an experiment;
+the reproduced local-tool `stop` continuation failure is corrected independently.
+
 ## The product boundary
 
 OpenScience should provide one capable Research loop that a scientist can use in

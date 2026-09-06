@@ -1267,6 +1267,43 @@ describe("session.compaction.selectTail", () => {
     expect(tailStartId).toBe("u2") // the last REAL turn, not the empty carrier
   })
 
+  test.each(["local", "local-error", "provider-executed", "interrupted", "cancelled"])(
+    "protected context classifies a %s stop result consistently with the loop",
+    (mode) => {
+      const response = a("a1", "Before tool settlement")
+      const failed = ["local-error", "interrupted", "cancelled"].includes(mode)
+      response.parts.push({
+        id: "p1",
+        sessionID: "s",
+        messageID: "a1",
+        type: "tool",
+        tool: "fixture",
+        callID: "call_fixture",
+        ...(mode === "provider-executed" ? { metadata: { providerExecuted: true } } : {}),
+        state: failed
+          ? {
+              status: "error",
+              input: {},
+              error: "Tool failure",
+              metadata: { [mode]: true },
+              time: { start: 1, end: 2 },
+            }
+          : {
+              status: "completed",
+              input: {},
+              output: "Tool result",
+              title: "Fixture",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+      })
+      const messages = [u("u1"), response, u("u2", "New request")]
+      expect(SessionCompaction.protectedContext(messages, "u2").map((message) => message.info.id)).toEqual(
+        mode === "local" || mode === "local-error" ? ["u1", "a1", "u2"] : ["u2"],
+      )
+    },
+  )
+
   test("keeps every queued unanswered user turn verbatim beyond the configured tail limit", () => {
     const carrier = {
       info: {

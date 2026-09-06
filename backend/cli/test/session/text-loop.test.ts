@@ -71,15 +71,23 @@ describe("MessageV2.isContinuingTurn", () => {
     expect(MessageV2.isContinuingTurn("unknown", false)).toBe(false)
   })
 
-  test("completed finishes never continue", () => {
+  test("stop continues only for a settled local result", () => {
+    expect(MessageV2.isContinuingTurn("stop", true)).toBe(true)
+    expect(MessageV2.isContinuingTurn("stop", false)).toBe(false)
+  })
+
+  test("terminal limits and errors never continue", () => {
     expect(MessageV2.isContinuingTurn("stop", false)).toBe(false)
     expect(MessageV2.isContinuingTurn("length", true)).toBe(false)
+    expect(MessageV2.isContinuingTurn("max-steps", true)).toBe(false)
+    expect(MessageV2.isContinuingTurn("content-filter", true)).toBe(false)
+    expect(MessageV2.isContinuingTurn("error", true)).toBe(false)
     expect(MessageV2.isContinuingTurn(undefined, true)).toBe(false)
   })
 
   test("stays consistent with isContinuing for the tool-call case", () => {
     // Compaction still uses isContinuing; the loop uses isContinuingTurn. They must
-    // agree except on the text-only 'unknown' case the loop tightened.
+    // preserve the established tool-call continuation case.
     expect(MessageV2.isContinuing("tool-calls")).toBe(true)
     expect(MessageV2.isContinuing("unknown")).toBe(true)
   })
@@ -98,5 +106,57 @@ describe("MessageV2.outputRecovery", () => {
     expect(MessageV2.outputRecovery({ finish: "stop", unanswered: true, bare: false, attempts: 0 })).toBe("none")
     expect(MessageV2.outputRecovery({ finish: "length", unanswered: false, bare: false, attempts: 0 })).toBe("none")
     expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: true, attempts: 0 })).toBe("none")
+  })
+})
+
+describe("MessageV2.hasLocalToolResult", () => {
+  const tool = (state: MessageV2.ToolPart["state"], metadata?: MessageV2.ToolPart["metadata"]): MessageV2.ToolPart => ({
+    id: "prt_fixture",
+    sessionID: "ses_fixture",
+    messageID: "msg_fixture",
+    type: "tool",
+    tool: "fixture",
+    callID: "call_fixture",
+    state,
+    metadata,
+  })
+  const completed: MessageV2.ToolStateCompleted = {
+    status: "completed",
+    input: {},
+    output: "RESULT",
+    title: "fixture",
+    metadata: {},
+    time: { start: 1, end: 2 },
+  }
+  const failed: MessageV2.ToolStateError = {
+    status: "error",
+    input: {},
+    error: "File not found",
+    time: { start: 1, end: 2 },
+  }
+
+  test("normal success and tool failure both need interpretation", () => {
+    expect(MessageV2.hasLocalToolResult([tool(completed)])).toBe(true)
+    expect(MessageV2.hasLocalToolResult([tool(failed)])).toBe(true)
+  })
+
+  test("provider-executed tools never force another turn", () => {
+    expect(MessageV2.hasLocalToolResult([tool(completed, { providerExecuted: true })])).toBe(false)
+    expect(MessageV2.hasLocalToolResult([tool(failed, { providerExecuted: true })])).toBe(false)
+  })
+
+  test("unsettled or cleanup-interrupted wrappers never force another turn", () => {
+    for (const state of [
+      { status: "pending" as const, input: {}, raw: "" },
+      { status: "running" as const, input: {}, time: { start: 1 } },
+      { ...failed, metadata: { cancelled: true } },
+      { ...failed, metadata: { interrupted: true } },
+      {
+        ...failed,
+        error:
+          "Tool execution was interrupted before completion. Its side effects may have completed; inspect the current state before retrying.",
+      },
+    ])
+      expect(MessageV2.hasLocalToolResult([tool(state)])).toBe(false)
   })
 })
