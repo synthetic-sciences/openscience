@@ -802,7 +802,7 @@ export namespace SessionPrompt {
     let preflightRecoveries = recovered.preflightRecoveries
     // Compact once, then don't compact again until context drops back under the
     // threshold. Prevents an infinite compaction loop when fixed system+tool+
-    // summary overhead alone already exceeds the 0.75 threshold.
+    // summary overhead alone already exceeds the usable context capacity.
     let compactionArmed = true
     let outputContinuations = recovered.outputContinuations
     const workspace = await SessionFilesystem.workspace(sessionID)
@@ -1355,7 +1355,7 @@ export namespace SessionPrompt {
             !!(m.info as MessageV2.Assistant).finish &&
             m.info.id > lastFinished!.id,
         )
-      // context overflow, needs compaction (proactive, at the 0.75 threshold)
+      // Compact proactively when reported usage fills the usable model capacity.
       const overThreshold =
         !!lastFinished &&
         lastFinished.summary !== true &&
@@ -1722,7 +1722,7 @@ export namespace SessionPrompt {
         // same unanswered user message against the summary — the agent continues
         // on its own; the user never re-enters the prompt.
         await compact("overflow")
-        // A compaction just ran; disarm so the reactive 0.75 branch doesn't
+        // A compaction just ran; disarm so the overflow branch doesn't
         // immediately re-compact the same (now-summarized) context next turn.
         compactionArmed = false
         continue

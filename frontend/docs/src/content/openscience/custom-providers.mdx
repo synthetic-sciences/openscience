@@ -64,18 +64,18 @@ A custom model entry does not automatically import an arbitrary provider's full 
 
 A context limit in configuration describes what OpenScience should expect. For self-hosted models, configure the actual server limit separately.
 
-## Adjust a slow connection
+## Request deadlines
 
 Provider options support request deadlines in milliseconds:
 
 | Option | Default |
 | --- | --- |
 | `connectTimeout` | 120000: waiting for response headers. |
-| `idleTimeout` | 300000: no response data. |
-| `outputIdleTimeout` | 600000: no new readable output or tool-call activity. |
+| `idleTimeout` | Disabled; optionally bound silence between response-body chunks. |
+| `outputIdleTimeout` | Disabled; optionally bound the wait for readable output or tool-call activity. |
 | `timeout` | No total-duration limit by default. |
 
-For a slow endpoint, merge an override into that provider's options:
+An opened response keeps waiting by default, including when the model does not publish its reasoning. Use **Stop** to cancel your wait. To opt into a twenty-minute readable-output deadline, merge an override into that provider's options:
 
 ```json
 {
