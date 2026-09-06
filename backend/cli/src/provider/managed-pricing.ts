@@ -50,6 +50,8 @@ const Entry = z.object({
 })
 
 export namespace ManagedPricing {
+  export type Catalog = { prices: Record<string, Model>; availability: Record<string, boolean> }
+
   export type Model = {
     cost: {
       input: number
@@ -103,7 +105,7 @@ export namespace ManagedPricing {
       const premium = fast?.pricing?.tiers.find((tier) => !tier.min_input_tokens)
       const body: Record<string, string> | undefined =
         model.upstream_provider === "openrouter" &&
-        /^openai\/gpt-5\.6-(sol|terra|luna)$/.test(model.id) &&
+        /^openai\/(?:gpt-5\.6-(?:sol|terra|luna)|gpt-6-astra)$/.test(model.id) &&
         transport &&
         "service_tier" in transport
           ? { service_tier: "priority" }
@@ -155,11 +157,26 @@ export namespace ManagedPricing {
     return result
   }
 
+  /** Availability is independent of price validity: an explicit denial must not
+   * disappear into the offline pricing fallback. Unknown models remain ignored. */
+  export function availability(value: unknown): Record<string, boolean> {
+    const body = z.object({ models: z.array(z.unknown()).max(100) }).safeParse(value)
+    if (!body.success) return {}
+    const result: Record<string, boolean> = {}
+    for (const row of body.data.models) {
+      const parsed = z.object({ id: z.string(), available: z.boolean() }).safeParse(row)
+      if (!parsed.success || !MANAGED_OPENROUTER_MODEL_SET.has(parsed.data.id)) continue
+      // Conflicting duplicates fail closed regardless of their ordering.
+      result[parsed.data.id] = result[parsed.data.id] !== false && parsed.data.available
+    }
+    return result
+  }
+
   const fingerprint = (snapshot: FundingSnapshot) =>
     createHash("sha256")
       .update(`${snapshot.api_key}\0${snapshot.user_id}\0${snapshot.organization_id ?? "personal"}`)
       .digest("hex")
-  let cached: { key: string; at: number; value: Record<string, Model> } | undefined
+  let cached: { key: string; at: number; value: Catalog } | undefined
   let pending: { key: string; promise: Promise<void> } | undefined
   const TTL = 60_000
   const TIMEOUT = 3_000
@@ -195,10 +212,12 @@ export namespace ManagedPricing {
         text += decoder.decode(part.value, { stream: true })
       }
       text += decoder.decode()
-      const value = parse(JSON.parse(text))
+      const body = JSON.parse(text)
+      const value = { prices: parse(body), availability: availability(body) }
       const current = await OpenScience.getFundingSnapshot()
       if (!current || fingerprint(current) !== key) return
-      const changed = JSON.stringify(cached?.key === key ? cached.value : {}) !== JSON.stringify(value)
+      const changed =
+        JSON.stringify(cached?.key === key ? cached.value : { prices: {}, availability: {} }) !== JSON.stringify(value)
       cached = { key, at: Date.now(), value }
       if (!changed) return
       const { Provider } = await import("./provider")
@@ -207,16 +226,20 @@ export namespace ManagedPricing {
     } catch {
       const current = await OpenScience.getFundingSnapshot().catch(() => null)
       if (current && fingerprint(current) === key)
-        cached = { key, at: Date.now() - TTL + 10_000, value: cached?.key === key ? cached.value : {} }
+        cached = {
+          key,
+          at: Date.now() - TTL + 10_000,
+          value: cached?.key === key ? cached.value : { prices: {}, availability: {} },
+        }
     } finally {
       clearTimeout(timer)
     }
   }
 
   /** Local session/cache reads only. Network refresh never blocks startup. */
-  export async function current(): Promise<Record<string, Model>> {
+  export async function catalog(): Promise<Catalog> {
     const snapshot = await OpenScience.getFundingSnapshot().catch(() => null)
-    if (!snapshot) return {}
+    if (!snapshot) return { prices: {}, availability: {} }
     const key = fingerprint(snapshot)
     if ((cached?.key !== key || Date.now() - cached.at >= TTL) && pending?.key !== key) {
       const promise = refresh(snapshot, key)
@@ -225,6 +248,10 @@ export namespace ManagedPricing {
         if (pending?.promise === promise) pending = undefined
       })
     }
-    return cached?.key === key ? cached.value : {}
+    return cached?.key === key ? cached.value : { prices: {}, availability: {} }
+  }
+
+  export async function current(): Promise<Record<string, Model>> {
+    return (await catalog()).prices
   }
 }

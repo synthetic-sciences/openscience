@@ -1,10 +1,12 @@
 /** Reviewed Ace roster shipped with the client. No dashboard sync is required. */
 export const MANAGED_OPENROUTER_MODELS = Object.freeze([
+  "openai/gpt-6-astra",
   "openai/gpt-5.6-sol",
   "openai/gpt-5.6-terra",
   "openai/gpt-5.6-luna",
   "anthropic/claude-opus-5",
   "anthropic/claude-fable-5",
+  "anthropic/claude-fable-5.1",
   "anthropic/claude-sonnet-5",
   "anthropic/claude-haiku-4.5",
   "google/gemini-3.1-pro-preview",
@@ -29,6 +31,10 @@ type ManagedModel = {
   name: string
   context: number
   output: number
+  maxInput?: number
+  efforts?: readonly string[]
+  defaultEffort?: string
+  requiresApproval?: boolean
   input: readonly ("text" | "image" | "video" | "audio" | "pdf")[]
   temperature?: boolean
 }
@@ -37,12 +43,23 @@ type ManagedModel = {
 // Runtime metadata supplies prices for the actual upstream route; this fallback
 // only keeps model identity and token budgeting usable when models.dev lags.
 export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[number], ManagedModel> = {
+  "openai/gpt-6-astra": {
+    name: "GPT-6 Astra",
+    context: 1_050_000,
+    maxInput: 922_000,
+    output: 128_000,
+    input: ["text", "image", "pdf"],
+    temperature: false,
+    efforts: ["low", "medium", "high", "xhigh", "max"],
+  },
   "openai/gpt-5.6-sol": {
     name: "GPT-5.6 Sol",
     context: 1_050_000,
     output: 128_000,
     input: ["text", "image", "pdf"],
     temperature: false,
+    efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
   },
   "openai/gpt-5.6-terra": {
     name: "GPT-5.6 Terra",
@@ -50,6 +67,8 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     output: 128_000,
     input: ["text", "image", "pdf"],
     temperature: false,
+    efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
   },
   "openai/gpt-5.6-luna": {
     name: "GPT-5.6 Luna",
@@ -57,6 +76,8 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     output: 128_000,
     input: ["text", "image", "pdf"],
     temperature: false,
+    efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "medium",
   },
   "anthropic/claude-opus-5": {
     name: "Claude Opus 5",
@@ -71,6 +92,18 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     output: 128_000,
     input: ["text", "image", "pdf"],
     temperature: false,
+  },
+  "anthropic/claude-fable-5.1": {
+    name: "Claude Fable 5.1",
+    context: 1_000_000,
+    output: 128_000,
+    input: ["text", "image", "pdf"],
+    temperature: false,
+    efforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "high",
+    // OpenRouter's bound-thinking replay must be approved by the gateway before
+    // this new route is offered. Missing metadata is not approval.
+    requiresApproval: true,
   },
   "anthropic/claude-sonnet-5": {
     name: "Claude Sonnet 5",

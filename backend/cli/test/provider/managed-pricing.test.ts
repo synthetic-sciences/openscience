@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test, spyOn } from "bun:test"
 import { GlobalBus } from "../../src/bus/global"
 import { ProviderTransform } from "../../src/provider/transform"
 import type { Provider } from "../../src/provider/provider"
@@ -58,6 +58,20 @@ test("pricing ingestion copies only reviewed non-executable metadata", () => {
   expect(ManagedPricing.parse({ models: [{ ...entry, id: "unreviewed/model" }] })).toEqual({})
   expect(ManagedPricing.parse({ models: [{ ...entry, available: false }] })).toEqual({})
   expect(ManagedPricing.parse({ models: [{ ...entry, pricing: { tiers: [{ input: -1, output: 25 }] } }] })).toEqual({})
+})
+
+test("explicit availability survives missing prices and conflicting rows fail closed", () => {
+  expect(
+    ManagedPricing.availability({
+      models: [
+        { id: entry.id, available: false },
+        { id: entry.id, available: true },
+        { id: "openai/gpt-6-astra", available: true },
+        { id: "unreviewed/model", available: true },
+        { id: "openai/gpt-5.6-sol" },
+      ],
+    }),
+  ).toEqual({ [entry.id]: false, "openai/gpt-6-astra": true })
 })
 
 test("long-context prices retain inclusive provider thresholds", () => {
@@ -215,5 +229,169 @@ test("pricing cache is nonblocking, deduplicated, and partitioned by immutable w
     release?.()
     globalThis.fetch = originalFetch
     await OpenScience.clearSession()
+  }
+})
+
+test("provider list retries failed pricing after cooldown without a runtime restart or inference request", async () => {
+  const { Provider } = await import("../../src/provider/provider")
+  const { Instance } = await import("../../src/project/instance")
+  const { tmpdir } = await import("../fixture/fixture")
+  const originalFetch = globalThis.fetch
+  const originalNow = Date.now
+  let clock = originalNow()
+  let calls = 0
+  const now = spyOn(Date, "now").mockImplementation(() => clock)
+  const id = "openai/gpt-6-astra"
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    expect(request.method).toBe("GET")
+    expect(new URL(request.url).pathname).toBe("/api/cli/model-catalog")
+    calls++
+    if (calls === 1) return new Response("unavailable", { status: 503 })
+    return Response.json(
+      {
+        models: [
+          {
+            id,
+            upstream_provider: "openrouter",
+            context_length: 1_050_000,
+            max_output_tokens: 128_000,
+            capabilities: { reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] },
+            pricing: { tiers: [{ input: 10, output: 50, cache_read: 1, cache_write: 12.5 }] },
+            fast_mode: true,
+            fast_mode_details: {
+              available: true,
+              transport: { service_tier: "priority" },
+              pricing: { verified: true, tiers: [{ input: 20, output: 100, cache_read: 2, cache_write: 25 }] },
+            },
+          },
+        ],
+      },
+      {
+        headers: {
+          "OpenScience-Funding-Protocol": "1",
+          "OpenScience-Funding-Context": "organization:org_pricing_retry",
+        },
+      },
+    )
+  }) as typeof fetch
+  await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
+  try {
+    await OpenScience.saveSession({
+      api_key: "osk_fixture_pricing_retry",
+      user_id: "fixture",
+      organization_id: "org_pricing_retry",
+      workspace_locked: true,
+    })
+    Provider.invalidate()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const initial = (await Provider.list()).openrouter.models[id]
+        expect(initial.modes).toEqual({})
+        expect(Object.keys(initial.variants ?? {})).toEqual(["low", "medium", "high", "xhigh", "max"])
+        let restored: Provider.Model | undefined
+        // Advance only the cache clock. Poll the observable provider result,
+        // allowing filesystem-backed credential snapshots to finish between reads.
+        for (let attempt = 0; attempt < 100; attempt++) {
+          clock += 11_000
+          const listed = (await Provider.list()).openrouter.models[id]
+          if (listed.modes?.fast) {
+            restored = listed
+            break
+          }
+          await Bun.sleep(5)
+        }
+        expect(restored?.modes?.fast.provider?.body).toEqual({ service_tier: "priority" })
+        expect(restored?.cost.input).toBe(10)
+        expect(calls).toBe(2)
+      },
+    })
+  } finally {
+    now.mockRestore()
+    globalThis.fetch = originalFetch
+    await OpenScience.clearSession()
+    Provider.invalidate()
+  }
+})
+
+test("managed availability controls selection independently of pricing and cannot be bypassed by config", async () => {
+  const { Provider } = await import("../../src/provider/provider")
+  const { Instance } = await import("../../src/project/instance")
+  const { tmpdir } = await import("../fixture/fixture")
+  const originalFetch = globalThis.fetch
+  let clock = Date.now()
+  const now = spyOn(Date, "now").mockImplementation(() => clock)
+  const id = "anthropic/claude-fable-5.1"
+  let allowed = false
+  let calls = 0
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    expect(request.method).toBe("GET")
+    expect(new URL(request.url).pathname).toBe("/api/cli/model-catalog")
+    calls++
+    return Response.json(
+      {
+        models: [
+          { ...entry, id, upstream_provider: "openrouter", available: allowed },
+          // No prices: an explicit disabled established route must still be removed.
+          { id: "openai/gpt-5.6-terra", available: false },
+        ],
+      },
+      {
+        headers: {
+          "OpenScience-Funding-Protocol": "1",
+          "OpenScience-Funding-Context": "organization:org_availability",
+        },
+      },
+    )
+  }) as typeof fetch
+  await using tmp = await tmpdir({
+    config: {
+      billing: { llm: "managed" },
+      provider: { openrouter: { models: { [id]: { name: "Configured Fable" } } } },
+    },
+  })
+  try {
+    await OpenScience.saveSession({
+      api_key: "osk_fixture_availability",
+      user_id: "fixture",
+      organization_id: "org_availability",
+      workspace_locked: true,
+    })
+    Provider.invalidate()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const waitFor = async (predicate: (models: Record<string, Provider.Model>) => boolean) => {
+          for (let attempt = 0; attempt < 100; attempt++) {
+            const models = (await Provider.list()).openrouter.models
+            if (predicate(models)) return models
+            await Bun.sleep(5)
+          }
+          throw new Error("Managed catalog did not publish the expected availability")
+        }
+        expect((await Provider.list()).openrouter.models[id]).toBeUndefined()
+        const disabled = await waitFor((models) => !models["openai/gpt-5.6-terra"])
+        expect(disabled[id]).toBeUndefined()
+        expect(disabled["openai/gpt-5.6-sol"]).toBeDefined()
+        expect(disabled["openai/gpt-6-astra"]).toBeDefined()
+        await expect(Provider.getModel("openrouter", id)).rejects.toThrow()
+        allowed = true
+        clock += 61_000
+        await waitFor((models) => !!models[id])
+        expect((await Provider.getModel("openrouter", id)).name).toBe("Configured Fable")
+        allowed = false
+        clock += 61_000
+        await waitFor((models) => !models[id])
+        await expect(Provider.getModel("openrouter", id)).rejects.toThrow()
+        expect(calls).toBe(3)
+      },
+    })
+  } finally {
+    now.mockRestore()
+    globalThis.fetch = originalFetch
+    await OpenScience.clearSession()
+    Provider.invalidate()
   }
 })

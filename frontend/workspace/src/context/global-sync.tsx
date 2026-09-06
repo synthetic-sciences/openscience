@@ -254,6 +254,7 @@ function createGlobalSync() {
   // scopeFor() folds the project id into the key, so the id itself is kept
   // alongside it — the loader needs the pair the caller actually asked with.
   const providerScopes = new Map<string, string | undefined>()
+  let providerRevision = 0
   const providerLoads = createInflightCache<ProviderListResponse>(async (key) => {
     const [, directory = ""] = key.split("\n")
     try {
@@ -273,6 +274,19 @@ function createGlobalSync() {
     const key = scopeFor(directory, projectID)
     providerScopes.set(key, projectID)
     return providerLoads.get(key)
+  }
+  const updateProvider = async (
+    directory: string,
+    projectID: string | undefined,
+    apply: (value: ProviderListResponse) => void,
+  ) => {
+    const revision = providerRevision
+    const value = await loadProvider(directory, projectID)
+    // Pricing/credential refresh may finish before an older bootstrap read.
+    // Never let that old response remove newly available controls, including
+    // when the newer read fails or belongs to a different account selection.
+    if (revision !== providerRevision) return
+    apply(value)
   }
 
   const [projectCache, setProjectCache, , projectCacheReady] = persisted(
@@ -483,6 +497,7 @@ function createGlobalSync() {
    * silent failure here looks exactly like "the key was never saved".
    */
   async function refreshProviders() {
+    providerRevision++
     providerLoads.invalidate()
     const reload = async (
       directory: string,
@@ -490,7 +505,7 @@ function createGlobalSync() {
       apply: (value: ProviderListResponse) => void,
     ) => {
       if (!directory) return
-      apply(await loadProvider(directory, projectID))
+      await updateProvider(directory, projectID, apply)
     }
     await providerRefresh.notifyAfter(async () => {
       await Promise.all([
@@ -835,7 +850,7 @@ function createGlobalSync() {
 
       const blockingRequests = {
         project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
-        provider: () => loadProvider(directory, projectID).then((value) => setStore("provider", reconcile(value))),
+        provider: () => updateProvider(directory, projectID, (value) => setStore("provider", reconcile(value))),
         agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
         config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
       }
@@ -1440,7 +1455,7 @@ function createGlobalSync() {
           // the same directory-keyed helper lets a direct project route share the
           // in-flight response instead of parsing the catalog twice.
           const directory = value.worktree || value.directory
-          setGlobalStore("provider", reconcile(await loadProvider(directory)))
+          await updateProvider(directory, undefined, (value) => setGlobalStore("provider", reconcile(value)))
         }),
       ),
       retry(() =>

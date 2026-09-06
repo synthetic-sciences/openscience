@@ -34,6 +34,38 @@ function platform(input: { states: DesktopUpdateState[]; calls: string[] }): Pla
 }
 
 describe("desktop update controller", () => {
+  test("polls a supervised launch until the newly installed version proves health", async () => {
+    const calls: string[] = []
+    const queued: Array<() => void> = []
+    const controller = createUpdateController(
+      platform({
+        states: [
+          { phase: "restarting", version: "2.0.76" },
+          { phase: "succeeded", version: "2.0.76", completed_at: "2026-09-06T13:00:00Z" },
+        ],
+        calls,
+      }),
+      {
+        schedule: (run) => {
+          queued.push(run)
+          return 1 as unknown as ReturnType<typeof setTimeout>
+        },
+      },
+    )
+    controller.start()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(controller.state.phase).toBe("restarting")
+    expect(queued).toHaveLength(1)
+    queued.shift()?.()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(controller.state.phase).toBe("succeeded")
+    expect(controller.state.version).toBe("2.0.76")
+    expect(controller.state.available).toBeUndefined()
+    expect(queued).toHaveLength(0)
+  })
+
   test("shares the explicit download then restart lifecycle without claiming early installation", async () => {
     const calls: string[] = []
     const queued: Array<() => void> = []

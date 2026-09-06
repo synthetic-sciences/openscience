@@ -472,6 +472,7 @@ export namespace ProviderTransform {
   function openaiEfforts(model: Provider.Model): string[] {
     const id = model.id.toLowerCase()
     if (!/(^|\/)(gpt-|o[1-9](?:\b|-))/.test(id)) return []
+    if (/(^|\/)gpt-6-astra$/.test(id)) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh", "max"]
     // OpenRouter publishes separate GPT-5.6 `-pro` routes, but their effort
     // contract is still the full 5.6 ladder. Check 5.6 before the generic
     // historical Pro handling below.
@@ -492,6 +493,7 @@ export namespace ProviderTransform {
   // ladder in sync with the OAuth model catalog rather than deriving it from a
   // release date or inheriting API-only `none`/`minimal` values.
   function codexOAuthEfforts(id: string): string[] | undefined {
+    if (id === "gpt-6-astra") return [...WIDELY_SUPPORTED_EFFORTS, "xhigh", "max"]
     if (/^gpt-5[.-]6-(?:sol|terra)$/.test(id)) {
       return [...WIDELY_SUPPORTED_EFFORTS, "xhigh", "max"]
     }
@@ -1006,11 +1008,14 @@ export namespace ProviderTransform {
     // are meaningless to OR's /chat/completions and were silently making managed
     // gpt-5 reasoning stream blank — exclude the OR npm here.
     if (
-      input.model.api.id.includes("gpt-5") &&
+      (input.model.api.id.includes("gpt-5") || input.model.api.id === "gpt-6-astra") &&
       !input.model.api.id.includes("gpt-5-chat") &&
       input.model.api.npm !== "@openrouter/ai-sdk-provider"
     ) {
-      if (!input.model.api.id.includes("gpt-5-pro")) {
+      if (
+        !input.model.api.id.includes("gpt-5-pro") &&
+        (input.model.api.id !== "gpt-6-astra" || input.model.providerID === "openai-codex")
+      ) {
         // Defaults differ by transport and exact model. Sol defaults to low in
         // the live Codex OAuth catalog; the other Codex models default to
         // medium. On the public API GPT-5.4 / 5.4-mini default to none, while
@@ -1079,6 +1084,13 @@ export namespace ProviderTransform {
 
   export function smallOptions(model: Provider.Model) {
     const apiID = model.api.id.toLowerCase()
+    if (/(^|\/)gpt-6-astra$|(^|\/)claude-fable-5[.-]1$/.test(apiID)) {
+      return model.api.npm === "@openrouter/ai-sdk-provider"
+        ? { reasoning: { effort: "low" } }
+        : apiID.includes("claude-fable")
+          ? { thinking: { type: "adaptive" }, effort: "low" }
+          : { reasoningEffort: "low" }
+    }
     if (/glm-5[.-]3\b|kimi-k3\b/.test(apiID)) {
       return model.api.npm === "@openrouter/ai-sdk-provider"
         ? { reasoning: { effort: "low" } }

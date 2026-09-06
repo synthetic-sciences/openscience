@@ -8,8 +8,10 @@ import { iconNames, type IconName } from "@synsci/ui/icons/provider"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { Switch } from "@synsci/ui/switch"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Component, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useSync } from "@/context/sync"
+import { useGlobalSync } from "@/context/global-sync"
 import {
   COMPOSER_MODEL_ROSTER,
   displayProviderForModel,
@@ -268,10 +270,37 @@ type ModelEffortPanelProps = {
   onEffortSelect: (id: string) => void
   onTierSelect: (id: "standard" | "fast") => void
   onContextSelect?: (id: string) => void
+  unavailable?: { loading: boolean; error: boolean; refresh: () => void }
 }
 
 export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => (
   <div data-model-effort-panel>
+    <Show when={props.unavailable}>
+      {(unavailable) => (
+        <section
+          class="model-settings-option-section model-settings-options-unavailable"
+          aria-label={props.options.length > 0 ? "Current rates unavailable" : "Model options unavailable"}
+        >
+          <p>
+            {props.options.length > 0
+              ? "Current Ace rates have not loaded. Verified effort choices are still available."
+              : "Model options and current rates aren’t available yet for this Ace workspace."}
+          </p>
+          <Show when={unavailable().error}>
+            <p role="alert">Could not refresh model options. Try again.</p>
+          </Show>
+          <Button
+            type="button"
+            variant="secondary"
+            data-model-options-refresh
+            disabled={unavailable().loading}
+            onClick={() => unavailable().refresh()}
+          >
+            {unavailable().loading ? "Refreshing…" : "Refresh options"}
+          </Button>
+        </section>
+      )}
+    </Show>
     <Show when={props.options.length > 0}>
       <section
         class="model-settings-option-section"
@@ -354,13 +383,17 @@ export const ModelEffortPopover: Component<ModelEffortPopoverProps> = (props) =>
         data-model-effort-chip
         aria-label={
           props.options.length > 0
-            ? `Reasoning effort: ${props.value}.${props.fast?.active ? " Fast mode on." : ""} Reasoning options`
-            : props.fast
-              ? `Fast mode: ${props.fast.active ? "on" : "off"}. Model options`
-              : `Context window: ${props.context?.options.find((option) => option.id === props.context?.current)?.label ?? "Default"}. Model options`
+            ? `Reasoning effort: ${props.value}.${props.fast?.active ? " Fast mode on." : ""}${props.unavailable ? " Current rates unavailable." : ""} Reasoning options`
+            : props.unavailable
+              ? "Model options unavailable. Refresh model options"
+              : props.fast
+                ? `Fast mode: ${props.fast.active ? "on" : "off"}. Model options`
+                : `Context window: ${props.context?.options.find((option) => option.id === props.context?.current)?.label ?? "Default"}. Model options`
         }
       >
-        <strong>{props.options.length > 0 ? props.value : props.fast ? "Fast" : "Context"}</strong>
+        <strong>
+          {props.options.length > 0 ? props.value : props.unavailable ? "Options" : props.fast ? "Fast" : "Context"}
+        </strong>
         <Show when={props.fast?.active && props.options.length > 0}>
           <span data-model-fast-indicator aria-hidden="true">
             Fast
@@ -376,9 +409,11 @@ export const ModelEffortPopover: Component<ModelEffortPopoverProps> = (props) =>
         initialFocus={
           props.options.length > 0
             ? '[data-model-option="effort"][aria-checked="true"]'
-            : props.fast
-              ? '[data-model-fast-toggle] [data-slot="switch-input"]'
-              : '[data-model-option="context"][aria-checked="true"]'
+            : props.unavailable
+              ? "[data-model-options-refresh]"
+              : props.fast
+                ? '[data-model-fast-toggle] [data-slot="switch-input"]'
+                : '[data-model-option="context"][aria-checked="true"]'
         }
         contentRef={(element) => (content = element)}
       >
@@ -390,6 +425,7 @@ export const ModelEffortPopover: Component<ModelEffortPopoverProps> = (props) =>
           onEffortSelect={props.onEffortSelect}
           onTierSelect={props.onTierSelect}
           onContextSelect={props.onContextSelect}
+          unavailable={props.unavailable}
         />
       </ModelPopoverSurface>
     </Kobalte>
@@ -399,6 +435,7 @@ export const ModelEffortPopover: Component<ModelEffortPopoverProps> = (props) =>
 export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (props) => {
   const local = useLocal()
   const sync = useSync()
+  const globalSync = useGlobalSync()
   const dialog = useDialog()
   const mobile = createMediaQuery("(max-width: 719px)")
   const [open, setOpen] = createSignal(false)
@@ -411,6 +448,8 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const [quickFocus, setQuickFocus] = createSignal("")
   const [catalogFocus, setCatalogFocus] = createSignal("")
   const [notice, setNotice] = createSignal("")
+  const [options, setOptions] = createStore({ loading: false, error: false })
+  const optionRequests = { revision: 0 }
   const refs = { content: undefined as HTMLElement | undefined }
   const current = createMemo(() => local.model.current())
   const exact = (model: NonNullable<ReturnType<typeof current>>) => `${model.provider.id}/${model.id}`
@@ -592,6 +631,25 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const fast = createMemo(() => {
     return exactRouteFastMode(current(), local.model.tier.current())
   })
+  const unavailable = createMemo(() => current()?.provider.source === "managed" && !current()?.pricing)
+  const optionsKey = createMemo(() => `${sync.data.project ?? ""}/${current()?.provider.id}/${current()?.id}`)
+  createEffect(() => {
+    optionsKey()
+    optionRequests.revision++
+    setOptions({ loading: false, error: false })
+  })
+  const refreshOptions = async () => {
+    if (options.loading) return
+    const key = optionsKey()
+    const revision = ++optionRequests.revision
+    setOptions({ loading: true, error: false })
+    const failed = await globalSync.refreshProviders().then(
+      () => false,
+      () => true,
+    )
+    if (key !== optionsKey() || revision !== optionRequests.revision) return
+    setOptions({ loading: false, error: failed })
+  }
 
   createEffect(() => {
     const value = control()
@@ -937,12 +995,22 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
           </Show>
         </ModelPopoverSurface>
       </Kobalte>
-      <Show when={props.trigger !== "icon" && (control().effort || fast() || local.model.context.list().length > 1)}>
+      <Show
+        when={
+          props.trigger !== "icon" &&
+          (control().effort || fast() || local.model.context.list().length > 1 || unavailable())
+        }
+      >
         <ModelEffortPopover
           value={control().effort?.value ?? "Fast"}
           current={control().effort?.current.id ?? "standard"}
           options={control().effort?.options ?? []}
           fast={fast()}
+          unavailable={
+            unavailable()
+              ? { loading: options.loading, error: options.error, refresh: () => void refreshOptions() }
+              : undefined
+          }
           context={{
             current: String(local.model.context.current()),
             options: local.model.context.list().map((value) => ({

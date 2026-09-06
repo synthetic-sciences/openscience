@@ -540,6 +540,7 @@ export namespace Provider {
   // dash spellings because older models.dev snapshots normalized version dots
   // while current snapshots preserve the upstream ids.
   const CODEX_MODEL_IDS = new Set([
+    "gpt-6-astra",
     "gpt-5.6-sol",
     "gpt-5-6-sol",
     "gpt-5.6-terra",
@@ -629,6 +630,48 @@ export namespace Provider {
     cost: { input: 0.075, output: 0.25, cache_read: 0.015, cache_write: 0 },
     limit: { context: 1_000_000, output: 131_072 },
     modalities: { input: ["text", "image", "video", "pdf"], output: ["text"] },
+    options: {},
+  } satisfies ModelsDev.Model
+
+  // Official provider contracts, not an entitlement probe. Keep new native
+  // models available when the bundled or cached models.dev catalog predates them.
+  const ASTRA = {
+    id: "gpt-6-astra",
+    name: "GPT-6 Astra",
+    family: "gpt",
+    release_date: "",
+    provider: { npm: "@ai-sdk/openai" },
+    attachment: true,
+    reasoning: true,
+    reasoning_options: [{ type: "effort", values: ["low", "medium", "high", "xhigh", "max"] }],
+    temperature: false,
+    tool_call: true,
+    cost: {
+      input: 10,
+      output: 50,
+      cache_read: 1,
+      cache_write: 12.5,
+      tiers: [{ input: 20, output: 75, cache_read: 2, cache_write: 25, tier: { type: "context", size: 272_000 } }],
+    },
+    limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+    modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+    options: {},
+  } satisfies ModelsDev.Model
+
+  const FABLE51 = {
+    id: "claude-fable-5-1",
+    name: "Claude Fable 5.1",
+    family: "claude-fable",
+    release_date: "2026-09-01",
+    provider: { npm: "@ai-sdk/anthropic" },
+    attachment: true,
+    reasoning: true,
+    reasoning_options: [{ type: "effort", values: ["low", "medium", "high", "xhigh", "max"] }],
+    temperature: false,
+    tool_call: true,
+    cost: { input: 10, output: 50, cache_read: 0.25, cache_write: 12.5 },
+    limit: { context: 1_000_000, output: 128_000 },
+    modalities: { input: ["text", "image", "pdf"], output: ["text"] },
     options: {},
   } satisfies ModelsDev.Model
 
@@ -917,6 +960,33 @@ export namespace Provider {
     const normalized = { ...body }
     delete normalized.tool_choice
     return normalized
+  }
+
+  export function normalizeAstraRequestBody(value: Record<string, unknown>) {
+    if (value.model !== "gpt-6-astra") return value
+    const body = { ...value }
+    for (const key of ["temperature", "top_p", "logprobs", "top_logprobs"]) delete body[key]
+    if (Array.isArray(body.include)) {
+      body.include = body.include.filter((item) => item !== "message.output_text.logprobs")
+    }
+    return body
+  }
+
+  export function normalizeFableRequestBody(value: Record<string, unknown>) {
+    if (value.model !== "claude-fable-5-1") return value
+    const choice = value.tool_choice as { type?: string } | undefined
+    if (choice?.type === "any" || choice?.type === "tool") {
+      throw new Error("Claude Fable 5.1 does not support forced tool selection. Use automatic tool selection.")
+    }
+    // Fable 5.1 binds thinking signatures to the preceding conversation,
+    // system prompt and tools. OpenScience may compact history or change the
+    // available tools: ask Anthropic to drop only invalidated blocks instead
+    // of rejecting the whole request. Unchanged reasoning remains preserved.
+    // https://platform.claude.com/docs/en/models/fable-5-1/migration-guide
+    return {
+      ...value,
+      thinking: { type: "adaptive", block_binding: { prefix_mismatch_behavior: "drop_block" } },
+    }
   }
 
   /** Detect a retired proxy path so a user-owned key can never be sent to it. */
@@ -1853,7 +1923,9 @@ export namespace Provider {
     // Priority is a paid service tier, not throughput sorting. Only advertise
     // audited routes: an arbitrary OR model has no guaranteed Fast endpoint.
     const openrouter: NonNullable<Model["modes"]> =
-      provider.id === "openrouter" && /^openai\/gpt-5\.6-(sol|terra|luna)$/.test(model.id) ? { fast: priority() } : {}
+      provider.id === "openrouter" && /^openai\/(?:gpt-5\.6-(?:sol|terra|luna)|gpt-6-astra)$/.test(model.id)
+        ? { fast: priority() }
+        : {}
     const xai: NonNullable<Model["modes"]> =
       provider.id === "xai" && /^grok-4[.-]6\b/.test(model.id) ? { fast: priority() } : {}
     const result = provider.id === "openrouter" ? openrouter : { ...direct, ...xai }
@@ -1957,10 +2029,24 @@ export namespace Provider {
   }
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
+    const reviewed =
+      provider.id === "openai"
+        ? [ASTRA]
+        : provider.id === "anthropic"
+          ? [FABLE51]
+          : provider.id === "openrouter"
+            ? [
+                { ...ASTRA, id: "openai/gpt-6-astra", provider: { npm: "@openrouter/ai-sdk-provider" } },
+                { ...FABLE51, id: "anthropic/claude-fable-5.1", provider: { npm: "@openrouter/ai-sdk-provider" } },
+              ]
+            : []
     const models =
       (provider.id === "zai" || provider.id === "zhipuai") && !provider.models[GLM53.id]
         ? { ...provider.models, [GLM53.id]: GLM53 }
-        : provider.models
+        : { ...provider.models }
+    for (const model of reviewed) {
+      models[model.id] = { ...provider.models[model.id], ...model, experimental: undefined }
+    }
     return {
       id: provider.id,
       source: "custom",
@@ -2229,7 +2315,18 @@ export namespace Provider {
             // Keep each model's catalog window. Flattening the whole Codex
             // family to a legacy input allowance made flagship and mini
             // models advertise the same, incorrect context in every picker.
-            limit: { ...model.limit },
+            limit: id === "gpt-6-astra" ? { context: 872_000, output: 128_000 } : { ...model.limit },
+            // The subscription catalog advertises a smaller default/maximum
+            // context than the public API. Ultra is a Codex orchestration mode,
+            // not an additional Responses reasoning.effort value.
+            ...(id === "gpt-6-astra"
+              ? {
+                  contextOptions: [272_000, 872_000],
+                  reasoningOptions: [
+                    { type: "effort", values: ["low", "medium", "high", "xhigh", "max"], default: "medium" },
+                  ],
+                }
+              : {}),
             // Codex advertises its own fast tier independently of the public
             // API catalog, so synthesize only the modes in the OAuth contract.
             modes: codexOAuthModes(model.id),
@@ -2406,18 +2503,26 @@ export namespace Provider {
       const configProvider = config.provider?.[providerID]
 
       if (managedRoute) {
-        const prices = await ManagedPricing.current()
+        const catalog = await ManagedPricing.catalog()
         for (const modelID of MANAGED_OPENROUTER_MODEL_SET) {
+          const reviewed = managedModelDetails(modelID)!
+          if (
+            catalog.availability[modelID] === false ||
+            (reviewed.requiresApproval && catalog.availability[modelID] !== true)
+          ) {
+            delete provider.models[modelID]
+            continue
+          }
           if (!(modelID in provider.models)) provider.models[modelID] = _syntheticOpenRouterModel(modelID)
           const model = provider.models[modelID]
-          const reviewed = managedModelDetails(modelID)!
           const configured = configProvider?.models?.[modelID]
           model.name = configured?.name ?? reviewed.name
           model.limit.context = configured?.limit?.context ?? reviewed.context
           model.limit.output = configured?.limit?.output ?? reviewed.output
+          if (reviewed.maxInput) model.limit.input = reviewed.maxInput
           if (reviewed.temperature !== undefined) model.capabilities.temperature = reviewed.temperature
           // Never present models.dev's unrelated upstream price as Ace pricing.
-          const price = prices[modelID]
+          const price = catalog.prices[modelID]
           model.api = { ...model.api, ...managedModelRoute(modelID) }
           if (price?.pricing.upstream_provider === "gemini") {
             model.capabilities.input.audio = false
@@ -2435,7 +2540,15 @@ export namespace Provider {
             delete model.pricing
             // Do not inherit unrelated BYOK capabilities or paid modes while
             // this workspace's route catalogue is unavailable.
-            model.reasoningOptions = []
+            model.reasoningOptions = reviewed.efforts
+              ? [
+                  {
+                    type: "effort",
+                    values: [...reviewed.efforts],
+                    ...(reviewed.defaultEffort ? { default: reviewed.defaultEffort } : {}),
+                  },
+                ]
+              : []
             model.contextOptions = [model.limit.context]
             model.modes = {}
           }
@@ -2554,7 +2667,12 @@ export namespace Provider {
   }
 
   export async function list() {
-    return state().then((state) => state.providers)
+    const s = await state()
+    // Provider state can outlive the pricing cache, including a failed initial
+    // fetch. Catalog reads must revalidate pricing so Refresh can recover;
+    // keep this off getModel/getLanguage and never await a network response.
+    if (Object.values(s.providers).some((provider) => provider.source === "managed")) await ManagedPricing.current()
+    return s.providers
   }
 
   // === tokenCommand: refreshing shell-command auth (#146) ===
@@ -2712,12 +2830,24 @@ export namespace Provider {
           opts.body = JSON.stringify(body)
         }
 
+        if (model.api.npm === "@ai-sdk/anthropic" && typeof opts.body === "string" && opts.method === "POST") {
+          const body = JSON.parse(opts.body)
+          if (body.model === "claude-fable-5-1") {
+            opts.body = JSON.stringify(normalizeFableRequestBody(body))
+            const headers = new Headers(opts.headers as HeadersInit | undefined)
+            const beta = new Set((headers.get("anthropic-beta") ?? "").split(",").filter(Boolean))
+            beta.add("thinking-binding-controls-2026-08-01")
+            headers.set("anthropic-beta", [...beta].join(","))
+            opts.headers = headers
+          }
+        }
+
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
         // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
         // IDs are only re-attached for Azure with store=true
         if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
-          const body = JSON.parse(opts.body as string)
+          const body = normalizeAstraRequestBody(JSON.parse(opts.body as string))
           const isAzure = model.providerID.includes("azure")
           const keepIds = isAzure && body.store === true
           if (!keepIds && Array.isArray(body.input)) {
@@ -2726,8 +2856,8 @@ export namespace Provider {
                 delete item.id
               }
             }
-            opts.body = JSON.stringify(body)
           }
+          opts.body = JSON.stringify(body)
         }
 
         // Mint (or reuse) the shell-command token and overwrite Authorization.

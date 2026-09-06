@@ -22,6 +22,38 @@ import {
 } from "./model-catalog"
 
 describe("frontier model canonicalization", () => {
+  test("Astra groups native, subscription, and managed identities without changing the selected route", () => {
+    const models = [
+      { id: "gpt-6-astra", provider: { id: "openai" } },
+      { id: "gpt-6-astra", provider: { id: "openai-codex" } },
+      { id: "openai/gpt-6-astra", provider: { id: "openrouter" } },
+    ]
+    for (const model of models) {
+      expect(isFrontier({ providerID: model.provider.id, modelID: model.id })).toBe(true)
+      expect(modelDisplayName(model.id, model.provider.id, model.id)).toBe("6 Astra")
+    }
+    const grouped = groupModelRoutes({ models, current: { providerID: "openai-codex", modelID: "gpt-6-astra" } })
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0]?.model).toBe(models[1]!)
+    expect(grouped[0]?.routes).toHaveLength(3)
+  })
+
+  test("Fable 5.1 native ids resolve to the dotted OpenRouter slug only when that route exists", () => {
+    const direct = { providerID: "anthropic", modelID: "claude-fable-5-1" }
+    const managed = { providerID: "openrouter", modelID: "anthropic/claude-fable-5.1" }
+    for (const model of [direct, managed]) {
+      expect(isFrontier(model)).toBe(true)
+      expect(modelDisplayName(model.modelID, model.providerID, model.modelID)).toBe("Fable 5.1")
+    }
+    expect(logicalModelKey(direct.providerID, direct.modelID)).toBe(
+      logicalModelKey(managed.providerID, managed.modelID),
+    )
+    expect(routableModelKey(direct, (model) => model.modelID === managed.modelID)).toEqual(managed)
+    expect(routableModelKey(direct, () => true)).toEqual(direct)
+    expect(routableModelKey(direct, () => false)).toEqual(direct)
+    expect(isFrontier({ providerID: "anthropic", modelID: "claude-fable-5" })).toBe(true)
+  })
+
   test("the generic GPT-5.6 API route stays exact while presentation groups it with Sol", () => {
     for (const id of ["gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
       expect(canonicalKey("openai", id)).toBe(canonicalKey("openrouter", `openai/${id}`))
@@ -219,8 +251,10 @@ describe("frontier model canonicalization", () => {
   test("uses the requested composer roster and normalizes GLM provider aliases", () => {
     expect(COMPOSER_MODEL_ROSTER.map((model) => model.label)).toEqual([
       "5.6 Sol",
+      "6 Astra",
       "5.6 Terra",
       "Opus 5",
+      "Fable 5.1",
       "Kimi K3",
       "GLM 5.3",
       "DeepSeek V4 Flash",

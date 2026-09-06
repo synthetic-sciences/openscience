@@ -30,15 +30,17 @@ const OPENROUTER_PROVIDER_PREFIX: Record<string, string> = {
   zhipuai: "z-ai",
 }
 
-const ANTHROPIC_DASHED_VERSION = /^(claude-(?:opus|sonnet|haiku)-\d+)-(\d+)(?:-\d{8})?$/
+const ANTHROPIC_DASHED_VERSION = /^(claude-(?:opus|sonnet|haiku|fable)-\d+)-(\d+)(?:-\d{8})?$/
 const GLM_PROVIDER_ALIASES = new Set(["zai", "opencode-go", "zai-coding-plan", "zhipuai-coding-plan"])
 
 /** Ordered product roster for the composer. Missing entries are presentation-
  * only placeholders; this list never fabricates a callable provider route. */
 export const COMPOSER_MODEL_ROSTER = [
   { key: "openai/gpt-5-6-sol", label: "5.6 Sol", provider: "openai" },
+  { key: "openai/gpt-6-astra", label: "6 Astra", provider: "openai" },
   { key: "openai/gpt-5-6-terra", label: "5.6 Terra", provider: "openai" },
   { key: "anthropic/claude-opus-5", label: "Opus 5", provider: "anthropic" },
+  { key: "anthropic/claude-fable-5-1", label: "Fable 5.1", provider: "anthropic" },
   { key: "moonshotai/kimi-k3", label: "Kimi K3", provider: "moonshotai" },
   { key: "zai/glm-5-3", label: "GLM 5.3", provider: "zai" },
   { key: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", provider: "deepseek" },
@@ -50,6 +52,7 @@ export const COMPOSER_MODEL_ROSTER = [
 // Keep the release's broader frontier defaults intact; the composer roster
 // above only controls ordering and passive unavailable placeholders.
 export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
+  "openai/gpt-6-astra",
   "openai/gpt-5-6-sol",
   "openai/gpt-5-6-sol-pro",
   "openai/gpt-5-6-terra",
@@ -72,6 +75,7 @@ export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
   "anthropic/claude-sonnet-5",
   "anthropic/claude-opus-5",
   "anthropic/claude-fable-5",
+  "anthropic/claude-fable-5-1",
   "anthropic/claude-haiku-4-5",
   "anthropic/claude-opus-4-8",
   "google/gemini-3-6-flash",

@@ -21,6 +21,7 @@ import {
   stageCurrent,
   verify as verifyUpdate,
 } from "./updater.mjs"
+import { startupUpdateState } from "./update-state.mjs"
 
 const execute = promisify(execFile)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -381,18 +382,6 @@ function updateView() {
   }
 }
 
-function storedUpdateResult(value) {
-  if (!value || (value.status !== "succeeded" && value.status !== "failed")) return
-  if (!/^\d+\.\d+\.\d+$/.test(value.version ?? "")) return
-  if (typeof value.completed_at !== "string" || !Number.isFinite(Date.parse(value.completed_at))) return
-  return {
-    phase: value.status,
-    version: value.version,
-    completed_at: value.completed_at,
-    error: value.status === "failed" && typeof value.error === "string" ? value.error.slice(0, 4_096) : undefined,
-  }
-}
-
 function prepareUpdate(version) {
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error("The desktop update version is invalid")
   if (state.updateRestart) throw new Error("OpenScience is already committed to restarting for this update")
@@ -550,7 +539,7 @@ async function updates() {
     .then((value) => JSON.parse(value))
     .catch(() => undefined)
   if (stored) await rm(resultFile, { force: true })
-  state.updateResult = storedUpdateResult(stored)
+  state.updateResult = startupUpdateState(stored, app.getVersion(), validateUpdateHealthRequest()?.version)
   const recovered = updateHealthRequest()
     ? undefined
     : await recoverUpdate(state.updateCache, {

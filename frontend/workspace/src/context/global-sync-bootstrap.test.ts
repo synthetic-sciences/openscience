@@ -58,7 +58,7 @@ type Hit = { path: string; directory?: string; project?: string; body?: Record<s
  * `broken` fail the way the server's directory validation does for a folder
  * that no longer exists.
  */
-function createFakeServer(projects: Project[]) {
+function createFakeServer(projects: Project[], provider?: (directory?: string) => Promise<Response> | Response) {
   const hits: Hit[] = []
   const broken = new Set<string>()
   const encoder = new TextEncoder()
@@ -104,7 +104,7 @@ function createFakeServer(projects: Project[]) {
       case "/project/current":
         return json(projects.find((item) => item.worktree === directory) ?? projects[0])
       case "/provider":
-        return json({ all: [], connected: [], default: {} })
+        return provider?.(directory) ?? json({ all: [], connected: [], default: {} })
       case "/vcs":
         return json({ branch: "main" })
       case "/global/config":
@@ -205,6 +205,46 @@ const projects = [
 ]
 
 describe("project bootstrap", () => {
+  test.each([false, true])(
+    "a superseded provider bootstrap cannot replace the latest refresh (latest failed=%s)",
+    async (failed) => {
+      const pending = new Map<string, (response: Response) => void>()
+      const response = (name: string) =>
+        new Response(
+          JSON.stringify({ all: [{ id: "openrouter", name, models: {} }], connected: ["openrouter"], default: {} }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )
+      let refreshed = false
+      const fake = createFakeServer(projects, (directory = "global") => {
+        if (refreshed) {
+          if (failed) return new Response("catalog unavailable", { status: 503 })
+          return response("Current account catalog")
+        }
+        return new Promise((resolve) => pending.set(directory, resolve))
+      })
+      const sync = mount(fake.fetch)
+      await until(() => !!sync())
+      const app = sync()!
+      const [store] = app.child("/research/a", { projectID: "prj_a" })
+      await until(() => pending.has(cwd) && pending.has("/research/a"))
+
+      refreshed = true
+      const error = await app.refreshProviders().then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+      expect(Boolean(error)).toBe(failed)
+      if (!failed) {
+        expect(app.data.provider.all[0]?.name).toBe("Current account catalog")
+        expect(store.provider.all[0]?.name).toBe("Current account catalog")
+      }
+      for (const resolve of pending.values()) resolve(response("Stale previous account catalog"))
+      await until(() => app.ready && store.status === "complete")
+      expect(app.data.provider.all.map((provider) => provider.name)).toEqual(failed ? [] : ["Current account catalog"])
+      expect(store.provider.all.map((provider) => provider.name)).toEqual(failed ? [] : ["Current account catalog"])
+    },
+  )
+
   test("a project route bootstraps only the active project, through catalog refreshes and reconnects", async () => {
     const fake = createFakeServer(projects)
     const sync = mount(fake.fetch)

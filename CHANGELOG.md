@@ -10,6 +10,17 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Keep model-specific effort controls in the composer while Ace pricing loads,
+  recover pricing after a failed initial fetch, and prevent older catalog reads
+  from overwriting a newer refresh. Keep Fast gated by verified rates and offer
+  a read-only options refresh without changing the selected model or access route.
+- Add GPT-6 Astra and Claude Fable 5.1 with reviewed model-specific effort,
+  context, tool, and pricing contracts. Keep existing composer selections and
+  pins; distinguish native API, subscription, and managed access capabilities.
+  Keep managed Fable 5.1 gated pending OpenRouter thinking-replay verification;
+  native Anthropic support is independent.
+- Show the current update's health-check progress instead of an earlier
+  release's success banner, and continue polling until that update is verified.
 - Preserve original paths in assistant Markdown links, prose, code, and copied
   responses. Opening an in-project report from chat no longer strips its project
   prefix or changes it into an outside-workspace path.

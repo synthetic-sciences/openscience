@@ -81,7 +81,22 @@ Replace the example value with your configured model. See [Configuration](/opens
 
 ## Reasoning, context, and rates
 
-Open a model's options to see its supported reasoning tiers, context capacity, and **Rates and limits**. Available tiers depend on the selected model; there is no universal list.
+Use the effort control beside the model name in the composer to choose the model's supported effort, Fast mode, and context window. Available choices depend on the exact model and access route; there is no universal list. View current prices in **Customize → Models → Rates and limits**.
+
+Verified effort choices remain usable while Ace refreshes pricing. Fast appears only after its route and prices are verified. If the options report that rates are unavailable, choose **Refresh options**; this only reloads metadata and does not send a model request, change your selection, or purchase anything.
+
+### GPT-6 Astra and Claude Fable 5.1
+
+Both models offer **Low, Medium, High, Extra high, and Max** effort. Their transport contracts remain distinct:
+
+- **GPT-6 Astra:** native OpenAI access uses Responses for tool calls. The public API supports a 1.05M context window; supported ChatGPT access has separate 272K/872K context choices. OpenRouter uses its documented normalized tool interface. Native API and subscription Fast are not enabled merely because Ace's OpenRouter route supports priority.
+- **Claude Fable 5.1:** adaptive thinking is always on, with High as the default; there is no Off or manual thinking-budget option. Native Anthropic access preserves valid thinking blocks and uses the documented handling for blocks invalidated by a changed conversation prefix. Forced tool selection is unsupported. Fable 5.1 has no Fast mode.
+
+Model availability still depends on your account and the selected route. The exact IDs are `openai/gpt-6-astra`, `openai-codex/gpt-6-astra`, and `anthropic/claude-fable-5-1` for those native connections. OpenRouter slugs are `openai/gpt-6-astra` and `anthropic/claude-fable-5.1` (prefixed by `openrouter/` in CLI model selections).
+
+Fable 5.1's **Ace route is withheld by default** until its multi-turn thinking-replay compatibility through OpenRouter is verified. Native Anthropic support is available independently. Reviewed prices or a stored key do not establish managed availability; OpenScience requires an explicit approval signal from the Ace catalog before offering that route.
+
+Provider contracts: [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra), [OpenRouter Astra](https://openrouter.ai/openai/gpt-6-astra), and [Fable 5.1](https://platform.claude.com/docs/en/models/fable-5-1/overview).
 
 `openscience run --variant <tier>` selects a supported reasoning tier for that run. Research effort, selected with `--effort normal` or `--effort ultra`, is a separate control for how broadly to investigate the task.
 

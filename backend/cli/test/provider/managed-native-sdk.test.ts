@@ -13,6 +13,7 @@ const headers = {
 }
 const catalog = MANAGED_OPENROUTER_MODELS.map((id) => ({
   id,
+  available: true,
   upstream_provider: id.startsWith("anthropic/")
     ? "anthropic"
     : id.startsWith("google/")
@@ -110,7 +111,7 @@ const { Provider } = await import("../../src/provider/provider")
 const { ProviderTransform } = await import("../../src/provider/transform")
 const { Instance } = await import("../../src/project/instance")
 
-test("Ace keeps every curated model on the scoped OpenRouter transport", async () => {
+test("Ace keeps every explicitly approved curated model on the scoped OpenRouter transport", async () => {
   calls.length = 0
   const originalFetch = globalThis.fetch
   globalThis.fetch = ((input, init) => {

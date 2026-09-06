@@ -60,7 +60,7 @@ const FRONTIER_MODELS = {
 const SONNET = "claude-sonnet-4-6"
 const OPUS = "claude-opus-4-5"
 
-test("Ace exposes the reviewed 21 models with exact names and context even when the bundled catalog lags", async () => {
+test("Ace preserves reviewed fallback models but requires approval for new bound-thinking routes", async () => {
   await using tmp = await tmpdir({ config: { billing: { llm: "managed" } } })
   await OpenScience.saveSession({
     api_key: "osk_fixture_managed_catalog",
@@ -74,9 +74,11 @@ test("Ace exposes the reviewed 21 models with exact names and context even when 
       fn: async () => {
         const provider = (await Provider.list()).openrouter
         expect(provider.source).toBe("managed")
-        expect(Object.keys(provider.models).sort()).toEqual([...MANAGED_OPENROUTER_MODELS].sort())
-        expect(Object.keys(provider.models)).toHaveLength(21)
-        for (const id of MANAGED_OPENROUTER_MODELS) {
+        const available = MANAGED_OPENROUTER_MODELS.filter((id) => !MANAGED_MODEL_DETAILS[id].requiresApproval)
+        expect(Object.keys(provider.models).sort()).toEqual([...available].sort())
+        expect(Object.keys(provider.models)).toHaveLength(22)
+        expect(provider.models["anthropic/claude-fable-5.1"]).toBeUndefined()
+        for (const id of available) {
           const model = provider.models[id]
           const reviewed = MANAGED_MODEL_DETAILS[id]
           expect(model.api.id).toBe(id)
@@ -87,6 +89,21 @@ test("Ace exposes the reviewed 21 models with exact names and context even when 
         expect(provider.models["qwen/qwen3.8-flash"].name).toBe("Qwen 3.8 Flash Next")
         expect(provider.models["nvidia/nemotron-3-ultra-550b-a55b"].capabilities.input.image).toBe(false)
         expect(provider.models["google/gemini-3.7-flash"].capabilities.input.video).toBe(true)
+        for (const id of ["openai/gpt-5.6-sol", "openai/gpt-5.6-terra", "openai/gpt-5.6-luna"]) {
+          expect(Object.keys(provider.models[id].variants ?? {})).toEqual([
+            "none",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+          ])
+          expect(provider.models[id].modes).toEqual({})
+        }
+        for (const id of ["openai/gpt-6-astra"]) {
+          expect(Object.keys(provider.models[id].variants ?? {})).toEqual(["low", "medium", "high", "xhigh", "max"])
+          expect(provider.models[id].modes).toEqual({})
+        }
       },
     })
   } finally {
@@ -176,8 +193,13 @@ test("synthesized Codex OAuth models use Codex variants and preserve model-speci
         expect(codex.name).toBe("OpenAI (Codex subscription)")
 
         const publicSol = providers.openai?.models["gpt-5.6-sol"]
+        const astra = codex.models["gpt-6-astra"]
+        expect(astra.limit).toEqual({ context: 872_000, output: 128_000 })
+        expect(astra.contextOptions).toEqual([272_000, 872_000])
+        expect(astra.modes).toBeUndefined()
+        expect(Object.keys(astra.variants ?? {})).toEqual(["low", "medium", "high", "xhigh", "max"])
         for (const [id, model] of Object.entries(codex.models)) {
-          expect(model.limit.context).toBe(providers.openai?.models[id]?.limit.context)
+          expect(model.limit.context).toBe(id === "gpt-6-astra" ? 872_000 : providers.openai?.models[id]?.limit.context)
         }
         expect(Object.keys(publicSol?.variants ?? {})).toEqual(["none", "low", "medium", "high", "xhigh", "max"])
       },

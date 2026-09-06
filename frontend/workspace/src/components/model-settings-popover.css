@@ -506,6 +506,20 @@
   min-width: 0;
 }
 
+.model-settings-options-unavailable {
+  color: var(--model-control-muted);
+  font-size: var(--font-size-medium);
+  line-height: 20px;
+}
+
+.model-settings-options-unavailable p {
+  margin: 0;
+}
+
+.model-settings-options-unavailable [role="alert"] {
+  color: var(--text-critical-base);
+}
+
 [data-model-effort-panel] {
   display: grid;
   gap: 12px;
