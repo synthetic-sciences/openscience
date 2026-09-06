@@ -470,6 +470,66 @@ describe("chronological activity in a turn", () => {
 })
 
 describe("execution inspection", () => {
+  test("assistant file links preserve Markdown targets and prose without weakening workspace boundaries", async () => {
+    const opened: string[] = []
+    const copied: string[] = []
+    const original = Object.getOwnPropertyDescriptor(navigator, "clipboard")
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          copied.push(text)
+        },
+      },
+    })
+    const text = [
+      "The project is /research. Read the evidence without changing its path.",
+      "[Report](/research/COST_MODEL.md)",
+      "[Relative](COST_MODEL.md)",
+      "[Outside](/research-archive/COST_MODEL.md)",
+      "[Web](https://example.com/research/COST_MODEL.md)",
+      "`cat /research/COST_MODEL.md`",
+    ].join("\n\n")
+    const part: TextPart = { id: "prt_absolute_link", sessionID, messageID: "msg_0002", type: "text", text }
+    try {
+      const host = mount(
+        () =>
+          web.createComponent(markdown.MarkdownImages, {
+            resolve: (src) => src,
+            resolveFile: (path) => assets.workspaceAssetPath(path, "/research"),
+            openFile: (path) => opened.push(path),
+            get children() {
+              return parts.Part({ part, message: assistant(3_000) })
+            },
+          }),
+        empty(),
+      )
+      await ready(() => host.querySelectorAll('[data-slot="assistant-prose"] a').length === 4)
+      const anchors = [...host.querySelectorAll<HTMLAnchorElement>('[data-slot="assistant-prose"] a')]
+      expect(anchors.map((anchor) => anchor.getAttribute("href"))).toEqual([
+        "/research/COST_MODEL.md",
+        "COST_MODEL.md",
+        "/research-archive/COST_MODEL.md",
+        "https://example.com/research/COST_MODEL.md",
+      ])
+      expect(anchors[0].getAttribute("data-file-path")).toBe("/research/COST_MODEL.md")
+      expect(anchors[1].getAttribute("data-file-path")).toBe("COST_MODEL.md")
+      expect(anchors[2].hasAttribute("data-file-path")).toBe(false)
+      expect(anchors[3].hasAttribute("data-file-path")).toBe(false)
+      anchors[0].click()
+      anchors[1].click()
+      expect(opened).toEqual(["/research/COST_MODEL.md", "COST_MODEL.md"])
+      expect(host.textContent).toContain("The project is /research.")
+      expect(host.querySelector("code")?.textContent).toBe("cat /research/COST_MODEL.md")
+      host.querySelector<HTMLButtonElement>('[data-slot="text-part-copy-wrapper"] button')!.click()
+      await ready(() => copied.length === 1)
+      expect(copied).toEqual([text])
+    } finally {
+      if (original) Object.defineProperty(navigator, "clipboard", original)
+      else Reflect.deleteProperty(navigator, "clipboard")
+    }
+  })
+
   test("a preview's explicit file resolver is not replaced by surrounding turn provenance", async () => {
     const opened: string[] = []
     const host = mount(

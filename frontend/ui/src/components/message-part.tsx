@@ -706,10 +706,11 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 }
 
 PART_MAPPING["text"] = function TextPartDisplay(props) {
-  const data = useData()
   const i18n = useI18n()
   const part = props.part as TextPart
-  const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
+  // Paths inside Markdown targets, prose, and code are content, not labels.
+  // Removing a project prefix corrupts their meaning before file resolution.
+  const displayText = () => (part.text ?? "").trim()
   const throttledText = createTypewriter(displayText)
   const [copied, setCopied] = createSignal(false)
   const streaming = () => props.message.role === "assistant" && !completedAt(props.message) && !part.time?.end

@@ -1,6 +1,7 @@
 import type { AssistantMessage, Part, ReasoningPart, TextPart, UserMessage } from "@synsci/sdk/v2"
 import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "./fixtures"
+import { openFilesSources } from "./utils"
 
 test.skip(process.env.OPENSCIENCE_E2E_FAKE_MODEL !== "1", "requires the isolated deterministic model")
 
@@ -23,6 +24,32 @@ async function settleLayout(page: Page) {
   await page.evaluate(
     () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
   )
+}
+
+async function dragInspector(page: Page, distance: number, verify: () => Promise<void>) {
+  const handle = page.getByRole("separator", { name: "Resize research inspector", exact: true })
+  const box = await handle.boundingBox()
+  if (!box) throw new Error("The inspector resize handle did not render")
+  const before = Number(await handle.getAttribute("aria-valuenow"))
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  try {
+    await expect(page.locator("[data-pane-resize-shield]")).toHaveCount(1)
+    // Separate pointer moves and layout frames are essential: the drag shield
+    // intercepts hit-testing after the first correction, but reading must stay
+    // anchored for the entire drag, not just its first frame.
+    for (const fraction of [0.25, 0.5, 0.75, 1]) {
+      await page.mouse.move(x + distance * fraction, y)
+      await settleLayout(page)
+      await verify()
+    }
+  } finally {
+    await page.mouse.up()
+  }
+  await expect(page.locator("[data-pane-resize-shield]")).toHaveCount(0)
+  expect(Math.abs(Number(await handle.getAttribute("aria-valuenow")) - before)).toBeGreaterThan(100)
 }
 
 test("classic long-chat disclosures preserve the reader, stay per-turn, and survive reload", async ({
@@ -85,7 +112,7 @@ test("classic long-chat disclosures preserve the reader, stay per-turn, and surv
         sessionID,
         type: "text",
         text:
-          `Conclusion for experiment ${index}.\n\n` +
+          `## Conclusion for experiment ${index}.\n\n` +
           Array.from(
             { length: 5 },
             () =>
@@ -153,6 +180,76 @@ test("classic long-chat disclosures preserve the reader, stay per-turn, and surv
     await expect(page.locator(reasoningBody)).toHaveCount(2)
     await expect(turn(7).locator(disclosure)).toHaveAttribute("aria-expanded", "false")
     await expect(turn(1).locator(disclosure)).toHaveAttribute("aria-expanded", "true")
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await openFilesSources(page)
+    await expect(page.locator(".session-right-pane")).toHaveAttribute("data-overlay", "false")
+    const handle = page.getByRole("separator", { name: "Resize research inspector", exact: true })
+    await handle.press("Home")
+    await settleLayout(page)
+
+    const paragraph = turn(9).locator('[data-component="text-part"] p').first()
+    await paragraph.evaluate((element) => {
+      const scroller = element.closest<HTMLElement>(".session-scroller")!
+      scroller.scrollTop += element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + 8
+      scroller.dispatchEvent(new Event("scroll"))
+    })
+    await settleLayout(page)
+    const character = await page.locator(".session-scroller").evaluateHandle((scroller) => {
+      const bounds = scroller.getBoundingClientRect()
+      for (const offset of [12, 32, 56]) {
+        const caret = document.caretPositionFromPoint(bounds.left + scroller.clientWidth / 2, bounds.top + offset)
+        if (!caret || caret.offsetNode.nodeType !== Node.TEXT_NODE || !scroller.contains(caret.offsetNode)) continue
+        const range = document.createRange()
+        const start = Math.min(caret.offset, (caret.offsetNode.textContent?.length ?? 0) - 1)
+        if (start < 0) continue
+        range.setStart(caret.offsetNode, start)
+        range.setEnd(caret.offsetNode, start + 1)
+        if (range.getBoundingClientRect().top >= bounds.top) return range
+      }
+      throw new Error("The fixture reading point must be visible conversation text")
+    })
+    const textTop = () =>
+      character.evaluate((range) => {
+        const scroller = range.startContainer.parentElement!.closest(".session-scroller")!
+        return range.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+      })
+    const beforeText = await textTop()
+    expect(beforeText).toBeGreaterThanOrEqual(0)
+    const checkText = async () => expect(Math.abs((await textTop()) - beforeText)).toBeLessThanOrEqual(2)
+    await dragInspector(page, -185, checkText)
+    await dragInspector(page, 185, checkText)
+    await character.dispose()
+
+    // Heading spacing must not select the preceding offscreen paragraph.
+    const heading = turn(9).getByRole("heading", { name: "Conclusion for experiment 9.", exact: true })
+    await heading.evaluate((element) => {
+      const scroller = element.closest<HTMLElement>(".session-scroller")!
+      scroller.scrollTop += element.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 44
+      scroller.dispatchEvent(new Event("scroll"))
+    })
+    await settleLayout(page)
+    const headingTop = () =>
+      heading.evaluate(
+        (element) =>
+          element.getBoundingClientRect().top - element.closest(".session-scroller")!.getBoundingClientRect().top,
+      )
+    const beforeHeading = await headingTop()
+    const checkHeading = async () => expect(Math.abs((await headingTop()) - beforeHeading)).toBeLessThanOrEqual(2)
+    await dragInspector(page, -185, checkHeading)
+    await dragInspector(page, 185, checkHeading)
+
+    await page.getByRole("button", { name: "Jump to Latest", exact: true }).click()
+    await settleLayout(page)
+    const checkBottom = async () => {
+      const remaining = await page
+        .locator(".session-scroller")
+        .evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+      expect(Math.abs(remaining)).toBeLessThanOrEqual(2)
+    }
+    await checkBottom()
+    await dragInspector(page, -185, checkBottom)
+    await dragInspector(page, 185, checkBottom)
   } finally {
     await sdk.session.delete({ sessionID }).catch(() => undefined)
   }

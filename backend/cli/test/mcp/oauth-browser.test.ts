@@ -6,12 +6,15 @@ const auth = await import("@modelcontextprotocol/sdk/client/auth.js")
 // Track open() calls and control failure behavior
 let openShouldFail = false
 let openCalledWith: string | undefined
+let browserOpened = Promise.withResolvers<string>()
 let finishAuthCalls = 0
 let connectWithoutAuthorization = false
+let authorizationDelay = 0
 
 mock.module("open", () => ({
   default: async (url: string) => {
     openCalledWith = url
+    browserOpened.resolve(url)
     // Return a mock subprocess that emits an error if openShouldFail is true
     const subprocess = new EventEmitter()
     if (openShouldFail) {
@@ -39,15 +42,20 @@ const transportCalls: Array<{
   options: { authProvider?: unknown; requestInit?: { headers?: Record<string, string> } }
 }> = []
 
+type MockAuthProvider = {
+  redirectToAuthorization?: (url: URL) => Promise<void>
+  saveTokens?: (tokens: { access_token: string; token_type: string }) => Promise<void>
+}
+
 // Mock the transport constructors
 mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     url: string
-    authProvider: { redirectToAuthorization?: (url: URL) => Promise<void> } | undefined
+    authProvider: MockAuthProvider | undefined
     constructor(
       url: URL,
       options?: {
-        authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> }
+        authProvider?: MockAuthProvider
         requestInit?: { headers?: Record<string, string> }
       },
     ) {
@@ -60,6 +68,9 @@ mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
       })
     }
     async start() {
+      const delay = authorizationDelay
+      authorizationDelay = 0
+      if (delay) await Bun.sleep(delay)
       if (connectWithoutAuthorization) return
       // Simulate OAuth redirect by calling the authProvider's redirectToAuthorization
       if (this.authProvider?.redirectToAuthorization) {
@@ -70,6 +81,9 @@ mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
     async finishAuth(_code: string) {
       // Mock successful auth completion
       finishAuthCalls++
+      if (connectWithoutAuthorization) {
+        await this.authProvider?.saveTokens?.({ access_token: "browser-test-token", token_type: "Bearer" })
+      }
     }
   },
 }))
@@ -112,9 +126,11 @@ mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
 beforeEach(() => {
   openShouldFail = false
   openCalledWith = undefined
+  browserOpened = Promise.withResolvers<string>()
   transportCalls.length = 0
   finishAuthCalls = 0
   connectWithoutAuthorization = false
+  authorizationDelay = 0
 })
 
 // Import modules after mocking
@@ -127,6 +143,39 @@ const { tmpdir } = await import("../fixture/fixture")
 const { Config } = await import("../../src/config/config")
 const { McpAuth } = await import("../../src/mcp/auth")
 const { Log } = await import("../../src/util/log")
+const { withTimeout } = await import("../../src/util/timeout")
+
+async function authorizeBrowser(name: string, authentication: Promise<unknown>) {
+  // Observe the browser call rather than guessing when cold config, trust and
+  // durable OAuth preparation have finished. Surface early auth failures too.
+  const url = await withTimeout(
+    Promise.race([
+      browserOpened.promise,
+      authentication.then(() => {
+        throw new Error("Authentication settled without opening the browser")
+      }),
+    ]),
+    10_000,
+  )
+  const pending = await McpAuth.pendingOAuthFlow(name)
+  expect(pending?.authorizationUrl).toBe(url)
+  expect(pending?.state).toBeDefined()
+  connectWithoutAuthorization = true
+  const callback = await fetch(
+    `http://127.0.0.1:19876/mcp/oauth/callback?state=${encodeURIComponent(pending!.state)}&code=browser-test-code`,
+    { keepalive: false, signal: AbortSignal.timeout(5_000) },
+  )
+  const page = await callback.text()
+  expect(callback.status).toBe(200)
+  expect(page).toContain("Authorization Successful")
+  // Completing the flow also waits through the real browser error-detection
+  // window. Stopping the listener immediately after open() would reject its
+  // callback promise while that window is still running.
+  expect(await authentication).toEqual({ status: "connected" })
+  expect(finishAuthCalls).toBe(1)
+  expect(await McpAuth.pendingOAuthFlow(name)).toBeUndefined()
+  return url
+}
 
 async function trust() {
   const status = await ProjectTrust.status(Instance.project)
@@ -215,29 +264,27 @@ test("BrowserOpenFailed event is NOT published when open() succeeds", async () =
     fn: async () => {
       await trust()
       openShouldFail = false
+      // Model a cold preparation that exceeds the former 700 ms test sleep.
+      // This is fixture latency, not the synchronization condition.
+      authorizationDelay = 800
 
       const events: Array<{ mcpName: string; url: string }> = []
       const unsubscribe = Bus.subscribe(MCP.BrowserOpenFailed, (evt) => {
         events.push(evt.properties)
       })
 
-      // Run authenticate with a timeout to avoid waiting forever for the callback
-      const authPromise = MCP.authenticate("test-oauth-server-2").catch(() => undefined)
-
-      // Wait for the browser open attempt and the 500ms error detection timeout
-      await new Promise((resolve) => setTimeout(resolve, 700))
-
-      // Stop the callback server and cancel any pending auth
-      await McpOAuthCallback.stop()
-
-      await authPromise
-
-      unsubscribe()
-
-      // Verify NO BrowserOpenFailed event was published
-      expect(events.length).toBe(0)
-      // Verify open() was still called
-      expect(openCalledWith).toBeDefined()
+      const authPromise = MCP.authenticate("test-oauth-server-2")
+      void authPromise.catch(() => undefined)
+      try {
+        await authorizeBrowser("test-oauth-server-2", authPromise)
+        // A successful browser launch and callback must not emit a fallback URL.
+        expect(events.length).toBe(0)
+        expect(openCalledWith).toBeDefined()
+      } finally {
+        await McpOAuthCallback.stop()
+        await authPromise.catch(() => undefined)
+        unsubscribe()
+      }
     },
   })
 })
@@ -266,26 +313,21 @@ test("open() is called with the authorization URL", async () => {
     fn: async () => {
       await trust()
       openShouldFail = false
-      openCalledWith = undefined
+      authorizationDelay = 800
 
-      // Run authenticate with a timeout to avoid waiting forever for the callback
-      const authPromise = MCP.authenticate("test-oauth-server-3").catch(() => undefined)
-
-      // Wait for the browser open attempt and the 500ms error detection timeout
-      await new Promise((resolve) => setTimeout(resolve, 700))
-
-      // Stop the callback server and cancel any pending auth
-      await McpOAuthCallback.stop()
-
-      await authPromise
-
-      // Verify open was called with a URL
-      expect(openCalledWith).toBeDefined()
-      expect(typeof openCalledWith).toBe("string")
-      expect(openCalledWith!).toContain("https://")
-      expect(transportCalls.find((call) => call.type === "streamable")?.options.requestInit?.headers).toEqual({
-        "X-Tenant": "tenant-123",
-      })
+      const authPromise = MCP.authenticate("test-oauth-server-3")
+      void authPromise.catch(() => undefined)
+      try {
+        const url = await authorizeBrowser("test-oauth-server-3", authPromise)
+        expect(url).toBe("https://auth.example.com/authorize?client_id=test")
+        expect(typeof url).toBe("string")
+        expect(transportCalls.find((call) => call.type === "streamable")?.options.requestInit?.headers).toEqual({
+          "X-Tenant": "tenant-123",
+        })
+      } finally {
+        await McpOAuthCallback.stop()
+        await authPromise.catch(() => undefined)
+      }
     },
   })
 })

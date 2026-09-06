@@ -28,12 +28,22 @@ phase headings or Detailed/Compact modes. Tool rows use their original icon,
 title and description, with one accessible lifecycle indicator. Full command
 output and error details remain inspectable.
 
+Assistant Markdown is rendered and copied without replacing project paths in
+the source text. Shortening an entire response can turn an absolute report link
+into a different, outside-workspace path; only explicit display labels may be
+shortened. The existing file resolver and backend still enforce workspace access.
+
 The new global toggle changed the heights of earlier turns. In a long-chat
 Chromium reproduction this displaced the clicked control by 4,400 pixels.
 The restored per-turn control avoids that global mutation. The scroll hook also
 captures a disclosure's viewport position before layout changes and corrects
 only its residual displacement after native scroll anchoring. Corrections are
 immediate, not animated; manual scrolling and Jump to latest release the anchor.
+
+For a scrolled-up reader, width changes preserve the visible text position rather
+than an obsolete pixel offset after paragraphs rewrap. This reading anchor only
+corrects width reflow, yields to manual scrolling and the disclosure anchor, and
+ignores removed content. Readers at the bottom remain there when panes resize.
 
 The 2.0.61–2.0.64 runtime used the same streaming SDK versions as 2.0.75 and
 appended reasoning deltas as they arrived. Keep that path, the readable-reasoning

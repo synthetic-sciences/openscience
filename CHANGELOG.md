@@ -10,6 +10,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Preserve original paths in assistant Markdown links, prose, code, and copied
+  responses. Opening an in-project report from chat no longer strips its project
+  prefix or changes it into an outside-workspace path.
+- Keep the reader's place when resizing the chat and file panes, including
+  inside long paragraphs, without pulling a scrolled-up reader to the latest turn.
 - Restore the classic 2.0.61–2.0.63 chat presentation: one saved reasoning/activity
   disclosure per turn, inline reasoning, and quiet tool rows without repeated
   timers or status rails. Keep live turns open on completion, anchor disclosure
