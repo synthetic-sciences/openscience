@@ -197,6 +197,13 @@ export namespace PermissionNext {
 
   export const Event = {
     Asked: BusEvent.define("permission.asked", Request),
+    Cancelled: BusEvent.define(
+      "permission.cancelled",
+      z.object({
+        sessionID: z.string(),
+        requestID: z.string(),
+      }),
+    ),
     Replied: BusEvent.define(
       "permission.replied",
       z.object({
@@ -221,8 +228,9 @@ export namespace PermissionNext {
           info: Request
           mode?: ProjectAccess.Mode
           resolve: () => void
-          reject: (e: any) => void
+          reject: (error: unknown) => void
           trace: Promise<void>
+          cleanup: () => void
         }
       > = {}
 
@@ -238,6 +246,7 @@ export namespace PermissionNext {
       const traces: Promise<void>[] = []
       for (const [id, pending] of Object.entries(current.pending)) {
         delete current.pending[id]
+        pending.cleanup()
         traces.push(pending.trace)
         pending.reject(new InstanceDisposedError())
       }
@@ -321,94 +330,114 @@ export namespace PermissionNext {
     })
   }
 
-  export const ask = fn(
-    Request.partial({ id: true }).extend({
-      ruleset: Ruleset,
-      mode: ProjectAccess.Mode.optional(),
-    }),
-    async (input) => {
-      const s = await state()
-      const { ruleset, mode, ...request } = input
-      const filesystemRequest =
-        request.permission === "external_directory" ? FilesystemMetadata.safeParse(request.metadata) : undefined
-      if (
-        filesystemRequest?.success &&
-        filesystemRequest.data.filesystem.access === "write" &&
-        (await SessionFilesystem.restrictsWrite({
-          sessionID: request.sessionID,
-          path: filesystemRequest.data.filesystem.path,
-        }))
-      ) {
-        throw new SessionFilesystem.DeniedError({
-          sessionID: request.sessionID,
-          path: filesystemRequest.data.filesystem.path,
-          access: "write",
-        })
-      }
-      // Configured agent/tool policy is not a user approval. In an untrusted
-      // clone it may never silently turn an external path request into a grant;
-      // explicit standing approvals and already-materialized filesystem grants
-      // remain separate, auditable user decisions.
-      const configured =
-        request.permission === "external_directory" && !(await ProjectTrust.allowed(Instance.project))
-          ? ruleset.filter((rule) => !(rule.action === "allow" && Wildcard.match(request.permission, rule.permission)))
-          : ruleset
-      const granted = approvals(s, request.sessionID)
-      const policy = REMOTE_PLAN.has(request.permission)
-        ? configured.filter((rule) => rule.action !== "allow")
-        : spendFilter(request.permission, configured)
-      const rules = REMOTE_PLAN.has(request.permission)
-        ? merge(
-            configured.filter((rule) => rule.action !== "allow"),
-            spendFilter(request.permission, granted),
-          )
-        : spendFilter(request.permission, merge(configured, granted))
-      const approved = spendFilter(request.permission, granted)
-      const evaluated = (request.patterns ?? []).map((pattern) => {
-        const base = evaluate(request.permission, pattern, rules)
-        const rule = {
-          ...base,
-          action: mode
-            ? modeAction({
-                mode,
-                permission: request.permission,
-                configured: evaluate(request.permission, pattern, policy).action,
-                granted: evaluate(request.permission, pattern, approved).action,
-                metadata: request.metadata,
-              })
-            : base.action,
-        }
-        log.debug("evaluated", { permission: request.permission, pattern, action: rule })
-        return rule
-      })
-      const denied = evaluated.find((rule) => rule.action === "deny")
-      if (denied) throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
-      if (mode !== "ask" && request.permission === "external_directory" && (await filesystem(request))) return
-      if (evaluated.some((rule) => rule.action === "ask")) {
-        const id = input.id ?? Identifier.ascending("permission")
-        const info: Request = {
-          id,
-          ...request,
-        }
-        const trace = SessionTraceStore.approvalAsked(info)
-        return new Promise<void>((resolve, reject) => {
-          s.pending[id] = {
-            info,
-            mode,
-            resolve,
-            reject,
-            trace,
-          }
-          // The pending request must outlive a failed broadcast: the client
-          // can still discover it through the list endpoint and reply.
-          Bus.publish(Event.Asked, info).catch((error) =>
-            log.error("failed to publish permission request", { id, error }),
-          )
-        })
-      }
-      await materialize(request, "session")
-    },
+  const Ask = Request.partial({ id: true }).extend({
+    ruleset: Ruleset,
+    mode: ProjectAccess.Mode.optional(),
+  })
+
+  // The cancellation signal belongs to the running host, never the wire schema.
+  export const ask = Object.assign(
+    (input: z.infer<typeof Ask>, signal?: AbortSignal) => request(Ask.parse(input), signal),
+    { schema: Ask, force: request },
   )
+
+  async function request(input: z.infer<typeof Ask>, signal?: AbortSignal) {
+    signal?.throwIfAborted()
+    const s = await state()
+    const { ruleset, mode, ...request } = input
+    const filesystemRequest =
+      request.permission === "external_directory" ? FilesystemMetadata.safeParse(request.metadata) : undefined
+    if (
+      filesystemRequest?.success &&
+      filesystemRequest.data.filesystem.access === "write" &&
+      (await SessionFilesystem.restrictsWrite({
+        sessionID: request.sessionID,
+        path: filesystemRequest.data.filesystem.path,
+      }))
+    ) {
+      throw new SessionFilesystem.DeniedError({
+        sessionID: request.sessionID,
+        path: filesystemRequest.data.filesystem.path,
+        access: "write",
+      })
+    }
+    // Configured agent/tool policy is not a user approval. In an untrusted
+    // clone it may never silently turn an external path request into a grant;
+    // explicit standing approvals and already-materialized filesystem grants
+    // remain separate, auditable user decisions.
+    const configured =
+      request.permission === "external_directory" && !(await ProjectTrust.allowed(Instance.project))
+        ? ruleset.filter((rule) => !(rule.action === "allow" && Wildcard.match(request.permission, rule.permission)))
+        : ruleset
+    const granted = approvals(s, request.sessionID)
+    const policy = REMOTE_PLAN.has(request.permission)
+      ? configured.filter((rule) => rule.action !== "allow")
+      : spendFilter(request.permission, configured)
+    const rules = REMOTE_PLAN.has(request.permission)
+      ? merge(
+          configured.filter((rule) => rule.action !== "allow"),
+          spendFilter(request.permission, granted),
+        )
+      : spendFilter(request.permission, merge(configured, granted))
+    const approved = spendFilter(request.permission, granted)
+    const evaluated = (request.patterns ?? []).map((pattern) => {
+      const base = evaluate(request.permission, pattern, rules)
+      const rule = {
+        ...base,
+        action: mode
+          ? modeAction({
+              mode,
+              permission: request.permission,
+              configured: evaluate(request.permission, pattern, policy).action,
+              granted: evaluate(request.permission, pattern, approved).action,
+              metadata: request.metadata,
+            })
+          : base.action,
+      }
+      log.debug("evaluated", { permission: request.permission, pattern, action: rule })
+      return rule
+    })
+    signal?.throwIfAborted()
+    const denied = evaluated.find((rule) => rule.action === "deny")
+    if (denied) throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
+    if (mode !== "ask" && request.permission === "external_directory" && (await filesystem(request))) return
+    signal?.throwIfAborted()
+    if (evaluated.some((rule) => rule.action === "ask")) {
+      const id = input.id ?? Identifier.ascending("permission")
+      const info: Request = {
+        id,
+        ...request,
+      }
+      const trace = SessionTraceStore.approvalAsked(info)
+      return new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          const pending = s.pending[id]
+          if (!pending) return
+          delete s.pending[id]
+          pending.cleanup()
+          reject(signal?.reason ?? new DOMException("Permission request cancelled", "AbortError"))
+          Bus.publish(Event.Cancelled, { sessionID: info.sessionID, requestID: id }).catch((error) =>
+            log.error("failed to publish permission cancellation", { id, error }),
+          )
+        }
+        s.pending[id] = {
+          info,
+          mode,
+          resolve,
+          reject,
+          trace,
+          cleanup: () => signal?.removeEventListener("abort", abort),
+        }
+        signal?.addEventListener("abort", abort, { once: true })
+        // The pending request must outlive a failed broadcast: the client
+        // can still discover it through the list endpoint and reply.
+        Bus.publish(Event.Asked, info).catch((error) =>
+          log.error("failed to publish permission request", { id, error }),
+        )
+      })
+    }
+    await materialize(request, "session")
+  }
 
   /** Resolve any other pending request the newly granted approvals now cover. */
   async function settle(s: State, reply: Reply) {
@@ -432,8 +461,10 @@ export namespace PermissionNext {
                 spendFilter(pending.info.permission, approvals(s, pending.info.sessionID)),
               ).action === "allow",
           ))
-      if (!ok) continue
+      // filesystem() yields: another reply or cancellation may already own it.
+      if (!ok || s.pending[id] !== pending) continue
       delete s.pending[id]
+      pending.cleanup()
       await pending.trace
       await SessionTraceStore.approvalReplied({
         sessionID: pending.info.sessionID,
@@ -452,14 +483,16 @@ export namespace PermissionNext {
   export const reply = fn(
     z.object({
       requestID: Identifier.schema("permission"),
+      sessionID: Identifier.schema("session").optional(),
       reply: Reply,
       message: z.string().optional(),
     }),
     async (input) => {
       const s = await state()
       const existing = s.pending[input.requestID]
-      if (!existing) return
+      if (!existing || (input.sessionID !== undefined && existing.info.sessionID !== input.sessionID)) return false
       delete s.pending[input.requestID]
+      existing.cleanup()
       await existing.trace
       await SessionTraceStore.approvalReplied({
         sessionID: existing.info.sessionID,
@@ -476,8 +509,9 @@ export namespace PermissionNext {
         // Reject all other pending permissions for this session
         const sessionID = existing.info.sessionID
         for (const [id, pending] of Object.entries(s.pending)) {
-          if (pending.info.sessionID === sessionID) {
+          if (pending.info.sessionID === sessionID && s.pending[id] === pending) {
             delete s.pending[id]
+            pending.cleanup()
             await pending.trace
             await SessionTraceStore.approvalReplied({
               sessionID: pending.info.sessionID,
@@ -492,7 +526,7 @@ export namespace PermissionNext {
             pending.reject(new RejectedError())
           }
         }
-        return
+        return true
       }
       if (input.reply === "once") {
         await materialize(existing.info, "once").catch((error) => {
@@ -500,7 +534,7 @@ export namespace PermissionNext {
           throw error
         })
         existing.resolve()
-        return
+        return true
       }
       if (input.reply === "session") {
         if (existing.info.permission !== "external_directory") {
@@ -517,7 +551,7 @@ export namespace PermissionNext {
         })
         existing.resolve()
         await settle(s, input.reply)
-        return
+        return true
       }
       // "project" persists for this project; "always" persists machine-wide.
       const scope: StandingScope = input.reply === "always" ? "global" : "project"
@@ -550,6 +584,7 @@ export namespace PermissionNext {
       })
       existing.resolve()
       await settle(s, input.reply)
+      return true
     },
   )
 

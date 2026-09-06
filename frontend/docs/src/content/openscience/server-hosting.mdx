@@ -1,0 +1,95 @@
+---
+title: "Headless server hosting"
+description: "Connect to, own, and build an OpenScience runtime without the browser workbench."
+---
+
+The workbench and integrations use the same OpenScience server. `openscience serve` starts that server without opening a browser. It binds to loopback; run an adapter alongside it or use an authenticated gateway for remote access. Project selectors choose project context, not a separate tenant security boundary.
+
+## Start a server
+
+```bash
+cd /absolute/path/to/research-project
+openscience serve --port 0 --format json
+```
+
+Port `0` lets the runtime choose an available local port. The command prints one JSON readiness record containing `type: "server.ready"`, `schemaVersion: 1`, `url`, `pid`, and `version`. Use that URL, then check `GET /global/health`. Without `--format json`, the command keeps its human-readable announcement.
+
+The process remains available until SIGINT, SIGTERM, or its bound desktop parent exits. It closes HTTP/event connections and performs runtime cleanup before exiting. Stopping a server is different from disconnecting an observing client: do not assume an active model loop resumes after the server exits. Inspect detached jobs through their retained job records and reconcile remote state before submitting replacements.
+
+## Connect to a separately managed server
+
+```typescript
+import { createOpenScienceClient } from "@synsci/sdk/v2/client"
+
+const controller = new AbortController()
+const client = createOpenScienceClient({
+  baseUrl: "http://127.0.0.1:4096",
+  directory: "/absolute/path/to/research-project",
+  signal: controller.signal,
+})
+
+const health = await client.global.health()
+console.log(health.data)
+controller.abort()
+```
+
+Aborting this client's requests does not own or stop the server. Use the [SDK and API](/openscience/api) to manage sessions, work, and results.
+
+## Launch a server your application owns
+
+```typescript
+import { createOpenScienceServer } from "@synsci/sdk/v2/server"
+import { createOpenScienceClient } from "@synsci/sdk/v2/client"
+
+const server = await createOpenScienceServer({
+  executablePath: "/absolute/path/to/openscience",
+  cwd: "/absolute/path/to/research-project",
+  port: 0,
+  timeout: 15_000,
+  shutdownTimeout: 10_000,
+  env: {
+    OPENSCIENCE_DATA_DIR: "/absolute/path/to/runtime-data",
+    OPENSCIENCE_CONFIG_DIR: "/absolute/path/to/runtime-config",
+  },
+})
+
+try {
+  const client = createOpenScienceClient({ baseUrl: server.url })
+  console.log((await client.global.health()).data)
+} finally {
+  await server.close()
+}
+```
+
+The launcher starts exactly one child, waits for its readiness announcement and health check, and returns its URL and PID. A failed or timed-out startup terminates that child before rejecting. `close()` is idempotent and waits for termination, first sending SIGTERM and then SIGKILL if the shutdown grace period expires. An optional `signal` owns the child's lifetime both during startup and after readiness.
+
+`executablePath` defaults to `openscience` on PATH. `executableArgs` can prepend arguments when launching source through Bun. Environment overrides are merged with the parent environment; an explicit `undefined` removes a variable. A supplied `config` is serialized into `OPENSCIENCE_CONFIG_CONTENT`. Other than loopback, `hostname` values are rejected. The launcher also accepts older runtimes' human readiness announcements, followed by the same health check.
+
+`createOpenScience(options)` from `@synsci/sdk/v2` is a convenience factory returning `{ client, server }`. Its client inherits the child's working directory and `OPENSCIENCE_AUTH_TOKEN` credential, including environment overrides. When constructing a client separately, supply its `directory` and authorization header explicitly.
+
+## Build without embedding the workbench
+
+From a source checkout, use the Bun version pinned in `package.json` and install dependencies with the frozen lockfile first. A headless build does not install missing dependencies or build the workspace UI.
+
+```bash
+bun install --frozen-lockfile
+OPENSCIENCE_VERSION=0.0.0-runtime-local OPENSCIENCE_CHANNEL=dev \
+  bun run --cwd backend/cli build --headless --single
+```
+
+The result is under `backend/cli/dist/headless/@synsci/openscience-<platform>/bin/openscience`. It includes the CLI and API, without web assets. An existing generated web manifest is excluded, so stale UI builds cannot accidentally enter this artifact. Normal builds without `--headless` continue to bundle the workbench.
+
+The build normally obtains its model catalog snapshot from models.dev. Set `MODELS_DEV_API_JSON` to an existing model catalog JSON file to use a supplied snapshot. This is build metadata; building does not run a model or an evaluation.
+
+## Build a Linux binary for Harbor
+
+```bash
+OPENSCIENCE_VERSION=0.0.0-runtime-local OPENSCIENCE_CHANNEL=dev \
+  bun run --cwd backend/cli build --headless --target linux-x64-baseline
+```
+
+The binary is `backend/cli/dist/headless/@synsci/openscience-linux-x64-baseline/bin/openscience`. Select `linux-arm64` for an ARM64 environment, or a musl target when the image requires it. Cross-compilation may download Bun's matching compiler runtime.
+
+Pass the resulting Linux binary to Harbor's `binary` agent argument, for example `--ak binary=/absolute/path/to/openscience`. This uploads the local artifact instead of installing a published release. The macOS `--single` output cannot run inside a Linux task container. See the [Harbor adapter guide](https://github.com/synthetic-sciences/openscience/blob/main/tooling/harbor/README.md) for the full task configuration.
+
+Headless artifacts are separate development outputs with private package metadata. They do not upload or publish a release, and `--headless` rejects `OPENSCIENCE_RELEASE` to avoid mixing them into release staging.

@@ -840,18 +840,21 @@ export namespace SessionProcessor {
                         break
                       }
                       const agent = await Agent.get(input.assistantMessage.agent)
-                      await PermissionNext.ask({
-                        permission: "doom_loop",
-                        patterns: [value.toolName],
-                        sessionID: input.assistantMessage.sessionID,
-                        mode: (await ProjectAccess.status(Instance.project)).mode,
-                        metadata: {
-                          tool: value.toolName,
-                          input: value.input,
+                      await PermissionNext.ask(
+                        {
+                          permission: "doom_loop",
+                          patterns: [value.toolName],
+                          sessionID: input.assistantMessage.sessionID,
+                          mode: (await ProjectAccess.status(Instance.project)).mode,
+                          metadata: {
+                            tool: value.toolName,
+                            input: value.input,
+                          },
+                          always: [value.toolName],
+                          ruleset: agent.permission,
                         },
-                        always: [value.toolName],
-                        ruleset: agent.permission,
-                      })
+                        input.abort,
+                      )
                     }
                   }
                   break

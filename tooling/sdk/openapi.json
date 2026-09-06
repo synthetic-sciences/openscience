@@ -25857,6 +25857,13 @@
                   },
                   "permission": {
                     "$ref": "#/components/schemas/PermissionRuleset"
+                  },
+                  "workspace": {
+                    "type": "string",
+                    "enum": [
+                      "isolated",
+                      "project"
+                    ]
                   }
                 }
               }
@@ -30891,10 +30898,110 @@
                     "type": "string",
                     "pattern": "^ses.*"
                   },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_[0-9a-fA-F]{12}[A-Za-z0-9]{14}$"
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "modelID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "providerID",
+                      "modelID"
+                    ]
+                  },
+                  "variant": {
+                    "type": "string"
+                  },
+                  "tier": {
+                    "type": "string"
+                  },
+                  "context": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "delegation": {
+                    "type": "boolean"
+                  },
+                  "delegationSettings": {
+                    "type": "object",
+                    "properties": {
+                      "level": {
+                        "default": "standard",
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "light",
+                          "standard",
+                          "high"
+                        ]
+                      },
+                      "workerModel": {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "providerID",
+                          "modelID"
+                        ]
+                      },
+                      "autonomy": {
+                        "default": "balanced",
+                        "type": "string",
+                        "enum": [
+                          "interactive",
+                          "balanced",
+                          "autonomous"
+                        ]
+                      }
+                    }
+                  },
+                  "requestID": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
                   "message": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 1000000
+                  },
+                  "parts": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/TextPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/FilePartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/AgentPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/ConversationPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/SubtaskPartInput"
+                        }
+                      ]
+                    }
                   },
                   "effort": {
                     "type": "string",
@@ -30906,9 +31013,9 @@
                 },
                 "required": [
                   "sessionID",
-                  "message",
                   "effort"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -30917,6 +31024,253 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.runtime.prompt({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/runtime/cancel": {
+      "post": {
+        "operationId": "runtime.cancel",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Cancel one research run",
+        "description": "Cancellation is scoped to the run ID. Repeating it cannot stop a later run. Running tools may need time to settle; read the run receipt for terminal state.",
+        "responses": {
+          "200": {
+            "description": "Current run state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeRun"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session or run not found"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses.*"
+                  },
+                  "runID": {
+                    "type": "string",
+                    "pattern": "^run_[A-Za-z0-9_-]+$"
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "runID"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.runtime.cancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/runtime/decision": {
+      "post": {
+        "operationId": "runtime.decide",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Resolve a pending runtime decision",
+        "description": "Retries of an identical decision return its stored receipt. A conflicting response is rejected. Only live requests on the connected runtime can be resolved; an indeterminate receipt requires inspecting current state rather than repeating the action.",
+        "responses": {
+          "200": {
+            "description": "Decision receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeDecisionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid answer"
+          },
+          "404": {
+            "description": "Session not found"
+          },
+          "409": {
+            "description": "Conflicting or expired decision"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeDecisionInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.runtime.decide({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/runtime/capabilities": {
+      "get": {
+        "operationId": "runtime.capabilities",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get supported runtime protocol",
+        "responses": {
+          "200": {
+            "description": "Runtime capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeCapabilities"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.runtime.capabilities({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/runtime/run": {
+      "get": {
+        "operationId": "runtime.getRun",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "runID",
+            "schema": {
+              "type": "string",
+              "pattern": "^run_[A-Za-z0-9_-]+$"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get a durable research run",
+        "description": "Returns the authoritative run receipt and terminal result reference, independently of event retention. A dead runtime is interrupted and never automatically retried.",
+        "responses": {
+          "200": {
+            "description": "Research run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeRun"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session or run not found"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.runtime.getRun({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/runtime/snapshot": {
+      "get": {
+        "operationId": "runtime.snapshot",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Resynchronize a research session",
+        "description": "Returns durable run receipts, an event cursor and live pending decisions belonging to this server process. Replayed decision events are historical; only pending requests in a fresh snapshot are actionable.",
+        "responses": {
+          "200": {
+            "description": "Runtime snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeSnapshot"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found"
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.runtime.snapshot({\n  ...\n})"
           }
         ]
       }
@@ -54543,6 +54897,34 @@
           "properties"
         ]
       },
+      "Event.permission.cancelled": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "permission.cancelled"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "requestID": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sessionID",
+              "requestID"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "Event.permission.replied": {
         "type": "object",
         "properties": {
@@ -55093,6 +55475,34 @@
           "properties"
         ]
       },
+      "Event.question.cancelled": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.cancelled"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "requestID": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sessionID",
+              "requestID"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "Event.question.rejected": {
         "type": "object",
         "properties": {
@@ -55341,6 +55751,14 @@
           },
           "directory": {
             "type": "string"
+          },
+          "workspace": {
+            "description": "Default tool directory: owned scratch or the existing project directory.",
+            "type": "string",
+            "enum": [
+              "isolated",
+              "project"
+            ]
           },
           "parentID": {
             "type": "string",
@@ -56091,6 +56509,9 @@
             "$ref": "#/components/schemas/Event.permission.asked"
           },
           {
+            "$ref": "#/components/schemas/Event.permission.cancelled"
+          },
+          {
             "$ref": "#/components/schemas/Event.permission.replied"
           },
           {
@@ -56116,6 +56537,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.question.replied"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.cancelled"
           },
           {
             "$ref": "#/components/schemas/Event.question.rejected"
@@ -58891,6 +59315,301 @@
         "required": [
           "runID",
           "acceptedAt"
+        ]
+      },
+      "RuntimeRun": {
+        "type": "object",
+        "properties": {
+          "runID": {
+            "type": "string",
+            "pattern": "^run_[A-Za-z0-9_-]+$"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string",
+            "pattern": "^msg.*"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "running",
+              "completed",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ]
+          },
+          "acceptedAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "updatedAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "completedAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "resultMessageID": {
+            "type": "string",
+            "pattern": "^msg.*"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "runID",
+          "sessionID",
+          "messageID",
+          "state",
+          "acceptedAt",
+          "updatedAt"
+        ]
+      },
+      "RuntimeDecisionResult": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "resolved",
+              "indeterminate"
+            ]
+          },
+          "decidedAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "sessionID",
+          "requestID",
+          "status",
+          "decidedAt"
+        ]
+      },
+      "RuntimeDecisionInput": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "kind": {
+                "type": "string",
+                "const": "permission"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^per.*"
+              },
+              "reply": {
+                "type": "string",
+                "enum": [
+                  "once",
+                  "session",
+                  "project",
+                  "always",
+                  "reject"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 100000
+              }
+            },
+            "required": [
+              "sessionID",
+              "kind",
+              "requestID",
+              "reply"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "kind": {
+                "type": "string",
+                "const": "question"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que.*"
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionAnswer"
+                }
+              }
+            },
+            "required": [
+              "sessionID",
+              "kind",
+              "requestID",
+              "answers"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "kind": {
+                "type": "string",
+                "const": "question_reject"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que.*"
+              }
+            },
+            "required": [
+              "sessionID",
+              "kind",
+              "requestID"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "RuntimeCapabilities": {
+        "type": "object",
+        "properties": {
+          "protocolVersion": {
+            "type": "string",
+            "const": "1.0"
+          },
+          "serverVersion": {
+            "type": "string"
+          },
+          "idempotentPrompts": {
+            "type": "boolean",
+            "const": true
+          },
+          "richInputs": {
+            "type": "boolean",
+            "const": true
+          },
+          "runSnapshots": {
+            "type": "boolean",
+            "const": true
+          },
+          "eventRetention": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "crashRecovery": {
+            "type": "string",
+            "const": "interrupt"
+          },
+          "decisionScope": {
+            "type": "string",
+            "const": "connected_runtime"
+          }
+        },
+        "required": [
+          "protocolVersion",
+          "serverVersion",
+          "idempotentPrompts",
+          "richInputs",
+          "runSnapshots",
+          "eventRetention",
+          "crashRecovery",
+          "decisionScope"
+        ]
+      },
+      "RuntimeSnapshot": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuntimeRun"
+            }
+          },
+          "oldestSequence": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "latestSequence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionRequest"
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionRequest"
+            }
+          },
+          "decisionScope": {
+            "type": "string",
+            "const": "connected_runtime"
+          }
+        },
+        "required": [
+          "sessionID",
+          "runs",
+          "oldestSequence",
+          "latestSequence",
+          "permissions",
+          "questions",
+          "decisionScope"
         ]
       },
       "RuntimeEvent": {

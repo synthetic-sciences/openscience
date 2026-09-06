@@ -3,7 +3,7 @@ title: "Plugins, SDK, and editors"
 description: "Extend OpenScience or connect it to your own application."
 ---
 
-Use [Skills](/openscience/skills) for procedures and [MCP connectors](/openscience/connectors) for external tools. Plugins and the SDK are for integrations that need code.
+Use [Skills](/openscience/skills) for procedures and [MCP connectors](/openscience/connectors) for external tools. Plugins and the SDK are for integrations that need code. Browse the [developer ecosystem](/openscience/ecosystem) for maintained source integrations, examples, and their compatibility boundaries.
 
 ## Install a plugin
 
@@ -22,6 +22,31 @@ A local module can be referenced with a `file:///absolute/path/to/plugin.ts` URL
 Plugins execute code with access to the application context. Install ones you trust. Organization or project policy may prevent a plugin from loading; use the reported error to resolve that setup.
 
 The [plugin authoring guide](https://github.com/synthetic-sciences/openscience/blob/main/docs/notes/writing-a-plugin.md) documents the typed extension contract.
+
+## Build a scientific plugin
+
+Plugins can contribute a scientific source through `connector`, alongside their
+`tool` hooks. Sources appear in the existing `science_list_dbs`, `science_search`,
+and `science_fetch` tools for that instance. A source needs a unique ID and typed
+search/fetch methods; it cannot replace a built-in database.
+
+Tools may return text or a structured result with a title, JSON metadata and file
+attachments. OpenScience retains those fields when it truncates long textual
+output and supplies each attachment's session and message identity. Attachments
+are tool results; save a research artifact separately when you need versioned
+storage. No custom browser component is required to expose a file result to
+another client.
+
+The [local lab example](https://github.com/synthetic-sciences/openscience/tree/main/examples/local-lab-plugin)
+contains an offline calibration source, a summary tool that returns a CSV, tests,
+and a catalog submission record. It currently uses the development checkout's
+plugin package; use a matching published package once these APIs are released.
+
+Use a trusted global plugin for code that runs inside the server. Project plugins
+require project trust and are refused while the execution sandbox is enabled.
+The example does not require disabling that sandbox. For separate tool services,
+use [MCP connectors](/openscience/connectors). Use a skill to teach a procedure and
+the SDK to build a separate application around the same research sessions.
 
 ## Write a project tool
 
@@ -59,6 +84,13 @@ console.log(sessions.data)
 Replace the directory with the project path and use the server's actual URL. This example only lists sessions; sending prompts requires a configured model and suitable permission handling.
 
 The SDK version should match the installed OpenScience version. See the [SDK source and types](https://github.com/synthetic-sciences/openscience/tree/main/tooling/sdk/js) for current methods. The generated [API reference](https://github.com/synthetic-sciences/openscience/blob/main/tooling/sdk/openapi.json) describes request and response schemas.
+
+The Research composer uses this public runtime boundary too: it checks
+`runtime.capabilities` before sending rich prompt parts to `runtime.prompt`, with
+the message ID as its idempotency key. It uses the older session endpoint only
+when the capabilities route returns HTTP 404. Authentication failures, server
+errors, and a dropped prompt response never trigger a second submission through
+that older route. Specialized agent and command routes remain compatible.
 
 ## Editor integration with ACP
 

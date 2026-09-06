@@ -1,84 +1,8 @@
-import { spawn } from "node:child_process"
-import { type Config } from "./gen/types.gen.js"
+import type { Config } from "./gen/types.gen.js"
+import { startServer, type ServerProcessOptions } from "./server-process.js"
 
-export type ServerOptions = {
-  hostname?: string
-  port?: number
-  signal?: AbortSignal
-  timeout?: number
-  config?: Config
-}
+export type ServerOptions = ServerProcessOptions & { config?: Config }
 
-export async function createOpenScienceServer(options?: ServerOptions) {
-  options = Object.assign(
-    {
-      hostname: "127.0.0.1",
-      port: 4096,
-      timeout: 5000,
-    },
-    options ?? {},
-  )
-
-  const args = [`serve`, `--port=${options.port}`]
-  if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
-
-  const proc = spawn(`openscience`, args, {
-    signal: options.signal,
-    env: {
-      ...process.env,
-      OPENSCIENCE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
-    },
-  })
-
-  const url = await new Promise<string>((resolve, reject) => {
-    const id = setTimeout(() => {
-      reject(new Error(`Timeout waiting for server to start after ${options.timeout}ms`))
-    }, options.timeout)
-    let output = ""
-    proc.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
-      const lines = output.split("\n")
-      for (const line of lines) {
-        if (line.startsWith("openscience server listening")) {
-          const match = line.match(/on\s+(https?:\/\/[^\s]+)/)
-          if (!match) {
-            clearTimeout(id)
-            reject(new Error(`Failed to parse server url from output: ${line}`))
-            return
-          }
-          clearTimeout(id)
-          resolve(match[1]!)
-          return
-        }
-      }
-    })
-    proc.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
-    })
-    proc.on("exit", (code) => {
-      clearTimeout(id)
-      let msg = `Server exited with code ${code}`
-      if (output.trim()) {
-        msg += `\nServer output: ${output}`
-      }
-      reject(new Error(msg))
-    })
-    proc.on("error", (error) => {
-      clearTimeout(id)
-      reject(error)
-    })
-    if (options.signal) {
-      options.signal.addEventListener("abort", () => {
-        clearTimeout(id)
-        reject(new Error("Aborted"))
-      })
-    }
-  })
-
-  return {
-    url,
-    close() {
-      proc.kill()
-    },
-  }
+export function createOpenScienceServer(options?: ServerOptions) {
+  return startServer(options)
 }

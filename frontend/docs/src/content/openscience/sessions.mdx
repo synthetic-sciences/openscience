@@ -19,6 +19,19 @@ Use `--title` to make the session easy to find later:
 openscience run --title "Sample quality checks" "Inspect data/samples.csv for missing values"
 ```
 
+New sessions use an isolated scratch workspace by default. To make relative tool
+paths resolve in the selected project, choose project mode when creating the session:
+
+```bash
+openscience run --workspace project "Analyze the CSV files in this directory"
+```
+
+`--workspace isolated` explicitly selects the default. Continuing a session preserves
+its workspace; an explicit conflicting mode is rejected. Project mode uses the
+existing project directory and does not make OpenScience own or delete that directory
+when the session is removed. It retains the normal filesystem and tool permissions.
+The workspace option is a source-preview feature until a supporting release ships.
+
 ## Attach files or pipe input
 
 ```bash
@@ -54,6 +67,7 @@ In the workspace, open the saved conversation in project history. Queued prompts
 | `--bare` | Answer without tools; useful for testing a model connection. |
 | `--command <name>` | Run a custom command with the message as its arguments. |
 | `--format json` | Write one JSON event per line. |
+| `--workspace project` or `--workspace isolated` | Choose the tool workspace when creating a session. |
 
 See [Models](/openscience/models) and [Research controls](/openscience/agents).
 
@@ -109,3 +123,9 @@ openscience import session.json
 An export contains the conversation record. It is not a complete project backup: copy the datasets, source files, and result files separately. Review the transcript before sharing it because it can include private research content.
 
 For recovery during long work, use `/checkpoint` or `/handoff` in the workspace. For machine-readable output and CI, see [Automation and JSON output](/openscience/automation).
+
+## Native benchmark runners
+
+The source adapter in `tooling/harbor` targets Harbor **0.22.0**. It requires `run --workspace project` to preserve the native task working directory for relative tool paths, verifies the selected OpenScience binary, and requires a successful final JSON `done` event after collecting remote logs. A binary without the workspace option fails setup. Raw and partial trajectories remain available when a run fails; missing usage is not reported as zero. A successful agent process still needs the native task verifier.
+
+Use a matching Linux [headless build](/openscience/server-hosting) to benchmark local source changes. The adapter guide contains the exact `binary` and `binary_sha256` arguments. Existing runners pinned to a different Harbor version need separate conformance checks; this adapter does not replace their task images, graders, or aggregation.

@@ -1,6 +1,8 @@
+import { RuntimePromptInput, PromptInput as PublicPromptInput } from "./prompt-input"
 import path from "path"
 import os from "os"
 import fs from "fs/promises"
+import { AsyncLocalStorage } from "node:async_hooks"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
@@ -109,6 +111,7 @@ export namespace SessionPrompt {
 
   type TestHooks = {
     afterAttachmentAuthorization?: (input: { sessionID: string; path: string }) => void | Promise<void>
+    beforeLoopAdmission?: (input: { sessionID: string }) => void | Promise<void>
   }
 
   const hooks = { value: undefined as TestHooks | undefined }
@@ -245,6 +248,46 @@ export namespace SessionPrompt {
     },
   )
 
+  const pending = Instance.state(
+    () => new Map<string, AbortController>(),
+    async (current) => {
+      for (const [sessionID, controller] of current) {
+        processActive.delete(activityKey(sessionID))
+        controller.abort(new MessageV2.AbortedError({ message: "The runtime stopped during prompt preparation." }))
+      }
+      current.clear()
+    },
+  )
+  const admission = new AsyncLocalStorage<{ sessionID: string; controller: AbortController }>()
+
+  function preparation(sessionID: string) {
+    const current = admission.getStore()
+    return current?.sessionID === sessionID ? current.controller : undefined
+  }
+
+  function assertPreparing(sessionID: string) {
+    preparation(sessionID)?.signal.throwIfAborted()
+  }
+
+  // The loop aborts its controller during disposal to stop any remaining
+  // background work. That cleanup is not a cancellation of the completed
+  // prompt returned to its caller.
+  const completed = Symbol("prompt.completed")
+
+  async function cancellable<T>(signal: AbortSignal, action: () => Promise<T>) {
+    signal.throwIfAborted()
+    const cancelled = Promise.withResolvers<never>()
+    const stop = () => {
+      if (signal.reason !== completed) cancelled.reject(signal.reason)
+    }
+    signal.addEventListener("abort", stop, { once: true })
+    try {
+      return await Promise.race([action(), cancelled.promise])
+    } finally {
+      signal.removeEventListener("abort", stop)
+    }
+  }
+
   // Decode the text payload of a data: URL (data:<mime>[;base64],<payload>) — an
   // uploaded .txt/.md arrives this way. Only the part after the comma is the
   // payload; base64url-decoding the whole URL left a ~12-byte garbage prefix from
@@ -259,141 +302,47 @@ export namespace SessionPrompt {
   }
 
   export function assertNotBusy(sessionID: string) {
-    const match = state()[sessionID]
+    const match = state()[sessionID] ?? pending().get(sessionID)
     if (match) throw new Session.BusyError(sessionID)
   }
 
-  const RuntimePromptInput = z.object({
-    sessionID: Identifier.schema("session"),
-    messageID: Identifier.schema("message").optional(),
-    model: z
-      .object({
-        providerID: z.string(),
-        modelID: z.string(),
-      })
-      .optional(),
-    agent: z.string().optional(),
-    noReply: z.boolean().optional(),
-    tools: z
-      .record(z.string(), z.boolean())
-      .optional()
-      .describe(
-        "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
-      ),
-    effort: MessageV2.ResearchEffort.optional(),
-    /** Controls automatic Task-tool delegation for this turn. */
-    delegation: z.boolean().optional(),
-    delegationSettings: MessageV2.DelegationSettings.optional(),
-    system: z.string().optional(),
-    variant: z.string().optional(),
-    tier: z.string().optional(),
-    context: z.number().int().positive().optional(),
-    parts: z.array(
-      z.discriminatedUnion("type", [
-        MessageV2.TextPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "RuntimeTextPartInput",
-          }),
-        MessageV2.FilePart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "RuntimeFilePartInput",
-          }),
-        MessageV2.AgentPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "RuntimeAgentPartInput",
-          }),
-        z
-          .object({
-            id: Identifier.schema("part").optional(),
-            type: z.literal("conversation"),
-            sourceSessionID: Identifier.schema("session"),
-            throughMessageID: Identifier.schema("message").optional(),
-            label: z.string().trim().min(1).max(160).optional(),
-          })
-          .strict()
-          .meta({ ref: "RuntimeConversationPartInput" }),
-        MessageV2.SubtaskPart.omit({
-          messageID: true,
-          sessionID: true,
-        })
-          .partial({
-            id: true,
-          })
-          .meta({
-            ref: "RuntimeSubtaskPartInput",
-          }),
-      ]),
-    ),
-  })
-  // Public clients may supply ordinary text, files, agent mentions, and
-  // explicit subtasks, but cannot mark text as synthetic/ignored or attach
-  // runtime metadata. Internal command expansion uses RuntimePromptInput.
-  export const PromptInput = RuntimePromptInput.extend({
-    parts: z.array(
-      z.discriminatedUnion("type", [
-        MessageV2.TextPart.omit({
-          messageID: true,
-          sessionID: true,
-          synthetic: true,
-          ignored: true,
-          time: true,
-          metadata: true,
-        })
-          .partial({ id: true })
-          .strict()
-          .meta({ ref: "TextPartInput" }),
-        MessageV2.FilePart.omit({ messageID: true, sessionID: true })
-          .partial({ id: true })
-          .meta({ ref: "FilePartInput" }),
-        MessageV2.AgentPart.omit({ messageID: true, sessionID: true })
-          .partial({ id: true })
-          .meta({ ref: "AgentPartInput" }),
-        z
-          .object({
-            id: Identifier.schema("part").optional(),
-            type: z.literal("conversation"),
-            sourceSessionID: Identifier.schema("session"),
-            throughMessageID: Identifier.schema("message").optional(),
-            label: z.string().trim().min(1).max(160).optional(),
-          })
-          .strict()
-          .meta({ ref: "ConversationPartInput" }),
-        MessageV2.SubtaskPart.omit({ messageID: true, sessionID: true })
-          .partial({ id: true })
-          .meta({ ref: "SubtaskPartInput" }),
-      ]),
-    ),
-  })
+  export const PromptInput = PublicPromptInput
   export type PromptInput = z.infer<typeof RuntimePromptInput>
 
+  /** Reserve cancellation ownership before any asynchronous prompt preparation.
+   * The eventual loop reuses this controller, so an abort waiting on durable
+   * coordination cannot miss the handoff or cancel a replacement request. */
+  export const controlled = fn(RuntimePromptInput, (input) => {
+    assertNotBusy(input.sessionID)
+    const controller = new AbortController()
+    pending().set(input.sessionID, controller)
+    processActive.add(activityKey(input.sessionID))
+    return admission.run({ sessionID: input.sessionID, controller }, async () => {
+      try {
+        return await cancellable(controller.signal, () => prompt(input))
+      } finally {
+        cancel(input.sessionID, controller.signal, completed)
+      }
+    })
+  })
+
   export const prompt = fn(RuntimePromptInput, async (input) => {
+    const reservation = pending().get(input.sessionID)
+    if (reservation && reservation !== preparation(input.sessionID)) throw new Session.BusyError(input.sessionID)
+    assertPreparing(input.sessionID)
     const session = await Session.get(input.sessionID)
+    assertPreparing(input.sessionID)
     await SessionRevert.cleanup(session)
+    assertPreparing(input.sessionID)
 
     // A runtime gate stops before the provider sees the next user message.
     // Recognize an unambiguous continuation reply locally so the same session
     // can start a fresh bounded epoch instead of repeating the gate forever.
     if (SessionResearch.resumeIntent(input.parts)) await SessionResearch.resume(input.sessionID)
+    assertPreparing(input.sessionID)
 
     const message = await createUserMessage(input).catch((e) => {
+      assertPreparing(input.sessionID)
       // e.g. no providers are available at all — surface the failure to the
       // session (the web UI listens for session.error) instead of only throwing.
       const message = e instanceof Error ? e.message : String(e)
@@ -403,7 +352,9 @@ export namespace SessionPrompt {
       })
       throw e
     })
+    assertPreparing(input.sessionID)
     await Session.touch(input.sessionID)
+    assertPreparing(input.sessionID)
 
     // this is backwards compatibility for allowing `tools` to be specified when
     // prompting
@@ -418,9 +369,11 @@ export namespace SessionPrompt {
     if (permissions.length > 0) {
       session.permission = permissions
       await Session.update(session.id, (draft) => {
+        assertPreparing(input.sessionID)
         draft.permission = permissions
       })
     }
+    assertPreparing(input.sessionID)
 
     if (input.noReply === true) {
       return message
@@ -483,11 +436,15 @@ export namespace SessionPrompt {
   function start(sessionID: string) {
     const s = state()
     if (s[sessionID]) return
-    const controller = new AbortController()
+    assertPreparing(sessionID)
+    const reserved = pending().get(sessionID)
+    if (reserved && reserved !== preparation(sessionID)) throw new Session.BusyError(sessionID)
+    const controller = reserved ?? new AbortController()
     s[sessionID] = {
       abort: controller,
       callbacks: [],
     }
+    if (reserved) pending().delete(sessionID)
     processActive.add(activityKey(sessionID))
     return controller.signal
   }
@@ -504,14 +461,17 @@ export namespace SessionPrompt {
     log.info("cancel", { sessionID })
     const s = state()
     const match = s[sessionID]
-    if (!match) return
-    if (owner && match.abort.signal !== owner) return
-    match.abort.abort(reason)
-    for (const item of match.callbacks) {
+    const reserved = pending().get(sessionID)
+    const controller = match?.abort ?? reserved
+    if (!controller) return
+    if (owner && controller.signal !== owner) return
+    controller.abort(reason)
+    for (const item of match?.callbacks ?? []) {
       item.reject()
     }
-    delete s[sessionID]
-    processActive.delete(activityKey(sessionID))
+    if (s[sessionID]?.abort === controller) delete s[sessionID]
+    if (pending().get(sessionID) === controller) pending().delete(sessionID)
+    if (!s[sessionID] && !pending().has(sessionID)) processActive.delete(activityKey(sessionID))
     // Flush any coalesced (debounced) streaming part writes now, so the final
     // text/reasoning content is durable the moment the turn goes idle. cancel()
     // is sync (invoked from a `using` disposer), so this can't be awaited; log
@@ -525,7 +485,7 @@ export namespace SessionPrompt {
    * before a credential revision disposes the instance, so the transcript
    * names the revocation rather than an anonymous abort. */
   export function interrupt(reason: unknown): number {
-    const ids = Object.keys(state())
+    const ids = [...new Set([...Object.keys(state()), ...pending().keys()])]
     for (const sessionID of ids) cancel(sessionID, undefined, reason)
     return ids.length
   }
@@ -535,7 +495,7 @@ export namespace SessionPrompt {
    * cancel(); if a newer prompt starts in the meantime, cancellation is a
    * deliberate no-op rather than aborting the replacement controller. */
   export function activeController(sessionID: string) {
-    return state()[sessionID]?.abort.signal
+    return (state()[sessionID]?.abort ?? pending().get(sessionID))?.signal
   }
 
   const PREFLIGHT_CONTINUATION =
@@ -1228,12 +1188,15 @@ export namespace SessionPrompt {
             } satisfies MessageV2.ToolPart)
           },
           async ask(req) {
-            await PermissionNext.ask({
-              ...req,
-              sessionID: sessionID,
-              mode: (await ProjectAccess.status(Instance.project)).mode,
-              ruleset: PermissionNext.merge(taskAgent.permission, session.permission ?? []),
-            })
+            await PermissionNext.ask(
+              {
+                ...req,
+                sessionID: sessionID,
+                mode: (await ProjectAccess.status(Instance.project)).mode,
+                ruleset: PermissionNext.merge(taskAgent.permission, session.permission ?? []),
+              },
+              abort,
+            )
           },
         }
         const result =
@@ -1745,7 +1708,8 @@ export namespace SessionPrompt {
       }
     })()
     if (item) {
-      const queued = state()[sessionID]?.callbacks ?? []
+      const current = state()[sessionID]
+      const queued = current?.abort.signal === abort ? current.callbacks : []
       for (const q of queued) {
         q.resolve(item)
       }
@@ -1755,8 +1719,11 @@ export namespace SessionPrompt {
   }
 
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
+    assertPreparing(sessionID)
     const session = await Session.get(sessionID)
+    await hooks.value?.beforeLoopAdmission?.({ sessionID })
     const abort = await AuthoritySignal.exclusive(async () => {
+      assertPreparing(sessionID)
       const release = UpdateQuiescence.enter()
       try {
         return start(sessionID)
@@ -1771,10 +1738,11 @@ export namespace SessionPrompt {
       })
     }
 
-    using _ = defer(() => cancel(sessionID, abort))
+    using _ = defer(() => cancel(sessionID, abort, completed))
 
     await using lease = await FileLease.acquire(loopLeasePath(session.projectID, sessionID), LOOP_LEASE_TIMEOUT, abort)
     return await lease.during(async () => {
+      abort.throwIfAborted()
       try {
         return await execute(sessionID, session, abort)
       } finally {
@@ -1944,13 +1912,16 @@ export namespace SessionPrompt {
       },
       async ask(req) {
         const ruleset = await currentPermission()
-        await PermissionNext.ask({
-          ...req,
-          sessionID: input.session.id,
-          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          mode: accessAuthority.mode,
-          ruleset,
-        })
+        await PermissionNext.ask(
+          {
+            ...req,
+            sessionID: input.session.id,
+            tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+            mode: accessAuthority.mode,
+            ruleset,
+          },
+          options.abortSignal,
+        )
       },
     })
 
@@ -1986,6 +1957,7 @@ export namespace SessionPrompt {
       }
     }
 
+    const extensions = await ToolRegistry.customIDs()
     const native = await ToolRegistry.tools(
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
@@ -2003,6 +1975,7 @@ export namespace SessionPrompt {
           direct: input.direct,
           capabilities: loadedCapabilities,
           activatedTools,
+          extensions,
         }),
       input.request,
     )
@@ -2334,17 +2307,24 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
+    assertPreparing(input.sessionID)
     const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
     const session = await Session.get(input.sessionID)
     const access = await ProjectAccess.status(Instance.project)
+    assertPreparing(input.sessionID)
     const ruleset = PermissionNext.merge(agent.permission, session.permission ?? [])
     const ask = async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
-      await PermissionNext.ask({
-        ...req,
-        sessionID: input.sessionID,
-        mode: access.mode,
-        ruleset,
-      })
+      assertPreparing(input.sessionID)
+      await PermissionNext.ask(
+        {
+          ...req,
+          sessionID: input.sessionID,
+          mode: access.mode,
+          ruleset,
+        },
+        preparation(input.sessionID)?.signal,
+      )
+      assertPreparing(input.sessionID)
     }
     // Regenerate ID if client-provided one would sort before existing messages
     // (48-bit Identifier timestamp field wraps every ~2.2y; cross-clock drift
@@ -2372,9 +2352,11 @@ export namespace SessionPrompt {
       inference: await Inference.resolve(model.providerID, input.variant),
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
+    assertPreparing(input.sessionID)
 
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
+        assertPreparing(input.sessionID)
         if (part.type === "conversation") {
           const snapshot = await conversationSnapshot({
             sessionID: input.sessionID,
@@ -2410,7 +2392,9 @@ export namespace SessionPrompt {
             ]
 
             try {
+              assertPreparing(input.sessionID)
               const resourceContent = await MCP.readResource(clientName, uri)
+              assertPreparing(input.sessionID)
               if (!resourceContent) {
                 throw new Error(`Resource not found: ${clientName}/${uri}`)
               }
@@ -2451,6 +2435,7 @@ export namespace SessionPrompt {
                 sessionID: input.sessionID,
               })
             } catch (error: unknown) {
+              assertPreparing(input.sessionID)
               log.error("failed to read MCP resource", { error, clientName, uri })
               const message = error instanceof Error ? error.message : String(error)
               pieces.push({
@@ -2503,7 +2488,7 @@ export namespace SessionPrompt {
               const requested = fileURLToPath(part.url)
               const readCtx: Tool.Context = {
                 sessionID: input.sessionID,
-                abort: new AbortController().signal,
+                abort: preparation(input.sessionID)?.signal ?? new AbortController().signal,
                 agent: agent.name,
                 messageID: info.id,
                 extra: {},
@@ -2525,7 +2510,9 @@ export namespace SessionPrompt {
               }
               await hooks.value?.afterAttachmentAuthorization?.({ sessionID: input.sessionID, path: requested })
               const opened = await AuthoritySignal.exclusive(async () => {
+                assertPreparing(input.sessionID)
                 const filepath = (await authorized?.revalidate()) ?? requested
+                assertPreparing(input.sessionID)
                 return { filepath, stat: await fs.stat(filepath) }
               })
               const filepath = opened.filepath
@@ -2551,7 +2538,9 @@ export namespace SessionPrompt {
                   // symbol in the document to get the full range
                   if (start === end) {
                     const symbols = await AuthoritySignal.exclusive(async () => {
+                      assertPreparing(input.sessionID)
                       const current = (await authorized?.revalidate()) ?? filepath
+                      assertPreparing(input.sessionID)
                       if (current !== filepath) throw new Error("Attachment path changed after authorization")
                       return LSP.documentSymbol(filePathURI)
                     })
@@ -2590,12 +2579,13 @@ export namespace SessionPrompt {
                 await ReadTool.init()
                   .then(async (t) => {
                     const model = await Provider.getModel(info.model.providerID, info.model.modelID)
-                    const result = await AuthoritySignal.exclusive(() =>
-                      t.execute(args, {
+                    const result = await AuthoritySignal.exclusive(() => {
+                      assertPreparing(input.sessionID)
+                      return t.execute(args, {
                         ...readCtx,
                         extra: { model, fileAuthorization: authorized, skipLSP: true },
-                      }),
-                    )
+                      })
+                    })
                     pieces.push({
                       id: Identifier.ascending("part"),
                       messageID: info.id,
@@ -2624,6 +2614,7 @@ export namespace SessionPrompt {
                     }
                   })
                   .catch((error) => {
+                    assertPreparing(input.sessionID)
                     log.error("failed to read file", { error })
                     const message = error instanceof Error ? error.message : error.toString()
                     Bus.publish(Session.Event.Error, {
@@ -2648,12 +2639,13 @@ export namespace SessionPrompt {
               if (part.mime === "application/x-directory") {
                 const args = { path: filepath }
                 const result = await AuthoritySignal.exclusive(() =>
-                  ListTool.init().then((t) =>
-                    t.execute(args, {
+                  ListTool.init().then((t) => {
+                    assertPreparing(input.sessionID)
+                    return t.execute(args, {
                       ...readCtx,
                       extra: { fileAuthorization: authorized },
-                    }),
-                  ),
+                    })
+                  }),
                 )
                 return [
                   {
@@ -2682,7 +2674,9 @@ export namespace SessionPrompt {
               }
 
               const snapshot = await AuthoritySignal.exclusive(async () => {
+                assertPreparing(input.sessionID)
                 const current = (await authorized?.revalidate()) ?? filepath
+                assertPreparing(input.sessionID)
                 if (current !== filepath) throw new Error("Attachment path changed after authorization")
                 return SafeFileIO.read(current, { maxBytes: ATTACHMENT_LIMIT })
               }).catch((error: unknown) => {
@@ -2763,6 +2757,7 @@ export namespace SessionPrompt {
       }),
     ).then((x) => x.flat())
 
+    assertPreparing(input.sessionID)
     await Plugin.trigger(
       "chat.message",
       {
@@ -2777,6 +2772,7 @@ export namespace SessionPrompt {
         parts,
       },
     )
+    assertPreparing(input.sessionID)
 
     // A fresh external turn starts a new breaker epoch. The marker is bound to
     // the server-owned prompt intent and ordered by its monotonic message ID, so
@@ -2795,6 +2791,7 @@ export namespace SessionPrompt {
 
     await Session.updateMessage(info)
     for (const part of parts) {
+      assertPreparing(input.sessionID)
       await Session.updatePart(part)
     }
 
@@ -3587,16 +3584,19 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
                 messageID: commandMessageID,
                 callID: `command-interpolation-${index + 1}`,
                 agent: commandAgent.name,
-                abort: new AbortController().signal,
+                abort: preparation(input.sessionID)?.signal ?? new AbortController().signal,
                 messages,
                 metadata() {},
                 async ask(req) {
-                  await PermissionNext.ask({
-                    ...req,
-                    sessionID: input.sessionID,
-                    mode: (await ProjectAccess.status(Instance.project)).mode,
-                    ruleset: PermissionNext.merge(commandAgent.permission, session.permission ?? []),
-                  })
+                  await PermissionNext.ask(
+                    {
+                      ...req,
+                      sessionID: input.sessionID,
+                      mode: (await ProjectAccess.status(Instance.project)).mode,
+                      ruleset: PermissionNext.merge(commandAgent.permission, session.permission ?? []),
+                    },
+                    preparation(input.sessionID)?.signal,
+                  )
                 },
               },
             )

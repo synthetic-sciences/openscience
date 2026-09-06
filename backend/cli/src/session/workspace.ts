@@ -157,7 +157,7 @@ export namespace SessionWorkspace {
       grantRevision: input.grantRevision ?? 1,
       createdAt: now,
       lastUsedAt: now,
-      size: await size(scratchRoot),
+      size: input.mode === "isolated" ? await size(scratchRoot) : 0,
     }
     await Storage.write(key(input.sessionID), info)
     return info

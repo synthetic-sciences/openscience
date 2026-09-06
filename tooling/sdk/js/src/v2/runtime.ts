@@ -1,5 +1,15 @@
 import { createOpenScienceClient, type OpenScienceClientConfig } from "./client.js"
-import type { RuntimeEvent, RuntimeEventReplay, RuntimePromptAccepted, RuntimePromptData } from "./gen/types.gen.js"
+import type {
+  RuntimeEvent,
+  RuntimeEventReplay,
+  RuntimePromptAccepted,
+  RuntimePromptData,
+  RuntimeCapabilities,
+  RuntimeRun,
+  RuntimeSnapshot,
+  RuntimeDecisionInput,
+  RuntimeDecisionResult,
+} from "./gen/types.gen.js"
 
 export type RuntimePromptInput = NonNullable<RuntimePromptData["body"]>
 
@@ -76,6 +86,49 @@ export class OpenScienceRuntime {
       .then((result) => result.data)
   }
 
+  capabilities(): Promise<RuntimeCapabilities> {
+    return this.#client.runtime.capabilities(undefined, { throwOnError: true }).then((result) => result.data)
+  }
+
+  getRun(input: { sessionID: string; runID: string }): Promise<RuntimeRun> {
+    return this.#client.runtime.getRun(input, { throwOnError: true }).then((result) => result.data)
+  }
+
+  snapshot(input: { sessionID: string }): Promise<RuntimeSnapshot> {
+    return this.#client.runtime.snapshot(input, { throwOnError: true }).then((result) => result.data)
+  }
+
+  cancel(input: { sessionID: string; runID: string }): Promise<RuntimeRun> {
+    return this.#client.runtime.cancel(input, { throwOnError: true }).then((result) => result.data)
+  }
+
+  decide(input: RuntimeDecisionInput): Promise<RuntimeDecisionResult> {
+    return this.#client.runtime
+      .decide({ runtimeDecisionInput: input }, { throwOnError: true })
+      .then((result) => result.data)
+  }
+
+  /** Snapshot reads survive event eviction. Waiting never submits new work or
+   * resolves a decision: callers can surface pending cards through snapshot. */
+  async wait(input: {
+    sessionID: string
+    runID: string
+    signal?: AbortSignal
+    intervalMs?: number
+  }): Promise<RuntimeRun> {
+    const interval = input.intervalMs ?? 1000
+    if (!Number.isFinite(interval) || interval < 10) throw new Error("Run polling interval must be at least 10 ms")
+    for (;;) {
+      input.signal?.throwIfAborted()
+      const result = await this.#client.runtime.getRun(
+        { sessionID: input.sessionID, runID: input.runID },
+        { throwOnError: true, signal: input.signal },
+      )
+      if (result.data.state !== "accepted" && result.data.state !== "running") return result.data
+      await waitForReconnect(interval, input.signal)
+    }
+  }
+
   replay(input: Omit<RuntimeEventInput, "signal">): Promise<RuntimeEventReplay> {
     return this.#client.runtime
       .replay(input, {
@@ -105,6 +158,11 @@ export class OpenScienceRuntime {
       })
 
       for await (const event of result.stream) {
+        if (event.sessionID !== input.sessionID || !Number.isSafeInteger(event.sequence) || event.sequence < 1)
+          throw new RuntimeEventCursorError("The runtime returned an invalid session or sequence")
+        if (lastSequence !== undefined && event.sequence <= lastSequence) continue
+        if (lastSequence !== undefined && event.sequence !== lastSequence + 1)
+          throw new RuntimeEventCursorError("The runtime event stream has a gap; refresh the session snapshot")
         lastSequence = event.sequence
         failures = 0
         delivered = true

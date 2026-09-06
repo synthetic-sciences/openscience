@@ -19,7 +19,23 @@ When you run `openscience`, the CLI starts a local server and opens a workspace 
         +--  Compute jobs       local, SSH, scheduler, and user-owned Modal runs
 ```
 
-The server binds to `127.0.0.1` and enforces a Host and Origin allowlist. There is no remote mode.
+The server binds to `127.0.0.1` and enforces a Host and Origin allowlist. A configured deployment bearer token protects the whole local service; project selectors do not create tenant isolation. Remote applications need a separately authenticated gateway and an appropriate execution boundary.
+
+`openscience serve` owns the same Research loop without opening the workbench. A `--headless` source build omits the embedded UI; the normal combined build remains available. Frontends and integrations submit work through the public runtime contract, while the native CLI/Harbor adapter retains its versioned JSONL process contract over the same session/tool loop.
+
+```text
+Workbench / TypeScript client / Python client / private Slack adapter
+                            | HTTP commands + SSE observations
+                     Public runtime protocol
+                            | admission / decisions / cancellation
+                     Research session + tool loop
+                            | existing scoped services
+                 Files / Results / compute jobs / plugins / MCP
+```
+
+`src/runtime/runs.ts` records request receipts before model execution and serializes admission across processes. An identical request ID returns the same run; changed content conflicts. Terminal receipts outlive the bounded event journal. Loss of the owning process interrupts unfinished work rather than automatically repeating external effects. `src/runtime/decisions.ts` records responses to live permission/question continuations; it does not recreate an approval continuation after a server crash. Ambiguous decisions are reported as indeterminate.
+
+The workbench negotiates capabilities before using the runtime. A confirmed missing capability endpoint allows an older server's legacy prompt path; an uncertain submission never falls back to another submission route. Domain logic remains below HTTP routes. See the [runtime contract](frontend/docs/src/content/openscience/api.mdx) and [headless hosting](frontend/docs/src/content/openscience/server-hosting.mdx) for lifecycle and compatibility details.
 
 ## Repository layout
 
@@ -31,6 +47,9 @@ frontend/ui          Shared UI components, themes, and icons
 frontend/docs        The documentation site (Vite + React)
 frontend/landing     The marketing site (openscience.sh); has its own lockfile
 tooling/sdk/js       The TypeScript SDK, generated from the server contract
+tooling/sdk/python   The dependency-free Python HTTP/SSE client
+tooling/harbor       The installed-agent adapter for native Harbor tasks
+examples             External science plugin and private application starters
 tooling/plugin       The plugin runtime (@synsci/plugin)
 tooling/launcher     The `npx synsci` installer
 tooling/repo         Repo automation: contributor setup, SDK regeneration, release scripts
@@ -73,7 +92,10 @@ Skills are instruction bundles the agent loads on demand (`src/skill`). The cano
 ## SDK and plugins
 
 - `tooling/sdk/js` is generated from the server's OpenAPI contract. Run `./tooling/repo/generate.ts` after changing the server API to regenerate it.
-- `tooling/plugin` is the plugin runtime. Plugins receive a typed client and can add tools, providers, and hooks.
+- `tooling/sdk/js/src/v2/runtime.ts` is the stable result-oriented facade over the generated client. Its stream reconnection carries a cursor; a gap requires snapshot recovery, never another prompt.
+- `tooling/sdk/python` provides a standard-library HTTP/SSE client for Python integrations. It uses the same public protocol and is tested against the source server and a local fixture provider.
+- `tooling/plugin` is the plugin runtime. Plugins receive a project-scoped client and can add tools, providers, connectors, and hooks. String results remain valid; structured results preserve metadata and attachments while the host assigns attachment identity. Trusted plugin code runs in the host process. MCP remains the process-separated tool protocol.
+- `tooling/harbor` keeps native tasks, images, graders, limits, and aggregation in Harbor. Only the installed-agent boundary and root trajectory conversion belong here; compatibility is explicitly pinned to Harbor 0.22.0.
 
 ## Generated files and the dev loop
 

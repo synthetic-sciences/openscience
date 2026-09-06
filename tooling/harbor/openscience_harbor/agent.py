@@ -1,23 +1,14 @@
-"""OpenScience as a Harbor installed agent.
-
-Mirrors Harbor's OpenCode adapter: install the pinned release with the
-project's own ``install`` script, write a headless config, run
-``openscience run --format json --auto-approve`` in ``/app``, and convert the
-JSON event stream into an ATIF trajectory.
-
-Works with Harbor from PyPI (0.22, descriptor-based ``CLI_FLAGS`` and
-``SUPPORTS_*`` flags) and with Harbor ``main`` (``options_model`` and
-``AgentCapabilities``); the shims below pick whichever the installed
-version provides.
-"""
+"""OpenScience installed-agent adapter for the tested Harbor 0.22.0 contract."""
 
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import re
 import shlex
-from pathlib import Path
-from typing import Annotated, Any
+from pathlib import Path, PurePosixPath
+from typing import Any, ClassVar
 
 from harbor.agents.installed.base import (
     BaseInstalledAgent,
@@ -33,20 +24,7 @@ from harbor.utils.trajectory_utils import format_trajectory_json
 
 from openscience_harbor import trajectory
 
-try:  # Harbor main
-    from harbor.agents.capabilities import AgentCapabilities
-except ImportError:  # Harbor 0.22
-    AgentCapabilities = None
-
-try:  # Harbor main
-    from pydantic import Field
-
-    from harbor.agents.options import Cli, InstalledAgentOptions
-except ImportError:  # Harbor 0.22
-    Cli = None
-    InstalledAgentOptions = None
-
-INSTALL_URL = "https://openscience.sh/install"
+INSTALL_ROOT = "https://raw.githubusercontent.com/synthetic-sciences/OpenScience"
 BIN_DIR = "$HOME/.openscience/bin"
 UPLOADED_BINARY = "/installed-agent/openscience"
 
@@ -77,25 +55,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
 }
 
-if InstalledAgentOptions is not None:
-
-    class OpenScienceOptions(InstalledAgentOptions):
-        variant: Annotated[str | None, Cli("--variant")] = Field(
-            default=None, description="Provider-specific reasoning effort (e.g. high, max, minimal)."
-        )
-        effort: Annotated[str | None, Cli("--effort")] = Field(
-            default=None, description="Research effort: normal or ultra."
-        )
-        agent: Annotated[str | None, Cli("--agent")] = Field(
-            default=None, description="Primary agent to run (default: research)."
-        )
-        openscience_config: dict[str, Any] | None = Field(
-            default=None, description="openscience.json overlay, deep-merged over the headless defaults."
-        )
-        binary: str | None = Field(
-            default=None, description="Host path to an openscience Linux binary to upload instead of downloading."
-        )
-
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     for key, value in override.items():
@@ -106,38 +65,65 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return base
 
 
+def _sha256(path: Path) -> str:
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
+
+
 class OpenScienceAgent(BaseInstalledAgent):
     """Run OpenScience headlessly inside a Harbor task container."""
 
     MODEL_CONNECTION = ModelConnectionSpec(passthrough=True)
     _OUTPUT_FILENAME = "openscience.txt"
 
-    if AgentCapabilities is not None:
-        capabilities = AgentCapabilities(atif=True, resume=True)
-    else:
-        SUPPORTS_ATIF = True
-        SUPPORTS_RESUME = True
-
-    if InstalledAgentOptions is not None:
-        options_model = OpenScienceOptions
-    else:
-        CLI_FLAGS = [
-            CliFlag(kwarg="variant", cli="--variant"),
-            CliFlag(kwarg="effort", cli="--effort", type="enum", choices=["normal", "ultra"]),
-            CliFlag(kwarg="agent", cli="--agent"),
-        ]
+    SUPPORTS_ATIF = True
+    SUPPORTS_RESUME = True
+    CLI_FLAGS: ClassVar[list[CliFlag]] = [
+        CliFlag(kwarg="variant", cli="--variant"),
+        CliFlag(
+            kwarg="effort", cli="--effort", type="enum", choices=["normal", "ultra"]
+        ),
+        CliFlag(kwarg="agent", cli="--agent"),
+    ]
 
     def __init__(
         self,
         *args: Any,
         openscience_config: dict[str, Any] | None = None,
         binary: str | None = None,
+        binary_sha256: str | None = None,
+        cwd: str | None = None,
         **kwargs: Any,
     ):
-        super().__init__(*args, openscience_config=openscience_config, binary=binary, **kwargs)
+        super().__init__(*args, **kwargs)
+        if self._version:
+            self._version = self._version.removeprefix("v")
+            if not re.fullmatch(r"\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?", self._version):
+                raise ValueError("version must be an exact release such as 2.0.77")
+        if not binary and not self._version:
+            raise ValueError(
+                "Pass an exact release with --ak version=<x.y.z> or --ak binary=<path>."
+            )
+        if cwd is not None and (not PurePosixPath(cwd).is_absolute() or "\x00" in cwd):
+            raise ValueError("cwd must be an absolute path inside the task environment")
+        if binary_sha256 is not None and (
+            not isinstance(binary_sha256, str)
+            or not re.fullmatch(r"[a-fA-F0-9]{64}", binary_sha256)
+        ):
+            raise ValueError(
+                "binary_sha256 must be a 64-character hexadecimal SHA-256 digest"
+            )
+        if binary_sha256 is not None and not binary:
+            raise ValueError("binary_sha256 requires binary")
         self._openscience_config: dict[str, Any] = openscience_config or {}
+        json.dumps(self._openscience_config, allow_nan=False)
         self._binary = binary
+        self._binary_digest = _sha256(Path(binary)) if binary else None
+        if binary_sha256 and binary_sha256.lower() != self._binary_digest:
+            raise ValueError("Local binary does not match binary_sha256")
+        self._cwd = cwd
         self._instruction: str | None = None
+        self._identity: dict[str, Any] = {}
 
     @staticmethod
     def name() -> str:
@@ -162,31 +148,69 @@ class OpenScienceAgent(BaseInstalledAgent):
     async def install(self, environment: BaseEnvironment) -> None:
         # `coreutils` provides the `stdbuf` run() pipes through; `git` lets the
         # agent version-control the task directory when it chooses to.
-        await self.ensure_system_dependencies(environment, ("curl", "bash", "coreutils", "git"))
+        await self.ensure_system_dependencies(
+            environment, ("curl", "bash", "coreutils", "git")
+        )
         if self._binary:
+            if _sha256(Path(self._binary)) != self._binary_digest:
+                raise ValueError("Local binary changed after agent construction")
             await environment.upload_file(Path(self._binary), UPLOADED_BINARY)
             await self.exec_as_agent(
                 environment,
                 command=(
                     f"set -euo pipefail; mkdir -p {BIN_DIR} && "
-                    f"install -m 755 {UPLOADED_BINARY} {BIN_DIR}/openscience && "
-                    f"{BIN_DIR}/openscience --version"
+                    f"install -m 755 {UPLOADED_BINARY} {BIN_DIR}/openscience"
                 ),
             )
-            return
-        if not self._version:
-            raise ValueError(
-                "OpenScience needs a pinned release: pass --ak version=<x.y.z> "
-                "(the first release with `openscience run --auto-approve`) or --ak binary=<path>."
+        else:
+            # Pin the installer too; a mutable website script is not a release pin.
+            url = f"{INSTALL_ROOT}/v{self._version}/install"
+            await self.exec_as_agent(
+                environment,
+                command=(
+                    f"set -euo pipefail; curl -fsSL {shlex.quote(url)} | "
+                    f"OPENSCIENCE_SKIP_CHECKSUM=0 bash -s -- --version {shlex.quote(self._version)} --no-modify-path"
+                ),
             )
-        # The project's own installer picks the glibc/musl and baseline
-        # variant, verifies checksums.txt, and installs to ~/.openscience/bin.
+        version = await self.exec_as_agent(
+            environment, command=self.get_version_command()
+        )
+        installed_version = (version.stdout or "").strip().removeprefix("v")
+        if not installed_version or "\n" in installed_version:
+            raise ValueError("Installed OpenScience did not report a single version")
+        if self._version and self._version != installed_version:
+            raise ValueError(
+                f"Requested OpenScience {self._version}, installed {installed_version}"
+            )
+        digest = await self.exec_as_agent(
+            environment, command=f"sha256sum {BIN_DIR}/openscience"
+        )
+        sha256 = (digest.stdout or "").split(maxsplit=1)[0] if digest.stdout else ""
+        if not re.fullmatch(r"[a-f0-9]{64}", sha256):
+            raise ValueError("Installed OpenScience did not report a SHA-256 digest")
+        if self._binary_digest and sha256 != self._binary_digest:
+            raise ValueError("Uploaded OpenScience binary differs from the host binary")
+        help_result = await self.exec_as_agent(
+            environment, command=f"{BIN_DIR}/openscience run --help"
+        )
+        if not re.search(r"--workspace\b", help_result.stdout or ""):
+            raise ValueError(
+                "Installed OpenScience lacks run --workspace project. "
+                "Use a candidate or pinned release that supports the native workspace contract."
+            )
+        self._identity = {
+            "requested_version": self._version,
+            "installed_version": installed_version,
+            "sha256": sha256,
+            "source": "local_binary" if self._binary else "release",
+            "installer_url": None if self._binary else url,
+        }
+        self._version = installed_version
         await self.exec_as_agent(
             environment,
             command=(
-                f"set -euo pipefail; curl -fsSL {INSTALL_URL} | "
-                f"bash -s -- --version {shlex.quote(self._version)} --no-modify-path && "
-                f"{BIN_DIR}/openscience --version"
+                f"printf '%s\\n' {shlex.quote(json.dumps(self._identity))} > "
+                f"{shlex.quote(self._logs + '/openscience-identity.json')}"
             ),
         )
 
@@ -199,7 +223,11 @@ class OpenScienceAgent(BaseInstalledAgent):
                     command = [server.command, *server.args] if server.command else []
                     mcp[server.name] = {"type": "local", "command": command}
                 else:
-                    mcp[server.name] = {"type": "remote", "url": server.url, "oauth": False}
+                    mcp[server.name] = {
+                        "type": "remote",
+                        "url": server.url,
+                        "oauth": False,
+                    }
             config["mcp"] = mcp
         if self.model_name and "/" in self.model_name:
             provider, model_id = self.model_name.split("/", 1)
@@ -213,11 +241,13 @@ class OpenScienceAgent(BaseInstalledAgent):
     def setup_command(self) -> str:
         parts = [
             f"mkdir -p {shlex.quote(self._config_dir)} {shlex.quote(self._data_dir)}",
-            f"echo {shlex.quote(json.dumps(self.headless_config(), indent=2))} > {shlex.quote(self._config_dir + '/openscience.json')}",
+            f"printf '%s\\n' {shlex.quote(json.dumps(self.headless_config(), indent=2))} > {shlex.quote(self._config_dir + '/openscience.json')}",
         ]
         if self.skills_dir:
             skills = shlex.quote(self._data_dir + "/user-skills")
-            parts.append(f"mkdir -p {skills} && cp -r {shlex.quote(self.skills_dir)}/* {skills}/ 2>/dev/null || true")
+            parts.append(
+                f"mkdir -p {skills} && cp -R {shlex.quote(str(self.skills_dir) + '/.')} {skills}/"
+            )
         return " && ".join(parts)
 
     def run_env(self) -> dict[str, str]:
@@ -228,7 +258,9 @@ class OpenScienceAgent(BaseInstalledAgent):
         return env
 
     @with_prompt_template
-    async def run(self, instruction: str, environment: BaseEnvironment, context: AgentContext) -> None:
+    async def run(
+        self, instruction: str, environment: BaseEnvironment, context: AgentContext
+    ) -> None:
         self._instruction = instruction
         if not self.model_name or "/" not in self.model_name:
             raise ValueError("Model name must be in the format provider/model")
@@ -242,57 +274,57 @@ class OpenScienceAgent(BaseInstalledAgent):
             environment,
             command=(
                 f'export PATH="{BIN_DIR}:$PATH"; '
-                f"openscience run --format json --auto-approve --model {shlex.quote(self.model_name)} "
+                f"openscience run --format json --auto-approve --workspace project --model {shlex.quote(self.model_name)} "
                 f"{resume}{flags + ' ' if flags else ''}-- {shlex.quote(instruction)} "
-                f"2>&1 </dev/null | stdbuf -oL tee {self._logs}/{self._OUTPUT_FILENAME}"
+                f"2>&1 </dev/null | stdbuf -oL tee {shlex.quote(self._logs + '/' + self._OUTPUT_FILENAME)}"
             ),
             env=env,
-            cwd="/app",
+            cwd=self._cwd,
         )
 
-        # Raise here, not in populate_context_post_run, so Harbor's run-phase
-        # error classification and --max-retries apply.
+        # Harbor downloads logs after run() returns. Remote environments do not
+        # share logs_dir; checking it here would accept an empty or stale log.
+        output = self.logs_dir / self._OUTPUT_FILENAME
+        pending = self.logs_dir / ".openscience-current.txt"
+        await environment.download_file(
+            self._logs + "/" + self._OUTPUT_FILENAME, pending
+        )
+        pending.replace(output)
         events = self._events()
-        messages = trajectory.errors(events)
-        code = trajectory.exit_code(events)
-        if messages or (code is not None and code != 0):
-            detail = "; ".join(messages[:3]) if messages else f"exit code {code}"
+        detail = trajectory.completion_failure(events)
+        if detail:
             raise NonZeroAgentExitCodeError(f"OpenScience run failed: {detail}")
 
     def _events(self) -> list[dict[str, Any]]:
         output = self.logs_dir / self._OUTPUT_FILENAME
         if not output.exists():
             return []
-        return trajectory.parse(output.read_text())
+        return trajectory.parse(output.read_text(encoding="utf-8", errors="replace"))
 
     def populate_context_post_run(self, context: AgentContext) -> None:
         events = self._events()
         if not events:
             return
-        try:
-            data = trajectory.convert(
-                events,
-                agent_name=self.name(),
-                agent_version=self.version() or "unknown",
-                model_name=self.model_name,
-                instruction=self._instruction,
-            )
-            result = Trajectory.model_validate(data) if data else None
-        except Exception:
-            self.logger.exception("Failed to convert OpenScience events to a trajectory")
-            return
+        data = trajectory.convert(
+            events,
+            agent_name=self.name(),
+            agent_version=self.version() or "unknown",
+            model_name=self.model_name,
+            instruction=self._instruction,
+        )
+        if data and self._identity:
+            data["extra"]["binary"] = self._identity
+        result = Trajectory.model_validate(data) if data else None
         if result is None:
             return
 
         path = self.logs_dir / "trajectory.json"
-        try:
-            path.write_text(format_trajectory_json(result.to_json_dict()))
-        except OSError as exc:
-            self.logger.debug(f"Failed to write trajectory file {path}: {exc}")
+        path.write_text(format_trajectory_json(result.to_json_dict()), encoding="utf-8")
+        context.metadata = {"openscience": result.extra}
 
         metrics = result.final_metrics
         if metrics:
             context.cost_usd = metrics.total_cost_usd
-            context.n_input_tokens = metrics.total_prompt_tokens or 0
-            context.n_output_tokens = metrics.total_completion_tokens or 0
-            context.n_cache_tokens = metrics.total_cached_tokens or 0
+            context.n_input_tokens = metrics.total_prompt_tokens
+            context.n_output_tokens = metrics.total_completion_tokens
+            context.n_cache_tokens = metrics.total_cached_tokens

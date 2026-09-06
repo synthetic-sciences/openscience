@@ -13,8 +13,10 @@ import type { Model, Provider } from "@synsci/sdk/v2"
 
 import type { BunShell } from "./shell.js"
 import { type ToolDefinition } from "./tool.js"
+import type { Connector } from "./connector.js"
 
 export * from "./tool.js"
+export type * from "./connector.js"
 
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
@@ -29,6 +31,8 @@ export type PluginInput = {
   worktree: string
   serverUrl: URL
   $: BunShell
+  /** Aborted when this instance unloads the plugin. Older hosts may omit it. */
+  signal?: AbortSignal
 }
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
@@ -145,11 +149,15 @@ export type AuthOuathResult = { url: string; instructions: string } & (
 )
 
 export interface Hooks {
+  /** Release resources on instance shutdown or plugin invalidation. */
+  dispose?: () => Promise<void>
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
   tool?: {
     [key: string]: ToolDefinition
   }
+  /** Scientific sources available through science_list_dbs/search/fetch in this instance. */
+  connector?: Connector[]
   auth?: AuthHook
   /**
    * Called when a new message is received

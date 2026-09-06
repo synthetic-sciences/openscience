@@ -152,6 +152,7 @@ export namespace ToolSelection {
       direct?: boolean
       capabilities?: ReadonlySet<string>
       activatedTools?: ReadonlySet<string>
+      extensions?: ReadonlySet<string>
     },
   ) {
     if (input.tools?.[tool] === true) return true
@@ -169,6 +170,9 @@ export namespace ToolSelection {
     // absent from the user-facing Research tool surface; Results and ordinary
     // files are the product-facing record.
     if (tool.startsWith("provenance_")) return false
+    // Installed host extensions declare capabilities through their own schema.
+    // Direct answers and read-only inspection above still keep their narrow set.
+    if (input.extensions?.has(tool)) return true
     if (core.has(tool)) return true
 
     const text = message ?? ""

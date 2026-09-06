@@ -1,0 +1,89 @@
+---
+title: "Developer ecosystem"
+description: "Source integrations for scientific tools, notebooks, chat applications, and evaluation runners."
+---
+
+Build on the same research runtime from a tool package, notebook, chat application,
+or evaluation runner. This directory lists integrations present in the OpenScience
+repository. Their source and tests are reviewable; listing one does not install it
+or authorize its access.
+
+The runtime protocol, Python client, rich plugin results, and connector contribution
+APIs described here are source previews until the release that includes them. Use a
+matching development checkout, then pin the published versions you have tested.
+An installed package's existing version number alone does not imply these new APIs
+are available. Check `runtime.capabilities` before submitting work.
+
+## Choose an integration
+
+| Integration | What it connects | Compatibility and support |
+| --- | --- | --- |
+| [TypeScript SDK](https://github.com/synthetic-sciences/openscience/tree/main/tooling/sdk/js) | A browser, service, or custom interface to the HTTP runtime. `createOpenScienceRuntime` handles run receipts, snapshots, decisions, and reconnecting event streams. | The generated client and runtime facade are maintained in this repository. Match the SDK to the server release and negotiate runtime protocol 1.0. |
+| [Python client](https://github.com/synthetic-sciences/openscience/tree/main/tooling/sdk/python) | A notebook or Python service to the same runtime using the standard library. | Source preview for Python 3.10+ and protocol 1.0; no published PyPI release is claimed. Its README covers bounded reconnection and ambiguous submissions. |
+| [Harbor adapter](https://github.com/synthetic-sciences/openscience/tree/main/tooling/harbor) | OpenScience's headless CLI to Harbor's native task environment, logs, and ATIF trajectory contract. | Pins Harbor 0.22.0 and requires `run --workspace project`. Use a checked source-build binary until a compatible release ships; released OpenScience 2.0.77 lacks that option. Adapter conformance is separate from benchmark results. |
+| [Local lab plugin](https://github.com/synthetic-sciences/openscience/tree/main/examples/local-lab-plugin) | An offline calibration source and a numerical summary tool, with JSON metadata and a CSV attachment. | An external package template using only `@synsci/plugin`. Develop against the checkout until its required APIs are published; replace the template peer range with the versions you test. |
+| [Slack research starter](https://github.com/synthetic-sciences/openscience/tree/main/examples/slack-research) | Signed Slack mentions to one trusted runtime, with persisted thread/session mappings, run receipts, pending decisions, and result links. | A source example for a private deployment. Explicit team/channel/user bindings select fixed server projects. It is not a hosted Slack service or a tenant-isolation layer. |
+
+Use [skills](/openscience/skills) for repeatable procedures and
+[MCP connectors](/openscience/connectors) for separate tool services. The
+[extension guide](/openscience/extensions) explains the boundary between these
+surfaces. A client connects to the agent loop; a plugin executes inside its host.
+
+## Verify before connecting live work
+
+The local lab example has an offline test command:
+
+```bash
+cd examples/local-lab-plugin
+bun run setup
+bun test
+```
+
+Its host integration test also loads the package outside the project, discovers its
+tool through the public Research runtime, executes a deterministic provider tool
+call, and reads the metadata and CSV through the HTTP API. The execution sandbox
+stays enabled. A second session checks that an explicit tool denial still applies,
+and removing the plugin from host configuration removes it from discovery.
+
+The SDK, Python, Harbor, and Slack directories provide their own tests and setup
+instructions. Run the tests for the exact source version you intend to use before
+adding service credentials or submitting model work. Local conformance tests prove
+an integration's behavior; they do not establish a scientific result, a benchmark
+score, or a production service's availability.
+
+## Maintain an entry
+
+The entries above are maintained through the OpenScience repository. Report a
+problem with the source revision, server and client versions, a minimal reproduction,
+and the failing contract. Keep secrets and private research data out of reports.
+
+A contributed entry should identify its maintainer, source, license, installation
+method, exact tested versions or version ranges, and verification commands. Declare
+which external services, credentials, filesystem locations, and paid compute it
+uses. The local lab example's `catalog.json` is a submission template, not a runtime
+manifest or an installation permission grant.
+
+For each update, test installation, a representative invocation, cancellation,
+removal, and the applicable trust boundary in a separate development project.
+Test reconnects and stale decisions for clients that maintain state. Record the
+verified versions; do not widen a compatibility range solely because a new version
+installs successfully. Separate API compatibility from validation of the scientific
+method supplied by an integration.
+
+## Update and remove integrations
+
+Pin package versions or source revisions so an update is deliberate. Review changes
+to access and dependencies, run the integration's tests, and use a server with the
+matching protocol before replacing a working setup.
+
+To remove a plugin, remove its global configuration entry and restart its host.
+During graceful disposal the host aborts its lifecycle signal and invokes its
+cleanup hook; cleanup is bounded and best effort. Project-owned plugin code also
+requires project trust, and the execution sandbox refuses in-process project
+plugins. Revoking project trust removes their subsequent discovery and guards
+retained calls. Global plugins run as trusted host code and are not isolated by
+that execution sandbox.
+
+Disconnecting a client does not stop a run already accepted by the server. Cancel
+the specific run and inspect its receipt when shutdown needs to stop work. Removing
+an integration does not automatically delete saved research sessions or artifacts.

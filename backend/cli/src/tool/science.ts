@@ -2,7 +2,7 @@ import z from "zod"
 import path from "path"
 import crypto from "node:crypto"
 import { Tool } from "./tool"
-import { registry } from "../science/connectors"
+import { connectorRegistry } from "../science/connectors/plugin"
 import type { ConnectorHit } from "../science/connectors"
 import { SessionFilesystem } from "../session/filesystem"
 import { SafeFileIO } from "../file/safe-io"
@@ -51,6 +51,7 @@ export const ScienceListDbsTool = Tool.define("science_list_dbs", {
       .describe("Optional domain filter (e.g. 'chemistry', 'biology', 'literature', 'structure')"),
   }),
   async execute(params, _ctx) {
+    const registry = await connectorRegistry()
     const entries = registry.catalog().filter((e) => !params.domain || e.domain === params.domain)
     if (!entries.length) {
       return {
@@ -98,6 +99,7 @@ export const ScienceSearchTool = Tool.define("science_search", {
     organism: z.string().optional().describe("Optional organism/taxon filter where supported"),
   }),
   async execute(params, ctx) {
+    const registry = await connectorRegistry()
     const connector = registry.get(params.db)
     if (!connector) {
       const available = registry
@@ -187,6 +189,7 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
       .describe("Optional file format, e.g. 'cif' | 'pdb' | 'fasta' | 'sdf'. Omit for a structured record."),
   }),
   async execute(params, ctx) {
+    const registry = await connectorRegistry()
     const connector = registry.get(params.db)
     if (!connector) {
       const available = registry

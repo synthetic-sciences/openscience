@@ -67,20 +67,46 @@ type Payload<T> = T extends unknown ? Omit<T, "timestamp" | "sessionID"> : never
 /** Find or create the session `run` drives; both the local and `--attach` paths share it. */
 export async function session(
   sdk: OpenScienceClient,
-  input: { continue?: boolean; session?: string; title?: string; message: string },
+  input: {
+    continue?: boolean
+    session?: string
+    title?: string
+    message: string
+    workspace?: "isolated" | "project"
+  },
 ) {
-  if (input.continue) {
-    const result = await sdk.session.list()
-    return result.data?.find((s) => !s.parentID)?.id
+  const verify = async (sessionID: string) => {
+    if (!input.workspace) return
+    const result = await sdk.session.filesystem.list({ sessionID }, { throwOnError: true })
+    const workspace = result.data.workspace.mode === "legacy" ? "project" : "isolated"
+    if (input.workspace !== workspace) {
+      throw new Error(`Session ${sessionID} uses workspace ${workspace}; cannot use ${input.workspace}.`)
+    }
   }
-  if (input.session) return input.session
+  const resumed = input.continue
+    ? (await sdk.session.list(undefined, { throwOnError: true })).data?.find((s) => !s.parentID)?.id
+    : input.session
+  if (resumed) {
+    await verify(resumed)
+    return resumed
+  }
+  if (input.continue) return
   const title =
     input.title === undefined
       ? undefined
       : input.title === ""
         ? input.message.slice(0, 50) + (input.message.length > 50 ? "..." : "")
         : input.title
-  const result = await sdk.session.create({ ...(title ? { title } : {}), permission: QUESTION_DENY })
+  const result = await sdk.session.create(
+    { ...(title ? { title } : {}), permission: QUESTION_DENY, workspace: input.workspace },
+    { throwOnError: true },
+  )
+  // An older attached server can accept the request while stripping an
+  // unknown workspace field. Never start tools unless it honored the mode.
+  await verify(result.data.id).catch(async (error) => {
+    await sdk.session.delete({ sessionID: result.data.id }).catch(() => undefined)
+    throw error
+  })
   return result.data?.id
 }
 
@@ -425,6 +451,11 @@ export const RunCommand = cmd({
         describe: "session id to continue",
         type: "string",
       })
+      .option("workspace", {
+        type: "string",
+        choices: ["isolated", "project"] as const,
+        describe: "default tool directory for new sessions (default: isolated); resumed sessions keep their mode",
+      })
       .option("model", {
         type: "string",
         alias: ["m"],
@@ -522,6 +553,7 @@ export const RunCommand = cmd({
         continue: args.continue,
         session: args.session,
         title: args.title,
+        workspace: args.workspace,
         message,
       })
       if (!sessionID) {

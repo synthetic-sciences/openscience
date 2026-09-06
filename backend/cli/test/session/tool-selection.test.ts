@@ -438,3 +438,23 @@ describe("tool selection", () => {
     expect(ToolSelection.relevant("compute_job", input)).toBe(false)
   })
 })
+
+test("installed custom tools are discoverable while permission, direct-answer and inspection gates stay in force", () => {
+  const extensions = new Set(["local_lab_summary"])
+  const input = { agent: "research", message: "Calculate the calibration summary.", extensions }
+  expect(ToolSelection.relevant("local_lab_summary", input)).toBe(true)
+  expect(ToolSelection.relevant("local_lab_summary", { ...input, extensions: undefined })).toBe(false)
+  expect(ToolSelection.relevant("local_lab_summary", { ...input, direct: true })).toBe(false)
+  expect(
+    ToolSelection.relevant("local_lab_summary", {
+      ...input,
+      message: "Read this repository and explain it. Do not modify any files.",
+    }),
+  ).toBe(false)
+  expect(
+    ToolSelection.enabled("local_lab_summary", {
+      permission: PermissionNext.fromConfig({ local_lab_summary: "deny" }),
+    }),
+  ).toBe(false)
+  expect(ToolSelection.enabled("local_lab_summary", { permission: [], tools: { "*": false } })).toBe(false)
+})

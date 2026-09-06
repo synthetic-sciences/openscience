@@ -2,9 +2,11 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Instance } from "@/project/instance"
 import { SessionTelemetry } from "./telemetry"
+import { Log } from "@/util/log"
 import z from "zod"
 
 export namespace SessionStatus {
+  const log = Log.create({ service: "session.status" })
   export const Info = z
     .union([
       z.object({
@@ -66,7 +68,7 @@ export namespace SessionStatus {
     Bus.publish(Event.Status, {
       sessionID,
       status,
-    })
+    }).catch((error) => log.error("failed to publish session status", { sessionID, error }))
     // A retry countdown is the "retry_wait" request phase of the message that
     // is currently in flight; mirror it so the phase record stays honest
     // without the retry path having to know about telemetry.
@@ -87,7 +89,7 @@ export namespace SessionStatus {
       // deprecated
       Bus.publish(Event.Idle, {
         sessionID,
-      })
+      }).catch((error) => log.error("failed to publish session idle", { sessionID, error }))
       delete state()[sessionID]
       return
     }

@@ -43,6 +43,29 @@ import { ProjectTrust } from "@/project/trust"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { GenerateImageTool } from "./generate-image"
 import { ProviderComputeTool } from "./provider-compute"
+import { Identifier } from "../id/id"
+
+const pluginResult = z
+  .object({
+    output: z.string(),
+    title: z.string().optional(),
+    metadata: z.record(z.string(), z.json()).optional(),
+    attachments: z
+      .array(
+        z
+          .object({
+            type: z.literal("file"),
+            mime: z.string().min(1),
+            url: z.url().refine((value) => ["data:", "https:", "http:", "file:"].includes(new URL(value).protocol), {
+              message: "Attachment URLs must use data, https, http, or file",
+            }),
+            filename: z.string().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
+  .strict()
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -117,12 +140,27 @@ export namespace ToolRegistry {
           directory: Instance.directory,
           worktree: Instance.worktree,
         } as unknown as PluginToolContext
-        const result = await def.execute(args as any, pluginCtx)
-        const out = await Truncate.output(result, { sessionID: ctx.sessionID }, initCtx?.agent)
+        const raw = await def.execute(z.record(z.string(), z.unknown()).parse(args), pluginCtx)
+        const parsed = pluginResult.safeParse(typeof raw === "string" ? { output: raw } : raw)
+        if (!parsed.success) {
+          throw new Error(`Plugin tool "${id}" returned an invalid result: ${parsed.error.message}`)
+        }
+        const result = parsed.data
+        const out = await Truncate.output(result.output, { sessionID: ctx.sessionID }, initCtx?.agent)
         return {
-          title: "",
-          output: out.truncated ? out.content : result,
-          metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+          title: result.title ?? "",
+          output: out.content,
+          metadata: {
+            ...result.metadata,
+            truncated: out.truncated,
+            outputPath: out.truncated ? out.outputPath : undefined,
+          },
+          attachments: result.attachments?.map((attachment) => ({
+            ...attachment,
+            id: Identifier.ascending("part"),
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+          })),
         }
       },
     }))
@@ -187,6 +225,11 @@ export namespace ToolRegistry {
 
   export async function ids() {
     return all().then((x) => x.map((t) => t.id))
+  }
+
+  /** Installed extensions participate in Research without a built-in name list. */
+  export async function customIDs(): Promise<ReadonlySet<string>> {
+    return new Set((await state()).custom.map((tool) => tool.id))
   }
 
   /**

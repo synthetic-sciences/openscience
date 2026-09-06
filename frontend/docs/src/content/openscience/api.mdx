@@ -1,88 +1,158 @@
 ---
-title: "TypeScript SDK and local API"
-description: "Create an integration against your running OpenScience project."
+title: "Runtime SDK and API"
+description: "Build a scientific assistant against the same runtime used by the OpenScience workbench."
 ---
 
-Use the TypeScript SDK to build a local integration, automate a project workflow, or connect another interface to a running OpenScience server. Use the CLI's [JSON run mode](/openscience/automation) when a single command is sufficient.
+OpenScience owns the Research agent loop, tools, permissions, files, Results, and compute records. Your application owns its interface and the mapping from its users to an authorized project and conversation. The TypeScript and Python clients speak HTTP and SSE; they do not import the workbench or implement another agent loop.
 
-## Start a server for the intended project
+The runtime protocol below is new in this source branch. Until a release includes it, use a matching locally built SDK and runtime. `GET /runtime/capabilities` reports protocol support; the base package version alone does not distinguish an unreleased build. The native CLI [JSON run contract](/openscience/automation) remains supported for Harbor and single-process automation.
+
+## Connect to a project
 
 ```bash
 cd /absolute/path/to/research-project
-openscience serve --port 4096
+openscience serve --port 0 --format json
 ```
 
-Use the actual URL printed by the command. Keep the server available while your integration runs. This is the local OpenScience project API; an Ace account is not a hosted substitute for this server.
-
-## Install and connect
-
-```bash
-npm install @synsci/sdk
-```
+Use the printed URL. See [server hosting](/openscience/server-hosting) for a UI-free build, machine readiness, and an SDK-owned child process. Set `OPENSCIENCE_AUTH_TOKEN` on the server and send `Authorization: Bearer …` when deployment authentication is configured. Project selectors choose context; they do not authorize arbitrary users or isolate tenants.
 
 ```typescript
-import { createOpenScienceClient } from "@synsci/sdk/v2"
+import { createOpenScienceClient, createOpenScienceRuntime } from "@synsci/sdk/v2"
 
-const client = createOpenScienceClient({
-  baseUrl: "http://localhost:4096",
+const connection = {
+  baseUrl: "http://127.0.0.1:4096", // actual printed URL
   directory: "/absolute/path/to/research-project",
-})
-
-const sessions = await client.session.list({ limit: 10 })
-if (sessions.error) throw new Error("Could not list sessions")
-console.log(sessions.data)
+}
+const client = createOpenScienceClient(connection)
+const runtime = createOpenScienceRuntime(connection)
+const capabilities = await runtime.capabilities()
+if (capabilities.protocolVersion !== "1.0") throw new Error("Unsupported runtime")
 ```
 
-Replace the directory with the same project used to start the server. Keep SDK and OpenScience versions aligned.
+The clients attach the directory selector to every request. A directory or project header is not a substitute for your application's authentication and access policy.
 
-## Create a session and send a request
-
-This example creates a conversation and asks for a text response. It uses the configured model, so running it can incur that model's usual usage costs.
+## Submit once and recover the same work
 
 ```typescript
-import { createOpenScienceClient } from "@synsci/sdk/v2"
+import { createOpenScienceClient, createOpenScienceRuntime } from "@synsci/sdk/v2"
 
-const client = createOpenScienceClient({
-  baseUrl: "http://localhost:4096",
+const connection = {
+  baseUrl: "http://127.0.0.1:4096",
   directory: "/absolute/path/to/research-project",
-})
+}
+const client = createOpenScienceClient(connection)
+const runtime = createOpenScienceRuntime(connection)
+const { data: session } = await client.session.create(
+  { title: "Calibration analysis" },
+  { throwOnError: true },
+)
 
-const created = await client.session.create({ title: "Integration check" })
-if (created.error || !created.data) throw new Error("Could not create session")
-
-const response = await client.session.prompt({
-  sessionID: created.data.id,
-  parts: [{ type: "text", text: "Reply with a short greeting. Do not use tools." }],
-})
-if (response.error) throw new Error("The request failed")
-console.log(response.data)
+const input = {
+  sessionID: session.id,
+  requestID: "your-persisted-external-event-id",
+  effort: "normal" as const,
+  message: "Analyze the calibration data and save a short report.",
+}
+// Persist session.id and this exact input BEFORE submitting it.
+const accepted = await runtime.prompt(input)
+// Persist accepted.runID. Receiving 202 acknowledges admission, not success.
+const run = await runtime.wait({ sessionID: session.id, runID: accepted.runID })
+console.log(run.state, run.resultMessageID)
 ```
 
-For a tool-using integration, implement the relevant permission and user-question handling before submitting substantial work. A prompt asking to avoid tools is an instruction, not a programmatic permission policy.
+This example uses the configured model and can incur model usage. A tool-using application must surface pending decisions while waiting. `wait()` observes state; it never grants permissions or repeats a prompt.
 
-## Common SDK surfaces
+Session creation defaults to an isolated scratch workspace. Pass `workspace: "project"`
+to `client.session.create` when relative tool paths should use the selected project
+directory, as in a native evaluation environment. Python exposes the same choice as
+`create_session(workspace="project")`. The mode belongs to the session and is not
+changed by later prompts. Removing a project-mode session preserves the project files.
+Use a matching source build for this new option; see [session workspaces](/openscience/sessions).
 
-| Task | SDK surface |
+An identical `requestID` in the same session returns the original receipt, including after completion. A changed prompt or model with that ID returns HTTP 409. Omit the ID only when duplicate admission after an uncertain network result is acceptable. Advanced clients can supply a native `messageID`; ordinary integrations should let the server generate it and use their own external `requestID`.
+
+Use **exactly one** of `message` or `parts`. Parts support ordinary text, file attachments, agent mentions, conversation references, and explicit subtasks using the generated session input types. Internal synthetic text and system/agent overrides are excluded. Optional model, variant, tier, context, delegation, and delegation settings survive admission.
+
+Run states are `accepted`, `running`, `completed`, `failed`, `cancelled`, and `interrupted`. A completed run means the agent turn finished; it does not prove the science is correct or that a detached compute job has completed. Inspect saved Results, job delivery state, and native verification separately.
+
+An owning server's death leaves unfinished receipts `interrupted`. During an orderly shutdown, an owned loop may first settle as failed or cancelled; an already terminal receipt keeps that outcome. Work is **not automatically resumed**: inspect partial messages, files, and job records before submitting a new request ID. Request idempotency prevents duplicate admission; it does not make a third-party tool's external side effect transactional.
+
+## Reconnect with a snapshot and cursor
+
+```typescript
+import type { OpenScienceRuntime } from "@synsci/sdk/v2"
+
+export async function observe(runtime: OpenScienceRuntime, sessionID: string, signal: AbortSignal) {
+  const snapshot = await runtime.snapshot({ sessionID })
+  console.log(snapshot.runs, snapshot.permissions, snapshot.questions)
+  for await (const event of runtime.events({
+    sessionID,
+    afterSequence: snapshot.latestSequence,
+    signal,
+  })) {
+    // Apply/deduplicate the event, then persist event.sequence.
+    console.log(event.runID, event.type)
+  }
+}
+```
+
+The runtime retains the latest 2,048 events per session. Durable run receipts and messages are separate from this replay window. The TypeScript facade and Python client reconnect with `Last-Event-ID`, discard duplicates, and reject gaps or an expired/ahead cursor. After a cursor conflict, fetch another snapshot and resume from its cursor. Never recover an observation error by starting a fresh prompt.
+
+A snapshot captures the cursor before reading current state, so a concurrent update may appear in both. Deduplicate by event sequence and object identity. `RuntimeEvent.properties` contains versioned event-specific data; keep the SDK aligned with the server when interpreting those payloads.
+
+Disconnecting an observing client does not cancel a run. Explicit cancellation is scoped to a receipt:
+
+```typescript
+import type { OpenScienceRuntime } from "@synsci/sdk/v2"
+
+export async function stop(runtime: OpenScienceRuntime, sessionID: string, runID: string) {
+  return runtime.cancel({ sessionID, runID })
+}
+```
+
+Repeated cancellation cannot stop a later run. Running tools may take time to settle; read the receipt until terminal. Closing an SDK-owned server has a different lifecycle: it stops that process and its owned execution.
+
+## Resolve live decisions
+
+Only `permissions` and `questions` in a fresh snapshot are actionable. Their continuations live in the **connected runtime process**; replayed events are historical records. Cancellation and shutdown remove pending requests.
+
+```typescript
+import type { OpenScienceRuntime } from "@synsci/sdk/v2"
+
+// Call only after your authenticated user chooses this permission response.
+export async function approveOnce(runtime: OpenScienceRuntime, sessionID: string, requestID: string) {
+  return runtime.decide({ kind: "permission", sessionID, requestID, reply: "once" })
+}
+
+export async function answer(runtime: OpenScienceRuntime, sessionID: string, requestID: string, answers: string[][]) {
+  return runtime.decide({ kind: "question", sessionID, requestID, answers })
+}
+```
+
+Permission responses include `once`, `session`, `project`, `always`, and `reject`; `always` grants installation-wide authority. A private adapter should expose only the scopes its authenticated user is allowed to grant. Use `question_reject` to dismiss a question.
+
+An identical reply returns the stored receipt. A changed reply returns 409. Unknown, expired, or wrong-session requests cannot be claimed. A receipt marked `indeterminate` means the runtime cannot confirm whether a decision completed across an interruption; inspect state rather than repeating the action. For multiple server processes, route a pending decision back to the process that owns its continuation.
+
+## Retrieve outputs and compute state
+
+Use `client.session.messages` or `client.session.message` with a run's `resultMessageID` to retrieve the transcript after the stream ends. Completed tool parts preserve structured metadata and attachments. The existing `client.file.artifactStore` and `client.settings.compute.jobs` surfaces expose saved Results and job records; generated types are authoritative for each operation.
+
+A plugin attachment is not automatically a saved Result. Plugins that need a durable, versioned Result should create it through the scoped artifact API and return the verified reference in metadata. Track job execution, output retrieval, resource release, and scientific verification separately.
+
+## Python and application starters
+
+The standard-library Python package is in `tooling/sdk/python`. Install this source package locally with `python -m pip install ./tooling/sdk/python`, then use `openscience.Client`. It exposes sessions, rich prompts, receipts, cancellation, decisions, and cursor-aware SSE without importing the backend. Its README includes persistence and recovery examples.
+
+The repository's `examples/local-lab-plugin` returns an offline scientific summary and CSV; `examples/slack-research` demonstrates an authenticated private application with durable conversation mapping and delivery records. The [ecosystem catalog](/openscience/ecosystem) lists support boundaries and author guidance.
+
+## Compatibility
+
+| Consumer | Supported path |
 | --- | --- |
-| List, create, inspect, or remove conversations | `client.session` |
-| Read messages or send a prompt | `client.session.messages`, `client.session.prompt` |
-| Stop an active response | `client.session.abort` |
-| Fork an existing conversation | `client.session.fork` |
-| Inspect project files | `client.file` |
-| Find project material | `client.find` |
-| Inspect configured model providers | `client.provider` |
-| Read available commands | `client.command` |
+| Matching TypeScript SDK / Python client | Runtime protocol 1.0 plus generated session, artifact, and compute APIs |
+| Research workbench | Runtime admission; falls back only after confirmed capability-endpoint 404 |
+| Older workbench / specialized agent commands | Existing session prompt and event interfaces remain available |
+| Harbor 0.22.0 | Native installed-agent execution of `run --format json --auto-approve --workspace project` over the same agent/tool loop |
+| Other Harbor versions | Require their own conformance checks before migration |
 
-Use generated types for the exact parameters in your installed version. Do not guess endpoint paths or assume a v1 example has the same calling convention as v2.
-
-## Errors and long-running work
-
-Inspect `error` before using returned `data`. Preserve the session identifier so a failed client request can be investigated without starting duplicate work. A timeout does not prove the server performed no action.
-
-Use the SDK's generated event and asynchronous methods when your interface needs live progress, and match the event types to the same SDK version. For a batch process, [Automation](/openscience/automation) documents the CLI event contract and exit handling.
-
-## Reference and extensions
-
-The [generated API reference](https://github.com/synthetic-sciences/openscience/blob/main/tooling/sdk/openapi.json) contains the complete request and response contract. The [v2 SDK implementation](https://github.com/synthetic-sciences/openscience/blob/main/tooling/sdk/js/src/v2/gen/sdk.gen.ts) shows methods and parameters.
-
-Use [custom tools](/openscience/custom-tools) or [plugins and editors](/openscience/extensions) when the integration belongs inside the agent instead of outside it.
+A failed modern prompt is never retried through a legacy endpoint. The generated [OpenAPI contract](https://github.com/synthetic-sciences/openscience/blob/main/tooling/sdk/openapi.json) and the corresponding source-build SDK define exact request shapes. Hosted tenant isolation, public extension publishing, and distributed continuation recovery require additional deployment work; a local bearer token does not implement them.

@@ -70,11 +70,14 @@ export const QuestionTool = Tool.define("question", {
       return recommendedResolution({ autonomy, reason: params.reason, questions: params.questions })
     }
 
-    const answers = await Question.ask({
-      sessionID: ctx.sessionID,
-      questions: params.questions,
-      tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
-    })
+    const answers = await Question.ask(
+      {
+        sessionID: ctx.sessionID,
+        questions: params.questions,
+        tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+      },
+      ctx.abort,
+    )
 
     function format(answer: Question.Answer | undefined) {
       if (!answer?.length) return "Unanswered"

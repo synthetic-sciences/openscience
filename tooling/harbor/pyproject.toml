@@ -5,7 +5,7 @@ description = "Run OpenScience as a Harbor / Terminal-Bench installed agent"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
-dependencies = ["harbor>=0.22"]
+dependencies = ["harbor==0.22.0"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]

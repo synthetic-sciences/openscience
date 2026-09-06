@@ -5,38 +5,14 @@ import z from "zod"
 import { Identifier } from "../../id/id"
 import { RuntimeEvents } from "../../runtime/events"
 import { Session } from "../../session"
-import { SessionPrompt } from "../../session/prompt"
 import { lazy } from "@synsci/util/lazy"
-import { Log } from "../../util/log"
 import { Flag } from "../../flag/flag"
 
-const log = Log.create({ service: "runtime-route" })
-
-const PromptInput = z.object({
-  sessionID: Identifier.schema("session"),
-  message: z.string().trim().min(1).max(1_000_000),
-  effort: z.enum(["normal", "ultra"]),
-})
-
-const PromptAccepted = z
-  .object({
-    runID: Identifier.schema("runtime"),
-    acceptedAt: z.number().int().nonnegative(),
-  })
-  .meta({ ref: "RuntimePromptAccepted" })
-
-const CursorQuery = z.object({
-  sessionID: Identifier.schema("session"),
-  afterSequence: z.coerce.number().int().nonnegative().optional(),
-})
-
-const Replay = z
-  .object({
-    events: z.array(RuntimeEvents.Event),
-    oldestSequence: z.number().int().positive(),
-    latestSequence: z.number().int().nonnegative(),
-  })
-  .meta({ ref: "RuntimeEventReplay" })
+import { RuntimeRuns } from "../../runtime/runs"
+import { RuntimeDecisions } from "../../runtime/decisions"
+import { PermissionNext } from "../../permission/next"
+import { Question } from "../../question"
+import { Installation } from "../../installation"
 
 function cursorError(error: unknown) {
   if (error instanceof RuntimeEvents.CursorExpiredError) {
@@ -73,8 +49,55 @@ export function handoffRuntimeEvents(
   activate(deliver)
 }
 
-export const RuntimeRoutes = lazy(() =>
-  new Hono()
+export const RuntimeRoutes = lazy(() => {
+  const PromptInput = RuntimeRuns.Input
+
+  const Snapshot = z
+    .object({
+      sessionID: Identifier.schema("session"),
+      runs: RuntimeRuns.Run.array(),
+      oldestSequence: z.number().int().positive(),
+      latestSequence: z.number().int().nonnegative(),
+      permissions: PermissionNext.Request.array(),
+      questions: Question.Request.array(),
+      decisionScope: z.literal("connected_runtime"),
+    })
+    .meta({ ref: "RuntimeSnapshot" })
+
+  const Capabilities = z
+    .object({
+      protocolVersion: z.literal("1.0"),
+      serverVersion: z.string(),
+      idempotentPrompts: z.literal(true),
+      richInputs: z.literal(true),
+      runSnapshots: z.literal(true),
+      eventRetention: z.number().int().positive(),
+      crashRecovery: z.literal("interrupt"),
+      decisionScope: z.literal("connected_runtime"),
+    })
+    .meta({ ref: "RuntimeCapabilities" })
+
+  const PromptAccepted = z
+    .object({
+      runID: Identifier.schema("runtime"),
+      acceptedAt: z.number().int().nonnegative(),
+    })
+    .meta({ ref: "RuntimePromptAccepted" })
+
+  const CursorQuery = z.object({
+    sessionID: Identifier.schema("session"),
+    afterSequence: z.coerce.number().int().nonnegative().optional(),
+  })
+
+  const Replay = z
+    .object({
+      events: z.array(RuntimeEvents.Event),
+      oldestSequence: z.number().int().positive(),
+      latestSequence: z.number().int().nonnegative(),
+    })
+    .meta({ ref: "RuntimeEventReplay" })
+
+  return new Hono()
     .post(
       "/prompt",
       describeRoute({
@@ -107,56 +130,145 @@ export const RuntimeRoutes = lazy(() =>
           )
         }
         const agent = requestedAgent ?? "research"
-        await Session.get(input.sessionID)
-        SessionPrompt.assertNotBusy(input.sessionID)
-
-        const acceptedAt = Date.now()
-        const runID = Identifier.ascending("runtime")
         try {
-          await RuntimeEvents.begin({
-            sessionID: input.sessionID,
-            runID,
-            acceptedAt,
-            effort: input.effort,
-          })
+          return c.json(await RuntimeRuns.prompt(input, agent), 202)
         } catch (error) {
-          if (error instanceof RuntimeEvents.ActiveRunError) {
+          if (error instanceof RuntimeRuns.ConflictError)
+            return c.json({ error: "request_conflict", message: error.message }, 409)
+          if (error instanceof RuntimeEvents.ActiveRunError)
             return c.json({ error: "session_busy", message: error.message }, 409)
-          }
           throw error
         }
-
-        void SessionPrompt.prompt({
-          sessionID: input.sessionID,
-          // Every public run still enters through Research. Only the isolated,
-          // explicitly feature-gated source lab can reach researchagent-test.
-          agent,
-          effort: input.effort,
-          parts: [{ type: "text", text: input.message }],
+      },
+    )
+    .post(
+      "/cancel",
+      describeRoute({
+        summary: "Cancel one research run",
+        description:
+          "Cancellation is scoped to the run ID. Repeating it cannot stop a later run. Running tools may need time to settle; read the run receipt for terminal state.",
+        operationId: "runtime.cancel",
+        responses: {
+          200: {
+            description: "Current run state",
+            content: { "application/json": { schema: resolver(RuntimeRuns.Run) } },
+          },
+          404: { description: "Session or run not found" },
+        },
+      }),
+      validator("json", z.object({ sessionID: Identifier.schema("session"), runID: RuntimeRuns.RunID }).strict()),
+      async (c) => {
+        const input = c.req.valid("json")
+        return c.json(await RuntimeRuns.cancel(input.sessionID, input.runID))
+      },
+    )
+    .post(
+      "/decision",
+      describeRoute({
+        summary: "Resolve a pending runtime decision",
+        description:
+          "Retries of an identical decision return its stored receipt. A conflicting response is rejected. Only live requests on the connected runtime can be resolved; an indeterminate receipt requires inspecting current state rather than repeating the action.",
+        operationId: "runtime.decide",
+        responses: {
+          200: {
+            description: "Decision receipt",
+            content: { "application/json": { schema: resolver(RuntimeDecisions.Result) } },
+          },
+          400: { description: "Invalid answer" },
+          404: { description: "Session not found" },
+          409: { description: "Conflicting or expired decision" },
+        },
+      }),
+      validator("json", RuntimeDecisions.Input),
+      async (c) => {
+        try {
+          return c.json(await RuntimeDecisions.decide(c.req.valid("json")))
+        } catch (error) {
+          if (error instanceof RuntimeDecisions.ConflictError)
+            return c.json({ error: "decision_conflict", message: error.message }, 409)
+          if (error instanceof RuntimeDecisions.ExpiredError)
+            return c.json({ error: "decision_expired", message: error.message }, 409)
+          if (error instanceof RuntimeDecisions.AnswerError)
+            return c.json({ error: "invalid_answer", message: error.message }, 400)
+          throw error
+        }
+      },
+    )
+    .get(
+      "/capabilities",
+      describeRoute({
+        summary: "Get supported runtime protocol",
+        operationId: "runtime.capabilities",
+        responses: {
+          200: {
+            description: "Runtime capabilities",
+            content: { "application/json": { schema: resolver(Capabilities) } },
+          },
+        },
+      }),
+      (c) =>
+        c.json({
+          protocolVersion: "1.0" as const,
+          serverVersion: Installation.VERSION,
+          idempotentPrompts: true as const,
+          richInputs: true as const,
+          runSnapshots: true as const,
+          eventRetention: RuntimeEvents.RETAINED_EVENTS,
+          crashRecovery: "interrupt" as const,
+          decisionScope: "connected_runtime" as const,
+        }),
+    )
+    .get(
+      "/run",
+      describeRoute({
+        summary: "Get a durable research run",
+        description:
+          "Returns the authoritative run receipt and terminal result reference, independently of event retention. A dead runtime is interrupted and never automatically retried.",
+        operationId: "runtime.getRun",
+        responses: {
+          200: { description: "Research run", content: { "application/json": { schema: resolver(RuntimeRuns.Run) } } },
+          404: { description: "Session or run not found" },
+        },
+      }),
+      validator("query", z.object({ sessionID: Identifier.schema("session"), runID: RuntimeRuns.RunID })),
+      async (c) => {
+        const input = c.req.valid("query")
+        return c.json(await RuntimeRuns.get(input.sessionID, input.runID))
+      },
+    )
+    .get(
+      "/snapshot",
+      describeRoute({
+        summary: "Resynchronize a research session",
+        description:
+          "Returns durable run receipts, an event cursor and live pending decisions belonging to this server process. Replayed decision events are historical; only pending requests in a fresh snapshot are actionable.",
+        operationId: "runtime.snapshot",
+        responses: {
+          200: { description: "Runtime snapshot", content: { "application/json": { schema: resolver(Snapshot) } } },
+          404: { description: "Session not found" },
+        },
+      }),
+      validator("query", z.object({ sessionID: Identifier.schema("session") })),
+      async (c) => {
+        const { sessionID } = c.req.valid("query")
+        await Session.get(sessionID)
+        // Read the cursor before state so changes racing this snapshot can be
+        // replayed afterwards; consumers deduplicate by sequence/identity.
+        const replay = await RuntimeEvents.replay(sessionID)
+        const [runs, permissions, questions] = await Promise.all([
+          RuntimeRuns.list(sessionID),
+          PermissionNext.list(),
+          Question.list(),
+        ])
+        return c.json({
+          sessionID,
+          runs,
+          oldestSequence: replay.oldestSequence,
+          latestSequence: replay.latestSequence,
+          permissions: permissions.filter((item) => item.sessionID === sessionID),
+          questions: questions.filter((item) => item.sessionID === sessionID),
+          decisionScope: "connected_runtime" as const,
         })
-          .then((message) =>
-            message.info.role === "assistant" && message.info.error
-              ? RuntimeEvents.fail({
-                  sessionID: input.sessionID,
-                  runID,
-                  messageID: message.info.id,
-                  error: message.info.error,
-                })
-              : RuntimeEvents.finish({
-                  sessionID: input.sessionID,
-                  runID,
-                  messageID: message.info.id,
-                }),
-          )
-          .catch(async (error) => {
-            // Another terminal writer may have won a genuine ownership race.
-            if (error instanceof RuntimeEvents.ActiveRunError) return
-            await RuntimeEvents.fail({ sessionID: input.sessionID, runID, error }).catch((journalError) => {
-              log.error("failed to record terminal runtime event", { sessionID: input.sessionID, runID, journalError })
-            })
-          })
-
-        return c.json({ runID, acceptedAt }, 202)
       },
     )
     .get(
@@ -272,5 +384,5 @@ export const RuntimeRoutes = lazy(() =>
           })
         })
       },
-    ),
-)
+    )
+})

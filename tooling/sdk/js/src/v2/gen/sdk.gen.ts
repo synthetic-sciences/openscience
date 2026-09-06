@@ -239,10 +239,20 @@ import type {
   QuestionReplyErrors,
   QuestionReplyResponses,
   ResearchEffort,
+  RuntimeCancelErrors,
+  RuntimeCancelResponses,
+  RuntimeCapabilitiesResponses,
+  RuntimeDecideErrors,
+  RuntimeDecideResponses,
+  RuntimeDecisionInput,
+  RuntimeGetRunErrors,
+  RuntimeGetRunResponses,
   RuntimePromptErrors,
   RuntimePromptResponses,
   RuntimeReplayErrors,
   RuntimeReplayResponses,
+  RuntimeSnapshotErrors,
+  RuntimeSnapshotResponses,
   RuntimeSubscribeErrors,
   RuntimeSubscribeResponse,
   RuntimeSubscribeResponses,
@@ -3282,6 +3292,7 @@ export class Session extends HeyApiClient {
       parentID?: string
       title?: string
       permission?: PermissionRuleset
+      workspace?: "isolated" | "project"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3295,6 +3306,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "parentID" },
             { in: "body", key: "title" },
             { in: "body", key: "permission" },
+            { in: "body", key: "workspace" },
           ],
         },
       ],
@@ -4345,7 +4357,26 @@ export class Runtime extends HeyApiClient {
     parameters: {
       directory?: string
       sessionID: string
-      message: string
+      messageID?: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
+      variant?: string
+      tier?: string
+      context?: number
+      delegation?: boolean
+      delegationSettings?: {
+        level?: "off" | "light" | "standard" | "high"
+        workerModel?: {
+          providerID: string
+          modelID: string
+        }
+        autonomy?: "interactive" | "balanced" | "autonomous"
+      }
+      requestID?: string
+      message?: string
+      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
       effort: "normal" | "ultra"
     },
     options?: Options<never, ThrowOnError>,
@@ -4357,7 +4388,16 @@ export class Runtime extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "body", key: "sessionID" },
+            { in: "body", key: "messageID" },
+            { in: "body", key: "model" },
+            { in: "body", key: "variant" },
+            { in: "body", key: "tier" },
+            { in: "body", key: "context" },
+            { in: "body", key: "delegation" },
+            { in: "body", key: "delegationSettings" },
+            { in: "body", key: "requestID" },
             { in: "body", key: "message" },
+            { in: "body", key: "parts" },
             { in: "body", key: "effort" },
           ],
         },
@@ -4372,6 +4412,157 @@ export class Runtime extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Cancel one research run
+   *
+   * Cancellation is scoped to the run ID. Repeating it cannot stop a later run. Running tools may need time to settle; read the run receipt for terminal state.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      sessionID: string
+      runID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "runID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<RuntimeCancelResponses, RuntimeCancelErrors, ThrowOnError>({
+      url: "/runtime/cancel",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Resolve a pending runtime decision
+   *
+   * Retries of an identical decision return its stored receipt. A conflicting response is rejected. Only live requests on the connected runtime can be resolved; an indeterminate receipt requires inspecting current state rather than repeating the action.
+   */
+  public decide<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      runtimeDecisionInput?: RuntimeDecisionInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "runtimeDecisionInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<RuntimeDecideResponses, RuntimeDecideErrors, ThrowOnError>({
+      url: "/runtime/decision",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get supported runtime protocol
+   */
+  public capabilities<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<RuntimeCapabilitiesResponses, unknown, ThrowOnError>({
+      url: "/runtime/capabilities",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a durable research run
+   *
+   * Returns the authoritative run receipt and terminal result reference, independently of event retention. A dead runtime is interrupted and never automatically retried.
+   */
+  public getRun<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      sessionID: string
+      runID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+            { in: "query", key: "runID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<RuntimeGetRunResponses, RuntimeGetRunErrors, ThrowOnError>({
+      url: "/runtime/run",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Resynchronize a research session
+   *
+   * Returns durable run receipts, an event cursor and live pending decisions belonging to this server process. Replayed decision events are historical; only pending requests in a fresh snapshot are actionable.
+   */
+  public snapshot<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<RuntimeSnapshotResponses, RuntimeSnapshotErrors, ThrowOnError>({
+      url: "/runtime/snapshot",
+      ...options,
+      ...params,
     })
   }
 

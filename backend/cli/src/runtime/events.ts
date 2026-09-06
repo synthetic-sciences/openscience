@@ -327,6 +327,16 @@ export namespace RuntimeEvents {
     }
   }
 
+  export async function isActive(sessionID: string) {
+    if (state().active.has(sessionID)) return true
+    const journal = await read(sessionID)
+    return !!(
+      journal.activeRunID &&
+      journal.activeOwner &&
+      (await ProcessIdentity.owns(journal.activeOwner.pid, journal.activeOwner.identity))
+    )
+  }
+
   export async function begin(input: {
     sessionID: string
     runID: string
@@ -493,11 +503,13 @@ export namespace RuntimeEvents {
   export async function requestCancel(input: {
     sessionID: string
     source: "user" | "runner_timeout"
+    runID?: string
   }): Promise<CancelResult> {
     const active = state().active.get(input.sessionID)
     const current = await read(input.sessionID)
     const runID = active ?? current.activeRunID
     if (!runID || current.activeRunID !== runID) return { status: "inactive" }
+    if (input.runID && input.runID !== runID) return { status: "inactive" }
 
     const identity = await ProcessIdentity.capture(process.pid)
     if (!identity) throw new Error("Could not capture the runtime server process identity")

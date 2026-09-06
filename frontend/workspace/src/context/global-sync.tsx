@@ -1348,6 +1348,7 @@ function createGlobalSync() {
         )
         break
       }
+      case "permission.cancelled":
       case "permission.replied": {
         const permissions = store.permission[event.properties.sessionID]
         if (!permissions) break
@@ -1385,6 +1386,7 @@ function createGlobalSync() {
         )
         break
       }
+      case "question.cancelled":
       case "question.replied":
       case "question.rejected": {
         const questions = store.question[event.properties.sessionID]

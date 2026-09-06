@@ -362,11 +362,12 @@ export namespace SessionFilesystem {
     }
 
     // Lazily upgrade sessions created before filesystem grants shipped.
-    const session = await Storage.read<{ id: string; projectID: string; directory: string }>([
-      "session",
-      Instance.project.id,
-      sessionID,
-    ])
+    const session = await Storage.read<{
+      id: string
+      projectID: string
+      directory: string
+      workspace?: "isolated" | "project"
+    }>(["session", Instance.project.id, sessionID])
     if (
       session.projectID !== Instance.project.id ||
       Project.canonicalize(session.directory) !== Project.canonicalize(Instance.directory)
@@ -377,11 +378,15 @@ export namespace SessionFilesystem {
         access: "read",
       })
     }
-    await initialize(sessionID, session.directory)
+    await initialize(sessionID, session.directory, { workspace: session.workspace })
     return assert(State.parse(await read(sessionID)))
   }
 
-  export async function initialize(sessionID: string, directory: string, options: { revokeExisting?: boolean } = {}) {
+  export async function initialize(
+    sessionID: string,
+    directory: string,
+    options: { revokeExisting?: boolean; workspace?: "isolated" | "project" } = {},
+  ) {
     const root = await canonical(directory)
     const worktree = await canonical(Instance.worktree)
     // A broad legacy project such as the user's home directory may contain the
@@ -397,7 +402,9 @@ export namespace SessionFilesystem {
     const workspace = await SessionWorkspace.create({
       sessionID,
       directory: root,
-      mode: "isolated",
+      // Legacy workspaces already encode non-ownership: trash and purge must
+      // never rename or remove a caller's existing project directory.
+      mode: options.workspace === "project" ? "legacy" : "isolated",
     })
     const canonicalWorkspace = await canonical(workspace.scratchRoot)
     const grants: Grant[] = [

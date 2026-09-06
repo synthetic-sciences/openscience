@@ -1,0 +1,8 @@
+services:
+  main:
+    image: ${MAIN_IMAGE_NAME}
+    build:
+      context: ${CONTEXT_DIR}
+    platform: linux/amd64
+    network_mode: none
+    command: ["sleep", "infinity"]

@@ -153,7 +153,11 @@ export namespace Server {
             else if (err instanceof Provider.ModelNotFoundError) status = 400
             else if (err.name === "SessionFilesystemDeniedError") status = 403
             else if (err.name === "SessionFilesystemInvalidPathError") status = 400
-            else if (err.name === "SessionDirectoryMismatchError" || err.name === "SessionDirectoryImmutableError")
+            else if (
+              err.name === "SessionDirectoryMismatchError" ||
+              err.name === "SessionDirectoryImmutableError" ||
+              err.name === "SessionWorkspaceMismatchError"
+            )
               status = 409
             else if (err.name === "ProjectUnknownError") status = 404
             else if (err.name === "ProjectStaleError") status = 410

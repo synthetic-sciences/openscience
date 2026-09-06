@@ -86,6 +86,7 @@ import {
   publishCapabilityPreferences,
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
+import { submitComposerPrompt, type ComposerPromptInput } from "./prompt-runtime"
 import { requestFailure, requestStatus } from "@/utils/request-error"
 import {
   slashGroup,
@@ -2265,7 +2266,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       ...agentAttachmentParts,
       ...imageAttachmentParts,
     ]
-    const sendParts = requestParts as unknown as Parameters<typeof client.session.prompt>[0]["parts"]
+    const sendParts = requestParts as unknown as ComposerPromptInput["parts"]
 
     const optimisticParts = requestParts.map((part) => ({
       ...part,
@@ -2353,6 +2354,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addOptimisticMessage()
     setSubmitting(false)
 
+    const restoreSubmission = () => {
+      if (sessionDirectory === projectDirectory) {
+        sync.set("session_status", session.id, { type: "idle" })
+      }
+      removeOptimisticMessage()
+      for (const item of commentItems) {
+        prompt.context.add({
+          type: "file",
+          path: item.path,
+          selection: item.selection,
+          comment: item.comment,
+          commentID: item.commentID,
+          commentOrigin: item.commentOrigin,
+          preview: item.preview,
+        })
+      }
+      restoreInputAfterFailure()
+    }
+
     const waitForWorktree = async () => {
       const worktree = WorktreeState.get(sessionDirectory)
       if (!worktree || worktree.status !== "pending") return true
@@ -2363,26 +2383,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       const controller = new AbortController()
 
-      const cleanup = () => {
-        if (sessionDirectory === projectDirectory) {
-          sync.set("session_status", session.id, { type: "idle" })
-        }
-        removeOptimisticMessage()
-        for (const item of commentItems) {
-          prompt.context.add({
-            type: "file",
-            path: item.path,
-            selection: item.selection,
-            comment: item.comment,
-            commentID: item.commentID,
-            commentOrigin: item.commentOrigin,
-            preview: item.preview,
-          })
-        }
-        restoreInputAfterFailure()
-      }
-
-      pending.set(session.id, { abort: controller, cleanup })
+      pending.set(session.id, { abort: controller, cleanup: restoreSubmission })
 
       const abort = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
         if (controller.signal.aborted) {
@@ -2419,10 +2420,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const send = async () => {
       const ok = await waitForWorktree()
       if (!ok) return
-      const request: Parameters<typeof client.session.prompt>[0] & {
-        effort: "normal"
-        delegationSettings: DelegationSettings
-      } = {
+      const request: ComposerPromptInput = {
         sessionID: session.id,
         agent,
         model,
@@ -2435,29 +2433,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         tier,
         context: contextLimit,
       }
-      await client.session.prompt(request)
+      const controller = new AbortController()
+      pending.set(session.id, { abort: controller, cleanup: restoreSubmission })
+      if (sessionDirectory === projectDirectory) {
+        sync.set("session_status", session.id, { type: "busy" })
+      }
+      const submitted = () => {
+        if (pending.get(session.id)?.abort === controller) pending.delete(session.id)
+      }
+      // Stop owns capability negotiation locally; once submission begins the
+      // session's server cancellation path owns the running request.
+      await submitComposerPrompt(client, request, controller.signal, submitted)
+        .catch((error) => {
+          if (!controller.signal.aborted) throw error
+        })
+        .finally(submitted)
     }
 
     void send().catch((err) => {
       pending.delete(session.id)
-      if (sessionDirectory === projectDirectory) {
-        sync.set("session_status", session.id, { type: "idle" })
-      }
       const failure = requestFailure(err, "Send prompt")
       showToast({ title: failure.title, description: failure.description })
-      removeOptimisticMessage()
-      for (const item of commentItems) {
-        prompt.context.add({
-          type: "file",
-          path: item.path,
-          selection: item.selection,
-          comment: item.comment,
-          commentID: item.commentID,
-          commentOrigin: item.commentOrigin,
-          preview: item.preview,
-        })
-      }
-      restoreInputAfterFailure()
+      restoreSubmission()
     })
   }
 

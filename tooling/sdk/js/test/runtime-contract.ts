@@ -5,7 +5,9 @@ type Assert<T extends true> = T
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 
 type _promptInput = Assert<
-  Equal<RuntimePromptInput, { sessionID: string; message: string; effort: "normal" | "ultra" }>
+  RuntimePromptInput extends { sessionID: string; message?: string; effort: "normal" | "ultra"; requestID?: string }
+    ? true
+    : false
 >
 type _promptResult = Assert<
   Equal<Awaited<ReturnType<ReturnType<typeof createOpenScienceRuntime>["prompt"]>>, RuntimePromptAccepted>

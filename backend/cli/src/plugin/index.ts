@@ -58,8 +58,11 @@ export namespace Plugin {
   }
 
   const compute = async () => {
+    const controller = new AbortController()
     const client = createOpenScienceClient({
       baseUrl: "http://openscience.internal",
+      directory: Instance.directory,
+      projectID: Instance.project.id,
       fetch: Server.internalFetch(),
     })
     const config = await Config.getExecution()
@@ -72,99 +75,148 @@ export namespace Plugin {
       directory: Instance.directory,
       serverUrl: Server.url(),
       $: Bun.$,
+      signal: controller.signal,
     }
 
-    for (const plugin of INTERNAL_PLUGINS) {
-      log.info("loading internal plugin", { name: plugin.name })
-      const init = await plugin(input)
-      hooks.push(init)
-    }
+    try {
+      for (const plugin of INTERNAL_PLUGINS) {
+        log.info("loading internal plugin", { name: plugin.name })
+        const init = await plugin(input)
+        hooks.push(init)
+      }
 
-    const plugins = [...(config.plugin ?? [])]
-    if (!Flag.OPENSCIENCE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push(...BUILTIN)
-    }
+      const plugins = [...(config.plugin ?? [])]
+      if (!Flag.OPENSCIENCE_DISABLE_DEFAULT_PLUGINS) {
+        plugins.push(...BUILTIN)
+      }
 
-    for (let plugin of plugins) {
-      // ignore old codex plugin since it is supported first party now
-      if (
-        ["openscience-openai-codex-auth", "openscience-copilot-auth", "synsci-openai-codex-auth", "synsci-copilot-auth"] // legacy config names still skipped
-          .some((name) => plugin.includes(name))
-      )
-        continue
-      const project = await Config.projectControlsPlugin(plugin)
-      if (project) {
-        await ProjectTrust.require(Instance.project, "project_plugin")
-        if (sandbox.enabled === true) {
-          const message =
-            `Project plugin ${plugin} was not loaded because project plugins run in the OpenScience host process ` +
-            "and cannot be isolated by the execution sandbox. Disable the sandbox globally only if you accept that host access."
-          log.warn("refusing in-process project plugin while sandbox is enabled", { plugin })
-          Bus.publish(Session.Event.Error, {
-            error: new NamedError.Unknown({ message }).toObject(),
-          })
+      for (let plugin of plugins) {
+        // ignore old codex plugin since it is supported first party now
+        if (
+          [
+            "openscience-openai-codex-auth",
+            "openscience-copilot-auth",
+            "synsci-openai-codex-auth",
+            "synsci-copilot-auth",
+          ] // legacy config names still skipped
+            .some((name) => plugin.includes(name))
+        )
           continue
-        }
-      }
-      log.info("loading plugin", { path: plugin })
-      if (!plugin.startsWith("file://")) {
-        const lastAtIndex = plugin.lastIndexOf("@")
-        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
-        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
-        plugin = await installWithTimeout(pkg, version).catch((err) => {
-          if (!builtin) throw err
-
-          const message = err instanceof Error ? err.message : String(err)
-          log.error("failed to install builtin plugin", {
-            pkg,
-            version,
-            error: message,
-          })
-          Bus.publish(Session.Event.Error, {
-            error: new NamedError.Unknown({
-              message: `Failed to install built-in plugin ${pkg}@${version}: ${message}`,
-            }).toObject(),
-          })
-
-          return ""
-        })
-        if (!plugin) continue
-      }
-      const load = async () => {
-        const mod = await import(plugin)
-        // Prevent duplicate initialization when plugins export the same function
-        // as both a named export and default export (e.g., `export const X` and `export default X`).
-        const seen = new Set<PluginInstance>()
-        for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-          if (seen.has(fn)) continue
-          seen.add(fn)
-          const init = await fn(input)
-          hooks.push(init)
-          if (project) projectHooks.add(init)
-        }
-      }
-      if (project) {
-        await AuthoritySignal.exclusive(async () => {
+        const project = await Config.projectControlsPlugin(plugin)
+        if (project) {
           await ProjectTrust.require(Instance.project, "project_plugin")
-          await load()
-        })
-      } else {
-        await load()
-      }
-    }
+          if (sandbox.enabled === true) {
+            const message =
+              `Project plugin ${plugin} was not loaded because project plugins run in the OpenScience host process ` +
+              "and cannot be isolated by the execution sandbox. Disable the sandbox globally only if you accept that host access."
+            log.warn("refusing in-process project plugin while sandbox is enabled", { plugin })
+            Bus.publish(Session.Event.Error, {
+              error: new NamedError.Unknown({ message }).toObject(),
+            })
+            continue
+          }
+        }
+        log.info("loading plugin", { path: plugin })
+        if (!plugin.startsWith("file://")) {
+          const lastAtIndex = plugin.lastIndexOf("@")
+          const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+          const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
+          const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
+          plugin = await installWithTimeout(pkg, version).catch((err) => {
+            if (!builtin) throw err
 
-    return {
-      hooks,
-      input,
+            const message = err instanceof Error ? err.message : String(err)
+            log.error("failed to install builtin plugin", {
+              pkg,
+              version,
+              error: message,
+            })
+            Bus.publish(Session.Event.Error, {
+              error: new NamedError.Unknown({
+                message: `Failed to install built-in plugin ${pkg}@${version}: ${message}`,
+              }).toObject(),
+            })
+
+            return ""
+          })
+          if (!plugin) continue
+        }
+        const load = async () => {
+          const mod = await import(plugin)
+          // Prevent duplicate initialization when plugins export the same function
+          // as both a named export and default export (e.g., `export const X` and `export default X`).
+          const seen = new Set<PluginInstance>()
+          for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+            if (seen.has(fn)) continue
+            seen.add(fn)
+            const init = await fn(input)
+            hooks.push(init)
+            if (project) projectHooks.add(init)
+          }
+        }
+        if (project) {
+          await AuthoritySignal.exclusive(async () => {
+            await ProjectTrust.require(Instance.project, "project_plugin")
+            await load()
+          })
+        } else {
+          await load()
+        }
+      }
+
+      return {
+        hooks,
+        input,
+        controller,
+        configure: undefined as Promise<void> | undefined,
+      }
+    } catch (error) {
+      await dispose({ controller, hooks })
+      throw error
     }
   }
 
-  const state = Instance.state(compute)
+  async function dispose(current: { controller: AbortController; hooks: Hooks[] }) {
+    current.controller.abort()
+    await Promise.all(
+      current.hooks.map(async (hook) => {
+        if (!hook.dispose) return
+        const limit = Promise.withResolvers<never>()
+        const timer = setTimeout(() => limit.reject(new Error("Plugin disposal timed out after 5000ms")), 5000)
+        timer.unref()
+        await Promise.race([Promise.resolve().then(() => hook.dispose!()), limit.promise])
+          .catch((error) => {
+            log.error("plugin disposal failed", { error })
+          })
+          .finally(() => clearTimeout(timer))
+      }),
+    )
+  }
+
+  const state = Instance.state(compute, dispose)
+
+  const events = Instance.state(
+    () =>
+      Bus.subscribeAll(async (input) => {
+        // Disposal must not recreate a plugin runtime after it has been evicted.
+        if (input.type === Bus.InstanceDisposed.type) return
+        const current = await state()
+        if (current.controller.signal.aborted) return
+        for (const hook of current.hooks) {
+          if (projectHooks.has(hook) && !(await ProjectTrust.allowed(Instance.project))) continue
+          void Promise.resolve()
+            .then(() => (current.controller.signal.aborted ? undefined : hook.event?.({ event: input })))
+            .catch((error) => {
+              log.error("plugin event hook failed", { error })
+            })
+        }
+      }),
+    async (unsubscribe) => unsubscribe(),
+  )
 
   /** Remove project plugin hooks from every subsequent trigger/tool lookup. */
-  export function invalidate() {
-    State.clear(Instance.directory, compute)
+  export async function invalidate() {
+    await State.remove(Instance.directory, compute)
   }
 
   export function projectOwned(hook: Hooks) {
@@ -172,7 +224,7 @@ export namespace Plugin {
   }
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "connector" | "dispose">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
@@ -195,20 +247,15 @@ export namespace Plugin {
   }
 
   export async function init() {
-    const hooks = await state().then((x) => x.hooks)
-    const config = await Config.getExecution()
-    for (const hook of hooks) {
-      // @ts-expect-error this is because we haven't moved plugin to sdk v2
-      await hook.config?.(config)
-    }
-    Bus.subscribeAll(async (input) => {
-      const current = await state()
+    const current = await state()
+    current.configure ??= (async () => {
+      const config = await Config.getExecution()
       for (const hook of current.hooks) {
-        if (projectHooks.has(hook) && !(await ProjectTrust.allowed(Instance.project))) continue
-        hook["event"]?.({
-          event: input,
-        })
+        // @ts-expect-error this is because we haven't moved plugin to sdk v2
+        await hook.config?.(config)
       }
-    })
+    })()
+    await current.configure
+    events()
   }
 }

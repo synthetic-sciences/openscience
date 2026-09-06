@@ -1,0 +1,13 @@
+{
+  "name": "@openscience-examples/local-lab-plugin",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "scripts": {
+    "setup": "bun setup.ts",
+    "test": "bun test"
+  },
+  "peerDependencies": {
+    "@synsci/plugin": "*"
+  }
+}

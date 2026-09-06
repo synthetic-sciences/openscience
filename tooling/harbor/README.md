@@ -1,103 +1,158 @@
-# OpenScience for Harbor / Terminal-Bench
+# OpenScience for Harbor
 
-A [Harbor](https://www.harborframework.com) installed agent that runs OpenScience
-headlessly inside a task container and records an ATIF trajectory.
+An installed-agent adapter for **Harbor 0.22.0**. Harbor owns the task image,
+instruction, working directory, agent user, phase network policy, resource and
+time limits, verifier, and scoring. This package installs and invokes OpenScience
+and converts its root-session event log to ATIF. It does not replace the native
+benchmark runner or supply an evaluator.
 
-## Run Terminal-Bench 2
+The dependency is pinned to the version tested here. Moving Harbor `main`, older
+0.13 task integrations, and future versions need their own conformance checks;
+they are not covered by this package's compatibility claim.
+
+## Check the adapter without running a benchmark
+
+From the repository root:
 
 ```bash
-uv run --with harbor --with-editable tooling/harbor \
-  harbor run -d terminal-bench/terminal-bench-2 \
-    -a openscience_harbor.agent:OpenScienceAgent \
-    -m anthropic/claude-opus-4-8 \
-    --ak version=2.0.70 \
-    -n 4
+uv run --project tooling/harbor --extra test python -m pytest tooling/harbor/tests
 ```
 
-`-m provider/model` selects the model; Harbor resolves that provider's API key
-and base URL from the host environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-`OPENROUTER_API_KEY`, ...) and passes them through unchanged. Retries follow
-Harbor's normal rules, e.g. `--max-retries 3 --retry-include ApiRateLimitError`.
+These tests use the real Harbor package, its installed-agent execution helpers,
+error classification, and ATIF model/validator. A deterministic local executable
+emits a recorded fixture; separate host and environment log directories exercise
+the log-transfer boundary. They make no model calls and start no containers,
+verifiers, or benchmark jobs. Passing them proves these adapter contracts, not a
+benchmark score or every environment provider's behavior.
+
+For a compiled Linux candidate, the [native conformance fixture](native-smoke/README.md)
+runs one real Docker/Harbor task using a deterministic loopback provider and native
+grader. It checks the actual binary, tool execution, working directory, reward,
+and collected ATIF without a model service. This is a separate, explicit container
+test; it is not part of the unit tests above or a scientific benchmark.
+
+## Run a native task
+
+This example is a real evaluation invocation and can spend money. Use the native
+task and approved model, environment, limits, and retry settings for your study:
+
+```bash
+uv run --project tooling/harbor harbor run \
+  --path /path/to/native-task \
+  -a openscience_harbor.agent:OpenScienceAgent \
+  -m provider/model \
+  --ak binary=/absolute/path/to/compatible-linux-candidate \
+  --ak binary_sha256=<expected-sha256>
+```
+
+The executable must support `run --workspace project`. Setup checks the public
+CLI help and fails before task execution if that option is absent. The released
+2.0.77 binary predates this option; it is not compatible with this adapter's native
+workspace contract. After a compatible release ships, `--ak version=<exact-release>`
+can replace the local binary arguments. This source change does not publish a release.
+
+For a registered dataset, use Harbor's dataset arguments in place of `--path`.
+Keep benchmark-specific task preparation, network restrictions, protected grading
+credentials, and score aggregation in the native runner. Existing integrations
+that pin another Harbor version should keep that pin until separately migrated.
+
+`-m provider/model` uses Harbor's model connection handling to select the provider
+key and configured base URL. The adapter does not collect grader credentials or
+copy the host environment wholesale. Explicit `extra_env`, config overlays, task
+MCP servers, and skills are trusted runner inputs: the adapter is not a policy
+sandbox for arbitrary runner configuration. `--auto-approve` permits local task
+tools, so Harbor's environment isolation remains essential.
 
 ### Options (`--ak key=value`)
 
-| Option               | Use                                                                                                                                                                    |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`            | Release to install with the pinned root `install` script (required unless `binary` is set). Must be a release that ships `openscience run --auto-approve` (>= 2.0.70). |
-| `binary`             | Host path to an `openscience` Linux binary to upload instead of downloading (offline task networks, local builds).                                                     |
-| `variant`            | Provider-specific reasoning effort (`high`, `max`, `minimal`; model-dependent).                                                                                        |
-| `effort`             | Research effort, `normal` or `ultra`.                                                                                                                                  |
-| `agent`              | Primary agent, default `research`.                                                                                                                                     |
-| `openscience_config` | JSON overlay deep-merged into the headless `openscience.json`, e.g. `'{"experimental":{"continue_loop_on_deny":true}}'`.                                               |
+| Option               | Use                                                                                                                                                                                                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`            | Exact compatible release (a leading `v` is accepted). Required unless `binary` is set. Must support `run --workspace project` and `--auto-approve`; setup checks the workspace option.                                                                               |
+| `binary`             | Existing host path to a Linux OpenScience executable to upload. Captures its SHA-256 before setup; rejects changed files and upload mismatches. Useful for local builds or an offline agent install. System dependencies must already exist for fully offline setup. |
+| `binary_sha256`      | Optional expected SHA-256 for `binary`; mismatch fails before setup.                                                                                                                                                                                                 |
+| `cwd`                | Optional absolute directory inside the task environment. Omit to preserve the task image's native working directory.                                                                                                                                                 |
+| `variant`            | Provider-specific reasoning effort (`high`, `max`, `minimal`; model-dependent).                                                                                                                                                                                      |
+| `effort`             | Research effort, `normal` or `ultra`.                                                                                                                                                                                                                                |
+| `agent`              | Primary agent; OpenScience defaults to `research`.                                                                                                                                                                                                                   |
+| `openscience_config` | JSON overlay deep-merged over the adapter's headless defaults. Can override those defaults; use only an approved configuration.                                                                                                                                      |
 
-## What the adapter does
+## Installation and run contract
 
-- **Install** (`setup` phase): ensures `curl`, `bash`, `coreutils` (for `stdbuf`),
-  and `git`, then runs the project's own installer pinned to `version`, which
-  picks the glibc/musl and baseline variant, verifies `checksums.txt`, and
-  installs to `~/.openscience/bin`:
+For releases, the adapter fetches `install` from the requested OpenScience Git
+tag, invokes it with the same version, and forces checksum verification on. The
+installer selects the platform variant and verifies its release checksum. The
+adapter then checks the installed version and records the executable's SHA-256.
+A Git tag/release checksum is release selection and integrity evidence, not an
+independent signature or an immutable source attestation.
 
-  ```bash
-  curl -fsSL https://openscience.sh/install | bash -s -- --version <version> --no-modify-path
-  ```
+For local binaries, upload and installation use the same version/digest checks.
+If `version` is supplied with `binary`, the executable must report that version;
+otherwise its reported version is recorded. `openscience-identity.json` captures
+requested version, installed version, SHA-256, and installation source. Setup
+ensures `curl`, `bash`, `coreutils`, and `git` through Harbor's dependency helper.
 
-- **Run**: writes `$OPENSCIENCE_CONFIG_DIR/openscience.json` with
-  `sandbox.enabled=false`, `permission {"*": "allow"}` plus denies for the
-  tools that need a Synthetic Sciences account or paid remote compute
-  (`research_search`, `atlas`, `atlas_write`, `remote_compute`, `modal`,
-  `provider_compute`, `compute_job`), the task's MCP servers, and the model
-  registration; copies the task's skills directory into
-  `$OPENSCIENCE_DATA_DIR/user-skills`; then executes, with `cwd=/app`:
-
-  ```bash
-  openscience run --format json --auto-approve --model <provider/model> [--variant ...] [--effort ...] [--agent ...] [--continue] -- '<instruction>' \
-    2>&1 </dev/null | stdbuf -oL tee /logs/agent/openscience.txt
-  ```
-
-  with `OPENSCIENCE_DATA_DIR=/logs/agent/openscience/data`,
-  `OPENSCIENCE_CONFIG_DIR=/logs/agent/openscience/config`,
-  `OPENSCIENCE_DISABLE_AUTOUPDATE=1`, `OPENSCIENCE_DISABLE_LSP_DOWNLOAD=1`,
-  `OPENSCIENCE_DISABLE_PROJECT_CONFIG=1`, and
-  `OPENSCIENCE_SKIP_ENVIRONMENT_BOOTSTRAP=1`. Everything OpenScience writes
-  stays under `/logs/agent`, which Harbor collects with the trial.
-
-- **Errors**: after the run, any `error` event or a non-zero `done.exitCode`
-  raises `NonZeroAgentExitCodeError`, so Harbor's error classification and
-  `--max-retries` apply. Exit codes: `1` provider/agent error, `2` usage or
-  configuration error (unknown model, no provider), `3` stopped by a rejected
-  permission or question.
-- **Trajectory**: `populate_context_post_run` converts the JSON lines into
-  `trajectory.json` (ATIF v1.7): a `user` step from the `user` event, one agent
-  step per `step_start`/`step_finish` pair carrying text, `reasoning_content`,
-  tool calls with their observations (failed calls keep their error text), and
-  per-step token/cost metrics summed into `final_metrics` and the Harbor
-  `AgentContext`.
-
-The event contract the converter reads is frozen in
-`backend/cli/src/cli/run-events.ts` and documented under "Headless and
-container runs" on the Sessions docs page.
-
-## Known limitations
-
-- A fresh-session instruction under 320 characters that opens with `what`,
-  `how`, `why`, `explain`, `compare`, or `define` and names no work gets a
-  direct, tool-free answer (the Research agent's conversational route). Task
-  instructions normally contain work verbs; if one does not, wrap it with a
-  `prompt_template_path`.
-- Delegation is off under `--auto-approve`, so the trajectory has no
-  `subagent_trajectories`.
-- Harbor from PyPI (0.22) and Harbor `main` differ in how agents declare
-  options and capabilities; the adapter supports both.
-
-## Tests
+The run writes a separate headless config, copies declared task skills (including
+dotfiles), registers task MCP servers and the selected model, and invokes:
 
 ```bash
-cd tooling/harbor
-uv run --with pytest --with harbor python -m pytest
+openscience run --format json --auto-approve --workspace project --model <provider/model> [options] -- '<native instruction>'
 ```
 
-`tests/test_trajectory.py` runs the converter against a stream captured from a
-real `openscience run --format json --auto-approve` turn
-(`tests/fixtures/openscience.jsonl`) and, when Harbor is installed, validates
-the result with Harbor's trajectory validator. `tests/test_agent.py` checks the
-command, config, and environment the agent assembles.
+Harbor's execution helper preserves the native agent user and applies `pipefail`
+to the log pipeline. The instruction is shell-quoted without adding benchmark
+hints. Explicit project workspace mode makes relative file tools and default bash
+execution use the task directory. Starting the CLI there alone is insufficient:
+ordinary new OpenScience sessions default to an isolated scratch workspace. The
+project directory remains task-owned and must not be deleted by session cleanup.
+The adapter adds no trajectory-import capability; Harbor's resume support
+uses OpenScience's `--continue` in the existing environment and session data.
+
+Defaults disable auto-update, LSP downloads, project config discovery, environment
+bootstrap, and OpenScience's nested sandbox. The task container supplies isolation.
+Default permissions deny account-dependent and remote-compute tools
+(`research_search`, `atlas`, `atlas_write`, `remote_compute`, `modal`,
+`provider_compute`, `compute_job`). These defaults are not a general egress policy.
+
+## Logs, failure, and accounting
+
+The default environment artifact paths are:
+
+| Path                                        | Contents                                            |
+| ------------------------------------------- | --------------------------------------------------- |
+| `/logs/agent/openscience.txt`               | Raw JSONL event stream with merged stderr.          |
+| `/logs/agent/openscience-identity.json`     | Installed executable identity.                      |
+| `/logs/agent/openscience/data`              | OpenScience session state and copied task skills.   |
+| `/logs/agent/openscience/config`            | Headless configuration.                             |
+| `<Harbor trial agent logs>/trajectory.json` | Validated ATIF v1.7 generated after log collection. |
+
+These paths follow Harbor's `environment_logs_dir` if customized. Task outputs
+remain in the task workspace; they are not automatically relocated into logs.
+The logs and session state can contain prompts, tool output, and research data.
+
+A successful process is followed by an explicit remote log download **before**
+`run()` returns. Success requires exactly one final `done` event with status
+`completed`, exit code zero, a consistent root session, balanced model steps,
+and no session `error`. Missing, stale, or truncated logs cannot imply success.
+Nonzero process exits use Harbor's native classification; event-level failures
+raise `NonZeroAgentExitCodeError`. The adapter does not retry: Harbor's job retry
+policy governs retries. On process failure or timeout, Harbor's normal cleanup
+and log synchronization retain available diagnostics.
+
+ATIF keeps user text, agent text, reported reasoning, tool calls, and observations,
+including tool errors and work from unfinished steps. It deduplicates repeated
+part IDs for conversion, while duplicate events cannot pass the completion check.
+Input totals include uncached input, cache reads, and cache creation; reasoning
+tokens are recorded separately without adding them again to output tokens.
+Explicit reported zero is retained; absent usage stays unknown. Interrupted or
+inconsistent runs retain observed root usage under `final_metrics.extra` and do
+not claim complete totals. Cost values are OpenScience's **catalog estimates**,
+not verified provider charges; zero may indicate unavailable model pricing.
+
+`--auto-approve` disables built-in delegation in the supported CLI. The event
+contract contains root-session events only. If a `task` call nevertheless
+appears, the converter flags it and withholds whole-run totals; it never invents
+child trajectories. Conversion/schema or artifact-write failures are surfaced,
+not silently counted as valid trajectories.
+
+The source contract is `backend/cli/src/cli/run-events.ts`. A passing adapter run
+still needs the native verifier to determine whether the scientific task succeeded.

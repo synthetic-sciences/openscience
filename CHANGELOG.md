@@ -10,6 +10,22 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Expose a detachable Research runtime with rich prompt inputs, durable request
+  receipts, run-scoped cancellation, snapshot recovery, and idempotent decisions.
+  Exact retries reconcile the existing run; an interrupted server never silently
+  repeats scientific work. The Research composer uses the public runtime API.
+- Add a headless build and owned SDK server lifecycle, a Python HTTP/SSE client,
+  and external scientific and private Slack integration examples. Plugins can
+  return structured results and register project-scoped scientific connectors;
+  cancellation and shutdown remove pending decisions and dispose extensions.
+- Harden the Harbor 0.22.0 adapter: preserve native task working directories,
+  verify executable identity, collect remote logs before checking completion,
+  require a successful terminal event, and retain unknown/partial usage honestly.
+- Add explicit project or isolated workspace selection at session creation and
+  `run --workspace project`; the default remains isolated. Harbor requires project
+  mode so relative tool paths use the native task directory, and rejects binaries
+  without that capability. Removing a project-mode session preserves project files.
+
 - Keep model-specific effort controls in the composer while Ace pricing loads,
   recover pricing after a failed initial fetch, and prevent older catalog reads
   from overwriting a newer refresh. Keep Fast gated by verified rates and offer

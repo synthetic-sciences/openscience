@@ -32,6 +32,8 @@ import { FileLease } from "@/util/file-lease"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
+  export const Workspace = z.enum(["isolated", "project"])
+  export type Workspace = z.infer<typeof Workspace>
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
@@ -64,6 +66,9 @@ export namespace Session {
       slug: z.string(),
       projectID: z.string(),
       directory: z.string(),
+      workspace: Workspace.optional().describe(
+        "Default tool directory: owned scratch or the existing project directory.",
+      ),
       parentID: Identifier.schema("session").optional(),
       summary: z
         .object({
@@ -135,6 +140,15 @@ export namespace Session {
     z.object({
       sessionID: Identifier.schema("session"),
       directory: z.string(),
+    }),
+  )
+
+  export const WorkspaceMismatchError = NamedError.create(
+    "SessionWorkspaceMismatchError",
+    z.object({
+      sessionID: Identifier.schema("session"),
+      workspace: Workspace,
+      requested: Workspace,
     }),
   )
 
@@ -219,6 +233,7 @@ export namespace Session {
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
+        workspace: Workspace.optional(),
       })
       .optional(),
     async (input) => {
@@ -228,6 +243,7 @@ export namespace Session {
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
+        workspace: input?.workspace,
       })
     },
   )
@@ -289,6 +305,7 @@ export namespace Session {
     parentID?: string
     directory: string
     permission?: PermissionNext.Ruleset
+    workspace?: Workspace
   }) {
     const id = Identifier.descending("session", input.id)
     const directory = Project.canonicalize(input.directory)
@@ -303,7 +320,17 @@ export namespace Session {
           throw error
         })
       : undefined
-    if (existing) return bind(existing)
+    if (existing) {
+      bind(existing)
+      if (input.workspace) {
+        const filesystem = await SessionFilesystem.snapshot(id)
+        const workspace = filesystem.workspace.mode === "legacy" ? "project" : "isolated"
+        if (workspace !== input.workspace) {
+          throw new WorkspaceMismatchError({ sessionID: id, workspace, requested: input.workspace })
+        }
+      }
+      return existing
+    }
     if (input.parentID) await assertDirectory(input.parentID)
     if (directory !== Project.canonicalize(Instance.directory)) {
       throw new DirectoryMismatchError({
@@ -318,6 +345,7 @@ export namespace Session {
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory,
+      workspace: input.workspace ?? "isolated",
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
@@ -333,7 +361,10 @@ export namespace Session {
     // or announced yet. Publishing its initial workspace as a "change" would
     // schedule a redundant revocation that can race the session's first job.
     // Lazy initialization of legacy sessions keeps the default revocation.
-    await SessionFilesystem.initialize(result.id, directory, { revokeExisting: false }).catch(async (error) => {
+    await SessionFilesystem.initialize(result.id, directory, {
+      revokeExisting: false,
+      workspace: result.workspace,
+    }).catch(async (error) => {
       await SessionFilesystem.remove(result.id).catch(() => undefined)
       await Storage.remove(["session", Instance.project.id, result.id])
       throw error

@@ -7,6 +7,13 @@ from the registry.
 
 ## The contract
 
+For an external package, import `Connector` from `@synsci/plugin` and return it
+in a plugin's `connector` array. No core registry edit is needed: the current
+instance's science tools discover it automatically. See
+[writing-a-plugin.md](writing-a-plugin.md) and the
+[offline local lab example](../../examples/local-lab-plugin/README.md).
+The instructions below describe adding a source to the bundled distribution.
+
 Implement `Connector` from `backend/cli/src/science/connectors/types.ts`:
 
 | Member        | Required | Notes                                                                                                                                                  |

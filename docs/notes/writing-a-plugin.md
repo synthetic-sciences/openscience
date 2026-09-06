@@ -30,23 +30,81 @@ export const ExamplePlugin: Plugin = async (ctx) => {
 
 `ctx` (`PluginInput`) carries `client` (a typed SDK client bound to the local
 server), `project`, `directory`, `worktree`, `serverUrl`, and `$` (Bun's shell).
+The client is bound to the instance's project and directory. `signal` is aborted
+when the host unloads the plugin; pass it to background requests you own. Older
+hosts may not supply that optional field.
 
 The returned `Hooks` may include:
 
-| Hook                                          | When it runs                                                                    |
-| --------------------------------------------- | ------------------------------------------------------------------------------- |
-| `tool`                                        | Registers tools by id (see [adding-a-tool.md](adding-a-tool.md)).               |
-| `auth`                                        | Adds `oauth` or `api` credential methods for a provider.                        |
-| `config`                                      | Once at startup with the effective config.                                      |
-| `event`                                       | Every bus event.                                                                |
-| `chat.message`, `chat.params`, `chat.headers` | When a new message is received / before model params and headers are finalized. |
-| `permission.ask`                              | Before a permission prompt; may set `allow`, `deny`, or `ask`.                  |
-| `command.execute.before`                      | Before a slash command runs.                                                    |
-| `tool.execute.before`, `tool.execute.after`   | Around every tool call.                                                         |
-| `experimental.*`                              | Message, system-prompt, compaction, and text-complete transforms; unstable.     |
+| Hook                                          | When it runs                                                                                          |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `tool`                                        | Registers tools by id (see [adding-a-tool.md](adding-a-tool.md)).                                     |
+| `connector`                                   | Adds scientific sources to this instance's `science_list_dbs`, `science_search`, and `science_fetch`. |
+| `dispose`                                     | Releases resources on shutdown or invalidation, after the host aborts `signal`.                       |
+| `auth`                                        | Adds `oauth` or `api` credential methods for a provider.                                              |
+| `config`                                      | Once at startup with the effective config.                                                            |
+| `event`                                       | Every bus event.                                                                                      |
+| `chat.message`, `chat.params`, `chat.headers` | When a new message is received / before model params and headers are finalized.                       |
+| `permission.ask`                              | Before a permission prompt; may set `allow`, `deny`, or `ask`.                                        |
+| `command.execute.before`                      | Before a slash command runs.                                                                          |
+| `tool.execute.before`, `tool.execute.after`   | Around every tool call.                                                                               |
+| `experimental.*`                              | Message, system-prompt, compaction, and text-complete transforms; unstable.                           |
 
-Every plugin module export that is a function is initialized, so export one
-plugin per module (or a default export) to avoid double registration.
+Export only plugin functions from the entry module; put helpers in other files.
+Exporting the same function both by name and as default initializes it once.
+
+## Return a scientific result
+
+A tool may still return a string. It can also return an object:
+
+```ts
+return {
+  title: "Sample summary",
+  output: "Three observations; mean 2.",
+  metadata: { count: 3, mean: 2, method: "arithmetic mean" },
+  attachments: [
+    {
+      type: "file",
+      mime: "text/csv",
+      filename: "summary.csv",
+      url: "data:text/csv,count%2Cmean%0A3%2C2%0A",
+    },
+  ],
+}
+```
+
+`output` is required; `title`, JSON-serializable `metadata`, and `attachments`
+are optional. Each attachment requires `type: "file"`, `mime`, and an absolute
+`data:`, `http:`, `https:`, or `file:` URL. The host assigns part, session and
+message IDs; supplying those fields is rejected. Tool context also includes an
+optional `callID` for correlating a real invocation.
+
+The host validates results and truncates text while preserving title, metadata,
+and attachments. It owns the `metadata.truncated` and `metadata.outputPath`
+fields. Attachments do not bypass file access policy, fetch remote content, or
+save versioned artifacts. Use the artifact/job APIs for persistent resources and
+include their returned references in metadata; a string that looks like an ID
+does not create or authorize access to that resource. Keep attachment bodies
+small and reference large saved files instead of embedding them in messages.
+
+## Contribute a scientific source
+
+Import `Connector` from `@synsci/plugin` and return `connector: [source]` with
+your hooks. It is the same type used by the built-in connector registry. A source
+provides an ID, name, domain, description, `search`, and `fetch`; optional
+`formats` and `fetchFile` support file representations. Honor the caller's abort
+signal, limits, and your service's usage rules. Plugins own any HTTP transport,
+credential handling and rate limiting they require.
+
+Contributions are composed per project instance, so they cannot leak into
+another project's catalog. IDs must be lowercase words separated by hyphens and
+must not collide with built-in or other plugin sources. The host checks project
+trust at invocation, including retained connector references after revocation.
+These checks do not turn host-process JavaScript into sandboxed code.
+
+The [local lab package](../../examples/local-lab-plugin/README.md) is a complete,
+offline example with real tool and connector tests. It imports only the public
+plugin package and supplies a directory submission template in `catalog.json`.
 
 ## Installing a plugin
 
@@ -88,6 +146,21 @@ bun test --timeout 15000 ./test/tool/registry.test.ts
 Plugins do not need to live in this repo. Open an issue first if you think a
 plugin should ship as a built-in.
 
+## Resource lifecycle
+
+Return `dispose: async () => { ... }` to close connections, watchers, queues or
+timers. It runs when an instance closes or its plugin cache is invalidated.
+If a later plugin fails initialization, hooks already initialized are disposed too.
+Dispose is best effort, bounded to five seconds per plugin, and failures are
+logged. The host first aborts `signal`; a plugin must cooperate with cancellation
+because JavaScript already running in the host cannot be forcibly isolated.
+Keep cleanup idempotent and avoid starting new work during disposal.
+
+Repeated host initialization does not add duplicate event subscriptions. Event
+callbacks are observations and are not awaited as durable business processing;
+exceptions are logged. Use the runtime SDK's replayable stream for a separate
+application that needs reconnect and delivery recovery.
+
 ## Observability and optional review
 
 Keep external provenance or phase protocols in opt-in plugins, not a required
@@ -111,3 +184,12 @@ proof of correctness. A blocking reviewer (issue #141) needs a separate design:
 which actions it can block, a bounded latency and spend budget, treatment of
 unavailable evidence, visible reasons, and recovery. Existing observation hooks
 do not by themselves implement a safe accept/reject gate.
+
+Installed plugin and custom tool IDs participate in the normal Research tool
+selection without a built-in name whitelist. Configured denies still apply before
+initialization; fresh direct answers and explicit local read-only inspection keep
+their existing narrow tool sets. The host integration test at
+`backend/cli/test/plugin/runtime.test.ts` loads the external local-lab package with
+the execution sandbox enabled, executes it through the public HTTP runtime and a
+deterministic local provider, verifies its rich result through the messages API,
+checks a configured denial, and checks removal from discovery after uninstall.

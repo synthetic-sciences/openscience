@@ -1,0 +1,99 @@
+name: Runtime compatibility
+
+on:
+  pull_request:
+    paths:
+      - "backend/cli/**"
+      - "tooling/sdk/**"
+      - "tooling/plugin/**"
+      - "tooling/harbor/**"
+      - "tooling/util/**"
+      - "frontend/workspace/src/components/prompt*.ts*"
+      - "frontend/workspace/src/context/global-sync.tsx"
+      - "tooling/repo/runtime-conformance.ts"
+      - "tooling/repo/generate.ts"
+      - "examples/**"
+      - ".github/actions/setup-bun/**"
+      - ".github/workflows/runtime-conformance.yml"
+      - "package.json"
+      - "bun.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - name: Configure Linux containment fixtures
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
+          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          fi
+          bwrap --ro-bind / / --dev /dev --proc /proc --unshare-pid --die-with-parent -- true
+      - name: Install the pinned Harbor adapter and Python client
+        run: |
+          python3 -c 'import sys; assert sys.version_info >= (3, 12), "Harbor requires Python 3.12+"'
+          python3 -m venv "$RUNNER_TEMP/runtime-python"
+          "$RUNNER_TEMP/runtime-python/bin/python" -m pip install -e 'tooling/harbor[test]' -e tooling/sdk/python
+      - name: Check public clients and native Harbor contracts without model calls
+        run: |
+          "$RUNNER_TEMP/runtime-python/bin/python" -m pytest tooling/harbor/tests
+          "$RUNNER_TEMP/runtime-python/bin/python" -m unittest discover -s tooling/sdk/python/tests -p 'test_*.py'
+          bun run test:sdk
+          bun run --cwd backend/cli test ./test/runtime ./test/plugin ./test/question ./test/permission ./test/session/prompt-cancellation.test.ts ./test/session/tool-selection.test.ts ./test/tool/registry.test.ts ./test/cli/serve-lifecycle.test.ts ./test/cli/run-workspace.test.ts ./test/installation/headless-build.test.ts
+          bun run --cwd backend/cli test ./test/project/trust.test.ts
+          bun run --cwd examples/local-lab-plugin setup
+          bun test ./examples/local-lab-plugin
+          bun test ./examples/slack-research
+      - name: Check standalone Slack starter types
+        run: node_modules/.bin/tsc --project examples/slack-research/tsconfig.json --typeRoots backend/cli/node_modules/@types
+      - name: Check the first-party Research admission contract
+        working-directory: frontend/workspace
+        run: bun test ./src/components/prompt-runtime.test.ts
+      - name: Verify generated API and SDK stay in sync
+        env:
+          OPENSCIENCE_DISABLE_MODELS_FETCH: "true"
+          OPENSCIENCE_DISABLE_DEFAULT_PLUGINS: "true"
+          OPENSCIENCE_DISABLE_AUTOUPDATE: "true"
+        run: |
+          ./tooling/repo/generate.ts
+          git diff --exit-code -- tooling/sdk
+      - name: Build a native headless candidate with the offline catalog
+        env:
+          OPENSCIENCE_VERSION: 0.0.0-runtime-conformance
+          OPENSCIENCE_CHANNEL: dev
+          MODELS_DEV_API_JSON: ${{ runner.temp }}/runtime-models.json
+        run: |
+          bun -e 'await Bun.write(process.env.MODELS_DEV_API_JSON, Bun.gunzipSync(await Bun.file("backend/cli/test/fixture/models-catalog.json.gz").arrayBuffer()))'
+          bun run --cwd backend/cli build --headless --target linux-x64-baseline
+      - name: Exercise the compiled runtime over authenticated HTTP
+        run: |
+          bun tooling/repo/runtime-conformance.ts "$PWD/backend/cli/dist/headless/@synsci/openscience-linux-x64-baseline/bin/openscience" "$RUNNER_TEMP/runtime-python/bin/python"
+      - name: Verify the candidate through native Harbor and its fixture grader
+        run: |
+          runtime_binary="$PWD/backend/cli/dist/headless/@synsci/openscience-linux-x64-baseline/bin/openscience"
+          runtime_sha256="$(sha256sum "$runtime_binary" | cut -d ' ' -f 1)"
+          "$RUNNER_TEMP/runtime-python/bin/python" tooling/harbor/native-smoke/run.py \
+            --binary "$runtime_binary" \
+            --sha256 "$runtime_sha256" \
+            --output "$RUNNER_TEMP/native-harbor-conformance" \
+            --execute
+      - name: Retain native Harbor conformance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-harbor-conformance-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-harbor-conformance
+          if-no-files-found: ignore
+          retention-days: 7

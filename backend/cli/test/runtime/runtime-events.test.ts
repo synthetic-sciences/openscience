@@ -722,6 +722,7 @@ describe("/runtime routes", () => {
           const accepted = (await response.json()) as { runID: string; acceptedAt: number }
           expect(accepted.runID).toStartWith("run_")
           expect(accepted.acceptedAt).toBeGreaterThan(0)
+          await waitUntil(() => promptCall.mock.calls.length > 0)
           expect(promptCall.mock.calls[0]?.[0].agent).toBe("research")
 
           const replay = await RuntimeRoutes().request(`/events/replay?sessionID=${session.id}&afterSequence=0`)

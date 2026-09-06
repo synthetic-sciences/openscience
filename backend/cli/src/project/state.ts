@@ -43,6 +43,13 @@ export namespace State {
     if (entries.size === 0) recordsByKey.delete(key)
   }
 
+  /** Evict before awaiting cleanup so subsequent lookups cannot reuse a retired runtime. */
+  export async function remove(key: string, init: Function) {
+    const entry = recordsByKey.get(key)?.get(init)
+    clear(key, init)
+    if (entry?.dispose) await entry.dispose(await entry.state)
+  }
+
   export async function dispose(key: string, options: { strict?: boolean } = {}) {
     const entries = recordsByKey.get(key)
     if (!entries) return

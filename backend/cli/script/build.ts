@@ -15,7 +15,12 @@ process.chdir(dir)
 import pkg from "../package.json"
 import { Script } from "@synsci/script"
 import { assertLinuxArm64PageSize } from "./linux-arm64-page-size"
-import { NativeTargets, nativePackageName } from "./native-targets"
+import { nativePackageName } from "./native-targets"
+import { buildOptions, headlessAssets } from "./build-options"
+
+const options = buildOptions(process.argv.slice(2))
+if (options.headless && Script.release)
+  throw new Error("Headless builds are development artifacts; unset OPENSCIENCE_RELEASE")
 
 // Fetch and generate models.dev snapshot. Runtime refreshes stale snapshots
 // when current frontier IDs are missing, so avoid inventing model aliases here.
@@ -30,8 +35,6 @@ await Bun.write(
 )
 console.log("Generated models-snapshot.ts")
 
-const singleFlag = process.argv.includes("--single")
-const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 const artifactSource = process.env.OPENSCIENCE_ARTIFACT_SOURCE?.trim() ?? ""
 if (artifactSource && !/^[a-f0-9]{40}$/.test(artifactSource)) {
@@ -40,28 +43,7 @@ if (artifactSource && !/^[a-f0-9]{40}$/.test(artifactSource)) {
   )
 }
 
-const targets = singleFlag
-  ? NativeTargets.filter((item) => {
-      if (item.os !== process.platform || item.arch !== process.arch) {
-        return false
-      }
-
-      // When building for the current platform, prefer a single native binary by default.
-      // Baseline binaries require additional Bun artifacts and can be flaky to download.
-      if (item.avx2 === false) {
-        return baselineFlag
-      }
-
-      // also skip abi-specific builds for the same reason
-      if (item.abi !== undefined) {
-        return false
-      }
-
-      return true
-    })
-  : NativeTargets
-
-await $`rm -rf dist`
+await fs.promises.rm(options.output, { recursive: true, force: true })
 await $`bun run script/generate-skill-bundle.ts`
 
 // Build the openscience web UI (frontend/workspace) and regenerate the embedded asset
@@ -75,34 +57,37 @@ await $`bun run script/generate-skill-bundle.ts`
 // — run the workspace install if `node_modules` is missing.
 const repoRoot = path.resolve(dir, "../..")
 const webAppDir = path.resolve(repoRoot, "frontend/workspace")
-if (!fs.existsSync(path.join(repoRoot, "node_modules")) || !fs.existsSync(path.join(webAppDir, "node_modules"))) {
-  console.log("workspace node_modules missing — running bun install at repo root")
-  await $`bun install`.cwd(repoRoot)
+if (!options.headless) {
+  if (!fs.existsSync(path.join(repoRoot, "node_modules")) || !fs.existsSync(path.join(webAppDir, "node_modules"))) {
+    console.log("workspace node_modules missing — running bun install at repo root")
+    await $`bun install`.cwd(repoRoot)
+  }
+  console.log("building frontend/workspace (openscience web)")
+  await $`VITE_OPENSCIENCE_VERSION=${Script.version} bun run build`.cwd(webAppDir)
+  await Bun.file(path.join(webAppDir, "dist", "version.json")).write(
+    JSON.stringify({ version: Script.version, channel: Script.channel }, null, 2) + "\n",
+  )
+  await $`bun run script/generate-web-assets.ts`
 }
-console.log("building frontend/workspace (openscience web)")
-await $`VITE_OPENSCIENCE_VERSION=${Script.version} bun run build`.cwd(webAppDir)
-await Bun.file(path.join(webAppDir, "dist", "version.json")).write(
-  JSON.stringify({ version: Script.version, channel: Script.channel }, null, 2) + "\n",
-)
-await $`bun run script/generate-web-assets.ts`
 
 // Generate encryption key for prompt files (unique per build)
 const keyFragments = generateKeyFragments()
 const { plugin: encryptPlugin, defines: keyDefines } = createEncryptPromptsPlugin(keyFragments)
 
 const binaries: Record<string, string> = {}
-if (!skipInstall) {
+if (!skipInstall && !options.headless) {
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
-for (const item of targets) {
+for (const item of options.targets) {
   const name = nativePackageName(pkg.name, item)
   console.log(`building ${name}`)
-  await $`mkdir -p dist/${name}/bin`
+  const output = path.join(options.output, name)
+  await fs.promises.mkdir(path.join(output, "bin"), { recursive: true })
 
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
-    plugins: [encryptPlugin],
+    plugins: [encryptPlugin, ...(options.headless ? [headlessAssets(dir)] : [])],
     sourcemap: "external",
     compile: {
       autoloadBunfig: false,
@@ -111,7 +96,7 @@ for (const item of targets) {
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/openscience`,
+      outfile: path.join(output, "bin/openscience"),
       execArgv: [`--user-agent=openscience/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
@@ -127,14 +112,15 @@ for (const item of targets) {
   })
 
   if (item.os === "linux" && item.arch === "arm64") {
-    const report = await assertLinuxArm64PageSize(`dist/${name}/bin/openscience`)
+    const report = await assertLinuxArm64PageSize(path.join(output, "bin/openscience"))
     console.log(`verified ${name} has ${report.loads} ELF load segments compatible with 64KB-page kernels`)
   }
 
-  await Bun.file(`dist/${name}/package.json`).write(
+  await Bun.file(path.join(output, "package.json")).write(
     JSON.stringify(
       {
         name,
+        ...(options.headless ? { private: true } : {}),
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],

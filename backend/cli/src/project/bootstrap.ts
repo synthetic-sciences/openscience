@@ -48,7 +48,7 @@ async function invalidateProjectExecutionCaches() {
   Command.invalidate()
   ToolRegistry.invalidate()
   Agent.invalidate()
-  Plugin.invalidate()
+  await Plugin.invalidate()
   const providerAuth = import("@/provider/auth").then(({ ProviderAuth }) => ProviderAuth.invalidate())
   await Promise.all([Skill.invalidate(), providerAuth])
 }

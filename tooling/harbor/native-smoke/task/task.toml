@@ -1,0 +1,26 @@
+schema_version = "1.4"
+artifacts = ["/workspace/harbor-native-fixture/fixture-result.json"]
+
+[task]
+name = "openscience/native-conformance"
+version = "1.0.0"
+description = "Deterministic protocol fixture, not a scientific benchmark"
+
+[agent]
+timeout_sec = 180
+
+[verifier]
+timeout_sec = 30
+
+[environment]
+build_timeout_sec = 300
+cpus = 1
+memory_mb = 2048
+storage_mb = 2048
+gpus = 0
+
+[environment.healthcheck]
+command = "curl --fail --silent http://127.0.0.1:8765/health"
+interval_sec = 1
+timeout_sec = 5
+retries = 10
