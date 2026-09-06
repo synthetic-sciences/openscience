@@ -162,7 +162,7 @@ async function withArtifact(
   }
 }
 
-test("reasoning prose and artifacts respect Show reasoning but ignore obsolete activity preferences", async ({
+test("classic per-turn disclosure preserves full reasoning and results despite legacy global preferences", async ({
   page,
   sdk,
   gotoSession,
@@ -221,19 +221,27 @@ test("reasoning prose and artifacts respect Show reasoning but ignore obsolete a
     })
     await page.addInitScript((id) => {
       localStorage.setItem("openscience:activity-view:v1", "compact")
-      localStorage.setItem("openscience-trace-expansion-v1", JSON.stringify({ [id]: false }))
+      if (localStorage.getItem("openscience-trace-expansion-v1") === null) {
+        localStorage.setItem("openscience-trace-expansion-v1", JSON.stringify({ [id]: false }))
+      }
+      // Old global hiding must not override an explicitly expanded classic turn.
+      localStorage.setItem("settings.v3", JSON.stringify({ general: { showReasoning: false } }))
     }, userID)
     await gotoSession(sessionID)
     const artifact = page.locator('[data-component="science-artifact"][data-kind="sequence"]')
     const reasoningRows = page.locator('[data-component="reasoning-part"]')
-    const toggle = page.locator('[data-slot="session-turn-reasoning-toggle"]')
+    const toggle = page.locator('[data-slot="session-turn-collapsible-trigger-content"]')
     await expect(page.getByRole("group", { name: "Activity view", exact: true })).toHaveCount(0)
-    await expect(page.locator('[data-slot="session-turn-collapsible-trigger-content"]')).toHaveCount(0)
+    await expect(page.locator('[data-slot="session-turn-reasoning-toggle"]')).toHaveCount(0)
+    await expect(toggle).toHaveAttribute("aria-expanded", "false")
+    await expect(reasoningRows).toHaveCount(0)
+    await expect(artifact).toBeVisible()
+    await toggle.click()
     await expect(reasoningRows).toHaveCount(2)
     await expect(reasoningRows.locator("button")).toHaveCount(0)
     await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
     await expect(reasoningRows.locator("strong")).toHaveText("same evaluation conditions")
-    await expect(toggle).toHaveText("Hide reasoning")
+    await expect(toggle).toContainText("Hide reasoning and activity")
     await expect(toggle).toHaveAttribute("aria-expanded", "true")
     await expect(artifact).toBeVisible()
     await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
@@ -251,30 +259,24 @@ test("reasoning prose and artifacts respect Show reasoning but ignore obsolete a
 
     await toggle.click()
     await expect(reasoningRows).toHaveCount(0)
-    await expect(toggle).toHaveText("Show reasoning")
+    await expect(toggle).toContainText("Show reasoning and activity")
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     await expect(artifact).toBeVisible()
     await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
     await page.reload()
-    await expect(toggle).toHaveText("Show reasoning")
+    await expect(toggle).toContainText("Show reasoning and activity")
     await expect(reasoningRows).toHaveCount(0)
     await expect(artifact).toBeVisible()
 
     const dialog = await openSettings(page)
     await dialog.getByRole("button", { name: "General", exact: true }).click()
-    const setting = dialog.getByRole("switch", { name: "Show reasoning", exact: true })
-    await expect(setting).not.toBeChecked()
-    await setting.locator("..").locator('[data-slot="switch-control"]').click()
-    await expect(setting).toBeChecked()
-    await setting.focus()
-    await expect(setting).toBeFocused()
-    await setting.press("Space")
-    await expect(setting).not.toBeChecked()
-    await setting.press("Space")
-    await expect(setting).toBeChecked()
+    await expect(dialog.getByRole("switch", { name: "Show reasoning", exact: true })).toHaveCount(0)
     await dialog.getByRole("button", { name: "Close", exact: true }).click()
+    await expect(reasoningRows).toHaveCount(0)
+    await expect(toggle).toHaveAttribute("aria-expanded", "false")
+    await toggle.click()
     await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
-    await expect(toggle).toHaveText("Hide reasoning")
+    await expect(toggle).toContainText("Hide reasoning and activity")
     await page.reload()
     await expect(reasoningRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
     await expect(artifact).toBeVisible()

@@ -41,7 +41,7 @@ import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
 import { progressStatus } from "./session-turn-progress"
-import { visibleResearchTrace } from "./research-trace"
+import { collapsibleTracePart, visibleResearchTrace } from "./research-trace"
 import { MarkdownFileScope } from "./markdown"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
@@ -126,9 +126,11 @@ function isGeneratedTool(part: PartType | undefined): part is ToolPart {
   return part?.type === "tool" && part.tool === "artifact" && part.state.status === "completed"
 }
 
-function AssistantTrace(props: { messages: AssistantMessage[]; showReasoning: boolean }) {
+function AssistantTrace(props: { messages: AssistantMessage[]; expanded: boolean; pendingRequestCallID?: string }) {
   const data = useData()
   const emptyParts: PartType[] = []
+  const pendingChildRequest = (sessionID: string) =>
+    !!(data.store.permission?.[sessionID]?.[0] || data.store.question?.[sessionID]?.[0])
   const trace = createMemo(() =>
     visibleResearchTrace(
       props.messages.flatMap((message) =>
@@ -136,7 +138,7 @@ function AssistantTrace(props: { messages: AssistantMessage[]; showReasoning: bo
           message,
           part,
           hidden:
-            (!props.showReasoning && part.type === "reasoning") ||
+            (!props.expanded && collapsibleTracePart(part, props.pendingRequestCallID, pendingChildRequest)) ||
             (part.type === "tool" && part.tool === "todoread") ||
             isGeneratedTool(part),
         })),
@@ -188,8 +190,8 @@ export function SessionTurn(
     sessionTitle?: string
     messageID: string
     lastUserMessageID?: string
-    showReasoning?: boolean
-    onShowReasoningChange?: (show: boolean) => void
+    stepsExpanded?: boolean
+    onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -293,14 +295,6 @@ export function SessionTurn(
   const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
 
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
-
-  const hasReasoning = createMemo(() =>
-    assistantMessages().some((message) =>
-      (data.store.part[message.id] ?? emptyParts).some(
-        (part) => part.type === "reasoning" && !!reasoningDisplayText(part.text),
-      ),
-    ),
-  )
 
   const hasSteps = createMemo(() => {
     for (const m of assistantMessages()) {
@@ -547,7 +541,7 @@ export function SessionTurn(
   const diffBatch = 20
 
   const [store, setStore] = createStore({
-    showReasoning: true,
+    stepsExpanded: undefined as boolean | undefined,
     retrySeconds: 0,
     now: Date.now(),
     diffsOpen: [] as string[],
@@ -557,13 +551,18 @@ export function SessionTurn(
     duration: duration(),
   })
 
-  const showReasoning = () => props.showReasoning ?? store.showReasoning
-  const toggleReasoning = () => {
-    const show = !showReasoning()
-    setStore("showReasoning", show)
-    props.onShowReasoningChange?.(show)
+  const expanded = () => props.stepsExpanded ?? store.stepsExpanded ?? false
+  const toggleSteps = () => {
     props.onUserInteracted?.()
+    if (props.onStepsExpandedToggle) return props.onStepsExpandedToggle()
+    setStore("stepsExpanded", !expanded())
   }
+
+  // Open a live turn once. Finishing a response must not collapse the text
+  // underneath someone reading it, and an explicit collapse must stay put.
+  createEffect(() => {
+    if (working() && store.stepsExpanded === undefined) setStore("stepsExpanded", true)
+  })
 
   createEffect(
     on(
@@ -676,12 +675,24 @@ export function SessionTurn(
                         <Message message={msg()} parts={stickyParts()} />
                       </div>
 
-                      {/* Keep request state beside its originating user message. */}
+                      {/* One disclosure owns this turn's trace, never the whole conversation. */}
                       <Show when={working() || hasSteps()}>
                         <div data-slot="session-turn-response-trigger">
-                          <div data-slot="session-turn-status">
+                          <Button
+                            type="button"
+                            data-slot="session-turn-collapsible-trigger-content"
+                            data-expandable={hasSteps()}
+                            variant="ghost"
+                            size="small"
+                            aria-expanded={expanded()}
+                            onClick={toggleSteps}
+                            title={working() ? statusText() : undefined}
+                          >
                             <Show when={working()}>
                               <Spinner />
+                            </Show>
+                            <Show when={!working()}>
+                              <Icon name="chevron-down" size="small" data-slot="session-turn-trigger-icon" />
                             </Show>
                             <Switch>
                               <Match when={retry()}>
@@ -697,8 +708,10 @@ export function SessionTurn(
                               <Match when={working()}>
                                 <span data-slot="session-turn-status-text">{statusText()}</span>
                               </Match>
-                              <Match when={true}>
-                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.trace.title")}</span>
+                              <Match when={!working()}>
+                                <span data-slot="session-turn-status-text">
+                                  {i18n.t(expanded() ? "ui.sessionTurn.steps.hide" : "ui.sessionTurn.steps.show")}
+                                </span>
                               </Match>
                             </Switch>
                             <Show when={!working() || !phase()}>
@@ -707,34 +720,18 @@ export function SessionTurn(
                                 {store.duration}
                               </span>
                             </Show>
-                          </div>
-                          <Show when={hasReasoning()}>
-                            <button
-                              type="button"
-                              data-slot="session-turn-reasoning-toggle"
-                              aria-expanded={showReasoning()}
-                              onClick={toggleReasoning}
-                            >
-                              <Icon name="chevron-down" size="small" />
-                              {i18n.t(
-                                showReasoning() ? "ui.sessionTurn.reasoning.hide" : "ui.sessionTurn.reasoning.show",
-                              )}
-                            </button>
-                          </Show>
-                          <Show when={working() && phase()?.hint}>
-                            {(hint) => (
-                              <div data-slot="session-turn-progress-hint" role="status" aria-live="polite">
-                                {i18n.t(hint())}
-                              </div>
-                            )}
-                          </Show>
+                          </Button>
                         </div>
                       </Show>
                     </div>
                     <Show when={assistantMessages().length > 0}>
-                      <div data-slot="session-turn-response-section">
+                      <div data-slot="session-turn-response-section" data-expanded={expanded() ? "true" : undefined}>
                         <MarkdownFileScope paths={linkedFiles()}>
-                          <AssistantTrace messages={assistantMessages()} showReasoning={showReasoning()} />
+                          <AssistantTrace
+                            messages={assistantMessages()}
+                            expanded={expanded()}
+                            pendingRequestCallID={requestTool()?.callID}
+                          />
                         </MarkdownFileScope>
                         <Show when={response()}>
                           <div

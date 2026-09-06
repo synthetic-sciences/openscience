@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  "ui.sessionTurn.steps.show": "顯示執行軌跡",
+  "ui.sessionTurn.steps.hide": "隱藏執行軌跡",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
@@ -93,6 +95,7 @@ export const dict = {
   "ui.tool.running.edit": "編輯中",
   "ui.tool.running.write": "寫入中",
   "ui.tool.running.patch": "套用修補程式中",
+  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "執行中",
   "ui.tool.status.done": "完成",
   "ui.tool.status.error": "失敗",

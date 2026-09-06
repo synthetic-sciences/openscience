@@ -65,6 +65,28 @@ function lifecycle(part: Part) {
   return part.type === "step-start" || part.type === "step-finish" || part.type === "snapshot" || part.type === "patch"
 }
 
+/** Collapsing activity must not bury deliverables, failures, or a question the
+ * user is still answering. Keep those entries mounted at their original IDs. */
+export function collapsibleTracePart(
+  part: Part,
+  pendingRequestCallID?: string,
+  pendingChildRequest?: (sessionID: string) => boolean,
+) {
+  if (part.type === "reasoning") return true
+  if (part.type !== "tool") return false
+  if (part.callID === pendingRequestCallID || part.state.status === "error") return false
+  const child = part.tool === "task" && "metadata" in part.state ? part.state.metadata?.sessionId : undefined
+  if (typeof child === "string" && pendingChildRequest?.(child)) return false
+  if (part.state.status !== "completed") return true
+  if (part.state.metadata?.ok === false) return false
+  const outcome = part.tool === "task" ? part.state.metadata?.outcome : undefined
+  if (outcome === "error" || outcome === "timed_out" || outcome === "partial") return false
+  if (part.state.metadata?.artifact) return false
+  if (part.tool === "bash" && typeof part.state.metadata?.exit === "number" && part.state.metadata.exit !== 0)
+    return false
+  return true
+}
+
 /**
  * Keep received prose and tool calls unchanged and chronological. Only
  * lifecycle markers, unreadable reasoning, and entries presented elsewhere are omitted; streaming

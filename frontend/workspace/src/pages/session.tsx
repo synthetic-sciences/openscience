@@ -74,6 +74,7 @@ import { useExecutionAuthority } from "@/atlas/use-execution-authority"
 import { sessionEntryTarget } from "@/pages/session-entry"
 import { shouldConfirmUndo, undoPreview, undoSummary, type UndoPreview } from "@/pages/session-undo"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { createTraceExpansion } from "@/pages/session-trace"
 import { estimate, latestContext, type ContextEstimate, type ContextSample } from "@/pages/session-context"
 import "./session-header.css"
 import "./session-undo.css"
@@ -835,6 +836,16 @@ export default function Page(): JSX.Element {
     return !!status && status.type !== "idle"
   })
 
+  const traceExpansion = createTraceExpansion()
+  createEffect(
+    on(
+      () => (working() ? lastUserMessage()?.id : undefined),
+      (id) => {
+        if (id) traceExpansion.open(id)
+      },
+    ),
+  )
+
   const chatScroll = createAutoScroll({
     working,
     overflowAnchor: "dynamic",
@@ -1306,8 +1317,8 @@ export default function Page(): JSX.Element {
                                   sessionID={params.id!}
                                   messageID={message.id}
                                   lastUserMessageID={lastUserMessage()?.id}
-                                  showReasoning={settings.general.showReasoning()}
-                                  onShowReasoningChange={settings.general.setShowReasoning}
+                                  stepsExpanded={traceExpansion.expanded(message.id)}
+                                  onStepsExpandedToggle={() => traceExpansion.toggle(message.id)}
                                   classes={{
                                     root: "min-w-0 w-full relative",
                                     content: "flex flex-col justify-between !overflow-visible",

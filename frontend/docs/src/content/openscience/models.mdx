@@ -87,7 +87,7 @@ Open a model's options to see its supported reasoning tiers, context capacity, a
 
 The conversation displays readable reasoning and tool activity when the model supplies them. Some models return only a final answer or a reasoning summary. The visible activity is useful for following progress, but the saved outputs and cited evidence are what you should verify.
 
-Use **Show reasoning / Hide reasoning** above a turn, or **Customize → General → Show reasoning**, to change visibility. The choice is saved across sessions. Hiding reasoning does not hide tool calls, stop the model, or change the conversation sent to it. There is no Detailed/Compact mode.
+Use **Show reasoning and activity / Hide reasoning and activity** above a turn to inspect its steps. Expansion is saved per turn, not applied to every earlier response. Live turns open once and stay open when they finish; answers and pending approvals remain accessible when steps are collapsed. The control does not stop the model or change the conversation sent to it. There is no global reasoning toggle or Detailed/Compact mode.
 
 Readable passages appear as plain prose, with routine provider phase headings removed from the display. OpenScience does not generate another summary or modify the stored provider response. A model that exposes only a reasoning summary cannot be made to expose private internal reasoning through this setting.
 

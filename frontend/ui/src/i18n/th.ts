@@ -1,4 +1,6 @@
 export const dict = {
+  "ui.sessionTurn.steps.show": "แสดงร่องรอยการทำงาน",
+  "ui.sessionTurn.steps.hide": "ซ่อนร่องรอยการทำงาน",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
@@ -90,6 +92,7 @@ export const dict = {
   "ui.tool.running.edit": "กำลังแก้ไข",
   "ui.tool.running.write": "กำลังเขียน",
   "ui.tool.running.patch": "กำลังใช้แพตช์",
+  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "กำลังทำงาน",
   "ui.tool.status.done": "เสร็จสิ้น",
   "ui.tool.status.error": "ล้มเหลว",

@@ -1,7 +1,4 @@
 export const dict = {
-  "settings.general.reasoning.title": "Show reasoning",
-  "settings.general.reasoning.description":
-    "Display the readable reasoning supplied by the model. Tool activity stays visible.",
   "command.category.suggested": "Suggested",
   "command.category.view": "View",
   "command.category.project": "Project",

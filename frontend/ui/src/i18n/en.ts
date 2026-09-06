@@ -1,4 +1,6 @@
 export const dict = {
+  "ui.sessionTurn.steps.show": "Show reasoning and activity",
+  "ui.sessionTurn.steps.hide": "Hide reasoning and activity",
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Commenting on ",
@@ -92,6 +94,7 @@ export const dict = {
   "ui.tool.running.edit": "Editing",
   "ui.tool.running.write": "Writing",
   "ui.tool.running.patch": "Applying patch",
+  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "Running",
   "ui.tool.status.done": "Done",
   "ui.tool.status.error": "Failed",

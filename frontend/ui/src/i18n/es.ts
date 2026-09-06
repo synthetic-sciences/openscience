@@ -1,4 +1,6 @@
 export const dict = {
+  "ui.sessionTurn.steps.show": "Mostrar traza de ejecución",
+  "ui.sessionTurn.steps.hide": "Ocultar traza de ejecución",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
@@ -90,6 +92,7 @@ export const dict = {
   "ui.tool.running.edit": "Editando",
   "ui.tool.running.write": "Escribiendo",
   "ui.tool.running.patch": "Aplicando parche",
+  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "En curso",
   "ui.tool.status.done": "Listo",
   "ui.tool.status.error": "Falló",

@@ -30,40 +30,6 @@
     min-width: 0;
   }
 
-  [data-slot="session-turn-reasoning-toggle"] {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    min-height: 32px;
-    padding: 4px 8px;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: transparent;
-    color: var(--text-weak);
-    font-size: var(--font-size-small);
-    cursor: pointer;
-
-    &[aria-expanded="true"] [data-slot="icon-svg"] {
-      transform: rotate(180deg);
-    }
-
-    &:hover {
-      background: var(--surface-raised-base);
-      color: var(--text-base);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--color-focus);
-      outline-offset: 1px;
-    }
-  }
-
-  [data-slot="session-turn-progress-hint"] {
-    flex-basis: 100%;
-    color: var(--text-weak);
-    font-size: var(--font-size-small);
-  }
-
   [data-slot="session-turn-message-container"] {
     display: flex;
     flex-direction: column;
@@ -594,14 +560,27 @@
     }
   }
 
-  [data-slot="session-turn-status"] {
+  [data-slot="session-turn-collapsible-trigger-content"] {
     max-width: 100%;
-    min-height: 24px;
+    min-height: 32px;
     display: flex;
     align-items: center;
     gap: 8px;
+    padding: 6px 10px;
+    margin: -6px -10px;
+    border-radius: var(--radius-xs);
     color: var(--text-weak);
     font-size: var(--font-size-small);
+    cursor: pointer;
+
+    [data-slot="session-turn-trigger-icon"] {
+      flex-shrink: 0;
+      transform: rotate(-90deg);
+    }
+
+    &[aria-expanded="true"] [data-slot="session-turn-trigger-icon"] {
+      transform: none;
+    }
 
     [data-component="spinner"] {
       width: 12px;
@@ -629,13 +608,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  [data-slot="session-turn-progress-hint"] {
-    margin-top: 6px;
-    font-size: var(--font-size-small);
-    line-height: var(--line-height-large);
-    color: var(--text-weak);
   }
 
   [data-slot="session-turn-details-text"] {

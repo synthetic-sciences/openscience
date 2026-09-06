@@ -1,15 +1,12 @@
 import { children, createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { type UiI18nKey, useI18n } from "../context/i18n"
 import { Card } from "./card"
-import { useClock } from "./clock"
 import { Collapsible } from "./collapsible"
 import { Icon, IconProps } from "./icon"
 import { Spinner } from "./spinner"
-import { elapsedLabel, formatTaskDuration } from "./research-trace"
 import {
   errorLine,
   humanizeToolName,
-  runningLabel,
   toolErrorDisplay,
   toolOutcome,
   type ToolOutcome,
@@ -41,10 +38,7 @@ export interface BasicToolProps {
   forceOpen?: boolean
   locked?: boolean
   onSubtitleClick?: () => void
-  /** Lifecycle of the underlying call. Renderers spread their ToolProps, so
-   * these arrive without each renderer wiring them, and the row shows one
-   * status glyph, the live elapsed time or final duration, and a one-line
-   * receipt or the first error line. */
+  /** Preserve call state without adding another status rail to the transcript. */
   tool?: string
   status?: string
   time?: { start: number; end?: number }
@@ -59,7 +53,7 @@ export function resolveBasicToolChildren(getChildren: () => JSX.Element) {
 }
 
 const glyphLabel: Record<ToolOutcome, UiI18nKey> = {
-  pending: "ui.tool.status.running",
+  pending: "ui.tool.status.pending",
   running: "ui.tool.status.running",
   done: "ui.tool.status.done",
   error: "ui.tool.status.error",
@@ -110,24 +104,12 @@ export function BasicTool(props: BasicToolProps) {
   const outcome = createMemo(() =>
     toolOutcome(props.status, props.error, props.tool === "bash" ? props.metadata?.exit : undefined),
   )
-  const live = () => outcome() === "running" || outcome() === "pending"
-  const now = useClock(() => live() && !!props.time?.start)
-  const clock = createMemo(() => {
-    const time = props.time
-    if (!time?.start) return ""
-    if (live()) return elapsedLabel(now() - time.start)
-    const total = (time.end ?? time.start) - time.start
-    return total >= 1000 ? formatTaskDuration(total) : ""
-  })
   const detail = createMemo(() => {
     if (props.error) return errorLine(props.error)
     return (props.summary ?? []).map((item) => i18n.t(item.key, item.params)).join(" · ")
   })
   const detailed = () => !props.hideDetails && (!!props.error || !!content())
-  const title = (trigger: TriggerTitle) => {
-    const key = live() && props.tool ? runningLabel(props.tool) : undefined
-    return key ? i18n.t(key) : trigger.title
-  }
+  const failed = () => outcome() === "error" || outcome() === "cancelled"
 
   createEffect(() => {
     if (props.forceOpen) setOpen(true)
@@ -141,9 +123,33 @@ export function BasicTool(props: BasicToolProps) {
   return (
     <Collapsible open={open()} onOpenChange={handleOpenChange}>
       <Collapsible.Trigger>
-        <div data-component="tool-trigger">
+        <div data-component="tool-trigger" data-outcome={props.status ? outcome() : undefined}>
           <div data-slot="basic-tool-tool-trigger-content">
-            <Icon name={props.icon} size="small" />
+            <span
+              data-slot="basic-tool-tool-status"
+              data-outcome={props.status ? outcome() : undefined}
+              role={props.status ? "img" : undefined}
+              aria-label={props.status ? i18n.t(glyphLabel[outcome()]) : undefined}
+              title={props.status ? [i18n.t(glyphLabel[outcome()]), detail()].filter(Boolean).join(" · ") : undefined}
+            >
+              <Switch>
+                <Match when={props.status && outcome() === "pending"}>
+                  <Icon name="clock" size="small" />
+                </Match>
+                <Match when={props.status && outcome() === "running"}>
+                  <Spinner />
+                </Match>
+                <Match when={props.status && outcome() === "cancelled"}>
+                  <Icon name="circle-ban-sign" size="small" />
+                </Match>
+                <Match when={props.status && outcome() === "error"}>
+                  <Icon name="circle-x" size="small" />
+                </Match>
+                <Match when={true}>
+                  <Icon name={props.icon} size="small" />
+                </Match>
+              </Switch>
+            </span>
             <div data-slot="basic-tool-tool-info">
               <Switch>
                 <Match when={isTriggerTitle(props.trigger) && props.trigger}>
@@ -156,8 +162,13 @@ export function BasicTool(props: BasicToolProps) {
                             [trigger().titleClass ?? ""]: !!trigger().titleClass,
                           }}
                         >
-                          {title(trigger())}
+                          {trigger().title}
                         </span>
+                        <Show when={props.status && failed()}>
+                          <span data-slot="basic-tool-tool-failure-label" title={detail()}>
+                            {i18n.t(glyphLabel[outcome()])}
+                          </span>
+                        </Show>
                         <Show when={trigger().subtitle}>
                           <span
                             data-slot="basic-tool-tool-subtitle"
@@ -198,38 +209,6 @@ export function BasicTool(props: BasicToolProps) {
               </Switch>
             </div>
           </div>
-          <Show when={props.status}>
-            <span data-slot="basic-tool-tool-status" data-outcome={outcome()}>
-              <Show when={detail()}>
-                <span
-                  data-slot="basic-tool-tool-detail"
-                  data-error={outcome() === "error" ? "true" : undefined}
-                  title={detail()}
-                >
-                  {detail()}
-                </span>
-              </Show>
-              <span data-slot="basic-tool-tool-glyph" role="img" aria-label={i18n.t(glyphLabel[outcome()])}>
-                <Switch>
-                  <Match when={live()}>
-                    <Spinner />
-                  </Match>
-                  <Match when={outcome() === "done"}>
-                    <Icon name="check" size="small" />
-                  </Match>
-                  <Match when={outcome() === "cancelled"}>
-                    <Icon name="circle-ban-sign" size="small" />
-                  </Match>
-                  <Match when={true}>
-                    <Icon name="circle-x" size="small" />
-                  </Match>
-                </Switch>
-              </span>
-              <span data-slot="basic-tool-tool-time" aria-live="off">
-                {clock()}
-              </span>
-            </span>
-          </Show>
           <Show when={detailed() && !props.locked}>
             <Collapsible.Arrow />
           </Show>

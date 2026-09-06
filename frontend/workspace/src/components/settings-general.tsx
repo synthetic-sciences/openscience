@@ -190,14 +190,6 @@ export const AppearanceSections: Component = () => {
               triggerVariant="settings"
             />
           </SettingsRow>
-          <SettingsRow
-            title={language.t("settings.general.reasoning.title")}
-            description={language.t("settings.general.reasoning.description")}
-          >
-            <Switch hideLabel checked={settings.general.showReasoning()} onChange={settings.general.setShowReasoning}>
-              {language.t("settings.general.reasoning.title")}
-            </Switch>
-          </SettingsRow>
         </div>
       </SettingsSection>
 

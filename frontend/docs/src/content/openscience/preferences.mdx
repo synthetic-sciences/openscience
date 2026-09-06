@@ -3,7 +3,7 @@ title: "Appearance, notifications, and updates"
 description: "Set up the workspace for how you read, monitor work, and keep the app current."
 ---
 
-Open **Customize → General** for appearance, reasoning visibility, language, notification, sound, account, and update preferences.
+Open **Customize → General** for appearance, language, notification, sound, account, and update preferences. Reasoning visibility is controlled within each conversation turn.
 
 ## Appearance and language
 
@@ -32,7 +32,9 @@ Check the account and funding workspace before paid work. [Ace](/openscience/ace
 
 ## Reasoning visibility
 
-Use **Show reasoning** in General, or **Show reasoning / Hide reasoning** above a turn's activity. Both controls use the same saved preference. Hiding reasoning leaves tool calls and results visible. There are no Detailed/Compact modes; readable provider text is shown as prose, with routine action headings omitted. Providers may supply summaries or no readable reasoning; OpenScience cannot reveal private reasoning the provider did not send.
+Use **Show reasoning and activity / Hide reasoning and activity** above a turn to expand or collapse its steps. Each turn remembers its own choice; changing one does not move or hide the history in other turns. New live turns open automatically and stay open when they finish; a turn you explicitly collapse stays collapsed. Answers, scientific results, pending approvals/questions, and failed tool calls remain visible when steps are collapsed.
+
+There is no separate global reasoning toggle or Detailed/Compact mode. Readable provider text is shown inline, with routine action headings omitted. Providers may supply summaries or no readable reasoning; OpenScience cannot reveal private reasoning the provider did not send.
 
 ## Updates and release notes
 

@@ -17,10 +17,13 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let cleanup: (() => void) | undefined
   let auto: { top: number; time: number } | undefined
   let height = 0
+  let anchor: { element: HTMLElement; top: number; until: number } | undefined
+  let anchorFrame: number | undefined
 
   const threshold = () => options.bottomThreshold ?? 10
 
   const [store, setStore] = createStore({
+    scrollRef: undefined as HTMLElement | undefined,
     contentRef: undefined as HTMLElement | undefined,
     userScrolled: false,
   })
@@ -78,6 +81,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const scrollToBottom = (force: boolean) => {
+    if (force) anchor = undefined
     if (!force && !active()) return
     const el = scroll
     if (!el) return
@@ -106,6 +110,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const handleWheel = (e: WheelEvent) => {
+    anchor = undefined
     if (e.deltaY >= 0) return
     // If the user is scrolling within a nested scrollable region (tool output,
     // code block, etc), don't treat it as leaving the "follow bottom" mode.
@@ -144,6 +149,54 @@ export function createAutoScroll(options: AutoScrollOptions) {
     stop()
   }
 
+  const restoreAnchor = () => {
+    const el = scroll
+    const saved = anchor
+    if (!el || !saved) return false
+    if (Date.now() > saved.until || !el.contains(saved.element)) {
+      anchor = undefined
+      return false
+    }
+    // Native scroll anchoring may already have compensated. Restore only the
+    // remaining visual displacement, never add the content-height difference.
+    const delta = saved.element.getBoundingClientRect().top - saved.top
+    if (Math.abs(delta) > 1) el.scrollTop += delta
+    return true
+  }
+
+  const captureDisclosure = (event: MouseEvent) => {
+    const el = scroll
+    const target = event.target instanceof Element ? event.target : undefined
+    const button = target?.closest<HTMLElement>("[aria-expanded], summary")
+    if (!el || !button || !el.contains(button) || !canScroll(el)) return
+    const nested = target?.closest("[data-scrollable]")
+    if (nested && nested !== el) return
+    stop()
+    anchor = { element: button, top: button.getBoundingClientRect().top, until: Date.now() + 350 }
+    if (anchorFrame !== undefined) cancelAnimationFrame(anchorFrame)
+    // Capture-phase runs before a disclosure changes layout, including a
+    // keyboard-generated click. ResizeObserver also follows short transitions.
+    anchorFrame = requestAnimationFrame(() => {
+      anchorFrame = undefined
+      restoreAnchor()
+    })
+  }
+
+  const clearAnchor = () => {
+    anchor = undefined
+  }
+
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return
+    if (!["PageUp", "PageDown", "ArrowUp", "ArrowDown", "Home", "End", " "].includes(event.key)) return
+    const target = event.target instanceof Element ? event.target : undefined
+    if (target?.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])")) return
+    // Space activates a focused disclosure; its generated click still needs
+    // the anchor. On ordinary content, these keys are explicit scroll intent.
+    if (event.key === " " && target?.closest("button, summary, [role='button']")) return
+    clearAnchor()
+  }
+
   const updateOverflowAnchor = (el: HTMLElement) => {
     const mode = options.overflowAnchor ?? "dynamic"
 
@@ -166,6 +219,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
       const el = scroll
       const grew = next > height
       height = next
+      if (restoreAnchor()) return
       if (el && !canScroll(el)) return
       if (!active()) return
       if (store.userScrolled) return
@@ -176,6 +230,14 @@ export function createAutoScroll(options: AutoScrollOptions) {
       // ResizeObserver fires after layout, before paint.
       // Keep the bottom locked in the same frame to avoid visible
       // "jump up then catch up" artifacts while streaming content.
+      scrollToBottom(false)
+    },
+  )
+
+  createResizeObserver(
+    () => store.scrollRef,
+    () => {
+      if (restoreAnchor()) return
       scrollToBottom(false)
     },
   )
@@ -210,6 +272,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   onCleanup(() => {
     if (settleTimer) clearTimeout(settleTimer)
     if (autoTimer) clearTimeout(autoTimer)
+    if (anchorFrame !== undefined) cancelAnimationFrame(anchorFrame)
     if (cleanup) cleanup()
   })
 
@@ -221,6 +284,8 @@ export function createAutoScroll(options: AutoScrollOptions) {
       }
 
       scroll = el
+      setStore("scrollRef", el)
+      anchor = undefined
 
       if (!el) return
 
@@ -228,9 +293,17 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
       updateOverflowAnchor(el)
       el.addEventListener("wheel", handleWheel, { passive: true })
+      el.addEventListener("click", captureDisclosure, true)
+      el.addEventListener("pointerdown", clearAnchor, { passive: true })
+      el.addEventListener("touchmove", clearAnchor, { passive: true })
+      el.addEventListener("keydown", handleKeydown)
 
       cleanup = () => {
         el.removeEventListener("wheel", handleWheel)
+        el.removeEventListener("click", captureDisclosure, true)
+        el.removeEventListener("pointerdown", clearAnchor)
+        el.removeEventListener("touchmove", clearAnchor)
+        el.removeEventListener("keydown", handleKeydown)
       }
     },
     contentRef: (el: HTMLElement | undefined) => setStore("contentRef", el),

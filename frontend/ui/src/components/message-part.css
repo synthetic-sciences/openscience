@@ -261,18 +261,28 @@
 [data-component="shell-output"] {
   position: relative;
   min-width: 0;
-  border-radius: var(--radius-sm);
-  background: var(--surface-inset-base, var(--surface-base));
 
   [data-slot="shell-output-actions"] {
-    display: flex;
-    justify-content: flex-end;
-    padding: 2px 4px 0;
+    position: absolute;
+    top: 0;
+    right: 4px;
+    opacity: 0;
+  }
+
+  &:hover [data-slot="shell-output-actions"],
+  &:focus-within [data-slot="shell-output-actions"] {
+    opacity: 1;
+  }
+
+  @media (hover: none) {
+    [data-slot="shell-output-actions"] {
+      opacity: 1;
+    }
   }
 
   [data-component="tool-output"] {
     min-width: 0;
-    padding: 0 12px 12px;
+    padding: 4px 40px 10px 10px;
     scrollbar-width: thin;
     overscroll-behavior: contain;
 
@@ -291,8 +301,8 @@
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       font-family: var(--font-family-mono);
-      font-size: var(--font-size-small);
-      line-height: 1.6;
+      font-size: var(--font-size-medium);
+      line-height: 20px;
     }
   }
 

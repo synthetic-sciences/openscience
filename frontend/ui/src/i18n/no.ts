@@ -2,6 +2,8 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict: Record<Keys, string> = {
+  "ui.sessionTurn.steps.show": "Vis utføringsspor",
+  "ui.sessionTurn.steps.hide": "Skjul utføringsspor",
   "ui.sessionTurn.reasoning.show": "Vis resonnering",
   "ui.sessionTurn.reasoning.hide": "Skjul resonnering",
   "ui.messagePart.reasoning.label": "Reasoning",
@@ -94,6 +96,7 @@ export const dict: Record<Keys, string> = {
   "ui.tool.running.edit": "Redigerer",
   "ui.tool.running.write": "Skriver",
   "ui.tool.running.patch": "Bruker patch",
+  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "Kjører",
   "ui.tool.status.done": "Ferdig",
   "ui.tool.status.error": "Mislyktes",

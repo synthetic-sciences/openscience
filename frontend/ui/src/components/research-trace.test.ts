@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  collapsibleTracePart,
   elapsedLabel,
   formatTaskDuration,
   stripTaskMetadata,
@@ -65,6 +66,57 @@ const lifecycle = (id: string, type: "step-start" | "step-finish", message = "ms
 }
 
 describe("literal research trace", () => {
+  test("collapses routine activity but retains answers, requests, failures, and scientific results", () => {
+    expect(collapsibleTracePart(narrative("reason", "reasoning", "Full reasoning").part)).toBe(true)
+    expect(collapsibleTracePart(narrative("answer", "text", "Final response").part)).toBe(false)
+    expect(collapsibleTracePart(entry("read", "read", "Read source").part)).toBe(true)
+    expect(collapsibleTracePart(entry("pending", "question", "Approval", "running").part, "pending")).toBe(false)
+    expect(collapsibleTracePart(entry("error", "read", "Missing file", "error").part)).toBe(false)
+    const command = entry("command", "bash", "Run calculation").part
+    if (command.type !== "tool" || command.state.status !== "completed") throw new Error("Invalid fixture")
+    command.state.metadata = { exit: 2 }
+    expect(collapsibleTracePart(command)).toBe(false)
+    command.state.metadata = { exit: 0 }
+    expect(collapsibleTracePart(command)).toBe(true)
+    command.state.metadata = { artifact: { kind: "sequence", data: { sequence: "ACGT" } } }
+    expect(collapsibleTracePart(command)).toBe(false)
+  })
+
+  test("keeps only tasks with a pending request in their bound child session outside collapse", () => {
+    const task = entry("task", "task", "Review protocol", "running").part
+    if (task.type !== "tool" || task.state.status !== "running") throw new Error("Invalid fixture")
+    task.state.metadata = { sessionId: "child" }
+    expect(collapsibleTracePart(task)).toBe(true)
+    expect(collapsibleTracePart(task, undefined, (id) => id === "unrelated")).toBe(true)
+    expect(collapsibleTracePart(task, undefined, (id) => id === "child")).toBe(false)
+    task.state.metadata = { sessionId: 12 }
+    expect(collapsibleTracePart(task, undefined, () => true)).toBe(true)
+    task.state.metadata = {}
+    expect(collapsibleTracePart(task, undefined, () => true)).toBe(true)
+  })
+
+  test("does not bury an explicitly failed kernel behind a completed tool transport", () => {
+    const kernel = entry("kernel", "python", "Evaluate control").part
+    if (kernel.type !== "tool" || kernel.state.status !== "completed") throw new Error("Invalid fixture")
+    kernel.state.metadata = { ok: false }
+    expect(collapsibleTracePart(kernel)).toBe(false)
+    kernel.state.metadata = { ok: true }
+    expect(collapsibleTracePart(kernel)).toBe(true)
+    kernel.state.metadata = { ok: "false" }
+    expect(collapsibleTracePart(kernel)).toBe(true)
+  })
+
+  test.each(["error", "timed_out", "partial"])("keeps a completed delegated %s outcome visible", (outcome) => {
+    const task = entry("task", "task", "Review protocol").part
+    if (task.type !== "tool" || task.state.status !== "completed") throw new Error("Invalid fixture")
+    task.state.metadata = { outcome }
+    expect(collapsibleTracePart(task)).toBe(false)
+    task.state.metadata = { outcome: "completed" }
+    expect(collapsibleTracePart(task)).toBe(true)
+    task.state.metadata = { outcome: "unknown" }
+    expect(collapsibleTracePart(task)).toBe(true)
+  })
+
   test("preserves prose and tool calls in their recorded order across assistant steps", () => {
     const first = narrative("reason-1", "reasoning", "First provider explanation", "msg-1")
     const read = entry("read", "read", "Read paper.tex", "completed", "msg-1")

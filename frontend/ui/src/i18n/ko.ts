@@ -1,4 +1,6 @@
 export const dict = {
+  "ui.sessionTurn.steps.show": "실행 추적 표시",
+  "ui.sessionTurn.steps.hide": "실행 추적 숨기기",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
@@ -89,6 +91,7 @@ export const dict = {
   "ui.tool.running.edit": "편집 중",
   "ui.tool.running.write": "쓰는 중",
   "ui.tool.running.patch": "패치 적용 중",
+  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "실행 중",
   "ui.tool.status.done": "완료",
   "ui.tool.status.error": "실패",

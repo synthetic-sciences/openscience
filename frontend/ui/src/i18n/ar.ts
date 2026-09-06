@@ -1,4 +1,6 @@
 export const dict = {
+  "ui.sessionTurn.steps.show": "إظهار سجل التنفيذ",
+  "ui.sessionTurn.steps.hide": "إخفاء سجل التنفيذ",
   "ui.messagePart.reasoning.label": "Reasoning",
   "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
   "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
@@ -89,6 +91,7 @@ export const dict = {
   "ui.tool.running.edit": "جارٍ التحرير",
   "ui.tool.running.write": "جارٍ الكتابة",
   "ui.tool.running.patch": "جارٍ تطبيق التصحيح",
+  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "قيد التشغيل",
   "ui.tool.status.done": "تم",
   "ui.tool.status.error": "فشل",

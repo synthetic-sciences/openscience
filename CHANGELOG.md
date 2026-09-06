@@ -10,18 +10,23 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Restore the classic 2.0.61–2.0.63 chat presentation: one saved reasoning/activity
+  disclosure per turn, inline reasoning, and quiet tool rows without repeated
+  timers or status rails. Keep live turns open on completion, anchor disclosure
+  clicks in place, and preserve pending answers, approvals, failures, and final
+  responses while activity is collapsed. Streaming and billing safeguards remain
+  unchanged.
 - Honor Stop even when it arrives just before retry backoff. Preserve the
   selected model context window through compaction and continuation, and include
   cached writes when assessing whether pruning made enough room.
 - Recheck the current OAuth callback listener when two local processes connect
   simultaneously. Avoid stale pooled connections to a stopped runtime without
   accepting a different data profile or taking over another service's port.
-- Make the reasoning setting keyboard- and screen-reader-accessible, and verify
-  that Show/Hide survives reloads without hiding tool results or shortening prose.
-- Restore a saved Show/Hide reasoning control without Detailed/Compact modes.
-  Display reasoning as plain prose, omit routine provider phase headings, and
-  remove per-part thinking clocks that counted silence as reasoning. Keep the
-  original provider text and tool results intact.
+- Keep the per-turn disclosure keyboard- and screen-reader-accessible, and retain
+  its open or closed state across reloads. Ignore the obsolete global reasoning
+  preference without resetting other settings. Display reasoning as plain prose,
+  omit routine provider phase headings, and remove per-part thinking clocks that
+  counted silence as reasoning. Keep original provider text and tool results intact.
 - Remove the Context percentage selector and automatically compact at the usable
   model capacity with output headroom, following OpenCode's default. Legacy
   percentage preferences no longer override automatic context management.
@@ -41,9 +46,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Update the homepage closing headline, simplify the photo wordmark, and add
   LinkedIn with external-link arrows to the footer’s Connect links.
 
-- Keep all readable provider reasoning and individual tool calls visible in
-  chronological order, without Detailed/Compact modes or a shared activity
-  disclosure. Omit empty encrypted-only rows instead of repeating unavailable
+- Keep readable provider reasoning and individual tool calls in chronological
+  order when a turn is expanded, without Detailed/Compact modes or a global
+  visibility toggle. Omit empty encrypted-only rows instead of repeating unavailable
   reasoning notices. Preserve readable OpenRouter reasoning when encrypted
   continuation metadata arrives in the same response.
 - Open chat-linked documents already saved in a managed project's Project files

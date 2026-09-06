@@ -7,8 +7,7 @@ import solid from "vite-plugin-solid"
 import { dict as en } from "../i18n/en"
 import { resolveBasicToolChildren, type BasicToolProps } from "./basic-tool"
 
-// Render the real BasicTool row in jsdom so the status rail, the running verb,
-// and the disclosure state are checked against live DOM rather than source.
+// Check the classic compact row and lifecycle semantics against live DOM.
 const vite = await createServer({
   root: fileURLToPath(new URL("../../../workspace", import.meta.url)),
   mode: "production",
@@ -60,20 +59,29 @@ describe("BasicTool children", () => {
 })
 
 describe("tool row lifecycle", () => {
-  test("a live call reads as one verb line with a spinner and a ticking clock", async () => {
+  test("preparing, running and completed calls share one stable compact row", async () => {
     const { host, setProps, trigger, status } = mount({
       icon: "glasses",
       tool: "read",
-      status: "running",
+      status: "pending",
       time: { start: Date.now() - 12_400 },
       trigger: { title: "Read", subtitle: "paper.tex" },
     })
     await settle()
-    expect(host.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Reading")
+    const row = trigger()
+    expect(host.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Read")
+    expect(status()?.getAttribute("data-outcome")).toBe("pending")
+    expect(status()?.getAttribute("aria-label")).toBe("Preparing")
+    expect(status()?.querySelector('[data-component="spinner"]')).toBeNull()
+    expect(status()?.querySelector('[data-icon="clock"]')).not.toBeNull()
+
+    setProps("status", "running")
+    await settle()
     expect(status()?.getAttribute("data-outcome")).toBe("running")
     expect(status()?.querySelector('[data-component="spinner"]')).not.toBeNull()
-    expect(status()?.querySelector('[data-slot="basic-tool-tool-time"]')?.textContent).toBe("12s")
-    expect(status()?.querySelector('[data-slot="basic-tool-tool-glyph"]')?.getAttribute("aria-label")).toBe("Running")
+    expect(status()?.getAttribute("aria-label")).toBe("Running")
+    expect(host.querySelector('[data-slot="basic-tool-tool-time"]')).toBeNull()
+    expect(host.textContent?.trim()).toBe("Readpaper.tex")
     // No body yet, so the row is a button that has nothing to expand.
     expect(trigger().tagName).toBe("BUTTON")
     expect(host.querySelector('[data-slot="collapsible-arrow"]')).toBeNull()
@@ -83,11 +91,13 @@ describe("tool row lifecycle", () => {
     expect(host.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Read")
     expect(status()?.getAttribute("data-outcome")).toBe("done")
     expect(status()?.querySelector('[data-component="spinner"]')).toBeNull()
-    expect(status()?.querySelector('[data-slot="basic-tool-tool-glyph"]')?.getAttribute("aria-label")).toBe("Done")
-    expect(status()?.querySelector('[data-slot="basic-tool-tool-time"]')?.textContent).toBe("3.4s")
+    expect(status()?.getAttribute("aria-label")).toBe("Done")
+    expect(status()?.querySelector('[data-icon="glasses"]')).not.toBeNull()
+    expect(host.textContent?.trim()).toBe("Readpaper.tex")
+    expect(trigger()).toBe(row)
   })
 
-  test("output stays collapsed behind a one-line receipt until the reader opens it", async () => {
+  test("output and receipt counts stay out of the compact row until opened or inspected", async () => {
     const { host, trigger } = mount({
       icon: "console",
       tool: "bash",
@@ -106,9 +116,10 @@ describe("tool row lifecycle", () => {
       },
     })
     await settle()
-    expect(host.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("exit 2 · 12 lines")
-    // Sub-second durations stay quiet; the reserved clock slot keeps its place.
-    expect(host.querySelector('[data-slot="basic-tool-tool-time"]')?.textContent).toBe("")
+    expect(host.querySelector('[data-slot="basic-tool-tool-detail"]')).toBeNull()
+    expect(host.querySelector('[data-slot="basic-tool-tool-time"]')).toBeNull()
+    expect(host.querySelector('[data-slot="basic-tool-tool-status"]')?.getAttribute("title")).toContain("12 lines")
+    expect(host.textContent?.trim()).toBe("ShellRun the checks")
     expect(trigger().getAttribute("aria-expanded")).toBe("false")
     expect(host.querySelector('[data-slot="test-output"]')).toBeNull()
     expect(host.querySelector('[data-slot="collapsible-arrow"]')).not.toBeNull()
@@ -124,7 +135,7 @@ describe("tool row lifecycle", () => {
     expect(host.querySelector('[data-slot="test-output"]')).toBeNull()
   })
 
-  test("a failure keeps the tool's own row, shows the first error line inline, and folds the detail", async () => {
+  test("a failure keeps the tool and filename visible with an explicit label and expandable error", async () => {
     const { host, trigger, status } = mount({
       icon: "glasses",
       tool: "read",
@@ -136,10 +147,11 @@ describe("tool row lifecycle", () => {
     await settle()
     expect(host.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Read")
     expect(status()?.getAttribute("data-outcome")).toBe("error")
-    expect(status()?.querySelector('[data-slot="basic-tool-tool-glyph"]')?.getAttribute("aria-label")).toBe("Failed")
-    const detail = host.querySelector('[data-slot="basic-tool-tool-detail"]')
-    expect(detail?.textContent).toBe("File not found: paper.pdf")
-    expect(detail?.getAttribute("data-error")).toBe("true")
+    expect(status()?.getAttribute("aria-label")).toBe("Failed")
+    const label = host.querySelector('[data-slot="basic-tool-tool-failure-label"]')
+    expect(label?.textContent).toBe("Failed")
+    expect(label?.getAttribute("title")).toBe("File not found: paper.pdf")
+    expect(host.querySelector('[data-slot="basic-tool-tool-subtitle"]')?.textContent).toBe("paper.pdf")
     expect(host.querySelector('[data-slot="basic-tool-failure"]')).toBeNull()
 
     trigger().click()
@@ -158,15 +170,22 @@ describe("tool row lifecycle", () => {
       status: "error",
       error: "Tool execution aborted",
       trigger: { title: "Shell" },
+      get children() {
+        const command = document.createElement("pre")
+        command.textContent = "$ python optional_check.py\nPartial output remains available"
+        return command
+      },
     })
     await settle()
     expect(status()?.getAttribute("data-outcome")).toBe("cancelled")
-    expect(status()?.querySelector('[data-slot="basic-tool-tool-glyph"]')?.getAttribute("aria-label")).toBe("Cancelled")
-    expect(status()?.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("Tool execution aborted")
+    expect(status()?.getAttribute("aria-label")).toBe("Cancelled")
+    expect(status()?.getAttribute("title")).toContain("Tool execution aborted")
+    expect(host.querySelector('[data-slot="basic-tool-tool-failure-label"]')?.textContent).toBe("Cancelled")
     trigger().click()
     await settle()
     expect(host.querySelector('[data-slot="message-part-tool-error-title"]')?.textContent).toBe("Bash cancelled")
     expect(host.querySelector('[data-slot="basic-tool-failure"]')?.getAttribute("data-variant")).toBe("normal")
+    expect(host.querySelector("pre")?.textContent).toBe("$ python optional_check.py\nPartial output remains available")
   })
 
   test("a nonzero command exit is visibly unsuccessful while retaining its output receipt", async () => {
@@ -180,14 +199,17 @@ describe("tool row lifecycle", () => {
     })
     await settle()
     expect(status()?.getAttribute("data-outcome")).toBe("error")
-    expect(status()?.querySelector('[data-slot="basic-tool-tool-glyph"]')?.getAttribute("aria-label")).toBe("Failed")
-    expect(host.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("exit 2")
+    expect(status()?.getAttribute("aria-label")).toBe("Failed")
+    expect(host.querySelector('[data-slot="basic-tool-tool-failure-label"]')?.textContent).toBe("Failed")
+    expect(status()?.getAttribute("title")).toContain("exit 2")
   })
 
-  test("rows without lifecycle props render no status rail", async () => {
+  test("rows without lifecycle props keep their icon without inventing a status", async () => {
     const { host, status } = mount({ icon: "console", trigger: { title: "Checked environment · 2 steps" } })
     await settle()
-    expect(status()).toBeNull()
+    expect(status()?.hasAttribute("data-outcome")).toBe(false)
+    expect(status()?.hasAttribute("aria-label")).toBe(false)
+    expect(status()?.querySelector('[data-icon="console"]')).not.toBeNull()
     expect(host.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Checked environment · 2 steps")
   })
 })
@@ -202,7 +224,7 @@ describe("trajectory strings", () => {
         key.startsWith("ui.tool.calls.") ||
         key === "ui.messagePart.reasoning.thinking",
     )
-    expect(keys.length).toBe(25)
+    expect(keys.length).toBe(26)
     const dir = fileURLToPath(new URL("../i18n/", import.meta.url))
     const locales = readdirSync(dir).filter((file) => file.endsWith(".ts"))
     expect(locales.length).toBe(15)

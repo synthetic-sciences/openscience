@@ -207,7 +207,7 @@ describe("reasoning rows", () => {
     expect(host.querySelector('[data-component="reasoning-part"]')).toBeNull()
   })
 
-  test("show/hide reasoning preserves live text, tool disclosure, and the saved visibility choice", async () => {
+  test("one turn's classic disclosure preserves streamed prose and its saved expansion choice", async () => {
     const message = assistant()
     const reason = reasoning("prt_reason", { start: Date.now() })
     const command = read("prt_read", "/research/protocol.md", 1_000)
@@ -224,35 +224,29 @@ describe("reasoning rows", () => {
       message: { [sessionID]: [user, message] },
       part: { [user.id]: [], [message.id]: [reason, command, answer] },
     })
-    const [preference, setPreference] = reactive.createStore({ show: true })
+    const [preference, setPreference] = reactive.createStore({ expanded: true })
     const view = () =>
       turn.SessionTurn({
         sessionID,
         messageID: user.id,
         lastUserMessageID: user.id,
-        get showReasoning() {
-          return preference.show
+        get stepsExpanded() {
+          return preference.expanded
         },
-        onShowReasoningChange: (show) => setPreference("show", show),
+        onStepsExpandedToggle: () => setPreference("expanded", !preference.expanded),
       })
     const host = mount(view, store)
     await ready(() => host.querySelector('[data-slot="reasoning-part-body"] p') !== null)
-    const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-reasoning-toggle"]')!
-    expect(toggle.textContent).toContain("Hide reasoning")
+    const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
     expect(toggle.getAttribute("aria-expanded")).toBe("true")
-    const tool = host.querySelector('[data-component="tool-part-wrapper"]')!
-    const disclosure = tool.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!
-    disclosure.click()
-    await ready(() => disclosure.getAttribute("aria-expanded") === "true")
 
     toggle.click()
     await ready(() => host.querySelector('[data-component="reasoning-part"]') === null)
-    expect(preference.show).toBe(false)
-    expect(toggle.textContent).toContain("Show reasoning")
+    expect(preference.expanded).toBe(false)
     expect(toggle.getAttribute("aria-expanded")).toBe("false")
     expect(host.textContent).toContain(answer.text)
-    expect(host.querySelector('[data-component="tool-part-wrapper"]')).toBe(tool)
-    expect(disclosure.getAttribute("aria-expanded")).toBe("true")
+    expect(host.querySelector('[data-component="tool-part-wrapper"]')).toBeNull()
+    const prose = host.querySelector('[data-component="text-part"]')
     const continued = reason.text + "\n\nNew streamed evidence."
     setStore("part", message.id, 0, { ...reason, text: continued })
     await settle()
@@ -263,23 +257,28 @@ describe("reasoning rows", () => {
         host.querySelector('[data-slot="reasoning-part-body"]')?.textContent?.includes("New streamed evidence.") ===
         true,
     )
-    expect(host.querySelector('[data-component="tool-part-wrapper"]')).toBe(tool)
+    expect(host.querySelector('[data-component="tool-part-wrapper"]')).not.toBeNull()
+    expect(host.querySelector('[data-component="text-part"]')).toBe(prose)
 
     toggle.click()
     setStore("message", sessionID, 1, { ...message, time: { ...message.time, completed: Date.now() } })
+    setStore("session_status", sessionID, { type: "idle" })
     cleanups.splice(0).forEach((cleanup) => cleanup())
     document.body.replaceChildren()
     const again = mount(view, store)
-    await ready(() => again.querySelector('[data-slot="session-turn-reasoning-toggle"]') !== null)
+    await ready(() => again.querySelector('[data-slot="session-turn-collapsible-trigger-content"]') !== null)
     expect(again.querySelector('[data-component="reasoning-part"]')).toBeNull()
-    again.querySelector<HTMLButtonElement>('[data-slot="session-turn-reasoning-toggle"]')!.click()
+    const restored = again.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
+    expect(restored.textContent).toContain("Show reasoning and activity")
+    restored.click()
     await ready(() => again.textContent?.includes("New streamed evidence.") === true)
+    expect(restored.textContent).toContain("Hide reasoning and activity")
     expect(store.part[message.id][0]).toMatchObject({ text: continued })
     expect(again.textContent).not.toContain("Detailed")
     expect(again.textContent).not.toContain("Compact")
   })
 
-  test("visibility works for consumers without a settings callback", async () => {
+  test("completed turns start quietly collapsed and can open without a settings callback", async () => {
     const message = assistant(2_000)
     const store: Store = {
       ...empty(),
@@ -287,12 +286,13 @@ describe("reasoning rows", () => {
       part: { [user.id]: [], [message.id]: [reasoning("prt_reason", { start: 1_000, end: 2_000 })] },
     }
     const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    expect(host.querySelector('[data-component="reasoning-part"]')).toBeNull()
+    const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
+    expect(toggle.textContent).toContain("Show reasoning and activity")
+    toggle.click()
     await ready(() => host.querySelector('[data-component="reasoning-part"]') !== null)
-    const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-reasoning-toggle"]')!
     toggle.click()
     await ready(() => host.querySelector('[data-component="reasoning-part"]') === null)
-    toggle.click()
-    await ready(() => host.querySelector('[data-component="reasoning-part"]') !== null)
   })
 
   test("interleaved encrypted parts do not add blank rows or repeated notices to a completed turn", async () => {
@@ -313,9 +313,12 @@ describe("reasoning rows", () => {
         ],
       },
     }
-    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id }), store)
+    const host = mount(
+      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
+      store,
+    )
     await ready(() => host.textContent?.includes(answer.text) === true)
-    expect(host.querySelector('[data-slot="session-turn-status"]')).not.toBeNull()
+    expect(host.querySelector('[data-slot="session-turn-collapsible-trigger-content"]')).not.toBeNull()
     expect(host.querySelectorAll('[data-component="reasoning-part"]')).toHaveLength(1)
     expect(host.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain(visible.text)
     expect(host.querySelector('[data-origin="provider-reasoning-unavailable"]')).toBeNull()
@@ -347,7 +350,7 @@ describe("streaming prose", () => {
 })
 
 describe("chronological activity in a turn", () => {
-  test("completed operations stay individually visible without an outer disclosure or mode selector", async () => {
+  test("completed operations expand into individual chronological rows without a mode selector", async () => {
     const message = assistant(5_000)
     const store: Store = {
       ...empty(),
@@ -358,13 +361,15 @@ describe("chronological activity in a turn", () => {
       },
     }
     const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    const status = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
+    expect(status.getAttribute("aria-expanded")).toBe("false")
+    status.click()
     await ready(() => host.querySelectorAll('[data-component="tool-part-wrapper"]').length === 2)
     expect(host.querySelector('[data-component="trace-run-group"]')).toBeNull()
     expect(host.textContent).toContain("paper.tex")
     expect(host.textContent).toContain("analysis.py")
-    const status = host.querySelector('[data-slot="session-turn-status"]')!
-    expect(status.tagName).not.toBe("BUTTON")
-    expect(status.hasAttribute("aria-expanded")).toBe(false)
+    expect(status.tagName).toBe("BUTTON")
+    expect(status.getAttribute("aria-expanded")).toBe("true")
     expect(host.querySelector('[data-slot="session-turn-activity-mode"]')).toBeNull()
   })
 
@@ -401,13 +406,13 @@ describe("chronological activity in a turn", () => {
     expect(
       [...rows].slice(0, 3).map((row) => row.querySelector('[data-slot="basic-tool-tool-subtitle"]')?.textContent),
     ).toEqual(["paper.tex", "analysis.py", "results.csv"])
-    expect(rows[1]?.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("2 lines")
+    expect(rows[1]?.querySelector('[data-slot="basic-tool-tool-detail"]')).toBeNull()
 
     const live = host.querySelector('[data-component="tool-part-wrapper"][data-tool-status="running"]')!
     expect(live.closest('[data-component="trace-run-group"]')).toBeNull()
-    expect(live.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Searching")
+    expect(live.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Grep")
     expect(live.querySelector('[data-slot="basic-tool-tool-status"]')?.getAttribute("data-outcome")).toBe("running")
-    expect(live.querySelector('[data-slot="basic-tool-tool-time"]')?.textContent).toBe("2s")
+    expect(live.querySelector('[data-slot="basic-tool-tool-time"]')).toBeNull()
   })
 
   test("a call that just finished keeps its own row and receipt while the turn works", async () => {
@@ -449,7 +454,7 @@ describe("chronological activity in a turn", () => {
     const second = row("analysis.py")
     expect(second.getAttribute("data-tool-status")).toBe("completed")
     expect(second.querySelector('[data-slot="basic-tool-tool-status"]')?.getAttribute("data-outcome")).toBe("done")
-    expect(second.querySelector('[data-slot="basic-tool-tool-detail"]')?.textContent).toBe("2 lines")
+    expect(second.querySelector('[data-slot="basic-tool-tool-detail"]')).toBeNull()
     expect(row("paper.tex").querySelector('[data-slot="collapsible-trigger"]')?.getAttribute("aria-expanded")).toBe(
       "true",
     )
@@ -870,7 +875,9 @@ describe("timeout recovery", () => {
       expect(host.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain(reason.text)
       expect(host.textContent).toContain(partial.text)
       expect(host.querySelector('[data-component="reasoning-part"]')?.getAttribute("data-live")).toBeNull()
-      expect(host.querySelector('[data-slot="session-turn-status"] [data-component="spinner"]')).toBeNull()
+      expect(
+        host.querySelector('[data-slot="session-turn-collapsible-trigger-content"] [data-component="spinner"]'),
+      ).toBeNull()
       expect(host.querySelector('[data-slot="session-turn-retry-message"]')).toBeNull()
       expect(host.querySelector('[data-slot="session-turn-progress-hint"]')).toBeNull()
 
@@ -896,7 +903,245 @@ describe("timeout recovery", () => {
           "Waiting for output from openai/gpt-5.6-sol",
         ),
       )
-      expect(host.querySelector('[data-slot="session-turn-status"] [data-component="spinner"]')).not.toBeNull()
+      expect(
+        host.querySelector('[data-slot="session-turn-collapsible-trigger-content"] [data-component="spinner"]'),
+      ).not.toBeNull()
     },
   )
+})
+
+describe("collapsed activity safeguards", () => {
+  test("keeps a pending question and its unsent selections and custom draft mounted across activity toggles", async () => {
+    const message = assistant()
+    const question: ToolPart = {
+      id: "prt_pending_question",
+      sessionID,
+      messageID: message.id,
+      type: "tool",
+      tool: "question",
+      callID: "call_pending_question",
+      state: {
+        status: "running",
+        input: {},
+        title: "Choose evaluation conditions",
+        metadata: {},
+        time: { start: Date.now() },
+      },
+    }
+    const store: Store = {
+      ...empty(),
+      session_status: { [sessionID]: { type: "busy" } },
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [read("prt_before_question", "/research/protocol.md", 1_000), question] },
+      question: {
+        [sessionID]: [
+          {
+            id: "que_pending_draft",
+            sessionID,
+            tool: { messageID: message.id, callID: question.callID },
+            questions: [
+              {
+                header: "Conditions",
+                question: "Which evaluation conditions should be included?",
+                multiple: true,
+                options: [
+                  { label: "Stock", description: "Include the unchanged baseline." },
+                  { label: "Sham", description: "Include the procedural control." },
+                ],
+              },
+              {
+                header: "Confirmation",
+                question: "When should confirmation run?",
+                options: [{ label: "After review", description: "Wait for protocol review." }],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    await ready(() => host.querySelector('[data-component="question-prompt"]') !== null)
+    const prompt = host.querySelector('[data-component="question-prompt"]')!
+    const options = prompt.querySelectorAll<HTMLButtonElement>('[data-slot="question-option"]')
+    options[0].click()
+    options[options.length - 1].click()
+    await ready(() => prompt.querySelector('[data-slot="custom-input"]') !== null)
+    const input = prompt.querySelector<HTMLInputElement>('[data-slot="custom-input"]')!
+    input.value = "A matched held-out control"
+    input.dispatchEvent(new window.Event("input", { bubbles: true }))
+    const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
+    expect(toggle.getAttribute("aria-expanded")).toBe("true")
+    const tool = prompt.closest('[data-component="tool-part-wrapper"]')!
+
+    for (const expanded of [false, true, false]) {
+      toggle.click()
+      await ready(() => toggle.getAttribute("aria-expanded") === String(expanded))
+      expect(host.querySelectorAll('[data-component="question-prompt"]')).toHaveLength(1)
+      expect(host.querySelector('[data-component="question-prompt"]')).toBe(prompt)
+      expect(prompt.closest('[data-component="tool-part-wrapper"]')).toBe(tool)
+      expect(input.isConnected).toBe(true)
+      expect(prompt.querySelector('[data-slot="custom-input"]')).toBe(input)
+      expect(input.value).toBe("A matched held-out control")
+      expect(options[0].getAttribute("data-picked")).toBe("true")
+      expect(prompt.querySelector('[data-slot="question-tab"][data-active="true"]')?.textContent).toBe("Conditions")
+      expect(host.querySelectorAll('[data-component="tool-part-wrapper"]')).toHaveLength(expanded ? 2 : 1)
+    }
+    expect(store.part[message.id][1]).toBe(question)
+    expect(store.question?.[sessionID]).toHaveLength(1)
+  })
+
+  test("keeps a completed turn's tool error visible while ordinary activity is collapsed", async () => {
+    const message = assistant(3_000)
+    const error = "Measurement file was not found. No result was produced."
+    const failed: ToolPart = {
+      id: "prt_failed_command",
+      sessionID,
+      messageID: message.id,
+      type: "tool",
+      tool: "bash",
+      callID: "call_failed_command",
+      state: {
+        status: "error",
+        input: { command: "inspect measurements" },
+        error,
+        time: { start: 2_000, end: 3_000 },
+      },
+    }
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [read("prt_successful_read", "/research/protocol.md", 1_000), failed] },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    await ready(() => host.querySelector('[data-slot="basic-tool-tool-failure-label"]') !== null)
+    const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
+    const failure = host.querySelector('[data-component="tool-part-wrapper"][data-tool-status="error"]')!
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    expect(host.querySelectorAll('[data-component="tool-part-wrapper"]')).toHaveLength(1)
+    expect(failure.querySelector('[data-slot="basic-tool-tool-failure-label"]')?.textContent).toBe("Failed")
+    expect(failure.querySelector('[data-slot="basic-tool-tool-failure-label"]')?.getAttribute("title")).toBe(error)
+    expect(message.error).toBeUndefined()
+    failure.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!.click()
+    await ready(() => failure.querySelector('[data-component="tool-error"]') !== null)
+    expect(failure.textContent).toContain(error)
+
+    for (const expanded of [true, false]) {
+      toggle.click()
+      await ready(() => toggle.getAttribute("aria-expanded") === String(expanded))
+      expect(host.querySelector('[data-component="tool-part-wrapper"][data-tool-status="error"]')).toBe(failure)
+      expect(failure.querySelector('[data-component="tool-error"]')).not.toBeNull()
+      expect(failure.textContent).toContain(error)
+      expect(host.querySelectorAll('[data-component="tool-part-wrapper"]')).toHaveLength(expanded ? 2 : 1)
+    }
+    expect(store.part[message.id][1]).toBe(failed)
+  })
+})
+
+describe("delegated request visibility", () => {
+  const childID = "ses_child_request"
+  const task = (messageID: string): ToolPart => ({
+    id: "prt_child_task",
+    sessionID,
+    messageID,
+    type: "tool",
+    tool: "task",
+    callID: "call_child_task",
+    state: {
+      status: "running",
+      input: { description: "Review the evaluation protocol", subagent_type: "research" },
+      title: "Review the evaluation protocol",
+      metadata: { sessionId: childID },
+      time: { start: Date.now() },
+    },
+  })
+
+  test("preserves a child question draft when its parent's activity is collapsed", async () => {
+    const message = assistant()
+    const store: Store = {
+      ...empty(),
+      session_status: { [sessionID]: { type: "busy" } },
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [task(message.id)] },
+      question: {
+        [childID]: [
+          {
+            id: "que_child_draft",
+            sessionID: childID,
+            tool: { messageID: "msg_child_question", callID: "call_child_question" },
+            questions: [
+              {
+                header: "Controls",
+                question: "Which controls should the delegated review include?",
+                multiple: true,
+                options: [{ label: "Sham", description: "Include a procedural control." }],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    await ready(() => host.querySelector('[data-component="question-prompt"]') !== null)
+    const prompt = host.querySelector('[data-component="question-prompt"]')!
+    const options = prompt.querySelectorAll<HTMLButtonElement>('[data-slot="question-option"]')
+    options[0].click()
+    options[options.length - 1].click()
+    await ready(() => prompt.querySelector('[data-slot="custom-input"]') !== null)
+    const input = prompt.querySelector<HTMLInputElement>('[data-slot="custom-input"]')!
+    input.value = "Match the instrument calibration"
+    input.dispatchEvent(new window.Event("input", { bubbles: true }))
+    const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
+
+    for (const expanded of [false, true, false]) {
+      toggle.click()
+      await ready(() => toggle.getAttribute("aria-expanded") === String(expanded))
+      expect(host.querySelectorAll('[data-component="question-prompt"]')).toHaveLength(1)
+      expect(host.querySelector('[data-component="question-prompt"]')).toBe(prompt)
+      expect(prompt.querySelector('[data-slot="custom-input"]')).toBe(input)
+      expect(input.isConnected).toBe(true)
+      expect(input.value).toBe("Match the instrument calibration")
+      expect(options[0].getAttribute("data-picked")).toBe("true")
+    }
+    expect(store.question?.[sessionID]).toBeUndefined()
+    expect(store.question?.[childID]).toHaveLength(1)
+  })
+
+  test("reveals a new child permission in collapsed activity and restores ordinary task collapse after resolution", async () => {
+    const message = assistant()
+    const [store, setStore] = reactive.createStore<Store>({
+      ...empty(),
+      session_status: { [sessionID]: { type: "busy" } },
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [task(message.id)] },
+      permission: { [childID]: [] },
+    })
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, stepsExpanded: false }), store)
+    await settle()
+    expect(host.querySelector('[data-component="tool-part-wrapper"]')).toBeNull()
+    setStore("permission", childID, [
+      {
+        id: "per_child_read",
+        sessionID: childID,
+        permission: "read",
+        patterns: ["/research/control.csv"],
+        always: [],
+        metadata: { query: "Read /research/control.csv" },
+        tool: { messageID: "msg_child_read", callID: "call_child_read" },
+      },
+    ])
+    await ready(() => host.querySelector('[data-component="permission-prompt"]') !== null)
+    const permission = host.querySelector('[data-component="permission-prompt"]')!
+    expect(host.querySelectorAll('[data-component="permission-prompt"]')).toHaveLength(1)
+    expect(permission.textContent).toContain("/research/control.csv")
+    expect(permission.querySelectorAll("button").length).toBeGreaterThan(0)
+    expect(
+      host.querySelector('[data-slot="session-turn-collapsible-trigger-content"]')?.getAttribute("aria-expanded"),
+    ).toBe("false")
+    expect(store.permission?.[sessionID]).toBeUndefined()
+
+    setStore("permission", childID, [])
+    await ready(() => host.querySelector('[data-component="permission-prompt"]') === null)
+    expect(host.querySelector('[data-component="tool-part-wrapper"]')).toBeNull()
+    expect(store.part[message.id][0].type).toBe("tool")
+  })
 })
