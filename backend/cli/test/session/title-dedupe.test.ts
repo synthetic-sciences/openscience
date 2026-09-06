@@ -119,8 +119,14 @@ async function until(check: () => Promise<boolean>) {
   }
 }
 
-async function provide(base: string, fn: () => Promise<void>) {
-  await using tmp = await tmpdir({ git: true, config: stressProviderConfig(base) })
+async function provide(base: string, fn: () => Promise<void>, title = true) {
+  await using tmp = await tmpdir({
+    git: true,
+    config: {
+      ...stressProviderConfig(base),
+      ...(!title ? { agent: { title: { disable: true } } } : {}),
+    },
+  })
   await Instance.provide({
     directory: tmp.path,
     init: async () => {
@@ -132,6 +138,44 @@ async function provide(base: string, fn: () => Promise<void>) {
 }
 
 describe("session title generation", () => {
+  test("disabling UI titles preserves the research answer and diff summaries without auxiliary calls", async () => {
+    const local = fixture()
+    try {
+      await provide(
+        local.base,
+        async () => {
+          const session = await Session.create({})
+          const result = await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            tools: { "*": false },
+            parts: [{ type: "text", text: "Compare sequencing pipelines on this cohort." }],
+          })
+          expect(result.parts.some((part) => part.type === "text" && part.text === "RESEARCH_ANSWER")).toBe(true)
+          const history = await Session.messages({ sessionID: session.id })
+          const user = history.find((message) => message.info.role === "user")
+          if (!user) throw new Error("expected a user message")
+          await SessionPrompt.ensureTitle({ session, history, ...model })
+          await SessionSummary.summarize({ sessionID: session.id, messageID: user.info.id })
+
+          expect(local.count("research")).toBe(1)
+          expect(local.count("session")).toBe(0)
+          expect(local.count("message")).toBe(0)
+          const stored = await Session.get(session.id)
+          expect(Session.isDefaultTitle(stored.title)).toBe(true)
+          expect(stored.summary).toEqual({ additions: 0, deletions: 0, files: 0 })
+          const message = await MessageV2.get({ sessionID: session.id, messageID: user.info.id })
+          expect(message.info.role === "user" && message.info.summary?.diffs).toEqual([])
+          expect(message.info.role === "user" && message.info.summary?.title).toBeUndefined()
+        },
+        false,
+      )
+    } finally {
+      local.stop()
+    }
+  })
+
   test("overlapping ensureTitle calls issue exactly one upstream request", async () => {
     const local = fixture()
     try {

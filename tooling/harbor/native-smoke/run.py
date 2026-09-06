@@ -212,6 +212,9 @@ def main() -> None:
         .read_text()
         .splitlines()
     ]
+    # This fixture needs a tool turn and a final answer; UI title generation
+    # would introduce extra requests without contributing to its result.
+    assert len(requests) == 2, requests
     assert sum(request["emitted_tool"] for request in requests) == 1
     assert any(request["has_tool_result"] for request in requests)
     environment = json.loads((trial / "agent" / "fixture-environment.json").read_text())

@@ -60,17 +60,24 @@ export namespace LLM {
   // Share the exact header selection with context preflight. Codex sends its
   // base instructions separately from the assembled conversation context.
   export function prompts(input: Pick<StreamInput, "agent" | "model" | "direct" | "inspection">, codex = false) {
+    const minimal = ToolSelection.minimalResearchAgent(input.agent.name)
+    const instructions = codex
+      ? minimal && input.agent.prompt
+        ? input.agent.prompt
+        : SystemPrompt.instructions(input.direct, input.inspection)
+      : undefined
+    // Codex already receives this exact Research header as instructions.
+    // Keep distinct agent contracts and all caller context in their own slots.
+    const duplicate = codex && minimal && input.agent.prompt === instructions
     return {
-      system: input.agent.prompt
-        ? [input.agent.prompt]
-        : codex
-          ? []
-          : SystemPrompt.provider(input.model, input.direct, input.inspection),
-      instructions: codex
-        ? ToolSelection.minimalResearchAgent(input.agent.name) && input.agent.prompt
-          ? input.agent.prompt
-          : SystemPrompt.instructions(input.direct, input.inspection)
-        : undefined,
+      system: duplicate
+        ? []
+        : input.agent.prompt
+          ? [input.agent.prompt]
+          : codex
+            ? []
+            : SystemPrompt.provider(input.model, input.direct, input.inspection),
+      instructions,
     }
   }
 

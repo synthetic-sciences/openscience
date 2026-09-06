@@ -109,6 +109,10 @@ uses OpenScience's `--continue` in the existing environment and session data.
 
 Defaults disable auto-update, LSP downloads, project config discovery, environment
 bootstrap, and OpenScience's nested sandbox. The task container supplies isolation.
+The existing `agent.title.disable` configuration is set to `true` to avoid model
+calls for session and message UI labels. Research execution, compaction, skills,
+and file-diff summaries are unchanged. An approved `openscience_config` overlay
+can re-enable titles; interactive OpenScience keeps its existing defaults.
 Default permissions deny account-dependent and remote-compute tools
 (`research_search`, `atlas`, `atlas_write`, `remote_compute`, `modal`,
 `provider_compute`, `compute_job`). These defaults are not a general egress policy.
@@ -147,6 +151,13 @@ Explicit reported zero is retained; absent usage stays unknown. Interrupted or
 inconsistent runs retain observed root usage under `final_metrics.extra` and do
 not claim complete totals. Cost values are OpenScience's **catalog estimates**,
 not verified provider charges; zero may indicate unavailable model pricing.
+
+`extra.usage_complete` refers only to recorded root-agent steps, as declared by
+`usage_components` and `excluded_usage`. It does not establish whole-trial billing
+completeness: unrecorded auxiliary model calls and external tool/compute charges
+are outside this trace. Compare quality against independently reconciled total
+trial cost and elapsed time, retaining failed attempts and any retries. Do not
+use an ATIF catalog estimate alone to claim a cost-performance frontier.
 
 `--auto-approve` disables built-in delegation in the supported CLI. The event
 contract contains root-session events only. If a `task` call nevertheless

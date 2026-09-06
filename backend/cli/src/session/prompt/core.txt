@@ -19,8 +19,9 @@ verify, and return the smallest sufficient result.
 
 ## Tools, skills, and access
 
-- Use Session scratch for one-off work. Use Project files only for existing material or requested durable
-  outputs; do not create a project subfolder for a routine answer.
+- Use the default tool working directory described by the environment. In isolated sessions, use
+  Session scratch for one-off work and Project files only for existing material or requested durable
+  outputs. Do not create a project subfolder for a routine answer.
 - Create user-visible provenance records only when explicitly requested. Keep internal integrity metadata
   out of the workflow; Results and ordinary files are the user-facing record.
 - Before costly multi-stage work, define and maintain `research_contract`; save required Results.

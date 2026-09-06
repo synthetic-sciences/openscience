@@ -30,6 +30,8 @@ openscience run --workspace project "Analyze the CSV files in this directory"
 its workspace; an explicit conflicting mode is rejected. Project mode uses the
 existing project directory and does not make OpenScience own or delete that directory
 when the session is removed. It retains the normal filesystem and tool permissions.
+The model receives guidance matching that mode: temporary session scratch in
+isolated mode, or durable shared project files in project mode.
 The workspace option is a source-preview feature until a supporting release ships.
 
 ## Attach files or pipe input
@@ -129,3 +131,10 @@ For recovery during long work, use `/checkpoint` or `/handoff` in the workspace.
 The source adapter in `tooling/harbor` targets Harbor **0.22.0**. It requires `run --workspace project` to preserve the native task working directory for relative tool paths, verifies the selected OpenScience binary, and requires a successful final JSON `done` event after collecting remote logs. A binary without the workspace option fails setup. Raw and partial trajectories remain available when a run fails; missing usage is not reported as zero. A successful agent process still needs the native task verifier.
 
 Use a matching Linux [headless build](/openscience/server-hosting) to benchmark local source changes. The adapter guide contains the exact `binary` and `binary_sha256` arguments. Existing runners pinned to a different Harbor version need separate conformance checks; this adapter does not replace their task images, graders, or aggregation.
+
+Harbor defaults disable session and message title generation with
+`agent.title.disable: true`. Research execution and compaction remain enabled;
+interactive sessions keep their normal titles. Trajectory usage covers recorded
+root-agent steps and uses catalog cost estimates. It excludes unrecorded auxiliary
+calls and external tool or compute charges, so whole-trial cost comparisons need
+separate billing evidence.

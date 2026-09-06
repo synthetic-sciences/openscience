@@ -2,6 +2,10 @@
 
 This document explains how OpenScience is put together, so you can find your way around the codebase and know where a change belongs.
 
+The [scientific harness design](docs/notes/scientific-harness-design.md) explains
+what should stay small, how extensions fit, and how to evaluate quality and cost
+across the five target science benchmarks without changing their native contracts.
+
 ## The shape of the system
 
 When you run `openscience`, the CLI starts a local server and opens a workspace in your browser. The workspace, durable state, permissions, and compute control plane run on your machine. Model calls, scientific connectors, and explicitly approved remote-compute jobs may use the provider you configure.

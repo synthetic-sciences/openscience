@@ -134,6 +134,7 @@ def test_headless_config_and_env(tmp_path):
     )
     config = subject.headless_config()
     assert config["sandbox"] == {"enabled": False}
+    assert config["agent"]["title"]["disable"] is True
     assert config["permission"] == DEFAULT_CONFIG["permission"]
     assert config["experimental"] == {"continue_loop_on_deny": True}
     assert config["provider"]["anthropic"]["models"] == {"claude-test": {}}
@@ -145,6 +146,17 @@ def test_headless_config_and_env(tmp_path):
     assert all(env[key] == "1" for key in module.HEADLESS_ENV)
     assert "OPENSCIENCE_FAKE_VCS" not in env
     assert "JUDGE_API_KEY" not in env
+
+
+def test_trusted_title_override_does_not_mutate_headless_defaults(tmp_path):
+    subject = agent(
+        tmp_path, openscience_config={"agent": {"title": {"disable": False}}}
+    )
+    config = subject.headless_config()
+    assert config["agent"]["title"]["disable"] is False
+    config["agent"]["title"]["disable"] = True
+    assert subject.headless_config()["agent"]["title"]["disable"] is False
+    assert agent(tmp_path).headless_config()["agent"]["title"]["disable"] is True
 
 
 @pytest.mark.parametrize(

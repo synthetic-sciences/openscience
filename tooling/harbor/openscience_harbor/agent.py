@@ -43,6 +43,9 @@ HEADLESS_ENV = {
 # tools that need a Synthetic Sciences account or paid remote compute.
 DEFAULT_CONFIG: dict[str, Any] = {
     "sandbox": {"enabled": False},
+    # Headless trials do not need model-generated UI labels. This existing
+    # switch leaves research, compaction, and file-diff bookkeeping intact.
+    "agent": {"title": {"disable": True}},
     "permission": {
         "*": "allow",
         "research_search": "deny",

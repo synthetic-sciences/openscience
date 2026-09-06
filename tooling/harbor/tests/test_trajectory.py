@@ -48,6 +48,11 @@ def test_convert_groups_steps_and_keeps_tool_observations(events: list[dict]) ->
     assert result is not None
     assert result["schema_version"] == "ATIF-v1.7"
     assert result["session_id"] == events[0]["sessionID"]
+    assert result["extra"]["usage_components"] == "recorded_agent_steps"
+    assert result["extra"]["excluded_usage"] == [
+        "unrecorded_auxiliary_model_calls",
+        "external_tool_and_compute_charges",
+    ]
     assert result["agent"] == {
         "name": "openscience",
         "version": "2.0.70",

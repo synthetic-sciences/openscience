@@ -10,6 +10,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Align model workspace guidance with the session's actual isolated or project
+  mode and remove the duplicated Research header from Codex requests. Harbor
+  trials disable model-generated UI titles through existing configuration and
+  explicitly label the limits of root-step usage accounting.
 - Expose a detachable Research runtime with rich prompt inputs, durable request
   receipts, run-scoped cancellation, snapshot recovery, and idempotent decisions.
   Exact retries reconcile the existing run; an interrupted server never silently

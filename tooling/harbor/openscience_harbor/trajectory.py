@@ -326,11 +326,17 @@ def convert(
         "steps": steps,
         "notes": (
             "Only root-session events are available. Interrupted steps are retained without inferred usage. "
+            "Usage completeness covers recorded agent steps only, excluding unrecorded auxiliary model calls and external tool or compute charges. "
             "Cost is OpenScience's catalog estimate, not a verified invoice; a reported zero may mean missing pricing. "
             "No child trajectories are synthesized. See openscience.txt for original events."
         ),
         "extra": {
             "usage_scope": "root_session",
+            "usage_components": "recorded_agent_steps",
+            "excluded_usage": [
+                "unrecorded_auxiliary_model_calls",
+                "external_tool_and_compute_charges",
+            ],
             "trace_complete": failure is None,
             "usage_complete": complete
             and all(m[name] is not None for m in metrics for name in names),

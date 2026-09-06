@@ -64,6 +64,8 @@ The launcher fails unless all of these hold:
 - The actual CLI JSON stream passes the adapter's completed-run contract.
 - The collected ATIF passes Harbor's schema validator and contains one real bash
   call, while the provider sees its tool result before final completion.
+- Exactly two provider requests occur: the tool turn and the final answer. UI
+  title generation introduces no auxiliary requests in this headless fixture.
 - Native grader evidence and Harbor's downloaded artifact record the expected
   output and working directory; the container reports x86_64, only loopback with
   the interface-up flag, and no usable IPv4/IPv6 default route. Inactive kernel
