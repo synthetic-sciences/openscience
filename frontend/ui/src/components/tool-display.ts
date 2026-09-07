@@ -29,12 +29,11 @@ export function stripRedactedReasoning(text: string): string {
   return visible.trim() ? visible : ""
 }
 
-const reasoningPhase =
-  /^(?:planning|preparing|retrieving|locating|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|considering|choosing|simplifying|determining|revising|parsing|researching|optimizing|streamlining|refining|rethinking|comparing)\b[\p{L}\p{N} ,'/()_-]*$/iu
+const reasoningHeading = /^[\p{L}\p{N} ,'/()_&:–—-]+$/u
 const reasoningStatus =
   /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|thinking|considering next steps)$/i
 
-/** Display-only phase-label cleanup; the persisted provider text is never changed. */
+/** Display-only heading cleanup; the persisted provider text is never changed. */
 export function reasoningDisplayText(text: string): string {
   const visible = stripRedactedReasoning(text)
   if (!visible || reasoningStatus.test(visible.trim())) return ""
@@ -71,7 +70,7 @@ export function reasoningDisplayText(text: string): string {
     if (
       label.length > 100 ||
       label.trim().split(/\s+/).length > 12 ||
-      !reasoningPhase.test(label.trim()) ||
+      !reasoningHeading.test(label.trim()) ||
       offset + match.length >= end ||
       literals.some((literal) => offset >= literal.start && offset < literal.end)
     ) {

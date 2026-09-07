@@ -355,9 +355,19 @@ describe("provider reasoning presentation", () => {
     )
   })
 
-  test("preserves arbitrary headings without classifying their content", () => {
-    const heading = "**Feature counts requirement**\nThe explanation remains below it."
-    expect(reasoningDisplayText(heading)).toBe(heading)
+  test("removes short structural headings without depending on a vocabulary of phase verbs", () => {
+    for (const heading of [
+      "Locating datasets",
+      "Gathering dataset for analysis",
+      "Clarifying project path",
+      "Dataset and plotting plan",
+      "Data: source & analysis",
+      "Feature counts requirement",
+    ]) {
+      expect(reasoningDisplayText(`**${heading}**\n\nThe complete explanation remains below it.`)).toBe(
+        "The complete explanation remains below it.",
+      )
+    }
   })
 
   test("does not strip an action phrase used as inline emphasis or a complete bold statement", () => {
