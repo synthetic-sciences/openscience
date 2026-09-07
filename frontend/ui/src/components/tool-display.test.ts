@@ -388,6 +388,10 @@ describe("provider reasoning presentation", () => {
     }
     const indented = "    **Checking sources**\n    Preserve this example."
     expect(reasoningDisplayText(indented)).toBe(indented)
+    for (const indent of ["    ", "\t"]) {
+      const bridge = `${indent}done.**Gathering sources**\n${indent}Preserve this literal.`
+      expect(reasoningDisplayText(bridge)).toBe(bridge)
+    }
   })
 
   test("preserves inline code and math even across line breaks", () => {
@@ -407,6 +411,9 @@ describe("provider reasoning presentation", () => {
     expect(reasoningDisplayText(code)).toBe(code)
     const escaped = "$\\text{cost \\$}\n**Checking sources**\nPreserve this example.\n$"
     expect(reasoningDisplayText(escaped)).toBe(escaped)
+    expect(reasoningDisplayText("The cost is \\$5.\n\n**Gathering sources:**\n\nThe complete passage.")).toBe(
+      "The cost is \\$5.\n\nThe complete passage.",
+    )
   })
 
   test("preserves raw code elements and comments containing heading-looking examples", () => {

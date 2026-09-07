@@ -43,7 +43,7 @@ export function reasoningDisplayText(text: string): string {
   // unfinished literal arriving over the stream. This deliberately errs on the
   // side of retaining labels rather than deleting potentially meaningful text.
   const literals: { start: number; end: number }[] = []
-  const delimiters = /^ {0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)|`+|\${1,2}|\\[[(]|<(pre|code)\b[^>]*>|<!--/gim
+  const delimiters = /^ {0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)|`+|(?<!\\)\${1,2}|\\[[(]|<(pre|code)\b[^>]*>|<!--/gim
   for (const match of visible.matchAll(delimiters)) {
     if ((literals.at(-1)?.end ?? -1) > match.index) continue
     const delimiter = match[1] ?? match[0]
@@ -72,6 +72,7 @@ export function reasoningDisplayText(text: string): string {
       label.trim().split(/\s+/).length > 12 ||
       !reasoningHeading.test(label.trim()) ||
       offset + match.length >= end ||
+      /^(?: {4}|\t)/.test(visible.slice(visible.lastIndexOf("\n", offset - 1) + 1, offset)) ||
       literals.some((literal) => offset >= literal.start && offset < literal.end)
     ) {
       return match
