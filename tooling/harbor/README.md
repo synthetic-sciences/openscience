@@ -47,9 +47,9 @@ uv run --project tooling/harbor harbor run \
 
 The executable must support `run --workspace project`. Setup checks the public
 CLI help and fails before task execution if that option is absent. The released
-2.0.77 binary predates this option; it is not compatible with this adapter's native
-workspace contract. After a compatible release ships, `--ak version=<exact-release>`
-can replace the local binary arguments. This source change does not publish a release.
+2.0.77 binary predates this option; **2.0.78 is the first compatible release**, so
+`--ak version=2.0.78` (or a later release) can replace the local binary arguments.
+Earlier releases are not compatible with this adapter's native workspace contract.
 
 For a registered dataset, use Harbor's dataset arguments in place of `--path`.
 Keep benchmark-specific task preparation, network restrictions, protected grading
@@ -57,11 +57,17 @@ credentials, and score aggregation in the native runner. Existing integrations
 that pin another Harbor version should keep that pin until separately migrated.
 
 `-m provider/model` uses Harbor's model connection handling to select the provider
-key and configured base URL. The adapter does not collect grader credentials or
-copy the host environment wholesale. Explicit `extra_env`, config overlays, task
-MCP servers, and skills are trusted runner inputs: the adapter is not a policy
-sandbox for arbitrary runner configuration. `--auto-approve` permits local task
-tools, so Harbor's environment isolation remains essential.
+key and configured base URL. Harbor resolves a key only for the provider slugs it
+knows (its built-in model-connection registry); for any other provider the model
+connection carries no key. To run such a provider, pass its API key through
+`extra_env` (the environment variable that provider's OpenScience adapter reads,
+for example `OPENROUTER_API_KEY`) and, when needed, route it with an
+`openscience_config` provider overlay (`provider.<slug>.options`). The adapter
+does not collect grader credentials or copy the host environment wholesale.
+Explicit `extra_env`, config overlays, task MCP servers, and skills are trusted
+runner inputs: the adapter is not a policy sandbox for arbitrary runner
+configuration. `--auto-approve` permits local task tools, so Harbor's environment
+isolation remains essential.
 
 ### Options (`--ak key=value`)
 

@@ -5,17 +5,20 @@ import {
   assertLeadDelegationSession,
   assertTaskContinuation,
   childPermissionRules,
+  classifyTaskContinuation,
   classifyTaskOutcome,
   normalizeTaskAttemptInput,
+  resolveTaskContinuation,
   summarizeTurn,
   taskHandoff,
   taskText,
+  TaskContinuationError,
   TaskTool,
   taskContinuationID,
 } from "../../src/tool/task"
 import { PermissionNext } from "../../src/permission/next"
 import { tmpdir } from "../fixture/fixture"
-import type { MessageV2 } from "../../src/session/message-v2"
+import { MessageV2 } from "../../src/session/message-v2"
 import { Session } from "../../src/session"
 
 test("Task advertises generic phases and accepts an explicit domain specialist lens", async () => {
@@ -341,4 +344,98 @@ test("Task preserves byte-exact long assignments and rejects internal compaction
       "ses_parent",
     ),
   ).toThrow("No child was started")
+})
+
+test("Task classifies every placeholder, empty and self-referential session id as a new child", () => {
+  const parent = "ses_parent_real"
+  for (const value of [
+    undefined,
+    null,
+    "",
+    "   ",
+    parent,
+    "ses_new",
+    "ses_NONE",
+    "ses_null",
+    "ses_undefined",
+    "ses_placeholder",
+    "ses_current",
+    "ses_parent",
+  ]) {
+    expect(classifyTaskContinuation(value, parent)).toEqual({ kind: "new" })
+  }
+  expect(classifyTaskContinuation(" ses_child_real ", parent)).toEqual({
+    kind: "continue",
+    sessionID: "ses_child_real",
+  })
+  expect(classifyTaskContinuation("ses_", parent)).toEqual({ kind: "continue", sessionID: "ses_" })
+  expect(classifyTaskContinuation(`${parent}_code`, parent)).toEqual({ kind: "continue", sessionID: `${parent}_code` })
+})
+
+test("Task continuation resolves only a direct child and explains recovery for invented, bare or foreign ids", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const parent = await Session.create({})
+      const ownChild = await Session.create({ parentID: parent.id, title: "literature sweep" })
+      const siblingParent = await Session.create({})
+      const foreignChild = await Session.create({ parentID: siblingParent.id })
+      const scope = { parentSession: parent, projectID: parent.projectID }
+
+      expect((await resolveTaskContinuation({ requested: ownChild.id, ...scope }))?.id).toBe(ownChild.id)
+      expect(await resolveTaskContinuation({ requested: undefined, ...scope })).toBeUndefined()
+      expect(await resolveTaskContinuation({ requested: "ses_new", ...scope })).toBeUndefined()
+      expect(await resolveTaskContinuation({ requested: parent.id, ...scope })).toBeUndefined()
+
+      for (const requested of [
+        "ses_",
+        `${parent.id}_code`,
+        `${parent.id}_eval`,
+        foreignChild.id,
+        "ses_stale_never_existed",
+      ]) {
+        const failure = await resolveTaskContinuation({ requested, ...scope }).then(
+          () => undefined,
+          (error: unknown) => error,
+        )
+        expect(failure).toBeInstanceOf(TaskContinuationError)
+        const message = (failure as Error).message
+        expect(message).toContain(`No child session ${requested} exists for this session`)
+        expect(message).toContain("No child was started")
+        expect(message).toContain("Omit session_id to start a new task")
+        expect(message).toContain(`${ownChild.id} (literature sweep)`)
+      }
+
+      const orphan = await Session.create({})
+      const none = await resolveTaskContinuation({
+        requested: "ses_",
+        parentSession: orphan,
+        projectID: orphan.projectID,
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+      expect((none as Error).message).toContain("has started no child tasks to continue yet")
+    },
+  })
+})
+
+test("a compacted Task summary keeps the reusable child session id", () => {
+  const state = {
+    status: "completed" as const,
+    input: { description: "literature sweep", prompt: "find papers" },
+    output: "Task session ses_child_real: reuse this sessionId to continue the same worker.\nfindings",
+    title: "literature sweep",
+    metadata: { sessionId: "ses_child_real", handoff: "three relevant papers" },
+    time: { start: 1, end: 2 },
+  }
+  const summary = MessageV2.toolSummary("task", state as any)
+  expect(summary.startsWith("Task session ses_child_real: reuse this sessionId to continue the same worker.")).toBe(
+    true,
+  )
+  expect(summary).toContain("three relevant papers")
+  const cleared = MessageV2.toolSummary("task", { ...state, metadata: { sessionId: "ses_child_real" } } as any)
+  expect(cleared.startsWith("Task session ses_child_real:")).toBe(true)
+  expect(MessageV2.toolSummary("read", { ...state, metadata: {} } as any).startsWith("Task session")).toBe(false)
 })

@@ -66,6 +66,25 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   the Fast mode rate next to the Fast toggle and in the Models panel.
 - Record the 922,000-token input limit for the GPT-5.6 Sol, Terra and Luna
   routes and the GPT-6 Astra release date so the newest model gets its badge.
+- Give delegated work a usable continuation contract: an omitted, empty or
+  placeholder `session_id` starts one child, an invented, bare or foreign id
+  fails before any child is created with the exact recovery (omit it, or reuse
+  one of this session's real child ids), and every Task result and compacted
+  handoff begins with the child session id to reuse.
+- Recognise repeated tool failures with the same cause even when the model
+  rewords its arguments: the second failure appends corrective guidance to the
+  tool result and the third stops the turn, independently of access settings.
+- Let a session that may overwrite a project file also move, delete and restore
+  it: legacy sessions without a project-root grant no longer fail deletions with
+  a bare `SessionFilesystemDeniedError`, and a real denial now names the
+  operation, path, missing authority and recovery.
+- Treat a second finalization of the same runtime run as idempotent and bind
+  cancellation to the exact run, so a cancel that races normal settlement no
+  longer logs a phantom active run and a stale cancel cannot abort a replacement.
+- Emit one `tool_use` per part in `openscience run --format json` so a Harbor
+  trial no longer fails with "duplicate event part" after context pruning
+  republishes completed tool parts; name 2.0.78 as the first Harbor-compatible
+  release and run the native Harbor trial on main in its own job.
 - Wait for scientific canary artifact delivery before validating a completed
   remote computation, while preserving bounded waits and resource cleanup.
 - Start desktop onboarding with Synthetic Sciences sign-in and workspace selection,

@@ -29,8 +29,8 @@ BIN_DIR = "$HOME/.openscience/bin"
 UPLOADED_BINARY = "/installed-agent/openscience"
 
 # The headless environment contract documented in
-# frontend/docs/src/content/openscience/sessions.mdx ("Headless and container
-# runs"). Everything OpenScience writes lands under /logs/agent so Harbor
+# frontend/docs/src/content/openscience/automation.mdx ("Configure a CI
+# environment"). Everything OpenScience writes lands under /logs/agent so Harbor
 # collects it with the trial.
 HEADLESS_ENV = {
     "OPENSCIENCE_DISABLE_AUTOUPDATE": "1",
@@ -102,7 +102,7 @@ class OpenScienceAgent(BaseInstalledAgent):
         if self._version:
             self._version = self._version.removeprefix("v")
             if not re.fullmatch(r"\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?", self._version):
-                raise ValueError("version must be an exact release such as 2.0.77")
+                raise ValueError("version must be an exact release such as 2.0.78")
         if not binary and not self._version:
             raise ValueError(
                 "Pass an exact release with --ak version=<x.y.z> or --ak binary=<path>."

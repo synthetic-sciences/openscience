@@ -117,3 +117,50 @@ describe("SessionProcessor.isDoomLoop", () => {
     expect(SessionProcessor.isMalformedLoop(parts, { tool: "bash", failure: "invalid_input" })).toBe(false)
   })
 })
+
+describe("SessionProcessor.toolErrorLoopAction", () => {
+  const errored = (name: string, error: string): any => ({
+    type: "tool",
+    tool: name,
+    callID: "c",
+    state: { status: "error", input: {}, error },
+  })
+
+  test("guides on the second same-cause error and stops on the third, ignoring reworded ids", () => {
+    const parts = [
+      errored("task", "No child session ses_alpha_code exists for this session. No child was started."),
+      errored("task", "No child session ses_ exists for this session. No child was started."),
+    ]
+    expect(SessionProcessor.toolErrorLoopCount(parts, "task")).toBe(2)
+    expect(SessionProcessor.toolErrorLoopAction(parts, "task")).toBe("guide")
+    parts.push(errored("task", "No child session ses_beta_eval exists for this session. No child was started."))
+    expect(SessionProcessor.toolErrorLoopAction(parts, "task")).toBe("stop")
+  })
+
+  test("a completed call of the same tool resets the streak", () => {
+    const parts = [
+      errored("task", "No child session ses_a exists for this session."),
+      errored("task", "No child session ses_b exists for this session."),
+      tool("task", { description: "worked" }),
+      errored("task", "No child session ses_c exists for this session."),
+    ]
+    expect(SessionProcessor.toolErrorLoopCount(parts, "task")).toBe(1)
+    expect(SessionProcessor.toolErrorLoopAction(parts, "task")).toBe("none")
+  })
+
+  test("a different failure cause or a different tool does not count", () => {
+    const parts = [
+      errored("task", "No child session ses_a exists for this session."),
+      errored("bash", "No child session ses_a exists for this session."),
+      errored("task", "Delegation is not permitted for child sessions."),
+    ]
+    expect(SessionProcessor.toolErrorLoopCount(parts, "task")).toBe(1)
+    expect(SessionProcessor.toolErrorLoopAction(parts, "task")).toBe("none")
+    expect(SessionProcessor.toolErrorLoopAction(parts, "bash")).toBe("none")
+  })
+
+  test("the guidance and stop messages name the tool and the recovery", () => {
+    expect(SessionProcessor.toolErrorGuidance("task")).toContain("repeated task failures")
+    expect(SessionProcessor.toolErrorStopMessage("task")).toContain("three consecutive task failures")
+  })
+})

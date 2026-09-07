@@ -30,10 +30,80 @@ export function isComputeDelegationProfile(name: string) {
   return name === "execute"
 }
 
+/** Placeholder session ids models eagerly emit for the optional `session_id`
+ * field. Every one of them unambiguously means "start a new child". */
+const CONTINUATION_PLACEHOLDER = /^ses_(?:new|none|null|undefined|placeholder|current|parent)$/i
+
+export type TaskContinuation = { kind: "new" } | { kind: "continue"; sessionID: string }
+
+/**
+ * The single continuation classifier shared by schema normalization, dispatch
+ * and restart recovery. It does not load a session: an omitted, empty,
+ * placeholder, or self-referential value is a new child; any other `ses_` id is
+ * a continuation candidate that dispatch/recovery must still authorize as a
+ * direct child before reusing it.
+ */
+export function classifyTaskContinuation(value: unknown, parentSessionID: string): TaskContinuation {
+  const trimmed = typeof value === "string" ? value.trim() : ""
+  if (!trimmed || trimmed === parentSessionID) return { kind: "new" }
+  if (CONTINUATION_PLACEHOLDER.test(trimmed)) return { kind: "new" }
+  return { kind: "continue", sessionID: trimmed }
+}
+
 export function taskContinuationID(value: string | undefined, parentSessionID: string) {
-  if (!value || value === parentSessionID) return undefined
-  if (/^ses_(?:new|none|placeholder|current|parent)$/i.test(value)) return undefined
-  return value
+  const continuation = classifyTaskContinuation(value, parentSessionID)
+  return continuation.kind === "continue" ? continuation.sessionID : undefined
+}
+
+/** A pre-dispatch continuation failure. Its message is written for the model:
+ * it never created a child and it names the exact recovery (omit `session_id`,
+ * or reuse one of this session's real child tasks). */
+export class TaskContinuationError extends Error {
+  constructor(
+    readonly parentSessionID: string,
+    readonly requested: string,
+    message: string,
+  ) {
+    super(message)
+    this.name = "TaskContinuationError"
+  }
+}
+
+/**
+ * Resolve a model-supplied `session_id` to a reusable child, or fail before any
+ * child work is dispatched. Placeholders and the calling session itself resolve
+ * to a new child (undefined). A real id is accepted only when it is a direct
+ * child of the calling session in this project; anything else — an invented
+ * suffix, a bare `ses_`, a foreign or stale id — raises a typed error that tells
+ * the model to omit `session_id` or reuse one of this session's actual children.
+ * A stale id never silently spawns duplicate work.
+ */
+export async function resolveTaskContinuation(input: {
+  requested: unknown
+  parentSession: Session.Info
+  projectID: string
+}): Promise<Session.Info | undefined> {
+  const continuation = classifyTaskContinuation(input.requested, input.parentSession.id)
+  if (continuation.kind === "new") return undefined
+  const session = await Session.get(continuation.sessionID).catch((error) => {
+    if (Storage.NotFoundError.isInstance(error)) return undefined
+    throw error
+  })
+  if (session && session.projectID === input.projectID && session.parentID === input.parentSession.id) {
+    return session
+  }
+  const children = (await Session.children(input.parentSession.id)).filter(
+    (child) => child.projectID === input.projectID,
+  )
+  const reusable = children.map((child) => `${child.id} (${child.title})`)
+  const recovery = reusable.length
+    ? `Omit session_id to start a new task, or reuse one of: ${reusable.join("; ")}`
+    : "Omit session_id to start a new task. This session has started no child tasks to continue yet"
+  throw new TaskContinuationError(
+    input.parentSession.id,
+    continuation.sessionID,
+    `No child session ${continuation.sessionID} exists for this session. No child was started. ${recovery}.`,
+  )
 }
 const configuredChildCap = Number(process.env.OPENSCIENCE_MAX_CHILD_AGENTS)
 export const MAX_CHILD_AGENTS =
@@ -309,7 +379,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
-      assertLeadDelegationSession(await Session.get(ctx.sessionID))
+      const leadSession = assertLeadDelegationSession(await Session.get(ctx.sessionID))
       const config = await Config.get()
       const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
       const configured = MessageV2.resolveDelegationSettings(ctx.extra?.delegationSettings, { effort })
@@ -319,17 +389,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           : configured
       // Some models eagerly fill every optional schema field with the current
       // session or a `ses_new` placeholder. Those values unambiguously mean a
-      // new child; only a different, real direct-child id is a continuation.
+      // new child; a real id must be a direct child of this session or dispatch
+      // fails with an actionable typed error rather than a raw storage failure.
       const attemptInput = normalizeTaskAttemptInput(params, ctx.sessionID)
       const attachments = MessageV2.SubtaskAttachment.array().parse(ctx.extra?.attachments ?? [])
-      const continuationID = attemptInput.session_id
-      const continuation = continuationID
-        ? assertTaskContinuation({
-            session: await Session.get(continuationID),
-            parentSessionID: ctx.sessionID,
-            projectID: Instance.project.id,
-          })
-        : undefined
+      const continuation = await resolveTaskContinuation({
+        requested: params.session_id,
+        parentSession: leadSession,
+        projectID: Instance.project.id,
+      })
+      const continuationID = continuation?.id
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -618,7 +687,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             : `The child stopped before emitting textual findings after ${summary.length} tool calls in this turn.`)
         const handoff = taskHandoff(raw)
         const activeMs = timing.activeMs
+        // Surface the durable child id in the model-visible output (not only in
+        // metadata) so the lead can continue this exact worker via `session_id`.
+        // Compaction preserves it: MessageV2.toolSummary re-emits it from metadata.
         const output = [
+          `Task session ${session.id}: reuse this sessionId to continue the same worker.`,
           ...(taskOutcome.stopReason === "max_steps"
             ? ["[Child reached its bounded step limit; partial result follows.]"]
             : taskOutcome.stopReason === "tool_failures"

@@ -1078,16 +1078,21 @@ export namespace MessageV2 {
       .replace(/\s+/g, " ")
       .slice(0, 80)
       .trim()
+    // A compacted Task must keep its reusable child id: the lead continues the
+    // same worker through `session_id`, and dropping it on prune would strand
+    // that thread. task.ts also writes it as the first line of the live output.
+    const sessionID = tool === "task" && typeof state.metadata.sessionId === "string" ? state.metadata.sessionId : ""
+    const idLine = sessionID ? `Task session ${sessionID}: reuse this sessionId to continue the same worker.\n` : ""
     const handoff = tool === "task" && typeof state.metadata.handoff === "string" ? state.metadata.handoff.trim() : ""
     if (handoff) {
       const retained =
         handoff.length <= TASK_HANDOFF_CHARS
           ? handoff
           : handoff.slice(0, TASK_HANDOFF_CHARS).trimEnd() + "\n[… child handoff truncated …]"
-      return `[task]${descriptor ? " " + descriptor : ""} → retained child handoff\n${retained}`
+      return `${idLine}[task]${descriptor ? " " + descriptor : ""} → retained child handoff\n${retained}`
     }
     const lines = state.output ? state.output.split("\n").length : 0
-    return `[${tool}]${descriptor ? " " + descriptor : ""} → cleared (${lines} line${lines === 1 ? "" : "s"})`
+    return `${idLine}[${tool}]${descriptor ? " " + descriptor : ""} → cleared (${lines} line${lines === 1 ? "" : "s"})`
   }
 
   export type Composition = {
