@@ -417,6 +417,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: runner.os == 'macOS'
+        with:
+          ref: ${{ needs.publish-test.outputs.source }}
+      - uses: ./.github/actions/setup-bun
+        if: runner.os == 'macOS'
+        with:
+          install: "false"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
@@ -445,6 +453,30 @@ jobs:
           echo "::error::openscience server never became healthy"
           cat "$RUNNER_TEMP/openscience-smoke.log" || true
           exit 1
+      - name: Verify compiled macOS worker startup with piped stdin
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          modules="$RUNNER_TEMP/openscience-prefix/lib/node_modules"
+          native=$(node --input-type=module - "$modules" <<'NODE'
+          import path from "node:path"
+          import { createRequire } from "node:module"
+          const require = createRequire(path.join(process.argv[2], "@synsci/openscience/package.json"))
+          const manifest = require.resolve(`@synsci/openscience-darwin-${process.arch}/package.json`)
+          console.log(path.join(path.dirname(manifest), "bin/openscience"))
+          NODE
+          )
+          bun --no-env-file backend/cli/script/smoke-darwin-launcher.ts "$native" "$RUNNER_TEMP/darwin-launcher-smoke"
+      - name: Upload macOS worker startup evidence
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-test-darwin-launcher-${{ github.run_attempt }}
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
+          path: ${{ runner.temp }}/darwin-launcher-smoke
       - name: Install and smoke OpenScience test package
         if: runner.os == 'Windows'
         shell: pwsh

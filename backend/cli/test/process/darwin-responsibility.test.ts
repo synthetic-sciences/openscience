@@ -87,6 +87,89 @@ test.skipIf(process.platform !== "darwin")(
 )
 
 test.skipIf(process.platform !== "darwin")(
+  "Darwin activation preserves open piped stdin and its exact payload through EOF",
+  async () => {
+    expect(DarwinResponsibility.available()).toBe(true)
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-darwin-responsibility-stdin-"))
+    const payload = path.join(root, "payload.pid")
+    const latchReady = path.join(root, "latch-ready")
+    const wrapped = DarwinResponsibilityLauncher.wrap({
+      file: "/bin/sh",
+      args: ["-c", 'printf "%s" "$$" > "$1"; printf "payload-stderr\\n" >&2; exec /bin/cat', "piped-stdin", payload],
+    })
+    if (!wrapped.release) throw new Error("Darwin responsibility launch did not create a registration gate")
+    const child = spawn(wrapped.file, wrapped.args, {
+      cwd: path.resolve(import.meta.dir, "../.."),
+      detached: true,
+      env: {
+        ...process.env,
+        OPENSCIENCE_TEST_HOME: root,
+        OPENSCIENCE_DARWIN_SUPERVISOR_TEST_READY: latchReady,
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+    })
+    const stdout: Buffer[] = []
+    const stderr: Buffer[] = []
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk))
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk))
+    const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      child.once("error", reject)
+      child.once("close", (code, signal) => resolve({ code, signal }))
+    })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let owner: string | undefined
+    try {
+      if (!child.pid) throw new Error("Darwin responsibility launcher did not start")
+      await fs.writeFile(wrapped.release, String(child.pid), { encoding: "utf8", flag: "wx", mode: 0o600 })
+      await independentRoot(child.pid)
+      owner = DarwinResponsibility.unique(child.pid)
+      expect(owner).toBeDefined()
+      // The launcher must finish SETEXEC and install its control handlers while
+      // stdin is still empty and open, before the second gate admits a payload.
+      expect(Number(await text(latchReady))).toBe(child.pid)
+      expect(child.stdin.writableEnded).toBe(false)
+      expect(await Bun.file(payload).exists()).toBe(false)
+      expect(Buffer.concat(stdout).length).toBe(0)
+      await fs.writeFile(`${wrapped.release}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, String(child.pid), {
+        encoding: "utf8",
+        flag: "wx",
+        mode: 0o600,
+      })
+      const payloadPID = Number(await text(payload))
+      expect(DarwinResponsibility.unique(payloadPID)).toBe(owner)
+      const input = Buffer.from(JSON.stringify({ nonce: crypto.randomUUID(), message: "stdin → payload\nEOF" }))
+      child.stdin.end(input)
+      const outcome = await Promise.race([
+        closed,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Darwin payload did not close its pipes after EOF")), 5_000)
+        }),
+      ])
+      expect(outcome, Buffer.concat(stderr).toString()).toEqual({ code: 0, signal: null })
+      expect(Buffer.concat(stdout)).toEqual(input)
+      expect(Buffer.concat(stderr).toString()).toBe("payload-stderr\n")
+      expect(DarwinResponsibility.uniqueMembers(owner!)).toEqual([])
+    } finally {
+      if (timer) clearTimeout(timer)
+      if (owner) {
+        for (const pid of DarwinResponsibility.uniqueMembers(owner)) {
+          if (!DarwinResponsibility.uniquelyOwns(owner, pid)) continue
+          try {
+            process.kill(pid, "SIGKILL")
+          } catch {}
+        }
+      }
+      child.kill("SIGKILL")
+      await closed.catch(() => undefined)
+      await fs.rm(wrapped.release, { force: true })
+      await fs.rm(`${wrapped.release}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, { force: true })
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+  15_000,
+)
+
+test.skipIf(process.platform !== "darwin")(
   "kernel responsibility tracks a setsid double-fork after it reparents to launchd",
   async () => {
     if (!Bun.which("python3")) return
