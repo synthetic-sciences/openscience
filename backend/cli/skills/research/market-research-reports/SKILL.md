@@ -59,12 +59,12 @@ Every report should generate **6 essential visuals** at the start, with addition
 
 ```bash
 # Example: Generate a TAM/SAM/SOM diagram
-python skills/scientific-schematics/scripts/generate_schematic.py \
+python skills/visualization/scientific-schematics/scripts/generate_schematic.py \
   "TAM SAM SOM concentric circle diagram showing Total Addressable Market $50B outer circle, Serviceable Addressable Market $15B middle circle, Serviceable Obtainable Market $3B inner circle, with labels and arrows pointing to each segment" \
   -o figures/tam_sam_som.png --doc-type report
 
 # Example: Generate Porter's Five Forces
-python skills/scientific-schematics/scripts/generate_schematic.py \
+python skills/visualization/scientific-schematics/scripts/generate_schematic.py \
   "Porter's Five Forces diagram with center box 'Competitive Rivalry' connected to four surrounding boxes: 'Threat of New Entrants' (top), 'Bargaining Power of Suppliers' (left), 'Bargaining Power of Buyers' (right), 'Threat of Substitutes' (bottom). Each box should show High/Medium/Low rating" \
   -o figures/porters_five_forces.png --doc-type report
 ```
@@ -511,27 +511,27 @@ Or generate individually:
 
 ```bash
 # 1. Market growth trajectory
-python skills/scientific-schematics/scripts/generate_schematic.py \
+python skills/visualization/scientific-schematics/scripts/generate_schematic.py \
   "Bar chart showing market growth from 2020 to 2034, with historical bars in dark blue (2020-2024) and projected bars in light blue (2025-2034). Y-axis shows market size in billions USD. Include CAGR annotation" \
   -o figures/01_market_growth.png --doc-type report
 
 # 2. TAM/SAM/SOM breakdown
-python skills/scientific-schematics/scripts/generate_schematic.py \
+python skills/visualization/scientific-schematics/scripts/generate_schematic.py \
   "TAM SAM SOM concentric circles diagram. Outer circle TAM Total Addressable Market, middle circle SAM Serviceable Addressable Market, inner circle SOM Serviceable Obtainable Market. Each labeled with acronym and description. Blue gradient" \
   -o figures/02_tam_sam_som.png --doc-type report
 
 # 3. Porter's Five Forces
-python skills/scientific-schematics/scripts/generate_schematic.py \
+python skills/visualization/scientific-schematics/scripts/generate_schematic.py \
   "Porter's Five Forces diagram with center box 'Competitive Rivalry' connected to four surrounding boxes: Threat of New Entrants (top), Bargaining Power of Suppliers (left), Bargaining Power of Buyers (right), Threat of Substitutes (bottom). Color code by rating: High=red, Medium=yellow, Low=green" \
   -o figures/03_porters_five_forces.png --doc-type report
 
 # 4. Competitive positioning matrix
-python skills/scientific-schematics/scripts/generate_schematic.py \
+python skills/visualization/scientific-schematics/scripts/generate_schematic.py \
   "2x2 competitive positioning matrix with X-axis 'Market Focus (Niche to Broad)' and Y-axis 'Solution Approach (Product to Platform)'. Plot 8-10 competitors as labeled circles of varying sizes. Include quadrant labels" \
   -o figures/04_competitive_positioning.png --doc-type report
 
 # 5. Risk heatmap
-python skills/scientific-schematics/scripts/generate_schematic.py \
+python skills/visualization/scientific-schematics/scripts/generate_schematic.py \
   "Risk heatmap matrix. X-axis Impact (Low to Critical), Y-axis Probability (Unlikely to Very Likely). Color gradient: Green (low risk) to Red (critical risk). Plot 10-12 risks as labeled points" \
   -o figures/05_risk_heatmap.png --doc-type report
 

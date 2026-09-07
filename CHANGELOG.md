@@ -10,6 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Match the new-terminal shortcut by physical key so Ctrl+Shift+` works on layouts
+  where Shift+backtick reports a different symbol, and point twelve more skills at
+  the real scientific-schematics script path.
 - Document the 5.5% Ace funding fee (applied once per request, with no other
   markup; card processing fee shown separately at checkout) in the pricing, Ace,
   and FAQ guides, the README, and the landing page. The landing page no longer
