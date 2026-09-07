@@ -88,7 +88,10 @@ test("Ace preserves reviewed fallback models but requires approval for new bound
         }
         expect(provider.models["qwen/qwen3.8-flash"].name).toBe("Qwen 3.8 Flash Next")
         expect(provider.models["nvidia/nemotron-3-ultra-550b-a55b"].capabilities.input.image).toBe(false)
-        expect(provider.models["google/gemini-3.7-flash"].capabilities.input.video).toBe(true)
+        // The managed envelope accepts text and images only; audio, video and
+        // documents are cleared on the Ace route even for multimodal models.
+        expect(provider.models["google/gemini-3.7-flash"].capabilities.input.video).toBe(false)
+        expect(provider.models["google/gemini-3.7-flash"].capabilities.input.image).toBe(true)
         for (const id of ["openai/gpt-5.6-sol", "openai/gpt-5.6-terra", "openai/gpt-5.6-luna"]) {
           expect(Object.keys(provider.models[id].variants ?? {})).toEqual([
             "none",
