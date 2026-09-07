@@ -64,6 +64,34 @@ A custom model entry does not automatically import an arbitrary provider's full 
 
 A context limit in configuration describes what OpenScience should expect. For self-hosted models, configure the actual server limit separately.
 
+## Example: Mammouth
+
+Mammouth documents an [OpenAI-compatible chat endpoint](https://info.mammouth.ai/docs/api-quick-start/) at `https://api.mammouth.ai/v1`. Configure it as a custom provider, and keep the key in the `MAMMOUTH_API_KEY` environment variable rather than in the project file:
+
+```json
+{
+  "provider": {
+    "mammouth": {
+      "name": "Mammouth",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://api.mammouth.ai/v1",
+        "apiKey": "{env:MAMMOUTH_API_KEY}"
+      },
+      "models": {
+        "mammouth-recommended": {
+          "name": "Mammouth Recommended",
+          "tool_call": false,
+          "reasoning": false
+        }
+      }
+    }
+  }
+}
+```
+
+`mammouth-recommended` is Mammouth's moving alias, so the underlying model can change without editing this entry. For reproducible runs, choose an exact model ID from Mammouth's [Model Explorer](https://model-explorer.mammouth.ai/); its [public catalog](https://api.mammouth.ai/public/models) lists current IDs, limits, and rates. OpenScience does not import or refresh that catalog. The example leaves tool calling and reasoning disabled: the catalog does not declare those capabilities, and this is a chat configuration, not a verified agent-tool integration. Requests use your Mammouth account, not your Ace Wallet.
+
 ## Request deadlines
 
 Provider options support request deadlines in milliseconds:

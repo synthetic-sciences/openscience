@@ -311,10 +311,10 @@ class DrugBankHelper:
         search_term = name.lower()
 
         for drug in root.findall('db:drug', self.NAMESPACE):
-            drug_id = drug.find('db:drugbank-id[@primary="true"]', self.NAMESPACE).text
+            drug_id = self._get_text_safe(drug.find('db:drugbank-id[@primary="true"]', self.NAMESPACE))
             drug_name = self._get_text_safe(drug.find('db:name', self.NAMESPACE))
 
-            if drug_name:
+            if drug_id and drug_name:
                 if exact:
                     if drug_name.lower() == search_term:
                         results.append({'id': drug_id, 'name': drug_name})

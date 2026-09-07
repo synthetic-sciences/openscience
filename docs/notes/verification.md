@@ -38,8 +38,9 @@ The landing site has its own lockfile and is not a root-workspace package:
 
 Before a production release, also run the launcher and release-script smoke
 checks from `.github/workflows/ci.yml`. After the candidate lands, dispatch the
-main-only `test publish` workflow with packaged E2E, OS smoke, and scientific
-canary inputs enabled. The
+main-only **Deep release rehearsal** workflow (`.github/workflows/npm-test.yml`)
+with its `run_packaged_e2e`, `run_os_smoke`, and `run_scientific_canary` inputs
+enabled. The
 workflow also installs the exact candidate and runs all five packaged
 scientific capability lifecycles on Linux x64, Linux ARM64, and macOS ARM64;
 each evidence record must match the immutable source SHA compiled into that

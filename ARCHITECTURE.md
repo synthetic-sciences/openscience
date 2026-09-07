@@ -91,7 +91,7 @@ prompt-selection and provider-transport analysis.
 
 ### Skills
 
-Skills are instruction bundles the agent loads on demand (`src/skill`). The canonical default library is `backend/cli/skills`; releases embed a compressed, hashed copy of the complete tree and materialize it into a versioned local cache. User-authored skills, Git-installed skills, and project skills are also local. Skill discovery, loading, security review, installation, and removal never require the Gateway. An authenticated upgrade can perform a one-time read-only import of skill records created by older releases.
+Skills are instruction bundles the agent loads on demand (`src/skill`). The canonical default library is `backend/cli/skills`; releases embed a compressed, hashed copy of the complete tree and materialize it into a versioned local cache. User-authored skills, Git-installed skills, and project skills are also local. Skill discovery, loading, security review, installation, and removal never require an OpenScience account or the managed Ace service. An authenticated upgrade can perform a one-time read-only import of skill records created by older releases.
 
 ## Frontend
 

@@ -41,7 +41,7 @@ never make a key required or return empty results without one.
 ## Where it goes
 
 1. Create `backend/cli/src/science/connectors/<group>/<id>.ts` exporting a
-   `const <id>: Connector`. `chemistry/chebi.ts` (55 lines) is a good template.
+   `const <id>: Connector`. `chemistry/chebi.ts` is a short template to copy.
    The six groups on disk are `chemistry`, `genomics`, `literature`, `omics`,
    `pathways` and `proteins`; they are directories, not the `domain` field. A
    connector's `domain` is independent (`pathways/` holds `biology` sources,

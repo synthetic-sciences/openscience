@@ -42,7 +42,7 @@ This is not optional. Grant proposals without visual elements are incomplete and
 
 **How to generate schematics:**
 ```bash
-python skills/scientific-schematics/scripts/generate_schematic.py "your diagram description" -o figures/output.png
+python skills/visualization/scientific-schematics/scripts/generate_schematic.py "your diagram description" -o figures/output.png
 ```
 
 The AI will automatically:

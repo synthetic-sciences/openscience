@@ -37,7 +37,7 @@ If your document does not already contain schematics or diagrams:
 
 **How to generate schematics:**
 ```bash
-python skills/scientific-schematics/scripts/generate_schematic.py "your diagram description" -o figures/output.png
+python skills/visualization/scientific-schematics/scripts/generate_schematic.py "your diagram description" -o figures/output.png
 ```
 
 The AI will automatically:
@@ -680,7 +680,7 @@ ISMB poster specifications:
 - Include: QR code for paper/supplementary materials
 Available templates:
 - assets/posters/beamerposter_academic.tex
-- assets/posters/tikzposter_research.tex
+- tikzposter_template.tex from the latex-posters skill (skills/writing/latex-posters/assets/)
 ```
 
 ## Updates and Maintenance

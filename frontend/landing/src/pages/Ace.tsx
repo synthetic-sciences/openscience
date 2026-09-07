@@ -204,7 +204,7 @@ function Arrow() {
 const INCLUDED: readonly (readonly [string, string, boolean?])[] = [
   ["Managed models", "21 reviewed models from OpenAI, Anthropic, Google, xAI, and more, on validated routes"],
   ["Managed search", "Research search for the agent with no search key to manage"],
-  ["Memory", "Persistent memory across your sessions and projects"],
+  ["Memory", "Persistent memory across your sessions and projects", true],
   ["Ace-first plugins", "Exclusive integrations that land on Ace first", true],
 ]
 
@@ -213,9 +213,9 @@ const FAQ = [
     q: "What is Ace?",
     a: (
       <p>
-        Ace is the managed service inside OpenScience: reviewed models, research search, and memory, behind one Wallet.
-        Sign in to Synthetic Sciences, add a balance, and every model in the roster is available from the model selector
-        with no provider accounts to set up.
+        Ace is the managed service inside OpenScience: reviewed models and research search behind one Wallet, with
+        memory coming soon. Sign in to Synthetic Sciences, add a balance, and every model in the roster is available
+        from the model selector with no provider accounts to set up.
       </p>
     ),
   },
@@ -223,9 +223,9 @@ const FAQ = [
     q: "What does Ace include?",
     a: (
       <p>
-        Managed models on validated routes, managed research search with no search key to manage, and memory that
-        persists across sessions. Ace-first plugins are coming soon. Everything else in OpenScience stays free and works
-        without Ace.
+        Managed models on validated routes and managed research search with no search key to manage. Memory that
+        persists across sessions and Ace-first plugins are coming soon. Everything else in OpenScience stays free and
+        works without Ace.
       </p>
     ),
   },
@@ -244,9 +244,9 @@ const FAQ = [
     q: "Is Ace cheaper?",
     a: (
       <p>
-        Ace charges what the provider reports. OpenRouter routes cost the provider's reported usage plus a 5.5% funding
-        adjustment; native Anthropic, Google, and xAI routes are billed at their published standard rates. There is no
-        Ace service fee. See <a href={docs("pricing")}>pricing</a>.
+        Ace charges what the provider reports. Usage is billed at the provider's reported cost plus a 5.5% funding fee,
+        applied once per request, with no other markup. There is no Ace service fee. See{" "}
+        <a href={docs("pricing")}>pricing</a>.
       </p>
     ),
   },
@@ -254,10 +254,10 @@ const FAQ = [
     q: "How much does Ace cost?",
     a: (
       <p>
-        Activation is free. You add a $20 pay-as-you-go balance, and each request debits the verified cost once it
-        settles. A request may reserve funds while it runs; unused reservations are released, and a small request is
-        never rounded up to a full cent. Card processing charges are disclosed at checkout and are separate from your
-        Wallet value.
+        Activation is free. You add a $20 pay-as-you-go balance, and each request debits the provider's reported cost
+        plus a 5.5% funding fee once it settles. A request may reserve funds while it runs; unused reservations are
+        released, and a small request is never rounded up to a full cent. Card processing charges are disclosed at
+        checkout and are separate from your Wallet value.
       </p>
     ),
   },
@@ -335,9 +335,10 @@ export default function Ace() {
             </div>
             <div data-slot="pricing-copy">
               <p>
-                <strong>Add a $20 pay-as-you-go balance</strong> <span>(card processing fee shown at checkout)</span>
+                <strong>Add a $20 pay-as-you-go balance</strong>{" "}
+                <span>(provider cost plus a 5.5% funding fee per request; card processing fee shown at checkout)</span>
               </p>
-              <p>Models, search, and memory in one Wallet. Set a monthly cap. Cancel any time.</p>
+              <p>Models and search in one Wallet, memory coming soon. Set a monthly cap. Cancel any time.</p>
             </div>
           </section>
 
@@ -370,14 +371,14 @@ export default function Ace() {
                 <span data-slot="marker">1.</span>
                 <div>
                   <strong>Sign in and add a $20 balance</strong>Customize → Models → Ace, or follow the{" "}
-                  <a href={docs("gateway")}>setup instructions</a>
+                  <a href={docs("ace")}>setup instructions</a>
                 </div>
               </li>
               <li>
                 <span data-slot="marker">2.</span>
                 <div>
-                  <strong>Pay per request</strong>At the provider's <a href={docs("pricing")}>reported cost</a>, settled
-                  from verified usage, with no Ace fee
+                  <strong>Pay per request</strong>At the provider's <a href={docs("pricing")}>reported cost</a> plus a
+                  5.5% funding fee, settled from verified usage, with no Ace fee
                 </div>
               </li>
               <li>

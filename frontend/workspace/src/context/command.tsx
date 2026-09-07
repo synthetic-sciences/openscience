@@ -27,8 +27,16 @@ function signature(key: string, ctrl: boolean, meta: boolean, shift: boolean, al
   return `${key}:${mask}`
 }
 
+// Shift changes `event.key` for symbol keys (Shift+` reports "~" on US layouts),
+// so a binding written as ctrl+shift+` never matched. The physical key code is
+// layout-stable for the one symbol key we bind.
+function eventKey(event: KeyboardEvent) {
+  if (event.code === "Backquote") return "`"
+  return normalizeKey(event.key)
+}
+
 function signatureFromEvent(event: KeyboardEvent) {
-  return signature(normalizeKey(event.key), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
+  return signature(eventKey(event), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
 }
 
 export type KeybindConfig = string
@@ -108,10 +116,10 @@ export function parseKeybind(config: string): Keybind[] {
 }
 
 export function matchKeybind(keybinds: Keybind[], event: KeyboardEvent): boolean {
-  const eventKey = normalizeKey(event.key)
+  const key = eventKey(event)
 
   for (const kb of keybinds) {
-    const keyMatch = kb.key === eventKey
+    const keyMatch = kb.key === key
     const ctrlMatch = kb.ctrl === (event.ctrlKey || false)
     const metaMatch = kb.meta === (event.metaKey || false)
     const shiftMatch = kb.shift === (event.shiftKey || false)

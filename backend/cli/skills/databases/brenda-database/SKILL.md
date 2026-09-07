@@ -30,7 +30,9 @@ This skill should be used when:
 
 ### 1. Kinetic Parameter Retrieval
 
-Access comprehensive kinetic data for enzymes:
+Access comprehensive kinetic data for enzymes. Run the examples with this skill
+directory as the working directory: `from scripts.brenda_client import ...` resolves
+`scripts/` relative to it.
 
 **Get Km Values by EC Number**:
 ```python
@@ -675,7 +677,7 @@ For detailed BRENDA documentation, see `references/api_reference.md`. This inclu
 ## Troubleshooting
 
 **Authentication Errors**:
-- Verify BRENDA_EMAIL and BRENDA_PASSWORD in .env file
+- Verify BRENDA_EMAIL and BRENDA_PASSWORD are set in the process environment (the client reads only the environment; a `.env` file is not loaded)
 - Check for correct spelling (note BRENDA_EMIAL legacy support)
 - Ensure BRENDA account is active and has API access
 

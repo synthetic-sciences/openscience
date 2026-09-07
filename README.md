@@ -54,7 +54,7 @@ Follow the [quickstart](https://openscience.sh/docs/#/openscience/quickstart) fo
 | Your provider | Connect an API key or supported sign-in.                   | Your provider's access and billing terms. |
 | Local model   | Connect Ollama, LM Studio, or another compatible endpoint. | Your hardware; no Ace model charge.       |
 
-Ace activation is a $0 authorization. While automatic reloads are enabled, a purchased Wallet balance below $5 triggers a $20 reload; payment-processing fees are disclosed separately before payment. Changing to your own provider does not turn off automatic reloads. See [Pricing and usage](https://openscience.sh/docs/#/openscience/pricing).
+Ace activation is a $0 authorization. Usage is settled from the provider's reported cost plus a 5.5% funding fee, applied once per request, with no other markup; the card processing fee is shown separately at checkout. While automatic reloads are enabled, a purchased Wallet balance below $5 triggers a $20 reload. Changing to your own provider does not turn off automatic reloads. See [Pricing and usage](https://openscience.sh/docs/#/openscience/pricing).
 
 Connect from the terminal:
 

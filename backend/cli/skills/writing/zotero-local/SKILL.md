@@ -9,8 +9,10 @@ metadata:
 
 # Local Zotero library
 
-Use this skill only after the user asks to read or search their local Zotero
-library. Do not probe the library automatically. The helper makes read-only GET
+This skill is guidance for explicit requests: use it when the user asks to read
+or search their local Zotero library, and do not probe the library on your own
+initiative. OpenScience does not enforce that; access is gated by Zotero's own
+local-API setting (see Setup). The helper makes read-only GET
 requests to `127.0.0.1:23119`; it does not read Zotero's SQLite database, modify
 references, download attachments, or synchronize anything with a cloud service.
 
