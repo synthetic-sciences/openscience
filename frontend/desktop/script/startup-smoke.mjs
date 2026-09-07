@@ -1,28 +1,36 @@
 import assert from "node:assert/strict"
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises"
+import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { setTimeout as pause } from "node:timers/promises"
 
 const desktop = fileURLToPath(new URL("../", import.meta.url))
 const require = createRequire(new URL("../package.json", import.meta.url))
 const workspace = createRequire(new URL("../../workspace/package.json", import.meta.url))
 const playwright = createRequire(workspace.resolve("@playwright/test"))("playwright")
 const binary = process.env.OPENSCIENCE_DESKTOP_SIDECAR
-if (!binary || !(await Bun.file(binary).exists())) throw new Error("Build and set OPENSCIENCE_DESKTOP_SIDECAR first")
+if (
+  !binary ||
+  !(await access(binary).then(
+    () => true,
+    () => false,
+  ))
+)
+  throw new Error("Build and set OPENSCIENCE_DESKTOP_SIDECAR first")
 
 const root = await mkdtemp(path.join(os.tmpdir(), "openscience-desktop-startup-"))
-const packaged = await Bun.file(path.join(desktop, "package.json")).json()
+const packaged = JSON.parse(await readFile(path.join(desktop, "package.json"), "utf8"))
 const source = path.join(root, "app")
 const profile = path.join(root, "electron")
 await mkdir(profile, { recursive: true })
 await cp(path.join(desktop, "src"), path.join(source, "src"), { recursive: true })
-await Bun.write(
+await writeFile(
   path.join(source, "package.json"),
   JSON.stringify({ name: "openscience-startup-smoke", version: packaged.version, type: "module", main: "smoke.mjs" }),
 )
-await Bun.write(
+await writeFile(
   path.join(source, "smoke.mjs"),
   `import { app } from "electron"
 app.setPath("userData", ${JSON.stringify(profile)})
@@ -84,7 +92,7 @@ try {
       console.log(`Desktop startup passed on ${process.platform}: workspace mounted, splash closed, runtime healthy`)
       break
     }
-    await Bun.sleep(100)
+    await pause(100)
   }
 } finally {
   await electron.close()

@@ -36,7 +36,7 @@ jobs:
         shell: pwsh
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/backend/cli/dist/@synsci/openscience-windows-x64/bin/openscience.exe
-        run: bun frontend/desktop/script/startup-smoke.mjs
+        run: node frontend/desktop/script/startup-smoke.mjs
   signatures:
     name: Windows Authenticode verification
     runs-on: windows-2025
