@@ -37,9 +37,9 @@ are tool results; save a research artifact separately when you need versioned
 storage. No custom browser component is required to expose a file result to
 another client.
 
-Connector contributions and rich results are available in the development
-checkout. Use matching source packages until a release containing these APIs is
-published; an older package version does not imply support for them.
+Use matching OpenScience runtime and plugin package versions that include
+connector contributions and structured results. Older package versions may not
+support these APIs; check their exported types when building your integration.
 
 Use a trusted global plugin for code that runs inside the server. Project plugins
 require project trust and are refused while the execution sandbox is enabled.

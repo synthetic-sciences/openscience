@@ -5,7 +5,7 @@ description: "Build a scientific assistant against the same runtime used by the 
 
 OpenScience owns the Research agent loop, tools, permissions, files, Results, and compute records. Your application owns its interface and the mapping from its users to an authorized project and conversation. The TypeScript and Python clients speak HTTP and SSE; they do not import the workbench or implement another agent loop.
 
-The runtime protocol below is new in this source branch. Until a release includes it, use a matching locally built SDK and runtime. `GET /runtime/capabilities` reports protocol support; the base package version alone does not distinguish an unreleased build. The native CLI [JSON run contract](/openscience/automation) remains supported for Harbor and single-process automation.
+Use matching OpenScience runtime and TypeScript SDK versions. `GET /runtime/capabilities` reports protocol support; check it before submitting work because older servers may not expose these APIs. The native CLI [JSON run contract](/openscience/automation) remains supported for Harbor and single-process automation.
 
 ## Connect to a project
 
@@ -67,7 +67,7 @@ to `client.session.create` when relative tool paths should use the selected proj
 directory, as in a native evaluation environment. Python exposes the same choice as
 `create_session(workspace="project")`. The mode belongs to the session and is not
 changed by later prompts. Removing a project-mode session preserves the project files.
-Use a matching source build for this new option; see [session workspaces](/openscience/sessions).
+Use a runtime that supports this option; see [session workspaces](/openscience/sessions).
 
 An identical `requestID` in the same session returns the original receipt, including after completion. A changed prompt or model with that ID returns HTTP 409. Omit the ID only when duplicate admission after an uncertain network result is acceptable. Advanced clients can supply a native `messageID`; ordinary integrations should let the server generate it and use their own external `requestID`.
 
