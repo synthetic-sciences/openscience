@@ -10,6 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Start desktop onboarding with Synthetic Sciences sign-in and workspace selection,
+  then continue to research project setup. A small Skip action allows local setup
+  without an account; existing completed setups remain unchanged.
 - Preserve optional/defaulted tool inputs in provider schemas and clarify inline
   page reads versus raw downloads. Distinguish completed subagent handoffs with
   failed attempts from unfinished work, retain empty first-turn recovery baselines,

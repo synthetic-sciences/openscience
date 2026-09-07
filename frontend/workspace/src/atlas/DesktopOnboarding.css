@@ -50,6 +50,35 @@
   gap: 20px;
 }
 
+.desktop-onboarding__signin {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 28px;
+  padding-block: 24px;
+}
+
+.desktop-onboarding__signin-actions {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.desktop-onboarding__signin-hint {
+  margin: 0;
+  color: var(--text-weak);
+  font-size: var(--font-size-x-small);
+  line-height: 1.5;
+}
+
+.desktop-onboarding__skip {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--text-weak);
+}
+
 .desktop-onboarding__intro {
   max-width: 580px;
 }
@@ -69,6 +98,10 @@
   letter-spacing: -0.04em;
   line-height: 1.08;
   text-wrap: balance;
+}
+
+.desktop-onboarding__intro h1:focus {
+  outline: none;
 }
 
 .desktop-onboarding__intro > span,

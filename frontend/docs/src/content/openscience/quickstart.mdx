@@ -22,7 +22,18 @@ openscience ~/research/my-project
 
 `npx synsci` is an alternative launcher that installs and opens OpenScience. It requires Node.js and npm.
 
-## 2. Choose model access
+## 2. Sign in and set up your desktop workspace
+
+The desktop app starts with **Sign in with Synthetic Sciences**. Continue at
+[app.syntheticsciences.ai](https://app.syntheticsciences.ai) in your browser and
+choose any workspace you belong to. After sign-in, OpenScience automatically
+shows **Start with your research**. Open an existing folder or start a blank project.
+
+If you prefer to use your own provider access or local models without signing in,
+select **Skip** at the bottom right. You will reach the same project setup screen
+and can sign in later from **Customize → General**.
+
+## 3. Choose model access
 
 Open **Customize → Models** and choose the option that fits your setup:
 
@@ -36,7 +47,7 @@ An OpenScience account is optional when using your own provider access or local 
 
 For terminal setup, run `openscience keys add` to connect a provider, or `openscience local add` to connect a local endpoint.
 
-## 3. Open a project and add your inputs
+## 4. Open a project and add your inputs
 
 Create a project or open an existing folder in the workspace. Add the files the task needs and mention them in your request. Keep the original data and ask OpenScience to write results to a separate folder.
 
@@ -55,7 +66,7 @@ Help me plan a literature review on protein language models. Ask about
 my research question and inclusion criteria before searching.
 ```
 
-## 4. Review and continue
+## 5. Review and continue
 
 Read the response and open the files it produced. Check the cited sources, assumptions, and any reported limitations. Continue in the same conversation to refine the result:
 

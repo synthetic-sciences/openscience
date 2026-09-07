@@ -1,9 +1,11 @@
-import { For, Show, createEffect, createSignal, onMount, type ParentProps } from "solid-js"
+import { For, Show, createEffect, createSignal, onCleanup, onMount, type ParentProps } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
 import { TextField } from "@synsci/ui/text-field"
 import { IconFolder, IconPlus } from "@/atlas/shared/Icon"
 import { Wordmark } from "@/atlas/Wordmark"
 import { settingsApi } from "@/components/settings/api"
+import { ACCOUNT_DEADLINE_MS, withAccountDeadline } from "@/components/settings/account-deadline"
 import type { ProjectCreateInput } from "@/components/dialog-create-project"
 import { usePlatform } from "@/context/platform"
 import type { Platform } from "@/context/platform"
@@ -155,26 +157,86 @@ export function DesktopOnboardingController(
   const [configured, setConfigured] = createSignal<Configured>()
   const [busy, setBusy] = createSignal<Busy>()
   const [error, setError] = createSignal<string>()
+  const [account, setAccount] = createStore({
+    step: "account" as "account" | "project",
+    connected: false,
+    pending: false,
+  })
+  const lifetime = new AbortController()
   let errorElement: HTMLParagraphElement | undefined
+  let projectTitle: HTMLHeadingElement | undefined
   const server = props.server
   const platform = props.platform
   const fetcher = () => platform.fetch ?? fetch
 
+  onCleanup(() => lifetime.abort())
+
   onMount(() => {
     if (!desktop) return
-    void settingsApi<DesktopPreferences>(server.url, fetcher(), "/settings/preferences")
-      .then((value) => {
-        setComplete(value.desktop_onboarding_version >= 1)
-        rememberVersion(value.desktop_onboarding_version)
+    void withAccountDeadline(async (deadline) => {
+      const signal = AbortSignal.any([deadline, lifetime.signal])
+      const value = await settingsApi<DesktopPreferences>(server.url, fetcher(), "/settings/preferences", { signal })
+      if (signal.aborted) return
+      rememberVersion(value.desktop_onboarding_version)
+      if (value.desktop_onboarding_version >= 1) {
+        setComplete(true)
+        return
+      }
+      setReady(false)
+      setComplete(false)
+      const session = await settingsApi<{ session: boolean }>(server.url, fetcher(), "/account/session", { signal })
+      if (signal.aborted) return
+      setAccount({ connected: session.session, step: session.session ? "project" : "account" })
+    }, ACCOUNT_DEADLINE_MS)
+      .catch((cause) => {
+        if (!lifetime.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))
-      .finally(() => setReady(true))
+      .finally(() => {
+        if (!lifetime.signal.aborted) setReady(true)
+      })
   })
 
   createEffect(() => {
     if (!error()) return
     queueMicrotask(() => errorElement?.focus())
   })
+
+  createEffect(() => {
+    if (!ready() || complete() || account.step !== "project") return
+    queueMicrotask(() => projectTitle?.focus())
+  })
+
+  const login = async () => {
+    if (account.pending) return
+    setAccount("pending", true)
+    setError(undefined)
+    try {
+      const result = await settingsApi<{ ok: boolean; error?: string }>(
+        server.url,
+        fetcher(),
+        "/account/login-browser",
+        {
+          method: "POST",
+          signal: lifetime.signal,
+        },
+      )
+      if (lifetime.signal.aborted) return
+      if (!result.ok) throw new Error(result.error || "Sign in did not complete. Try again.")
+      setAccount({ connected: true, step: "project" })
+      window.dispatchEvent(new Event("openscience:account-changed"))
+    } catch (cause) {
+      if (!lifetime.signal.aborted && account.step === "account") {
+        setError(cause instanceof Error ? cause.message : String(cause))
+      }
+    } finally {
+      if (!lifetime.signal.aborted) setAccount("pending", false)
+    }
+  }
+
+  const skip = () => {
+    setError(undefined)
+    setAccount("step", "project")
+  }
 
   const projectFlow = createOnboardingProjectFlow({
     create: (input) =>
@@ -278,109 +340,143 @@ export function DesktopOnboardingController(
             <section class="desktop-onboarding__shell">
               <header class="desktop-onboarding__header">
                 <Wordmark size="sm" />
-                <span class="desktop-onboarding__account-state">Local workspace</span>
+                <span class="desktop-onboarding__account-state">
+                  {account.step === "account"
+                    ? "Step 1 of 2"
+                    : account.connected
+                      ? "Account connected · Step 2 of 2"
+                      : "Step 2 of 2"}
+                </span>
               </header>
 
-              <div class="desktop-onboarding__content">
-                <div class="desktop-onboarding__intro">
-                  <p>YOUR FIRST WORKSPACE</p>
-                  <h1 id="desktop-onboarding-title">Start with your research</h1>
-                  <span>
-                    Open an existing folder to keep files, sessions, and results together. You can change model and
-                    compute access anytime in Customize. Projects and credentials stay on this device.
-                  </span>
-                </div>
-
-                <div class="desktop-onboarding__workspace-actions" aria-label="Choose your first workspace">
-                  <button
-                    type="button"
-                    class="desktop-onboarding__workspace-action desktop-onboarding__workspace-action--primary"
-                    disabled={Boolean(busy())}
-                    onClick={() => void openFolder()}
-                  >
-                    <span class="desktop-onboarding__workspace-icon" aria-hidden="true">
-                      <IconFolder size={19} strokeWidth={1.55} />
-                    </span>
-                    <span>
-                      <strong>{busy() === "folder" ? "Opening folder…" : "Open a folder"}</strong>
-                      <small>Recommended · continue with an existing research directory</small>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    class="desktop-onboarding__workspace-action"
-                    disabled={Boolean(busy())}
-                    onClick={() => void startBlank()}
-                  >
-                    <span class="desktop-onboarding__workspace-icon" aria-hidden="true">
-                      <IconPlus size={18} strokeWidth={1.65} />
-                    </span>
-                    <span>
-                      <strong>{busy() === "blank" ? "Creating project…" : "Start a blank project"}</strong>
-                      <small>Create a clean workspace and connect folders later</small>
-                    </span>
-                  </button>
-                </div>
-
-                <details class="desktop-onboarding__models">
-                  <summary>
-                    <span>
-                      <strong>Model access</strong>
-                      <small>Optional · set up now or later</small>
-                    </span>
-                    <span aria-hidden="true">+</span>
-                  </summary>
-                  <div class="desktop-onboarding__model-options">
-                    <section class="desktop-onboarding__model-option desktop-onboarding__model-option--key">
-                      <div class="desktop-onboarding__model-copy">
-                        <strong>Provider key</strong>
-                        <small>Stored locally and billed directly by the provider.</small>
-                      </div>
-                      <div class="desktop-onboarding__credentials">
-                        <label>
-                          <span>Provider</span>
-                          <select
-                            value={provider()}
-                            disabled={Boolean(busy())}
-                            onChange={(event) => setProvider(event.currentTarget.value)}
-                          >
-                            <For each={providers}>{(item) => <option value={item.id}>{item.label}</option>}</For>
-                          </select>
-                        </label>
-                        <label class="desktop-onboarding__field">
-                          <span>API key</span>
-                          <TextField
-                            hideLabel
-                            type="password"
-                            value={key()}
-                            disabled={Boolean(busy())}
-                            onChange={setKey}
-                            placeholder="Paste provider key"
-                            autocomplete="off"
-                            onKeyDown={(event: KeyboardEvent) => {
-                              if (event.key !== "Enter") return
-                              event.preventDefault()
-                              void saveKey()
-                            }}
-                          />
-                        </label>
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          disabled={Boolean(busy()) || !key().trim()}
-                          onClick={() => void saveKey()}
-                        >
-                          {busy() === "api" ? "Saving…" : configured() === "api" ? "Saved" : "Save key"}
-                        </Button>
-                      </div>
-                    </section>
-
-                    <p class="desktop-onboarding__note">
-                      You can also connect ChatGPT / Codex or a local runtime later in Customize → Models.
-                    </p>
+              <Show
+                when={account.step === "project"}
+                fallback={
+                  <div class="desktop-onboarding__signin">
+                    <div class="desktop-onboarding__intro">
+                      <p>YOUR RESEARCH STARTS HERE</p>
+                      <h1 id="desktop-onboarding-title">Welcome to OpenScience</h1>
+                      <span>
+                        Sign in to Synthetic Sciences and choose any workspace you belong to. Connect its model access
+                        and shared credentials before starting your research.
+                      </span>
+                    </div>
+                    <div class="desktop-onboarding__signin-actions">
+                      <Button variant="primary" size="large" disabled={account.pending} onClick={() => void login()}>
+                        {account.pending ? "Waiting for sign-in…" : "Sign in with Synthetic Sciences"}
+                      </Button>
+                      <p class="desktop-onboarding__signin-hint" role="status" aria-live="polite">
+                        {account.pending
+                          ? "Choose your workspace in your browser. This window will continue automatically."
+                          : "Opens app.syntheticsciences.ai in your browser."}
+                      </p>
+                    </div>
                   </div>
-                </details>
-              </div>
+                }
+              >
+                <div class="desktop-onboarding__content">
+                  <div class="desktop-onboarding__intro">
+                    <p>YOUR FIRST WORKSPACE</p>
+                    <h1 ref={projectTitle} id="desktop-onboarding-title" tabindex="-1">
+                      Start with your research
+                    </h1>
+                    <span>
+                      Open an existing folder to keep files, sessions, and results together. You can change model and
+                      compute access anytime in Customize. Project files stay on this device.
+                    </span>
+                  </div>
+
+                  <div class="desktop-onboarding__workspace-actions" aria-label="Choose your first workspace">
+                    <button
+                      type="button"
+                      class="desktop-onboarding__workspace-action desktop-onboarding__workspace-action--primary"
+                      disabled={Boolean(busy())}
+                      onClick={() => void openFolder()}
+                    >
+                      <span class="desktop-onboarding__workspace-icon" aria-hidden="true">
+                        <IconFolder size={19} strokeWidth={1.55} />
+                      </span>
+                      <span>
+                        <strong>{busy() === "folder" ? "Opening folder…" : "Open a folder"}</strong>
+                        <small>Recommended · continue with an existing research directory</small>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      class="desktop-onboarding__workspace-action"
+                      disabled={Boolean(busy())}
+                      onClick={() => void startBlank()}
+                    >
+                      <span class="desktop-onboarding__workspace-icon" aria-hidden="true">
+                        <IconPlus size={18} strokeWidth={1.65} />
+                      </span>
+                      <span>
+                        <strong>{busy() === "blank" ? "Creating project…" : "Start a blank project"}</strong>
+                        <small>Create a clean workspace and connect folders later</small>
+                      </span>
+                    </button>
+                  </div>
+
+                  <details class="desktop-onboarding__models">
+                    <summary>
+                      <span>
+                        <strong>Model access</strong>
+                        <small>Optional · set up now or later</small>
+                      </span>
+                      <span aria-hidden="true">+</span>
+                    </summary>
+                    <div class="desktop-onboarding__model-options">
+                      <section class="desktop-onboarding__model-option desktop-onboarding__model-option--key">
+                        <div class="desktop-onboarding__model-copy">
+                          <strong>Provider key</strong>
+                          <small>Stored locally and billed directly by the provider.</small>
+                        </div>
+                        <div class="desktop-onboarding__credentials">
+                          <label>
+                            <span>Provider</span>
+                            <select
+                              value={provider()}
+                              disabled={Boolean(busy())}
+                              onChange={(event) => setProvider(event.currentTarget.value)}
+                            >
+                              <For each={providers}>{(item) => <option value={item.id}>{item.label}</option>}</For>
+                            </select>
+                          </label>
+                          <label class="desktop-onboarding__field">
+                            <span>API key</span>
+                            <TextField
+                              hideLabel
+                              type="password"
+                              value={key()}
+                              disabled={Boolean(busy())}
+                              onChange={setKey}
+                              placeholder="Paste provider key"
+                              autocomplete="off"
+                              onKeyDown={(event: KeyboardEvent) => {
+                                if (event.key !== "Enter") return
+                                event.preventDefault()
+                                void saveKey()
+                              }}
+                            />
+                          </label>
+                          <Button
+                            variant="secondary"
+                            size="small"
+                            disabled={Boolean(busy()) || !key().trim()}
+                            onClick={() => void saveKey()}
+                          >
+                            {busy() === "api" ? "Saving…" : configured() === "api" ? "Saved" : "Save key"}
+                          </Button>
+                        </div>
+                      </section>
+
+                      <p class="desktop-onboarding__note">
+                        You can also connect ChatGPT / Codex or a local runtime later in Customize → Models.
+                      </p>
+                    </div>
+                  </details>
+                </div>
+              </Show>
 
               <Show when={error()}>
                 <p ref={errorElement} class="desktop-onboarding__error" role="alert" tabindex="-1">
@@ -389,7 +485,19 @@ export function DesktopOnboardingController(
               </Show>
 
               <footer class="desktop-onboarding__footer">
-                <span>Model setup is optional. OpenScience works with credentials and runtimes you control.</span>
+                <Show
+                  when={account.step === "project"}
+                  fallback={
+                    <>
+                      <span>You can also use your own models and sign in later.</span>
+                      <Button class="desktop-onboarding__skip" variant="ghost" size="small" onClick={skip}>
+                        Skip
+                      </Button>
+                    </>
+                  }
+                >
+                  <span>Model setup is optional. OpenScience works with credentials and runtimes you control.</span>
+                </Show>
               </footer>
             </section>
           </main>
