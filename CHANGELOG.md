@@ -10,6 +10,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Keep successful skill loads visible in collapsed conversation activity with
+  inspectable instructions and load details; distinguish searches and failures
+  from actual loads. Give the Skill Library one scrolling list with fixed search
+  and pagination controls, readable descriptions, and accurate partial counts.
 - Remove short standalone headings from visible reasoning while retaining
   the complete prose. Rank skill discovery by query relevance and use an explicit
   search query to recover a guessed skill name without loading unrelated instructions.

@@ -57,6 +57,7 @@ import {
   savedArtifact,
   scienceTaskLabel,
   sentenceCaseLabel,
+  loadedSkillName,
   skillActivity,
   stripBashMetadata,
   toolOutcome,
@@ -1036,6 +1037,12 @@ ToolRegistry.register({
       skillActivity({ metadata: props.metadata, input: props.input, title: props.title, status: props.status })
     return (
       <BasicTool {...props} icon="mcp" trigger={{ title: activity().title, subtitle: activity().subtitle }}>
+        <Show when={loadedSkillName(props)}>
+          <details data-slot="skill-load-receipt">
+            <summary>Load details</summary>
+            <pre>{JSON.stringify({ input: props.input, metadata: props.metadata }, null, 2)}</pre>
+          </details>
+        </Show>
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>

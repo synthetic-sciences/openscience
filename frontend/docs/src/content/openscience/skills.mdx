@@ -31,6 +31,12 @@ A skill supplies guidance. It does not guarantee that every referenced package, 
 
 OpenScience searches the enabled library when it does not know an exact skill name. Search results are suggestions; instructions load only after selecting an available name. If a request includes both an unavailable name and a search query, OpenScience uses the query to find candidates instead of loading a guessed substitute.
 
+Choose **Browse all skills** in the conversation picker to open the searchable library. The list scrolls independently of the search and count controls. Selecting a skill prepares its slash command in the composer; it does not send your request.
+
+A successful tool load appears in the conversation as **Loaded skill: name**, even when reasoning and activity are collapsed. Expand it to inspect the saved instructions, then **Load details** for the source and instruction hash. Searches and failed loads are labeled separately.
+
+Loaded guidance remains available in ordinary follow-up turns through conversation history, so a new load is not required on every turn. The receipt stays on the original turn; it confirms that guidance was supplied, not that every instruction was followed. Context compaction can remove older guidance; load the skill again when its full procedure is needed afterward.
+
 ## Install from a Git repository
 
 ```bash

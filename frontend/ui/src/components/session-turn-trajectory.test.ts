@@ -338,6 +338,120 @@ describe("reasoning rows", () => {
   })
 })
 
+describe("skill load receipts", () => {
+  const loaded = (): ToolPart => ({
+    ...read("prt_skill", "", 1_000),
+    tool: "skill",
+    state: {
+      status: "completed",
+      input: { name: "matplotlib", query: "scientific figures" },
+      title: "Loaded skill: matplotlib",
+      output: "## Skill: matplotlib\n\nUse labelled axes and retain the figure source.",
+      metadata: {
+        name: "matplotlib",
+        dir: "/skills/matplotlib",
+        origin: "bundled",
+        contentHash: "a".repeat(64),
+        matches: [],
+        truncated: false,
+      },
+      time: { start: 1_000, end: 1_001 },
+    },
+  })
+
+  test("keeps an inspectable load visible in its completed turn, without claiming another load on the next turn", async () => {
+    const first = assistant(2_000)
+    const next: UserMessage = { ...user, id: "msg_0003" }
+    const second: AssistantMessage = { ...assistant(4_000), id: "msg_0004", parentID: next.id }
+    const skill = loaded()
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, first, next, second] },
+      part: {
+        [user.id]: [],
+        [first.id]: [skill, read("prt_read", "/research/data.csv", 1_100)],
+        [next.id]: [],
+        [second.id]: [
+          { id: "prt_second", sessionID, messageID: second.id, type: "text", text: "Here is the next figure." },
+        ],
+      },
+    }
+    const view = () => [
+      turn.SessionTurn({ sessionID, messageID: user.id }),
+      turn.SessionTurn({ sessionID, messageID: next.id }),
+    ]
+    const host = mount(view, store)
+    const earlier = host.querySelector(`[data-message="${user.id}"]`)!
+    const later = host.querySelector(`[data-message="${next.id}"]`)!
+    expect(earlier.textContent).toContain("Loaded skill: matplotlib")
+    expect(earlier.querySelectorAll('[data-component="tool-part-wrapper"]')).toHaveLength(1)
+    expect(later.querySelector('[data-tool-family="skills"]')).toBeNull()
+    const receipt = earlier.querySelector('[data-tool-family="skills"]')!
+    expect(receipt.querySelector('[data-component="tool-output"]')).toBeNull()
+    const button = receipt.querySelector<HTMLButtonElement>("button")!
+    expect(button.getAttribute("aria-expanded")).toBe("false")
+    button.click()
+    await ready(() => receipt.textContent?.includes("Use labelled axes and retain the figure source.") === true)
+    expect(receipt.querySelector('[data-slot="skill-load-receipt"] pre')?.textContent).toContain("a".repeat(64))
+    expect(receipt.querySelector('[data-slot="skill-load-receipt"] pre')?.textContent).toContain("/skills/matplotlib")
+    expect(receipt.querySelector('[data-slot="skill-load-receipt"] pre')?.textContent).toContain('"truncated": false')
+    const activity = earlier.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
+    activity.click()
+    await ready(() => earlier.querySelectorAll('[data-component="tool-part-wrapper"]').length === 2)
+    expect(earlier.querySelector('[data-tool-family="skills"]')).toBe(receipt)
+    activity.click()
+    await ready(() => earlier.querySelectorAll('[data-component="tool-part-wrapper"]').length === 1)
+    expect(earlier.querySelector('[data-tool-family="skills"]')).toBe(receipt)
+    expect(button.getAttribute("aria-expanded")).toBe("true")
+    expect(store.part[first.id][0]).toEqual(skill)
+
+    cleanups.splice(0).forEach((cleanup) => cleanup())
+    document.body.replaceChildren()
+    const reopened = mount(view, store)
+    expect(reopened.querySelector(`[data-message="${user.id}"]`)?.textContent).toContain("Loaded skill: matplotlib")
+    expect(reopened.querySelector(`[data-message="${next.id}"] [data-tool-family="skills"]`)).toBeNull()
+  })
+
+  test("does not turn discovery or a failed load into a loaded receipt", async () => {
+    const message = assistant(2_000)
+    const discovery: ToolPart = {
+      ...loaded(),
+      id: "prt_search",
+      state: {
+        status: "completed",
+        input: { query: "matplotlib" },
+        title: "Skill matches: matplotlib",
+        output: "No skill instructions have been loaded.",
+        metadata: { name: "matplotlib", dir: "", matches: ["matplotlib"] },
+        time: { start: 1_000, end: 1_001 },
+      },
+    }
+    const failed: ToolPart = {
+      ...loaded(),
+      id: "prt_failed",
+      state: {
+        status: "error",
+        input: { name: "matplotlib" },
+        error: "Permission denied for matplotlib.",
+        time: { start: 1_002, end: 1_003 },
+      },
+    }
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [discovery, failed] },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    expect(host.querySelectorAll('[data-tool-family="skills"]')).toHaveLength(1)
+    expect(host.textContent).toContain("Skill load failed")
+    expect(host.textContent).not.toContain("Loaded skill:")
+    expect(host.textContent).not.toContain("Using matplotlib")
+    host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!.click()
+    await ready(() => host.textContent?.includes("Found 1 relevant skill") === true)
+    expect(host.querySelectorAll('[data-slot="skill-load-receipt"]')).toHaveLength(0)
+  })
+})
+
 describe("streaming prose", () => {
   test("marks a growing text part until its end arrives", async () => {
     const [message, setMessage] = reactive.createStore<AssistantMessage>(assistant())

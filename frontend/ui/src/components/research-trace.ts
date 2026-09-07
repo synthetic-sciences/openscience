@@ -1,5 +1,5 @@
 import type { AssistantMessage, Part } from "@synsci/sdk/v2/client"
-import { reasoningDisplayText } from "./tool-display"
+import { loadedSkillName, reasoningDisplayText } from "./tool-display"
 
 export type ResearchTraceEntry = {
   message: AssistantMessage
@@ -50,7 +50,7 @@ export function traceLabel(family: TraceFamily, count: number) {
   if (family === "commands") return `Ran ${count} build or verification ${count === 1 ? "step" : "steps"}`
   if (family === "changes") return `Updated ${count} ${count === 1 ? "file" : "files"}`
   if (family === "images") return `Generated ${count} ${count === 1 ? "image" : "images"}`
-  if (family === "skills") return `Using ${count} ${count === 1 ? "skill" : "skills"}`
+  if (family === "skills") return `Loaded ${count} ${count === 1 ? "skill" : "skills"}`
   return `Completed ${count} research ${count === 1 ? "operation" : "operations"}`
 }
 
@@ -65,8 +65,8 @@ function lifecycle(part: Part) {
   return part.type === "step-start" || part.type === "step-finish" || part.type === "snapshot" || part.type === "patch"
 }
 
-/** Collapsing activity must not bury deliverables, failures, or a question the
- * user is still answering. Keep those entries mounted at their original IDs. */
+/** Collapsing activity must not bury deliverables, skill load receipts, failures,
+ * or a question the user is still answering. Keep their original IDs mounted. */
 export function collapsibleTracePart(
   part: Part,
   pendingRequestCallID?: string,
@@ -79,6 +79,7 @@ export function collapsibleTracePart(
   if (typeof child === "string" && pendingChildRequest?.(child)) return false
   if (part.state.status !== "completed") return true
   if (part.state.metadata?.ok === false) return false
+  if (part.tool === "skill" && loadedSkillName(part.state)) return false
   const outcome = part.tool === "task" ? part.state.metadata?.outcome : undefined
   if (outcome === "error" || outcome === "timed_out" || outcome === "partial") return false
   if (part.state.metadata?.artifact) return false
@@ -113,7 +114,7 @@ export function visibleResearchTrace(entries: ResearchTraceEntry[]): ResearchTra
 export function summarizeTaskActivity(items: TaskActivity[]): TaskActivityGroup[] {
   const groups = new Map<TraceFamily, TaskActivityGroup & { titles: string[] }>()
   for (const item of items) {
-    const directSkill = item.tool === "skill" && item.state.title?.startsWith("Loaded skill: ")
+    const directSkill = item.tool === "skill" && loadedSkillName(item.state)
     if (item.tool === "skill" && !directSkill) continue
     const family = traceFamily(item.tool)
     const previous = groups.get(family)

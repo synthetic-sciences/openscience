@@ -28,7 +28,192 @@
   grid-template-columns: 32px minmax(0, 1fr);
   align-items: start;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 12px 10px;
+}
+
+[data-component="dialog"] [data-slot="dialog-content"].atlas-skill-library {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.atlas-skill-library > [data-slot="dialog-body"] {
+  min-height: 0;
+}
+
+.atlas-skill-library__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  gap: 12px;
+  padding: 0 20px 12px;
+}
+
+.atlas-skill-library__search {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 44px;
+  gap: 8px;
+  padding: 4px 8px 4px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+
+.atlas-skill-library__search:focus-within {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: 2px;
+}
+
+.atlas-skill-library__search input {
+  all: unset;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-family-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.atlas-skill-library__clear {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.atlas-skill-library__clear:hover {
+  background: var(--color-accent-subtle);
+}
+
+.atlas-skill-library__clear:focus-visible {
+  outline: 2px solid var(--focus-lit-ring);
+  outline-offset: -2px;
+}
+
+.atlas-skill-library__results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 4px 2px;
+}
+
+.atlas-skill-library__group + .atlas-skill-library__group {
+  margin-top: 16px;
+}
+
+.atlas-skill-library__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 10px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-faint);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.atlas-skill-library__heading h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+
+.atlas-skill-library__heading > span {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-skill-library__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle);
+  color: var(--color-text-muted);
+}
+
+.atlas-skill-library__details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.atlas-skill-library__name {
+  font-family: var(--font-family-mono);
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.atlas-skill-library__description {
+  font-family: var(--font-family-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.atlas-skill-library__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.atlas-skill-library__tags > span {
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle);
+  color: var(--color-text-faint);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+}
+
+.atlas-skill-library__empty {
+  padding: 40px 10px;
+  text-align: center;
+  font-family: var(--font-family-sans);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.atlas-skill-library__footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  min-height: 44px;
+  gap: 8px 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .atlas-skill-row:hover,

@@ -5,6 +5,7 @@
  * prompt — the same invoke convention as the inline slash autocomplete.
  */
 import { createSignal, createMemo, onMount, onCleanup, For, Show, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Dialog } from "@synsci/ui/dialog"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { Icon } from "@synsci/ui/icon"
@@ -273,160 +274,105 @@ export function SkillsBrowser(props: { onPick: (name: string) => void; onClose: 
 export function SkillLibraryDialog(props: { onPick: (name: string) => void; initialQuery?: string }): JSX.Element {
   const sync = useSync()
   const dialog = useDialog()
-  const [query, setQuery] = createSignal(props.initialQuery ?? "")
-  const [visibleRows, setVisibleRows] = createSignal(SKILL_LIBRARY_INITIAL_ROWS)
+  const [state, setState] = createStore({ query: props.initialQuery ?? "", visibleRows: SKILL_LIBRARY_INITIAL_ROWS })
+  let results: HTMLDivElement | undefined
+  let search: HTMLInputElement | undefined
 
   const matches = createMemo(() => {
     const all = skillCatalogSnapshot((sync.data.skill ?? []) as SkillRow[], {
       permission: sync.data.config.permission,
     }).allowed
-    const q = query().trim().toLowerCase()
+    const q = state.query.trim().toLowerCase()
     return (
       q
         ? all.filter(
-            (s) =>
-              s.name.toLowerCase().includes(q) ||
-              (s.description ?? "").toLowerCase().includes(q) ||
-              (s.tags ?? []).some((t) => t.toLowerCase().includes(q)),
+            (skill) =>
+              skill.name.toLowerCase().includes(q) ||
+              (skill.description ?? "").toLowerCase().includes(q) ||
+              (skill.tags ?? []).some((tag) => tag.toLowerCase().includes(q)),
           )
         : all
     ).toSorted(
       (a, b) => (a.category || originOf(a)).localeCompare(b.category || originOf(b)) || a.name.localeCompare(b.name),
     )
   })
-
-  const visible = createMemo(() => matches().slice(0, visibleRows()))
+  const visible = createMemo(() => matches().slice(0, state.visibleRows))
+  const counts = createMemo(() => {
+    const counts = new Map<string, number>()
+    for (const skill of matches()) {
+      const label = skill.category || originOf(skill)
+      counts.set(label, (counts.get(label) ?? 0) + 1)
+    }
+    return counts
+  })
   const groups = createMemo(() => {
     const map = new Map<string, SkillRow[]>()
-    for (const s of visible()) {
-      const label = s.category || originOf(s)
-      const arr = map.get(label) ?? []
-      arr.push(s)
-      map.set(label, arr)
+    for (const skill of visible()) {
+      const label = skill.category || originOf(skill)
+      const items = map.get(label) ?? []
+      items.push(skill)
+      map.set(label, items)
     }
-    return Array.from(map.entries())
-      .map(([label, items]) => ({ label, items: items.sort((a, b) => a.name.localeCompare(b.name)) }))
-      .sort((a, b) => a.label.localeCompare(b.label))
+    return Array.from(map, ([label, items]) => ({ label, items }))
   })
-
   const total = createMemo(() => matches().length)
   const shown = createMemo(() => visible().length)
   const hasMore = createMemo(() => shown() < total())
-
-  const revealMore = () => setVisibleRows((value) => Math.min(total(), value + SKILL_LIBRARY_ROW_BATCH))
+  const revealMore = () => setState("visibleRows", (value) => Math.min(total(), value + SKILL_LIBRARY_ROW_BATCH))
+  const filter = (query: string) => {
+    setState({ query, visibleRows: SKILL_LIBRARY_INITIAL_ROWS })
+    if (results) results.scrollTop = 0
+  }
   const handleScroll = (event: Event) => {
     if (!hasMore()) return
     const target = event.currentTarget as HTMLElement
     if (target.scrollHeight - target.scrollTop - target.clientHeight < 240) revealMore()
   }
-
   const pick = (name: string) => {
     props.onPick(name)
     dialog.close()
   }
 
   return (
-    <Dialog title="Skill Library" size="large" transition>
-      <div
-        style={{
-          display: "flex",
-          "flex-direction": "column",
-          gap: "12px",
-          width: "min(680px, 82vw)",
-          "min-height": "440px",
-          "max-height": "64vh",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            "align-items": "center",
-            gap: "8px",
-            padding: "8px 10px",
-            border: "1px solid var(--color-border-strong)",
-            "border-radius": "4px",
-            background: "var(--color-bg)",
-          }}
-        >
-          <IconSearch size={13} strokeWidth={1.5} />
+    <Dialog title="Skill Library" size="large" class="atlas-skill-library" transition>
+      <div class="atlas-skill-library__body">
+        <div class="atlas-skill-library__search" data-focus-frame>
+          <IconSearch size={16} strokeWidth={1.5} />
           <input
+            ref={search}
             autofocus
-            value={query()}
-            onInput={(e) => {
-              setQuery(e.currentTarget.value)
-              setVisibleRows(SKILL_LIBRARY_INITIAL_ROWS)
-            }}
+            value={state.query}
+            onInput={(event) => filter(event.currentTarget.value)}
             placeholder="Search skills…"
             aria-label="Search the skill library"
-            style={{
-              all: "unset",
-              flex: 1,
-              "font-family": FONT_SANS,
-              "font-size": "14px",
-              color: "var(--color-text)",
-              padding: "3px 10px",
-            }}
           />
-          <span
-            style={{
-              "font-family": FONT_MONO,
-              "font-size": "11px",
-              "letter-spacing": "normal",
-              color: "var(--color-text-faint)",
-            }}
-          >
-            Skills: {shown() === total() ? total() : `${shown()} of ${total()}`}
-          </span>
+          <Show when={state.query}>
+            <button
+              type="button"
+              class="atlas-skill-library__clear"
+              aria-label="Clear skill search"
+              onClick={() => {
+                filter("")
+                search?.focus({ preventScroll: true })
+              }}
+            >
+              <Icon name="close" size="small" />
+            </button>
+          </Show>
         </div>
 
-        <div
-          class="atlas-scroll"
-          onScroll={handleScroll}
-          style={{
-            flex: 1,
-            "min-height": 0,
-            "overflow-y": "auto",
-            display: "flex",
-            "flex-direction": "column",
-            gap: "14px",
-            "padding-right": "2px",
-          }}
-        >
-          <Show
-            when={total() > 0}
-            fallback={
-              <div
-                style={{
-                  padding: "40px 10px",
-                  "text-align": "center",
-                  "font-family": FONT_MONO,
-                  "font-size": "12px",
-                  color: "var(--color-text-faint)",
-                }}
-              >
-                No matching skills
-              </div>
-            }
-          >
+        <div ref={results} class="atlas-scroll atlas-skill-library__results" onScroll={handleScroll}>
+          <Show when={total() > 0} fallback={<div class="atlas-skill-library__empty">No matching skills</div>}>
             <For each={groups()}>
               {(group) => (
-                <div style={{ display: "flex", "flex-direction": "column", gap: "1px" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      "align-items": "center",
-                      gap: "8px",
-                      padding: "0 4px 6px",
-                      "border-bottom": "1px solid var(--color-border)",
-                      "margin-bottom": "4px",
-                      "font-family": FONT_MONO,
-                      "font-size": "11px",
-                      "letter-spacing": "normal",
-                      color: "var(--color-text-faint)",
-                    }}
-                  >
-                    <span style={{ flex: 1 }}>{sentence(group.label)}</span>
-                    <span>{group.items.length}</span>
+                <section class="atlas-skill-library__group" aria-label={sentence(group.label)}>
+                  <div class="atlas-skill-library__heading">
+                    <h3>{sentence(group.label)}</h3>
+                    <span>
+                      {group.items.length === counts().get(group.label)
+                        ? group.items.length
+                        : `${group.items.length} of ${counts().get(group.label)}`}
+                    </span>
                   </div>
                   <For each={group.items}>
                     {(skill) => (
@@ -436,79 +382,44 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void; init
                         class="atlas-skill-row atlas-skill-row--dialog"
                         aria-label={`Use the ${skill.name} skill`}
                       >
-                        <span
-                          aria-hidden="true"
-                          style={{
-                            width: "32px",
-                            height: "32px",
-                            display: "grid",
-                            "place-items": "center",
-                            "border-radius": "var(--radius-sm)",
-                            background: "var(--color-accent-subtle)",
-                            color: "var(--color-text-muted)",
-                          }}
-                        >
+                        <span aria-hidden="true" class="atlas-skill-library__icon">
                           <Icon name={skillIconFor(skill)} size="small" />
                         </span>
-                        <span style={{ display: "flex", "min-width": 0, "flex-direction": "column", gap: "3px" }}>
-                          <span
-                            style={{
-                              "font-family": FONT_MONO,
-                              "font-size": "14px",
-                              "font-weight": "var(--font-weight-medium)",
-                              color: "var(--color-text)",
-                            }}
-                          >
-                            /{skill.name}
-                          </span>
+                        <span class="atlas-skill-library__details">
+                          <span class="atlas-skill-library__name">/{skill.name}</span>
                           <Show when={skill.description}>
-                            <span
-                              style={{
-                                "font-family": FONT_SANS,
-                                "font-size": "13px",
-                                color: "var(--color-text-muted)",
-                                "line-height": 1.5,
-                                display: "-webkit-box",
-                                "-webkit-line-clamp": "2",
-                                "-webkit-box-orient": "vertical",
-                                overflow: "hidden",
-                              }}
-                            >
-                              {skill.description}
-                            </span>
+                            <span class="atlas-skill-library__description">{skill.description}</span>
                           </Show>
                           <Show when={(skill.tags ?? []).length > 0}>
-                            <span style={{ display: "flex", "flex-wrap": "wrap", gap: "4px", "margin-top": "2px" }}>
-                              <For each={(skill.tags ?? []).slice(0, 6)}>
-                                {(tag) => (
-                                  <span
-                                    style={{
-                                      "font-family": FONT_MONO,
-                                      "font-size": "11px",
-                                      color: "var(--color-text-faint)",
-                                      background: "var(--color-accent-subtle)",
-                                      padding: "1px 6px",
-                                      "border-radius": "4px",
-                                    }}
-                                  >
-                                    {tag}
-                                  </span>
-                                )}
-                              </For>
+                            <span class="atlas-skill-library__tags">
+                              <For each={(skill.tags ?? []).slice(0, 6)}>{(tag) => <span>{tag}</span>}</For>
                             </span>
                           </Show>
                         </span>
                       </button>
                     )}
                   </For>
-                </div>
+                </section>
               )}
             </For>
-            <Show when={hasMore()}>
-              <button type="button" class="atlas-skill-browser__more" onClick={revealMore}>
-                Show more skills
-              </button>
-            </Show>
+          </Show>
+        </div>
+        <div class="atlas-skill-library__footer">
+          <span role="status" aria-live="polite" aria-atomic="true">
+            {shown() < total() ? `${shown()} of ${total()}` : total()} {total() === 1 ? "skill" : "skills"}
+          </span>
+          <Show when={hasMore()}>
+            <button
+              type="button"
+              class="atlas-skill-browser__more"
+              onClick={() => {
+                const next = shown()
+                revealMore()
+                results?.querySelectorAll<HTMLButtonElement>(".atlas-skill-row")[next]?.focus()
+              }}
+            >
+              Show more skills
+            </button>
           </Show>
         </div>
       </div>

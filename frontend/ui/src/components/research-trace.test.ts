@@ -174,6 +174,10 @@ describe("literal research trace", () => {
     if (loaded.part.type === "tool") loaded.part.state.input = { name: "figures" }
     const calls = [searched, loaded]
     expect(visibleResearchTrace(calls)).toEqual(calls)
+    expect(collapsibleTracePart(loaded.part)).toBe(false)
+    expect(collapsibleTracePart(searched.part)).toBe(true)
+    expect(collapsibleTracePart(entry("loading", "skill", "Loaded skill: figures", "running").part)).toBe(true)
+    expect(collapsibleTracePart(entry("failed", "skill", "Permission denied", "error").part)).toBe(false)
   })
 
   test("running, failed, and completed tools all keep individual chronological rows", () => {
@@ -248,7 +252,7 @@ describe("delegation summaries", () => {
     ])
 
     expect(groups).toEqual([
-      { family: "skills", count: 1, failed: 0, label: "Using 1 skill", detail: "scientific-schematics" },
+      { family: "skills", count: 1, failed: 0, label: "Loaded 1 skill", detail: "scientific-schematics" },
     ])
   })
 

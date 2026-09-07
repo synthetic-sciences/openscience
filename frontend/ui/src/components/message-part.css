@@ -391,6 +391,24 @@
   margin: 2px 10px 10px 12px;
 }
 
+[data-slot="skill-load-receipt"] {
+  margin: 4px 10px 10px;
+  color: var(--text-weak);
+  font-size: var(--font-size-small);
+
+  summary {
+    cursor: pointer;
+    width: fit-content;
+  }
+
+  pre {
+    margin: 8px 0 0;
+    font-family: var(--font-family-mono);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
 [data-component="tool-output"] {
   white-space: pre-wrap;
   padding: 4px 10px 10px;

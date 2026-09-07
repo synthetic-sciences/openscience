@@ -29,9 +29,29 @@ An unavailable name without a query remains an error with relevant suggestions.
 
 Loading reads the selected `SKILL.md` again, validates its current frontmatter,
 and returns its instructions with a base directory for relative references. The
-tool records the origin and SHA-256 of the delivered instruction body in its
+tool records the origin and SHA-256 of the full transformed instruction body in its
 result metadata. This identifies the instructions used in a trajectory; it is
 not a signature or a claim that the procedure is scientifically validated.
+
+## Conversation evidence and context lifetime
+
+The UI keeps completed `Loaded skill: ...` tool results visible when ordinary
+activity is collapsed. Expanding a load shows the stored instructions and its
+input/result metadata. Search results, pending requests and failed calls do not
+count as loaded skills, including in the composer's current-turn list.
+
+Subsequent ordinary turns send the original skill output in model history.
+Routine tool-output pruning protects skill loads, but full context compaction can
+discard older instruction bodies outside the retained tail. There is no separate
+permanent active-skill registry or automatic reinjection. A later turn does not
+get a synthetic load receipt merely because earlier guidance remains available.
+Explicit workflow command templates can also provide guidance; those are command
+invocations rather than skill-tool loads.
+
+The normal tool-output size limit still applies to large skills. A truncated
+result records `truncated` and `outputPath`, allowing the model to read the full
+saved output. The content hash identifies the full transformed body, not proof
+that every byte fit in the inline response or that the model followed it.
 
 ## Predictable local ownership
 

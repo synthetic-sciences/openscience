@@ -181,7 +181,7 @@ type TurnMessage = { id: string; role: string }
 type TurnToolPart = {
   type: string
   tool?: string
-  state?: { status?: string; input?: Record<string, unknown>; metadata?: Record<string, unknown> }
+  state?: { status?: string; title?: string; input?: Record<string, unknown>; metadata?: Record<string, unknown> }
 }
 
 /** Read completed Skill-tool calls after the latest user message. This is a UI
@@ -196,8 +196,13 @@ export function loadedSkillNamesThisTurn(
   for (const message of messages.slice(start)) {
     for (const part of parts[message.id] ?? []) {
       if (part.type !== "tool" || part.tool !== "skill" || part.state?.status !== "completed") continue
-      const value = part.state.metadata?.name ?? part.state.input?.name
-      if (typeof value !== "string" || !value.trim() || names.includes(value)) continue
+      if (part.state.metadata?.ok === false) continue
+      if (!part.state.title?.startsWith("Loaded skill: ")) continue
+      const title = part.state.title.slice("Loaded skill: ".length).trim()
+      if (!title) continue
+      const name = part.state.metadata?.name
+      const value = typeof name === "string" && name.trim() ? name.trim() : title
+      if (names.includes(value)) continue
       names.push(value)
     }
   }

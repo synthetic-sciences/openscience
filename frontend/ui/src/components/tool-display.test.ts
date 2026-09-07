@@ -6,6 +6,7 @@ import {
   generatedArtifacts,
   humanizeToolName,
   lineCount,
+  loadedSkillName,
   reasoningDisplayText,
   runningLabel,
   sentenceCaseLabel,
@@ -100,9 +101,9 @@ describe("skillName", () => {
     expect(skillName({})).toBeUndefined()
     expect(skillActivity({ status: "running" })).toEqual({ title: "Finding relevant skills" })
   })
-  test("distinguishes using a skill from merely finding candidates", () => {
+  test("distinguishes a requested load, recorded load and discovered candidates", () => {
     expect(skillActivity({ input: { name: "scientific-schematics" }, status: "running" })).toEqual({
-      title: "Using scientific-schematics",
+      title: "Loading scientific-schematics",
     })
     expect(
       skillActivity({
@@ -119,7 +120,7 @@ describe("skillName", () => {
         title: "Loaded skill: exploratory-data-analysis",
         status: "completed",
       }),
-    ).toEqual({ title: "Using exploratory-data-analysis" })
+    ).toEqual({ title: "Loaded skill: exploratory-data-analysis" })
     expect(
       skillActivity({
         input: { name: "data-visualization", query: "Titanic plots" },
@@ -129,8 +130,42 @@ describe("skillName", () => {
       }),
     ).toEqual({ title: "Found 2 relevant skills" })
     expect(skillActivity({ metadata: { names: ["scientific-schematics", "ml-paper-writing"] } })).toEqual({
-      title: "Using 2 skills",
+      title: "2 skills",
       subtitle: "scientific-schematics · ml-paper-writing",
+    })
+  })
+
+  test("requires a successful load result and uses its identity, never the requested name", () => {
+    expect(loadedSkillName({ title: "Loaded skill: matplotlib", status: "completed" })).toBe("matplotlib")
+    expect(
+      loadedSkillName({ title: "Loaded skill: matplotlib", status: "completed", metadata: { name: "matplotlib" } }),
+    ).toBe("matplotlib")
+    for (const title of ["Skill matches: matplotlib", "Skills in category: matplotlib", "Loaded skill: ", undefined]) {
+      expect(loadedSkillName({ title, status: "completed", metadata: { name: "matplotlib" } })).toBeUndefined()
+    }
+    for (const status of ["pending", "running", "error", undefined]) {
+      expect(loadedSkillName({ title: "Loaded skill: matplotlib", status })).toBeUndefined()
+    }
+    expect(
+      loadedSkillName({ title: "Loaded skill: matplotlib", status: "completed", metadata: { ok: false } }),
+    ).toBeUndefined()
+    expect(
+      skillActivity({ title: "Loaded skill: matplotlib", status: "completed", input: { name: "unavailable" } }),
+    ).toEqual({ title: "Loaded skill: matplotlib" })
+    expect(skillActivity({ status: "completed", input: { name: "matplotlib" } })).toEqual({
+      title: "Skill result",
+      subtitle: "matplotlib",
+    })
+  })
+
+  test("labels failed loads and empty discovery results without implying use", () => {
+    expect(skillActivity({ input: { name: "matplotlib" }, status: "error" })).toEqual({
+      title: "Skill load failed",
+      subtitle: "matplotlib",
+    })
+    expect(skillActivity({ input: { query: "plots" }, status: "error" })).toEqual({ title: "Skill lookup failed" })
+    expect(skillActivity({ input: { category: "plots" }, metadata: { matches: [] }, status: "completed" })).toEqual({
+      title: "No matching skills found",
     })
   })
 })

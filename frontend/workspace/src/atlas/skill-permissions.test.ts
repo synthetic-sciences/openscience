@@ -72,10 +72,44 @@ test("loaded-this-turn state starts at the latest user turn and requires a compl
       {
         type: "tool",
         tool: "skill",
-        state: { status: "completed", input: { name: "fallback" }, metadata: { name: "loaded-skill" } },
+        state: {
+          status: "completed",
+          title: "Loaded skill: loaded-skill",
+          input: { name: "fallback", query: "find an analysis skill" },
+          metadata: { name: "loaded-skill" },
+        },
       },
     ],
   }
 
   expect(loadedSkillNamesThisTurn(messages, parts)).toEqual(["loaded-skill"])
+})
+
+test("discovery and failed calls never mark a skill loaded, even when the query is its exact name", () => {
+  const messages = [
+    { id: "user", role: "user" },
+    { id: "assistant", role: "assistant" },
+  ]
+  const result = (title: string, metadata: Record<string, unknown>, status = "completed") => ({
+    type: "tool",
+    tool: "skill",
+    state: { status, title, input: { name: "guessed-name", query: "matplotlib" }, metadata },
+  })
+  expect(
+    loadedSkillNamesThisTurn(messages, {
+      assistant: [
+        result("Skill matches: matplotlib", { name: "matplotlib", matches: ["matplotlib"], dir: "" }),
+        result("Skills in category: visualization", { name: "visualization", matches: ["matplotlib"], dir: "" }),
+        result("Loaded skill: matplotlib", { name: "matplotlib" }, "error"),
+        result("Loaded skill: matplotlib", { name: "matplotlib" }, "running"),
+        result("Loaded skill: matplotlib", { name: "matplotlib", ok: false }),
+        result("Loaded skill: ", { name: "matplotlib" }),
+      ],
+    }),
+  ).toEqual([])
+  expect(
+    loadedSkillNamesThisTurn(messages, {
+      assistant: [result("Loaded skill: matplotlib", {}), result("Loaded skill: matplotlib", { name: "matplotlib" })],
+    }),
+  ).toEqual(["matplotlib"])
 })
