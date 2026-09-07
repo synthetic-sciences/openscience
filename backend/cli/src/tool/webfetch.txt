@@ -3,7 +3,8 @@ Fetch an HTTP(S) URL. Prefer a targeted tool when available.
 - Read pages inline: `{"url":"https://example.com/article","format":"markdown"}`. Omit unused `output_path`; never supply a dummy filename, empty string, or null.
 - Inline text is read-only, capped at 5 MiB; full text may be retained in managed output behind a preview.
 - Binary responses (including PDFs) auto-download to session scratch without overwriting; use `output_path` for a root filename or large text.
-- Downloads save raw bytes; `format` does not convert them. Save HTML as `.html`. For subfolders, follow the root-download then sandboxed-move sequence in `output_path`.
+- Downloads save raw bytes; `format` does not convert them. Save HTML as `.html`.
+- For `papers/foo.pdf`, use `output_path:"foo.pdf"`; only after success run sandboxed Bash `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`.
 - Downloads bypass model context; return filename, bytes, SHA-256, and content type.
-- Capacity is free disk minus 512 MiB. Never send cap/claimed-size overrides. On capacity failure, paginate, free space, or use an approved transfer.
+- Capacity is live free disk minus 512 MiB. Never send cap/claimed-size overrides. On capacity failure, paginate, free space, or use an approved transfer.
 - Paginate large JSON. Never retry unchanged capacity failures or the same 404/405 URL.

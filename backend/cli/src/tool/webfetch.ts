@@ -157,8 +157,7 @@ const parameters = z
       .enum(["text", "markdown", "html"])
       .default("markdown")
       .describe(
-        "Inline response format (text, markdown, or html), default markdown. Omit output_path to read or convert a page. " +
-          "With output_path, raw response bytes are saved without format conversion.",
+        "Inline format (default markdown). Omit output_path to read or convert pages; downloads save raw bytes.",
       ),
     timeout: z
       .number()
