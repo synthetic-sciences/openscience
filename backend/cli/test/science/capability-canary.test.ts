@@ -58,6 +58,66 @@ function context() {
   }
 }
 
+function deliveryResult(
+  status: "succeeded" | "failed",
+  delivery: "pending" | "complete" | "failed" | "rejected",
+  captureError?: string,
+) {
+  const output = result(status, "{}", "modal")
+  return {
+    ...output,
+    metadata: {
+      compute_job: {
+        job: {
+          ...output.metadata.compute_job.job,
+          lifecycle: {
+            execution: status,
+            delivery,
+            resource: "active",
+            recoverable: delivery === "failed" || delivery === "rejected",
+          },
+          ...(captureError ? { capture_error: captureError } : {}),
+        },
+      },
+    },
+  }
+}
+
+function deliveryCanary(
+  states: Array<ReturnType<typeof result> | ReturnType<typeof deliveryResult>>,
+  timeoutSeconds = 30,
+) {
+  const actions: string[] = []
+  const tool = {
+    async execute(input: { action: string }) {
+      actions.push(input.action)
+      if (input.action === "doctor") return { title: "doctor", output: "{}", metadata: {} }
+      if (input.action === "smoke") return result("running", "{}", "modal")
+      if (input.action === "status" || input.action === "wait") {
+        const state = states.shift()
+        if (!state) throw new Error("unexpected additional wait")
+        return state
+      }
+      if (input.action === "logs") return { title: "logs", output: "bounded canary log", metadata: {} }
+      if (input.action === "artifacts" || input.action === "verify")
+        return { title: input.action, output: "{}", metadata: {} }
+      if (input.action === "release") return result("succeeded", "{}", "modal", true)
+      throw new Error(`unexpected ${input.action}`)
+    },
+  }
+  return {
+    actions,
+    run: () =>
+      runScientificCapabilityCanary({
+        tool: tool as never,
+        ctx: context() as never,
+        id: "matplotlib",
+        target: "modal",
+        timeoutSeconds,
+      }),
+  }
+}
+
 describe("scientific capability release canary", () => {
   test("binds release evidence to the source embedded in the artifact", () => {
     const source = "a".repeat(40)
@@ -189,6 +249,43 @@ describe("scientific capability release canary", () => {
       }),
     ).rejects.toThrow("bounded failure log")
     expect(actions).toEqual(["doctor", "smoke", "status", "wait", "logs", "release"])
+  })
+
+  test.each(["status", "wait"])("waits for artifact delivery after %s reports success", async (first) => {
+    const pending = deliveryResult("succeeded", "pending")
+    const complete = deliveryResult("succeeded", "complete")
+    const states = [...(first === "wait" ? [result("running", "{}", "modal")] : []), pending, pending, complete]
+    const canary = deliveryCanary(states)
+    await expect(canary.run()).resolves.toMatchObject({ status: "succeeded", cleanup: { status: "closed" } })
+    expect(canary.actions).toEqual([
+      "doctor",
+      "smoke",
+      "status",
+      ...Array.from({ length: first === "wait" ? 3 : 2 }, () => "wait"),
+      "logs",
+      "artifacts",
+      "verify",
+      "release",
+    ])
+  })
+
+  test.each([
+    { delivery: "failed" as const, captureError: undefined, error: "failed" },
+    { delivery: "rejected" as const, captureError: undefined, error: "rejected" },
+    { delivery: "complete" as const, captureError: "immutable capture failed", error: "immutable capture failed" },
+  ])("fails $delivery delivery without verification or retry", async ({ delivery, captureError, error }) => {
+    const canary = deliveryCanary([
+      deliveryResult("succeeded", "pending"),
+      deliveryResult("succeeded", delivery, captureError),
+    ])
+    await expect(canary.run()).rejects.toThrow(`could not deliver its artifacts: ${error}.\nbounded canary log`)
+    expect(canary.actions).toEqual(["doctor", "smoke", "status", "wait", "logs", "release"])
+  })
+
+  test("times out pending delivery without cancelling completed execution", async () => {
+    const canary = deliveryCanary([deliveryResult("succeeded", "pending")], 0)
+    await expect(canary.run()).rejects.toThrow("timed out")
+    expect(canary.actions).toEqual(["doctor", "smoke", "status", "release"])
   })
 
   test("cancels and releases a running job when the bounded deadline expires", async () => {

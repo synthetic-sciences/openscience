@@ -10,6 +10,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Wait for scientific canary artifact delivery before validating a completed
+  remote computation, while preserving bounded waits and resource cleanup.
 - Start packaged macOS workers without loading application configuration or
   migrating storage, and verify their gated startup and piped input in release smokes.
 - Preserve optional/defaulted tool inputs in provider schemas and clarify inline

@@ -88,7 +88,7 @@ export async function runScientificCapabilityCanary(input: {
   try {
     const current = await input.tool.execute({ action: "status", id: input.id, job_id: jobID }, input.ctx)
     state = job(current)
-    while (!terminal.has(state.status)) {
+    while (!terminal.has(state.status) || state.lifecycle?.delivery === "pending") {
       const remaining = Math.ceil((deadline - Date.now()) / 1_000)
       if (remaining <= 0) throw new Error(`Scientific capability canary ${input.id}/${input.target} timed out`)
       const waited = await input.tool.execute(
@@ -109,6 +109,11 @@ export async function runScientificCapabilityCanary(input: {
     }
 
     const logs = await input.tool.execute({ action: "logs", id: input.id, job_id: jobID, bytes: 64_000 }, input.ctx)
+    if (state.lifecycle?.delivery === "failed" || state.lifecycle?.delivery === "rejected" || state.capture_error) {
+      throw new Error(
+        `Scientific capability canary ${input.id}/${input.target} could not deliver its artifacts: ${state.capture_error ?? state.lifecycle?.delivery}.\n${logs.output}`,
+      )
+    }
     const artifacts = await input.tool.execute({ action: "artifacts", id: input.id, job_id: jobID }, input.ctx)
     const verified = await input.tool.execute({ action: "verify", id: input.id, job_id: jobID }, input.ctx)
     const result = {
