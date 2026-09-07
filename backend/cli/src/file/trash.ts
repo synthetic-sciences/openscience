@@ -249,6 +249,7 @@ export namespace FileTrash {
     path: string
     authorization?: SessionFilesystem.Authorization
     authorizationOwnership?: "borrowed" | "owned"
+    projectInternal?: boolean
   }): Promise<AuthorizationScope> {
     const ownership = input.authorization ? (input.authorizationOwnership ?? "borrowed") : "owned"
     const state = { released: false }
@@ -279,11 +280,33 @@ export namespace FileTrash {
         },
       }
     }
+    // No caller-supplied authorization: mint one from the session's own grants.
+    // The scratch workspace and any granted directory authorize here as before.
     const authorized = await SessionFilesystem.authorize({
       sessionID: input.sessionID,
       path: input.path,
       access: "write",
+    }).catch((error) => {
+      // Authorization equivalence for in-project edits. `apply_patch` update/add
+      // overwrite a project-internal file through an unauthorized scope (the
+      // broker resolves a project path without a per-path grant), so a session
+      // that may overwrite that file in place may also move or delete it. A
+      // session saved before the project-root write grant existed (scratch
+      // grant only, empty project grants) has no grant to authorize the trash,
+      // so recognize the same edit authority the caller vouches for. Only a
+      // genuine project-internal canonical path qualifies below; this mints,
+      // restores, and widens no grant, and stays fail-closed for every path
+      // outside the project (a revoked or read-only external grant included).
+      if (input.projectInternal && SessionFilesystem.DeniedError.isInstance(error)) return undefined
+      throw error
     })
+    if (!authorized) {
+      const canonical = await target(input.path)
+      if (!(await Instance.containsCanonicalPath(canonical))) {
+        throw new SessionFilesystem.DeniedError({ sessionID: input.sessionID, path: canonical, access: "write" })
+      }
+      return { ownership: "none", [Symbol.dispose]() {} }
+    }
     const authorization = await SessionFilesystem.bindAuthorization({
       sessionID: input.sessionID,
       access: "write",
@@ -308,6 +331,7 @@ export namespace FileTrash {
     root?: string
     authorization?: SessionFilesystem.Authorization
     authorizationOwnership?: "borrowed" | "owned"
+    projectInternal?: boolean
     expectedContent?: string | Uint8Array
     now?: number
   }): Promise<Record> {
@@ -316,6 +340,7 @@ export namespace FileTrash {
       path: input.path,
       authorization: input.authorization,
       authorizationOwnership: input.authorizationOwnership,
+      projectInternal: input.projectInternal,
     })
     const authorization = authority.authorization
     const canonical = authorization?.path ?? (await target(input.path))
@@ -355,6 +380,10 @@ export namespace FileTrash {
       if (authorization) {
         const current = await SessionFilesystem.revalidateAuthorization(authorization)
         if (current.path !== canonical) throw new Error("Trash path changed after authorization")
+      } else if (input.projectInternal && !(await Instance.containsCanonicalPath(canonical))) {
+        // A project-internal edit authority must never trash a path that moved
+        // out of the project between the pre-lock check and the mutation.
+        throw new SessionFilesystem.DeniedError({ sessionID: input.sessionID, path: canonical, access: "write" })
       }
       const data = await target(Global.Path.data)
       const trusted = await SafeTrashIO.ensureDataEntry(data, segment(input.projectID), id)
@@ -428,12 +457,24 @@ export namespace FileTrash {
       await remove(record)
       return
     }
-    using authority = await binding({ sessionID: input.sessionID, path: record.originalPath })
-    const authorization = authority.authorization!
+    // Recovering into the project reuses the same in-project edit authority as
+    // the move/delete that trashed it, so a legacy session with only a scratch
+    // grant can restore a project file it deleted. Any other path still needs a
+    // real writable grant.
+    using authority = await binding({ sessionID: input.sessionID, path: record.originalPath, projectInternal: true })
+    const authorization = authority.authorization
     await hooks.value?.afterAuthorization?.("restore", record, authorization)
     const result = await AuthoritySignal.exclusive(async () => {
-      const current = await SessionFilesystem.revalidateAuthorization(authorization)
-      if (current.path !== record.originalPath) throw new Error("Trash restore path changed after authorization")
+      if (authorization) {
+        const current = await SessionFilesystem.revalidateAuthorization(authorization)
+        if (current.path !== record.originalPath) throw new Error("Trash restore path changed after authorization")
+      } else if (!(await Instance.containsCanonicalPath(await target(record.originalPath)))) {
+        throw new SessionFilesystem.DeniedError({
+          sessionID: input.sessionID,
+          path: record.originalPath,
+          access: "write",
+        })
+      }
       await validateWorkspaceRecord(record)
       const verified = await verifyPayload(record)
       const action =
@@ -464,12 +505,20 @@ export namespace FileTrash {
     using _ = await Lock.write(lock(input.projectID))
     const record = await read(input.projectID, input.id)
     if (!record || record.state !== "trash" || !(await available(record))) return
-    using authority = await binding({ sessionID: input.sessionID, path: record.originalPath })
-    const authorization = authority.authorization!
+    using authority = await binding({ sessionID: input.sessionID, path: record.originalPath, projectInternal: true })
+    const authorization = authority.authorization
     await hooks.value?.afterAuthorization?.("purge", record, authorization)
     const result = await AuthoritySignal.exclusive(async () => {
-      const current = await SessionFilesystem.revalidateAuthorization(authorization)
-      if (current.path !== record.originalPath) throw new Error("Trash purge path changed after authorization")
+      if (authorization) {
+        const current = await SessionFilesystem.revalidateAuthorization(authorization)
+        if (current.path !== record.originalPath) throw new Error("Trash purge path changed after authorization")
+      } else if (!(await Instance.containsCanonicalPath(await target(record.originalPath)))) {
+        throw new SessionFilesystem.DeniedError({
+          sessionID: input.sessionID,
+          path: record.originalPath,
+          access: "write",
+        })
+      }
       await validateWorkspaceRecord(record)
       const verified = await verifyPayload(record)
       await remove(record, { verified: verified.current })

@@ -222,8 +222,16 @@ export function applyRuntimeCancellationRequest(request: {
   runID: string
   source: "user" | "runner_timeout"
 }) {
+  // Ignore a stale request whose run this process no longer owns: a newer
+  // prompt may have replaced it, and cancelling by session alone would abort
+  // the replacement's controller. Bind cancellation to this exact run.
+  if (RuntimeEvents.activeRunID(request.sessionID) !== request.runID) {
+    return Promise.resolve({ status: "inactive" as const })
+  }
   const controller = SessionPrompt.activeController(request.sessionID)
   if (!controller) return RuntimeEvents.cancel(request)
+  // Bind the abort to this controller so a prompt that starts after this read
+  // is a deliberate no-op rather than an aborted replacement.
   SessionPrompt.cancel(request.sessionID, controller)
   return Promise.resolve({ status: "requested" as const, runID: request.runID })
 }

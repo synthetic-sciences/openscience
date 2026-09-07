@@ -1,6 +1,8 @@
 name: Runtime compatibility
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - "backend/cli/**"
@@ -76,6 +78,30 @@ jobs:
       - name: Exercise the compiled runtime over authenticated HTTP
         run: |
           bun tooling/repo/runtime-conformance.ts "$PWD/backend/cli/dist/headless/@synsci/openscience-linux-x64-baseline/bin/openscience" "$RUNNER_TEMP/runtime-python/bin/python"
+
+  # The native Harbor trial builds and runs one real Docker/Harbor task with a
+  # deterministic loopback provider. It is a heavier, container-based check than
+  # the contract tests above, so it runs as its own job and can pass or fail
+  # independently of the rest of the conformance suite.
+  harbor-native-trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - name: Install the pinned Harbor adapter and Python client
+        run: |
+          python3 -c 'import sys; assert sys.version_info >= (3, 12), "Harbor requires Python 3.12+"'
+          python3 -m venv "$RUNNER_TEMP/runtime-python"
+          "$RUNNER_TEMP/runtime-python/bin/python" -m pip install -e 'tooling/harbor[test]' -e tooling/sdk/python
+      - name: Build a native headless candidate with the offline catalog
+        env:
+          OPENSCIENCE_VERSION: 0.0.0-runtime-conformance
+          OPENSCIENCE_CHANNEL: dev
+          MODELS_DEV_API_JSON: ${{ runner.temp }}/runtime-models.json
+        run: |
+          bun -e 'await Bun.write(process.env.MODELS_DEV_API_JSON, Bun.gunzipSync(await Bun.file("backend/cli/test/fixture/models-catalog.json.gz").arrayBuffer()))'
+          bun run --cwd backend/cli build --headless --target linux-x64-baseline
       - name: Verify the candidate through native Harbor and its fixture grader
         run: |
           runtime_binary="$PWD/backend/cli/dist/headless/@synsci/openscience-linux-x64-baseline/bin/openscience"

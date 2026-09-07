@@ -46,6 +46,10 @@ export namespace RuntimeEvents {
 
   export const RETAINED_EVENTS = 2_048
 
+  /** The event types that terminalize a run. `terminal` records exactly one of
+   * these per run and treats a later matching call as idempotent. */
+  const TERMINAL_TYPES = new Set(["runtime.completed", "runtime.failed", "runtime.cancelled"])
+
   export class ActiveRunError extends Error {
     constructor(readonly sessionID: string) {
       super(`Session ${sessionID} already has an active runtime run`)
@@ -588,10 +592,20 @@ export namespace RuntimeEvents {
   }) {
     await flushProgress(input.sessionID)
     let event: Event | undefined
+    let idempotent = false
     await Storage.upsert<Journal>(key(input.sessionID), (current) => {
       const journal = current ? Journal.parse(current) : empty()
       if (journal.activeRunID !== input.runID) {
-        throw new ActiveRunError(input.sessionID)
+        // The run is no longer active. If the other finalization path already
+        // recorded a terminal event for this exact run, return that event
+        // instead of failing: normal settlement and a cancellation request can
+        // race the same run, and both must succeed. A different active run, or
+        // no recorded terminal for this run at all, is still a real conflict.
+        const recorded = journal.events.findLast((item) => item.runID === input.runID && TERMINAL_TYPES.has(item.type))
+        if (!recorded) throw new ActiveRunError(input.sessionID)
+        event = recorded
+        idempotent = true
+        return journal
       }
       if (
         input.verifyOwner &&
@@ -621,10 +635,19 @@ export namespace RuntimeEvents {
       }
     })
     if (!event) throw new Error("Runtime completion did not produce an event")
+    // An idempotent replay returns the already-recorded (and already-notified)
+    // terminal event without re-running teardown or re-delivering it.
+    if (idempotent) return event
     if (state().active.get(input.sessionID) === input.runID) state().active.delete(input.sessionID)
     state().progress.delete(input.sessionID)
     input.onTerminal?.()
     return notify(event)
+  }
+
+  /** The run this process currently owns for a session, if any. Cancellation
+   * coordination uses it to ignore a request whose run is no longer active. */
+  export function activeRunID(sessionID: string) {
+    return state().active.get(sessionID)
   }
 
   /** Capture an internal event only while a public runtime run owns the session. */

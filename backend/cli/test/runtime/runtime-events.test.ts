@@ -846,3 +846,54 @@ describe("/runtime routes", () => {
     })
   })
 })
+
+describe("terminal event idempotency", () => {
+  test("a second finalization of the same run returns the recorded terminal event instead of failing", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        try {
+          await RuntimeEvents.begin({ sessionID: session.id, runID: "run_settled", acceptedAt: 100, effort: "normal" })
+          const completed = await RuntimeEvents.finish({
+            sessionID: session.id,
+            runID: "run_settled",
+            messageID: "msg_done",
+          })
+          expect(completed.type).toBe("runtime.completed")
+
+          // A cancellation request that lost the race with normal settlement
+          // reports the run as inactive rather than a phantom active run.
+          const late = await RuntimeEvents.cancel({ sessionID: session.id, runID: "run_settled", source: "user" })
+          expect(late).toEqual({ status: "inactive" })
+
+          // The other finalization path reaching the same run after settlement
+          // gets the recorded terminal event back instead of an ActiveRunError.
+          const again = await RuntimeEvents.finish({
+            sessionID: session.id,
+            runID: "run_settled",
+            messageID: "msg_done",
+          })
+          expect(again).toMatchObject({ runID: "run_settled", type: "runtime.completed" })
+          expect(again.sequence).toBe(completed.sequence)
+
+          const replay = await RuntimeEvents.replay(session.id)
+          expect(
+            replay.events
+              .filter((event) => event.runID === "run_settled" && event.type.startsWith("runtime."))
+              .map((event) => event.type),
+          ).toEqual(["runtime.accepted", "runtime.completed"])
+          expect(RuntimeEvents.activeRunID(session.id)).toBeUndefined()
+
+          // A different run that was never recorded is still a real conflict.
+          await expect(
+            RuntimeEvents.finish({ sessionID: session.id, runID: "run_never_started", messageID: "msg_x" }),
+          ).rejects.toBeInstanceOf(RuntimeEvents.ActiveRunError)
+        } finally {
+          await Session.remove(session.id)
+        }
+      },
+    })
+  })
+})

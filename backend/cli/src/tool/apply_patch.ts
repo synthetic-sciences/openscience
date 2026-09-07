@@ -18,7 +18,7 @@ import { ToolRetryGuard } from "@/session/tool-retry-guard"
 import { File } from "../file"
 import { FileTrash } from "../file/trash"
 import { Lock } from "@/util/lock"
-import type { SessionFilesystem } from "@/session/filesystem"
+import { SessionFilesystem } from "@/session/filesystem"
 import { AuthoritySignal } from "@/project/authority-signal"
 
 const PatchParams = z.object({
@@ -228,6 +228,37 @@ async function removeInstalled(item: PreparedChange) {
   item.installed = false
 }
 
+/**
+ * Move an approved source into recoverable trash for a move/delete. A move or
+ * delete of a project-internal path uses the same edit authority that `update`
+ * relies on (external-directory returns no per-path authorization for project
+ * paths), so a session that may overwrite the file in place may also trash it.
+ * External granted paths keep their bound authorization. A denial is rewritten
+ * into an actionable tool error naming the operation, path, missing authority
+ * and recovery — the raw `SessionFilesystemDeniedError` shows the model only a
+ * class name.
+ */
+async function trashChange(change: FileChange, ctx: Tool.Context): Promise<FileTrash.Record> {
+  const operation = change.type === "move" ? "move" : "delete"
+  const relative = path.relative(Instance.worktree, change.filePath)
+  return FileTrash.trash({
+    projectID: Instance.project.id,
+    sessionID: ctx.sessionID,
+    path: change.filePath,
+    authorization: change.authorization,
+    authorizationOwnership: "borrowed",
+    projectInternal: change.authorization === undefined,
+    expectedContent: change.approved!.bytes,
+  }).catch((error) => {
+    if (!SessionFilesystem.DeniedError.isInstance(error)) throw error
+    throw new Error(
+      `apply_patch cannot ${operation} ${relative}: this session has no write authorization covering ${path.dirname(change.filePath)}. ` +
+        `No files were changed. Grant write access to that folder, or keep the ${operation} inside the project or this session's workspace, then retry.`,
+      { cause: error },
+    )
+  })
+}
+
 async function applyTransaction(changes: FileChange[], ctx: Tool.Context) {
   const prepared: PreparedChange[] = []
   try {
@@ -276,14 +307,7 @@ async function applyTransaction(changes: FileChange[], ctx: Tool.Context) {
           if (!change.approved || !change.movePath) {
             throw new Error(`Missing approved move state for ${change.filePath}`)
           }
-          item.removed = await FileTrash.trash({
-            projectID: Instance.project.id,
-            sessionID: ctx.sessionID,
-            path: change.filePath,
-            authorization: change.authorization,
-            authorizationOwnership: "borrowed",
-            expectedContent: change.approved.bytes,
-          })
+          item.removed = await trashChange(change, ctx)
           await AuthoritySignal.exclusive(async () => {
             await revalidate(change, true)
             await installExclusive(item.staged!, change.movePath!)
@@ -292,14 +316,7 @@ async function applyTransaction(changes: FileChange[], ctx: Tool.Context) {
           break
         case "delete":
           if (!change.approved) throw new Error(`Missing approved file snapshot for ${change.filePath}`)
-          item.removed = await FileTrash.trash({
-            projectID: Instance.project.id,
-            sessionID: ctx.sessionID,
-            path: change.filePath,
-            authorization: change.authorization,
-            authorizationOwnership: "borrowed",
-            expectedContent: change.approved.bytes,
-          })
+          item.removed = await trashChange(change, ctx)
           break
       }
     }

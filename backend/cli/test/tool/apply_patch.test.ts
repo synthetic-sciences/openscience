@@ -788,3 +788,47 @@ EOF`
     })
   })
 })
+
+describe("tool.apply_patch legacy session authority", () => {
+  test("a session without a project-root grant can delete and move project files it may overwrite", async () => {
+    await using fixture = await tmpdir({ git: true })
+    const { ctx, calls } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        // Project mode resolves patch paths against the project directory, as
+        // the affected desktop sessions did.
+        const session = await Session.create({ workspace: "project" })
+        // The captured legacy shape: a scratch workspace grant, no project-root
+        // write grant. Revoke any project-root grant a fresh session received.
+        for (const grant of await SessionFilesystem.list(session.id)) {
+          if (grant.access === "write" && !grant.time.revoked && grant.path === Instance.directory) {
+            await SessionFilesystem.revoke(session.id, grant.id)
+          }
+        }
+        const legacyCtx = { ...ctx, sessionID: session.id }
+        const obsolete = path.join(fixture.path, "plans", "obsolete.md")
+        const renamed = path.join(fixture.path, "plans", "renamed.md")
+        await fs.mkdir(path.dirname(obsolete), { recursive: true })
+        await fs.writeFile(obsolete, "old plan\n", "utf-8")
+        await fs.writeFile(renamed, "keep\n", "utf-8")
+
+        const result = await execute(
+          {
+            patchText:
+              "*** Begin Patch\n*** Delete File: plans/obsolete.md\n*** Update File: plans/renamed.md\n*** Move to: plans/archive/renamed.md\n@@\n-keep\n+kept\n*** End Patch",
+          },
+          legacyCtx,
+        )
+        expect(calls).toHaveLength(1)
+        expect(calls[0]?.metadata.files.map((file) => file.type)).toEqual(["delete", "move"])
+        await expect(fs.readFile(obsolete, "utf-8")).rejects.toThrow()
+        await expect(fs.readFile(renamed, "utf-8")).rejects.toThrow()
+        expect(await fs.readFile(path.join(fixture.path, "plans", "archive", "renamed.md"), "utf-8")).toBe("kept\n")
+        expect(result.output).toContain("D plans/obsolete.md")
+        expect(await FileTrash.list(Instance.project.id)).toHaveLength(2)
+      },
+    })
+  })
+})

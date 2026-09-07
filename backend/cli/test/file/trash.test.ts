@@ -703,3 +703,73 @@ describe("recoverable source file trash", () => {
     },
   )
 })
+
+describe("in-project edit authority for move and delete", () => {
+  test("a session with only a scratch grant can trash and restore a project file it may already overwrite", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        // Sessions saved before the project-root write grant existed carry a
+        // scratch workspace grant and an empty project grant list. Revoke any
+        // project-root write grant so this session has the captured legacy shape.
+        const projectRoot = await SessionFilesystem.workspace(session.id).then(() => Instance.directory)
+        for (const grant of await SessionFilesystem.list(session.id)) {
+          if (grant.access === "write" && !grant.time.revoked && grant.path === projectRoot) {
+            await SessionFilesystem.revoke(session.id, grant.id)
+          }
+        }
+        const target = path.join(tmp.path, "plans", "old-plan.md")
+        await fs.mkdir(path.dirname(target), { recursive: true })
+        await fs.writeFile(target, "superseded\n")
+
+        // Without the in-project edit authority the legacy grant shape is denied.
+        await expect(
+          FileTrash.trash({ projectID: Instance.project.id, sessionID: session.id, path: target }),
+        ).rejects.toThrow()
+
+        const record = await FileTrash.trash({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          path: target,
+          projectInternal: true,
+          expectedContent: "superseded\n",
+        })
+        expect(record.state).toBe("trash")
+        await expect(fs.access(target)).rejects.toThrow()
+
+        const restored = await FileTrash.restore({
+          projectID: Instance.project.id,
+          sessionID: session.id,
+          id: record.id,
+        })
+        expect(restored?.state).toBe("restored")
+        expect(await fs.readFile(target, "utf8")).toBe("superseded\n")
+      },
+    })
+  })
+
+  test("the in-project authority never reaches outside the project", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await using outside = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await executionSession()
+        const external = path.join(outside.path, "notes.txt")
+        await fs.writeFile(external, "external\n")
+        await expect(
+          FileTrash.trash({
+            projectID: Instance.project.id,
+            sessionID: session.id,
+            path: external,
+            projectInternal: true,
+          }),
+        ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+        expect(await fs.readFile(external, "utf8")).toBe("external\n")
+        expect(await FileTrash.list(Instance.project.id)).toEqual([])
+      },
+    })
+  })
+})

@@ -18,6 +18,7 @@ import { RunEvents } from "../run-events"
 import { SafeFileIO } from "../../file/safe-io"
 import { SubtaskAttachments } from "../../session/subtask-attachments"
 import { detectImageMime } from "../../util/image"
+import type { MessageV2 } from "@/session/message-v2"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -129,6 +130,19 @@ function describe(error: unknown) {
   }
   if (error && typeof error === "object" && "name" in error) return String(error.name)
   return String(error)
+}
+
+/**
+ * Claim the single `tool_use` emission for a terminal tool part. Context
+ * pruning marks completed parts compacted and republishes them, and a resumed
+ * session replays earlier parts; neither is a new tool call, and a Harbor
+ * trajectory rejects a duplicated event part.
+ */
+export function claimToolPartEmission(emitted: Set<string>, part: MessageV2.ToolPart): boolean {
+  if (part.state.status === "completed" && part.state.time.compacted) return false
+  if (emitted.has(part.id)) return false
+  emitted.add(part.id)
+  return true
 }
 
 /** Run one prompt (or command) to completion and return the process exit code. */
@@ -273,6 +287,12 @@ export async function execute(input: RunInput): Promise<number> {
   // deltas to stdout instead of waiting for part.time.end.
   const textBuffers = new Map<string, string>()
 
+  // A tool part reaches a terminal state once, but context pruning later marks
+  // it compacted and republishes it (and a resumed session replays prior tool
+  // parts). Emit exactly one `tool_use` per part id: a Harbor trial rejects a
+  // duplicated event part, and a compacted republish is not a new tool call.
+  const emittedToolParts = new Set<string>()
+
   const processor = (async () => {
     for await (const event of events.stream) {
       if (finished) break
@@ -281,6 +301,7 @@ export async function execute(input: RunInput): Promise<number> {
         if (part.sessionID !== sessionID) continue
 
         if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
+          if (!claimToolPartEmission(emittedToolParts, part)) continue
           if (emit({ type: "tool_use", part })) continue
           const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
           const title =
