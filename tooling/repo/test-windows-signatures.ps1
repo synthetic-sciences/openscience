@@ -11,6 +11,7 @@ function Assert-Rejected([string]$File, [string]$Publisher, [string]$Reason) {
     if (-not $failure -or -not $failure.Contains($Reason)) {
         throw "Expected '$Reason' for '$File', got '$failure'"
     }
+    Write-Output "Rejected as expected: $Reason"
 }
 
 try {
@@ -36,17 +37,21 @@ try {
 
     # Trust this short-lived test certificate only on the disposable runner
     # so an otherwise valid signature reaches the missing-timestamp check.
+    if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
+        throw 'The temporary trust fixture requires a disposable GitHub-hosted runner'
+    }
     $certificate = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=OpenScience Signing Test' -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1)
     $public = Join-Path $directory 'fixture.cer'
     Export-Certificate -Cert $certificate -FilePath $public | Out-Null
-    Import-Certificate -FilePath $public -CertStoreLocation Cert:\CurrentUser\Root | Out-Null
+    # CurrentUser\Root opens a confirmation dialog that cannot complete in CI.
+    Import-Certificate -FilePath $public -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
     Set-AuthenticodeSignature -LiteralPath $script -Certificate $certificate -HashAlgorithm SHA256 | Out-Null
     Assert-Rejected $script 'OpenScience Signing Test' 'Missing signature timestamp'
     Write-Output 'Windows signature verification checks passed'
 }
 finally {
     if ($null -ne $certificate) {
-        Remove-Item -LiteralPath "Cert:\CurrentUser\Root\$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath "Cert:\LocalMachine\Root\$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -ErrorAction SilentlyContinue
     }
     Remove-Item -LiteralPath $directory -Recurse -Force
