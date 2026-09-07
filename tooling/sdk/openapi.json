@@ -31273,7 +31273,7 @@
           }
         ],
         "summary": "Resynchronize a research session",
-        "description": "Returns durable run receipts, an event cursor and live pending decisions belonging to this server process. Replayed decision events are historical; only pending requests in a fresh snapshot are actionable.",
+        "description": "Returns durable run receipts, an event cursor and live pending decisions belonging to this server process, including decisions raised by delegated child sessions of this session. Replayed decision events are historical; only pending requests in a fresh snapshot are actionable.",
         "responses": {
           "200": {
             "description": "Runtime snapshot",
@@ -57830,7 +57830,7 @@
                 ]
               },
               "connectTimeout": {
-                "description": "Maximum wait for provider response headers in milliseconds, including connection setup and upstream admission. Defaults to 120000 (2 minutes). Set false to disable.",
+                "description": "Maximum wait for provider response headers in milliseconds, including connection setup and upstream admission. Defaults to 300000 (5 minutes), and to disabled for local endpoints (loopback or .local base URLs and the ollama, lmstudio, llamacpp, vllm and jan providers), which send headers only after prompt processing. Set false to disable.",
                 "anyOf": [
                   {
                     "type": "integer",
@@ -58444,6 +58444,12 @@
                 "description": "Token budget for the verbatim recent tail during compaction (default: clamp(0.20*usable, 8000, 32000))",
                 "type": "integer",
                 "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "recentImages": {
+                "description": "How many of the most recent images are sent in full with each model request; older images become text placeholders that can be read again (default: 1)",
+                "type": "integer",
+                "minimum": 0,
                 "maximum": 9007199254740991
               }
             }

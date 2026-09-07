@@ -48,6 +48,13 @@ export namespace SessionCompaction {
   // session that reads many figures can't bloat the window with re-shipped base64.
   export const KEEP_RECENT_IMAGES = 1
 
+  /** `compaction.recentImages` widens that window for figure-heavy sessions on
+   * models with room for it; the default is unchanged. */
+  export function recentImages(config: Pick<Config.Info, "compaction">) {
+    const value = config.compaction?.recentImages
+    return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : KEEP_RECENT_IMAGES
+  }
+
   // Flat per-image token cost for pruning decisions. A tool output's TEXT is tiny but
   // its image attachments are ~1-2k tokens each; counting only text made image-heavy
   // outputs invisible to prune. Single source of truth is MessageV2.IMAGE_TOKENS (shared
@@ -424,7 +431,9 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       if (part.type === "file") {
         // text/plain + directory files are folded into text upstream, not shipped as files.
         if (part.mime === "text/plain" || part.mime === "application/x-directory") continue
-        total += part.mime.startsWith("image/") ? MessageV2.imageTokens(part.url) : Token.estimate(part.url)
+        total += part.mime.startsWith("image/")
+          ? MessageV2.imageTokens(part.url)
+          : MessageV2.documentTokens(part.mime, part.url)
         continue
       }
       if (part.type === "tool") {
@@ -436,7 +445,9 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
           total += Token.estimate(compacted ? MessageV2.toolSummary(part.tool, part.state) : part.state.output)
           if (!compacted)
             for (const a of part.state.attachments ?? [])
-              total += a.mime.startsWith("image/") ? MessageV2.imageTokens(a.url) : Token.estimate(a.url)
+              total += a.mime.startsWith("image/")
+                ? MessageV2.imageTokens(a.url)
+                : MessageV2.documentTokens(a.mime, a.url)
         }
         if (part.state.status === "error") total += Token.estimate(part.state.error)
       }

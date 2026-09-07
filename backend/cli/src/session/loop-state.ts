@@ -217,6 +217,26 @@ export namespace SessionLoopState {
     }
   }
 
+  /** Messages from the current epoch's first surviving record onward. Synthetic
+   * continuations and compaction carriers extend an epoch without starting one. */
+  export function epochMessages(messages: MessageV2.WithParts[]) {
+    return scope(messages).messages
+  }
+
+  /** Request text from the newest external prompts. Synthetic continuations
+   * carry no request text, so they must not push the real prompt out of the
+   * window a long tool loop routes tools and skills from. */
+  export function externalPrompts(messages: MessageV2.WithParts[], limit = 4, tail = 8_000) {
+    return messages
+      .filter(external)
+      .slice(-limit)
+      .flatMap((message) =>
+        message.parts.flatMap((part) => (part.type === "text" && !part.synthetic && !part.ignored ? [part.text] : [])),
+      )
+      .join("\n")
+      .slice(-tail)
+  }
+
   function scope(messages: MessageV2.WithParts[]) {
     const epoch = currentEpoch(messages)
     if (!epoch) return { epoch, messages, legacy: true }

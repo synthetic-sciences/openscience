@@ -5,7 +5,10 @@ import { iife } from "@synsci/util/iife"
 export namespace SessionRetry {
   export const RETRY_INITIAL_DELAY = 2000
   export const RETRY_BACKOFF_FACTOR = 2
-  export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
+  // A single computed wait never exceeds a minute; an explicit Retry-After is
+  // the provider's own schedule and is honored as given.
+  export const RETRY_MAX_BACKOFF = 60_000
+  export const RETRY_JITTER = 0.25
   export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 
   export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -28,7 +31,16 @@ export namespace SessionRetry {
     })
   }
 
-  export function delay(attempt: number, error?: MessageV2.APIError) {
+  /** Exponential backoff with ±25% jitter. Clients retrying in lockstep after
+   * an outage recreate the spike that caused it, and an uncapped doubling
+   * reached seventeen minutes of silence for one attempt. */
+  function backoff(attempt: number, random: () => number) {
+    const base = Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_BACKOFF)
+    const spread = 1 + RETRY_JITTER * (random() * 2 - 1)
+    return Math.min(Math.round(base * spread), RETRY_MAX_BACKOFF)
+  }
+
+  export function delay(attempt: number, error?: MessageV2.APIError, random: () => number = Math.random) {
     if (error) {
       const headers = error.data.responseHeaders
       if (headers) {
@@ -53,12 +65,10 @@ export namespace SessionRetry {
             return Math.ceil(parsed)
           }
         }
-
-        return RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
       }
     }
 
-    return Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS)
+    return backoff(attempt, random)
   }
 
   // Codes that unambiguously mean "TOTAL input too big". Deliberately small — never

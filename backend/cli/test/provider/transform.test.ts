@@ -2207,6 +2207,53 @@ describe("ProviderTransform.variants", () => {
         expect((result.low as { effort?: string }).effort).toBeUndefined()
       })
     }
+
+    // Without `thinking` in the default request these models answer without
+    // reasoning at all; the variant ladder above only applies when a user
+    // picks an explicit effort.
+    test.each(["claude-opus-4-7", "claude-opus-4-8", "claude-opus-4.8"])(
+      "%s requests adaptive thinking at high effort by default",
+      (id) => {
+        expect(ProviderTransform.options({ model: anthropicModel(id), sessionID: "fixture" })).toMatchObject({
+          thinking: { type: "adaptive" },
+          effort: "high",
+        })
+      },
+    )
+
+    test.each(["claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4.6", "claude-sonnet-4.6"])(
+      "%s requests adaptive thinking with neither effort nor a budget by default",
+      (id) => {
+        const options = ProviderTransform.options({ model: anthropicModel(id), sessionID: "fixture" })
+        expect(options.thinking).toEqual({ type: "adaptive" })
+        expect(options).not.toHaveProperty("effort")
+        expect(options.thinking).not.toHaveProperty("budgetTokens")
+      },
+    )
+
+    test.each(["claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5", "claude-3-7-sonnet"])(
+      "%s keeps its default request free of a thinking block",
+      (id) => {
+        expect(ProviderTransform.options({ model: anthropicModel(id), sessionID: "fixture" })).not.toHaveProperty(
+          "thinking",
+        )
+      },
+    )
+
+    test("recognizes a publisher-prefixed Vertex id for the 4.6 default", () => {
+      const model = createMockModel({
+        id: "google-vertex-anthropic/claude-sonnet-4-6",
+        providerID: "google-vertex-anthropic",
+        api: {
+          id: "anthropic/claude-sonnet-4-6",
+          url: "https://us-east5-aiplatform.googleapis.com",
+          npm: "@ai-sdk/google-vertex/anthropic",
+        },
+      })
+      const options = ProviderTransform.options({ model, sessionID: "fixture" })
+      expect(options.thinking).toEqual({ type: "adaptive" })
+      expect(options).not.toHaveProperty("effort")
+    })
   })
 
   describe("@ai-sdk/amazon-bedrock", () => {

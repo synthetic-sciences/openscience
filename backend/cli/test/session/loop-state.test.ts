@@ -5,6 +5,7 @@ import { SessionCompaction } from "../../src/session/compaction"
 import { SessionLoopState } from "../../src/session/loop-state"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionProcessor } from "../../src/session/processor"
 import { Identifier } from "../../src/id/id"
 import { tmpdir } from "../fixture/fixture"
 
@@ -69,7 +70,23 @@ function assistant(id: string, parentID: string, finish: string, summary = false
 }
 
 describe("session loop restart state", () => {
-  test("output recovery remains resumable after a transcript reload", () => {
+  test("output recovery remains resumable after a transcript reload while continuations make progress", () => {
+    const history = [
+      user("u1", [text("u1", "build the project")]),
+      { ...assistant("a1", "u1", "length"), parts: [text("a1", "chapter one of the build log")] },
+      user("c1", [text("c1", "continue", { synthetic: true, kind: "output" })], "output"),
+      { ...assistant("a2", "c1", "length"), parts: [text("a2", "chapter two of the build log")] },
+      user("c2", [text("c2", "continue", { synthetic: true, kind: "output" })], "output"),
+      { ...assistant("a3", "c2", "length"), parts: [text("a3", "chapter three of the build log")] },
+    ]
+    const reloaded = JSON.parse(JSON.stringify(history)) as MessageV2.WithParts[]
+    expect(SessionLoopState.restore(reloaded)).toMatchObject({ step: 3, outputContinuations: 2 })
+    const stalled = SessionProcessor.outputStall(SessionProcessor.turnMessages(reloaded, "c2"))
+    expect(stalled).toBe(0)
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, stalled })).toBe("continue")
+  })
+
+  test("a reloaded transcript whose continuations replayed the same truncated output stops asking", () => {
     const history = [
       user("u1", [text("u1", "build the project")]),
       assistant("a1", "u1", "length"),
@@ -79,16 +96,9 @@ describe("session loop restart state", () => {
       assistant("a3", "c2", "length"),
     ]
     const reloaded = JSON.parse(JSON.stringify(history)) as MessageV2.WithParts[]
-    const state = SessionLoopState.restore(reloaded)
-    expect(state).toMatchObject({ step: 3, outputContinuations: 2 })
-    expect(
-      MessageV2.outputRecovery({
-        finish: "length",
-        unanswered: true,
-        bare: false,
-        attempts: state.outputContinuations,
-      }),
-    ).toBe("continue")
+    const stalled = SessionProcessor.outputStall(SessionProcessor.turnMessages(reloaded, "c2"))
+    expect(stalled).toBe(2)
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, stalled })).toBe("fail")
   })
 
   test("a completed non-length response resets only output recovery", () => {
@@ -877,5 +887,38 @@ describe("session loop restart state", () => {
         await Session.remove(session.id)
       },
     })
+  })
+})
+
+describe("epoch routing inputs", () => {
+  test("routes from external prompts so synthetic continuations cannot consume the window", () => {
+    const history = [
+      user("u0", [text("u0", "first request about SMA actuators")]),
+      user("u1", [text("u1", "now analyse the resistance data with python")]),
+      assistant("a1", "u1", "length"),
+      user("c1", [text("c1", "continue", { synthetic: true, kind: "output" })], "output"),
+      user("c2", [text("c2", "continue", { synthetic: true, kind: "output" })], "output"),
+      user("c3", [text("c3", "continue", { synthetic: true, kind: "output" })], "output"),
+      user("c4", [text("c4", "continue", { synthetic: true, kind: "output" })], "output"),
+    ]
+    expect(SessionLoopState.externalPrompts(history)).toBe(
+      "first request about SMA actuators\nnow analyse the resistance data with python",
+    )
+    expect(SessionLoopState.externalPrompts(history, 1)).toBe("now analyse the resistance data with python")
+    expect(SessionLoopState.externalPrompts(history, 4, 6)).toBe("python")
+    expect(SessionLoopState.externalPrompts(history.slice(2))).toBe("")
+  })
+
+  test("epochMessages starts at the current request's first record", () => {
+    const history = [
+      user("u0", [text("u0", "first request")]),
+      assistant("a0", "u0", "stop"),
+      user("u1", [text("u1", "second request")]),
+      assistant("a1", "u1", "length"),
+      user("c1", [text("c1", "continue", { synthetic: true, kind: "output" })], "output"),
+      assistant("a2", "c1", "stop"),
+    ]
+    expect(SessionLoopState.epochMessages(history).map((message) => message.info.id)).toEqual(["u1", "a1", "c1", "a2"])
+    expect(SessionLoopState.epochMessages(history.slice(0, 2)).map((message) => message.info.id)).toEqual(["u0", "a0"])
   })
 })

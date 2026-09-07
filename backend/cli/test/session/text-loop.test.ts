@@ -94,18 +94,162 @@ describe("MessageV2.isContinuingTurn", () => {
 })
 
 describe("MessageV2.outputRecovery", () => {
-  test("continues a truncated active task without an artificial attempt ceiling", () => {
-    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, attempts: 0 })).toBe("continue")
-    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, attempts: 1 })).toBe("continue")
-    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, attempts: 200 })).toBe(
-      "continue",
-    )
+  test("continues a truncated active task without an artificial attempt ceiling while it makes progress", () => {
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, stalled: 0 })).toBe("continue")
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, stalled: 1 })).toBe("continue")
+  })
+
+  test("stops after two consecutive continuations that made no progress", () => {
+    expect(MessageV2.OUTPUT_STALL_LIMIT).toBe(2)
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, stalled: 2 })).toBe("fail")
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: false, stalled: 5 })).toBe("fail")
   })
 
   test("does not resume completed, answered, or bare turns", () => {
-    expect(MessageV2.outputRecovery({ finish: "stop", unanswered: true, bare: false, attempts: 0 })).toBe("none")
-    expect(MessageV2.outputRecovery({ finish: "length", unanswered: false, bare: false, attempts: 0 })).toBe("none")
-    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: true, attempts: 0 })).toBe("none")
+    expect(MessageV2.outputRecovery({ finish: "stop", unanswered: true, bare: false, stalled: 0 })).toBe("none")
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: false, bare: false, stalled: 0 })).toBe("none")
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: true, stalled: 0 })).toBe("none")
+    expect(MessageV2.outputRecovery({ finish: "length", unanswered: true, bare: true, stalled: 2 })).toBe("none")
+  })
+})
+
+type FixturePart =
+  | { text: string; synthetic?: boolean; ignored?: boolean }
+  | { tool: "completed" | "pending"; providerExecuted?: boolean }
+
+function turn(
+  id: string,
+  finish: string | undefined,
+  parts: FixturePart[],
+  extra?: { summary?: boolean; error?: boolean },
+): MessageV2.WithParts {
+  return {
+    info: {
+      id,
+      sessionID: "ses_fixture",
+      role: "assistant",
+      parentID: "msg_user",
+      finish,
+      summary: extra?.summary,
+      error: extra?.error ? { name: "UnknownError", data: { message: "stopped" } } : undefined,
+    },
+    parts: parts.map((part, index) => {
+      const base = { id: `${id}_${index}`, sessionID: "ses_fixture", messageID: id }
+      if ("text" in part)
+        return { ...base, type: "text", text: part.text, synthetic: part.synthetic, ignored: part.ignored }
+      return {
+        ...base,
+        type: "tool",
+        tool: "write",
+        callID: `call_${id}_${index}`,
+        metadata: part.providerExecuted ? { providerExecuted: true } : undefined,
+        state:
+          part.tool === "completed"
+            ? { status: "completed", input: {}, output: "ok", title: "write", metadata: {}, time: { start: 1, end: 2 } }
+            : { status: "pending", input: {}, raw: "" },
+      }
+    }),
+  } as unknown as MessageV2.WithParts
+}
+
+describe("SessionProcessor.outputStall", () => {
+  const chunk = (index: number) => `chapter ${index}: ` + "distinct prose about the build. ".repeat(20)
+  const replay = "the same truncated preamble that never changes. ".repeat(12)
+
+  test("the first truncation always earns a continuation", () => {
+    expect(SessionProcessor.outputStall([turn("a1", "length", [{ text: chunk(1) }])])).toBe(0)
+    expect(SessionProcessor.outputStall([turn("a1", "length", [])])).toBe(0)
+  })
+
+  test("continuations that add text or complete a local tool never stall, however many there are", () => {
+    const chunks = Array.from({ length: 200 }, (_, index) => turn(`a${index}`, "length", [{ text: chunk(index) }]))
+    expect(SessionProcessor.outputStall(chunks)).toBe(0)
+    expect(
+      SessionProcessor.outputStall([
+        turn("a1", "length", [{ text: replay }]),
+        turn("a2", "length", [{ tool: "completed" }]),
+        turn("a3", "length", [{ text: replay }]),
+      ]),
+    ).toBe(0)
+  })
+
+  test("counts consecutive continuations that only replay the previous truncated output", () => {
+    const turns = [
+      turn("a1", "length", [{ text: replay }]),
+      turn("a2", "length", [{ text: replay }]),
+      turn("a3", "length", [{ text: `${replay} with a different tail` }]),
+    ]
+    expect(SessionProcessor.outputStall(turns.slice(0, 2))).toBe(1)
+    expect(SessionProcessor.outputStall(turns)).toBe(2)
+  })
+
+  test("a write larger than the output cap leaves neither text nor a completed local tool", () => {
+    const turns = [
+      turn("a1", "length", [{ tool: "pending" }]),
+      turn("a2", "length", [{ tool: "pending" }]),
+      turn("a3", "length", [{ tool: "completed", providerExecuted: true }]),
+    ]
+    expect(SessionProcessor.outputStall(turns)).toBe(2)
+  })
+
+  test("any other finish ends the chain and a later truncation starts over", () => {
+    const turns = [
+      turn("a1", "length", []),
+      turn("a2", "length", []),
+      turn("a3", "tool-calls", [{ tool: "completed" }]),
+      turn("a4", "length", []),
+      turn("a5", "length", []),
+    ]
+    expect(SessionProcessor.outputStall(turns)).toBe(1)
+  })
+
+  test("ignores compaction summaries and unfinished error records", () => {
+    const turns = [
+      turn("a1", "length", []),
+      turn("a2", undefined, [], { error: true }),
+      turn("a3", "stop", [{ text: "summary" }], { summary: true }),
+      turn("a4", "length", []),
+    ]
+    expect(SessionProcessor.outputStall(turns)).toBe(1)
+  })
+})
+
+describe("SessionProcessor.turnText", () => {
+  test("normalizes visible text and drops synthetic or hidden parts", () => {
+    const value = turn("a1", "stop", [
+      { text: "  Found   THREE papers\n" },
+      { text: "continue", synthetic: true },
+      { text: "hidden", ignored: true },
+      { text: "on SMA actuators" },
+    ])
+    expect(SessionProcessor.turnText(value)).toBe("found three papers on sma actuators")
+  })
+})
+
+describe("SessionProcessor.convergenceWindow", () => {
+  test("keeps finished, non-summary turns recorded after the last trip", () => {
+    const turns = [
+      turn("a1", "stop", [{ text: "one" }]),
+      turn("a2", "stop", [{ text: "two" }]),
+      turn("a3", undefined, [], { error: true }),
+      turn("a4", "stop", [{ text: "summary" }], { summary: true }),
+      turn("a5", undefined, [{ text: "still streaming" }]),
+      turn("a6", "stop", [{ text: "three" }]),
+    ]
+    expect(SessionProcessor.convergenceWindow(turns).map((item) => item.info.id)).toEqual(["a6"])
+    expect(SessionProcessor.convergenceWindow(turns.slice(0, 2)).map((item) => item.info.id)).toEqual(["a1", "a2"])
+  })
+
+  test("a recorded trip cannot re-fire on the same three turns", () => {
+    const repeated = [
+      turn("a1", "stop", [{ text: CONTINUITY }]),
+      turn("a2", "stop", [{ text: CONTINUITY }]),
+      turn("a3", "stop", [{ text: CONTINUITY }]),
+    ]
+    const texts = (turns: MessageV2.WithParts[]) =>
+      SessionProcessor.convergenceWindow(turns).map(SessionProcessor.turnText)
+    expect(SessionProcessor.isTextLoop(texts(repeated))).toBe(true)
+    expect(SessionProcessor.isTextLoop(texts([...repeated, turn("a4", undefined, [], { error: true })]))).toBe(false)
   })
 })
 

@@ -35,14 +35,17 @@ import { Instance } from "@/project/instance"
 import { CredentialRevocation } from "@/credentials/revocation"
 import { abortedToolPart } from "./tool-outcome"
 import { outputWatchdog, watchOutput } from "./output-watchdog"
+import { defer } from "@/util/defer"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   // Hard ceiling on transient-error retries within a single message generation.
   // The retry loop is otherwise unbounded, and retry.ts classifies any JSON
   // body carrying an `error` field as retryable — so a persistently-failing
-  // provider (or a permanent error arriving as JSON) looped forever.
-  const MAX_RETRY_ATTEMPTS = 10
+  // provider (or a permanent error arriving as JSON) looped forever. Five
+  // attempts under the capped backoff in retry.ts surface a dead provider in
+  // about two minutes instead of most of an hour.
+  const MAX_RETRY_ATTEMPTS = 5
   const log = Log.create({ service: "session.processor" })
 
   /** Provider reasoning can contain a private-payload placeholder, including
@@ -178,7 +181,10 @@ export namespace SessionProcessor {
   /** Collect all assistant parts produced for one user request. The prompt loop
    * creates a new assistant message after every tool step, so checking only the
    * current message misses the most common repeated-call failure mode. */
-  export function turnParts(messages: MessageV2.WithParts[], parentID: string): MessageV2.Part[] {
+  export function turnMessages(
+    messages: MessageV2.WithParts[],
+    parentID: string,
+  ): (MessageV2.WithParts & { info: MessageV2.Assistant })[] {
     const users = new Map(
       messages
         .filter((message): message is MessageV2.WithParts & { info: MessageV2.User } => message.info.role === "user")
@@ -189,7 +195,7 @@ export namespace SessionProcessor {
       ? (SessionLoopState.messageEpoch(parent.info) ?? (SessionLoopState.external(parent) ? parent.info.id : undefined))
       : undefined
     return messages
-      .filter((message) => {
+      .filter((message): message is MessageV2.WithParts & { info: MessageV2.Assistant } => {
         if (message.info.role !== "assistant") return false
         if (!epoch) return message.info.parentID === parentID
         const owner = users.get(message.info.parentID)
@@ -197,7 +203,59 @@ export namespace SessionProcessor {
         return SessionLoopState.messageEpoch(owner.info) === epoch || owner.info.id === epoch
       })
       .sort((left, right) => left.info.id.localeCompare(right.info.id))
-      .flatMap((message) => message.parts)
+  }
+
+  export function turnParts(messages: MessageV2.WithParts[], parentID: string): MessageV2.Part[] {
+    return turnMessages(messages, parentID).flatMap((message) => message.parts)
+  }
+
+  /** An assistant turn's own visible text, normalized for repetition checks:
+   * lowercased, whitespace-collapsed, synthetic and hidden parts excluded. */
+  export function turnText(turn: MessageV2.WithParts) {
+    return turn.parts
+      .filter((part): part is MessageV2.TextPart => part.type === "text" && !part.synthetic && !part.ignored)
+      .map((part) => part.text)
+      .join("\n")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim()
+  }
+
+  /** Finished turns of one request that can still show non-convergence. A
+   * terminal error record in the epoch is a trip already taken, so the turns
+   * before it cannot fire a guard again; compaction summaries are not the
+   * model's answer and never count. */
+  export function convergenceWindow(turns: MessageV2.WithParts[]) {
+    const tripped = turns.findLastIndex((turn) => turn.info.role === "assistant" && !!turn.info.error)
+    return turns
+      .slice(tripped + 1)
+      .filter((turn) => turn.info.role === "assistant" && !!turn.info.finish && !turn.info.summary)
+  }
+
+  /** Trailing continuation turns that ended at the output limit without a
+   * completed tool result or text beyond the previous truncated turn. The
+   * first truncation always earns a continuation; only what the continuations
+   * produce afterwards counts, and any other finish ends the chain. */
+  export function outputStall(turns: MessageV2.WithParts[], prefix = 300): number {
+    let stalled = 0
+    let previous: string | undefined
+    for (const turn of turns) {
+      if (turn.info.role !== "assistant" || !turn.info.finish || turn.info.summary) continue
+      if (turn.info.finish !== "length") {
+        stalled = 0
+        previous = undefined
+        continue
+      }
+      const text = turnText(turn)
+      const completed = turn.parts.some(
+        (part) => part.type === "tool" && part.state.status === "completed" && part.metadata?.providerExecuted !== true,
+      )
+      const repeated = previous !== undefined && (text === previous || sharedPrefixLen(previous, text) >= prefix)
+      const progressed = completed || (text.length > 0 && !repeated)
+      stalled = previous === undefined || progressed ? 0 : stalled + 1
+      previous = text
+    }
+    return stalled
   }
 
   function sharedPrefixLen(a: string, b: string): number {
@@ -607,6 +665,23 @@ export namespace SessionProcessor {
       },
     })
 
+    // The doom-loop guards need this request's earlier tool calls. Read the
+    // epoch once per step instead of streaming the whole session from disk on
+    // every tool call; a part change elsewhere in the session drops the copy.
+    let epochHistory: Promise<MessageV2.WithParts[]> | undefined
+    const history = () =>
+      (epochHistory ??= MessageV2.epoch(input.sessionID, input.assistantMessage.parentID).then(
+        (messages) => messages.filter((message) => message.info.id !== input.assistantMessage.id),
+        (error: unknown) => {
+          // A failed read must not stick to every later tool call of the step.
+          epochHistory = undefined
+          throw error
+        },
+      ))
+    const invalidate = (sessionID: string, messageID: string) => {
+      if (sessionID === input.sessionID && messageID !== input.assistantMessage.id) epochHistory = undefined
+    }
+
     const result = {
       get message() {
         return input.assistantMessage
@@ -628,6 +703,18 @@ export namespace SessionProcessor {
       },
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
+        const watchers = [
+          Bus.subscribe(MessageV2.Event.PartUpdated, (event) =>
+            invalidate(event.properties.part.sessionID, event.properties.part.messageID),
+          ),
+          Bus.subscribe(MessageV2.Event.PartRemoved, (event) =>
+            invalidate(event.properties.sessionID, event.properties.messageID),
+          ),
+          Bus.subscribe(MessageV2.Event.Removed, (event) =>
+            invalidate(event.properties.sessionID, event.properties.messageID),
+          ),
+        ]
+        using _watchers = defer(() => watchers.forEach((stop) => stop()))
         const progress = (phase: SessionTelemetry.RequestPhase) =>
           SessionTelemetry.recordProgress({
             sessionID: input.sessionID,
@@ -869,8 +956,13 @@ export namespace SessionProcessor {
                     // reconcile it as soon as the call part exists.
                     await toolOutcomes.running(part as MessageV2.ToolPart)
 
-                    const history = await Array.fromAsync(MessageV2.stream(input.sessionID))
-                    const parts = turnParts(history, input.assistantMessage.parentID)
+                    const parts = turnParts(
+                      [
+                        ...(await history()),
+                        { info: input.assistantMessage, parts: await MessageV2.parts(input.assistantMessage.id) },
+                      ],
+                      input.assistantMessage.parentID,
+                    )
                     const repeated =
                       value.toolName === "invalid"
                         ? isMalformedLoop(parts, value.input)

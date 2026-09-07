@@ -19,10 +19,26 @@ function wrap(message: unknown) {
 }
 
 describe("session.retry.delay", () => {
-  test("caps delay at 30 seconds when headers missing", () => {
+  const centered = () => 0.5
+
+  test("doubles from two seconds and caps a computed wait at one minute", () => {
     const error = apiError()
-    const delays = Array.from({ length: 10 }, (_, index) => SessionRetry.delay(index + 1, error))
-    expect(delays).toStrictEqual([2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000, 30000, 30000])
+    const delays = Array.from({ length: 10 }, (_, index) => SessionRetry.delay(index + 1, error, centered))
+    expect(delays).toStrictEqual([2000, 4000, 8000, 16000, 32000, 60000, 60000, 60000, 60000, 60000])
+    expect(SessionRetry.delay(3, undefined, centered)).toBe(8000)
+    expect(SessionRetry.delay(3, apiError({ "content-type": "application/json" }), centered)).toBe(8000)
+  })
+
+  test("spreads each computed wait by ±25% so clients do not retry in lockstep", () => {
+    expect(SessionRetry.delay(1, apiError(), () => 0)).toBe(1500)
+    expect(SessionRetry.delay(1, apiError(), () => 1)).toBe(2500)
+    expect(SessionRetry.delay(6, apiError(), () => 1)).toBe(60000)
+    const sampled = new Set(Array.from({ length: 50 }, () => SessionRetry.delay(2, apiError())))
+    for (const value of sampled) {
+      expect(value).toBeGreaterThanOrEqual(3000)
+      expect(value).toBeLessThanOrEqual(5000)
+    }
+    expect(sampled.size).toBeGreaterThan(1)
   })
 
   test("prefers retry-after-ms when shorter than exponential", () => {
@@ -45,18 +61,18 @@ describe("session.retry.delay", () => {
 
   test("ignores invalid retry hints", () => {
     const error = apiError({ "retry-after": "not-a-number" })
-    expect(SessionRetry.delay(1, error)).toBe(2000)
+    expect(SessionRetry.delay(1, error, centered)).toBe(2000)
   })
 
   test("ignores malformed date retry hints", () => {
     const error = apiError({ "retry-after": "Invalid Date String" })
-    expect(SessionRetry.delay(1, error)).toBe(2000)
+    expect(SessionRetry.delay(1, error, centered)).toBe(2000)
   })
 
   test("ignores past date retry hints", () => {
     const pastDate = new Date(Date.now() - 5000).toUTCString()
     const error = apiError({ "retry-after": pastDate })
-    expect(SessionRetry.delay(1, error)).toBe(2000)
+    expect(SessionRetry.delay(1, error, centered)).toBe(2000)
   })
 
   test("uses retry-after values even when exceeding 10 minutes with headers", () => {
@@ -265,12 +281,16 @@ describe("SessionProcessor.providerFailureAction", () => {
     },
   )
 
-  test("keeps bounded transient retries without granting timeout replays", () => {
+  test("keeps five bounded transient retries without granting timeout replays", () => {
     expect(SessionProcessor.consumeProviderRetry({ attempt: 0, transientRetries: 0 })).toEqual({
       attempt: 1,
       transientRetries: 1,
     })
-    expect(SessionProcessor.consumeProviderRetry({ attempt: 10, transientRetries: 10 })).toBeUndefined()
+    expect(SessionProcessor.consumeProviderRetry({ attempt: 4, transientRetries: 4 })).toEqual({
+      attempt: 5,
+      transientRetries: 5,
+    })
+    expect(SessionProcessor.consumeProviderRetry({ attempt: 5, transientRetries: 5 })).toBeUndefined()
   })
 
   test.each([400, 200, 503])("never retries gateway timeout under HTTP %s or SSE", (statusCode) => {
@@ -608,5 +628,54 @@ describe("SessionRetry.isContextOverflow", () => {
       }),
     )
     expect(SessionRetry.isContextOverflow(err)).toBe(false)
+  })
+})
+
+describe("pre-byte transport failures", () => {
+  const refused = () =>
+    new Provider.TransportError(
+      "connect",
+      "ConnectionRefused",
+      new Error("Unable to connect. Is the computer able to access the url?"),
+    )
+
+  test("a failure recorded before any response byte is a retryable connection error", () => {
+    const error = MessageV2.fromError(refused(), { providerID: "ollama" })
+    expect(MessageV2.APIError.isInstance(error)).toBe(true)
+    expect((error as MessageV2.APIError).data).toMatchObject({
+      isRetryable: true,
+      metadata: { code: "ConnectionRefused", phase: "connect" },
+    })
+    expect((error as MessageV2.APIError).data.message).toContain("Could not connect to the provider")
+    expect(SessionRetry.retryable(error)).toBe((error as MessageV2.APIError).data.message)
+  })
+
+  test("survives SDK wrapping through nested causes", () => {
+    const wrapped = new Error("Cannot connect to API", { cause: new AggregateError([refused()], "fetch failed") })
+    const error = MessageV2.fromError(wrapped, { providerID: "test" })
+    expect((error as MessageV2.APIError).data).toMatchObject({ isRetryable: true, metadata: { phase: "connect" } })
+  })
+
+  test("is retried only while no tool has started, and a connect deadline is still never replayed", () => {
+    const error = MessageV2.fromError(refused(), { providerID: "test" })
+    expect(SessionProcessor.providerFailureAction(refused(), error, false)).toEqual({
+      type: "retry",
+      message: expect.stringContaining("Could not connect"),
+    })
+    expect(SessionProcessor.providerFailureAction(refused(), error, true)).toEqual({
+      type: "drain",
+      message: expect.stringContaining("Could not connect"),
+    })
+    const timeout = new Provider.RequestTimeoutError("connect", 300_000)
+    expect(SessionProcessor.providerFailureAction(timeout, wrap(timeout.message), false)).toEqual({ type: "terminal" })
+  })
+
+  test("a bare transport code without the fetch wrapper's marker stays unknown and terminal", () => {
+    // Only the wrapper knows that no headers arrived; the same code deeper in
+    // a stream may follow a dispatch the provider already billed.
+    const bare = Object.assign(new Error("fetch failed"), { code: "ECONNREFUSED" })
+    const error = MessageV2.fromError(bare, { providerID: "test" })
+    expect(error.name).toBe("UnknownError")
+    expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 })

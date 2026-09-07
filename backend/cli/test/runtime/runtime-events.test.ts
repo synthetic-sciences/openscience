@@ -847,6 +847,74 @@ describe("/runtime routes", () => {
   })
 })
 
+describe("delegated child sessions in the public runtime journal", () => {
+  test("captures descendants' events under the parent's active run", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({})
+        const child = await Session.create({ parentID: parent.id })
+        const grandchild = await Session.create({ parentID: child.id })
+        const stranger = await Session.create({})
+        await Bus.publish(Tick, { sessionID: child.id, value: 0 })
+        await RuntimeEvents.begin({ sessionID: parent.id, runID: "run_delegated", acceptedAt: 100, effort: "normal" })
+        await Bus.publish(Tick, { sessionID: child.id, value: 1 })
+        await Bus.publish(Tick, { sessionID: grandchild.id, value: 2 })
+        await Bus.publish(Tick, { sessionID: stranger.id, value: 3 })
+        await RuntimeEvents.finish({ sessionID: parent.id, runID: "run_delegated", messageID: "msg_delegated" })
+        await Bus.publish(Tick, { sessionID: child.id, value: 4 })
+
+        expect((await RuntimeEvents.replay(parent.id)).events).toMatchObject([
+          { type: "runtime.accepted", runID: "run_delegated" },
+          {
+            type: Tick.type,
+            runID: "run_delegated",
+            sessionID: parent.id,
+            properties: { sessionID: child.id, value: 1 },
+          },
+          { type: Tick.type, runID: "run_delegated", properties: { sessionID: grandchild.id, value: 2 } },
+          { type: "runtime.completed" },
+        ])
+        expect((await RuntimeEvents.replay(child.id)).events).toHaveLength(0)
+        expect((await RuntimeEvents.replay(stranger.id)).events).toHaveLength(0)
+        expect(await RuntimeEvents.belongs(parent.id, grandchild.id)).toBe(true)
+        expect(await RuntimeEvents.belongs(parent.id, parent.id)).toBe(true)
+        expect(await RuntimeEvents.belongs(child.id, parent.id)).toBe(false)
+        expect(await RuntimeEvents.belongs(parent.id, stranger.id)).toBe(false)
+      },
+    })
+  })
+
+  test("a child's own active run keeps its events out of the parent's journal", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({})
+        const child = await Session.create({ parentID: parent.id })
+        await RuntimeEvents.begin({ sessionID: parent.id, runID: "run_parent", acceptedAt: 100, effort: "normal" })
+        await RuntimeEvents.begin({ sessionID: child.id, runID: "run_child", acceptedAt: 101, effort: "normal" })
+        await Bus.publish(Tick, { sessionID: child.id, value: 1 })
+        await RuntimeEvents.finish({ sessionID: child.id, runID: "run_child", messageID: "msg_child" })
+        await Bus.publish(Tick, { sessionID: child.id, value: 2 })
+        await RuntimeEvents.finish({ sessionID: parent.id, runID: "run_parent", messageID: "msg_parent" })
+
+        expect((await RuntimeEvents.replay(child.id)).events).toMatchObject([
+          { type: "runtime.accepted", runID: "run_child" },
+          { type: Tick.type, runID: "run_child", properties: { value: 1 } },
+          { type: "runtime.completed", runID: "run_child" },
+        ])
+        expect((await RuntimeEvents.replay(parent.id)).events).toMatchObject([
+          { type: "runtime.accepted", runID: "run_parent" },
+          { type: Tick.type, runID: "run_parent", properties: { sessionID: child.id, value: 2 } },
+          { type: "runtime.completed", runID: "run_parent" },
+        ])
+      },
+    })
+  })
+})
+
 describe("terminal event idempotency", () => {
   test("a second finalization of the same run returns the recorded terminal event instead of failing", async () => {
     await using tmp = await tmpdir({ git: true })

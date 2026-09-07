@@ -1005,12 +1005,18 @@ export namespace ProviderTransform {
       }
     }
 
-    if (
-      (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
-      /^claude-(?:opus|sonnet|fable|mythos)-[5-9]\b/.test(input.model.api.id)
-    ) {
-      result["thinking"] = { type: "adaptive" }
-      result["effort"] = "high"
+    if (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") {
+      const nativeID = input.model.api.id.toLowerCase().split("/").at(-1) ?? ""
+      // Opus 4.7/4.8 and the 5+ generation steer depth through effort. Opus
+      // and Sonnet 4.6 accept adaptive thinking but keep the classic budget
+      // ladder for explicit variants, so their default request names no effort
+      // and no budget. Without `thinking` these models answer without reasoning.
+      if (/^claude-(?:opus|sonnet|fable|mythos)-[5-9]\b/.test(nativeID) || /^claude-opus-4[.-][78]\b/.test(nativeID)) {
+        result["thinking"] = { type: "adaptive" }
+        result["effort"] = "high"
+      } else if (/^claude-(?:opus|sonnet)-4[.-]6\b/.test(nativeID)) {
+        result["thinking"] = { type: "adaptive" }
+      }
     }
 
     // OpenRouter-routed gpt-5 (e.g. "openai/gpt-5") is handled by the unified

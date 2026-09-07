@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionCompaction } from "../../src/session/compaction"
+import { Token } from "../../src/util/token"
 
 const sessionID = "session"
 
@@ -205,5 +206,91 @@ describe("session.message-v2.composition", () => {
     expect(c.image).toBe(IMG)
     expect(c.images).toBe(1)
     expect(c.total).toBe(10 + 10 + 10 + 13 + 13 + IMG)
+  })
+})
+
+/** A syntactically minimal PDF with `pages` page objects, padded so its data
+ * URL is far larger than the tokens a provider bills for it. */
+export function pdfDataURL(pages: number, padding = 0) {
+  const kids = Array.from({ length: pages }, (_, index) => `${index + 3} 0 R`).join(" ")
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    `<< /Type /Pages /Kids [${kids}] /Count ${pages} >>`,
+    ...Array.from({ length: pages }, () => "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>"),
+    ...(padding ? [`<< /Length ${padding} >>\nstream\n${"\u00ff".repeat(padding)}\nendstream`] : []),
+  ]
+  const body = objects.map((object, index) => `${index + 1} 0 obj\n${object}\nendobj\n`).join("")
+  const bytes = Buffer.from(`%PDF-1.4\n${body}trailer\n<< /Root 1 0 R >>\n%%EOF\n`, "latin1")
+  return `data:application/pdf;base64,${bytes.toString("base64")}`
+}
+
+describe("session.message-v2.composition — documents", () => {
+  const filePart = (messageID: string, id: string, mime: string, url: string) =>
+    ({ ...base(id, messageID), type: "file", mime, filename: "attachment", url }) as MessageV2.Part
+
+  test("counts PDF pages, never their base64 transport bytes", () => {
+    expect(MessageV2.pdfPages(pdfDataURL(3))).toBe(3)
+    expect(MessageV2.pdfPages(pdfDataURL(1))).toBe(1)
+    expect(MessageV2.pdfPages(pdfDataURL(0))).toBe(1)
+    expect(MessageV2.pdfPages("data:application/pdf;base64," + Buffer.from("not a pdf").toString("base64"))).toBe(1)
+    const scan = pdfDataURL(3, 300_000)
+    expect(Token.estimate(scan)).toBeGreaterThan(90_000)
+    expect(MessageV2.documentTokens("application/pdf", scan)).toBe(3 * MessageV2.PDF_PAGE_TOKENS)
+    expect(MessageV2.PDF_PAGE_TOKENS).toBe(3_000)
+  })
+
+  test("keeps the character estimate for files without a per-page contract", () => {
+    const url = "data:application/octet-stream;base64," + "A".repeat(4000)
+    expect(MessageV2.documentTokens("application/octet-stream", url)).toBe(Token.estimate(url))
+  })
+
+  test("reports attached documents under `document` and in the total", () => {
+    const scan = pdfDataURL(2, 100_000)
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [
+          textPart("u1", "p1", "a".repeat(40)),
+          filePart("u1", "f1", "application/pdf", scan),
+          filePart("u1", "f2", "text/plain", "data:text/plain;base64," + "A".repeat(4000)),
+        ],
+      },
+      {
+        info: assistantInfo("a1", "u1"),
+        parts: [
+          {
+            ...toolPart("a1", "t1", "science_fetch", {}, "fetched"),
+            state: {
+              ...(toolPart("a1", "t1", "science_fetch", {}, "fetched") as MessageV2.ToolPart).state,
+              attachments: [filePart("a1", "t1-att0", "application/pdf", pdfDataURL(4))],
+            },
+          } as MessageV2.Part,
+        ],
+      },
+    ]
+    const c = MessageV2.composition(input)
+    expect(c.document).toBe((2 + 4) * MessageV2.PDF_PAGE_TOKENS)
+    expect(c.text).toBe(10)
+    expect(c.total).toBe(c.system + c.text + c.reasoning + c.tool + c.skills + c.image + c.document)
+    expect(c.total).toBeLessThan(Token.estimate(scan))
+  })
+
+  test("a compacted tool result no longer carries its document attachments", () => {
+    const completed = toolPart("a1", "t1", "science_fetch", {}, "fetched", { compacted: true }) as MessageV2.ToolPart
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo("a1", "u1"),
+        parts: [
+          {
+            ...completed,
+            state: {
+              ...completed.state,
+              attachments: [filePart("a1", "t1-att0", "application/pdf", pdfDataURL(4))],
+            },
+          } as MessageV2.Part,
+        ],
+      },
+    ]
+    expect(MessageV2.composition(input).document).toBe(0)
   })
 })

@@ -53,11 +53,16 @@ import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
+import { LocalProvider } from "./local"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
   const MAX_TIMER_MS = 2_147_483_647
-  export const DEFAULT_CONNECT_TIMEOUT_MS = 120_000
+  // Upstream admission on busy gateways and prefill on self-hosted servers
+  // both happen before the first response byte; two minutes cut off healthy
+  // long prompts. Local endpoints disable the deadline entirely (see
+  // defaultConnectTimeout).
+  export const DEFAULT_CONNECT_TIMEOUT_MS = 300_000
   // A quiet response can still be generating private reasoning. Silence alone
   // cannot distinguish that from a stalled provider, so response deadlines are
   // opt-in; request progress and explicit cancellation remain active.
@@ -126,6 +131,70 @@ export namespace Provider {
       super(phase, idleTimeoutMs)
       this.name = "ProviderIdleTimeoutError"
     }
+  }
+
+  /** A request that failed before any response byte arrived. Only the fetch
+   * wrapper knows that no headers were received; a failure after that point
+   * may already have been processed and billed. */
+  export class TransportError extends Error {
+    constructor(
+      readonly phase: "connect",
+      readonly code: string,
+      cause: unknown,
+    ) {
+      super(cause instanceof Error ? cause.message : String(cause), { cause })
+      this.name = "ProviderTransportError"
+    }
+  }
+
+  const TRANSPORT_CODES = new Set([
+    "ECONNREFUSED",
+    "ConnectionRefused",
+    "ECONNRESET",
+    "ECONNABORTED",
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "ETIMEDOUT",
+    "EHOSTUNREACH",
+    "ENETUNREACH",
+    "ENETDOWN",
+    "EPIPE",
+    "FailedToOpenSocket",
+    "ConnectionClosed",
+    "UND_ERR_CONNECT_TIMEOUT",
+    "UND_ERR_SOCKET",
+    "UND_ERR_HEADERS_TIMEOUT",
+  ])
+  const TRANSPORT_MESSAGES =
+    /socket connection was closed|\bterminated\b|fetch failed|unable to connect|connection (?:refused|reset)|getaddrinfo|network error/i
+
+  /** Bun reports a refused or unresolved endpoint with its own codes
+   * (`ConnectionRefused`), which no SDK classifies as retryable; the AI SDK
+   * recognizes only undici's `fetch failed`. */
+  export function transportCode(error: unknown): string | undefined {
+    const seen = new Set<unknown>()
+    const pending = [error]
+    while (pending.length) {
+      const current = pending.shift()
+      if (!current || typeof current !== "object" || seen.has(current)) continue
+      seen.add(current)
+      const shape = current as { code?: unknown; message?: unknown; cause?: unknown }
+      if (typeof shape.code === "string" && TRANSPORT_CODES.has(shape.code)) return shape.code
+      if (typeof shape.message === "string" && TRANSPORT_MESSAGES.test(shape.message)) {
+        return typeof shape.code === "string" && shape.code ? shape.code : "transport"
+      }
+      pending.push(shape.cause)
+      if (current instanceof AggregateError) pending.push(...current.errors)
+    }
+  }
+
+  /** Aborts and deadlines keep their identity: a deadline means the request
+   * was sent and its outcome is unknown, which must never be replayed. */
+  function connectFailure(error: unknown, signal: AbortSignal) {
+    if (signal.aborted || isRequestTimeoutError(error) || error instanceof DOMException) return error
+    const code = transportCode(error)
+    if (!code) return error
+    return new TransportError("connect", code, error)
   }
 
   const requestContext = new AsyncLocalStorage<RequestContext>()
@@ -461,7 +530,7 @@ export namespace Provider {
       })
     } catch (error) {
       emit(timingOutcome(error, signal), error, requestTimeout(error)?.phase)
-      throw error
+      throw connectFailure(error, signal)
     }
 
     // Response.error()/opaque responses use status 0, which the Response
@@ -1104,6 +1173,25 @@ export namespace Provider {
     } catch {
       return false
     }
+  }
+
+  /** Self-hosted runtimes answer only after prompt processing: llama-server
+   * and Ollama send headers after prefill, so a long prompt on a slow machine
+   * legitimately outlasts any fixed connect deadline. Loopback and mDNS
+   * (`.local`) hosts and the bundled local runtime ids qualify. */
+  export function localEndpoint(input: { providerID: string; baseURL?: unknown }) {
+    if (LocalProvider.PRESETS.some((preset) => preset.id === input.providerID)) return true
+    if (isLocalBaseURL(input.baseURL)) return true
+    if (typeof input.baseURL !== "string" || !input.baseURL) return false
+    try {
+      return new URL(input.baseURL).hostname.toLowerCase().endsWith(".local")
+    } catch {
+      return false
+    }
+  }
+
+  export function defaultConnectTimeout(input: { providerID: string; baseURL?: unknown }): number | false {
+    return localEndpoint(input) ? false : DEFAULT_CONNECT_TIMEOUT_MS
   }
 
   /** Pin a user-owned key to a public endpoint when stale proxy config remains. */
@@ -2833,7 +2921,9 @@ export namespace Provider {
       const customFetch = options["fetch"]
       const tokenCommand = options["tokenCommand"] as string | undefined
       const idleTimeout = options["idleTimeout"]
-      const connectTimeout = options["connectTimeout"]
+      const connectTimeout =
+        options["connectTimeout"] ??
+        defaultConnectTimeout({ providerID: model.providerID, baseURL: options["baseURL"] ?? model.api.url })
       delete options["idleTimeout"]
       delete options["connectTimeout"]
       delete options["outputIdleTimeout"]

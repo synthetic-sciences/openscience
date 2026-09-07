@@ -1844,7 +1844,7 @@ export type ProviderConfig = {
      */
     idleTimeout?: number | false
     /**
-     * Maximum wait for provider response headers in milliseconds, including connection setup and upstream admission. Defaults to 120000 (2 minutes). Set false to disable.
+     * Maximum wait for provider response headers in milliseconds, including connection setup and upstream admission. Defaults to 300000 (5 minutes), and to disabled for local endpoints (loopback or .local base URLs and the ollama, lmstudio, llamacpp, vllm and jan providers), which send headers only after prompt processing. Set false to disable.
      */
     connectTimeout?: number | false
     /**
@@ -2147,6 +2147,10 @@ export type Config = {
      * Token budget for the verbatim recent tail during compaction (default: clamp(0.20*usable, 8000, 32000))
      */
     tailTokens?: number
+    /**
+     * How many of the most recent images are sent in full with each model request; older images become text placeholders that can be read again (default: 1)
+     */
+    recentImages?: number
   }
   experimental?: {
     /**

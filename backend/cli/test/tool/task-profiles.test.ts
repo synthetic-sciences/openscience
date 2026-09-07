@@ -222,8 +222,10 @@ test("Task summaries expose command and runtime failures carried in completed me
   ])
 })
 
-test("Task handoffs join every nonempty child text part in chronological order", () => {
-  const message = (id: string, created: number, parts: Array<{ id: string; text: string }>): MessageV2.WithParts => ({
+type HandoffPart = { id: string; text: string; ignored?: boolean } | { id: string; tool: true }
+
+function handoffMessage(id: string, created: number, parts: HandoffPart[]): MessageV2.WithParts {
+  return {
     info: {
       id,
       sessionID: "ses_child",
@@ -238,28 +240,67 @@ test("Task handoffs join every nonempty child text part in chronological order",
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     },
-    parts: parts.map((part) => ({
-      ...part,
-      sessionID: "ses_child",
-      messageID: id,
-      type: "text" as const,
-    })),
-  })
+    parts: parts.map((part) =>
+      "tool" in part
+        ? {
+            id: part.id,
+            sessionID: "ses_child",
+            messageID: id,
+            type: "tool" as const,
+            tool: "read",
+            callID: `call_${part.id}`,
+            state: {
+              status: "completed" as const,
+              input: {},
+              output: "fixture",
+              title: "read",
+              metadata: {},
+              time: { start: created, end: created + 1 },
+            },
+          }
+        : {
+            id: part.id,
+            sessionID: "ses_child",
+            messageID: id,
+            type: "text" as const,
+            text: part.text,
+            ignored: part.ignored,
+          },
+    ),
+  }
+}
+
+test("Task handoffs return the child's final answer, written after its last tool call", () => {
   const messages = [
-    message("msg_later", 20, [
-      { id: "prt_second", text: "second conclusion" },
+    handoffMessage("msg_final", 30, [
+      { id: "prt_plan", text: "Let me verify the result first." },
+      { id: "prt_verify", tool: true },
+      { id: "prt_hidden", text: "internal bookkeeping", ignored: true },
+      { id: "prt_findings", text: "## Findings\n- verified result 0.913" },
       { id: "prt_empty", text: "   " },
+      { id: "prt_next", text: "## Next action\n- apply the patch" },
     ]),
-    message("msg_earlier", 10, [
+    handoffMessage("msg_earlier", 10, [
       { id: "prt_a_opening", text: "opening evidence" },
       { id: "prt_b_detail", text: "supporting detail" },
     ]),
-    message("msg_historical", 1, [{ id: "prt_old", text: "old result" }]),
+    handoffMessage("msg_historical", 1, [{ id: "prt_old", text: "old result" }]),
   ]
 
   expect(taskText(messages, new Set(["msg_historical"]))).toBe(
-    "opening evidence\n\nsupporting detail\n\nsecond conclusion",
+    "## Findings\n- verified result 0.913\n\n## Next action\n- apply the patch",
   )
+})
+
+test("Task handoffs fall back to the last message that said anything", () => {
+  const trailing = handoffMessage("msg_tool_only", 30, [{ id: "prt_last_tool", tool: true }])
+  const spoke = handoffMessage("msg_spoke", 20, [
+    { id: "prt_note", text: "partial note before a final check" },
+    { id: "prt_check", tool: true },
+  ])
+  expect(taskText([trailing, spoke], new Set())).toBe("partial note before a final check")
+  expect(taskText([trailing], new Set())).toBe("")
+  expect(taskText([spoke, trailing], new Set(["msg_spoke"]))).toBe("")
 })
 
 test("Task handoffs preserve the complete child result by default", () => {

@@ -298,17 +298,26 @@ export function summarizeTurn(messages: MessageV2.WithParts[], previous: Set<str
   return { summary, usage }
 }
 
+/** The child's handoff is the text of its final assistant message that said
+ * anything, after that message's last tool call. Earlier narration and tool
+ * chatter stay in the child session, which the parent can open by the id in
+ * the result metadata. */
 export function taskText(messages: MessageV2.WithParts[], previous: Set<string>) {
-  return messages
+  const text = (parts: readonly MessageV2.Part[]) =>
+    parts
+      .filter(
+        (part): part is MessageV2.TextPart => part.type === "text" && !part.ignored && part.text.trim().length > 0,
+      )
+      .toSorted((a, b) => (a.time?.start ?? 0) - (b.time?.start ?? 0) || a.id.localeCompare(b.id))
+      .map((part) => part.text.trim())
+      .join("\n\n")
+  const final = messages
     .filter((message) => !previous.has(message.info.id) && message.info.role === "assistant")
     .toSorted((a, b) => a.info.time.created - b.info.time.created || a.info.id.localeCompare(b.info.id))
-    .flatMap((message) =>
-      message.parts
-        .filter((part): part is MessageV2.TextPart => part.type === "text" && part.text.trim().length > 0)
-        .toSorted((a, b) => (a.time?.start ?? 0) - (b.time?.start ?? 0) || a.id.localeCompare(b.id)),
-    )
-    .map((part) => part.text.trim())
-    .join("\n\n")
+    .findLast((message) => text(message.parts).length > 0)
+  if (!final) return ""
+  const lastTool = final.parts.findLastIndex((part) => part.type === "tool")
+  return text(final.parts.slice(lastTool + 1)) || text(final.parts)
 }
 
 export type TaskOutcome = {

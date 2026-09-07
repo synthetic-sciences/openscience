@@ -85,6 +85,33 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   trial no longer fails with "duplicate event part" after context pruning
   republishes completed tool parts; name 2.0.78 as the first Harbor-compatible
   release and run the native Harbor trial on main in its own job.
+- Continue past a model's output limit only while continuations make progress;
+  two consecutive continuations with no completed tool result and no new text
+  stop with a clear error that keeps the partial output. Scope the repeated-
+  response guard to the current request so a recorded stop cannot re-fire on
+  later prompts, and read only that request's messages for the repeated-call
+  guard instead of streaming the whole session on every tool call.
+- Estimate PDF attachments by page count rather than transport bytes, so a
+  multi-megabyte scan no longer reads as hundreds of thousands of tokens and is
+  refused before any request is sent.
+- Retry a provider request whose connection failed before any response byte
+  (refused, unresolved, or closed before headers) while no tool has started.
+  Wait up to five minutes for response headers, disable that deadline for local
+  runtimes (loopback or `.local` endpoints and the bundled local providers),
+  and bound transient retries to five attempts with jittered backoff capped at
+  one minute. Request timeouts and managed gateway verdicts remain terminal.
+- Return a delegated child's final answer as the Task result instead of every
+  text fragment it produced; the child session id in the result metadata still
+  opens the full transcript.
+- Route tool relevance and skill activation from the request's real prompts
+  across its whole epoch, so synthetic continuations no longer hide the editing,
+  Python and skill-enabled tools a long task needs.
+- Request adaptive thinking by default for Claude Opus 4.7/4.8 and Opus and
+  Sonnet 4.6.
+- Journal delegated child sessions' events under the parent's runtime run and
+  include their pending permissions and questions in the parent's snapshot.
+- Add `compaction.recentImages` to configure how many recent images are sent
+  in full with each request (default unchanged: 1).
 - Wait for scientific canary artifact delivery before validating a completed
   remote computation, while preserving bounded waits and resource cleanup.
 - Start desktop onboarding with Synthetic Sciences sign-in and workspace selection,

@@ -1,5 +1,6 @@
 import type { Agent } from "@/agent/agent"
 import { PermissionNext } from "@/permission/next"
+import type { MessageV2 } from "./message-v2"
 
 export namespace ToolSelection {
   export const THIN_RESEARCH_AGENT = "researchagent-test"
@@ -50,6 +51,25 @@ export namespace ToolSelection {
 
   export function fresh(roles: string[]) {
     return roles.filter((role) => role === "user").length === 1
+  }
+
+  /** Capabilities and tools unlocked by skills loaded anywhere in the given
+   * messages. Scanning a request's whole epoch keeps a skill's bundle offered
+   * through the synthetic continuations of the same task. */
+  export function activation(messages: readonly MessageV2.WithParts[]) {
+    const capabilities = new Set<string>()
+    const tools = new Set<string>()
+    for (const message of messages) {
+      if (message.info.role !== "assistant") continue
+      for (const part of message.parts) {
+        if (part.type !== "tool" || part.tool !== "skill" || part.state.status !== "completed") continue
+        const metadata = part.state.metadata as { capability?: unknown; allowedTools?: unknown } | undefined
+        if (typeof metadata?.capability === "string") capabilities.add(metadata.capability)
+        if (!Array.isArray(metadata?.allowedTools)) continue
+        for (const tool of metadata.allowedTools) if (typeof tool === "string") tools.add(tool)
+      }
+    }
+    return { capabilities, tools }
   }
 
   /** A slash token is an explicit request for a command or skill, even when

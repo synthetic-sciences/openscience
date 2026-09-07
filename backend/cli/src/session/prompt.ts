@@ -157,35 +157,6 @@ export namespace SessionPrompt {
     return values.reduce((sum, value) => sum + value, 0)
   }
 
-  function fileTokens(messages: MessageV2.WithParts[]) {
-    const superseded = MessageV2.supersededOutputs(messages)
-    return messages
-      .flatMap((message) => message.parts)
-      .reduce((sum, part) => {
-        if (
-          part.type === "file" &&
-          !part.mime.startsWith("image/") &&
-          part.mime !== "text/plain" &&
-          part.mime !== "application/x-directory"
-        )
-          return sum + Token.estimate(part.url)
-        if (
-          part.type !== "tool" ||
-          part.state.status !== "completed" ||
-          part.state.time.compacted ||
-          superseded.has(part.id)
-        )
-          return sum
-        return (
-          sum +
-          (part.state.attachments ?? []).reduce(
-            (total, attachment) => total + (attachment.mime.startsWith("image/") ? 0 : Token.estimate(attachment.url)),
-            0,
-          )
-        )
-      }, 0)
-  }
-
   /** Estimate the complete provider input assembled for this turn, retaining
    * headroom for provider-specific wrappers and tokenizer estimation error. */
   export async function contextPreflight(input: {
@@ -204,8 +175,10 @@ export namespace SessionPrompt {
     const composition = MessageV2.composition(input.messages, { system: input.system })
     const current = SessionCompaction.protectedContext(input.messages, input.current.id)
     const fixed = tools + extra
-    const total = composition.total + fileTokens(input.messages) + fixed
-    const newest = MessageV2.composition(current, { system: input.system }).total + fileTokens(current) + fixed
+    // Attachments are part of the composition, with documents estimated the
+    // way providers bill them (MessageV2.documentTokens) rather than by bytes.
+    const total = composition.total + fixed
+    const newest = MessageV2.composition(current, { system: input.system }).total + fixed
     return {
       total,
       newest,
@@ -779,19 +752,6 @@ export namespace SessionPrompt {
     let compactionArmed = true
     let outputContinuations = recovered.outputContinuations
     const workspace = await SessionFilesystem.workspace(sessionID)
-    // Text doom-loop guard (#176): weak/local models sometimes emit a near-identical
-    // "continuity summary" turn over and over instead of converging on an answer.
-    // The processor's doom-loop guard can't catch it — the TOOL calls vary (or are
-    // absent), only the TEXT repeats. Normalize an assistant turn's own text;
-    // SessionProcessor.isTextLoop does the (unit-tested) detection.
-    const turnText = (m: MessageV2.WithParts) =>
-      m.parts
-        .filter((p) => p.type === "text" && !p.synthetic && !p.ignored)
-        .map((p) => (p as MessageV2.TextPart).text)
-        .join("\n")
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim()
     const readMessages = async () => {
       let messages = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
       // Atomic message writes can briefly overlap a directory scan on busy or
@@ -955,13 +915,25 @@ export namespace SessionPrompt {
       // context forever (the #176 doom loop). See MessageV2.isContinuingTurn.
       const lastAssistantHasTool = MessageV2.hasLocalToolResult(lastAssistantMsg?.parts ?? [])
       const continuing = MessageV2.isContinuingTurn(lastAssistant?.finish, lastAssistantHasTool)
+      const epochTurns = SessionProcessor.turnMessages(msgs, lastUser.id)
       const recovery = MessageV2.outputRecovery({
         finish: lastAssistant?.finish,
         unanswered: owned,
         bare: bareMode,
-        attempts: outputContinuations,
+        stalled: SessionProcessor.outputStall(epochTurns),
       })
-      if (recovery !== "none") {
+      if (recovery === "fail") {
+        log.info("output limit reached repeatedly without progress — stopping", {
+          sessionID,
+          step,
+          continuations: outputContinuations,
+        })
+        await failTooLarge(
+          `The response reached the model's output limit ${outputContinuations + 1} times, and the last ${MessageV2.OUTPUT_STALL_LIMIT} continuations produced no completed tool result and no new text, so the model was not asked to continue again. The partial output is preserved. Ask for the work in smaller pieces (for example, write a long file in several chunks) or choose a model with a larger output limit.`,
+        )
+        break
+      }
+      if (recovery === "continue") {
         outputContinuations++
         await enqueue({
           user: lastUser,
@@ -1036,8 +1008,10 @@ export namespace SessionPrompt {
       // long AND share a large identical leading block (the repeated "continuity
       // summary"). Conservative on purpose — 3 substantial near-identical turns in a
       // row is a clear non-convergence signal that legitimate progress never produces.
-      const finishedTurns = msgs.filter((m) => m.info.role === "assistant" && m.info.finish)
-      if (SessionProcessor.isTextLoop(finishedTurns.map(turnText))) {
+      // Only this request's turns can show non-convergence, and a trip already
+      // recorded in the epoch must not re-fire on the same three turns.
+      const finishedTurns = SessionProcessor.convergenceWindow(epochTurns)
+      if (SessionProcessor.isTextLoop(finishedTurns.map(SessionProcessor.turnText))) {
         log.info("text doom-loop detected — stopping", { sessionID, step })
         await failTooLarge(
           "The model repeated nearly the same response several times without making progress. Stopping to avoid an endless loop. Try a stronger connected model or break the task into smaller steps.",
@@ -1656,7 +1630,7 @@ export namespace SessionPrompt {
           // Keep only the most-recent images in full; older figures/screenshots become
           // text placeholders so re-shipping media every turn can't bloat the window.
           ...MessageV2.toModelMessages(sessionMessages, model, {
-            keepRecentImages: SessionCompaction.KEEP_RECENT_IMAGES,
+            keepRecentImages: SessionCompaction.recentImages(config),
           }),
           ...(isLastStep
             ? [
@@ -1938,37 +1912,15 @@ export namespace SessionPrompt {
       },
     })
 
+    // Synthetic continuations carry no request text and would otherwise push
+    // the real prompt out of the routing window mid-task, dropping the editing,
+    // Python and skill-enabled tools the request needed. Skill loads count for
+    // the whole epoch, not only the span since the newest continuation.
     const selectionRequest =
-      input.messages
-        .filter((message) => message.info.role === "user")
-        .slice(-4)
-        .flatMap((message) =>
-          message.parts.flatMap((part) =>
-            part.type === "text" && !part.synthetic && !part.ignored ? [part.text] : [],
-          ),
-        )
-        .join("\n")
-        .slice(-8_000) || SessionLoopState.routing(input.messages)
-    const loadedCapabilities = new Set<string>()
-    const activatedTools = new Set<string>()
-    const currentTurn = input.messages.slice(
-      Math.max(
-        0,
-        input.messages.findLastIndex((message) => message.info.role === "user"),
-      ),
-    )
-    for (const message of currentTurn) {
-      if (message.info.role !== "assistant") continue
-      for (const part of message.parts) {
-        if (part.type !== "tool" || part.tool !== "skill" || part.state.status !== "completed") continue
-        const capability = (part.state.metadata as { capability?: unknown } | undefined)?.capability
-        if (typeof capability === "string") loadedCapabilities.add(capability)
-        const allowedTools = (part.state.metadata as { allowedTools?: unknown } | undefined)?.allowedTools
-        if (Array.isArray(allowedTools)) {
-          for (const tool of allowedTools) if (typeof tool === "string") activatedTools.add(tool)
-        }
-      }
-    }
+      SessionLoopState.externalPrompts(input.messages) || SessionLoopState.routing(input.messages)
+    const activation = ToolSelection.activation(SessionLoopState.epochMessages(input.messages))
+    const loadedCapabilities = activation.capabilities
+    const activatedTools = activation.tools
 
     const extensions = await ToolRegistry.customIDs()
     const native = await ToolRegistry.tools(
