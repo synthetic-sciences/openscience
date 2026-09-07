@@ -1,9 +1,9 @@
-Fetch a fully formed HTTP(S) URL as markdown (default), text, HTML, or a workspace download. Prefer a more targeted available tool.
+Fetch an HTTP(S) URL. Prefer a targeted tool when available.
 
-- Text mode is read-only and capped at 5 MiB; use it for bounded pages and API responses. Full bounded text may be retained in managed output when only a preview is shown.
-- For a webpage or bounded API response, omit `output_path` entirely. For example, `{"url":"https://example.com/article","format":"markdown"}` reads a page inline. Do not add a dummy filename, empty string, or null for an unused optional field.
-- Binary responses (including PDFs) are detected and streamed into session scratch under a safe non-overwriting filename automatically. Set `output_path` only when you need a specific root filename or when a large text response should bypass model context.
-- For `papers/foo.pdf`, use `output_path:"foo.pdf"`; only after success run sandboxed Bash `mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'`.
-- Setting `output_path` selects a raw download: `format` does not convert the saved bytes. To save HTML, use an `.html` filename; requesting Markdown with a `.md` download destination does not convert HTML. Downloads stream through the network broker to disk, never model context, and return filename, bytes, SHA-256, and content type.
-- Capacity is live free disk minus a 512 MiB reserve; never send cap or claimed-size override fields. After a capacity failure, paginate, free space, or use an approved transfer instead of retrying unchanged.
-- Paginate large JSON APIs. Do not retry the same 404 or 405 URL.
+- Read pages inline: `{"url":"https://example.com/article","format":"markdown"}`. Omit unused `output_path`; never supply a dummy filename, empty string, or null.
+- Inline text is read-only, capped at 5 MiB; full text may be retained in managed output behind a preview.
+- Binary responses (including PDFs) auto-download to session scratch without overwriting; use `output_path` for a root filename or large text.
+- Downloads save raw bytes; `format` does not convert them. Save HTML as `.html`. For subfolders, follow the root-download then sandboxed-move sequence in `output_path`.
+- Downloads bypass model context; return filename, bytes, SHA-256, and content type.
+- Capacity is free disk minus 512 MiB. Never send cap/claimed-size overrides. On capacity failure, paginate, free space, or use an approved transfer.
+- Paginate large JSON. Never retry unchanged capacity failures or the same 404/405 URL.
