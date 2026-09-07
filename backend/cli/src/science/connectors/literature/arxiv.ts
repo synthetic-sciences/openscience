@@ -114,7 +114,8 @@ export const arxiv: Connector = {
   id: "arxiv",
   name: "arXiv",
   domain: "literature",
-  description: "Open-access preprints in physics, math, CS, quantitative biology, and more.",
+  description:
+    "Preprint metadata and abstracts in physics, math, CS, quantitative biology, and more. Paper text must be retrieved separately from the returned PDF link.",
   homepage: "https://arxiv.org",
 
   async search(query, opts) {

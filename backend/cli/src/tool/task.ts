@@ -178,6 +178,21 @@ export async function materializeTaskToolOutputs(input: {
   return { prompt, files: [...destinations.values()] }
 }
 
+function taskToolStatus(part: MessageV2.ToolPart) {
+  if (part.tool === "research_search" && part.state.status === "completed") {
+    const metadata = part.state.metadata
+    // An unavailable search is a closed failed attempt. Its provider-level
+    // partial receipt does not mean an operation is still running at handoff.
+    if (
+      metadata?.outcome === "partial" &&
+      (metadata.stopReason === "search_unavailable" || metadata.stopReason === "search_output_unavailable")
+    ) {
+      return "error" as const
+    }
+  }
+  return observableToolStatus(part)
+}
+
 export function summarizeTurn(messages: MessageV2.WithParts[], previous: Set<string>) {
   const current = messages.filter((message) => !previous.has(message.info.id))
   const summary = current
@@ -187,7 +202,7 @@ export function summarizeTurn(messages: MessageV2.WithParts[], previous: Set<str
       id: part.id,
       tool: part.tool,
       state: {
-        status: observableToolStatus(part),
+        status: taskToolStatus(part),
         title: part.state.status === "completed" ? part.state.title : undefined,
       },
     }))
@@ -491,7 +506,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     id: part.id,
                     tool: part.tool,
                     state: {
-                      status: part.state.status,
+                      status: taskToolStatus(part),
                       title: part.state.status === "completed" ? part.state.title : undefined,
                     },
                   }
@@ -614,7 +629,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                   ? ["[Child stopped on a provider error; its usable partial result follows.]"]
                   : taskOutcome.stopReason === "empty_handoff"
                     ? ["[Child ended without a textual handoff; treat this result as incomplete.]"]
-                    : []),
+                    : failedToolCalls > 0
+                      ? [
+                          `[Child returned a completed handoff with ${failedToolCalls} failed tool ${failedToolCalls === 1 ? "attempt" : "attempts"}. Review its limitations; the failed attempts remain recorded in the child session.]`,
+                        ]
+                      : []),
           handoff.text,
         ]
           .filter(Boolean)

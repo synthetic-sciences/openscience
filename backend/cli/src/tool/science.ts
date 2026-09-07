@@ -176,6 +176,8 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
   description: [
     "Retrieve one record from a scientific database by id.",
     "Pass a `db` id (from `science_list_dbs`) and the record `id` returned by `science_search`.",
+    "For literature databases, a record contains bibliographic metadata and available abstracts, not the full paper.",
+    "A PDF or full-text URL in a record is only a link. Retrieve and inspect that source separately with webfetch before making claims that require the full text.",
     "Small records are returned inline; large ones are written to a file whose path is reported.",
     "Pass `format` to retrieve a file (e.g. 'cif', 'fasta', 'sdf') instead of a record —",
     "`science_list_dbs` reports which formats each database supports.",

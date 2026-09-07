@@ -147,7 +147,7 @@ export namespace TaskAttempt {
       if (current.status === "completed") return current
       return Info.parse({
         ...current,
-        previousMessageIDs: current.previousMessageIDs.length ? current.previousMessageIDs : input.previousMessageIDs,
+        previousMessageIDs: current.status === "reserved" ? input.previousMessageIDs : current.previousMessageIDs,
         status: "bound",
         updatedAt: Date.now(),
       })

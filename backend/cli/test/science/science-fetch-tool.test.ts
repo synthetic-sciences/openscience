@@ -5,7 +5,7 @@ import path from "path"
 import { ScienceFetchTool, ScienceListDbsTool } from "../../src/tool/science"
 import { Instance } from "../../src/project/instance"
 import { SessionFilesystem } from "../../src/session/filesystem"
-import { clearCache, resetRateLimits } from "../../src/science/connectors/http"
+import { clearCache, resetRateLimits, withHttpTestPolicy } from "../../src/science/connectors/http"
 import { executionSession } from "../fixture/fixture"
 
 const ctx = (sessionID: string) => ({
@@ -60,6 +60,43 @@ async function rerun(args: { db: string; id: string; format?: string }) {
 }
 
 describe("science_fetch record path", () => {
+  test("an arXiv record returns its abstract and PDF link without fetching paper text", async () => {
+    const requests: URL[] = []
+    const pdf = "https://arxiv.org/pdf/2505.15201v5"
+    const out = await withHttpTestPolicy(
+      {
+        resolveAddresses: async () => ["93.184.216.34"],
+        transport: async (input) => {
+          const url = new URL(String(input))
+          requests.push(url)
+          expect(url.hostname).toBe("export.arxiv.org")
+          expect(url.pathname).toBe("/api/query")
+          expect(url.searchParams.get("id_list")).toBe("2505.15201v5")
+          return new Response(`<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+<id>http://arxiv.org/abs/2505.15201v5</id><title>Fixture policy optimization paper</title>
+<summary>This is an abstract, not the experimental section.</summary>
+<published>2025-05-21T07:26:36Z</published><author><name>Fixture Author</name></author>
+<link title="pdf" href="${pdf}" type="application/pdf"/>
+</entry></feed>`)
+        },
+      },
+      () => run({ db: "arxiv", id: "2505.15201v5", format: "" }),
+    )
+    expect(requests).toHaveLength(1)
+    expect(JSON.parse(out.output)).toMatchObject({
+      title: "Fixture policy optimization paper",
+      summary: "This is an abstract, not the experimental section.",
+      authors: ["Fixture Author"],
+      published: "2025-05-21T07:26:36Z",
+      pdf,
+    })
+    expect(out.metadata).toMatchObject({ count: 1, disposition: "inline" })
+    expect(out.metadata).not.toHaveProperty("path")
+    const tool = await ScienceFetchTool.init()
+    expect(tool.description).toContain("not the full paper")
+  })
+
   test("a small record renders inline and writes nothing", async () => {
     stub(JSON.stringify({ pref_name: "ASPIRIN", molecule_type: "Small molecule" }))
     const out = await run({ db: "chembl", id: "CHEMBL25" })

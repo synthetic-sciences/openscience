@@ -10,6 +10,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Preserve optional/defaulted tool inputs in provider schemas and clarify inline
+  page reads versus raw downloads. Distinguish completed subagent handoffs with
+  failed attempts from unfinished work, retain empty first-turn recovery baselines,
+  and show search failures, source links and filtering warnings in the trajectory.
 - Keep successful skill loads visible in collapsed conversation activity with
   inspectable instructions and load details; distinguish searches and failures
   from actual loads. Give the Skill Library one scrolling list with fixed search

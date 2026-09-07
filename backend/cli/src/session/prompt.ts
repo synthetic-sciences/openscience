@@ -131,7 +131,9 @@ export namespace SessionPrompt {
 
   /** Build the provider schema and keep the executable Zod contract attached. */
   export function toolInputSchema(model: Provider.Model, item: Tool.Contract & { id: string }) {
-    const schema = ProviderTransform.schema(model, z.toJSONSchema(item.parameters))
+    // A model supplies input; defaults and transforms belong to validation.
+    // Output schemas incorrectly mark defaulted input fields as required.
+    const schema = ProviderTransform.schema(model, z.toJSONSchema(item.parameters, { io: "input" }))
     return jsonSchema(schema as any, {
       validate(args) {
         return Tool.validate(item.id, item, args)

@@ -409,6 +409,37 @@
   }
 }
 
+[data-component="research-search-results"] {
+  margin: 4px 12px 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-small);
+
+  [data-slot="search-result"] + [data-slot="search-result"] {
+    margin-top: 14px;
+  }
+
+  p {
+    margin: 6px 0;
+    color: var(--text-weak);
+  }
+
+  details {
+    margin-top: 8px;
+  }
+
+  summary {
+    cursor: pointer;
+    color: var(--text-weak);
+  }
+
+  pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--font-family-mono);
+  }
+}
+
 [data-component="tool-output"] {
   white-space: pre-wrap;
   padding: 4px 10px 10px;

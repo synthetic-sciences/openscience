@@ -62,7 +62,7 @@ export const europepmc: Connector = {
   id: "europepmc",
   name: "Europe PMC",
   domain: "literature",
-  description: "Life-science literature and full-text (PubMed, PMC, Agricola, patents) via EBI.",
+  description: "Life-science literature metadata and abstracts (PubMed, PMC, Agricola, patents) via EBI.",
   homepage: "https://europepmc.org",
 
   async search(query, opts) {

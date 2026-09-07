@@ -34,6 +34,7 @@ import { useCodeComponent } from "../context/code"
 import { useDialog } from "../context/dialog"
 import { useI18n } from "../context/i18n"
 import { BasicTool } from "./basic-tool"
+import { ResearchSearchTool } from "./research-search-tool"
 import { GenericTool } from "./basic-tool"
 import { Button } from "./button"
 import { createTypewriter } from "./typewriter"
@@ -1165,6 +1166,8 @@ ToolRegistry.register({
   },
 })
 
+ToolRegistry.register({ name: "research_search", render: ResearchSearchTool })
+
 ToolRegistry.register({
   name: "webfetch",
   render(props) {
@@ -1337,6 +1340,7 @@ ToolRegistry.register({
       if (outcome() === "timed_out") return "Time limit reached"
       if (outcome() === "error") return "Needs attention"
       if (outcome() === "cancelled") return i18n.t("ui.tool.status.cancelled")
+      if (Number(props.metadata.failedToolCalls) > 0) return "Completed with tool errors"
       return "Completed"
     }
     const [expanded, setExpanded] = createSignal<boolean>()

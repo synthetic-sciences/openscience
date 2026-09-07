@@ -27,7 +27,7 @@ export type TaskActivityGroup = {
 export type TraceFamily = "context" | "sources" | "commands" | "changes" | "images" | "skills" | "other"
 
 const context = new Set(["read", "list", "glob", "grep", "codesearch"])
-const sources = new Set(["webfetch", "websearch", "science_fetch", "science_search", "atlas"])
+const sources = new Set(["webfetch", "websearch", "research_search", "science_fetch", "science_search", "atlas"])
 const commands = new Set(["bash", "python", "r", "notebook", "rkernel", "modal", "compute_job"])
 const changes = new Set(["edit", "write", "multiedit", "apply_patch"])
 const images = new Set(["generate_image"])
@@ -79,6 +79,12 @@ export function collapsibleTracePart(
   if (typeof child === "string" && pendingChildRequest?.(child)) return false
   if (part.state.status !== "completed") return true
   if (part.state.metadata?.ok === false) return false
+  if (
+    part.tool === "research_search" &&
+    (part.state.metadata?.stopReason === "search_unavailable" ||
+      part.state.metadata?.stopReason === "search_output_unavailable")
+  )
+    return false
   if (part.tool === "skill" && loadedSkillName(part.state)) return false
   const outcome = part.tool === "task" ? part.state.metadata?.outcome : undefined
   if (outcome === "error" || outcome === "timed_out" || outcome === "partial") return false

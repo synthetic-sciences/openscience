@@ -39,6 +39,10 @@ Search supports fast, balanced, and deep modes. Deep requests additional page co
 
 A request for top-page content also limits enrichment to a small number of results. Page content can be missing or truncated. Read the returned warnings and counts, and request a known page directly when you need more of that source.
 
+In the conversation, expand a search to inspect source links, snippets and filtering warnings. Retrieved page text and the original search response have separate disclosures. Unavailable searches remain visible when ordinary activity is collapsed; a successful search returning zero results is labeled separately.
+
+An arXiv record fetched through `science_fetch` contains citation metadata and an abstract, not the full paper. Open its HTML or PDF and inspect the relevant passages before attributing detailed experimental results to it.
+
 ```text
 Search for the method, then read the three most relevant primary sources.
 For each, distinguish search-summary information from details verified in
@@ -62,6 +66,8 @@ Search cost is separate from the selected chat model. Using a local model does n
 | A limited fallback | State the coverage limitation and supplement the search. |
 
 A failed search is not evidence that the literature contains no relevant work.
+
+A delegated agent can finish its handoff after a search failure. Its card then reports **Completed with tool errors**, retains the failed-attempt count and preserves the source failures. This does not establish that every missing source was recovered or that the review is exhaustive. An unfinished operation, missing handoff or interrupted run still reports an incomplete outcome.
 
 ## Keep a search record
 

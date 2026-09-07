@@ -452,6 +452,100 @@ describe("skill load receipts", () => {
   })
 })
 
+describe("research search receipts", () => {
+  const search = (id: string, output: unknown, metadata: Record<string, unknown> = {}): ToolPart => ({
+    ...read(id, "", 1_000),
+    tool: "research_search",
+    state: {
+      status: "completed",
+      title: "Research search",
+      input: { query: "pass@k policy optimization" },
+      output: JSON.stringify(output),
+      metadata,
+      time: { start: 1_000, end: 1_001 },
+    },
+  })
+
+  test("shows source links, snippets and filter warnings without presenting a raw JSON wall", async () => {
+    const part = search("prt_search", {
+      status: "completed",
+      operation_id: "recorded-operation-id",
+      results: [
+        {
+          title: "Policy optimization paper",
+          url: "https://arxiv.org/abs/2505.15201",
+          snippet: "A verifiable source summary.",
+        },
+        { title: "Unsafe link remains text", url: "javascript:alert(1)" },
+        { url: "ftp://example.org/paper.txt", snippet: "Long captured excerpt. ".repeat(50) },
+      ],
+      warnings: ["search_publication_date_unknown_excluded"],
+    })
+    const host = mount(() => parts.Part({ part, message: assistant(2_000) }), empty())
+    expect(host.textContent).toContain("Found 3 sources")
+    host.querySelector<HTMLButtonElement>("button")!.click()
+    await ready(() => host.querySelector('[data-slot="search-result"] a') !== null)
+    expect(host.querySelector('[data-slot="search-result"] a')?.getAttribute("href")).toBe(
+      "https://arxiv.org/abs/2505.15201",
+    )
+    expect(host.querySelectorAll('[data-slot="search-result"] a')).toHaveLength(1)
+    await ready(() => host.textContent?.includes("A verifiable source summary.") === true)
+    expect(host.textContent).toContain("ftp://example.org/paper.txt")
+    expect(host.querySelector<HTMLDetailsElement>('[data-slot="search-excerpt"]')?.open).toBe(false)
+    expect(host.textContent).toContain("Results without a known publication date were excluded")
+    const details = host.querySelector<HTMLDetailsElement>('[data-slot="search-response-details"]')!
+    expect(details.open).toBe(false)
+    expect(details.textContent).toContain("recorded-operation-id")
+  })
+
+  test("keeps a closed unavailable search visible as a failure, distinct from an empty successful search", async () => {
+    const message = assistant(2_000)
+    const failed = search(
+      "prt_failed_search",
+      {
+        status: "partial",
+        type: "search_unavailable",
+        message: "Ace search failed with HTTP 500.",
+      },
+      { outcome: "partial", stopReason: "search_unavailable" },
+    )
+    const none = search("prt_empty_search", { status: "completed", results: [] })
+    const original = JSON.stringify(failed)
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [failed, none] },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    expect(host.querySelectorAll('[data-component="tool-part-wrapper"]')).toHaveLength(1)
+    expect(host.textContent).toContain("Research search unavailable")
+    expect(host.querySelector('[data-component="tool-trigger"]')?.getAttribute("data-outcome")).toBe("error")
+    const row = host.querySelector('[data-component="tool-part-wrapper"]')!
+    row.querySelector<HTMLButtonElement>("button")!.click()
+    await ready(() => row.textContent?.includes("Ace search failed with HTTP 500.") === true)
+    host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!.click()
+    await ready(() => host.textContent?.includes("No results returned") === true)
+    expect(JSON.stringify(failed)).toBe(original)
+  })
+
+  test("labels cancellation without implying a search-provider outage", () => {
+    const part: ToolPart = {
+      ...read("prt_cancelled_search", "", 1_000),
+      tool: "research_search",
+      state: {
+        status: "error",
+        input: { query: "pass@k" },
+        error: "The operation was aborted",
+        time: { start: 1_000, end: 1_001 },
+      },
+    }
+    const host = mount(() => parts.Part({ part, message: assistant(2_000) }), empty())
+    expect(host.textContent).toContain("Research search cancelled")
+    expect(host.textContent).not.toContain("Research search unavailable")
+    expect(host.querySelector('[data-component="tool-trigger"]')?.getAttribute("data-outcome")).toBe("cancelled")
+  })
+})
+
 describe("streaming prose", () => {
   test("marks a growing text part until its end arrives", async () => {
     const [message, setMessage] = reactive.createStore<AssistantMessage>(assistant())
@@ -872,6 +966,18 @@ describe("execution inspection", () => {
     card.querySelector<HTMLElement>("summary")!.click()
     await settle()
     expect(card.querySelector('[data-slot="delegation-current"]')?.textContent).toContain("Read new paper")
+    setPart("state", {
+      status: "completed",
+      input: part.state.input,
+      title: "Compare assays",
+      output: "The comparison is ready; one source could not be retrieved.",
+      metadata: { outcome: "completed", failedToolCalls: 1 },
+      time: { start: 1_000, end: 2_000 },
+    })
+    await settle()
+    expect(card.getAttribute("data-outcome")).toBe("completed")
+    expect(card.querySelector('[data-slot="delegation-status"]')?.textContent).toBe("Completed with tool errors")
+    expect(card.querySelector('[data-slot="delegation-metrics"]')?.textContent).toContain("1 failed")
   })
 
   test("a new model request replaces the preceding command status with its own wait", async () => {

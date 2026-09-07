@@ -156,7 +156,10 @@ const parameters = z
     format: z
       .enum(["text", "markdown", "html"])
       .default("markdown")
-      .describe("The format to return the content in (text, markdown, or html). Defaults to markdown."),
+      .describe(
+        "Inline response format (text, markdown, or html), default markdown. Omit output_path to read or convert a page. " +
+          "With output_path, raw response bytes are saved without format conversion.",
+      ),
     timeout: z
       .number()
       .positive()
@@ -168,7 +171,9 @@ const parameters = z
       .refine((value) => value === value.trim(), "output_path must not be blank or have surrounding whitespace")
       .optional()
       .describe(
-        "Optional destination. Absolute and folder paths are reduced to a new filename at the root of this session's workspace, " +
+        "Optional raw-download destination. Omit this field entirely to read a webpage or API response inline; do not fill it with a dummy filename, empty string, or null. " +
+          "Setting it saves raw response bytes, so format does not convert HTML into Markdown or text. Use an .html filename to save an HTML page. " +
+          "Absolute and folder paths are reduced to a new filename at the root of this session's workspace, " +
           "so mutable intermediate directories can never redirect a brokered write. For papers/foo.pdf, the broker downloads " +
           'to output_path:"foo.pdf"; only after ' +
           "success run sandboxed Bash: mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'. " +
@@ -837,6 +842,14 @@ function validateDownloadedFormat(target: DownloadTarget, response: Response, pr
   const html = looksLikeHTML(prefix) || contentType === "text/html" || contentType === "application/xhtml+xml"
   const htmlTarget = [".html", ".htm", ".xhtml"].includes(extension)
   if (html && !htmlTarget) {
+    if (!extension || [".md", ".markdown", ".txt"].includes(extension)) {
+      throw new Error(
+        "The server returned HTML, but output_path selected a raw download; format does not convert downloaded bytes. " +
+          'No destination file was created. To read this page, retry the same URL with format:"markdown" or format:"text" ' +
+          "and omit output_path entirely; it is optional. To save the raw HTML, use an .html output_path. " +
+          "This format mismatch alone does not establish an access block; inspect the returned page before making that claim.",
+      )
+    }
     throw new Error(
       `Downloaded response is HTML, not the requested ${extension || "data"} file. ` +
         "The URL may be a landing page, an expired redirect, or a login/consent/access interstitial. " +

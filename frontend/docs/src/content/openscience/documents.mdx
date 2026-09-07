@@ -53,6 +53,8 @@ Ask for a sample extraction before processing a large collection. State which pa
 
 For an exact URL, ask OpenScience to read the page and cite the sections it used. For discovery across many sites, use [Research search](/openscience/research-search). If a page requires a login or is not accessible, provide an authorized export or an alternative source.
 
+The `webfetch` tool reads a page inline when `output_path` is omitted; `format` selects Markdown, text or HTML. Providing `output_path` instead saves the raw response bytes without conversion. Use an `.html` destination for a saved HTML page. A format mismatch is not evidence of an access block, and HTML returned for a requested PDF or dataset is rejected rather than silently saved as that file type.
+
 A page can change after the analysis. Save the source URL, access date, document version, and any permitted local copy with the project.
 
 ## Save an evidence package
