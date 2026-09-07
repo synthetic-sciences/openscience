@@ -1043,7 +1043,9 @@ describe("workspace credential sync", () => {
     async () => {
       const { Global } = await import("../../src/global")
       expect((await OpenScience.syncCredentials({ force: true })).state).toBe("ready")
-      const expires = Date.now() + 150
+      // Far enough ahead that a loaded CI runner can write and read the store
+      // before the grant lapses; the expiry itself still fires within the wait below.
+      const expires = Date.now() + 400
       await JsonStore.update(WorkspaceCredentials.filepath, (store) => ({ ...store, expires_at: expires }))
       // Reading the store arms the expiry timer at the new deadline.
       expect(await WorkspaceCredentials.read()).toBeDefined()
@@ -1055,7 +1057,7 @@ describe("workspace credential sync", () => {
       // An unwritable data root makes publishing the expiry fail for real.
       await fs.chmod(Global.Path.data, 0o500)
       try {
-        await Bun.sleep(500)
+        await Bun.sleep(900)
         expect(reasons).toEqual([])
         expect((await JsonStore.read(WorkspaceCredentials.filepath)).expires_at).toBe(expires)
         // Still armed for the same deadline rather than dropped.
