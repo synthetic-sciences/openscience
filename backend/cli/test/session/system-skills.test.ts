@@ -4,6 +4,11 @@ import { SystemPrompt } from "../../src/session/system"
 import { Instance } from "../../src/project/instance"
 import { ProjectTrust } from "../../src/project/trust"
 import { Skill } from "../../src/skill"
+import { SkillTool } from "../../src/tool/skill"
+import type { Tool } from "../../src/tool/tool"
+import { Agent } from "../../src/agent/agent"
+import { Session } from "../../src/session"
+import { PermissionNext } from "../../src/permission/next"
 import { tmpdir } from "../fixture/fixture"
 
 async function trust() {
@@ -106,6 +111,7 @@ test("availableSkills injects call-first routing only for a known slash skill", 
       expect(known).toContain("complete requested workflow scope")
       expect(known).not.toContain("<skill-routing>")
       expect(known).not.toContain("Likely matches for this request")
+      expect(known).not.toContain("skill({query:")
       expect(upper).toContain('skill({name:"scanpy"})')
       expect(inline).toContain('skill({name:"scanpy"})')
       expect(punctuated).toContain('skill({name:"scanpy"})')
@@ -177,6 +183,54 @@ test("availableSkills blocks skill calls when the registry is empty", async () =
       const section = await SystemPrompt.availableSkills([])
       expect(section).toContain("No skills are currently available")
       expect(section).toContain("Do not call the skill tool")
+    },
+  })
+})
+
+test("availableSkills discovery guidance leads to callable exact names under the same permissions", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await writeSkill(dir, "plotly", "visualization", "Interactive charts, scatter plots, and histograms.")
+      await writeSkill(dir, "private-plots", "visualization", "Interactive charts, scatter plots, and histograms.")
+      await writeSkill(dir, "pysam", "biology", "Read and write sequence alignment files.")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const research = await Agent.get("research")
+      if (!research) throw new Error("Research agent is unavailable")
+      const permission: PermissionNext.Ruleset = [
+        { permission: "skill", pattern: "*", action: "allow" },
+        { permission: "skill", pattern: "private-plots", action: "deny" },
+      ]
+      const query = "interactive charts and histograms"
+      const section = await SystemPrompt.availableSkills(permission, query)
+      expect(section).toContain('skill({query:"<focused task>"})')
+      expect(section).toContain("load a returned exact name")
+      expect(section).not.toContain("private-plots")
+      const names = [...section.matchAll(/^- ([^:]+):/gm)].map((match) => match[1])
+      const session = await Session.create({ title: "Skill discovery contract" })
+      const tool = await SkillTool.init({ agent: { ...research, permission } })
+      const context: Tool.Context = {
+        sessionID: session.id,
+        messageID: "msg_skill_discovery",
+        agent: research.name,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => {},
+        ask: (request) => PermissionNext.ask({ ...request, sessionID: session.id, ruleset: permission }),
+      }
+      const matches = await tool.execute({ query }, context)
+      expect(matches.metadata.matches).toEqual(names)
+      expect(names).toEqual(["plotly"])
+      const loaded = await tool.execute({ name: names[0] }, context)
+      expect(loaded.metadata.name).toBe("plotly")
+      expect(loaded.output).toContain("# plotly")
+      await expect(tool.execute({ name: "private-plots" }, context)).rejects.toThrow("not found")
     },
   })
 })

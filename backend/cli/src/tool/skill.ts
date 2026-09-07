@@ -61,16 +61,17 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
   const description =
     accessibleSkills.length === 0
       ? "Load a skill to get detailed instructions for a specific task. No skills are currently available."
-      : `Load specialized instructions before work when their procedure applies. Use name for an exact known skill; otherwise use one focused query to rank relevant skills. Browse a category only when the category itself matters. Available categories: ${catalog}. Call this tool silently and apply its guidance; a user /skill invocation requests immediate use, not narration.`
-
-  const examples = accessibleSkills
-    .slice(0, 3)
-    .map((skill) => `'${skill.name}'`)
-    .join(", ")
-  const hint = examples.length > 0 ? ` (e.g., ${examples}, ...)` : ""
+      : `Discover or load specialized instructions when their procedure applies. Load with name only when the exact available name is known; do not invent a name from the task. Otherwise omit name and use one focused query, then load an exact name returned by discovery. Search and category results contain metadata, not instructions. If an unknown name accompanies a query, only discovery runs. Browse a category only when the category itself matters. Available categories: ${catalog}. Call this tool silently and apply its guidance; a user /skill invocation requests immediate use, not narration.`
 
   const parameters = z.object({
-    name: z.string().trim().min(1).optional().describe(`The skill name to load directly${hint}`),
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe(
+        "Exact available skill name to load, copied from the available skills or discovery results. Omit to search.",
+      ),
     query: z
       .string()
       .trim()
@@ -107,7 +108,8 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
             (skill) => (skill.category ?? "other").toLowerCase() === params.category!.toLowerCase(),
           )
         : accessibleSkills
-      if (params.query && !params.name) {
+      const selected = params.name ? accessibleByName.get(SkillCatalog.resolve(params.name)) : undefined
+      if (params.query && !selected) {
         const matched = searchSkills(params.query, candidates)
         if (matched.length === 0) {
           throw new Error(`No skills matched "${params.query}". Continue without a skill or try a narrower capability.`)
@@ -120,8 +122,13 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           .join("\n")
         return {
           title: `Skill matches: ${params.query}`,
-          output: `## Ranked skill matches\n\nLoad only the instructions that materially apply.\n\n${listing}`,
-          metadata: { name: params.query, dir: "", matches: matched.map((skill) => skill.name) },
+          output: `## Ranked skill matches\n\n${params.name ? `Skill "${params.name}" is unavailable. Searched the provided query instead. ` : ""}No skill instructions have been loaded. Load an applicable result by calling this tool with its exact name.\n\n${listing}`,
+          metadata: {
+            name: params.query,
+            dir: "",
+            matches: matched.map((skill) => skill.name),
+            ...(params.name ? { unavailableName: params.name } : {}),
+          },
         }
       }
 
@@ -156,9 +163,6 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           metadata: { name: "", dir: "", matches: [] },
         }
       }
-
-      const resolvedName = SkillCatalog.resolve(name)
-      const selected = accessibleByName.get(resolvedName)
 
       if (!selected) {
         const ranked = searchSkills(name, accessibleSkills, 5)

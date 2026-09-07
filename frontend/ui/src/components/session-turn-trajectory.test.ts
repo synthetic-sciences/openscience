@@ -151,10 +151,10 @@ describe("reasoning rows", () => {
     expect(row.querySelector('[data-slot="reasoning-part-header"]')).toBeNull()
     await ready(() => row.querySelector('[data-slot="reasoning-part-body"] p') !== null)
     const body = row.querySelector('[data-slot="reasoning-part-body"]')!
-    setPart("text", part.text + "\n\n**Researching cost distribution**\n\nThe entire next passage stays visible.")
+    setPart("text", part.text + "\n\n**Locating datasets**\n\nThe entire next passage stays visible.")
     await ready(() => body.textContent?.includes("The entire next passage stays visible.") === true)
     expect(row.querySelector('[data-slot="reasoning-part-body"]')).toBe(body)
-    expect(body.textContent).not.toContain("Researching cost distribution")
+    expect(body.textContent).not.toContain("Locating datasets")
     expect(row.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain("Comparing the two assay")
 
     // Completion does not replace or summarize the streamed prose.
@@ -175,6 +175,7 @@ describe("reasoning rows", () => {
       "The entire next passage stays visible.",
     )
     expect(again.querySelector('[data-slot="reasoning-part-toggle"]')).toBeNull()
+    expect(again.querySelector('[data-slot="reasoning-part-body"]')?.textContent).not.toContain("Locating datasets")
   })
 
   test("an aborted turn preserves reasoning without a misleading thinking clock", async () => {

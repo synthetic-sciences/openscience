@@ -30,7 +30,7 @@ export function stripRedactedReasoning(text: string): string {
 }
 
 const reasoningPhase =
-  /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|considering|choosing|simplifying|determining|revising|parsing|researching|optimizing|streamlining|refining|rethinking|comparing)\b[\p{L}\p{N} ,'/()_-]*$/iu
+  /^(?:planning|preparing|retrieving|locating|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|considering|choosing|simplifying|determining|revising|parsing|researching|optimizing|streamlining|refining|rethinking|comparing)\b[\p{L}\p{N} ,'/()_-]*$/iu
 const reasoningStatus =
   /^(?:planning|preparing|retrieving|exploring|inspecting|testing|verifying|checking|reviewing|analyzing|evaluating|designing|building|running|confirming|adjusting|patching|restarting|summarizing|finalizing|thinking|considering next steps)$/i
 
@@ -440,6 +440,12 @@ export function skillActivity(source: {
     : []
   if (used.length > 1) {
     return { title: `Using ${used.length} skills`, subtitle: used.join(" · ") }
+  }
+  // Models may send discovery fields with an exact load. The completed result
+  // identifies what actually happened, rather than the optional input fields.
+  if (source.status === "completed" && source.title?.startsWith("Loaded skill: ")) {
+    const name = skillName(source)
+    if (name) return { title: `Using ${name}` }
   }
   const search =
     typeof source.input?.query === "string" ||

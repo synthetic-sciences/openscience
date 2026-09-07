@@ -10,6 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Remove dataset-location phase headings from visible reasoning while retaining
+  the complete prose. Rank skill discovery by query relevance and use an explicit
+  search query to recover a guessed skill name without loading unrelated instructions.
 - Forward attached CLI authentication, server-side agent selection, command files
   and effort. Delegated commands retain bounded uploaded files in durable task
   state and deliver them into the child's workspace. Explicit OpenRouter model

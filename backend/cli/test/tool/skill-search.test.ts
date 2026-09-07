@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import type { Skill } from "../../src/skill"
+import path from "node:path"
+import { Skill } from "../../src/skill"
+import { ConfigMarkdown } from "../../src/config/markdown"
 import { searchSkills } from "../../src/tool/skill"
 
 const skills = [
@@ -23,7 +25,7 @@ const skills = [
   },
 ] as Skill.Info[]
 
-describe("skill semantic search", () => {
+describe("skill metadata search", () => {
   test("uses tags, capability names, short scientific terms and known aliases", () => {
     const indexed = [
       { ...skills[0], name: "expression-analysis", tags: ["RNA", "QC"], capability: "transcriptomics" },
@@ -40,8 +42,47 @@ describe("skill semantic search", () => {
 
   test("ranks task-relevant instructions without browsing whole categories", () => {
     expect(searchSkills("geospatial NetCDF ocean analysis", skills).map((skill) => skill.name)).toEqual([
-      "geopandas",
       "xarray",
+      "geopandas",
     ])
+  })
+
+  test("weights distinctive terms above repeated common metadata and preserves exact names", () => {
+    const indexed = [
+      ...Array.from({ length: 20 }, (_, index) => ({
+        ...skills[0],
+        name: `data-pipeline-${index}`,
+        description: "Data processing and data loading",
+        category: "data-engineering",
+        tags: ["data"],
+        capability: "data",
+      })),
+      { ...skills[0], name: "plotting", description: "Statistical visualization", category: "visualization" },
+    ]
+    expect(searchSkills("data visualization", indexed)[0].name).toBe("plotting")
+    expect(searchSkills("data-pipeline-3", indexed)[0].name).toBe("data-pipeline-3")
+    expect(searchSkills("unrelated nonexistent concept", indexed)).toEqual([])
+  })
+
+  test("the bundled catalog surfaces visualization skills for the observed missing-name query", async () => {
+    const root = path.join(import.meta.dir, "../../skills")
+    const paths = await Array.fromAsync(new Bun.Glob("**/SKILL.md").scan({ cwd: root, absolute: true }))
+    const indexed = await Promise.all(
+      paths.map(async (location) =>
+        Skill.Info.parse({ ...(await ConfigMarkdown.parse(location)).data, location, origin: "default" }),
+      ),
+    )
+    const names = searchSkills("data-visualization", indexed, 5).map((skill) => skill.name)
+    expect(names).toContain("scientific-visualization")
+    expect(names).toContain("matplotlib")
+    expect(names).not.toContain("ray-data")
+    expect(names).not.toContain("hdf5-pde-data-loading")
+    expect(names).not.toContain("training-data-pipeline")
+    expect(searchSkills("data-visualization", [...indexed].reverse(), 5).map((skill) => skill.name)).toEqual(names)
+    const plots = searchSkills(
+      "exploratory data analysis and publication-quality statistical plots for tabular Titanic dataset",
+      indexed.filter((skill) => skill.category === "visualization"),
+    )
+    expect(plots.slice(0, 3).map((skill) => skill.name)).toContain("seaborn")
   })
 })

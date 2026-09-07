@@ -90,6 +90,86 @@ test("search respects category and browsing remains bounded with explicit pagina
   })
 })
 
+test("an unknown name with a query discovers real bundled skills without loading instructions or asking permission", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "openscience.json"),
+        JSON.stringify({ skills: { paths: [path.join(import.meta.dir, "../../skills")] } }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const tool = await SkillTool.init()
+      const requests: string[] = []
+      const ctx = {
+        ...context(),
+        async ask(request) {
+          requests.push(...request.patterns)
+        },
+      } satisfies Tool.Context
+      const result = await tool.execute(
+        {
+          name: "data-visualization",
+          query: "exploratory data analysis and publication-quality statistical plots for tabular Titanic dataset",
+          category: "visualization",
+          offset: 0,
+        },
+        ctx,
+      )
+      expect(result.title).toStartWith("Skill matches:")
+      expect(result.metadata.matches.slice(0, 3)).toContain("seaborn")
+      expect(result.metadata.matches).not.toContain("ray-data")
+      expect(result.metadata.dir).toBe("")
+      expect(result.metadata).not.toHaveProperty("contentHash")
+      expect(result.output).toContain("No skill instructions have been loaded")
+      expect(requests).toEqual([])
+
+      const loaded = await tool.execute({ name: "seaborn" }, ctx)
+      expect(loaded.title).toBe("Loaded skill: seaborn")
+      expect(loaded.metadata).toHaveProperty("contentHash", expect.stringMatching(/^[a-f0-9]{64}$/))
+      expect(requests).toEqual(["seaborn"])
+      await expect(tool.execute({ name: "data-visualization" }, ctx)).rejects.toThrow(
+        'Skill "data-visualization" not found',
+      )
+      expect(requests).toEqual(["seaborn"])
+    },
+  })
+})
+
+test("an existing exact name wins over conflicting query, category and offset fields", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await Bun.write(path.join(dir, ".openscience/skills/exact/SKILL.md"), content("exact-protocol"))
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const tool = await SkillTool.init()
+      const requests: string[] = []
+      const result = await tool.execute(
+        { name: "exact-protocol", query: "unrelated work", category: "nonexistent", offset: 400 },
+        {
+          ...context(),
+          async ask(request) {
+            requests.push(...request.patterns)
+          },
+        },
+      )
+      expect(result.title).toBe("Loaded skill: exact-protocol")
+      expect(result.metadata.matches).toEqual([])
+      expect(requests).toEqual(["exact-protocol"])
+    },
+  })
+})
+
 test("loads current instructions and grants only the selected bundle read access", async () => {
   await using library = await tmpdir({
     init: async (dir) => {

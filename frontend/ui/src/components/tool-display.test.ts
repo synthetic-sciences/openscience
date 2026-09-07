@@ -112,6 +112,22 @@ describe("skillName", () => {
         status: "completed",
       }),
     ).toEqual({ title: "Found 2 relevant skills" })
+    expect(
+      skillActivity({
+        input: { name: "exploratory-data-analysis", query: "Titanic plots", category: "visualization", offset: 0 },
+        metadata: { name: "exploratory-data-analysis", matches: [] },
+        title: "Loaded skill: exploratory-data-analysis",
+        status: "completed",
+      }),
+    ).toEqual({ title: "Using exploratory-data-analysis" })
+    expect(
+      skillActivity({
+        input: { name: "data-visualization", query: "Titanic plots" },
+        metadata: { name: "Titanic plots", dir: "", matches: ["exploratory-data-analysis", "matplotlib"] },
+        title: "Skill matches: Titanic plots",
+        status: "completed",
+      }),
+    ).toEqual({ title: "Found 2 relevant skills" })
     expect(skillActivity({ metadata: { names: ["scientific-schematics", "ml-paper-writing"] } })).toEqual({
       title: "Using 2 skills",
       subtitle: "scientific-schematics · ml-paper-writing",
@@ -279,6 +295,14 @@ describe("provider reasoning presentation", () => {
     expect(reasoningDisplayText("  Received text with original whitespace.\n\n")).toBe(
       "  Received text with original whitespace.\n\n",
     )
+  })
+
+  test("removes the reported dataset-location phase while preserving its complete reasoning", () => {
+    const prose =
+      "I need to find a suitable dataset for the user's request. It looks like there aren't any files available, but I could use an online dataset from Seaborn. Since the user wants to generate plots, I’ll need to retrieve and analyze that data, then save the outputs, maybe from scratch. I might need to enhance my skills for data visualization too. Also, I’ll download the canonical Titanic CSV from a known URL. Let's fetch that!"
+    expect(reasoningDisplayText(`**Locating datasets**\n\n${prose}[REDACTED]`)).toBe(prose)
+    const statement = "**Locating the sample revealed a mislabeled tube.**\nThe label needs verification."
+    expect(reasoningDisplayText(statement)).toBe(statement)
   })
 
   test("suppresses exact status-only labels without guessing which standalone passages are labels", () => {

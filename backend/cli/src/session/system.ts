@@ -148,7 +148,7 @@ export namespace SystemPrompt {
         ...(invoked.length ? [] : likely),
         invoked.length
           ? "Use only the explicitly invoked skills for this request unless one of their loaded instructions names a required dependency."
-          : "Load a likely match directly, or browse a relevant category when the shortlist is insufficient. Do not guess other names from static routing tables.",
+          : 'Load a likely match by its listed exact name. If no exact name is known or the shortlist is insufficient, use skill({query:"<focused task>"}) and load a returned exact name. Browse a category only when category browsing is useful. Do not invent names from task descriptions or static routing tables.',
         "</available-skills>",
         ...invoke,
       ].join("\n"),

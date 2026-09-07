@@ -45,26 +45,43 @@ export function searchSkills(query: string, skills: Skill.Info[], limit = 8) {
   if (!query) return []
   const wanted = terms(query)
   const resolved = SkillCatalog.resolve(query)
-  return skills
-    .map((skill) => {
-      const name = terms(skill.name)
-      const description = terms(skill.description)
-      const category = terms(skill.category ?? "")
-      const tags = terms((skill.tags ?? []).join(" "))
-      const capability = terms(skill.capability ?? "")
-      let score = skill.name.toLowerCase() === resolved ? 100 : 0
-      if (skill.name.toLowerCase().includes(query)) score += 30
+  const indexed = skills.map((skill) => ({
+    skill,
+    fields: [
+      { terms: terms(skill.name), weight: 8 },
+      { terms: terms(skill.description), weight: 3 },
+      { terms: terms(skill.category ?? ""), weight: 2 },
+      { terms: terms((skill.tags ?? []).join(" ")), weight: 5 },
+      { terms: terms(skill.capability ?? ""), weight: 5 },
+    ],
+  }))
+  const frequency = new Map<string, number>()
+  for (const entry of indexed) {
+    for (const term of new Set(entry.fields.flatMap((field) => [...field.terms]))) {
+      frequency.set(term, (frequency.get(term) ?? 0) + 1)
+    }
+  }
+  return indexed
+    .map(({ skill, fields }) => {
+      let score = 0
       for (const term of wanted) {
-        if (name.has(term)) score += 8
-        if (description.has(term)) score += 2
-        if (category.has(term)) score += 1
-        if (tags.has(term)) score += 5
-        if (capability.has(term)) score += 5
+        // Count each term once per skill. Repeating a common word such as
+        // "data" across metadata must not swamp a more specific task term.
+        const weight = Math.max(...fields.map((field) => (field.terms.has(term) ? field.weight : 0)))
+        score += weight * Math.log(1 + skills.length / (1 + (frequency.get(term) ?? 0)))
       }
-      return { skill, score }
+      const exact = skill.name.toLowerCase() === resolved
+      const phrase = skill.name.toLowerCase().includes(query)
+      return { skill, score, exact, phrase }
     })
-    .filter((entry) => entry.score > 0)
-    .toSorted((a, b) => b.score - a.score || a.skill.name.localeCompare(b.skill.name))
+    .filter((entry) => entry.exact || entry.phrase || entry.score > 0)
+    .toSorted(
+      (a, b) =>
+        Number(b.exact) - Number(a.exact) ||
+        Number(b.phrase) - Number(a.phrase) ||
+        b.score - a.score ||
+        a.skill.name.localeCompare(b.skill.name),
+    )
     .slice(0, limit)
     .map((entry) => entry.skill)
 }

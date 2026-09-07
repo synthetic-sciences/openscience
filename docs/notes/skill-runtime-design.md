@@ -14,10 +14,18 @@ matches. Explicit `/skill-name` requests keep their existing priority over
 suggested workflows.
 
 Prompt suggestions and `skill(query=...)` use the same deterministic lexical
-search across names, descriptions, tags and capabilities. Exact names and known
-aliases win. Search is not an embedding service or a claim of semantic reasoning;
+search across names, descriptions, tags and capabilities. Terms that occur in
+fewer skill entries carry more weight, so a common word such as “data” does not
+dominate a specific capability. Exact names and known aliases win. Search is not
+an embedding service or a claim of semantic reasoning;
 it adds no model call, network dependency or registry. A category can restrict a
 query. Browsing returns at most 40 entries and an explicit next-page offset.
+
+Use an exact discovered name to load instructions. When a model supplies an
+unavailable name alongside a search query, the tool returns clearly labeled
+discovery results for that query; it does not load a guessed substitute. A known
+exact name still loads directly, even if optional search fields are also present.
+An unavailable name without a query remains an error with relevant suggestions.
 
 Loading reads the selected `SKILL.md` again, validates its current frontmatter,
 and returns its instructions with a base directory for relative references. The
