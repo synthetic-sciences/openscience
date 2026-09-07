@@ -17,7 +17,7 @@ test("model speed toggles through model options and reaches the prompt request",
   const send = async (tier?: string) => {
     const request = page.waitForRequest((request) => {
       const path = new URL(request.url()).pathname
-      return request.method() === "POST" && /\/session\/[^/]+\/message$/.test(path)
+      return request.method() === "POST" && path === "/runtime/prompt"
     })
     const token = `E2E_OK_${Date.now()}`
     const prompt = page.locator(promptSelector)

@@ -15,7 +15,7 @@ test("thinking effort and speed reach the prompt request through the settings po
   const send = async (options: { variant?: string; tier?: string } = {}) => {
     const request = page.waitForRequest((request) => {
       const path = new URL(request.url()).pathname
-      return request.method() === "POST" && /\/session\/[^/]+\/message$/.test(path)
+      return request.method() === "POST" && path === "/runtime/prompt"
     })
     const token = `E2E_OK_${Date.now()}`
     const prompt = page.locator(promptSelector)
