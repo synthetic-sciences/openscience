@@ -5,22 +5,12 @@ type Keys = keyof typeof en
 export const dict = {
   "ui.sessionTurn.steps.show": "顯示執行軌跡",
   "ui.sessionTurn.steps.hide": "隱藏執行軌跡",
-  "ui.messagePart.reasoning.label": "Reasoning",
-  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
-  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
-  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
-  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
-  "ui.sessionTurn.progress.stalledHint":
-    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "評論 ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "正在評論 ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "新增評論",
   "ui.lineComment.submit": "評論",
-  "ui.sessionTurn.trace.title": "執行軌跡",
-  "ui.sessionTurn.trace.detail": "已記錄的工具活動；模型摘要由供應商產生。",
   "ui.sessionTurn.summary.response": "回覆",
   "ui.sessionTurn.diff.showMore": "顯示更多變更 ({{count}})",
 
@@ -46,7 +36,6 @@ export const dict = {
   "ui.sessionTurn.progress.stillOpen": "提供者尚未開始回應；請求仍處於開啟狀態。",
 
   "ui.messagePart.diagnostic.error": "錯誤",
-  "ui.messagePart.reasoning.providerSummary": "模型摘要",
   "ui.messagePart.title.edit": "編輯",
   "ui.messagePart.title.write": "寫入",
   "ui.messagePart.option.typeOwnAnswer": "輸入自己的答案",
@@ -95,7 +84,6 @@ export const dict = {
   "ui.tool.running.edit": "編輯中",
   "ui.tool.running.write": "寫入中",
   "ui.tool.running.patch": "套用修補程式中",
-  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "執行中",
   "ui.tool.status.done": "完成",
   "ui.tool.status.error": "失敗",
@@ -109,7 +97,6 @@ export const dict = {
   "ui.tool.summary.exit": "結束代碼 {{code}}",
   "ui.tool.calls.one": "{{count}} 次呼叫",
   "ui.tool.calls.other": "{{count}} 次呼叫",
-  "ui.messagePart.reasoning.thinking": "思考中（{{duration}}）",
 
   "ui.common.file.one": "個檔案",
   "ui.common.file.other": "個檔案",

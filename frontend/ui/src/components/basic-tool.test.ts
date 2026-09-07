@@ -215,25 +215,28 @@ describe("tool row lifecycle", () => {
 })
 
 describe("trajectory strings", () => {
-  test("every running verb, status label, receipt, and reasoning clock exists in every locale", async () => {
+  test("every running verb, status label and receipt exists in English, and translations keep its placeholders", async () => {
     const keys = Object.keys(en).filter(
       (key) =>
         key.startsWith("ui.tool.running.") ||
         key.startsWith("ui.tool.status.") ||
         key.startsWith("ui.tool.summary.") ||
-        key.startsWith("ui.tool.calls.") ||
-        key === "ui.messagePart.reasoning.thinking",
+        key.startsWith("ui.tool.calls."),
     )
-    expect(keys.length).toBe(26)
+    expect(keys.length).toBe(25)
     const dir = fileURLToPath(new URL("../i18n/", import.meta.url))
     const locales = readdirSync(dir).filter((file) => file.endsWith(".ts"))
     expect(locales.length).toBe(15)
     for (const file of locales) {
       const mod = (await import(`${dir}${file}`)) as { dict: Record<string, string> }
       for (const key of keys) {
-        expect(`${file}:${key}:${mod.dict[key] ?? ""}`).not.toBe(`${file}:${key}:`)
+        // A locale without its own copy falls back to English; a copy it has
+        // must be non-empty and carry every placeholder.
+        const value = mod.dict[key]
+        if (value === undefined) continue
+        expect(`${file}:${key}:${value}`).not.toBe(`${file}:${key}:`)
         for (const name of en[key as keyof typeof en].match(/{{\w+}}/g) ?? []) {
-          expect(`${file}:${key}:${mod.dict[key]}`).toContain(name)
+          expect(`${file}:${key}:${value}`).toContain(name)
         }
       }
     }

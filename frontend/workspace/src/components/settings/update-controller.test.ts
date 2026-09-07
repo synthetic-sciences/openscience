@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { DesktopUpdateState, Platform } from "@/context/platform"
-import { createUpdateController, formatUpdateBytes } from "./update-controller"
+import { createUpdateController, formatUpdateBytes, pollDelay } from "./update-controller"
+
+const flush = async () => {
+  for (let i = 0; i < 4; i++) await Promise.resolve()
+}
 
 function platform(input: { states: DesktopUpdateState[]; calls: string[] }): Platform {
   return {
@@ -200,6 +204,61 @@ describe("desktop update controller", () => {
     finishApply()
     await applying
     expect(controller.state.phase).toBe("restarting")
+  })
+
+  test("keeps half-second reads for twenty polls, then backs off to a thirty-second ceiling", async () => {
+    const delays: number[] = []
+    const queued: Array<() => void> = []
+    const states: DesktopUpdateState[] = Array.from({ length: 40 }, () => ({ phase: "downloading", version: "2.0.54" }))
+    const controller = createUpdateController(platform({ states, calls: [] }), {
+      schedule: (run, delay) => {
+        delays.push(delay)
+        queued.push(run)
+        return delays.length as unknown as ReturnType<typeof setTimeout>
+      },
+    })
+    controller.start()
+    await flush()
+    for (let i = 0; i < 27; i++) {
+      queued.shift()?.()
+      await flush()
+    }
+    expect(controller.state.phase).toBe("downloading")
+    expect(delays.slice(0, 20)).toEqual(Array.from({ length: 20 }, () => 500))
+    expect(delays.slice(20, 28)).toEqual([1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000])
+    expect(pollDelay(0)).toBe(500)
+    expect(pollDelay(19)).toBe(500)
+    expect(pollDelay(20)).toBe(1000)
+    expect(pollDelay(60)).toBe(30000)
+
+    // A user action means the supervisor is expected to move again soon.
+    await controller.stage()
+    expect(delays.at(-1)).toBe(500)
+  })
+
+  test("stops polling a blocked restart until the user acts", async () => {
+    const calls: string[] = []
+    const queued: Array<() => void> = []
+    const candidate = platform({
+      states: [{ phase: "restart_blocked", version: "2.0.54", error: "Close the running installer first" }],
+      calls,
+    })
+    const controller = createUpdateController(candidate, {
+      schedule: (run) => {
+        queued.push(run)
+        return queued.length as unknown as ReturnType<typeof setTimeout>
+      },
+    })
+    controller.start()
+    await flush()
+    expect(controller.state.phase).toBe("restart_blocked")
+    expect(controller.state.error).toBe("Close the running installer first")
+    expect(queued).toHaveLength(0)
+
+    await controller.apply()
+    expect(controller.state.phase).toBe("restarting")
+    expect(queued).toHaveLength(1)
+    expect(calls).toEqual(["state", "apply"])
   })
 
   test("formats progress with compact tabular-friendly values", () => {

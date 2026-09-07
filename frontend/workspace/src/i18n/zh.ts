@@ -255,15 +255,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "工作区启动脚本",
   "dialog.project.edit.worktree.startup.description": "在创建新的工作区 (worktree) 后运行。",
   "dialog.project.edit.worktree.startup.placeholder": "例如 bun install",
-  "context.breakdown.title": "上下文拆分",
-  "context.breakdown.note": "输入 token 的大致拆分。“其他”包含工具定义和开销。",
-  "context.breakdown.system": "系统",
   "context.breakdown.user": "用户",
   "context.breakdown.assistant": "助手",
   "context.breakdown.tool": "工具调用",
-  "context.breakdown.other": "其他",
 
-  "context.systemPrompt.title": "系统提示词",
   "context.rawMessages.title": "原始消息",
 
   "context.stats.session": "会话",

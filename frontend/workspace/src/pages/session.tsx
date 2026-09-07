@@ -1218,7 +1218,7 @@ export default function Page(): JSX.Element {
                           This remains outside contentRef so the ResizeObserver measures
                           only the growing message list. */}
                       <Show when={activeSession()?.parentID}>
-                        <div class="sticky top-0 z-30 bg-background-stronger w-full">
+                        <div class="session-delegated-bar sticky top-0 z-30 bg-background-stronger w-full">
                           <div class="w-full px-4 md:px-6 md:max-w-200 md:mx-auto">
                             <div class="min-h-12 py-1.5 flex items-center gap-2 border-b border-border-weak-base">
                               <div class="min-w-0 flex-1">

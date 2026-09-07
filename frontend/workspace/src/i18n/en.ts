@@ -257,19 +257,14 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "Runs after creating a new workspace (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "E.g. bun install",
 
-  "context.breakdown.title": "Context breakdown",
-  "context.breakdown.note": 'Approximate breakdown of input tokens. "other" includes tool definitions and overhead.',
-  "context.breakdown.system": "System",
   "context.breakdown.user": "User",
   "context.breakdown.assistant": "Assistant",
   "context.breakdown.tool": "Tool calls",
-  "context.breakdown.other": "Other",
   "context.composition.title": "Available input text (estimate)",
   "context.composition.instructions": "Custom instructions",
   "context.composition.note":
     "Approximate shares of loaded text before this call, using four characters per token. Excludes this response, complete system instructions, tool definitions, media, and server-side context changes. These shares do not measure provider token usage.",
 
-  "context.systemPrompt.title": "System prompt",
   "context.rawMessages.title": "Raw messages",
 
   "context.stats.session": "Session",

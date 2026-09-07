@@ -184,6 +184,23 @@ type TurnToolPart = {
   state?: { status?: string; title?: string; input?: Record<string, unknown>; metadata?: Record<string, unknown> }
 }
 
+const loadedPrefix = "Loaded skill: "
+
+/** The skill a completed Skill call delivered, if any. A load records the
+ * skill's name with its directory and instruction hash; a discovery result
+ * carries the query as `name` and no directory, so it never counts. The title
+ * prefix remains the fallback for transcripts recorded before that metadata. */
+function loadedSkill(state: TurnToolPart["state"]) {
+  if (state?.status !== "completed" || state.metadata?.ok === false) return
+  const metadata = state.metadata ?? {}
+  const name = typeof metadata.name === "string" ? metadata.name.trim() : ""
+  const recorded = typeof metadata.contentHash === "string" || (typeof metadata.dir === "string" && metadata.dir !== "")
+  if (recorded && name) return name
+  const title = state.title?.startsWith(loadedPrefix) ? state.title.slice(loadedPrefix.length).trim() : ""
+  if (!title) return
+  return name || title
+}
+
 /** Read completed Skill-tool calls after the latest user message. This is a UI
  * state only; it never grants authority or persists across turns. */
 export function loadedSkillNamesThisTurn(
@@ -195,14 +212,9 @@ export function loadedSkillNamesThisTurn(
   const names: string[] = []
   for (const message of messages.slice(start)) {
     for (const part of parts[message.id] ?? []) {
-      if (part.type !== "tool" || part.tool !== "skill" || part.state?.status !== "completed") continue
-      if (part.state.metadata?.ok === false) continue
-      if (!part.state.title?.startsWith("Loaded skill: ")) continue
-      const title = part.state.title.slice("Loaded skill: ".length).trim()
-      if (!title) continue
-      const name = part.state.metadata?.name
-      const value = typeof name === "string" && name.trim() ? name.trim() : title
-      if (names.includes(value)) continue
+      if (part.type !== "tool" || part.tool !== "skill") continue
+      const value = loadedSkill(part.state)
+      if (!value || names.includes(value)) continue
       names.push(value)
     }
   }

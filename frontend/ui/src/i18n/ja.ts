@@ -1,22 +1,12 @@
 export const dict = {
   "ui.sessionTurn.steps.show": "実行トレースを表示",
   "ui.sessionTurn.steps.hide": "実行トレースを非表示",
-  "ui.messagePart.reasoning.label": "Reasoning",
-  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
-  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
-  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
-  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
-  "ui.sessionTurn.progress.stalledHint":
-    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "へのコメント",
   "ui.lineComment.editorLabel.prefix": "",
   "ui.lineComment.editorLabel.suffix": "へのコメントを作成中",
   "ui.lineComment.placeholder": "コメントを追加",
   "ui.lineComment.submit": "コメント",
-  "ui.sessionTurn.trace.title": "実行トレース",
-  "ui.sessionTurn.trace.detail": "記録されたツール操作。モデルの要約はプロバイダーが生成します。",
   "ui.sessionTurn.summary.response": "応答",
   "ui.sessionTurn.diff.showMore": "さらに変更を表示 ({{count}})",
 
@@ -42,7 +32,6 @@ export const dict = {
   "ui.sessionTurn.progress.stillOpen": "プロバイダーはまだ応答を開始していません。リクエストはまだ開いています。",
 
   "ui.messagePart.diagnostic.error": "エラー",
-  "ui.messagePart.reasoning.providerSummary": "モデルの要約",
   "ui.messagePart.title.edit": "編集",
   "ui.messagePart.title.write": "作成",
   "ui.messagePart.option.typeOwnAnswer": "自分の回答を入力",
@@ -91,7 +80,6 @@ export const dict = {
   "ui.tool.running.edit": "編集中",
   "ui.tool.running.write": "書き込み中",
   "ui.tool.running.patch": "パッチ適用中",
-  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "実行中",
   "ui.tool.status.done": "完了",
   "ui.tool.status.error": "失敗",
@@ -105,7 +93,6 @@ export const dict = {
   "ui.tool.summary.exit": "終了コード {{code}}",
   "ui.tool.calls.one": "{{count}}回",
   "ui.tool.calls.other": "{{count}}回",
-  "ui.messagePart.reasoning.thinking": "思考中 ({{duration}})",
 
   "ui.common.file.one": "ファイル",
   "ui.common.file.other": "ファイル",

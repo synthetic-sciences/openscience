@@ -69,6 +69,12 @@
   padding-top: 18px;
 }
 
+/* A delegated session pins its header above the transcript; each turn's
+   trace control pins below it instead of underneath it. */
+.session-scroller:has(> .session-delegated-bar) {
+  --session-title-height: 3rem;
+}
+
 .session-scroller [data-slot="session-turn-sticky"] {
   position: static;
   width: 100%;

@@ -85,6 +85,19 @@ const assets = createContext<{
 }>()
 const writtenFiles = createContext<() => readonly string[]>()
 
+/**
+ * The host-path resolvers file links run through, for surfaces that list
+ * recorded receipts outside Markdown. Absent without a `MarkdownImages`
+ * ancestor, in which case callers keep their own conservative rules.
+ */
+export function useMarkdownFileResolvers() {
+  const shared = useContext(assets)
+  return {
+    resolveFile: shared?.resolveFile,
+    resolveFileReceipt: shared?.resolveFileReceipt,
+  }
+}
+
 /** Scope bare chat filenames to this turn's exact completed write receipts. */
 export function MarkdownFileScope(props: ParentProps<{ paths: readonly string[] }>) {
   return <writtenFiles.Provider value={() => props.paths}>{props.children}</writtenFiles.Provider>

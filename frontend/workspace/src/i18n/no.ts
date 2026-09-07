@@ -256,15 +256,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Oppstartsskript for arbeidsområde",
   "dialog.project.edit.worktree.startup.description": "Kjører etter at et nytt arbeidsområde (worktree) er opprettet.",
   "dialog.project.edit.worktree.startup.placeholder": "f.eks. bun install",
-  "context.breakdown.title": "Kontekstfordeling",
-  "context.breakdown.note": 'Omtrentlig fordeling av input-tokens. "Annet" inkluderer verktøydefinisjoner og overhead.',
-  "context.breakdown.system": "System",
   "context.breakdown.user": "Bruker",
   "context.breakdown.assistant": "Assistent",
   "context.breakdown.tool": "Verktøykall",
-  "context.breakdown.other": "Annet",
 
-  "context.systemPrompt.title": "Systemprompt",
   "context.rawMessages.title": "Rå meldinger",
 
   "context.stats.session": "Sesjon",

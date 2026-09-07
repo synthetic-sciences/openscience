@@ -1,14 +1,6 @@
 export const dict = {
   "ui.sessionTurn.steps.show": "แสดงร่องรอยการทำงาน",
   "ui.sessionTurn.steps.hide": "ซ่อนร่องรอยการทำงาน",
-  "ui.messagePart.reasoning.label": "Reasoning",
-  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
-  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
-  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
-  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
-  "ui.sessionTurn.progress.stalledHint":
-    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "แสดงความคิดเห็นบน ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "กำลังแสดงความคิดเห็นบน ",
@@ -16,8 +8,6 @@ export const dict = {
   "ui.lineComment.placeholder": "เพิ่มความคิดเห็น",
   "ui.lineComment.submit": "แสดงความคิดเห็น",
 
-  "ui.sessionTurn.trace.title": "ร่องรอยการทำงาน",
-  "ui.sessionTurn.trace.detail": "กิจกรรมเครื่องมือที่บันทึกไว้; สรุปของโมเดลสร้างโดยผู้ให้บริการ",
   "ui.sessionTurn.summary.response": "การตอบสนอง",
   "ui.sessionTurn.diff.showMore": "แสดงการเปลี่ยนแปลงเพิ่มเติม ({{count}})",
 
@@ -43,7 +33,6 @@ export const dict = {
   "ui.sessionTurn.progress.stillOpen": "ผู้ให้บริการยังไม่เริ่มตอบกลับ คำขอยังเปิดอยู่",
 
   "ui.messagePart.diagnostic.error": "ข้อผิดพลาด",
-  "ui.messagePart.reasoning.providerSummary": "สรุปของโมเดล",
   "ui.messagePart.title.edit": "แก้ไข",
   "ui.messagePart.title.write": "เขียน",
   "ui.messagePart.option.typeOwnAnswer": "พิมพ์คำตอบของคุณเอง",
@@ -92,7 +81,6 @@ export const dict = {
   "ui.tool.running.edit": "กำลังแก้ไข",
   "ui.tool.running.write": "กำลังเขียน",
   "ui.tool.running.patch": "กำลังใช้แพตช์",
-  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "กำลังทำงาน",
   "ui.tool.status.done": "เสร็จสิ้น",
   "ui.tool.status.error": "ล้มเหลว",
@@ -106,7 +94,6 @@ export const dict = {
   "ui.tool.summary.exit": "รหัสออก {{code}}",
   "ui.tool.calls.one": "{{count}} ครั้ง",
   "ui.tool.calls.other": "{{count}} ครั้ง",
-  "ui.messagePart.reasoning.thinking": "กำลังคิด ({{duration}})",
 
   "ui.common.file.one": "ไฟล์",
   "ui.common.file.other": "ไฟล์",

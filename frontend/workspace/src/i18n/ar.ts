@@ -253,15 +253,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "سكريبت بدء تشغيل مساحة العمل",
   "dialog.project.edit.worktree.startup.description": "يتم تشغيله بعد إنشاء مساحة عمل جديدة (شجرة عمل).",
   "dialog.project.edit.worktree.startup.placeholder": "مثال: bun install",
-  "context.breakdown.title": "تفصيل السياق",
-  "context.breakdown.note": 'تفصيل تقريبي لرموز الإدخال. يشمل "أخرى" تعريفات الأدوات والنفقات العامة.',
-  "context.breakdown.system": "النظام",
   "context.breakdown.user": "المستخدم",
   "context.breakdown.assistant": "المساعد",
   "context.breakdown.tool": "استدعاءات الأداة",
-  "context.breakdown.other": "أخرى",
 
-  "context.systemPrompt.title": "موجه النظام",
   "context.rawMessages.title": "الرسائل الخام",
 
   "context.stats.session": "جلسة",

@@ -1,5 +1,4 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import type { JSX } from "solid-js"
 import { createServer } from "vite"

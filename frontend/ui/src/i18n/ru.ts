@@ -1,22 +1,12 @@
 export const dict = {
   "ui.sessionTurn.steps.show": "Показать трассировку выполнения",
   "ui.sessionTurn.steps.hide": "Скрыть трассировку выполнения",
-  "ui.messagePart.reasoning.label": "Reasoning",
-  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
-  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
-  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
-  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
-  "ui.sessionTurn.progress.stalledHint":
-    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "Комментарий к ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Комментирование: ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Добавить комментарий",
   "ui.lineComment.submit": "Комментировать",
-  "ui.sessionTurn.trace.title": "Трассировка выполнения",
-  "ui.sessionTurn.trace.detail": "Записанные действия инструментов; сводки модели генерируются поставщиком.",
   "ui.sessionTurn.summary.response": "Ответ",
   "ui.sessionTurn.diff.showMore": "Показать ещё изменений ({{count}})",
 
@@ -42,7 +32,6 @@ export const dict = {
   "ui.sessionTurn.progress.stillOpen": "Провайдер ещё не начал отвечать; запрос всё ещё открыт.",
 
   "ui.messagePart.diagnostic.error": "Ошибка",
-  "ui.messagePart.reasoning.providerSummary": "Сводка модели",
   "ui.messagePart.title.edit": "Редактировать",
   "ui.messagePart.title.write": "Написать",
   "ui.messagePart.option.typeOwnAnswer": "Введите свой ответ",
@@ -91,7 +80,6 @@ export const dict = {
   "ui.tool.running.edit": "Редактирование",
   "ui.tool.running.write": "Запись",
   "ui.tool.running.patch": "Применение патча",
-  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "Выполняется",
   "ui.tool.status.done": "Готово",
   "ui.tool.status.error": "Ошибка",
@@ -105,7 +93,6 @@ export const dict = {
   "ui.tool.summary.exit": "код выхода {{code}}",
   "ui.tool.calls.one": "{{count}} вызов",
   "ui.tool.calls.other": "{{count}} вызовов",
-  "ui.messagePart.reasoning.thinking": "Размышление ({{duration}})",
 
   "ui.common.file.one": "файл",
   "ui.common.file.other": "файлов",

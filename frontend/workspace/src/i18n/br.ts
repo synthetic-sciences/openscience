@@ -251,16 +251,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "Executa após criar um novo espaço de trabalho (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "ex: bun install",
 
-  "context.breakdown.title": "Detalhamento do Contexto",
-  "context.breakdown.note":
-    'Detalhamento aproximado dos tokens de entrada. "Outros" inclui definições de ferramentas e overhead.',
-  "context.breakdown.system": "Sistema",
   "context.breakdown.user": "Usuário",
   "context.breakdown.assistant": "Assistente",
   "context.breakdown.tool": "Chamadas de Ferramentas",
-  "context.breakdown.other": "Outros",
 
-  "context.systemPrompt.title": "Prompt do Sistema",
   "context.rawMessages.title": "Mensagens brutas",
 
   "context.stats.session": "Sessão",

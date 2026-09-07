@@ -28,6 +28,27 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   point at the real poster and schematic paths, Hugging Face Jobs drops a
   `--filter-method` flag that `generate-responses.py` does not accept, and Open
   Targets notes that its tests replay recorded fixtures.
+- Keep an explicit Show/Hide reasoning-and-activity control, with its chevron
+  and expanded state, while a turn is working; report request and retry status
+  beside it, and pin the control inside the turn so a long trace stays
+  collapsible from wherever the reader is.
+- Label delegated work by what the runtime recorded: preparing until a child
+  session exists, queued or running only once one does, and a delegation that
+  failed to start kept distinct from a worker that failed, returned a partial
+  result or reached its time limit.
+- Offer the files a shell command or kernel changed as turn outputs, taken from
+  the filesystem diffs recorded after each step and resolved like other file
+  links, so nothing is guessed from command text.
+- Present a turn that ended early as stopped, with the recorded reason (a Stop
+  press, a named interruption, a wait the runtime gave up on, or a provider
+  failure), the outputs kept and the operations left pending. Nothing is
+  rolled back or resumed automatically.
+- Back off desktop update polling after twenty reads, up to thirty seconds
+  between reads, and stop polling a blocked restart until the user acts.
+- Remove unused interface strings and the English placeholders copied into
+  non-English locales, which now fall back to English. Keep onboarding copy
+  host-neutral, bound the browser sign-in wait, and recognise loaded skills
+  from their recorded metadata rather than the receipt title alone.
 - Wait for scientific canary artifact delivery before validating a completed
   remote computation, while preserving bounded waits and resource cleanup.
 - Start desktop onboarding with Synthetic Sciences sign-in and workspace selection,

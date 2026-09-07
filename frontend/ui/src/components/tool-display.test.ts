@@ -7,6 +7,7 @@ import {
   humanizeToolName,
   lineCount,
   loadedSkillName,
+  pendingOperations,
   reasoningDisplayText,
   runningLabel,
   sentenceCaseLabel,
@@ -18,6 +19,8 @@ import {
   skillName,
   stripBashMetadata,
   stripRedactedReasoning,
+  taskOutcome,
+  taskPhase,
   toolErrorDisplay,
   toolOutcome,
   toolSummary,
@@ -681,5 +684,214 @@ describe("toolSummary", () => {
     expect(toolSummary({ tool: "task", status: "completed", output: "findings" })).toEqual([])
     expect(lineCount("")).toBe(0)
     expect(lineCount("one\ntwo\n")).toBe(2)
+  })
+})
+
+describe("sessionErrorDisplay", () => {
+  test("presents a Stop press as stopped at the user's request, keeping completed work", () => {
+    expect(
+      sessionErrorDisplay({ name: "MessageAbortedError", data: { message: "The operation was aborted." } }),
+    ).toEqual({
+      state: "stopped",
+      reason: "user",
+      title: "Stopped",
+      message: "Stopped at your request. Completed steps and written files are kept; nothing continues automatically.",
+    })
+    expect(sessionErrorDisplay({ name: "MessageAbortedError", data: { message: "" } })).toMatchObject({
+      state: "stopped",
+      reason: "user",
+    })
+  })
+
+  test("keeps the recorded cause of a named interruption", () => {
+    const message =
+      "Interrupted: credentials changed (workspace-sync.expired) and every runtime that inherited the previous snapshot was stopped"
+    expect(sessionErrorDisplay({ name: "MessageAbortedError", data: { message } })).toEqual({
+      state: "stopped",
+      reason: "interrupted",
+      title: "Stopped",
+      message,
+    })
+  })
+
+  test("separates a wait the runtime gave up on from a provider that stopped answering", () => {
+    const stopped = (code: string, message: string) => ({
+      name: "APIError",
+      data: { message, isRetryable: false, metadata: { code, openscience_state: "stopped", action: "resubmit" } },
+    })
+    expect(
+      sessionErrorDisplay(stopped("provider_request_timeout", "The model request timed out waiting for new output.")),
+    ).toEqual({
+      state: "stopped",
+      reason: "timeout",
+      title: "Stopped",
+      message: "The model request timed out waiting for new output.",
+    })
+    expect(
+      sessionErrorDisplay(stopped("managed_request_timeout", "The managed response stopped making progress.")),
+    ).toMatchObject({ state: "stopped", reason: "timeout" })
+    expect(
+      sessionErrorDisplay(
+        stopped("managed_response_incomplete", "The managed response ended before confirming completion."),
+      ),
+    ).toEqual({
+      state: "stopped",
+      reason: "provider",
+      title: "Stopped",
+      message: "The managed response ended before confirming completion.",
+    })
+  })
+
+  test("leaves ordinary failures as errors", () => {
+    expect(
+      sessionErrorDisplay({
+        name: "APIError",
+        data: { message: "Provider is overloaded", metadata: { code: "provider_overloaded" } },
+      }),
+    ).toEqual({ state: "error", message: "Provider is overloaded" })
+  })
+})
+
+describe("pendingOperations", () => {
+  const part = (id: string, tool: string, state: Record<string, unknown>) => ({ id, type: "tool", tool, state })
+
+  test("lists live and cancelled calls with whether each had started", () => {
+    expect(
+      pendingOperations([
+        part("prt_done", "write", { status: "completed", input: { filePath: "a.md" }, metadata: {} }),
+        part("prt_running", "bash", { status: "running", title: "Inspect results", input: { command: "ls" } }),
+        part("prt_pending", "read", { status: "pending", input: {} }),
+        part("prt_cancelled", "bash", {
+          status: "error",
+          error: "Tool execution aborted",
+          input: { command: "make", description: "Build the report" },
+          metadata: { cancelled: true, started: true },
+        }),
+        part("prt_never", "glob", {
+          status: "error",
+          error: "Tool execution aborted. The glob call had not started; no action was taken.",
+          input: {},
+          metadata: { cancelled: true, started: false },
+        }),
+        part("prt_failed", "bash", { status: "error", error: "Command failed", input: {} }),
+        { id: "prt_text", type: "text" },
+      ]),
+    ).toEqual([
+      { id: "prt_running", tool: "bash", title: "Inspect results", started: true },
+      { id: "prt_pending", tool: "read", title: "Read", started: false },
+      { id: "prt_cancelled", tool: "bash", title: "Build the report", started: true },
+      { id: "prt_never", tool: "glob", title: "Glob", started: false },
+    ])
+  })
+})
+
+describe("taskPhase", () => {
+  test("derives the delegation phase from the part state and the recorded child binding", () => {
+    expect(taskPhase({ status: "pending" })).toBe("preparing")
+    expect(taskPhase({ status: "running", metadata: {} })).toBe("preparing")
+    expect(taskPhase({ status: "running", metadata: { sessionId: "ses_child", queuedMs: 0 } })).toBe("queued")
+    expect(taskPhase({ status: "running", metadata: { sessionId: "ses_child", queuedMs: 12, activeMs: 0 } })).toBe(
+      "running",
+    )
+    expect(
+      taskPhase({ status: "error", error: "Task continuation session ses_x is not a direct child", metadata: {} }),
+    ).toBe("failed_to_start")
+    expect(taskPhase({ status: "error", error: "Worker crashed", metadata: { sessionId: "ses_child" } })).toBe("failed")
+    expect(
+      taskPhase({
+        status: "error",
+        error: "Tool execution aborted",
+        metadata: { cancelled: true, sessionId: "ses_child" },
+      }),
+    ).toBe("cancelled")
+    expect(taskPhase({ status: "completed", metadata: { sessionId: "ses_child", outcome: "completed" } })).toBe(
+      "completed",
+    )
+    expect(taskPhase({ status: "completed", metadata: { sessionId: "ses_child", outcome: "partial" } })).toBe("partial")
+    expect(taskPhase({ status: "completed", metadata: { sessionId: "ses_child", outcome: "timed_out" } })).toBe(
+      "timed_out",
+    )
+    expect(taskPhase({ status: "completed", metadata: { sessionId: "ses_child", outcome: "error" } })).toBe("failed")
+  })
+
+  test("maps phases onto the card's outcome vocabulary", () => {
+    expect(taskOutcome("preparing")).toBe("pending")
+    expect(taskOutcome("queued")).toBe("pending")
+    expect(taskOutcome("running")).toBe("running")
+    expect(taskOutcome("failed_to_start")).toBe("error")
+    expect(taskOutcome("failed")).toBe("error")
+    expect(taskOutcome("partial")).toBe("partial")
+    expect(taskOutcome("timed_out")).toBe("timed_out")
+    expect(taskOutcome("cancelled")).toBe("cancelled")
+    expect(taskOutcome("completed")).toBe("completed")
+  })
+})
+
+describe("writtenFiles from recorded patches", () => {
+  const patch = (files: unknown[]) => ({ type: "patch", files })
+
+  test("adds the files a step's filesystem diff recorded, deduplicated against tool receipts", () => {
+    expect(
+      writtenFiles([
+        {
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath: "notes.md" }, metadata: { filepath: "/project/notes.md" } },
+        },
+        {
+          type: "tool",
+          tool: "bash",
+          state: { status: "completed", input: { command: "python make_report.py" }, metadata: { exit: 0 } },
+        },
+        patch(["/project/notes.md", "/project/results.csv", "/project/results.csv", "relative.csv", 42]),
+      ]),
+    ).toEqual(["/project/notes.md", "/project/results.csv"])
+  })
+
+  test("runs recorded paths through the caller's resolver and drops what it rejects", () => {
+    const resolve = (path: string) => (path.startsWith("/project/") || path.startsWith("/scratch/") ? path : undefined)
+    expect(writtenFiles([patch(["/project/out.png", "/scratch/out.png", "/elsewhere/out.png"])], { resolve })).toEqual([
+      "/project/out.png",
+      "/scratch/out.png",
+    ])
+    expect(writtenFiles([patch(["/project/out.png"])], { canonicalOnly: true, resolve })).toEqual(["/project/out.png"])
+  })
+
+  test("never widens canonical-only link provenance beyond absolute recorded paths", () => {
+    expect(writtenFiles([patch(["figure.png"])], { canonicalOnly: true })).toEqual([])
+    expect(writtenFiles([patch(["figure.png"])])).toEqual([])
+  })
+})
+
+describe("loadedSkillName from recorded metadata", () => {
+  test("accepts a load by its recorded directory or hash and keeps the title as the fallback", () => {
+    expect(
+      loadedSkillName({
+        status: "completed",
+        title: "Skill: matplotlib",
+        metadata: { name: "matplotlib", dir: "/skills/matplotlib", contentHash: "a".repeat(64) },
+      }),
+    ).toBe("matplotlib")
+    expect(
+      loadedSkillName({
+        status: "completed",
+        title: "Loaded skill: renamed",
+        metadata: { name: "recorded", dir: "/skills/recorded" },
+      }),
+    ).toBe("recorded")
+    expect(
+      loadedSkillName({
+        status: "completed",
+        title: "Skill matches: seaborn",
+        metadata: { name: "seaborn", dir: "", matches: ["seaborn"] },
+      }),
+    ).toBeUndefined()
+    expect(
+      loadedSkillName({
+        status: "completed",
+        title: "Skill: denied",
+        metadata: { name: "denied", dir: "/skills/denied", ok: false },
+      }),
+    ).toBeUndefined()
   })
 })

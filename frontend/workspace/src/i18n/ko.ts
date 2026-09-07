@@ -253,15 +253,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "작업 공간 시작 스크립트",
   "dialog.project.edit.worktree.startup.description": "새 작업 공간(작업 트리)을 만든 뒤 실행됩니다.",
   "dialog.project.edit.worktree.startup.placeholder": "예: bun install",
-  "context.breakdown.title": "컨텍스트 분석",
-  "context.breakdown.note": '입력 토큰의 대략적인 분석입니다. "기타"에는 도구 정의 및 오버헤드가 포함됩니다.',
-  "context.breakdown.system": "시스템",
   "context.breakdown.user": "사용자",
   "context.breakdown.assistant": "어시스턴트",
   "context.breakdown.tool": "도구 호출",
-  "context.breakdown.other": "기타",
 
-  "context.systemPrompt.title": "시스템 프롬프트",
   "context.rawMessages.title": "원시 메시지",
 
   "context.stats.session": "세션",
