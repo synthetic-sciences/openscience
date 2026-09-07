@@ -408,36 +408,6 @@ export type TextPart = {
   }
 }
 
-export type SubtaskPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "subtask"
-  prompt: string
-  description: string
-  agent: string
-  model?: {
-    providerID: string
-    modelID: string
-  }
-  command?: string
-}
-
-export type ReasoningPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "reasoning"
-  text: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    start: number
-    end?: number
-  }
-}
-
 export type FilePartSourceText = {
   value: string
   start: number
@@ -478,6 +448,45 @@ export type ResourceSource = {
 }
 
 export type FilePartSource = FileSource | SymbolSource | ResourceSource
+
+export type SubtaskAttachment = {
+  type: "file"
+  mime: string
+  filename?: string
+  url: string
+  source?: FilePartSource
+}
+
+export type SubtaskPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "subtask"
+  prompt: string
+  description: string
+  agent: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
+  command?: string
+  attachments?: Array<SubtaskAttachment>
+}
+
+export type ReasoningPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "reasoning"
+  text: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    start: number
+    end?: number
+  }
+}
 
 export type FilePart = {
   id: string
@@ -2409,6 +2418,7 @@ export type SubtaskPartInput = {
     modelID: string
   }
   command?: string
+  attachments?: Array<SubtaskAttachment>
 }
 
 export type RuntimePromptAccepted = {

@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON, orFallback } from "../http"
+import { getJSON, SourceResponseError } from "../http"
 import { clampLimit, snippet } from "./util"
 
 /** A binary interaction row from the IntAct web service. */
@@ -40,13 +40,14 @@ export const intact: Connector = {
     const limit = clampLimit(opts?.limit, 10, 50)
     const params = new URLSearchParams({ page: "0", pageSize: String(limit) })
     const url = `${WS}/interaction/findInteractions/${encodeURIComponent(query)}?${params.toString()}`
-    const data = await orFallback(getJSON<IntactPage>(url, { signal: opts?.signal }), {} as IntactPage, opts?.signal)
+    const data = await getJSON<IntactPage>(url, { signal: opts?.signal })
     const rows = Array.isArray(data.content) ? data.content : []
 
     return rows.slice(0, limit).map<ConnectorHit>((row) => {
       const a = row.moleculeA ?? row.intactNameA ?? row.idA ?? "?"
       const b = row.moleculeB ?? row.intactNameB ?? row.idB ?? "?"
-      const id = row.ac ?? `${row.idA ?? "?"}-${row.idB ?? "?"}`
+      const id = row.ac
+      if (!id) throw new SourceResponseError("IntAct returned an interaction without a retrievable accession")
       const detail = [row.type, row.detectionMethod, row.hostOrganism].filter(Boolean).join(" · ")
       return {
         id,
@@ -61,8 +62,8 @@ export const intact: Connector = {
   async fetch(id, opts) {
     const params = new URLSearchParams({ page: "0", pageSize: "25" })
     const url = `${WS}/interaction/findInteractions/${encodeURIComponent(id)}?${params.toString()}`
-    const data = await orFallback(getJSON<IntactPage>(url, { signal: opts?.signal }), {} as IntactPage, opts?.signal)
+    const data = await getJSON<IntactPage>(url, { signal: opts?.signal })
     const rows = Array.isArray(data.content) ? data.content : []
-    return rows.find((r) => r.ac === id) ?? rows[0] ?? null
+    return rows.find((r) => r.ac === id) ?? null
   },
 }

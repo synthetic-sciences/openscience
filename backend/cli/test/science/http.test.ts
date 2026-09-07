@@ -5,7 +5,8 @@ import {
   request as requestRaw,
   clearCache,
   resetRateLimits,
-  orFallback,
+  orNotFound,
+  HttpStatusError,
   type HttpOptions,
 } from "../../src/science/connectors/http"
 import { Network } from "../../src/settings/network"
@@ -101,7 +102,7 @@ describe("http caching", () => {
     let calls = 0
     globalThis.fetch = (async () => {
       calls++
-      return new Response("<html>not json</html>", { status: 200 })
+      return new Response("valid text that does not match the caller cache gate", { status: 200 })
     }) as unknown as typeof fetch
 
     const looksValid = (body: string) => body.trimStart().startsWith("{")
@@ -183,52 +184,38 @@ describe("http per-host throttle", () => {
   })
 })
 
-describe("orFallback (abort-preserving fallback)", () => {
-  test("returns the fallback when the promise rejects and the signal is not aborted", async () => {
-    const result = await orFallback(
-      Promise.reject(new Error("source down")),
-      { hits: [] },
-      new AbortController().signal,
-    )
-    expect(result).toEqual({ hits: [] })
+describe("documented missing-record fallback", () => {
+  test("only HTTP 404 is a missing record", async () => {
+    expect(await orNotFound(Promise.reject(new HttpStatusError(404, "missing")), [])).toEqual([])
+    for (const error of [
+      new Error("source down"),
+      new HttpStatusError(401, "unauthorized"),
+      new HttpStatusError(429, "limited"),
+      new DOMException("aborted", "AbortError"),
+    ]) {
+      await expect(orNotFound(Promise.reject(error), [])).rejects.toThrow()
+    }
   })
-
-  test("returns the resolved value on success, ignoring the fallback", async () => {
-    const result = await orFallback(Promise.resolve("real"), "fallback", new AbortController().signal)
-    expect(result).toBe("real")
+  test("preserves a successful value", async () => {
+    expect(await orNotFound(Promise.resolve("record"), "missing")).toBe("record")
   })
+})
 
-  test("rethrows (does NOT fall back) when the caller's signal is aborted", async () => {
-    const controller = new AbortController()
-    controller.abort()
-    const err = new DOMException("The operation was aborted.", "AbortError")
-    await expect(orFallback(Promise.reject(err), "fallback", controller.signal)).rejects.toThrow(/aborted/)
+describe("scientific text and JSON content contracts", () => {
+  test("bracketed SDF titles remain plain text", async () => {
+    const body = "[Na+]\nRDKit fixture\n\n  1  0  0  0  0  0            999 V2000\nM  END\n$$$$\n"
+    globalThis.fetch = (async () =>
+      new Response(body, { headers: { "content-type": "chemical/x-mdl-sdfile" } })) as unknown as typeof fetch
+    expect(await getText("https://fixture.test/bracketed.sdf")).toBe(body)
   })
-
-  test("falls back when no signal is supplied", async () => {
-    const result = await orFallback(Promise.reject(new Error("nope")), 42)
-    expect(result).toBe(42)
-  })
-
-  test("a real search cancellation propagates through request() and orFallback", async () => {
-    const controller = new AbortController()
-    // Model real fetch: reject with an AbortError as soon as the signal is
-    // aborted — including when it is already aborted by the time fetch runs.
-    globalThis.fetch = ((_url: string, init?: RequestInit) =>
-      new Promise((_resolve, reject) => {
-        const sig = init?.signal
-        const fail = () => reject(new DOMException("aborted", "AbortError"))
-        if (sig?.aborted) return fail()
-        sig?.addEventListener("abort", fail, { once: true })
-      })) as unknown as typeof fetch
-
-    const search = orFallback(
-      getJSON("https://slow.test/q", { signal: controller.signal }),
-      { hits: [] },
-      controller.signal,
-    )
-    controller.abort()
-    // The cancellation surfaces instead of being masked as an empty result.
-    await expect(search).rejects.toThrow()
+  test("malformed requested JSON is rejected before caching", async () => {
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return new Response(calls === 1 ? "{malformed" : "{}")
+    }) as unknown as typeof fetch
+    await expect(getJSON("https://fixture.test/record")).rejects.toThrow()
+    expect(await getJSON("https://fixture.test/record")).toEqual({})
+    expect(calls).toBe(2)
   })
 })

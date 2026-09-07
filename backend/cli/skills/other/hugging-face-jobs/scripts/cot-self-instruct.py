@@ -30,13 +30,12 @@ Example usage:
         --num-samples 5000 \\
         --filter-method answer-consistency
 
-    # Instruction tasks with RIP filtering
+    # Instruction tasks without unsupported RIP filtering
     uv run cot-self-instruct.py \\
         --seed-dataset wildchat-filtered \\
         --output-dataset username/synthetic-prompts \\
         --task-type instruction \\
-        --filter-method rip \\
-        --reward-model Nexusflow/Athene-RM-8B
+        --filter-method none
 
     # HF Jobs execution
     hf jobs uv run --flavor l4x4 \\
@@ -45,6 +44,8 @@ Example usage:
         https://huggingface.co/datasets/uv-scripts/synthetic-data/raw/main/cot-self-instruct.py \\
         [args...]
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -57,14 +58,18 @@ from collections import Counter
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Union
 
-import numpy as np
-import torch
-from datasets import Dataset, load_dataset
-from huggingface_hub import DatasetCard, login
-from sklearn.cluster import KMeans
-from tqdm.auto import tqdm
-from transformers import AutoTokenizer
-from vllm import LLM, SamplingParams
+def load_dependencies():
+    """Load optional compute libraries only after validating the requested method."""
+    global np, torch, Dataset, load_dataset, DatasetCard, login, KMeans, tqdm, AutoTokenizer, LLM, SamplingParams
+    import numpy as np
+    import torch
+    from datasets import Dataset, load_dataset
+    from huggingface_hub import DatasetCard, login
+    from sklearn.cluster import KMeans
+    from tqdm.auto import tqdm
+    from transformers import AutoTokenizer
+    from vllm import LLM, SamplingParams
+
 
 # Enable HF Transfer for faster downloads
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
@@ -316,49 +321,19 @@ def answer_consistency_filter(
     return filtered_data
 
 
-def rip_filter(
-    llm: LLM,
-    synthetic_data: List[Dict],
-    reward_model_id: str,
-    k_responses: int = 32,
-    threshold: float = 0.5,
-) -> List[Dict]:
-    """Filter using Rejecting Instruction Preferences (RIP)."""
-    logger.info(f"Applying RIP filter with K={k_responses} and reward model {reward_model_id}")
-    
-    # Note: In a full implementation, you would load and use the actual reward model
-    # For this example, we'll use a placeholder scoring mechanism
-    logger.warning("RIP filtering requires a reward model implementation - using placeholder")
-    
-    filtered_data = []
-    
-    for item in tqdm(synthetic_data, desc="RIP filtering"):
-        prompt = item.get("prompt", item.get("question", ""))
-        
-        # Generate K responses
-        prompts = [prompt] * k_responses
-        sampling_params = SamplingParams(
-            temperature=1.0,
-            top_p=1.0,
-            max_tokens=1024,
-        )
-        
-        outputs = llm.generate(prompts, sampling_params)
-        
-        # In real implementation: score each response with reward model
-        # For now, use length as a proxy (longer responses often score higher)
-        scores = [len(output.outputs[0].text) for output in outputs]
-        
-        # Use minimum score as quality indicator
-        min_score = min(scores) if scores else 0
-        normalized_score = min_score / 1000  # Normalize to 0-1 range
-        
-        if normalized_score >= threshold:
-            item["rip_score"] = normalized_score
-            filtered_data.append(item)
-    
-    logger.info(f"RIP filter: kept {len(filtered_data)}/{len(synthetic_data)} examples")
-    return filtered_data
+def validate_filter(method: str, task_type: str):
+    if method in {"rip", "both"}:
+        raise ValueError("RIP reward-model filtering is not implemented. No generation or publishing was started. Use answer-consistency for reasoning tasks, or explicitly select none.")
+    if method == "answer-consistency" and task_type != "reasoning":
+        raise ValueError("Answer-consistency filtering requires reasoning tasks; use --filter-method none for instruction tasks.")
+    if method not in {"answer-consistency", "none"}:
+        raise ValueError(f"Unknown filtering method: {method}")
+
+
+def rip_filter(*args, **kwargs):
+    """Reject the former length proxy; it was not reward-model filtering."""
+    raise ValueError("RIP reward-model filtering is not implemented; no length proxy is substituted.")
+
 
 
 def create_dataset_card(
@@ -371,7 +346,8 @@ def create_dataset_card(
     generation_time: str,
     additional_info: Dict = None,
 ) -> str:
-    """Create a comprehensive dataset card."""
+    """Create a comprehensive dataset card for a supported method."""
+    validate_filter(filter_method, task_type)
     filter_info = ""
     if filter_method == "answer-consistency":
         filter_info = """
@@ -380,16 +356,7 @@ def create_dataset_card(
 This dataset was filtered using Answer-Consistency:
 - Generated K responses for each synthetic question
 - Kept only examples where majority answer matched the generated answer
-- Ensures high-quality, correctly solved problems"""
-    elif filter_method == "rip":
-        filter_info = """
-### RIP (Rejecting Instruction Preferences) Filtering
-
-This dataset was filtered using RIP:
-- Generated K responses for each synthetic prompt
-- Scored responses using a reward model
-- Kept only prompts with high minimum scores"""
-    
+- Agreement with a generated answer does not independently verify correctness"""
     return f"""---
 tags:
 - synthetic-data
@@ -491,7 +458,7 @@ def main():
         "--reward-model",
         type=str,
         default="Nexusflow/Athene-RM-8B",
-        help="Reward model for RIP filtering",
+        help="Reserved for a future validated RIP implementation; rip/both currently fail before execution",
     )
     
     # Generation parameters
@@ -558,6 +525,11 @@ def main():
     )
     
     args = parser.parse_args()
+    try:
+        validate_filter(args.filter_method, args.task_type)
+    except ValueError as error:
+        parser.error(str(error))
+    load_dependencies()
     
     # Set random seeds
     random.seed(args.seed)
@@ -649,30 +621,6 @@ def main():
                 args.k_responses,
                 args.quality_threshold,
             )
-        elif args.filter_method == "rip":
-            filtered_data = rip_filter(
-                filter_llm,
-                synthetic_data,
-                args.reward_model,
-                args.k_responses,
-                args.quality_threshold,
-            )
-        elif args.filter_method == "both":
-            if args.task_type == "reasoning":
-                filtered_data = answer_consistency_filter(
-                    filter_llm,
-                    synthetic_data,
-                    args.k_responses,
-                    args.quality_threshold,
-                )
-            filtered_data = rip_filter(
-                filter_llm,
-                filtered_data,
-                args.reward_model,
-                args.k_responses,
-                args.quality_threshold,
-            )
-    
     # Create HuggingFace dataset
     logger.info(f"Creating dataset with {len(filtered_data)} examples")
     dataset = Dataset.from_list(filtered_data)

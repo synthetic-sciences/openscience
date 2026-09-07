@@ -224,6 +224,11 @@ export namespace MessageV2 {
   })
   export type CompactionPart = z.infer<typeof CompactionPart>
 
+  export const SubtaskAttachment = FilePart.omit({ id: true, messageID: true, sessionID: true }).meta({
+    ref: "SubtaskAttachment",
+  })
+  export type SubtaskAttachment = z.infer<typeof SubtaskAttachment>
+
   export const SubtaskPart = PartBase.extend({
     type: z.literal("subtask"),
     prompt: z.string(),
@@ -236,6 +241,7 @@ export namespace MessageV2 {
       })
       .optional(),
     command: z.string().optional(),
+    attachments: SubtaskAttachment.array().optional(),
   }).meta({
     ref: "SubtaskPart",
   })

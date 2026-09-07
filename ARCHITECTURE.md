@@ -28,7 +28,7 @@ The server binds to `127.0.0.1` and enforces a Host and Origin allowlist. A conf
 `openscience serve` owns the same Research loop without opening the workbench. A `--headless` source build omits the embedded UI; the normal combined build remains available. Frontends and integrations submit work through the public runtime contract, while the native CLI/Harbor adapter retains its versioned JSONL process contract over the same session/tool loop.
 
 ```text
-Workbench / TypeScript client / Python client / private Slack adapter
+Workbench / TypeScript client / Python client
                             | HTTP commands + SSE observations
                      Public runtime protocol
                             | admission / decisions / cancellation
@@ -53,7 +53,6 @@ frontend/landing     The marketing site (openscience.sh); has its own lockfile
 tooling/sdk/js       The TypeScript SDK, generated from the server contract
 tooling/sdk/python   The dependency-free Python HTTP/SSE client
 tooling/harbor       The installed-agent adapter for native Harbor tasks
-examples             External science plugin and private application starters
 tooling/plugin       The plugin runtime (@synsci/plugin)
 tooling/launcher     The `npx synsci` installer
 tooling/repo         Repo automation: contributor setup, SDK regeneration, release scripts
@@ -87,12 +86,12 @@ transforms then adapt request options, tools, reasoning and message serializatio
 The generic fallback currently ignores model identity, and Research bypasses it.
 Codex OAuth places the Research header once in the API instructions field. See
 [CLAUDE.md](CLAUDE.md) for the actual routing and
-[the OpenCode comparison](docs/notes/opencode-harness-comparison.md) for the proposed
-model-specific interaction layer and its evaluation boundary.
+[the OpenCode comparison](docs/notes/opencode-harness-comparison.md) for the upstream
+prompt-selection and provider-transport analysis.
 
 ### Skills
 
-Skills are instruction bundles the agent loads on demand (`src/skill`). The canonical default library is `backend/cli/skills`; releases embed a compressed, hashed copy of the complete tree and materialize it into a versioned local cache. Learned skills, user-authored skills, Git-installed skills, and project skills are also local. Skill discovery, loading, security review, installation, and removal never require the Gateway. An authenticated upgrade can perform a one-time read-only import of skill records created by older releases.
+Skills are instruction bundles the agent loads on demand (`src/skill`). The canonical default library is `backend/cli/skills`; releases embed a compressed, hashed copy of the complete tree and materialize it into a versioned local cache. User-authored skills, Git-installed skills, and project skills are also local. Skill discovery, loading, security review, installation, and removal never require the Gateway. An authenticated upgrade can perform a one-time read-only import of skill records created by older releases.
 
 ## Frontend
 

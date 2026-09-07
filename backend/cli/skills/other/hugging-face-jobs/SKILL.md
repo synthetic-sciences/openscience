@@ -875,6 +875,8 @@ This repository ships ready-to-run UV scripts in `hf-jobs/scripts/`. Prefer usin
 
 **Requires:** GPU + **write** token (it pushes a dataset).
 
+Use `--filter-method none` for instruction tasks. RIP is not implemented: the script rejects it before loading models, generating data, or publishing a misleading dataset card. Answer-consistency is supported only for reasoning tasks.
+
 ```python
 from pathlib import Path
 
@@ -898,9 +900,11 @@ hf_jobs("uv", {
 
 ### Pattern 2: CoT Self-Instruct Synthetic Data — `scripts/cot-self-instruct.py`
 
-**What it does:** generates synthetic prompts/answers via CoT Self-Instruct, optionally filters outputs (answer-consistency / RIP), then **pushes** the generated dataset + dataset card to the Hub.
+**What it does:** generates synthetic prompts/answers via CoT Self-Instruct, optionally filters reasoning outputs using answer-consistency (RIP and `both` are unavailable and fail before execution), then **pushes** the generated dataset + dataset card to the Hub.
 
 **Requires:** GPU + **write** token (it pushes a dataset).
+
+Use `--filter-method none` for instruction tasks. RIP is not implemented: the script rejects it before loading models, generating data, or publishing a misleading dataset card. Answer-consistency is supported only for reasoning tasks.
 
 ```python
 from pathlib import Path

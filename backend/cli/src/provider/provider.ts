@@ -2597,6 +2597,7 @@ export namespace Provider {
       if (providerID === "openrouter" && configProvider?.whitelist && !managedRoute) {
         for (const wlid of configProvider.whitelist) {
           if (isRemovedModel(wlid)) continue
+          if (configProvider.blacklist?.includes(wlid)) continue
           if (!(wlid in provider.models)) {
             provider.models[wlid] = _syntheticOpenRouterModel(wlid)
           }

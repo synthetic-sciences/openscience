@@ -44,6 +44,23 @@ const account = {
 }
 
 describe("Wallet account summary", () => {
+  test("distinguishes a failed ledger read from a verified empty ledger without discarding the balance", async () => {
+    for (const getTransactions of [
+      async () => null,
+      async () => {
+        throw new Error("upstream failure")
+      },
+    ]) {
+      const result = await readWallet(false, { ...account, getTransactions })
+      expect(result.balanceUsd).toBe(20)
+      expect(result.transactions).toEqual([])
+      expect(result.error).toContain("transaction history is unavailable")
+    }
+    const empty = await readWallet(false, account)
+    expect(empty.transactions).toEqual([])
+    expect(empty.error).toBeUndefined()
+  })
+
   test("serves the stored summary at once and reports that a refresh is running", async () => {
     const result = await readWallet(true, {
       ...account,

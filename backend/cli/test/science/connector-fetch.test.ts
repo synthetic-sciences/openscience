@@ -76,6 +76,6 @@ describe("connector fetch conformance", () => {
       new Response("<html><body>503 Service Temporarily Unavailable</body></html>", {
         status: 200,
       })) as unknown as typeof fetch
-    await expect(arxiv.fetch("1706.03762")).rejects.toThrow(/non-Atom/)
+    await expect(arxiv.fetch("1706.03762")).rejects.toThrow(/non-Atom|HTML page/)
   })
 })

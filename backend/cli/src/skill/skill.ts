@@ -136,7 +136,7 @@ export namespace Skill {
     "scientific-schematics",
   ])
 
-  async function read(match: string, origin: Info["origin"]): Promise<Info | undefined> {
+  async function parse(match: string, origin: Info["origin"]) {
     const md = await ConfigMarkdown.parse(match).catch((err) => {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
@@ -148,7 +148,10 @@ export namespace Skill {
     if (!md) return
 
     const parsed = Frontmatter.safeParse(md.data)
-    if (!parsed.success) return
+    if (!parsed.success) {
+      log.warn("invalid skill frontmatter", { path: match, issues: parsed.error.issues })
+      return
+    }
 
     if (isRetiredProductSkillName(parsed.data.name) || isRetiredProductSkillPath(match)) {
       log.info("Skipped retired product skill", { name: parsed.data.name, path: match })
@@ -170,7 +173,7 @@ export namespace Skill {
     }
 
     const catalog = SkillCatalog.get(parsed.data.name)
-    return {
+    const info: Info = {
       name: parsed.data.name,
       description: parsed.data.description,
       location: match,
@@ -185,6 +188,23 @@ export namespace Skill {
       entry: parsed.data.entry,
       origin,
     }
+    return { info, content: md.content }
+  }
+
+  async function read(match: string, origin: Info["origin"]): Promise<Info | undefined> {
+    return (await parse(match, origin))?.info
+  }
+
+  /** Read current instructions at use time. Catalogs retain metadata only. */
+  export async function load(skill: Info) {
+    const loaded = await parse(skill.location, skill.origin)
+    if (!loaded || loaded.info.name !== skill.name) {
+      throw new InvalidError({
+        path: skill.location,
+        message: `Skill ${skill.name} changed or is no longer valid. Refresh Skills and select it again.`,
+      })
+    }
+    return loaded
   }
 
   const defaults = lazy(async () => {
@@ -193,12 +213,16 @@ export namespace Skill {
     if (!root) return []
     const skills: Info[] = []
     let count = 0
-    for await (const match of SKILL_GLOB.scan({
-      cwd: root,
-      absolute: true,
-      onlyFiles: true,
-      followSymlinks: false,
-    })) {
+    for (const match of (
+      await Array.fromAsync(
+        SKILL_GLOB.scan({
+          cwd: root,
+          absolute: true,
+          onlyFiles: true,
+          followSymlinks: false,
+        }),
+      )
+    ).toSorted()) {
       const skill = await read(match, "default")
       if (skill) skills.push(skill)
       count++
@@ -261,7 +285,7 @@ export namespace Skill {
     })
     if (retired > 0) log.info("Removed retired Atlas agent install artifacts", { count: retired })
     if (!Flag.OPENSCIENCE_DISABLE_CLAUDE_CODE_SKILLS) {
-      for (const dir of claudeDirs) {
+      for (const dir of claudeDirs.toReversed()) {
         const matches = await Array.fromAsync(
           CLAUDE_SKILL_GLOB.scan({
             cwd: dir,
@@ -275,19 +299,23 @@ export namespace Skill {
           return []
         })
 
-        for (const match of matches) {
+        for (const match of matches.toSorted()) {
           await addSkill(match, "project")
         }
       }
 
       if (await Filesystem.isDir(globalClaude)) {
-        for await (const match of CLAUDE_SKILL_GLOB.scan({
-          cwd: globalClaude,
-          absolute: true,
-          onlyFiles: true,
-          followSymlinks: true,
-          dot: true,
-        })) {
+        for (const match of (
+          await Array.fromAsync(
+            CLAUDE_SKILL_GLOB.scan({
+              cwd: globalClaude,
+              absolute: true,
+              onlyFiles: true,
+              followSymlinks: true,
+              dot: true,
+            }),
+          )
+        ).toSorted()) {
           await addSkill(match, "installed")
         }
       }
@@ -307,17 +335,25 @@ export namespace Skill {
             }),
           )
         : []
-    const directories = new Set([...(await Config.executableDirectories()), ...projectDirs])
+    const projectSet = new Set(projectDirs)
+    const directories = new Set([
+      ...(await Config.executableDirectories()).filter((dir) => !projectSet.has(dir)),
+      ...projectDirs.toSorted((a, b) => a.length - b.length || a.localeCompare(b)),
+    ])
 
     // Scan .openscience/skill/ directories
     for (const dir of directories) {
-      for await (const match of OPENSCIENCE_SKILL_GLOB.scan({
-        cwd: dir,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: true,
-      })) {
-        await addSkill(match, "project")
+      for (const match of (
+        await Array.fromAsync(
+          OPENSCIENCE_SKILL_GLOB.scan({
+            cwd: dir,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+          }),
+        )
+      ).toSorted()) {
+        await addSkill(match, projectSet.has(dir) ? "project" : "user")
       }
     }
 
@@ -332,12 +368,16 @@ export namespace Skill {
     }
     if (await Filesystem.isDir(USER_SKILL_DIR)) {
       let userCount = 0
-      for await (const match of SKILL_GLOB.scan({
-        cwd: USER_SKILL_DIR,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: true,
-      })) {
+      for (const match of (
+        await Array.fromAsync(
+          SKILL_GLOB.scan({
+            cwd: USER_SKILL_DIR,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+          }),
+        )
+      ).toSorted()) {
         await addSkill(match, "user")
         userCount++
       }
@@ -415,12 +455,16 @@ export namespace Skill {
         /* installedDir read failed — skip */
       }
 
-      for await (const match of SKILL_GLOB.scan({
-        cwd: installedDir,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: true,
-      })) {
+      for (const match of (
+        await Array.fromAsync(
+          SKILL_GLOB.scan({
+            cwd: installedDir,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+          }),
+        )
+      ).toSorted()) {
         await addSkill(match, "installed")
         installedCount++
         // SKILL_GLOB matches <installedDir>/<ns>/skills/<name>/SKILL.md.
@@ -450,12 +494,16 @@ export namespace Skill {
         log.warn("skill path not found", { path: resolved })
         continue
       }
-      for await (const match of SKILL_GLOB.scan({
-        cwd: resolved,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: true,
-      })) {
+      for (const match of (
+        await Array.fromAsync(
+          SKILL_GLOB.scan({
+            cwd: resolved,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+          }),
+        )
+      ).toSorted()) {
         await addSkill(match, "project")
       }
     }

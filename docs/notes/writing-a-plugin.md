@@ -102,10 +102,6 @@ must not collide with built-in or other plugin sources. The host checks project
 trust at invocation, including retained connector references after revocation.
 These checks do not turn host-process JavaScript into sandboxed code.
 
-The [local lab package](../../examples/local-lab-plugin/README.md) is a complete,
-offline example with real tool and connector tests. It imports only the public
-plugin package and supplies a directory submission template in `catalog.json`.
-
 ## Installing a plugin
 
 List it in `openscience.json` (global `~/.config/openscience/openscience.json`
@@ -189,7 +185,8 @@ Installed plugin and custom tool IDs participate in the normal Research tool
 selection without a built-in name whitelist. Configured denies still apply before
 initialization; fresh direct answers and explicit local read-only inspection keep
 their existing narrow tool sets. The host integration test at
-`backend/cli/test/plugin/runtime.test.ts` loads the external local-lab package with
+`backend/cli/test/plugin/runtime.test.ts` copies a deterministic test-only plugin
+outside the project and loads it through the public plugin package with
 the execution sandbox enabled, executes it through the public HTTP runtime and a
 deterministic local provider, verifies its rich result through the messages API,
 checks a configured denial, and checks removal from discovery after uninstall.

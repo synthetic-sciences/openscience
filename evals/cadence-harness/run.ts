@@ -2,7 +2,7 @@ import path from "node:path"
 import os from "node:os"
 import { appendFile, chmod, copyFile, lstat, mkdir, readFile, readdir, rename } from "node:fs/promises"
 import { createOpenScienceClient, createOpenScienceRuntime } from "@synsci/sdk/v2"
-import { aggregateCapturedSessionTree, type CapturedSessionSource } from "./tree-metrics"
+import { aggregateCapturedSessionTree, capturedChildren, type CapturedSessionSource } from "./tree-metrics"
 import { devPrompt } from "./dev-prompts"
 
 type Json = Record<string, any>
@@ -542,7 +542,7 @@ export async function captureSessions(
     unwrap<any>(client.session.get({ sessionID })).catch((error) => ({ error: String(error) })),
     unwrap<any[]>(client.session.messages({ sessionID, limit: 10_000 })).catch((error) => [{ error: String(error) }]),
     unwrap<any>(client.session.trace({ sessionID })).catch((error) => ({ error: String(error) })),
-    unwrap<any[]>(client.session.children({ sessionID })).catch(() => []),
+    unwrap<unknown>(client.session.children({ sessionID })).catch((error) => ({ error: String(error) })),
     unwrap<any>(client.session.filesystem.list({ sessionID })).catch((error) => ({ error: String(error) })),
     unwrap<any>(client.file.artifacts({ sessionID })).catch((error) => ({ error: String(error) })),
     unwrap<any>(client.provenance.executions({ sessionID })).catch((error) => ({ error: String(error) })),
@@ -557,10 +557,14 @@ export async function captureSessions(
     writeAtomic(path.join(directory, "executions.json"), safeValue(executions)),
   ])
   const descendants: CapturedSessionSource[] = []
-  for (const child of children) {
-    if (child?.id) descendants.push(...(await captureSessions(client, child.id, rawRoot, visited)))
+  const childIDs = new Set([
+    ...capturedChildren(children).ids,
+    ...capturedChildren(trace && !Object.hasOwn(trace, "error") ? trace.children : undefined).ids,
+  ])
+  for (const childID of childIDs) {
+    descendants.push(...(await captureSessions(client, childID, rawRoot, visited)))
   }
-  return [{ sessionID, session, trace, executions, messages, filesystem }, ...descendants]
+  return [{ sessionID, session, trace, children, executions, messages, filesystem }, ...descendants]
 }
 
 function finalText(message: Json | undefined) {

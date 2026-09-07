@@ -6,7 +6,7 @@ Combines predictions from predict.py, rescore.py, dock.py scores, and
 score.py interactions into a single rank-normalized consensus.
 
 Usage:
-    python consensus.py --scores affinity.json mmgbsa.json --output consensus.json
+    python consensus.py --scores affinity.json ligand_scores.json --output consensus.json
     python consensus.py --scores affinity.json --docking-scores scores.csv --interactions interactions.json --output consensus.json
 """
 
@@ -17,16 +17,13 @@ import math
 import os
 import sys
 import warnings
+from statistics import mean
 from collections import defaultdict
 
 from output_guard import validate_output_path, log_to_manifest
 
 warnings.filterwarnings("ignore")
 
-try:
-    import numpy as np
-except ImportError:
-    sys.exit("ERROR: NumPy is required. Install with: pip install numpy")
 
 
 # ---------------------------------------------------------------------------
@@ -53,10 +50,12 @@ def load_rescore_scores(path):
     """Load results from rescore.py output."""
     with open(path) as f:
         data = json.load(f)
+    if data.get("method") != "ligand_energy_heuristic" or data.get("receptor_used") is not False:
+        raise ValueError("Legacy rescore/MMGBSA attribution is unsupported. Regenerate an explicitly named ligand heuristic or provide independently validated external scores with their method provenance.")
     scores = {}
     for result in data.get("results", []):
         key = result.get("pose_id", result.get("pose_name"))
-        dg = result.get("dG_mmgbsa_kcal")
+        dg = result.get("ligand_score")
         if dg is None:
             continue
         scores[key] = {
@@ -64,7 +63,7 @@ def load_rescore_scores(path):
             "pose_name": result.get("pose_name", ""),
             "higher_is_better": False,  # more negative = better
         }
-    return "rescore", scores
+    return "ligand_heuristic", scores
 
 
 def load_docking_scores(path):
@@ -131,7 +130,7 @@ def load_score_file(path):
     if "results" in data:
         # Check if it's rescore or interactions
         results = data["results"]
-        if results and "dG_mmgbsa_kcal" in results[0]:
+        if data.get("method") == "ligand_energy_heuristic" or (results and "dG_mmgbsa_kcal" in results[0]):
             return load_rescore_scores(path)
         if results and "n_interactions" in results[0]:
             return load_interaction_scores(path)
@@ -278,7 +277,7 @@ def compute_consensus(all_normalized, weights=None):
                 tau_values.append(tau)
                 source_pairs.append((name_a, name_b, round(tau, 3)))
 
-    avg_tau = np.mean(tau_values) if tau_values else 0.0
+    avg_tau = mean(tau_values) if tau_values else 0.0
 
     # Classify agreement
     if avg_tau > 0.7:
@@ -373,8 +372,8 @@ def run_consensus(score_files, docking_scores_path, interactions_path,
         "agreement_tau": avg_tau,
         "agreement_class": agreement_class,
         "note": (
-            "Consensus of multiple scoring methods. "
-            "High agreement (τ > 0.7) increases confidence in ranking. "
+            "Rank aggregation of the named input methods; agreement is not scientific validation. Ligand heuristics do not measure binding affinity. "
+            "High agreement (τ > 0.7) describes these input rankings; it does not establish prediction accuracy. "
             "Low agreement suggests the ranking is uncertain — "
             "do not rely on absolute positions."
         ),
@@ -395,7 +394,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python consensus.py --scores affinity.json mmgbsa.json --output consensus.json
+  python consensus.py --scores affinity.json ligand_scores.json --output consensus.json
   python consensus.py --scores affinity.json --docking-scores scores.csv --interactions interactions.json --output consensus.json --top-n 10
         """,
     )

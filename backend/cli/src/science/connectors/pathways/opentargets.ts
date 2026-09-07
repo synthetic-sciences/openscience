@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON, orFallback } from "../http"
+import { getJSON } from "../http"
 import { clampLimit, snippet } from "./util"
 
 /** A hit from the Open Targets `search` query. */
@@ -31,16 +31,12 @@ const FETCH_QUERY = `query Fetch($id: String!) {
 }`
 
 async function graphql<T>(query: string, variables: Record<string, unknown>, signal?: AbortSignal): Promise<T | null> {
-  return orFallback(
-    getJSON<T>(ENDPOINT, {
-      method: "POST",
-      body: JSON.stringify({ query, variables }),
-      headers: { "Content-Type": "application/json" },
-      signal,
-    }),
-    null,
+  return getJSON<T>(ENDPOINT, {
+    method: "POST",
+    body: JSON.stringify({ query, variables }),
+    headers: { "Content-Type": "application/json" },
     signal,
-  )
+  })
 }
 
 function entityUrl(hit: OtHit): string | undefined {

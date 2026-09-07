@@ -8,7 +8,7 @@
  * accessions via UniProt and each prediction is fetched.
  */
 import type { Connector, ConnectorHit, FetchedFile, FetchOptions, SearchOptions } from "../types"
-import { getJSON, getText } from "../http"
+import { getJSON, getText, orNotFound } from "../http"
 import { asArray, clampLimit, firstString, looksLikeAccession, resolveUniProtAccessions, toRaw } from "./util"
 
 interface Prediction {
@@ -26,11 +26,7 @@ interface Prediction {
 const API = "https://alphafold.ebi.ac.uk/api/prediction"
 
 async function predict(accession: string, signal?: AbortSignal): Promise<Prediction[]> {
-  try {
-    return asArray<Prediction>(await getJSON(`${API}/${encodeURIComponent(accession)}`, { signal }))
-  } catch {
-    return []
-  }
+  return asArray<Prediction>(await orNotFound(getJSON(`${API}/${encodeURIComponent(accession)}`, { signal }), []))
 }
 
 function toHit(p: Prediction): ConnectorHit {

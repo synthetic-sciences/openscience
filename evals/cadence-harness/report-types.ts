@@ -70,15 +70,15 @@ export type CampaignSessionMetrics = {
   status?: string
   durationMs?: number
   timeToFirstOutputMs?: number
-  toolCalls: number
-  searches: number
-  approvals: number
-  childAgentLinks: number
-  retries: number
-  failures: number
+  toolCalls?: number
+  searches?: number
+  approvals?: number
+  childAgentLinks?: number
+  retries?: number
+  failures?: number
   reportedFailures?: number
-  executions: number
-  failedExecutions: number
+  executions?: number
+  failedExecutions?: number
   cost?: number
   tokens?: CampaignTokenMetrics
 }

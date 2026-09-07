@@ -156,6 +156,52 @@ afterEach(async () => {
 })
 
 describe("openscience run policy loop", () => {
+  test("command requests preserve uploaded files and explicitly selected effort", async () => {
+    const stub = provider({ secret: "" })
+    servers.push(stub.server)
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        ...stressProviderConfig(stub.baseURL),
+        command: { inspect: { template: "Inspect the supplied attachment", subtask: false } },
+        agent: { title: { disable: true } },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: trustProject,
+      fn: async () => {
+        const client = sdk(tmp.path)
+        const sessionID = await session(client, { message: "Inspect" })
+        if (!sessionID) throw new Error("Missing session")
+        const file = {
+          type: "file" as const,
+          filename: "measurements.txt",
+          mime: "text/plain",
+          url: "data:text/plain;base64,bWVhc3VyZW1lbnQ6IDQy",
+        }
+        const { out, code } = run({
+          sdk: client,
+          sessionID,
+          message: "Read the file",
+          command: "inspect",
+          files: [file],
+          effort: "ultra",
+          policy: "deny",
+        })
+        expect(await code).toBe(0)
+        const messages = (await client.session.messages({ sessionID }, { throwOnError: true })).data
+        const user = messages.find((message) => message.info.role === "user")
+        expect(user?.info.role === "user" && user.info.effort).toBe("ultra")
+        expect(user?.parts).toContainEqual(expect.objectContaining(file))
+        expect(stub.requests).toHaveLength(1)
+        expect(stub.requests[0]).toContain("measurement: 42")
+        const emitted = out.events().find((event) => event.type === "user")
+        expect(emitted?.type === "user" && emitted.parts).toContainEqual(file)
+      },
+    })
+  })
+
   test("streams user, reasoning, text, step and done events and exits 0", async () => {
     const stub = provider({ secret: "" })
     servers.push(stub.server)

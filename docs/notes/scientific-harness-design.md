@@ -7,11 +7,10 @@ Harbor fixture proves an execution contract; it measures no scientific ability.
 
 The subsequent [OpenCode harness comparison](opencode-harness-comparison.md)
 traces all active model-family prompts, provider adapters and both session loops.
-It refines this design: share the scientific contract, evaluate small optional
-model interaction profiles, and keep mandatory API compatibility separate. Default
-Research currently has an explicit agent prompt, so adding routing only to the
-generic provider fallback would miss it. Provider profiles remain an experiment;
-the reproduced local-tool `stop` continuation failure is corrected independently.
+Default Research has an explicit agent prompt, so the generic provider fallback
+does not determine its header. The comparison separates this existing behavior
+from provider API compatibility. The reproduced local-tool `stop` continuation
+failure is corrected independently.
 
 ## The product boundary
 
@@ -88,23 +87,9 @@ Research capability set remains available under the existing permission policy.
 
 ### 1. Quality at a given cost and time
 
-Treat “Fusion” as a proposed family of strategies until its intended reference is
-specified. Model mixing, selective stronger-model review, and learning reusable
-skills from development trajectories are different interventions. They must not
-be bundled into one unexplained mode.
-
-First measure the existing single-model loop at several declared inference budgets.
-Then compare one candidate: for example, a cheaper lead with a bounded stronger
-review on an explicit request or observable execution failure. Prefer existing
-task/review/provider seams. Start with deterministic eligibility rules; an extra
-LLM deciding routing on every turn may consume the saving it is meant to create.
-Do not use a protected grader or answer as the escalation signal.
-
-An offline skill-fusion experiment should record source trajectories, task split,
-transformation, version and license. Derive general methods from development work;
-freeze them before evaluation and exclude held-out answers and task-specific hints.
-Measure whether loading the learned skill actually helps relative to the original
-skill library. No such optimizer or automatic learning policy is implemented here.
+Measure the existing Research loop with a fixed model and declared inference
+budgets before comparing changes. Preserve task splits, tool access, permissions,
+and native grading. Do not use protected graders or answers to steer execution.
 
 Plot native scientific quality against total dollars and elapsed time, separately
 for each benchmark. A configuration is on the **measured frontier** only if another
@@ -114,10 +99,9 @@ differences do not prove dominance. Do not claim global Pareto optimality from a
 finite configuration sweep.
 
 The present Harbor `--auto-approve` path disables built-in delegation. Its tested
-lane is a single lead with tools, even when `effort=ultra` is passed. Multi-agent
-Fusion requires a separately tested noninteractive decision policy and complete
-child-usage accounting before it can enter a cost comparison. Preserve interactive
-Normal/Ultra delegation; do not weaken runtime permissions to make a benchmark run.
+lane is a single lead with tools, even when `effort=ultra` is passed. Interactive
+Normal/Ultra delegation remains available; do not weaken runtime permissions to
+make a benchmark run.
 
 ### 2. Best scientific performance
 
@@ -239,32 +223,20 @@ resampling tasks rather than treating repeats of the same task as independent.
 Any shorter cost/time-cap study is a labeled protocol beside the native-limit
 comparison. Preserve evaluator failures with a preregistered rerun/exclusion rule.
 
-## A plugin ecosystem that does not inflate every turn
+## Existing extension contracts
 
-Build on the existing contracts, in order:
+Skills supply methods; tools expose typed operations; scientific connectors
+describe integrations; MCP provides a process-separated tool protocol; plugins
+add trusted host-side contributions. External applications consume the runtime
+API. These contracts share existing session admission, cancellation, usage,
+permissions, and storage rather than recreating them in each integration.
 
-1. **Composable capabilities today.** Skills supply methods; tools expose typed
-   operations; scientific connectors describe integrations; MCP provides a
-   process-separated tool protocol; plugins add trusted host-side contributions.
-   External apps consume the runtime API. The
-   [local lab plugin](../../examples/local-lab-plugin) and
-   [private Slack starter](../../examples/slack-research) exercise those boundaries.
-2. **Measured discovery next.** Add optional compact discovery metadata to the
-   existing tool contract when installed-schema measurements justify it. Keep
-   current plugins working, explicit tool requests resolvable, permissions enforced
-   at execution, and a fallback for missed discovery. No second registry or mandatory
-   workflow language. The current eager exposure of trusted custom tools is retained
-   because it protects discoverability until that alternative is tested.
-3. **Distribution after contract stability.** Publish compatible SDK/plugin packages,
-   versioned examples, conformance tests and migration guidance. A registry can then
-   index manifests, compatibility, provenance, permissions and installation pins.
-   Marketplace moderation/signing and multi-tenant hosting are additional work.
-   Trusted in-process plugin code is not sandboxed by a tool permission setting.
-
-A proposed extension should contribute a concrete tool, source, method or client
-without rewriting session admission, cancellation, usage, permissions or storage.
-Use existing run/tool/artifact IDs to associate output with work. Test disposal,
-abort, structured results and reconnect behavior alongside happy-path execution.
+Installed plugin tools use the ordinary discovery path, with permissions enforced
+at execution. Trusted in-process plugin code is not sandboxed by a tool permission
+setting. The [plugin guide](writing-a-plugin.md) describes installation and rich
+results; test-only fixtures exercise discovery, invocation, cancellation, removal,
+and the applicable trust boundary. Use existing run/tool/artifact IDs to associate
+output with work.
 
 ## What the harness-engineering reference contributes
 

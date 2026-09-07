@@ -199,75 +199,30 @@ The current OpenScience cross-message tool repetition check is also stronger tha
 checking only the latest assistant message. These are reasons to compare concrete
 failure behavior rather than replace the loop wholesale.
 
-One unresolved compatibility case deserves a separate fixture: OpenScience's
-content-filter error helper currently reports an error only when no partial text
-exists. A filtered partial answer can therefore appear completed to the runtime.
-OpenCode records a content-filter error even with partial output. Retain the
-partial answer, expose the failure and avoid automatic retries if this is changed;
-the continuation correction does not address that case. Source:
+OpenScience now records a content-filter failure even when partial text exists,
+while preserving that text and completed tool actions. A local streaming-provider
+regression exercises the public runtime API: one write completes before filtered
+text arrives, the run fails, and neither an exact request retry nor re-entering the
+session loop repeats the provider request or write. This correction is separate
+from tool continuation. OpenCode also records a content-filter error with partial
+output. Source:
 [OpenCode finish handling](https://github.com/anomalyco/opencode/blob/337fd144d2ba144743368f78d9579a99cce175bd/packages/opencode/src/session/processor.ts).
 
-## Recommended OpenScience design
+## OpenScience implementation boundary
 
-Keep four distinct layers, with a small optional addition at the second layer:
+Default Research retains its explicit scientific header. Session assembly adds
+workspace, project, skill and user context, while provider transforms handle API
+shape, reasoning, tools, media, cache and errors. Custom-agent prompt replacement
+and internal title/compaction contracts remain separate. The allowed tool set and
+permission system are authoritative; domain procedures live in skills.
 
-```text
-Scientific contract        question, evidence, methods, uncertainty, useful outputs
-Model interaction profile  tested guidance for this model and offered tool interface
-Invocation context        workspace, project rules, relevant skills, files and state
-Transport adapter         API shape, reasoning, tools, media, cache and error semantics
-```
-
-The scientific contract belongs to Research and stays consistent across models.
-The model profile is deterministic request preparation, not another LLM deciding
-how to prompt the first one. It should be empty by default until evaluated, or
-explicitly selected as an experiment. Select using resolved model identity,
-transport and capabilities; a relay provider name alone cannot identify a family.
-Unknown models retain the current known-working fallback.
-
-The appropriate insertion point is shared header/request preparation used by both
-actual dispatch and context preflight. Routing only in `SystemPrompt.provider`
-would miss default Research because its explicit `agent.prompt` overrides that
-function. Keep custom-agent replacement semantics, narrow routes and internal
-title/compaction contracts explicit. Avoid adding a second global agent registry.
-
-A profile may explain tool-call discipline or an observed tendency to skip useful
-validation. It must not invent tools, require a coding-specific artifact, redefine
-workspace permissions, claim an environment is unsandboxed, or override a requested
-scientific method. The actual allowed tool set and permission system remain
-authoritative. Domain procedures continue to live in skills; providers do not own
-separate copies of biology, physics or chemistry workflows.
-
-Version each evaluated profile and record its content hash, exact serialized bytes,
-tool/schema identity, resolved model/options, route and cache usage. Extend existing
-`SessionHarness` records only when an added field is required for attribution.
-That manifest currently captures selected contract and schemas, not a complete
+The existing system-transform plugin hook can modify system context. Its presence
+does not imply a separate model-prompt registry or automatic routing policy.
+`SessionHarness` captures selected contracts and schemas, not a complete
 post-serialization request or provider bill.
 
-## Experiments before changing defaults
-
-| Comparison                                               | Hold constant                                                          | Measure                                                                                                     |
-| -------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Current Research vs a compact model profile              | Model snapshot, native task, tools, scientific instructions and budget | Native score, invalid calls, repaired calls, missed tools, completion, input/cache/output usage and latency |
-| Plain tool calls vs a supported parallel/batch interface | Available operations, permissions and total work                       | Successful call completion, dependency mistakes, request count and wall time                                |
-| Existing context policy vs compact factual recovery      | Task, model, saved outcomes and access                                 | Recovery accuracy, duplicate side effects, retained failures and rediscovery cost                           |
-| Fixed model vs bounded selective assistance              | Task envelope, declared spend cap and capability access                | Native quality, complete lead/child/retry cost and elapsed time                                             |
-
-Run deterministic contract fixtures first. Keep prompt-quality trials separate
-from mandatory API/lifecycle fixes. Use a development panel, freeze the profile,
-then evaluate held-out tasks with paired assignments. Report each benchmark in its
-native metric and preserve unsuccessful attempts. The five-lane qualification
+The reproduced continuation failure is an independently tested lifecycle fix.
+Deterministic contract fixtures establish API and execution behavior, while native
+scientific scores require actual evaluation. The five-lane qualification
 requirements in [the scientific harness plan](scientific-harness-design.md) remain
-unchanged; OpenCode prompt variety does not establish scientific benchmark gains.
-
-For the plugin ecosystem, retain existing tools, connectors, skills and runtime
-clients. A trusted plugin can already contribute model-aware system text through
-the system-transform hook; use that seam for bounded experiments. A future public
-profile contribution should be optional, inspectable and compatible with current
-plugins. Avoid a permanent prompt block from every installed extension on every
-turn; test discovery and activation before changing current exposure behavior.
-
-No new provider prompt family, automatic router or mandatory multi-agent workflow
-is enabled by this review. The source change addresses a reproduced lifecycle
-failure. The model-profile proposal is ready for controlled evaluation, not claimed
-to outperform the current Research prompt.
+unchanged; OpenCode's prompt variety does not establish scientific benchmark gains.

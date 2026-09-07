@@ -264,6 +264,10 @@ export const dict = {
   "context.breakdown.assistant": "Assistant",
   "context.breakdown.tool": "Tool calls",
   "context.breakdown.other": "Other",
+  "context.composition.title": "Available input text (estimate)",
+  "context.composition.instructions": "Custom instructions",
+  "context.composition.note":
+    "Approximate shares of loaded text before this call, using four characters per token. Excludes this response, complete system instructions, tool definitions, media, and server-side context changes. These shares do not measure provider token usage.",
 
   "context.systemPrompt.title": "System prompt",
   "context.rawMessages.title": "Raw messages",

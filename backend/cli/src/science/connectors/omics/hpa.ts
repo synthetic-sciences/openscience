@@ -9,7 +9,7 @@
  * fetch(id) → /{ensembl}.json  (full HPA record)
  */
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON, orFallback } from "../http"
+import { getJSON } from "../http"
 
 const BASE = "https://www.proteinatlas.org"
 const COLUMNS = "g,gs,eg,up,gd,chr"
@@ -50,7 +50,7 @@ export const hpa: Connector = {
 
   async search(query, opts) {
     const url = `${BASE}/api/search_download.php?search=${encodeURIComponent(query)}&format=json&columns=${COLUMNS}&compress=no`
-    const data = await orFallback(getJSON<HpaGene[]>(url, { signal: opts?.signal }), [] as HpaGene[], opts?.signal)
+    const data = await getJSON<HpaGene[]>(url, { signal: opts?.signal })
     const limit = Math.min(Math.max(opts?.limit ?? 10, 1), 25)
     return (Array.isArray(data) ? data : []).slice(0, limit).map(toHit)
   },
@@ -59,19 +59,8 @@ export const hpa: Connector = {
     const trimmed = id.trim()
     const ensembl = /^ENSG\d+/i.test(trimmed)
       ? trimmed
-      : await orFallback(
-          hpa.search(trimmed, { limit: 1, signal: opts?.signal }).then((hits) => hits[0]?.id),
-          undefined,
-          opts?.signal,
-        )
+      : await hpa.search(trimmed, { limit: 1, signal: opts?.signal }).then((hits) => hits[0]?.id)
     if (!ensembl) return { id: trimmed, found: false }
-    return orFallback(
-      getJSON(`${BASE}/${encodeURIComponent(ensembl)}.json`, { signal: opts?.signal }),
-      {
-        id: ensembl,
-        found: false,
-      },
-      opts?.signal,
-    )
+    return getJSON(`${BASE}/${encodeURIComponent(ensembl)}.json`, { signal: opts?.signal })
   },
 }

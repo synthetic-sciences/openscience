@@ -49,10 +49,9 @@ core/direct/inspection contract. Adding model routing only inside
 `SystemPrompt.provider` would therefore **not affect default Research**.
 
 An agent's configured `prompt` replaces its built-in header. Preserve this
-behavior for custom agents and internal title/compaction agents. Model-specific
-interaction profiles are a proposed ablation in
-[the OpenCode harness comparison](docs/notes/opencode-harness-comparison.md);
-they are not enabled by this documentation change.
+behavior for custom agents and internal title/compaction agents. The
+[OpenCode harness comparison](docs/notes/opencode-harness-comparison.md) documents
+upstream prompt selection and contrasts it with this current behavior.
 
 ### Context and reminders
 

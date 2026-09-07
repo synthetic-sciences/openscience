@@ -134,6 +134,7 @@ if (args[0] === "ls") {
   process.exit(0)
 }
 if (args[0] === "view") {
+  if (process.env.FAKE_NPM_VIEW === "fail") process.exit(1)
   console.log("2.0.66")
   process.exit(0)
 }
@@ -301,6 +302,16 @@ async function launch(env: NodeJS.ProcessEnv) {
 }
 
 describe("synsci unsafe candidate recovery", () => {
+  posix("continues with the installed CLI when update checking fails without claiming it is current", async () => {
+    const setup = await fixture({ standalone: "safe" })
+    const result = await launch({ ...setup.env, FAKE_NPM_VIEW: "fail" })
+    expect(result.code, result.stderr).toBe(0)
+    expect(result.stdout).toContain("Could not check for updates")
+    expect(result.stdout).not.toContain("up to date")
+    expect(await Bun.file(setup.calls).text()).toContain('["web"]')
+    expect(await Bun.file(setup.npmCalls).text()).not.toContain('["i","-g"')
+  })
+
   posix("never probes a pre-2.0.2 global wrapper when a standalone binary is available", async () => {
     const setup = await fixture({ standalone: "safe" })
     const result = await launch(setup.env)

@@ -1,6 +1,9 @@
 import type { Argv } from "yargs"
 import type z from "zod"
 import path from "path"
+import fs from "node:fs/promises"
+import { isUtf8 } from "node:buffer"
+import { pathToFileURL } from "node:url"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
@@ -11,8 +14,10 @@ import { createOpenScienceClient, type OpenScienceClient, type PermissionRequest
 import { NamedError } from "@synsci/util/error"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
-import { Agent } from "../../agent/agent"
 import { RunEvents } from "../run-events"
+import { SafeFileIO } from "../../file/safe-io"
+import { SubtaskAttachments } from "../../session/subtask-attachments"
+import { detectImageMime } from "../../util/image"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -177,7 +182,9 @@ export async function execute(input: RunInput): Promise<number> {
 
   const agent = await (async () => {
     if (!input.agent) return "research"
-    const found = await Agent.get(input.agent)
+    const found = (await sdk.app.agents(undefined, { throwOnError: true })).data.find(
+      (agent) => agent.name === input.agent,
+    )
     if (!found) {
       UI.println(
         UI.Style.TEXT_WARNING_BOLD + "!",
@@ -383,6 +390,8 @@ export async function execute(input: RunInput): Promise<number> {
         model: input.model,
         command: input.command,
         arguments: input.message,
+        parts: input.files,
+        effort: input.effort,
         variant: input.variant,
         delegation,
       })
@@ -518,6 +527,7 @@ export const RunCommand = cmd({
     }
 
     const files: RunFile[] = []
+    let uploadBytes = 0
     for (const filePath of args.file ?? []) {
       const resolvedPath = path.resolve(process.cwd(), filePath)
       const file = Bun.file(resolvedPath)
@@ -526,11 +536,45 @@ export const RunCommand = cmd({
         UI.error(`File not found: ${filePath}`)
         process.exit(RunEvents.ExitCode.usage)
       }
+      if (!args.attach) {
+        files.push({
+          type: "file",
+          url: pathToFileURL(resolvedPath).href,
+          filename: path.basename(resolvedPath),
+          mime: stat.isDirectory() ? "application/x-directory" : "text/plain",
+        })
+        continue
+      }
+      if (!stat.isFile()) {
+        UI.error("--attach --file accepts regular files only. Upload individual files instead of a directory.")
+        process.exit(RunEvents.ExitCode.usage)
+      }
+      // The explicit CLI argument authorizes reading this client's file. A
+      // remote server cannot resolve the client's path or grant access to it.
+      const snapshot = await SafeFileIO.read(await fs.realpath(resolvedPath), {
+        maxBytes: SubtaskAttachments.LIMIT - uploadBytes,
+      }).catch((error: unknown) => {
+        if (error instanceof SafeFileIO.LimitError) {
+          UI.error("Attached files exceed the 32 MiB byte limit. Split or reduce the uploaded files.")
+          process.exit(RunEvents.ExitCode.usage)
+        }
+        throw error
+      })
+      uploadBytes += snapshot.bytes.byteLength
+      // Text uploads use the API's inline-text representation; binary media
+      // keep their media type, corrected from magic bytes when possible.
+      const mime =
+        detectImageMime(snapshot.bytes) ??
+        (snapshot.bytes.subarray(0, 5).toString("ascii") === "%PDF-"
+          ? "application/pdf"
+          : !snapshot.bytes.includes(0) && isUtf8(snapshot.bytes)
+            ? "text/plain"
+            : file.type.split(";")[0] || "application/octet-stream")
       files.push({
         type: "file",
-        url: `file://${resolvedPath}`,
+        url: `data:${mime};base64,${snapshot.bytes.toString("base64")}`,
         filename: path.basename(resolvedPath),
-        mime: stat.isDirectory() ? "application/x-directory" : "text/plain",
+        mime,
       })
     }
 
@@ -577,7 +621,18 @@ export const RunCommand = cmd({
     }
 
     if (args.attach) {
-      process.exit(await run(createOpenScienceClient({ baseUrl: args.attach })))
+      const token = process.env.OPENSCIENCE_AUTH_TOKEN
+      const client = createOpenScienceClient({
+        baseUrl: args.attach,
+        ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+      })
+      const code = await run(client).catch((error: unknown) => {
+        if (error && typeof error === "object" && "error" in error && error.error === "Unauthorized") {
+          throw new Error("The server rejected authentication. Set OPENSCIENCE_AUTH_TOKEN to the server's token.")
+        }
+        throw error
+      })
+      process.exit(code)
     }
 
     const code = await bootstrap(process.cwd(), async () => {

@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON, orFallback } from "../http"
+import { getJSON, SourceResponseError } from "../http"
 import { asRecord, asText, clampLimit, snippet } from "./util"
 
 /** A single interaction record from the BioGRID webservice (JSON format). */
@@ -20,8 +20,7 @@ const WS = "https://webservice.thebiogrid.org"
 /**
  * Resolve the BioGRID access key. BioGRID requires a free 32-char key; we never
  * bake one in. Callers supply it via `opts.params.accessKey` or the
- * `BIOGRID_ACCESS_KEY` environment variable. Without it the connector degrades
- * gracefully to empty results rather than throwing.
+ * `BIOGRID_ACCESS_KEY` environment variable. Without it the connector reports a configuration error, not an empty search.
  */
 function accessKey(params?: Record<string, unknown>): string | undefined {
   return asText(params?.["accessKey"]) ?? asText(process.env["BIOGRID_ACCESS_KEY"])
@@ -55,7 +54,7 @@ export const biogrid: Connector = {
 
   async search(query, opts) {
     const key = accessKey(opts?.params)
-    if (!key) return []
+    if (!key) throw new SourceResponseError("BioGRID access key required (set BIOGRID_ACCESS_KEY)")
     const limit = clampLimit(opts?.limit, 10, 50)
     const params = new URLSearchParams({
       accessKey: key,
@@ -69,10 +68,11 @@ export const biogrid: Connector = {
     const taxon = asText(opts?.organism)
     if (taxon) params.set("taxId", taxon)
     const url = `${WS}/interactions/?${params.toString()}`
-    const data = await orFallback(getJSON<unknown>(url, { signal: opts?.signal }), null, opts?.signal)
+    const data = await getJSON<unknown>(url, { signal: opts?.signal })
     const rec = asRecord(data)
     // BioGRID reports auth/other failures as `{ STATUS: "ERROR", ... }`.
-    if (typeof rec["STATUS"] === "string") return []
+    if (typeof rec["STATUS"] === "string")
+      throw new SourceResponseError("BioGRID request failed; check the access key and query")
 
     const hits: ConnectorHit[] = []
     for (const value of Object.values(rec)) {
@@ -90,7 +90,7 @@ export const biogrid: Connector = {
     }
     const params = new URLSearchParams({ accessKey: key, interactionList: id, format: "json" })
     const url = `${WS}/interactions/?${params.toString()}`
-    const data = await orFallback(getJSON<unknown>(url, { signal: opts?.signal }), null, opts?.signal)
+    const data = await getJSON<unknown>(url, { signal: opts?.signal })
     const rec = asRecord(data)
     if (typeof rec["STATUS"] === "string") return { id, error: "BioGRID request failed" }
     return rec[id] ?? data

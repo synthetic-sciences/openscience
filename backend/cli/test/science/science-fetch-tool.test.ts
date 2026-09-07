@@ -115,7 +115,7 @@ describe("science_fetch degradation", () => {
   })
 
   test("a found:false sentinel is a clean miss, not an error", async () => {
-    stub(JSON.stringify({ found: false }))
+    stub("release,release_date,filename\r\n")
     const out = await run({ db: "depmap", id: "nothing-matches-this" })
     expect(out.metadata.count).toBe(0)
     expect(out.metadata.error).toBeUndefined()

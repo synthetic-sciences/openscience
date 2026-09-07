@@ -40,9 +40,7 @@ export const chembl: Connector = {
   async search(query, opts) {
     const limit = Math.min(opts?.limit ?? 10, 25)
     const url = `${BASE}/molecule/search.json?q=${encodeURIComponent(query)}&limit=${limit}`
-    const data = await getJSON<{ molecules?: Molecule[] }>(url, { signal: opts?.signal }).catch(
-      () => ({}) as { molecules?: Molecule[] },
-    )
+    const data = await getJSON<{ molecules?: Molecule[] }>(url, { signal: opts?.signal })
     const molecules = Array.isArray(data.molecules) ? data.molecules : []
     return molecules.slice(0, limit).map<ConnectorHit>((m) => {
       const id = m.molecule_chembl_id ?? ""

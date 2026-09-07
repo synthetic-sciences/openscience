@@ -10,6 +10,24 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Forward attached CLI authentication, server-side agent selection, command files
+  and effort. Delegated commands retain bounded uploaded files in durable task
+  state and deliver them into the child's workspace. Explicit OpenRouter model
+  blacklists remain authoritative, and blocked partial output is a failed turn.
+- Preserve scientific connector errors and cancellation instead of reporting
+  empty success; correct BindingDB identifier round trips and uncertain Modal
+  cleanup. Label ligand-only energy scoring accurately, reject the unsupported
+  reward-model training mode, and make incomplete venue validation explicit.
+- Use one bounded skill search over names, descriptions, tags and capabilities;
+  stabilize local override ordering, revalidate instructions on load, and retain
+  instruction hashes with read-only bundle access. Keep existing scientific
+  skills, explicit slash invocation and tool permissions.
+- Keep missing measurements out of distributions, preserve unavailable CPU
+  readings, label context proportions as estimates, mark failed trace captures
+  partial, surface Wallet ledger failures, and report unavailable update checks.
+- Remove the laboratory and private Slack demos, the static plugin catalog, and
+  speculative provider-profile/Fusion plans. Working runtime, SDK, plugin,
+  connector and reviewed skill-installation contracts remain available.
 - Continue after a local tool result even when a provider labels its turn `stop`,
   so the model can use the result and produce its final answer. Preserve terminal
   handling for provider-executed tools, interrupted work and configured limits.
@@ -23,8 +41,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   receipts, run-scoped cancellation, snapshot recovery, and idempotent decisions.
   Exact retries reconcile the existing run; an interrupted server never silently
   repeats scientific work. The Research composer uses the public runtime API.
-- Add a headless build and owned SDK server lifecycle, a Python HTTP/SSE client,
-  and external scientific and private Slack integration examples. Plugins can
+- Add a headless build and owned SDK server lifecycle and a Python HTTP/SSE client. Plugins can
   return structured results and register project-scoped scientific connectors;
   cancellation and shutdown remove pending decisions and dispose extensions.
 - Harden the Harbor 0.22.0 adapter: preserve native task working directories,

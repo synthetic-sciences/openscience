@@ -9,7 +9,7 @@
  * data API. Enrichment failures degrade gracefully to the bare identifier.
  */
 import type { Connector, ConnectorHit, FetchedFile, FetchOptions, SearchOptions } from "../types"
-import { getJSON, getText, orFallback } from "../http"
+import { getJSON, getText } from "../http"
 import { asArray, clampLimit, firstString, toRaw } from "./util"
 
 interface SearchResult {
@@ -49,8 +49,13 @@ async function enrich(id: string, signal?: AbortSignal): Promise<ConnectorHit> {
       summary: parts.length ? parts.join(", ") : undefined,
       extra: toRaw(e),
     }
-  } catch {
-    return base
+  } catch (error) {
+    signal?.throwIfAborted()
+    return {
+      ...base,
+      summary: "Search matched this identifier; record enrichment was unavailable.",
+      extra: { enrichment: "unavailable" },
+    }
   }
 }
 
@@ -69,11 +74,7 @@ export const rcsbPdb: Connector = {
       request_options: { paginate: { start: 0, rows } },
     }
     const url = `https://search.rcsb.org/rcsbsearch/v2/query?json=${encodeURIComponent(JSON.stringify(payload))}`
-    const data = await orFallback(
-      getJSON<SearchResponse>(url, { signal: opts?.signal }),
-      {} as SearchResponse,
-      opts?.signal,
-    )
+    const data = await getJSON<SearchResponse>(url, { signal: opts?.signal })
     const hits = asArray<SearchResult>(data.result_set).filter((r) => typeof r.identifier === "string")
     const enriched = await Promise.all(
       hits.map(async (r) => {

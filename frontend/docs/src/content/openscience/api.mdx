@@ -139,11 +139,9 @@ Use `client.session.messages` or `client.session.message` with a run's `resultMe
 
 A plugin attachment is not automatically a saved Result. Plugins that need a durable, versioned Result should create it through the scoped artifact API and return the verified reference in metadata. Track job execution, output retrieval, resource release, and scientific verification separately.
 
-## Python and application starters
+## Python client
 
 The standard-library Python package is in `tooling/sdk/python`. Install this source package locally with `python -m pip install ./tooling/sdk/python`, then use `openscience.Client`. It exposes sessions, rich prompts, receipts, cancellation, decisions, and cursor-aware SSE without importing the backend. Its README includes persistence and recovery examples.
-
-The repository's `examples/local-lab-plugin` returns an offline scientific summary and CSV; `examples/slack-research` demonstrates an authenticated private application with durable conversation mapping and delivery records. The [ecosystem catalog](/openscience/ecosystem) lists support boundaries and author guidance.
 
 ## Compatibility
 
@@ -155,4 +153,4 @@ The repository's `examples/local-lab-plugin` returns an offline scientific summa
 | Harbor 0.22.0 | Native installed-agent execution of `run --format json --auto-approve --workspace project` over the same agent/tool loop |
 | Other Harbor versions | Require their own conformance checks before migration |
 
-A failed modern prompt is never retried through a legacy endpoint. The generated [OpenAPI contract](https://github.com/synthetic-sciences/openscience/blob/main/tooling/sdk/openapi.json) and the corresponding source-build SDK define exact request shapes. Hosted tenant isolation, public extension publishing, and distributed continuation recovery require additional deployment work; a local bearer token does not implement them.
+A failed modern prompt is never retried through a legacy endpoint. The generated [OpenAPI contract](https://github.com/synthetic-sciences/openscience/blob/main/tooling/sdk/openapi.json) and the corresponding source-build SDK define exact request shapes. Hosted tenant isolation and distributed continuation recovery require additional deployment work; a local bearer token does not implement them.

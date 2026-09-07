@@ -14,6 +14,7 @@ import { Code } from "@synsci/ui/code"
 import { Markdown } from "@synsci/ui/markdown"
 import type { AssistantMessage, Message, Part, UserMessage } from "@synsci/sdk/v2/client"
 import { useLanguage } from "@/context/language"
+import { contextComposition } from "./context-composition"
 
 interface SessionContextTabProps {
   messages: () => Message[]
@@ -86,7 +87,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
   })
 
   const systemPrompt = createMemo(() => {
-    const msg = findLast(props.visibleUserMessages(), (m) => !!m.system)
+    const msg = props.visibleUserMessages().find((message) => message.id === ctx()?.message.parentID)
     const system = msg?.system
     if (!system) return
     const trimmed = system.trim()
@@ -124,119 +125,23 @@ export function SessionContextTab(props: SessionContextTabProps) {
     return c.message.modelID
   })
 
-  const breakdown = createMemo(
-    on(
-      () => [ctx()?.message.id, ctx()?.input, props.messages().length, systemPrompt()],
-      () => {
-        const c = ctx()
-        if (!c) return []
-        const input = c.input
-        if (!input) return []
-
-        const out = {
-          system: systemPrompt()?.length ?? 0,
-          user: 0,
-          assistant: 0,
-          tool: 0,
-        }
-
-        for (const msg of props.messages()) {
-          const parts = (sync.data.part[msg.id] ?? []) as Part[]
-
-          if (msg.role === "user") {
-            for (const part of parts) {
-              if (part.type === "text") out.user += part.text.length
-              if (part.type === "file") out.user += part.source?.text.value.length ?? 0
-              if (part.type === "agent") out.user += part.source?.value.length ?? 0
-            }
-            continue
-          }
-
-          if (msg.role === "assistant") {
-            for (const part of parts) {
-              if (part.type === "text") out.assistant += part.text.length
-              if (part.type === "reasoning") out.assistant += part.text.length
-              if (part.type === "tool") {
-                out.tool += Object.keys(part.state.input).length * 16
-                if (part.state.status === "pending") out.tool += part.state.raw.length
-                if (part.state.status === "completed") out.tool += part.state.output.length
-                if (part.state.status === "error") out.tool += part.state.error.length
-              }
-            }
-          }
-        }
-
-        const estimateTokens = (chars: number) => Math.ceil(chars / 4)
-        const system = estimateTokens(out.system)
-        const user = estimateTokens(out.user)
-        const assistant = estimateTokens(out.assistant)
-        const tool = estimateTokens(out.tool)
-        const estimated = system + user + assistant + tool
-
-        const pct = (tokens: number) => (tokens / input) * 100
-        const pctLabel = (tokens: number) => (Math.round(pct(tokens) * 10) / 10).toString() + "%"
-
-        const build = (tokens: { system: number; user: number; assistant: number; tool: number; other: number }) => {
-          return [
-            {
-              key: "system",
-              label: language.t("context.breakdown.system"),
-              tokens: tokens.system,
-              width: pct(tokens.system),
-              percent: pctLabel(tokens.system),
-              color: "var(--syntax-info)",
-            },
-            {
-              key: "user",
-              label: language.t("context.breakdown.user"),
-              tokens: tokens.user,
-              width: pct(tokens.user),
-              percent: pctLabel(tokens.user),
-              color: "var(--syntax-success)",
-            },
-            {
-              key: "assistant",
-              label: language.t("context.breakdown.assistant"),
-              tokens: tokens.assistant,
-              width: pct(tokens.assistant),
-              percent: pctLabel(tokens.assistant),
-              color: "var(--syntax-property)",
-            },
-            {
-              key: "tool",
-              label: language.t("context.breakdown.tool"),
-              tokens: tokens.tool,
-              width: pct(tokens.tool),
-              percent: pctLabel(tokens.tool),
-              color: "var(--syntax-warning)",
-            },
-            {
-              key: "other",
-              label: language.t("context.breakdown.other"),
-              tokens: tokens.other,
-              width: pct(tokens.other),
-              percent: pctLabel(tokens.other),
-              color: "var(--syntax-comment)",
-            },
-          ].filter((x) => x.tokens > 0)
-        }
-
-        if (estimated <= input) {
-          return build({ system, user, assistant, tool, other: input - estimated })
-        }
-
-        const scale = input / estimated
-        const scaled = {
-          system: Math.floor(system * scale),
-          user: Math.floor(user * scale),
-          assistant: Math.floor(assistant * scale),
-          tool: Math.floor(tool * scale),
-        }
-        const scaledTotal = scaled.system + scaled.user + scaled.assistant + scaled.tool
-        return build({ ...scaled, other: Math.max(0, input - scaledTotal) })
-      },
-    ),
-  )
+  const breakdown = createMemo(() => {
+    const call = ctx()?.message
+    if (!call) return []
+    const labels = {
+      instructions: language.t("context.composition.instructions"),
+      user: language.t("context.breakdown.user"),
+      assistant: language.t("context.breakdown.assistant"),
+      tool: language.t("context.breakdown.tool"),
+    }
+    const colors = { instructions: "info", user: "success", assistant: "property", tool: "warning" }
+    return contextComposition(props.messages(), sync.data.part, call).map((entry) => ({
+      label: labels[entry.key],
+      width: entry.share * 100,
+      percent: `~${Math.round(entry.share * 100)}%`,
+      color: `var(--syntax-${colors[entry.key]})`,
+    }))
+  })
 
   function Stat(statProps: { label: string; value: JSX.Element }) {
     return (
@@ -381,7 +286,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
 
         <Show when={breakdown().length > 0}>
           <div class="flex flex-col gap-2">
-            <div class="text-12-regular text-text-weak">{language.t("context.breakdown.title")}</div>
+            <div class="text-12-regular text-text-weak">{language.t("context.composition.title")}</div>
             <div class="h-2 w-full rounded-full bg-surface-base overflow-hidden flex">
               <For each={breakdown()}>
                 {(segment) => (
@@ -406,14 +311,14 @@ export function SessionContextTab(props: SessionContextTabProps) {
                 )}
               </For>
             </div>
-            <div class="hidden text-11-regular text-text-weaker">{language.t("context.breakdown.note")}</div>
+            <div class="text-11-regular text-text-weaker">{language.t("context.composition.note")}</div>
           </div>
         </Show>
 
         <Show when={systemPrompt()}>
           {(prompt) => (
             <div class="flex flex-col gap-2">
-              <div class="text-12-regular text-text-weak">{language.t("context.systemPrompt.title")}</div>
+              <div class="text-12-regular text-text-weak">{language.t("context.composition.instructions")}</div>
               <div class="border border-border-base rounded-md bg-surface-base px-3 py-2">
                 <Markdown text={prompt()} class="text-12-regular" />
               </div>

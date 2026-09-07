@@ -36,7 +36,7 @@ export const WalletState = z.object({
   refreshing: z.boolean(),
   /** When the served values were read from the account service. */
   refreshedAt: z.number().nullable(),
-  /** Why the latest refresh failed, when stored values are served instead. */
+  /** Why the latest summary or ledger read failed. An empty ledger is only authoritative when no error is present. */
   error: z.string().optional(),
 })
 export type WalletState = z.infer<typeof WalletState>
@@ -132,7 +132,13 @@ export async function readWallet(
   return walletState({
     snapshot: "value" in snapshot ? snapshot.value : null,
     refreshing: false,
-    error: "error" in snapshot ? snapshot.error : undefined,
+    error:
+      [
+        "error" in snapshot ? snapshot.error : undefined,
+        transactions === null ? "Wallet transaction history is unavailable. Retry when connected." : undefined,
+      ]
+        .filter(Boolean)
+        .join(" ") || undefined,
     summary: false,
     transactions: transactions ?? [],
   })

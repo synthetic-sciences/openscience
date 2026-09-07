@@ -1,13 +1,28 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
+import { createOpenScienceRuntime } from "@synsci/sdk/v2"
 import { Provider } from "../../src/provider/provider"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionFilesystem } from "../../src/session/filesystem"
+import { Server } from "../../src/server/server"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from "../fixture/stress-provider"
 
-function filteredResponse() {
+function filteredResponse(text?: string) {
   const body = [
+    ...(text
+      ? [
+          {
+            id: "chatcmpl-content-filter",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: STRESS_PROVIDER_MODEL,
+            choices: [{ index: 0, delta: { role: "assistant", content: text }, finish_reason: null }],
+          },
+        ]
+      : []),
     {
       id: "chatcmpl-content-filter",
       object: "chat.completion.chunk",
@@ -137,3 +152,104 @@ describe("empty provider content-filter responses", () => {
     })
   }, 20_000)
 })
+
+test("partial content-filter output fails the public run while preserving completed actions without retries", async () => {
+  const requests: unknown[] = []
+  const marker = { path: "" }
+  using provider = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      requests.push(await request.json())
+      if (requests.length > 1) return filteredResponse("I wrote the measurement file. The remaining answer is")
+      const chunk = (delta: Record<string, unknown>, finish: string | null) =>
+        `data: ${JSON.stringify({
+          id: "chatcmpl-content-filter-tool",
+          object: "chat.completion.chunk",
+          created: 1,
+          model: STRESS_PROVIDER_MODEL,
+          choices: [{ index: 0, delta, finish_reason: finish }],
+        })}\n\n`
+      return new Response(
+        chunk(
+          {
+            role: "assistant",
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_write_once",
+                type: "function",
+                function: {
+                  name: "write",
+                  arguments: JSON.stringify({ filePath: marker.path, content: "measurement: 42\n" }),
+                },
+              },
+            ],
+          },
+          null,
+        ) +
+          chunk({}, "tool_calls") +
+          "data: [DONE]\n\n",
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  await using tmp = await tmpdir({
+    git: true,
+    config: {
+      ...stressProviderConfig(`${provider.url.origin}/v1`),
+      agent: { title: { disable: true } },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: trustProject,
+    fn: async () => {
+      const session = await Session.create({
+        title: "Partial filtered reply",
+        permission: [{ permission: "write", pattern: "*", action: "allow" }],
+      })
+      marker.path = path.join(await SessionFilesystem.workspace(session.id), "measurement.txt")
+      const runtime = createOpenScienceRuntime({
+        baseUrl: "http://openscience.internal",
+        directory: tmp.path,
+        fetch: Server.internalFetch(),
+      })
+      const input = {
+        sessionID: session.id,
+        requestID: "partial-filter-once",
+        effort: "normal" as const,
+        delegation: false,
+        model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+        message: "Write the measurement file, then explain the result.",
+      }
+      const accepted = await runtime.prompt(input)
+      const completed = await runtime.wait({
+        sessionID: session.id,
+        runID: accepted.runID,
+        intervalMs: 10,
+        signal: AbortSignal.timeout(10_000),
+      })
+      expect(completed.state).toBe("failed")
+      expect(completed.error?.message).toContain("partial content")
+      expect(await Bun.file(marker.path).text()).toBe("measurement: 42\n")
+      expect(requests).toHaveLength(2)
+      const messages = await Session.messages({ sessionID: session.id })
+      const filtered = messages.find((message) => message.info.id === completed.resultMessageID)
+      expect(filtered?.info).toMatchObject({ role: "assistant", finish: "content-filter", error: { name: "APIError" } })
+      expect(
+        filtered?.parts.some((part) => part.type === "text" && part.text.includes("The remaining answer is")),
+      ).toBe(true)
+      expect(
+        messages
+          .flatMap((message) => message.parts)
+          .filter((part) => part.type === "tool" && part.tool === "write" && part.state.status === "completed"),
+      ).toHaveLength(1)
+      expect((await runtime.prompt(input)).runID).toBe(accepted.runID)
+      await SessionPrompt.loop(session.id)
+      expect(requests).toHaveLength(2)
+      expect(await Bun.file(marker.path).text()).toBe("measurement: 42\n")
+      await Session.remove(session.id)
+    },
+  })
+}, 20_000)

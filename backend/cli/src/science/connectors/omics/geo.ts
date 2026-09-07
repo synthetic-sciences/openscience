@@ -10,7 +10,7 @@
  *             full esummary record.
  */
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON, orFallback } from "../http"
+import { getJSON } from "../http"
 
 const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
@@ -77,17 +77,13 @@ export const geo: Connector = {
 
   async search(query, opts) {
     const limit = Math.min(Math.max(opts?.limit ?? 10, 1), 25)
-    const search = await orFallback(
-      getJSON<ESearchResult>(
-        `${EUTILS}/esearch.fcgi?db=gds&term=${encodeURIComponent(query)}&retmode=json&retmax=${limit}`,
-        { signal: opts?.signal, rateLimit: RATE_LIMIT },
-      ),
-      {} as ESearchResult,
-      opts?.signal,
+    const search = await getJSON<ESearchResult>(
+      `${EUTILS}/esearch.fcgi?db=gds&term=${encodeURIComponent(query)}&retmode=json&retmax=${limit}`,
+      { signal: opts?.signal, rateLimit: RATE_LIMIT },
     )
     const ids = search.esearchresult?.idlist ?? []
     if (ids.length === 0) return []
-    const summ = await orFallback(summaries(ids, opts?.signal), {} as ESummaryResult, opts?.signal)
+    const summ = await summaries(ids, opts?.signal)
     return ids.map((uid) => toHit(uid, summ.result?.[uid]))
   },
 
@@ -96,17 +92,13 @@ export const geo: Connector = {
     const isUid = /^\d+$/.test(trimmed)
     let uid = trimmed
     if (!isUid) {
-      const search = await orFallback(
-        getJSON<ESearchResult>(
-          `${EUTILS}/esearch.fcgi?db=gds&term=${encodeURIComponent(trimmed)}[ACCN]&retmode=json&retmax=20`,
-          { signal: opts?.signal, rateLimit: RATE_LIMIT },
-        ),
-        {} as ESearchResult,
-        opts?.signal,
+      const search = await getJSON<ESearchResult>(
+        `${EUTILS}/esearch.fcgi?db=gds&term=${encodeURIComponent(trimmed)}[ACCN]&retmode=json&retmax=20`,
+        { signal: opts?.signal, rateLimit: RATE_LIMIT },
       )
       const ids = search.esearchresult?.idlist ?? []
       if (ids.length === 0) return { id: trimmed, found: false }
-      const summ = await orFallback(summaries(ids, opts?.signal), {} as ESummaryResult, opts?.signal)
+      const summ = await summaries(ids, opts?.signal)
       const match = ids.find((u) => summ.result?.[u]?.accession === trimmed)
       if (match) return summ.result?.[match] ?? { id: trimmed, uid: match }
       uid = ids[0]

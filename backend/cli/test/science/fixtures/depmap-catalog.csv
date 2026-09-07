@@ -1,0 +1,5 @@
+release,release_date,filename,url,md5_hash
+DepMap Public 26Q1,2026-04-01,ScreenSequenceMap.csv,,57d6c76444a5a413353c07c4c75eb10e
+DepMap Public 26Q1,2026-04-01,CRISPRScreenMap.csv,,31e6beabaf716e9f0e2ee23a29309974
+DepMap Public 26Q1,2026-04-01,CRISPRGeneEffect.csv,,e4f75f92348388459c91401d20a9724e
+"Sanger CRISPR (Project Score, CERES)",2019-08-06,gene_effect.csv,https://ndownloader.figshare.com/files/16623881,

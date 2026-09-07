@@ -129,7 +129,7 @@ describe("arxiv error handling", () => {
 
   test("a non-Atom (HTML/empty) body is a typed error, not []", async () => {
     stub("<html><body>503 Service Temporarily Unavailable</body></html>")
-    await expect(arxiv.search("anything")).rejects.toThrow(/non-Atom/)
+    await expect(arxiv.search("anything")).rejects.toThrow(/non-Atom|HTML page/)
   })
 })
 

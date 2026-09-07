@@ -9,7 +9,7 @@
  * fetch(id) → catalogue entry for {accession}
  */
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON, orFallback } from "../http"
+import { getJSON } from "../http"
 
 const BASE = "https://www.ebi.ac.uk/gxa/sc"
 
@@ -60,11 +60,7 @@ function toHit(e: ScExperiment): ConnectorHit {
 }
 
 async function catalogue(signal?: AbortSignal): Promise<ScExperiment[]> {
-  const data = await orFallback(
-    getJSON<ScExperiments>(`${BASE}/json/experiments`, { signal }),
-    {} as ScExperiments,
-    signal,
-  )
+  const data = await getJSON<ScExperiments>(`${BASE}/json/experiments`, { signal })
   return data.experiments ?? []
 }
 

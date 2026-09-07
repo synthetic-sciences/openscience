@@ -6,6 +6,9 @@ default library; [skills.md](skills.md) explains how skills are discovered and
 resolved at runtime, and `openscience skill new` creates a personal skill
 outside the repo.
 
+See the [skill runtime design](skill-runtime-design.md) for bounded discovery,
+source precedence, and permission checks when a skill is loaded.
+
 ## Where it goes
 
 ```

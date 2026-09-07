@@ -87,6 +87,7 @@ import { Token } from "@/util/token"
 import { Auth } from "@/auth"
 import { SafeFileIO } from "@/file/safe-io"
 import { UpdateQuiescence } from "@/process/update-quiescence"
+import { SubtaskAttachments } from "./subtask-attachments"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -597,8 +598,17 @@ export namespace SessionPrompt {
         const attempt = await TaskAttempt.read(identity)
         if (attempt?.status !== "completed" || !attempt.result) return false
         const attemptInput = normalizeTaskAttemptInput(part.state.input, session.id)
-        const fingerprint = TaskAttempt.fingerprint(attemptInput)
-        const legacy = TaskAttempt.legacyFingerprint(attemptInput)
+        const source = TaskAttempt.wrapperSource(part)
+        const subtask = source
+          ? messages
+              .find((message) => message.info.id === source.messageID)
+              ?.parts.find((candidate) => candidate.id === source.partID && candidate.type === "subtask")
+          : undefined
+        const attachments = subtask?.type === "subtask" ? (subtask.attachments ?? []) : []
+        const fingerprint = TaskAttempt.fingerprint(
+          attachments.length ? { ...attemptInput, attachments } : attemptInput,
+        )
+        const legacy = attachments.length ? undefined : TaskAttempt.legacyFingerprint(attemptInput)
         if (attempt.fingerprint !== fingerprint && attempt.fingerprint !== legacy) {
           throw new Error(`Task call ${part.callID} changed arguments before durable result recovery`)
         }
@@ -1170,6 +1180,7 @@ export namespace SessionPrompt {
           callID: part.callID,
           extra: {
             bypassAgentCheck: true,
+            attachments: task.attachments,
             effort: MessageV2.resolveResearchEffort(lastUser.effort),
             delegationSettings: MessageV2.resolveDelegationSettings(lastUser.delegationSettings, {
               effort: lastUser.effort,
@@ -2357,6 +2368,31 @@ export namespace SessionPrompt {
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
         assertPreparing(input.sessionID)
+        if (part.type === "subtask" && part.attachments?.length) {
+          const attachments = await SubtaskAttachments.snapshot(
+            part.attachments,
+            {
+              sessionID: input.sessionID,
+              messageID: info.id,
+              agent: agent.name,
+              abort: preparation(input.sessionID)?.signal ?? new AbortController().signal,
+              messages: [],
+              metadata: async () => {},
+              ask,
+            },
+            (path) => hooks.value?.afterAttachmentAuthorization?.({ sessionID: input.sessionID, path }),
+          )
+          assertPreparing(input.sessionID)
+          return [
+            {
+              ...part,
+              attachments,
+              id: part.id ?? Identifier.ascending("part"),
+              messageID: info.id,
+              sessionID: input.sessionID,
+            },
+          ]
+        }
         if (part.type === "conversation") {
           const snapshot = await conversationSnapshot({
             sessionID: input.sessionID,
@@ -3668,8 +3704,10 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
               providerID: taskModel.providerID,
               modelID: taskModel.modelID,
             },
-            // TODO: how can we make task tool accept a more complex input?
             prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+            attachments: [...templateParts.filter((part) => part.type === "file"), ...(input.parts ?? [])].map((part) =>
+              MessageV2.SubtaskAttachment.parse(part),
+            ),
           },
         ]
       : [...templateParts, ...invocation, ...(input.parts ?? [])]

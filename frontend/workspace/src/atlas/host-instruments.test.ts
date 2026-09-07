@@ -55,10 +55,27 @@ describe("host reading", () => {
     expect(noMemory.cores).toBe("~0.3 of 4")
   })
 
-  test("treats a missing busy figure as idle rather than unavailable", () => {
-    // The route omits `busy` when it could not sample the interval, but the
-    // core count is still true — read 0 of 8, not blank.
-    const reading = hostReading({ cpu: { cores: 8 } })
+  test("preserves an unmeasurable CPU interval while showing machine capacity", () => {
+    const reading = hostReading({ cpu: { cores: 8 }, kernels: { live: 1, running: 1 } })
+
+    expect(reading.cores).toBe("— of 8")
+    expect(reading.running).toBe("1")
+    expect(reading.cpuFill).toBe(0)
+  })
+
+  test("does not use idle kernel CPU for unmeasured running commands", () => {
+    const reading = hostReading({
+      cpu: { cores: 8, kernels: 0 },
+      kernels: { live: 0, running: 0 },
+      commands: { live: 1, running: 1 },
+    })
+
+    expect(reading.cores).toBe("— of 8")
+    expect(reading.running).toBe("1")
+  })
+
+  test("keeps explicit zero CPU measurements", () => {
+    const reading = hostReading({ cpu: { cores: 8, compute: 0 } })
 
     expect(reading.cores).toBe("~0 of 8")
     expect(reading.cpuFill).toBe(0)

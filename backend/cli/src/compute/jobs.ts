@@ -3947,11 +3947,20 @@ export namespace ComputeJobs {
       }
       const proc = runtime?.process
       const provider = options.provider ?? runtime?.provider ?? ModalAdapter
-      const sandbox =
+      const discovery =
         job.target.kind === "modal" && context
-          ? (job.remote_id ??
-            (await provider.find(context, job.id, modalSpec(job, [], scope).project).catch(() => undefined)))
-          : undefined
+          ? job.remote_id
+            ? { id: job.remote_id }
+            : await provider.find(context, job.id, modalSpec(job, [], scope).project).then(
+                (id) => ({ id }),
+                (error) => ({
+                  id: undefined,
+                  error: OpenScience.redactSecrets(error instanceof Error ? error.message : String(error)),
+                }),
+              )
+          : { id: undefined }
+      const sandbox = discovery.id
+      const discoveryError = "error" in discovery ? discovery.error : undefined
       const modalStopped =
         job.target.kind === "modal"
           ? context
@@ -3960,7 +3969,7 @@ export namespace ComputeJobs {
                   () => true,
                   () => false,
                 )
-              : true
+              : discoveryError === undefined
             : false
           : true
       if (job.target.kind === "modal" && modalStopped) {
@@ -3974,6 +3983,7 @@ export namespace ComputeJobs {
       }
       if (job.target.kind === "modal" && !modalStopped) {
         await event(scope.root, job.id, "Modal did not confirm cancellation; the remote resource may still be billing")
+        if (discoveryError) await event(scope.root, job.id, `Modal sandbox discovery failed: ${discoveryError}`)
       }
       if (proc) {
         await Shell.killTree(proc, {
@@ -4004,7 +4014,8 @@ export namespace ComputeJobs {
               ? move(unknown, { type: "collect" })
               : unknown
           const warning = !modalStopped
-            ? "Cancellation was recorded, but Modal did not confirm that the sandbox stopped. It may still be billing; retry cancellation or check Modal."
+            ? "Cancellation was recorded, but Modal did not confirm that the sandbox stopped. It may still be billing; retry cancellation or check Modal." +
+              (discoveryError ? ` Sandbox discovery failed: ${discoveryError}` : "")
             : undefined
           const updated = Job.parse({
             ...collecting,

@@ -12,7 +12,6 @@ on:
       - "frontend/workspace/src/context/global-sync.tsx"
       - "tooling/repo/runtime-conformance.ts"
       - "tooling/repo/generate.ts"
-      - "examples/**"
       - ".github/actions/setup-bun/**"
       - ".github/workflows/runtime-conformance.yml"
       - "package.json"
@@ -55,11 +54,6 @@ jobs:
           bun run --cwd backend/cli test ./test/project/trust.test.ts
           bun run --cwd backend/cli test ./test/session/system-environment.test.ts ./test/session/llm.test.ts ./test/session/title-dedupe.test.ts
           bun run --cwd backend/cli test ./test/session/stop-tool-continuation.test.ts ./test/session/stall-recovery.test.ts ./test/session/text-loop.test.ts ./test/session/compaction.test.ts
-          bun run --cwd examples/local-lab-plugin setup
-          bun test ./examples/local-lab-plugin
-          bun test ./examples/slack-research
-      - name: Check standalone Slack starter types
-        run: node_modules/.bin/tsc --project examples/slack-research/tsconfig.json --typeRoots backend/cli/node_modules/@types
       - name: Check the first-party Research admission contract
         working-directory: frontend/workspace
         run: bun test ./src/components/prompt-runtime.test.ts

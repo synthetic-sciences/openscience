@@ -20,7 +20,7 @@ const GENE_BY_SYMBOL = `query($v:String!,$ref:ReferenceGenomeId!){gene(gene_symb
 const GENE_BY_ID = `query($v:String!,$ref:ReferenceGenomeId!){gene(gene_id:$v,reference_genome:$ref){${GENE_FIELDS}}}`
 const VARIANT = `query($v:String!,$ds:DatasetId!){variant(variantId:$v,dataset:$ds){${VARIANT_FIELDS}}}`
 
-/** POST a GraphQL query; returns the `data` block, or undefined on any failure. */
+/** POST a GraphQL query; returns the `data` block, or an empty data block for a missing record. */
 async function gql(query: string, variables: Rec, signal?: AbortSignal): Promise<Rec | undefined> {
   try {
     const res = await request(API, {
@@ -30,8 +30,8 @@ async function gql(query: string, variables: Rec, signal?: AbortSignal): Promise
       signal,
     })
     return asRecord(res.json<{ data?: unknown }>().data)
-  } catch {
-    return undefined
+  } catch (error) {
+    throw error
   }
 }
 

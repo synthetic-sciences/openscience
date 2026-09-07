@@ -435,7 +435,9 @@ async function main() {
       const s = spinner("Checking for updates...")
       const current = raw.replace(/[^0-9.]/g, "")
       const latest = runQuiet(`npm view @synsci/openscience@${OPENSCIENCE_NPM_TAG} version`)
-      if (!latest || current === latest) {
+      if (!latest) {
+        s.warn(`Could not check for updates, continuing with openscience ${current}`)
+      } else if (current === latest) {
         s.ok(`openscience ${current} ${DIM}(up to date)${RESET}`)
       } else {
         s.update(`Upgrading ${current} → ${latest}...`)

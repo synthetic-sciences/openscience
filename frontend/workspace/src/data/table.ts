@@ -161,12 +161,16 @@ export function parseTable(format: TableFormat, text: string, limit = 5_000): Da
   }
 }
 
-export function summarizeColumn(table: Pick<DataTable, "rows">, index: number) {
-  const values = table.rows
+export function numericColumn(table: Pick<DataTable, "rows">, index: number) {
+  return table.rows
     .map((row) => row[index] ?? "")
     .filter((value) => value.trim())
     .map(Number)
     .filter(Number.isFinite)
+}
+
+export function summarizeColumn(table: Pick<DataTable, "rows">, index: number) {
+  const values = numericColumn(table, index)
   const total = values.reduce((sum, value) => sum + value, 0)
   return {
     count: values.length,

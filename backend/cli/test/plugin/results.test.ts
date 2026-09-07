@@ -33,7 +33,7 @@ async function fixture(source?: string) {
       await fs.symlink(path.join(root, "tooling/plugin"), path.join(modules, "plugin"), "dir")
       await Bun.write(
         path.join(plugins, "example.ts"),
-        source ?? (await Bun.file(path.join(root, "examples/local-lab-plugin/index.ts")).text()),
+        source ?? (await Bun.file(path.join(import.meta.dir, "../fixture/calibration-plugin.ts")).text()),
       )
     },
   })
@@ -65,7 +65,7 @@ afterEach(async () => {
 })
 
 describe("plugin tool results", () => {
-  test("executes the external example with validated inputs and host-scoped attachments", async () => {
+  test("executes an external plugin fixture with validated inputs and host-scoped attachments", async () => {
     await using temporary = await fixture()
     await Instance.provide({
       directory: temporary.path,

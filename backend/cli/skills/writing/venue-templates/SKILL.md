@@ -413,6 +413,8 @@ python scripts/customize_template.py --interactive
 
 ### validate_format.py
 
+This helper uses bundled reference profiles, which are not current official venue rules. It checks total page count; margin/font entries require manual verification. Exit 0 means all requested checks were performed and passed, 1 means a detected failure, and 2 means incomplete/invalid input. An informational or skipped check cannot produce a compliance pass. Reports preserve this distinction.
+
 Check document compliance with venue requirements:
 
 ```bash
@@ -431,7 +433,7 @@ python scripts/validate_format.py \
 # Generate validation report
 python scripts/validate_format.py \
   --file my_paper.pdf \
-  --venue "Science" \
+  --venue "Nature" \
   --report validation_report.txt
 ```
 

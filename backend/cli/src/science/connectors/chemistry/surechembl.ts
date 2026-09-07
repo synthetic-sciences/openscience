@@ -1,5 +1,5 @@
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON, request, orFallback } from "../http"
+import { getJSON, request } from "../http"
 
 /**
  * SureChEMBL — chemistry mined from the patent literature (EMBL-EBI). Public API,
@@ -40,15 +40,11 @@ function pickTitle(doc: Document): string {
 
 async function searchContent(query: string, itemsPerPage: number, signal?: AbortSignal): Promise<Document[]> {
   const url = `${BASE}/search/content?query=${encodeURIComponent(query)}&page=1&itemsPerPage=${itemsPerPage}`
-  const res = await orFallback(
-    request(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      signal,
-    }),
-    undefined,
+  const res = await request(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     signal,
-  )
+  })
   if (!res) return []
   const body = res.json<{ data?: { results?: { documents?: Document[] } } }>()
   const docs = body.data?.results?.documents
@@ -80,13 +76,9 @@ export const surechembl: Connector = {
 
   async fetch(id, opts) {
     if (/^\d+$/.test(id.trim())) {
-      const data = await orFallback(
-        getJSON<{ data?: Chemical[] }>(`${BASE}/chemical/id/${encodeURIComponent(id.trim())}`, {
-          signal: opts?.signal,
-        }),
-        {} as { data?: Chemical[] },
-        opts?.signal,
-      )
+      const data = await getJSON<{ data?: Chemical[] }>(`${BASE}/chemical/id/${encodeURIComponent(id.trim())}`, {
+        signal: opts?.signal,
+      })
       const records = Array.isArray(data.data) ? data.data : []
       return records[0] ?? {}
     }

@@ -3,7 +3,7 @@ title: "Plugins, SDK, and editors"
 description: "Extend OpenScience or connect it to your own application."
 ---
 
-Use [Skills](/openscience/skills) for procedures and [MCP connectors](/openscience/connectors) for external tools. Plugins and the SDK are for integrations that need code. Browse the [developer ecosystem](/openscience/ecosystem) for maintained source integrations, examples, and their compatibility boundaries.
+Use [Skills](/openscience/skills) for procedures and [MCP connectors](/openscience/connectors) for external tools. Plugins and the SDK are for integrations that need code.
 
 ## Install a plugin
 
@@ -37,15 +37,13 @@ are tool results; save a research artifact separately when you need versioned
 storage. No custom browser component is required to expose a file result to
 another client.
 
-The [local lab example](https://github.com/synthetic-sciences/openscience/tree/main/examples/local-lab-plugin)
-contains an offline calibration source, a summary tool that returns a CSV, tests,
-and a catalog submission record. It currently uses the development checkout's
-plugin package; use a matching published package once these APIs are released.
+Connector contributions and rich results are available in the development
+checkout. Use matching source packages until a release containing these APIs is
+published; an older package version does not imply support for them.
 
 Use a trusted global plugin for code that runs inside the server. Project plugins
 require project trust and are refused while the execution sandbox is enabled.
-The example does not require disabling that sandbox. For separate tool services,
-use [MCP connectors](/openscience/connectors). Use a skill to teach a procedure and
+For separate tool services, use [MCP connectors](/openscience/connectors). Use a skill to teach a procedure and
 the SDK to build a separate application around the same research sessions.
 
 ## Write a project tool

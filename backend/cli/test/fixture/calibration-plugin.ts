@@ -1,5 +1,8 @@
 import { tool, type Connector, type Plugin } from "@synsci/plugin"
 
+// Test-only deterministic records. Integration tests copy this module outside
+// the project to exercise the public plugin loader and its trust boundary.
+
 const samples = [
   { id: "calibration-a", title: "Calibration sample A", values: [1, 2, 3] },
   { id: "calibration-b", title: "Calibration sample B", values: [2, 4, 6] },
@@ -7,9 +10,9 @@ const samples = [
 
 const source: Connector = {
   id: "local-lab",
-  name: "Local lab examples",
+  name: "Test calibration records",
   domain: "general",
-  description: "Offline calibration records supplied by the local lab plugin.",
+  description: "Deterministic calibration records for plugin contract tests.",
   async search(query, options) {
     options?.signal?.throwIfAborted()
     return samples
@@ -25,7 +28,7 @@ const source: Connector = {
   },
 }
 
-const LocalLabPlugin = (async () => ({
+const CalibrationPlugin = (async () => ({
   connector: [source],
   tool: {
     local_lab_summary: tool({
@@ -58,4 +61,4 @@ const LocalLabPlugin = (async () => ({
   },
 })) satisfies Plugin
 
-export default LocalLabPlugin
+export default CalibrationPlugin

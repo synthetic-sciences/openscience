@@ -12,6 +12,8 @@ Usage:
 import argparse
 import subprocess
 from pathlib import Path
+from datetime import datetime, timezone
+import sys
 
 
 # Venue requirements database
@@ -83,7 +85,12 @@ def check_page_count(pdf_path, venue_reqs):
     if not pdf_info:
         return {"status": "skip", "message": "Could not determine page count"}
 
-    pages = int(pdf_info.get('Pages', 0))
+    try:
+        pages = int(pdf_info["Pages"])
+        if pages < 1:
+            raise ValueError("Invalid page count")
+    except (KeyError, ValueError):
+        return {"status": "skip", "message": "PDF page count was unavailable or invalid"}
     limit = venue_reqs.get('page_limit')
 
     if limit is None:
@@ -141,15 +148,21 @@ def validate_document(pdf_path, venue, checks):
     venue_key = venue.lower().replace(" ", "_")
 
     if venue_key not in VENUE_REQUIREMENTS:
-        print(f"❌ Unknown venue: {venue}")
-        print(f"Available venues: {', '.join(VENUE_REQUIREMENTS.keys())}")
-        return
+        raise ValueError(f"Unknown venue: {venue}. Available profiles: {', '.join(VENUE_REQUIREMENTS)}")
+    allowed = {"page-count", "margins", "fonts", "all"}
+    if not checks or any(check not in allowed for check in checks):
+        raise ValueError("Choose at least one valid check: page-count, margins, fonts, all")
+    if not pdf_path.is_file():
+        raise ValueError(f"PDF file not found: {pdf_path}")
+    with pdf_path.open("rb") as source:
+        if source.read(5) != b"%PDF-":
+            raise ValueError("Input is not a PDF file")
 
     venue_reqs = VENUE_REQUIREMENTS[venue_key]
 
     print(f"\n{'=' * 60}")
     print(f"VALIDATING: {pdf_path.name}")
-    print(f"VENUE: {venue}")
+    print(f"VENUE PROFILE: {venue} (bundled reference; verify current official requirements)")
     print(f"{'=' * 60}\n")
 
     results = {}
@@ -169,18 +182,23 @@ def validate_document(pdf_path, venue, checks):
         print(f"{check_name.upper()}:")
         print(f"  {result['message']}\n")
 
-    # Summary
-    failures = sum(1 for r in results.values() if r['status'] == 'fail')
-    passes = sum(1 for r in results.values() if r['status'] == 'pass')
-
     print(f"{'=' * 60}")
-    if failures == 0:
-        print(f"✓ VALIDATION PASSED ({passes} checks)")
-    else:
-        print(f"✗ VALIDATION FAILED ({failures} issues)")
+    status = validation_status(results)
+    print(f"VALIDATION {status.upper()} ({sum(r['status'] == 'pass' for r in results.values())} performed checks passed)")
+    if status == "incomplete":
+        print("Manual or unavailable checks remain; this is not a compliance pass.")
     print(f"{'=' * 60}\n")
 
     return results
+
+
+def validation_status(results):
+    if any(result["status"] == "fail" for result in results.values()):
+        return "failed"
+    if results and all(result["status"] == "pass" for result in results.values()):
+        return "passed"
+    return "incomplete"
+
 
 
 def generate_report(pdf_path, venue, results, report_path):
@@ -191,15 +209,15 @@ def generate_report(pdf_path, venue, results, report_path):
         f.write(f"{'=' * 60}\n\n")
         f.write(f"File: {pdf_path}\n")
         f.write(f"Venue: {venue}\n")
-        f.write(f"Date: {Path.ctime(pdf_path)}\n\n")
+        f.write(f"Date: {datetime.now(timezone.utc).isoformat()}\n\n")
 
         for check_name, result in results.items():
             f.write(f"{check_name.upper()}:\n")
             f.write(f"  Status: {result['status']}\n")
             f.write(f"  {result['message']}\n\n")
 
-        failures = sum(1 for r in results.values() if r['status'] == 'fail')
-        f.write(f"\nSummary: {'PASSED' if failures == 0 else 'FAILED'}\n")
+        f.write(f"\nSummary: {validation_status(results).upper()}\n")
+        f.write("Bundled reference profile only; verify current official venue requirements.\n")
 
     print(f"Report saved to: {report_path}")
 
@@ -226,25 +244,16 @@ Examples:
 
     args = parser.parse_args()
 
-    # Check file exists
     pdf_path = Path(args.file)
-    if not pdf_path.exists():
-        print(f"Error: File not found: {pdf_path}")
-        return
-
-    # Parse checks
-    if args.check_all:
-        checks = ['all']
-    else:
-        checks = [c.strip() for c in args.check.split(',')]
-
-    # Validate
-    results = validate_document(pdf_path, args.venue, checks)
-
-    # Generate report if requested
-    if args.report and results:
-        generate_report(pdf_path, args.venue, results, Path(args.report))
+    checks = ["all"] if args.check_all else [check.strip() for check in args.check.split(",")]
+    try:
+        results = validate_document(pdf_path, args.venue, checks)
+        if args.report:
+            generate_report(pdf_path, args.venue, results, Path(args.report))
+    except (ValueError, OSError) as error:
+        parser.exit(2, f"ERROR: {error}\n")
+    return {"passed": 0, "failed": 1, "incomplete": 2}[validation_status(results)]
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

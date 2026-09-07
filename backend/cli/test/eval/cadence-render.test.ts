@@ -216,6 +216,7 @@ describe("cadence harness dashboard", () => {
         }),
       ),
       Bun.write(path.join(raw, "root", "executions.json"), JSON.stringify([{ id: "root-exec", status: "completed" }])),
+      Bun.write(path.join(raw, "root", "children.json"), JSON.stringify([{ id: "child" }])),
       Bun.write(
         path.join(raw, "child", "session.json"),
         JSON.stringify({ id: "child", parentID: "root", title: "Child session" }),
@@ -236,6 +237,7 @@ describe("cadence harness dashboard", () => {
         }),
       ),
       Bun.write(path.join(raw, "child", "executions.json"), JSON.stringify([{ id: "child-exec", status: "failed" }])),
+      Bun.write(path.join(raw, "child", "children.json"), JSON.stringify([])),
     ])
 
     const report = await loadCampaignReport({ root: treeRoot, plannedPrompts: 1 })
@@ -260,6 +262,15 @@ describe("cadence harness dashboard", () => {
     expect(html).toContain("Session tree")
     expect(html).toContain("Root metrics remain the run summary")
     expect(html).toContain("Child session")
+    expect(html).toContain("trace, execution and child discovery reads succeeded")
+
+    await Bun.write(path.join(raw, "root", "children.json"), JSON.stringify({ error: "child discovery unavailable" }))
+    const partial = await loadCampaignReport({ root: treeRoot, plannedPrompts: 1 })
+    expect(partial.runs[0]?.treeMetrics?.captureComplete).toBe(false)
+    expect(partial.runs[0]?.treeMetrics?.toolCalls).toBe(5)
+    const partialHtml = renderCampaignHtml(partial, path.join(treeRoot, "dashboard", "index.html"))
+    expect(partialHtml).toContain("root child discovery")
+    expect(partialHtml).toContain("totals exclude unavailable metrics")
   })
 
   test("writes a standalone dashboard and tolerates a campaign with no runs", async () => {

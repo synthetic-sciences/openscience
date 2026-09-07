@@ -28,9 +28,7 @@ export const chebi: Connector = {
   async search(query, opts) {
     const rows = Math.min(opts?.limit ?? 10, 25)
     const url = `${OLS}/search?q=${encodeURIComponent(query)}&ontology=chebi&rows=${rows}`
-    const data = await getJSON<{ response?: { docs?: Doc[] } }>(url, { signal: opts?.signal }).catch(
-      () => ({}) as { response?: { docs?: Doc[] } },
-    )
+    const data = await getJSON<{ response?: { docs?: Doc[] } }>(url, { signal: opts?.signal })
     const docs = data.response?.docs ?? []
     return docs.slice(0, rows).map<ConnectorHit>((d) => {
       const id = d.obo_id ?? d.short_form?.replace("_", ":") ?? ""
@@ -46,9 +44,7 @@ export const chebi: Connector = {
 
   async fetch(id, opts) {
     const url = `${OLS}/ontologies/chebi/terms?obo_id=${encodeURIComponent(id)}`
-    const data = await getJSON<{ _embedded?: { terms?: unknown[] } }>(url, { signal: opts?.signal }).catch(
-      () => ({}) as { _embedded?: { terms?: unknown[] } },
-    )
+    const data = await getJSON<{ _embedded?: { terms?: unknown[] } }>(url, { signal: opts?.signal })
     const terms = data._embedded?.terms
     return Array.isArray(terms) && terms.length ? terms[0] : data
   },

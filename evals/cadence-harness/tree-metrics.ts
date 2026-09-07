@@ -1,11 +1,12 @@
 import type { CampaignSessionMetrics, CampaignTokenMetrics, CampaignTreeMetrics } from "./report-types"
 
-type Json = Record<string, any>
+type Json = Record<string, unknown>
 
 export type CapturedSessionSource = {
   sessionID?: string
   session?: unknown
   trace?: unknown
+  children?: unknown
   executions?: unknown
   messages?: unknown
   filesystem?: unknown
@@ -15,8 +16,13 @@ function record(value: unknown): Json | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : undefined
 }
 
-function array(value: unknown) {
+function array(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
+}
+
+function capturedTrace(value: unknown) {
+  const source = record(value)
+  return source && !Object.hasOwn(source, "error") && record(source.summary) ? source : undefined
 }
 
 function finite(value: unknown) {
@@ -29,6 +35,18 @@ function finite(value: unknown) {
 
 function string(value: unknown) {
   return typeof value === "string" && value.trim() ? value : undefined
+}
+
+/** Retain usable IDs while distinguishing a verified empty list from a failed query. */
+export function capturedChildren(value: unknown) {
+  if (!Array.isArray(value)) return { ids: [], complete: false }
+  const ids = value.flatMap((child: unknown) => {
+    const source = record(child)
+    const id = string(source?.id ?? source?.sessionID ?? source?.sessionId)
+    // IDs become capture directory names; never follow a path from malformed data.
+    return id && /^[a-zA-Z0-9_-]+$/.test(id) ? [id] : []
+  })
+  return { ids: [...new Set(ids)], complete: ids.length === value.length }
 }
 
 function executions(value: unknown) {
@@ -104,7 +122,7 @@ export function aggregateCapturedSessionTree(
   const warnings: string[] = []
   for (const source of sources) {
     const session = record(source.session)
-    const trace = record(source.trace)
+    const trace = capturedTrace(source.trace)
     const id = string(source.sessionID ?? session?.id ?? record(trace?.session)?.id)
     if (!id) {
       warnings.push("A captured session had no stable session ID and was omitted.")
@@ -121,7 +139,7 @@ export function aggregateCapturedSessionTree(
   const resolvedRoot = rootSessionID && byID.has(rootSessionID) ? rootSessionID : byID.keys().next().value
   const agents = new Map<string, string>()
   for (const source of byID.values()) {
-    const trace = record(source.trace)
+    const trace = capturedTrace(source.trace)
     for (const child of array(trace?.children)) {
       const item = record(child)
       const sessionID = string(item?.sessionID ?? item?.sessionId ?? item?.id)
@@ -141,7 +159,7 @@ export function aggregateCapturedSessionTree(
 
   for (const [sessionID, source] of byID) {
     const session = record(source.session)
-    const trace = record(source.trace)
+    const trace = capturedTrace(source.trace)
     const summary = record(trace?.summary)
     const traceFailures = array(trace?.failures)
     const traceTools = array(trace?.tools)
@@ -149,11 +167,8 @@ export function aggregateCapturedSessionTree(
     const traceApprovals = array(trace?.approvals)
     const traceChildren = array(trace?.children)
     const traceRetries = array(trace?.retries)
-    for (const child of traceChildren) {
-      const item = record(child)
-      const childID = string(item?.sessionID ?? item?.sessionId ?? item?.id)
-      if (childID) expectedChildren.add(childID)
-    }
+    const discovered = capturedChildren(source.children)
+    for (const childID of [...discovered.ids, ...capturedChildren(traceChildren).ids]) expectedChildren.add(childID)
     allFailures.push(...traceFailures)
 
     const usage = tokenMetrics(summary?.tokens)
@@ -168,7 +183,13 @@ export function aggregateCapturedSessionTree(
     }
     const executionValues = executions(source.executions)
     const executionRecord = record(source.executions)
-    const executionCaptured = Array.isArray(source.executions) || Boolean(executionRecord && !executionRecord.error)
+    const executionCaptured =
+      Array.isArray(source.executions) ||
+      Boolean(
+        executionRecord &&
+        !Object.hasOwn(executionRecord, "error") &&
+        ["executions", "runs", "jobs", "items"].some((key) => Array.isArray(executionRecord[key])),
+      )
     if (executionCaptured) executionSessionCount += 1
     const parentSessionId = string(session?.parentID ?? session?.parentId ?? session?.parent_id)
     sessions.push({
@@ -180,22 +201,38 @@ export function aggregateCapturedSessionTree(
       status: string(record(trace?.session)?.status),
       durationMs: finite(summary?.totalCompletionTimeMs ?? summary?.durationMs),
       timeToFirstOutputMs: finite(summary?.timeToFirstUsefulOutputMs ?? summary?.timeToFirstOutputMs),
-      toolCalls: Array.isArray(trace?.tools) ? traceTools.length : (finite(summary?.toolCalls) ?? 0),
-      searches: Array.isArray(trace?.searches) ? traceSearches.length : (finite(summary?.searchCount) ?? 0),
-      approvals: Array.isArray(trace?.approvals) ? traceApprovals.length : (finite(summary?.approvalCount) ?? 0),
-      childAgentLinks: Array.isArray(trace?.children) ? traceChildren.length : (finite(summary?.childCount) ?? 0),
-      retries: Array.isArray(trace?.retries) ? traceRetries.length : (finite(summary?.retryCount) ?? 0),
-      failures: uniqueFailureCount(traceFailures),
+      toolCalls: trace ? (Array.isArray(trace.tools) ? traceTools.length : finite(summary?.toolCalls)) : undefined,
+      searches: trace
+        ? Array.isArray(trace.searches)
+          ? traceSearches.length
+          : finite(summary?.searchCount)
+        : undefined,
+      approvals: trace
+        ? Array.isArray(trace.approvals)
+          ? traceApprovals.length
+          : finite(summary?.approvalCount)
+        : undefined,
+      childAgentLinks: trace
+        ? Array.isArray(trace.children)
+          ? traceChildren.length
+          : finite(summary?.childCount)
+        : undefined,
+      retries: trace ? (Array.isArray(trace.retries) ? traceRetries.length : finite(summary?.retryCount)) : undefined,
+      failures: trace && Array.isArray(trace.failures) ? uniqueFailureCount(traceFailures) : undefined,
       reportedFailures: finite(summary?.failureCount),
-      executions: executionValues.length,
-      failedExecutions: executionValues.filter(failed).length,
+      executions: executionCaptured ? executionValues.length : undefined,
+      failedExecutions: executionCaptured ? executionValues.filter(failed).length : undefined,
       cost: sessionCost,
       tokens: usage,
     })
-    if (!trace) warnings.push(`Session ${sessionID} had no captured trace.`)
-    if (source.executions === undefined) warnings.push(`Session ${sessionID} had no captured execution query.`)
-    else if (record(source.executions)?.error)
-      warnings.push(`Session ${sessionID} execution capture returned an error.`)
+    if (!trace)
+      warnings.push(
+        `Session ${sessionID} trace capture was missing, invalid, or returned an error; its trace metrics are unavailable.`,
+      )
+    if (!executionCaptured)
+      warnings.push(`Session ${sessionID} execution capture was missing, invalid, or returned an error.`)
+    if (!discovered.complete)
+      warnings.push(`Session ${sessionID} child discovery was missing, invalid, or returned an error.`)
   }
 
   for (const childID of expectedChildren) {

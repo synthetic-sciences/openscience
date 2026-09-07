@@ -47,7 +47,7 @@ interface UniProtLite {
 /**
  * Resolve a free-text protein query into UniProt accessions. Several sources
  * (AlphaFold, SIFTS) are keyed by accession only, so this bridges a name search
- * to the accessions they understand. Never throws — returns [] on any failure.
+ * to the accessions they understand. Source failures propagate; only a successful empty lookup returns [].
  */
 export async function resolveUniProtAccessions(query: string, limit: number, signal?: AbortSignal): Promise<string[]> {
   const url =
@@ -58,7 +58,7 @@ export async function resolveUniProtAccessions(query: string, limit: number, sig
     return asArray<{ primaryAccession?: string }>(data.results)
       .map((r) => r.primaryAccession)
       .filter((a): a is string => typeof a === "string")
-  } catch {
-    return []
+  } catch (error) {
+    throw error
   }
 }

@@ -43,7 +43,10 @@ test("an external scientific plugin executes through the public Research API and
       await fs.mkdir(modules, { recursive: true })
       await fs.symlink(path.join(root, "tooling/plugin"), path.join(modules, "plugin"), "dir")
       await Bun.write(path.join(directory, "package.json"), JSON.stringify({ type: "module" }))
-      await Bun.write(path.join(directory, "index.ts"), Bun.file(path.join(root, "examples/local-lab-plugin/index.ts")))
+      await Bun.write(
+        path.join(directory, "index.ts"),
+        Bun.file(path.join(import.meta.dir, "../fixture/calibration-plugin.ts")),
+      )
     },
   })
   // The reviewed package lives outside the project and is configured by the

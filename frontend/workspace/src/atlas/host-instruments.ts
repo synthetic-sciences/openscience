@@ -67,14 +67,16 @@ export function hostReading(capacity?: Partial<Capacity>): Reading {
     capacity?.kernels?.running === undefined
       ? undefined
       : capacity.kernels.running + (capacity.commands?.running ?? 0) + (capacity.jobs?.running ?? 0)
-  const load = cpu?.compute ?? cpu?.kernels ?? 0
+  // A kernel-only reading cannot stand in for unmeasured live commands.
+  // Older servers without command inventory expose only the kernel metric.
+  const load = cpu?.compute ?? (commands === undefined || commands === 0 ? cpu?.kernels : undefined)
 
   return {
     headline: bytes(used),
     memory: total ? `of ${total} GB memory` : "memory unavailable",
     memoryFill: memory?.total === undefined ? 0 : ratio(used ?? 0, memory.total),
-    cores: cores === undefined ? "—" : `~${Number(load.toFixed(1))} of ${cores}`,
-    cpuFill: cores === undefined ? 0 : ratio(load, cores),
+    cores: cores === undefined ? "—" : `${load === undefined ? "—" : `~${Number(load.toFixed(1))}`} of ${cores}`,
+    cpuFill: cores === undefined || load === undefined ? 0 : ratio(load, cores),
     live: live === undefined ? "—" : String(live),
     running: running === undefined ? "—" : String(running),
     kernels:

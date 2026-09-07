@@ -21,6 +21,8 @@ import { TaskAttempt, TaskCapacity } from "./task-attempt"
 import { Storage } from "@/storage/storage"
 import { ToolSelection } from "@/session/tool-selection"
 import { availableParallelism } from "node:os"
+import { SubtaskAttachments } from "@/session/subtask-attachments"
+import { SessionWorkspace } from "@/session/workspace"
 
 export const DELEGATION_PROFILES = ["explore", "execute"] as const
 export const DELEGATION_SPECIALISTS = ["biology", "physics", "ml"] as const
@@ -304,6 +306,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // session or a `ses_new` placeholder. Those values unambiguously mean a
       // new child; only a different, real direct-child id is a continuation.
       const attemptInput = normalizeTaskAttemptInput(params, ctx.sessionID)
+      const attachments = MessageV2.SubtaskAttachment.array().parse(ctx.extra?.attachments ?? [])
       const continuationID = attemptInput.session_id
       const continuation = continuationID
         ? assertTaskContinuation({
@@ -353,8 +356,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
       const reserved = await TaskAttempt.reserve({
         ...identity,
-        fingerprint: TaskAttempt.fingerprint(attemptInput),
-        legacyFingerprint: TaskAttempt.legacyFingerprint(attemptInput),
+        fingerprint: TaskAttempt.fingerprint(attachments.length ? { ...attemptInput, attachments } : attemptInput),
+        ...(!attachments.length && { legacyFingerprint: TaskAttempt.legacyFingerprint(attemptInput) }),
         childSessionID: continuationID,
       })
       const started = reserved.createdAt
@@ -388,10 +391,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                   : ` (@${params.subagent_type} subagent)`),
               permission: childPermissionRules(config.experimental?.primary_tools),
             })
-        await SessionFilesystem.grantTaskHandoff({
-          parentSessionID: ctx.sessionID,
-          childSessionID: session.id,
-        })
+        // Project-mode parents have no private scratch to hand off. Their
+        // children keep isolated outputs and the existing project read policy.
+        if ((await SessionWorkspace.get(ctx.sessionID)).mode === "isolated") {
+          await SessionFilesystem.grantTaskHandoff({
+            parentSessionID: ctx.sessionID,
+            childSessionID: session.id,
+          })
+        }
 
         const model = settings.workerModel ??
           agent.model ?? { modelID: assistant.modelID, providerID: assistant.providerID }
@@ -551,7 +558,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                       task: false,
                       ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((tool) => [tool, false])),
                     },
-                    parts: await SessionPrompt.resolvePromptParts(transfer.prompt),
+                    parts: [
+                      ...(await SessionPrompt.resolvePromptParts(transfer.prompt)),
+                      ...(await SubtaskAttachments.materialize(attachments, session.id, ctx.abort)),
+                    ],
                   })
                 }
                 return run().then(

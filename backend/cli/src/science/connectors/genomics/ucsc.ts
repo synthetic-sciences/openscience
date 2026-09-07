@@ -67,8 +67,8 @@ export const ucsc: Connector = {
         { signal: opts?.signal },
       )
       return toHits(genome, envelope, limit)
-    } catch {
-      return []
+    } catch (error) {
+      throw error
     }
   },
 
@@ -96,8 +96,8 @@ export const ucsc: Connector = {
         `${API}/search?search=${encodeURIComponent(target)}&genome=${encodeURIComponent(genome)}`,
         { signal: opts?.signal },
       )
-    } catch {
-      return {}
+    } catch (error) {
+      throw error
     }
   },
 }

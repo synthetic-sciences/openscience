@@ -1,64 +1,91 @@
 /**
  * DepMap (Cancer Dependency Map) connector.
  *
- * DepMap's portal exposes a public, key-free download catalogue at
- * `/portal/api/download/files` describing every released dataset (CRISPR/RNAi
- * dependencies, expression, mutations, copy-number, drug sensitivity, models…).
- * This connector searches that catalogue and returns file/dataset records.
+ * The supported public metadata endpoint returns CSV, including release names,
+ * dates, file names and checksums. Portal-hosted download URLs may be omitted;
+ * external public links remain when the catalogue supplies them. This connector
+ * retrieves metadata, not the underlying datasets or verification-protected URLs.
  *
  * The portal periodically fronts its API with a bot-verification page that
- * returns HTML instead of JSON. This connector parses defensively: a non-JSON
- * body yields an empty result set rather than throwing.
+ * returns HTML instead of metadata. Invalid catalogues are source failures, not
+ * empty scientific results.
  *
- * search()  → filter /portal/api/download/files table
+ * search()  → filter /portal/api/no-captcha/download/files CSV
  * fetch(id) → catalogue file whose name/url matches {id}
  */
 import type { Connector, ConnectorHit } from "../types"
-import { getText, orFallback } from "../http"
+import { getText, SourceResponseError } from "../http"
 
 const PORTAL = "https://depmap.org/portal"
-const FILES_API = `${PORTAL}/api/download/files`
+const FILES_API = `${PORTAL}/api/no-captcha/download/files`
 
 interface DepmapFile {
   releaseName?: string
+  releaseDate?: string
   fileName?: string
   fileDescription?: string
   fileType?: string
   downloadUrl?: string
   size?: string
   taigaUrl?: string
+  md5Hash?: string
 }
 
-interface DepmapRelease {
-  releaseName?: string
-  releaseGroup?: string
-  releaseDate?: string
-  description?: string
-  citation?: string
-}
-
-interface DepmapCatalogue {
-  table?: DepmapFile[]
-  data?: DepmapFile[]
-  releaseData?: DepmapRelease[]
-}
-
-/** Parse JSON without throwing on the HTML verification page. */
-function safeParse(body: string): DepmapCatalogue | undefined {
-  const trimmed = body.trimStart()
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return undefined
+/** Strict CSV parsing: quoted release names can contain commas and newlines. */
+function safeParse(body: string): DepmapFile[] | undefined {
   try {
-    const parsed = JSON.parse(body) as unknown
-    if (Array.isArray(parsed)) return { table: parsed as DepmapFile[] }
-    if (parsed && typeof parsed === "object") return parsed as DepmapCatalogue
-    return undefined
+    const rows: string[][] = []
+    let row: string[] = []
+    let cell = ""
+    let state: "field" | "quoted" | "closed" = "field"
+    for (let index = 0; index < body.length; index++) {
+      const char = body[index]
+      if (index === 0 && char === "\uFEFF") continue
+      if (state === "quoted") {
+        if (char !== '"') cell += char
+        else if (body[index + 1] === '"') {
+          cell += '"'
+          index++
+        } else state = "closed"
+        continue
+      }
+      if (char === "," || char === "\r" || char === "\n") {
+        row.push(cell)
+        cell = ""
+        state = "field"
+        if (char !== ",") {
+          if (row.length !== 1 || row[0] !== "") rows.push(row)
+          row = []
+          if (char === "\r" && body[index + 1] === "\n") index++
+        }
+        continue
+      }
+      if (state === "closed") return undefined
+      if (char === '"') {
+        if (cell) return undefined
+        state = "quoted"
+      } else cell += char
+    }
+    if (state === "quoted") return undefined
+    if (cell || row.length || state === "closed") rows.push([...row, cell])
+    const header = rows.shift()
+    if (!header || new Set(header).size !== header.length) return undefined
+    if (!["release", "release_date", "filename"].every((name) => header.includes(name))) return undefined
+    return rows.map((row) => {
+      if (row.length !== header.length) throw new Error("Invalid CSV row")
+      const value = (name: string) => row[header.indexOf(name)]?.trim() || undefined
+      if (!value("release") || !value("filename")) throw new Error("Missing file metadata")
+      return {
+        releaseName: value("release"),
+        releaseDate: value("release_date"),
+        fileName: value("filename"),
+        downloadUrl: value("url"),
+        md5Hash: value("md5_hash"),
+      }
+    })
   } catch {
     return undefined
   }
-}
-
-function files(cat: DepmapCatalogue | undefined): DepmapFile[] {
-  return cat?.table ?? cat?.data ?? []
 }
 
 function haystack(f: DepmapFile): string {
@@ -77,30 +104,35 @@ function toHit(f: DepmapFile): ConnectorHit {
   }
 }
 
-async function catalogue(signal?: AbortSignal): Promise<DepmapCatalogue | undefined> {
-  const body = await orFallback(getText(FILES_API, { signal }), "", signal)
-  return safeParse(body)
+async function catalogue(signal?: AbortSignal): Promise<DepmapFile[]> {
+  const body = await getText(FILES_API, {
+    signal,
+    headers: { Accept: "text/csv" },
+    looksValid: (value) => safeParse(value) !== undefined,
+  })
+  const parsed = safeParse(body)
+  if (!parsed) throw new SourceResponseError("DepMap returned no valid catalogue; retry when the source is available")
+  return parsed
 }
 
 export const depmap: Connector = {
   id: "depmap",
   name: "DepMap",
   domain: "genomics",
-  description: "Cancer Dependency Map — CRISPR/RNAi dependencies, omics, and drug-sensitivity datasets.",
+  description: "Cancer Dependency Map — released CRISPR/RNAi, omics, and drug-sensitivity dataset metadata.",
   homepage: "https://depmap.org",
 
   async search(query, opts) {
     const limit = Math.min(Math.max(opts?.limit ?? 10, 1), 25)
     const needle = query.trim().toLowerCase()
-    const all = files(await catalogue(opts?.signal))
+    const all = await catalogue(opts?.signal)
     const matched = needle ? all.filter((f) => haystack(f).includes(needle)) : all
     return matched.slice(0, limit).map(toHit)
   },
 
   async fetch(id, opts) {
     const trimmed = id.trim().toLowerCase()
-    const cat = await catalogue(opts?.signal)
-    const all = files(cat)
+    const all = await catalogue(opts?.signal)
     const match = all.find(
       (f) =>
         f.fileName?.toLowerCase() === trimmed ||

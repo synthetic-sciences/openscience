@@ -117,6 +117,7 @@ describe("cadence runner contracts", () => {
             ],
           },
           executions: [{ id: "exec-root", status: "completed" }],
+          children: [{ id: "child" }],
         },
         {
           sessionID: "child",
@@ -136,6 +137,7 @@ describe("cadence runner contracts", () => {
             { id: "exec-child-1", status: "failed" },
             { id: "exec-child-2", status: "completed" },
           ],
+          children: [],
         },
       ],
       "root",
@@ -162,6 +164,86 @@ describe("cadence runner contracts", () => {
       expect.objectContaining({ sessionId: "root", isRoot: true, failures: 2, reportedFailures: 2 }),
       expect.objectContaining({ sessionId: "child", agent: "explore", failures: 2, reportedFailures: 3 }),
     ])
+  })
+
+  test("does not count failed child captures as complete or invent zero usage", () => {
+    for (const trace of [undefined, { error: "timeout" }, {}, { error: "timeout", summary: { cost: 99 } }]) {
+      const tree = aggregateCapturedSessionTree(
+        [
+          {
+            sessionID: "root",
+            trace: { summary: { cost: 1, tokens: { total: 100 } }, tools: [{}], children: [{ sessionID: "child" }] },
+            executions: [],
+            children: [{ id: "child" }],
+          },
+          { sessionID: "child", trace, executions: { error: "timeout" }, children: [] },
+        ],
+        "root",
+      )!
+      expect(tree.captureComplete).toBe(false)
+      expect(tree.cost).toBe(1)
+      expect(tree.tokens?.total).toBe(100)
+      expect(tree.toolCalls).toBe(1)
+      expect(tree.executionSessionCount).toBe(1)
+      expect(tree.warnings.some((warning) => warning.includes("child") && warning.includes("trace"))).toBe(true)
+      const child = tree.sessions.find((session) => session.sessionId === "child")!
+      expect(child.toolCalls).toBeUndefined()
+      expect(child.failures).toBeUndefined()
+      expect(child.executions).toBeUndefined()
+      expect(child.cost).toBeUndefined()
+      expect(child.tokens).toBeUndefined()
+    }
+  })
+
+  test("child discovery must succeed and every discovered child must be captured", () => {
+    for (const children of [undefined, { error: "timeout" }, {}, [null], [{ id: "../outside" }]]) {
+      const tree = aggregateCapturedSessionTree([
+        { sessionID: "root", trace: { summary: {}, children: [] }, executions: [], children },
+      ])!
+      expect(tree.captureComplete).toBe(false)
+      expect(tree.warnings).toEqual([expect.stringContaining("child discovery")])
+    }
+    const missing = aggregateCapturedSessionTree([
+      { sessionID: "root", trace: { summary: {}, children: [] }, executions: [], children: [{ id: "untraced-child" }] },
+    ])!
+    expect(missing.captureComplete).toBe(false)
+    expect(missing.warnings).toEqual(["Child session untraced-child was referenced but not captured."])
+  })
+
+  test("retains failed child discovery and salvages known trace children without claiming completeness", async () => {
+    for (const knownChild of [false, true]) {
+      const queries: string[] = []
+      const client = {
+        session: {
+          get: async ({ sessionID }: { sessionID: string }) => ({ data: { id: sessionID } }),
+          messages: async () => ({ data: [] }),
+          trace: async ({ sessionID }: { sessionID: string }) => ({
+            data: {
+              summary: { toolCalls: sessionID === "root" ? 0 : 1 },
+              children: knownChild && sessionID === "root" ? [{ sessionID: "child" }] : [],
+            },
+          }),
+          children: async ({ sessionID }: { sessionID: string }) => {
+            queries.push(sessionID)
+            if (sessionID === "root") throw new Error("child discovery unavailable")
+            return { data: [] }
+          },
+          filesystem: { list: async () => ({ data: [] }) },
+        },
+        file: { artifacts: async () => ({ data: [] }) },
+        provenance: { executions: async () => ({ data: [] }) },
+      }
+      const destination = path.join(root, `discovery-failure-${knownChild}`)
+      const captured = await captureSessions(client as never, "root", destination)
+      const tree = aggregateCapturedSessionTree(captured, "root")!
+      expect(queries).toEqual(knownChild ? ["root", "child"] : ["root"])
+      expect(tree.captureComplete).toBe(false)
+      expect(tree.toolCalls).toBe(knownChild ? 1 : 0)
+      expect(tree.warnings).toEqual([expect.stringContaining("root child discovery")])
+      expect(await Bun.file(path.join(destination, "root", "children.json")).json()).toEqual({
+        error: "Error: child discovery unavailable",
+      })
+    }
   })
 
   test("captures provenance executions for every session in the recursive tree", async () => {
@@ -200,6 +282,7 @@ describe("cadence runner contracts", () => {
     const captured = await captureSessions(client as never, "root", captureRoot)
 
     expect(captured.map((item) => item.sessionID)).toEqual(["root", "child"])
+    expect(aggregateCapturedSessionTree(captured, "root")?.captureComplete).toBe(true)
     expect(executionQueries).toEqual(["root", "child"])
     expect(await Bun.file(path.join(captureRoot, "root", "executions.json")).json()).toEqual([
       { id: "exec-root", status: "completed" },

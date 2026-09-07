@@ -93,7 +93,7 @@
           },
           {
             "group": "CLI and integrations",
-            "pages": ["commands", "automation", "api", "server-hosting", "extensions", "ecosystem"]
+            "pages": ["commands", "automation", "api", "server-hosting", "extensions"]
           }
         ]
       }

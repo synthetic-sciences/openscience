@@ -1,6 +1,6 @@
 import { For, Show, createMemo, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { exportDelimited, parseTable, summarizeColumn, type DataTable, type TableFormat } from "./table"
+import { exportDelimited, numericColumn, parseTable, summarizeColumn, type DataTable, type TableFormat } from "./table"
 import "./DataTableView.css"
 
 const PAGE_SIZE = 100
@@ -270,7 +270,7 @@ export function DataTableView(props: { text: string; format: TableFormat; name: 
 }
 
 function Histogram(props: { table: DataTable; index: number; onClose: () => void }): JSX.Element {
-  const values = () => props.table.rows.map((row) => Number(row[props.index])).filter(Number.isFinite)
+  const values = () => numericColumn(props.table, props.index)
   const stats = () => summarizeColumn(props.table, props.index)
   const bars = createMemo(() => {
     const items = values()

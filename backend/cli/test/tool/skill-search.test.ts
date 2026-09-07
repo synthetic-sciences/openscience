@@ -24,6 +24,20 @@ const skills = [
 ] as Skill.Info[]
 
 describe("skill semantic search", () => {
+  test("uses tags, capability names, short scientific terms and known aliases", () => {
+    const indexed = [
+      { ...skills[0], name: "expression-analysis", tags: ["RNA", "QC"], capability: "transcriptomics" },
+      { ...skills[1], name: "protein-binder-design", tags: ["蛋白质"] },
+    ]
+    for (const query of ["RNA QC", "transcriptomics"]) {
+      expect(searchSkills(query, indexed).map((skill) => skill.name)).toEqual(["expression-analysis"])
+    }
+    for (const query of ["  bionemo-agent-toolkit  ", "蛋白质"]) {
+      expect(searchSkills(query, indexed)[0].name).toBe("protein-binder-design")
+    }
+    expect(searchSkills("  ", indexed)).toEqual([])
+  })
+
   test("ranks task-relevant instructions without browsing whole categories", () => {
     expect(searchSkills("geospatial NetCDF ocean analysis", skills).map((skill) => skill.name)).toEqual([
       "geopandas",

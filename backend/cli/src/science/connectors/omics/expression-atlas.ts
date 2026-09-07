@@ -11,7 +11,7 @@
  * fetch(id) → /gxa/json/experiments/{accession}
  */
 import type { Connector, ConnectorHit } from "../types"
-import { getJSON, orFallback } from "../http"
+import { getJSON } from "../http"
 
 const BASE = "https://www.ebi.ac.uk/gxa"
 
@@ -62,11 +62,7 @@ function toHit(e: GxaExperiment): ConnectorHit {
 }
 
 async function catalogue(signal?: AbortSignal): Promise<GxaExperiment[]> {
-  const data = await orFallback(
-    getJSON<GxaExperiments>(`${BASE}/json/experiments`, { signal }),
-    {} as GxaExperiments,
-    signal,
-  )
+  const data = await getJSON<GxaExperiments>(`${BASE}/json/experiments`, { signal })
   return data.experiments ?? []
 }
 
@@ -87,13 +83,9 @@ export const expressionAtlas: Connector = {
 
   async fetch(id, opts) {
     const accession = id.trim()
-    const record = await orFallback(
-      getJSON(`${BASE}/json/experiments/${encodeURIComponent(accession)}`, {
-        signal: opts?.signal,
-      }),
-      undefined,
-      opts?.signal,
-    )
+    const record = await getJSON(`${BASE}/json/experiments/${encodeURIComponent(accession)}`, {
+      signal: opts?.signal,
+    })
     if (record) return record
     // Fallback: return the catalogue entry if the detail endpoint is unavailable.
     const experiments = await catalogue(opts?.signal)

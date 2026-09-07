@@ -399,15 +399,17 @@ async function capturedTreeMetrics(
   const sources = await Promise.all(
     directories.map(async (entry): Promise<CapturedSessionSource> => {
       const directory = path.join(rawRoot, entry.name)
-      const [session, trace, capturedExecutions] = await Promise.all([
+      const [session, trace, children, capturedExecutions] = await Promise.all([
         readJson<unknown>(path.join(directory, "session.json"), warnings, campaignRoot),
         readJson<unknown>(path.join(directory, "trace.json"), warnings, campaignRoot),
+        readJson<unknown>(path.join(directory, "children.json"), warnings, campaignRoot),
         readJson<unknown>(path.join(directory, "executions.json"), warnings, campaignRoot),
       ])
       return {
         sessionID: entry.name,
         session,
         trace,
+        children,
         executions: capturedExecutions ?? (entry.name === rootSessionID ? rootExecutions : undefined),
       }
     }),
@@ -1086,6 +1088,13 @@ function runTreeMetrics(run: CampaignRunReport) {
   const tree = run.treeMetrics
   if (!tree) return '<p class="empty">No recursive session capture was available.</p>'
   const summary = [
+    [
+      "Capture",
+      tree.captureComplete ? "Complete" : "Partial",
+      tree.captureComplete
+        ? "trace, execution and child discovery reads succeeded"
+        : "totals exclude unavailable metrics",
+    ],
     ["Sessions", integer(tree.sessionCount), `${integer(tree.childSessionCount)} children`],
     ["Tool calls", integer(tree.toolCalls), `${integer(run.metrics.toolCalls)} root`],
     ["Tokens", integer(tree.tokens?.total), `${integer(run.metrics.tokens?.total)} root`],

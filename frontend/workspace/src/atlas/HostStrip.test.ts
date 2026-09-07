@@ -100,6 +100,21 @@ const values = (host: HTMLElement) =>
   )
 
 describe("host strip", () => {
+  test("shows unknown CPU while an active kernel awaits a measurable interval", async () => {
+    const calls: Array<Promise<Response>> = []
+    const response = async () =>
+      new Response(JSON.stringify({ ...capacity, cpu: { cores: 8 } }), {
+        headers: { "content-type": "application/json" },
+      })
+    const host = guard(() => subject.HostStrip({ request: track(response, calls) }))
+    await settle(calls)
+
+    expect(values(host)).toEqual(["412.0 MB", "— of 8"])
+    expect(host.textContent).toContain("2 active · 1 running")
+    expect(host.textContent).not.toContain("~0 of 8")
+    expect(host.querySelector("[data-health]")?.getAttribute("data-health")).toBe("available")
+  })
+
   test("reads unavailable on every instrument when the server cannot be reached", async () => {
     const calls: Array<Promise<Response>> = []
     const host = guard(() => subject.HostStrip({ request: track(offline, calls) }))

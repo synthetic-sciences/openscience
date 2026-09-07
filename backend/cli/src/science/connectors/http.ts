@@ -28,6 +28,8 @@ export interface HttpOptions extends Omit<RequestInit, "signal"> {
   retries?: number
   /** External abort signal; combined with the internal timeout signal. */
   signal?: AbortSignal
+  /** For getText endpoints documenting an empty 2xx JSON body as a missing record. */
+  allowEmptyBody?: boolean
   /** Cache TTL in ms for this request. 0 disables caching (default: GET=5min, else 0). */
   cacheTtl?: number
   /** Optional per-host politeness throttle (min interval between + max concurrency). */
@@ -52,7 +54,7 @@ interface CacheEntry {
 
 /** A non-ok HTTP response. Terminal by construction: retryable statuses are
  * handled before this is thrown, so reaching it means "do not retry". */
-class HttpStatusError extends Error {
+export class HttpStatusError extends Error {
   constructor(
     readonly status: number,
     message: string,
@@ -60,6 +62,57 @@ class HttpStatusError extends Error {
     super(message)
     this.name = "HttpStatusError"
   }
+}
+
+export class SourceResponseError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "SourceResponseError"
+  }
+}
+
+function parseJSON<T>(body: string): T {
+  const value: unknown = JSON.parse(body)
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>
+    const failure = record.error ?? record.errors
+    if (
+      (typeof failure === "string" && failure.length > 0) ||
+      (Array.isArray(failure) && failure.length > 0) ||
+      (failure && typeof failure === "object" && !Array.isArray(failure) && Object.keys(failure).length > 0) ||
+      record.STATUS === "ERROR"
+    ) {
+      throw new SourceResponseError(
+        `Scientific source reported an error: ${JSON.stringify(failure ?? record).slice(0, 500)}`,
+      )
+    }
+  }
+  return value as T
+}
+
+/** Use only for endpoints whose documented missing-record response is 404. */
+export async function orNotFound<T>(request: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await request
+  } catch (error) {
+    if (error instanceof HttpStatusError && error.status === 404) return fallback
+    throw error
+  }
+}
+
+// Source errors are visible to the agent. A provider may echo the credential
+// supplied in its URL or headers, so remove those values before surfacing it.
+function redactRequestError(error: unknown, url: string, headers: Record<string, string>): void {
+  if (!(error instanceof Error)) return
+  const values = [
+    ...[...new URL(url).searchParams]
+      .filter(([name]) => /key|token|secret|password|credential/i.test(name))
+      .map(([, value]) => value),
+    ...Object.entries(headers)
+      .filter(([name]) => /authorization|key|token|secret|cookie/i.test(name))
+      .map(([, value]) => value),
+  ].flatMap((value) => [value, value.replace(/^Bearer\s+/i, ""), encodeURIComponent(value)])
+  for (const value of values) if (value) error.message = error.message.replaceAll(value, "[REDACTED]")
 }
 
 const cache = new Map<string, CacheEntry>()
@@ -192,6 +245,7 @@ async function throttle(url: string, limit?: RateLimit): Promise<() => void> {
  * Returns a normalized response object with `json()` / `text()` helpers.
  */
 export async function request(url: string, opts: HttpOptions = {}) {
+  opts.signal?.throwIfAborted()
   await Network.assertAllowed(url)
   const method = (opts.method ?? "GET").toUpperCase()
   const timeout = opts.timeout ?? DEFAULT_TIMEOUT
@@ -233,6 +287,7 @@ export async function request(url: string, opts: HttpOptions = {}) {
           },
         )
         const body = await res.text()
+        opts.signal?.throwIfAborted()
         if (!res.ok && isRetryable(res.status) && attempt < retries) {
           const backoff = backoffMs(res, attempt)
           clearTimeout(timer)
@@ -244,6 +299,25 @@ export async function request(url: string, opts: HttpOptions = {}) {
             res.status,
             `HTTP ${res.status} for ${url}: ${body.slice(0, 500) || res.statusText}`,
           )
+        }
+        if (/^\s*(?:<!doctype\s+html\b|<html\b)/i.test(body)) {
+          throw new SourceResponseError(
+            "Scientific source returned an HTML page instead of scientific data (possibly a verification or service-error page)",
+          )
+        }
+        // Parse before caching, including GraphQL's successful-HTTP error envelopes.
+        const jsonExpected =
+          headers.Accept?.includes("application/json") ||
+          /(?:application\/json|\+json)\b/i.test(res.headers.get("content-type") ?? "")
+        if (jsonExpected && !(opts.allowEmptyBody && body.trim().length === 0)) parseJSON(body)
+        else if (/^\s*[\[{]/.test(body)) {
+          // Text formats can begin with a bracket (e.g. an SDF title [Na+]).
+          // Recognize valid JSON error envelopes without treating all such files as JSON.
+          try {
+            parseJSON(body)
+          } catch (error) {
+            if (!(error instanceof SyntaxError)) throw error
+          }
         }
         const record: CacheEntry = {
           expires: Date.now() + ttl,
@@ -258,11 +332,13 @@ export async function request(url: string, opts: HttpOptions = {}) {
         return toResponse(record.status, record.headers, record.body)
       } catch (err) {
         clearTimeout(timer)
+        redactRequestError(err, url, headers)
         lastError = err
         // Abort from the caller's signal is terminal; internal timeout retries.
         if (opts.signal?.aborted) throw err
         // A non-retryable HTTP status is terminal — don't burn retries on a 404.
         if (err instanceof HttpStatusError) throw err
+        if (err instanceof SourceResponseError || err instanceof SyntaxError) throw err
         if (attempt < retries) {
           await sleep(backoffMs(undefined, attempt))
           continue
@@ -290,7 +366,7 @@ function toResponse(status: number, headers: Record<string, string>, body: strin
     ok: status >= 200 && status < 300,
     headers,
     text: () => body,
-    json: <T = unknown>(): T => JSON.parse(body) as T,
+    json: <T = unknown>(): T => parseJSON<T>(body),
   }
 }
 
@@ -307,26 +383,6 @@ export async function getJSON<T = unknown>(url: string, opts?: HttpOptions): Pro
 export async function getText(url: string, opts?: HttpOptions): Promise<string> {
   const res = await request(url, opts)
   return res.text()
-}
-
-/**
- * Await `p`, but on failure return `fallback` instead — UNLESS the caller's
- * `signal` was aborted, in which case rethrow so cancellation propagates.
- *
- * Connectors use this instead of a blanket `.catch(() => fallback)`: that
- * pattern swallows the AbortError `request()` deliberately rethrows on caller
- * abort, so a cancelled `science_search` looked like "no results" instead of a
- * clean cancellation. An internal request timeout still falls back (the caller
- * didn't cancel), which is the intended behavior — one slow source shouldn't
- * fail the whole search.
- */
-export async function orFallback<T>(p: Promise<T>, fallback: T, signal?: AbortSignal): Promise<T> {
-  try {
-    return await p
-  } catch (err) {
-    if (signal?.aborted) throw err
-    return fallback
-  }
 }
 
 /** Clear the in-memory cache (test/debug helper). */

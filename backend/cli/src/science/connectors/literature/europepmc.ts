@@ -75,12 +75,32 @@ export const europepmc: Connector = {
   },
 
   async fetch(id, opts) {
-    const slash = id.indexOf("/")
-    const query = slash > 0 ? `ext_id:${id.slice(slash + 1)} AND src:${id.slice(0, slash)}` : id
+    const value = id.trim()
+    const slash = value.indexOf("/")
+    const source =
+      slash > 0
+        ? value.slice(0, slash).toUpperCase()
+        : /^\d+$/.test(value)
+          ? "MED"
+          : /^PMC\d+$/i.test(value)
+            ? "PMC"
+            : undefined
+    const accession = slash > 0 ? value.slice(slash + 1) : value
+    if (!source || !/^[A-Z]+$/.test(source) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(accession)) {
+      throw new Error(
+        "Europe PMC fetch requires a namespaced search ID (e.g. MED/10508479), a PMID, or a PMC accession",
+      )
+    }
+    // Europe PMC EXT_ID does not match numeric accessions inside quotes.
+    // Validate the identifier above, then use its exact unquoted field value.
+    const query = `EXT_ID:${accession} AND SRC:${source}`
     const data = await getJSON<SearchResponse>(
       `${BASE}/search?query=${encodeURIComponent(query)}&format=json&resultType=core&pageSize=1`,
       { signal: opts?.signal },
     )
-    return data.resultList?.result?.[0] ?? null
+    return (
+      data.resultList?.result?.find((record) => record.source?.toUpperCase() === source && record.id === accession) ??
+      null
+    )
   },
 }

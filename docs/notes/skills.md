@@ -5,6 +5,9 @@ frontmatter and a body) that the agent loads on demand to prime itself for a tas
 This note explains where skills are discovered and how a bare name resolves —
 useful when a skill is unexpectedly "not found".
 
+The [skill runtime design](skill-runtime-design.md) explains metadata discovery,
+bounded search, instruction loading, and the execution-authority boundary.
+
 ## Sources
 
 The catalog is assembled in `backend/cli/src/skill/skill.ts` from several sources,
@@ -16,11 +19,10 @@ keyed by skill `name`:
 2. **Installed skills** — Git-installed packs under
    `~/.openscience/installed-skills/`, plus compatible global
    `~/.claude/skills/` packs.
-3. **Learned skills** — private skills distilled from prior local runs under
-   `~/.openscience/learned-skills/`.
-4. **Personal skills** — authored through Customize or
+3. **Personal skills** — authored through Customize or
    `openscience skill new`, stored under `~/.openscience/user-skills/`.
-5. **Project skills** — `.openscience/{skill,skills}` and `.claude/skills`
+   Global OpenScience skill directories also have user precedence.
+4. **Project skills** — `.openscience/{skill,skills}` and `.claude/skills`
    directories committed to the current project, plus `skills.paths` entries.
 
 `OPENSCIENCE_DISABLE_BUNDLED_SKILLS` disables only the default release library.
@@ -32,13 +34,16 @@ are ignored.
 
 A skill author can set `disabled: true` in `SKILL.md` frontmatter to keep that
 specific copy out of the catalog. A disabled copy does not shadow an enabled copy
-from another source; normal project → personal → learned → installed → default
+from another source; normal project → user → installed → default
 precedence still applies among the enabled copies.
 
 ## Resolution
 
 `Skill.get(name)` looks up the assembled name→skill map. On a name collision the
-precedence is project → personal → learned → installed → default. If a name isn't
+precedence is project → user → installed → default. Within a source directory,
+paths are sorted and the later path wins. Closer project directories override
+ancestors. Explicit `skills.paths` entries are processed last, in configured order,
+with project precedence. If a name isn't
 present, the skill tool returns a "not found" error with the closest fuzzy
 matches.
 
