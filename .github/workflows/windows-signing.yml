@@ -1,4 +1,4 @@
-name: Windows signing checks
+name: Windows desktop checks
 
 on:
   pull_request:
@@ -20,6 +20,23 @@ permissions:
   contents: read
 
 jobs:
+  startup:
+    name: Windows desktop startup
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-bun
+      - name: Build the real desktop runtime and workspace
+        shell: pwsh
+        run: |
+          $env:OPENSCIENCE_VERSION = (Get-Content backend/cli/package.json | ConvertFrom-Json).version
+          bun run --cwd backend/cli build --single --skip-install
+      - name: Launch the real Electron app through final startup health
+        shell: pwsh
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/backend/cli/dist/@synsci/openscience-windows-x64/bin/openscience.exe
+        run: bun frontend/desktop/script/startup-smoke.mjs
   signatures:
     name: Windows Authenticode verification
     runs-on: windows-2025

@@ -10,6 +10,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Fix Windows desktop startup failing with `spawn /bin/ps ENOENT` by limiting
+  macOS updater process-identity checks to supervised update launches.
 - Require Microsoft Artifact Signing for stable Windows desktop installers,
   including the bundled runtime and native libraries, and verify publisher,
   signature trust, and timestamps before publishing.
