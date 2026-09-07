@@ -10,6 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Require Microsoft Artifact Signing for stable Windows desktop installers,
+  including the bundled runtime and native libraries, and verify publisher,
+  signature trust, and timestamps before publishing.
 - Wait for scientific canary artifact delivery before validating a completed
   remote computation, while preserving bounded waits and resource cleanup.
 - Start desktop onboarding with Synthetic Sciences sign-in and workspace selection,

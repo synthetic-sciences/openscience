@@ -230,7 +230,6 @@ test("both desktop packaging jobs keep the resumable-asset and Electron cache co
   expect(workflow.match(/- name: Check for resumable assets/g)).toHaveLength(2)
   expect(workflow.match(/- name: Cache Electron downloads/g)).toHaveLength(2)
   expect(workflow.match(/- name: Notarize and staple macOS DMG/g)).toHaveLength(1)
-  expect(workflow.match(/- name: Build unsigned Windows installer/g)).toHaveLength(1)
 })
 
 test("release caches and resumed mac assets are bound and reverified", async () => {

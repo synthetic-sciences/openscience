@@ -56,10 +56,10 @@ never bump a version in a pull request, and add user-visible changes to the
    Exact-version resumes remain bound to the immutable source marker in the
    existing draft release; the workflow rejects any mismatch before building.
 
-   Stable publication has no unsigned macOS mode. Developer ID signing and
-   notarization credentials are mandatory before the draft can be built. The
-   Windows installer may still be published unsigned when both optional
-   Windows signing secrets are absent; release notes disclose that separately.
+   Stable publication requires both macOS and Windows signing. Developer ID
+   signing and notarization credentials, plus Windows Artifact Signing
+   configuration, are mandatory before the draft can be built. Windows
+   installers cannot fall back to an unsigned build.
    Ad-hoc-signed macOS development packages must never be attached to a stable
    update release.
 
@@ -67,8 +67,9 @@ never bump a version in a pull request, and add user-visible changes to the
    manual version editing in `package.json` and no risk of a tag collision.
 
 4. The workflow then, in order: computes the version and opens a draft GitHub
-   release → builds the platform binaries and signed/notarized macOS desktop
-   installers → verifies the immutable ZIP and DMG on native Apple Silicon and
+   release → builds the platform binaries, signed Windows desktop installer,
+   and signed/notarized macOS desktop installers → verifies Windows Authenticode
+   signatures and the immutable ZIP and DMG on native Apple Silicon and
    Intel runners → upgrades a previous immutable signed stable app through the
    real helper/sidecar handoff, proves packaged main and runtime health and
    cleanup, and injects a safe health failure to prove rollback → uploads and
@@ -111,7 +112,7 @@ release is not a draft, the tag targets the release commit, and the assets inclu
 11 platform archives, `checksums.txt`, `desktop-checksums.txt`, two macOS DMGs,
 two architecture-specific macOS updater ZIPs, one Windows EXE, and two Linux
 AppImages: 20 release assets in total. Inspect the publish run for Homebrew,
-launcher or Windows-signing warnings. macOS signing, notarization, immutable
+launcher warnings. Windows signing, macOS signing, notarization, immutable
 asset verification, and both native updater lifecycles are fatal gates. Homebrew updates remain non-fatal
 and may need owner follow-up. Publishing the `synsci` launcher is required in
 both test and production releases; a launcher failure leaves the GitHub release
@@ -120,6 +121,51 @@ asset with an ad-hoc-signed build.
 
 See [verification.md](verification.md) for the local gates to run before you
 push to `main`.
+
+## Windows signing setup
+
+Complete [Microsoft Artifact Signing identity validation](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart)
+for the legal company, then create a **Public Trust** certificate profile.
+Pending organization validation is not a usable signing certificate.
+
+Create a dedicated Entra application and a GitHub Actions federated credential:
+
+- Issuer: `https://token.actions.githubusercontent.com`
+- Subject: `repo:synthetic-sciences/openscience:ref:refs/heads/main`
+- Audience: `api://AzureADTokenExchange`
+
+Assign **Artifact Signing Certificate Profile Signer** to that application's
+service principal, scoped to the certificate profile. No subscription Owner,
+Contributor, or client secret is needed. The publish job logs in using OIDC and
+the signing module obtains its token through Azure CLI. Release repair resumes
+must also run from `main` to match the federated credential.
+
+Configure these repository secrets:
+
+| Secret                      | Value                         |
+| --------------------------- | ----------------------------- |
+| `WINDOWS_SIGNING_CLIENT_ID` | Entra application's client ID |
+| `WINDOWS_SIGNING_TENANT_ID` | Entra tenant ID               |
+
+Configure these repository variables:
+
+| Variable                    | Value                                                                     |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `WINDOWS_SIGNING_ENDPOINT`  | Account's regional endpoint, such as `https://eus.codesigning.azure.net/` |
+| `WINDOWS_SIGNING_ACCOUNT`   | Artifact Signing account name                                             |
+| `WINDOWS_SIGNING_PROFILE`   | Validated Public Trust certificate profile name                           |
+| `WINDOWS_SIGNING_PUBLISHER` | Exact certificate common name, such as `InkVell Inc.`                     |
+
+The former `WINDOWS_CSC_LINK` and `WINDOWS_CSC_KEY_PASSWORD` secrets are no longer
+used. The workflow requires a trusted, timestamped signature from the configured
+publisher on the installer, app, sidecar, and bundled native libraries. A resumed
+installer must match its GitHub SHA-256 digest and pass signature verification
+again. This applies to the desktop installer; standalone Windows CLI archives
+are outside this signing path.
+
+Signing identifies the publisher, but new downloads can still display
+[SmartScreen reputation warnings](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
+Do not claim that signing immediately removes every Windows warning.
 
 ## Isolated npm test installs
 

@@ -140,23 +140,21 @@ jobs:
           APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
           APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          WINDOWS_SIGNING_CLIENT_ID: ${{ secrets.WINDOWS_SIGNING_CLIENT_ID }}
+          WINDOWS_SIGNING_TENANT_ID: ${{ secrets.WINDOWS_SIGNING_TENANT_ID }}
+          WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+          WINDOWS_SIGNING_ACCOUNT: ${{ vars.WINDOWS_SIGNING_ACCOUNT }}
+          WINDOWS_SIGNING_PROFILE: ${{ vars.WINDOWS_SIGNING_PROFILE }}
+          WINDOWS_SIGNING_PUBLISHER: ${{ vars.WINDOWS_SIGNING_PUBLISHER }}
         run: |
           set -euo pipefail
           missing=()
-          for name in RELEASE_GITHUB_TOKEN APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_NOTARY_APPLE_ID APPLE_NOTARY_PASSWORD APPLE_TEAM_ID; do
+          for name in RELEASE_GITHUB_TOKEN APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_NOTARY_APPLE_ID APPLE_NOTARY_PASSWORD APPLE_TEAM_ID WINDOWS_SIGNING_CLIENT_ID WINDOWS_SIGNING_TENANT_ID WINDOWS_SIGNING_ENDPOINT WINDOWS_SIGNING_ACCOUNT WINDOWS_SIGNING_PROFILE WINDOWS_SIGNING_PUBLISHER; do
             [[ -n "${!name:-}" ]] || missing+=("$name")
           done
           if (( ${#missing[@]} )); then
             echo "::error::Missing release credentials: ${missing[*]}"
             exit 1
-          fi
-          if [[ -n "$WINDOWS_CSC_LINK" || -n "$WINDOWS_CSC_KEY_PASSWORD" ]]; then
-            [[ -n "$WINDOWS_CSC_LINK" && -n "$WINDOWS_CSC_KEY_PASSWORD" ]] || {
-              echo "::error::Configure both Windows signing secrets or neither"
-              exit 1
-            }
           fi
 
       - name: Verify npm publisher
@@ -356,23 +354,6 @@ jobs:
             const { appendFileSync } = await import("node:fs");
             appendFileSync(process.env.GITHUB_OUTPUT, `manifest=${JSON.stringify(manifest)}\n`);
           '
-      - name: Disclose unsigned Windows installer
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
-          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          [[ -z "$WINDOWS_CSC_LINK" && -z "$WINDOWS_CSC_KEY_PASSWORD" ]] || exit 0
-          body="$(gh release view "$OPENSCIENCE_TAG" --json body --jq .body)"
-          notice='> The macOS downloads are signed and notarized. The Windows installer is unsigned. Windows Smart App Control may block it, and SmartScreen may warn. Do not disable Windows security protections to install it.'
-          if ! grep -Fq 'The Windows installer is unsigned' <<<"$body"; then
-            notes="$RUNNER_TEMP/release-notes.txt"
-            printf '%s\n\n%s\n' "$body" "$notice" > "$notes"
-            gh release edit "$OPENSCIENCE_TAG" --notes-file "$notes"
-          fi
     outputs:
       cache_key: cli-signed-jit-v1-${{ needs.version.outputs.version }}-${{ needs.version.outputs.artifact_source }}
       sidecar_manifest: ${{ steps.sidecars.outputs.manifest }}
@@ -743,6 +724,7 @@ jobs:
     timeout-minutes: 35
     permissions:
       contents: write
+      id-token: write
     steps:
       - name: Check for resumable assets
         id: existing
@@ -784,7 +766,6 @@ jobs:
           [[ "$found" == "$total" ]] && echo "found=true" >> "$GITHUB_OUTPUT" || echo "found=false" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.existing.outputs.found != 'true'
         with:
           ref: ${{ needs.version.outputs.source }}
       - uses: ./.github/actions/setup-bun
@@ -812,15 +793,13 @@ jobs:
             git show "$WORKFLOW_SOURCE:tooling/repo/desktop-sidecar.ts" > tooling/repo/desktop-sidecar.ts
           fi
           bun tooling/repo/desktop-sidecar.ts
-      - name: Detect Windows signing
-        id: windows
+      - name: Authenticate Windows signer
         if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows'
-        shell: bash
-        env:
-          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
-        run: |
-          [[ -n "$CSC_LINK" && -n "$CSC_KEY_PASSWORD" ]] && echo "enabled=true" >> "$GITHUB_OUTPUT" || echo "enabled=false" >> "$GITHUB_OUTPUT"
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ secrets.WINDOWS_SIGNING_CLIENT_ID }}
+          tenant-id: ${{ secrets.WINDOWS_SIGNING_TENANT_ID }}
+          allow-no-subscriptions: true
       - name: Make sidecar executable
         if: steps.existing.outputs.found != 'true' && matrix.target != 'win'
         shell: bash
@@ -840,25 +819,47 @@ jobs:
             ~/AppData/Local/electron-builder/Cache
           key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('frontend/desktop/package.json') }}
       - name: Build desktop installer
-        if: steps.existing.outputs.found != 'true' && (matrix.signing != 'windows' || steps.windows.outputs.enabled == 'true')
+        if: steps.existing.outputs.found != 'true'
         shell: bash
         run: bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_DESKTOP_SIGNED: ${{ matrix.signing == 'windows' && steps.windows.outputs.enabled == 'true' }}
-          CSC_IDENTITY_AUTO_DISCOVERY: "true"
-          CSC_LINK: ${{ matrix.signing == 'windows' && secrets.WINDOWS_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.signing == 'windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || '' }}
-      - name: Build unsigned Windows installer
-        if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows' && steps.windows.outputs.enabled != 'true'
-        shell: bash
-        run: bun run --cwd frontend/desktop dist -- --win --x64
-        env:
-          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
-          OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_DESKTOP_SIGNED: "false"
+          OPENSCIENCE_DESKTOP_SIGNED: ${{ matrix.signing == 'windows' }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+          WINDOWS_SIGNING_ACCOUNT: ${{ vars.WINDOWS_SIGNING_ACCOUNT }}
+          WINDOWS_SIGNING_PROFILE: ${{ vars.WINDOWS_SIGNING_PROFILE }}
+          WINDOWS_SIGNING_PUBLISHER: ${{ vars.WINDOWS_SIGNING_PUBLISHER }}
+      - name: Verify Windows signatures
+        if: matrix.signing == 'windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENSCIENCE_TAG: ${{ needs.version.outputs.tag }}
+          DESKTOP_ASSET: ${{ matrix.asset }}
+          RESUMED: ${{ steps.existing.outputs.found }}
+          WINDOWS_SIGNING_PUBLISHER: ${{ vars.WINDOWS_SIGNING_PUBLISHER }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = "frontend/desktop/dist/$env:DESKTOP_ASSET"
+          if ($env:RESUMED -eq 'true') {
+            New-Item -ItemType Directory -Force frontend/desktop/dist | Out-Null
+            gh release download $env:OPENSCIENCE_TAG --repo $env:GITHUB_REPOSITORY --pattern $env:DESKTOP_ASSET --dir frontend/desktop/dist
+            if ($LASTEXITCODE -ne 0) { throw 'Could not download resumed Windows installer' }
+            $release = gh release view $env:OPENSCIENCE_TAG --repo $env:GITHUB_REPOSITORY --json assets | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw 'Could not read Windows installer digest' }
+            $asset = @($release.assets | Where-Object name -CEQ $env:DESKTOP_ASSET)
+            $digest = 'sha256:' + (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($asset.Count -ne 1 -or $asset[0].digest -cne $digest) { throw 'Resumed Windows installer digest mismatch' }
+          }
+          & ./tooling/repo/verify-windows-signatures.ps1 -Files $installer -Publisher $env:WINDOWS_SIGNING_PUBLISHER
+          if ($env:RESUMED -ne 'true') {
+            $app = 'frontend/desktop/dist/win-unpacked'
+            & ./tooling/repo/verify-windows-signatures.ps1 -Files "$app/openscience.exe", "$app/resources/sidecar/openscience.exe" -Publisher $env:WINDOWS_SIGNING_PUBLISHER
+            $files = @(Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object Extension -In '.exe', '.dll', '.node' | ForEach-Object FullName)
+            & ./tooling/repo/verify-windows-signatures.ps1 -Files $files -Publisher $env:WINDOWS_SIGNING_PUBLISHER
+          }
       - name: Upload immutable desktop assets
         if: steps.existing.outputs.found != 'true'
         shell: bash

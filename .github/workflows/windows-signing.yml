@@ -1,0 +1,31 @@
+name: Windows signing checks
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/windows-signing.yml"
+      - ".github/workflows/publish.yml"
+      - "frontend/desktop/**"
+      - "tooling/repo/*windows-signatures.ps1"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-signing.yml"
+      - ".github/workflows/publish.yml"
+      - "frontend/desktop/**"
+      - "tooling/repo/*windows-signatures.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signatures:
+    name: Windows Authenticode verification
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify trusted, tampered, unsigned, and untimestamped files
+        shell: pwsh
+        run: ./tooling/repo/test-windows-signatures.ps1
