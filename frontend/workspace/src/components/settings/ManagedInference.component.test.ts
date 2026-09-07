@@ -35,7 +35,7 @@ const contract = {
   activationAuthorizationUsd: 0,
   reloadThresholdUsd: 5,
   reloadAmountUsd: 20,
-  serviceMarginPercent: 2,
+  fundingFeePercent: 5.5,
   processingFeeDisclosedSeparately: true,
   reloadControlledByAce: true,
 }
@@ -52,6 +52,7 @@ const funded = {
 }
 type Wallet = Omit<typeof funded, "balanceUsd"> & {
   balanceUsd: number | null
+  availableUsd?: number | null
   refreshing?: boolean
   refreshedAt?: number | null
   error?: string
@@ -258,6 +259,41 @@ describe("Ace account surface", () => {
     state.wallet = { ...funded, balanceUsd: 60, refreshing: false, refreshedAt: 1_700_000_005_000 }
     for (const notify of state.updated) notify()
     await ready(() => host.querySelector("dd")?.textContent === "$60.00")
+    expect(host.querySelector("dd")?.getAttribute("data-refreshing")).toBeNull()
+    expect(state.reads).toBe(2)
+    expect(state.errors.filter(Boolean)).toEqual([])
+  })
+
+  test("shows what is spendable now beside the purchased balance only when the server knows it", async () => {
+    const { host, state } = await mount({ ...funded, availableUsd: 700.5 })
+    await ready(() => host.textContent?.includes("$700.50") === true)
+    const terms = [...host.querySelectorAll("dt")].map((item) => item.textContent)
+    expect(terms).toEqual(["Purchased Wallet", "Available"])
+    const values = [...host.querySelectorAll("dd")].map((item) => item.textContent)
+    expect(values).toEqual(["$778.16", "$700.50"])
+    expect(host.textContent).not.toContain("credit")
+
+    state.wallet = { ...funded, balanceUsd: 778.16, availableUsd: null }
+    for (const notify of state.updated) notify()
+    await ready(() => !host.textContent?.includes("$700.50"))
+    expect([...host.querySelectorAll("dt")].map((item) => item.textContent)).toEqual(["Purchased Wallet"])
+
+    // A private balance keeps its holds private too.
+    state.wallet = { ...funded, balanceRedacted: true, balanceUsd: null, availableUsd: 700.5 }
+    for (const notify of state.updated) notify()
+    await ready(() => host.textContent?.includes("Private to admins") === true)
+    expect(host.textContent).not.toContain("Available")
+    expect(host.textContent).not.toContain("$700.50")
+  })
+
+  test("a summary still marked refreshing is re-read even when no announcement arrives", async () => {
+    const { host, state } = await mount({ ...funded, balanceUsd: 50, refreshing: true })
+    await ready(() => host.querySelector("dd")?.textContent?.includes("Refreshing…") === true)
+    expect(state.reads).toBe(1)
+    // The background refresh finished but its announcement was lost.
+    state.wallet = { ...funded, balanceUsd: 60, refreshing: false }
+    for (let i = 0; i < 250 && host.querySelector("dd")?.textContent !== "$60.00"; i++) await settle()
+    expect(host.querySelector("dd")?.textContent).toBe("$60.00")
     expect(host.querySelector("dd")?.getAttribute("data-refreshing")).toBeNull()
     expect(state.reads).toBe(2)
     expect(state.errors.filter(Boolean)).toEqual([])

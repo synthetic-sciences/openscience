@@ -265,7 +265,8 @@ const ModelPopoverSurface: Component<ModelPopoverSurfaceProps> = (props) => {
 type ModelEffortPanelProps = {
   current: string
   options: Array<{ id: string; label: string }>
-  fast?: { active: boolean }
+  /** `rate` is the Fast price consequence, present once the route's pricing has loaded. */
+  fast?: { active: boolean; rate?: string }
   context?: { current: string; options: Array<{ id: string; label: string }> }
   onEffortSelect: (id: string) => void
   onTierSelect: (id: "standard" | "fast") => void
@@ -330,6 +331,13 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => (
               <span class="model-settings-fast-label">Fast mode</span>
             </Switch>
           </div>
+          <Show when={fast().rate}>
+            {(rate) => (
+              <p class="model-settings-fast-rate" data-model-fast-rate>
+                {rate()}
+              </p>
+            )}
+          </Show>
         </section>
       )}
     </Show>
@@ -643,7 +651,8 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
     const key = optionsKey()
     const revision = ++optionRequests.revision
     setOptions({ loading: true, error: false })
-    const failed = await globalSync.refreshProviders().then(
+    // The user asked: skip the server's pricing cache and failure cooldown.
+    const failed = await globalSync.refreshProviders({ force: true }).then(
       () => false,
       () => true,
     )

@@ -7,8 +7,18 @@ type Rates = {
 
 type ModelPricing = {
   upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
+  /** The only markup on an Ace turn, stated by the account's catalog; the public 5.5% otherwise. */
+  funding_fee_bps?: number
   audited_at?: string
   source_url?: string
+}
+
+type Cost = { input: number; output: number }
+
+const DEFAULT_FUNDING_FEE_BPS = 550
+
+export function fundingFeePercent(pricing: ModelPricing | undefined): number {
+  return (pricing?.funding_fee_bps ?? DEFAULT_FUNDING_FEE_BPS) / 100
 }
 
 type RuntimeCost = {
@@ -44,6 +54,8 @@ export function modelPricing(input: {
   access: "managed" | "byok" | "chatgpt"
   pricing?: ModelPricing
   cost: RuntimeCost
+  /** The route's Fast mode rates, when it offers one. */
+  fast?: RuntimeCost
 }): { note: string; lines: PricingLine[] } {
   if (input.access === "chatgpt") return { note: "Included with an eligible ChatGPT subscription.", lines: [] }
   const rates =
@@ -71,17 +83,37 @@ export function modelPricing(input: {
   const stepped = tiers?.filter((tier) => valid(tier) && Number.isFinite(tier.threshold) && tier.threshold > 0) ?? []
   const high = !stepped.length ? input.cost.experimentalOver200K : undefined
   const legacy = high ? { ...high, cache_read: high.cache.read, cache_write: high.cache.write } : undefined
+  const fast = input.fast
+    ? {
+        input: input.fast.input,
+        output: input.fast.output,
+        cache_read: input.fast.cache.read,
+        cache_write: input.fast.cache.write,
+      }
+    : undefined
   return {
     note:
       input.access === "managed"
-        ? "USD per 1M tokens · Wallet rates, including any upstream funding fee."
+        ? `USD per 1M tokens · Wallet rates; provider price plus the ${fundingFeePercent(input.pricing)}% funding fee, no other markup.`
         : "USD per 1M tokens · catalog estimate; billed by your provider.",
     lines: [
       ...rateLines(rates),
       ...stepped.flatMap((tier) => rateLines(tier, `Over ${tier.threshold.toLocaleString()} input · `)),
       ...(legacy && valid(legacy) ? rateLines(legacy, "200,000+ input · ") : []),
+      ...(fast && valid(fast) && !(fast.input === 0 && fast.output === 0) ? rateLines(fast, "Fast · ") : []),
     ],
   }
+}
+
+/** The Fast toggle's price consequence: the Fast rates, and their multiple of
+ * the standard rates when Fast is a uniform premium. */
+export function fastRateLabel(fast: Cost | undefined, standard?: Cost): string | undefined {
+  if (!fast || !valid(fast) || (fast.input === 0 && fast.output === 0)) return
+  const rates = `${dollars.format(fast.input)} in · ${dollars.format(fast.output)} out per 1M tokens`
+  if (!standard || !valid(standard) || standard.input <= 0 || standard.output <= 0) return rates
+  const multiple = fast.input / standard.input
+  if (multiple <= 1 || Math.abs(fast.output / standard.output - multiple) > 0.01) return rates
+  return `${Number(multiple.toFixed(2))}× standard · ${rates}`
 }
 
 export function pricingUpstream(pricing: ModelPricing | undefined): string | undefined {

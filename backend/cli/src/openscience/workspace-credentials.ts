@@ -183,6 +183,27 @@ export namespace WorkspaceCredentials {
     arm(expires)
   }
 
+  /** Extend a live grant's expiry without re-sealing it, after the server
+   * confirmed its payload is unchanged. A lapsed or missing grant, or one for
+   * another session, is never revived here. */
+  export async function renew(session: Session): Promise<boolean> {
+    const expires = Date.now() + TTL
+    let renewed = false
+    await JsonStore.update(filepath, (store) => {
+      if (
+        store.identity !== identity(session) ||
+        typeof store.expires_at !== "number" ||
+        store.expires_at <= Date.now() ||
+        typeof store.payload !== "string"
+      )
+        return
+      renewed = true
+      return { ...store, expires_at: expires }
+    })
+    if (renewed) arm(expires)
+    return renewed
+  }
+
   export async function clear(): Promise<void> {
     await JsonStore.update(filepath, () => ({}))
     if (expiry) clearTimeout(expiry)

@@ -628,12 +628,30 @@ export namespace Session {
 
   export const flushPendingParts = (sessionID: string) => partWriter.flushWhere((k) => k.startsWith(sessionID + "/"))
 
+  /** The cost OpenRouter reports for the request, in USD, when usage
+   * accounting was returned. It already reflects the served tier and any
+   * long-context pricing, and it is the figure the Wallet is debited from
+   * (plus the funding fee), so it outranks the catalog table. Cache-write
+   * tokens are not exposed by @openrouter/ai-sdk-provider 1.5.2: only
+   * prompt_tokens_details.cached_tokens is copied into its metadata, so a
+   * Claude cache creation still counts as plain input in the token split. */
+  function reportedCost(metadata: ProviderMetadata | undefined): number | undefined {
+    const usage = metadata?.["openrouter"]?.["usage"]
+    if (!usage || typeof usage !== "object" || Array.isArray(usage)) return
+    const cost = usage["cost"]
+    if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0) return
+    return cost
+  }
+
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
       tier: z.string().optional(),
       usage: z.custom<LanguageModelUsage>(),
       metadata: z.custom<ProviderMetadata>().optional(),
+      /** Basis points the Wallet adds to a provider-reported cost on a
+       * managed route; absent on routes the provider bills directly. */
+      fundingFeeBps: z.number().nonnegative().optional(),
     }),
     (input) => {
       const cacheReadInputTokens = input.usage.cachedInputTokens ?? 0
@@ -685,15 +703,19 @@ export namespace Session {
         ?.filter((tier) => promptTokens > tier.threshold)
         .sort((a, b) => b.threshold - a.threshold)[0]
       const costInfo = modeTier ?? modeCost ?? catalogCost
+      // The gateway's own figure is what the Wallet is debited (plus the
+      // funding fee); the catalog table is the estimate for everything else.
+      const reported = reportedCost(input.metadata)
+      const cost =
+        reported === undefined
+          ? new Decimal(0)
+              .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
+              .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
+              .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
+              .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
+          : new Decimal(reported).mul(new Decimal(10_000).add(input.fundingFeeBps ?? 0)).div(10_000)
       return {
-        cost: safe(
-          new Decimal(0)
-            .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
-            .toNumber(),
-        ),
+        cost: safe(cost.toNumber()),
         tokens,
       }
     },

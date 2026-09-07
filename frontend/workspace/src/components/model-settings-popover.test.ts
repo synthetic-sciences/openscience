@@ -306,6 +306,24 @@ describe("reasoning effort and Fast mode", () => {
     expect(supported.textContent).not.toContain("Response speed")
     expect(supported.textContent).not.toContain("Prefer faster responses")
     expect(supported.querySelector('[aria-label="Fast mode"]')).not.toBeNull()
+    // No rate is claimed until the route's pricing has loaded.
+    expect(supported.querySelector("[data-model-fast-rate]")).toBeNull()
+
+    const priced = mount(() =>
+      web.createComponent(subject.ModelEffortPanel, {
+        current: "standard",
+        options: [{ id: "standard", label: "Standard" }],
+        fast: { active: true, rate: "2× standard · $10.00 in · $60.00 out per 1M tokens" },
+        onEffortSelect: () => undefined,
+        onTierSelect: () => undefined,
+      }),
+    )
+    expect(priced.querySelector("[data-model-fast-rate]")?.textContent).toBe(
+      "2× standard · $10.00 in · $60.00 out per 1M tokens",
+    )
+    expect(
+      priced.querySelector('[aria-label="Fast mode"]')?.contains(priced.querySelector("[data-model-fast-rate]")),
+    ).toBe(true)
 
     const fastOnly = mount(() =>
       web.createComponent(subject.ModelEffortPanel, {

@@ -395,3 +395,64 @@ test("managed availability controls selection independently of pricing and canno
     Provider.invalidate()
   }
 })
+
+test("the funding fee travels with each price and defaults to the public rate", () => {
+  const stated = ManagedPricing.parse({
+    models: [{ ...entry, pricing: { ...entry.pricing, funding_fee_bps: 700 } }],
+  })[entry.id]!
+  expect(stated.pricing.funding_fee_bps).toBe(700)
+  expect(ManagedPricing.fundingFeeBps(stated)).toBe(700)
+  const implied = ManagedPricing.parse({ models: [entry] })[entry.id]!
+  expect(implied.pricing.funding_fee_bps).toBe(ManagedPricing.DEFAULT_FUNDING_FEE_BPS)
+  expect(ManagedPricing.DEFAULT_FUNDING_FEE_BPS).toBe(550)
+  // A route whose catalog entry has not loaded is still charged the fee.
+  expect(ManagedPricing.fundingFeeBps({})).toBe(550)
+  expect(ManagedPricing.fundingFeeBps({ pricing: { funding_fee_bps: 0 } })).toBe(0)
+  // Out-of-range or fractional fees are not prices the client will state.
+  expect(
+    ManagedPricing.parse({ models: [{ ...entry, pricing: { ...entry.pricing, funding_fee_bps: 55.5 } }] }),
+  ).toEqual({})
+})
+
+test("an explicit refresh skips the failure cooldown and waits for the answer", async () => {
+  const originalFetch = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = (async (input, init) => {
+    const request = new Request(input, init)
+    expect(new URL(request.url).pathname).toBe("/api/cli/model-catalog")
+    calls++
+    if (calls === 1) return new Response("unavailable", { status: 503 })
+    return Response.json(
+      { models: [{ ...entry, pricing: { ...entry.pricing, funding_fee_bps: 700 } }] },
+      {
+        headers: {
+          "OpenScience-Funding-Protocol": "1",
+          "OpenScience-Funding-Context": "organization:org_force",
+        },
+      },
+    )
+  }) as typeof fetch
+  try {
+    await OpenScience.saveSession({
+      api_key: "osk_fixture_force",
+      user_id: "fixture",
+      organization_id: "org_force",
+      workspace_locked: true,
+    })
+    expect(await ManagedPricing.fundingFeePercent()).toBe(5.5)
+    // The forced read waits for the (failed) fetch instead of answering from nothing.
+    expect(await ManagedPricing.current({ force: true })).toEqual({})
+    expect(calls).toBe(1)
+    // Inside the failure cooldown an ordinary read does not ask again...
+    expect(await ManagedPricing.current()).toEqual({})
+    expect(calls).toBe(1)
+    // ...while the user's Refresh does, and sees the answer in the same read.
+    const forced = await ManagedPricing.current({ force: true })
+    expect(calls).toBe(2)
+    expect(forced[entry.id]?.pricing.funding_fee_bps).toBe(700)
+    expect(await ManagedPricing.fundingFeePercent()).toBe(7)
+  } finally {
+    globalThis.fetch = originalFetch
+    await OpenScience.clearSession()
+  }
+})

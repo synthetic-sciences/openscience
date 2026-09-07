@@ -139,6 +139,27 @@ test("redacted provider variants retain the real composer effort and Fast contro
   expect(host.querySelector("[data-model-fast-indicator]")).toBeNull()
 })
 
+test("the composer's Fast toggle shows its price consequence from the route's catalog rates", async () => {
+  const model = route("openrouter", ["low", "medium", "high"])
+  fixture.setState({
+    models: [{ ...model, modes: { fast: { cost: { input: 10, output: 60, cache: { read: 1, write: 0 } } } } }],
+    index: 0,
+    effort: {},
+    tier: {},
+  })
+  const host = mount()
+  host.querySelector<HTMLButtonElement>("[data-model-effort-chip]")!.click()
+  await settle()
+  expect(document.querySelector("[data-model-fast-toggle]")).not.toBeNull()
+  expect(document.querySelector("[data-model-fast-rate]")?.textContent).toBe(
+    "2× standard · $10.00 in · $60.00 out per 1M tokens",
+  )
+  document.querySelector<HTMLInputElement>("[data-model-fast-toggle] input")!.click()
+  await settle()
+  expect(fixture.state.tier["openrouter/openai/gpt-5.6-sol"]).toBe("fast")
+  expect(document.querySelector("[data-model-fast-rate]")?.textContent).toContain("2× standard")
+})
+
 test("a provider metadata refresh restores options without replacing the chosen model", async () => {
   const model = route("openrouter", [])
   fixture.setState({

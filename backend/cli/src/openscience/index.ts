@@ -15,7 +15,7 @@ import { DataRootBarrier } from "@/global/data-root-barrier"
 import { ToolOutputPath } from "@/tool/tool-output-path"
 import { Lock } from "@/util/lock"
 import { Log } from "@/util/log"
-import { BILLING_URL, managedApiBase } from "@/endpoints"
+import { managedApiBase } from "@/endpoints"
 import {
   BYOK_LLM_BASE_URL_KEYS,
   BYOK_LLM_ENV_KEYS,
@@ -205,13 +205,6 @@ const BYOK_SUBPROCESS_PROVIDERS: Record<string, { keys: string[]; baseUrl?: stri
     baseUrl: "PERPLEXITY_BASE_URL",
     publicBaseUrl: "https://api.perplexity.ai",
   },
-}
-
-export class InsufficientCreditsError extends Error {
-  constructor(message = `Credits are empty. Add credits at ${BILLING_URL} or switch back to your own keys.`) {
-    super(message)
-    this.name = "InsufficientCreditsError"
-  }
 }
 
 const SESSION_PATH = path.join(Global.Path.data, "openscience-session.json")
@@ -779,9 +772,53 @@ export namespace OpenScience {
    * and retry a failure with short backoff, all inside one TTL. */
   export const SYNC_INTERVAL = 90_000
   export const SYNC_BACKOFF: readonly number[] = [5_000, 15_000, 30_000]
+  /** A tick reads only the server's digest of the payload and renews the
+   * cached grant when it is unchanged; the full payload is fetched when the
+   * digest moved, when it is unknown, or at least this often regardless. */
+  export const SYNC_FULL_INTERVAL = 5 * 60_000
+  const digests = new Map<string, { version: number; at: number }>()
 
   export function credentialSyncStatus(): SyncStatus {
     return synced
+  }
+
+  /** The server's digest of this workspace's credential payload, or undefined
+   * when it could not be read; the full sync then decides what happened. */
+  async function probeSyncVersion(
+    session: OpenScienceSession,
+    headers: Record<string, string>,
+    signal: AbortSignal,
+  ): Promise<number | undefined> {
+    const response = await fetch(`${apiBase()}/api/cli/sync/version`, { headers, signal }).catch(() => undefined)
+    if (!response) return
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined)
+      return
+    }
+    const context = response.headers.get(FUNDING_CONTEXT_HEADER)
+    if (context && session.organization_id && context !== `organization:${session.organization_id}`) return
+    const body: unknown = await response.json().catch(() => undefined)
+    const value =
+      typeof body === "number"
+        ? body
+        : body && typeof body === "object"
+          ? ((body as Record<string, unknown>).version ??
+            (body as Record<string, unknown>).digest ??
+            (body as Record<string, unknown>).sync_version)
+          : undefined
+    if (typeof value === "number" && Number.isInteger(value)) return value
+    if (typeof value === "string" && /^-?\d{1,10}$/.test(value)) return Number(value)
+  }
+
+  /** Extend the cached grant after the server confirmed its payload is
+   * unchanged. False when no live grant is stored, so a full sync follows. */
+  async function renewGrant(identity: string): Promise<boolean> {
+    const result = await CredentialLifecycle.update(async () => {
+      const current = await getSession()
+      if (!current || WorkspaceCredentials.identity(current) !== identity) return
+      return { action: () => WorkspaceCredentials.renew(current) }
+    })
+    return result.applied && result.value
   }
 
   export async function syncCredentials(options: { force?: boolean; timeoutMs?: number } = {}): Promise<SyncStatus> {
@@ -798,23 +835,31 @@ export namespace OpenScience {
       const controller = new AbortController()
       let timer: ReturnType<typeof setTimeout> | undefined
       const seen: { status?: number } = {}
-      const request = (async () => {
-        const response = await fetch(`${apiBase()}/api/cli/sync`, {
-          headers: { Authorization: `Bearer ${session.api_key}`, ...fundingHeaders(session) },
-          signal: controller.signal,
-        })
-        if (!response.ok) return { response }
-        return { response, body: await response.json() }
-      })()
+      const headers = { Authorization: `Bearer ${session.api_key}`, ...fundingHeaders(session) }
+      const deadline = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort()
+          reject(new Error("Credential sync timed out. Retry when connected."))
+        }, options.timeoutMs ?? 8_000)
+      })
       try {
+        const version = await Promise.race([probeSyncVersion(session, headers, controller.signal), deadline])
+        const known = digests.get(identity)
+        if (
+          !options.force &&
+          version !== undefined &&
+          known?.version === version &&
+          Date.now() - known.at < SYNC_FULL_INTERVAL &&
+          (await renewGrant(identity))
+        )
+          return (synced = { state: "ready", organization_id: session.organization_id, synced_at: Date.now() })
         const result = await Promise.race([
-          request,
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(() => {
-              controller.abort()
-              reject(new Error("Credential sync timed out. Retry when connected."))
-            }, options.timeoutMs ?? 8_000)
-          }),
+          (async () => {
+            const response = await fetch(`${apiBase()}/api/cli/sync`, { headers, signal: controller.signal })
+            if (!response.ok) return { response }
+            return { response, body: await response.json() }
+          })(),
+          deadline,
         ])
         seen.status = result.response.status
         if (result.response.status === 401) {
@@ -874,6 +919,9 @@ export namespace OpenScience {
           Provider.invalidate()
         }
         if (!(await matches())) return synced
+        // The digest read before this payload names it closely enough: a
+        // change in between shows up as a moved digest on the next tick.
+        if (version !== undefined) digests.set(target, { version, at: Date.now() })
         return (synced = { state: "ready", organization_id: data.snapshot.organization_id, synced_at: Date.now() })
       } catch (error) {
         // A silent failure here is how a grant lapses unnoticed: name the
@@ -1676,6 +1724,8 @@ export namespace OpenScience {
     balanceUsd: number
     balanceRedacted?: boolean
     balanceCents: number
+    /** The settled balance minus the gateway's holds for turns in flight; null when the service omits it. */
+    availableCents?: number | null
     cliBalanceCents: number
     spendableBalanceCents: number
     promotionalBalanceCents: number
@@ -1723,6 +1773,7 @@ export namespace OpenScience {
       const body = (await response.json()) as {
         unified_balance_cents?: number
         balance_cents?: number
+        available_cents?: number
         cli_balance_cents?: number
         purchased_cents?: number
         purchased_credits_cents?: number
@@ -1748,6 +1799,7 @@ export namespace OpenScience {
         balanceUsd: purchased / 100,
         balanceRedacted: body.redacted === true,
         balanceCents: purchased,
+        availableCents: typeof body.available_cents === "number" ? body.available_cents : null,
         cliBalanceCents: purchased,
         spendableBalanceCents: spendable,
         promotionalBalanceCents: promotional,
@@ -1936,8 +1988,47 @@ export namespace OpenScience {
     error?: string
   }
 
-  /** Published when a refresh stored a newer summary, or dropped the stored one after a refusal. */
-  export const AccountUpdatedEvent = BusEvent.define("account.updated", z.object({ refreshed_at: z.number() }))
+  /** Published when the stored summary should be read again: a refresh stored
+   * a newer one or dropped it after a refusal, a managed spend made it stale,
+   * or a background refresh failed (with `error`) while it was being served. */
+  export const AccountUpdatedEvent = BusEvent.define(
+    "account.updated",
+    z.object({ refreshed_at: z.number(), error: z.string().optional() }),
+  )
+
+  function announceAccount(properties: { refreshed_at: number; error?: string }): void {
+    GlobalBus.emit("event", { directory: "global", payload: { type: AccountUpdatedEvent.type, properties } })
+  }
+
+  // The gateway settles a managed charge server-side shortly after the
+  // response stream ends, so the summary is read again after this delay
+  // rather than at the response headers, which predate the charge.
+  const SETTLEMENT_DELAY_MS = 3_000
+  let settlement: ReturnType<typeof setTimeout> | undefined
+
+  /** A managed response finished streaming. Surfaces re-read the stored
+   * summary as stale at once, and one refresh runs after the settlement
+   * delay; the steps of one turn collapse into a single refresh. */
+  export function noteManagedSpend(): void {
+    invalidateBalance()
+    announceAccount({ refreshed_at: Date.now() })
+    if (settlement) clearTimeout(settlement)
+    settlement = setTimeout(() => {
+      settlement = undefined
+      void settleSpend()
+    }, SETTLEMENT_DELAY_MS)
+    settlement.unref()
+  }
+
+  async function settleSpend(): Promise<void> {
+    // A balance read between the spend and now predates settlement.
+    invalidateBalance()
+    const session = await getFundingSnapshot().catch(() => null)
+    if (!session) return
+    await refreshAccount(session, { signal: accountDeadline() }).catch((error) => {
+      announceAccount({ refreshed_at: Date.now(), error: refreshFailure(error) })
+    })
+  }
 
   /** The one bound on account reads the UI waits for. It replaces the old
    * pair of a short UI timeout racing a long server timeout: the route's
@@ -1991,6 +2082,7 @@ export namespace OpenScience {
     balanceUsd: z.number(),
     balanceRedacted: z.boolean().optional(),
     balanceCents: z.number(),
+    availableCents: z.number().nullable().optional(),
     cliBalanceCents: z.number(),
     spendableBalanceCents: z.number(),
     promotionalBalanceCents: z.number(),
@@ -2176,12 +2268,7 @@ export namespace OpenScience {
       // cannot outrank the refusal.
       const changed = await commitSummary(state.snapshot, denied ? null : snapshot)
       if (accountFailure?.context === context) accountFailure = undefined
-      if (changed) {
-        GlobalBus.emit("event", {
-          directory: "global",
-          payload: { type: AccountUpdatedEvent.type, properties: { refreshed_at: snapshot.at } },
-        })
-      }
+      if (changed) announceAccount({ refreshed_at: snapshot.at })
       return snapshot
     } catch (error) {
       // The read is cancelled once its last caller left; that caller's own
@@ -2224,19 +2311,26 @@ export namespace OpenScience {
     // is: the refresh that stored it just ran, and the next read after the
     // interval starts another. Nothing here asks the account service.
     const lifetime = cached && cached.at > accountStale ? ACCOUNT_SNAPSHOT_TTL_MS : ACCOUNT_REFRESH_MIN_MS
-    if (cached && now - cached.at < lifetime) return accountSummary(cached, false)
     const failure = accountFailure?.context === contextTag(session) ? accountFailure : undefined
-    if (cached && failure && failure.at > cached.at && now - failure.at < ACCOUNT_RETRY_MS) {
-      return accountSummary(cached, false, failure.error)
-    }
+    // A refresh that failed after the stored summary was written (a spend's
+    // settlement read, say) is reported with the summary it could not
+    // replace, however young that summary is: the announcement of the failure
+    // is what makes a surface re-read, and the re-read must say why.
+    const recent = cached && failure && failure.at > cached.at ? failure : undefined
+    if (cached && now - cached.at < lifetime) return accountSummary(cached, false, recent?.error)
+    if (cached && recent && now - recent.at < ACCOUNT_RETRY_MS) return accountSummary(cached, false, recent.error)
     // The only read that waits: the caller's own signal (a route's request,
     // aborted when the client leaves) bounds it together with the deadline.
     if (!cached)
       return accountSummary(await refreshAccount(session, { signal: accountDeadline(options.signal) }), false)
     // Nobody waits on the background read here, so it runs under the
     // deadline alone; the result is announced on the global bus and the next
-    // summary read serves it.
-    refreshAccount(session, { signal: accountDeadline() }).catch(() => undefined)
+    // summary read serves it. Nobody waits on a failure either, so it is
+    // announced too: a surface showing the stored summary as refreshing
+    // learns that the refresh stopped, and why.
+    refreshAccount(session, { signal: accountDeadline() }).catch((error) => {
+      announceAccount({ refreshed_at: Date.now(), error: refreshFailure(error) })
+    })
     return accountSummary(cached, true, failure?.error)
   }
 

@@ -42,6 +42,7 @@ type Account = {
   error?: string
   user?: Record<string, unknown> & { email?: string }
   balance_usd: number | null
+  available_usd?: number | null
   funding_context: FundingContext
   credential?: { type: "personal" | "organization"; legacy: boolean } | null
   credential_sync?: SyncStatus
@@ -219,7 +220,11 @@ export default function General() {
   }
   const wallet = () => {
     if (!account()) return error() ? "Unavailable" : "Checking…"
-    const label = walletBalanceLabel({ signedIn: account()!.session, balanceUsd: account()!.balance_usd })
+    const label = walletBalanceLabel({
+      signedIn: account()!.session,
+      balanceUsd: account()!.balance_usd,
+      availableUsd: account()!.available_usd,
+    })
     return account()!.refreshing ? `${label} · Refreshing…` : label
   }
 

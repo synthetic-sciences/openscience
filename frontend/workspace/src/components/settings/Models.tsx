@@ -456,6 +456,7 @@ export default function Models() {
                                             access: route.routeAccess,
                                             pricing: route.source.pricing,
                                             cost: route.source.cost,
+                                            fast: route.source.modes?.fast?.cost,
                                           })
                                         return (
                                           <div class="models-rate-route">

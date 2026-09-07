@@ -154,6 +154,29 @@ describe("Wallet account summary", () => {
     expect(unknown.balanceUsd).toBeNull()
   })
 
+  test("shows what is spendable now beside the purchased balance and states the funding fee", () => {
+    const result = project({ credits: { ...credits, availableCents: 1550 } })
+    expect(result.balanceUsd).toBe(20)
+    expect(result.availableUsd).toBe(15.5)
+    expect(result.aceContract.fundingFeePercent).toBe(5.5)
+    expect("serviceMarginPercent" in result.aceContract).toBe(false)
+    expect(project({ credits: { ...credits, availableCents: null } }).availableUsd).toBeNull()
+    expect(project({ credits: null }).availableUsd).toBeNull()
+    // A private balance keeps its holds private too.
+    expect(project({ credits: { ...credits, availableCents: 1550, balanceRedacted: true } }).availableUsd).toBeNull()
+    // The account's catalog restates the fee once it has loaded.
+    const stated = walletState({
+      snapshot: stored,
+      refreshing: false,
+      summary: true,
+      transactions: [],
+      fundingFeePercent: 7,
+    })
+    expect(stated.aceContract.fundingFeePercent).toBe(7)
+    expect(stated.aceContract.reloadAmountUsd).toBe(20)
+    expect(stated.aceContract.reloadThresholdUsd).toBe(5)
+  })
+
   test("keeps a private workspace balance hidden without denying verified member access", () => {
     const result = project({ credits: { ...credits, balanceRedacted: true } })
     expect(result.balanceUsd).toBeNull()

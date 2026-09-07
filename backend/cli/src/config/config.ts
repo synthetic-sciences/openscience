@@ -1196,7 +1196,7 @@ export namespace Config {
             .nullable()
             .optional()
             .describe(
-              "How LLM inference is paid for. 'managed' uses Ace Credits; 'byok' uses only user-owned keys, subscriptions, or local models.",
+              "How LLM inference is paid for. 'managed' pays from the purchased Wallet; 'byok' uses only user-owned keys, subscriptions, or local models.",
             ),
           compute: z
             .literal("byok")

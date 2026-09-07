@@ -26,6 +26,7 @@ import { ProjectAccess } from "@/project/access"
 import { randomUUID } from "node:crypto"
 import { Flag } from "@/flag/flag"
 import { OpenScience } from "@/openscience"
+import { BILLING_URL } from "@/endpoints"
 import { requiresWalletBalance, resolveCredentialSource } from "@/session/access-route"
 
 export namespace Agent {
@@ -561,7 +562,9 @@ export namespace Agent {
       if (balance === null)
         throw new Error("Ace could not verify the current balance. Retry when the connection returns.")
       if (balance <= 0) {
-        throw new Error("Your Ace balance is empty. Add credits or switch model access to BYOK / Subscription.")
+        throw new Error(
+          `Your Wallet has no available balance (purchased balance less holds for turns in flight). Add funds at ${BILLING_URL} or switch model access to Keys & subscriptions.`,
+        )
       }
     }
 

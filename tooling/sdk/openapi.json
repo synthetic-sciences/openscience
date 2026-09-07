@@ -500,6 +500,16 @@
                         }
                       ]
                     },
+                    "available_usd": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "billing_mode": {
                       "anyOf": [
                         {
@@ -650,6 +660,7 @@
                     "refreshing",
                     "refreshed_at",
                     "balance_usd",
+                    "available_usd",
                     "billing_mode",
                     "funding_context",
                     "credential"
@@ -23402,6 +23413,16 @@
                         }
                       ]
                     },
+                    "availableUsd": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "balanceRedacted": {
                       "type": "boolean"
                     },
@@ -23446,7 +23467,7 @@
                           "type": "number",
                           "exclusiveMinimum": 0
                         },
-                        "serviceMarginPercent": {
+                        "fundingFeePercent": {
                           "type": "number",
                           "minimum": 0
                         },
@@ -23461,7 +23482,7 @@
                         "activationAuthorizationUsd",
                         "reloadThresholdUsd",
                         "reloadAmountUsd",
-                        "serviceMarginPercent",
+                        "fundingFeePercent",
                         "processingFeeDisclosedSeparately",
                         "reloadControlledByAce"
                       ]
@@ -23526,6 +23547,7 @@
                   "required": [
                     "signedIn",
                     "balanceUsd",
+                    "availableUsd",
                     "billingMode",
                     "managedSupported",
                     "managedUnlocked",
@@ -31921,6 +31943,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "refresh",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "description": "Re-read managed model pricing now, skipping its cache and failure cooldown"
           }
         ],
         "summary": "List providers",
@@ -52698,6 +52732,9 @@
             "properties": {
               "refreshed_at": {
                 "type": "number"
+              },
+              "error": {
+                "type": "string"
               }
             },
             "required": [
@@ -58117,7 +58154,7 @@
             "type": "object",
             "properties": {
               "llm": {
-                "description": "How LLM inference is paid for. 'managed' uses Ace Credits; 'byok' uses only user-owned keys, subscriptions, or local models.",
+                "description": "How LLM inference is paid for. 'managed' pays from the purchased Wallet; 'byok' uses only user-owned keys, subscriptions, or local models.",
                 "anyOf": [
                   {
                     "type": "string",
@@ -58795,6 +58832,9 @@
                   "meta",
                   "openrouter"
                 ]
+              },
+              "funding_fee_bps": {
+                "type": "number"
               },
               "audited_at": {
                 "type": "string"

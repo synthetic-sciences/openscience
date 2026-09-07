@@ -99,6 +99,7 @@ export const AccountRoutes = lazy(() =>
                     error: z.string().optional(),
                     user: z.unknown().optional(),
                     balance_usd: z.number().nullable(),
+                    available_usd: z.number().nullable(),
                     billing_mode: BillingMode.nullable(),
                     funding_context: FundingContext,
                     credential: Credential.nullable(),
@@ -121,6 +122,7 @@ export const AccountRoutes = lazy(() =>
             ...(error ? { error } : {}),
             credential_sync: OpenScience.credentialSyncStatus(),
             balance_usd: null,
+            available_usd: null,
             billing_mode: null,
             credential: credential(session),
             funding_context: { type: "personal" as const, available: !session, locked: false, organizations: [] },
@@ -145,6 +147,10 @@ export const AccountRoutes = lazy(() =>
           credential_sync: OpenScience.credentialSyncStatus(),
           user: summary.user ?? (session.user_id ? { user_id: session.user_id } : undefined),
           balance_usd: summary.credits?.balanceUsd ?? null,
+          available_usd:
+            typeof summary.credits?.availableCents === "number" && !summary.credits.balanceRedacted
+              ? summary.credits.availableCents / 100
+              : null,
           billing_mode: summary.billing,
           funding_context: summary.context,
           credential: credential(session),

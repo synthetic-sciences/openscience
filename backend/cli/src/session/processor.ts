@@ -20,6 +20,8 @@ import { accessRoute, resolveCredentialSource } from "./access-route"
 import { requiresWalletBalance } from "./access-route"
 import type { CredentialSource } from "./access-route"
 import { OpenScience } from "@/openscience"
+import { BILLING_URL } from "@/endpoints"
+import { ManagedPricing } from "@/provider/managed-pricing"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
 import { ToolRetryGuard } from "./tool-retry-guard"
@@ -631,7 +633,7 @@ export namespace SessionProcessor {
               if (balance <= 0) {
                 OpenScience.invalidateBalance()
                 throw new Error(
-                  "Your Ace balance is empty. Add credits at app.syntheticsciences.ai/billing or switch model access to BYOK / Subscription.",
+                  `Your Wallet has no available balance (purchased balance less holds for turns in flight). Add funds at ${BILLING_URL} or switch model access to Keys & subscriptions.`,
                 )
               }
             }
@@ -885,12 +887,18 @@ export namespace SessionProcessor {
                   break
 
                 case "finish-step":
+                  const funded = requiresWalletBalance(credentialSource)
                   const usage = Session.getUsage({
                     model: input.model,
                     tier: streamInput.user.tier,
                     usage: value.usage,
                     metadata: value.providerMetadata,
+                    fundingFeeBps: funded ? ManagedPricing.fundingFeeBps(input.model) : undefined,
                   })
+                  // Each step is one gateway request the Wallet settles a
+                  // moment after its stream ends; announce it here rather than
+                  // at the response headers, which predate the charge.
+                  if (funded) OpenScience.noteManagedSpend()
                   const stepPartID = Identifier.ascending("part")
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
