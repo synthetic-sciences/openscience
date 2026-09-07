@@ -147,3 +147,61 @@ test("an ambiguous persisted decision is reported without reapplying its continu
     },
   })
 })
+
+test("a root snapshot includes pending decisions raised by delegated child sessions", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const parent = await Session.create({})
+      const child = await Session.create({ parentID: parent.id })
+      const grandchild = await Session.create({ parentID: child.id })
+      const stranger = await Session.create({})
+      const controller = new AbortController()
+      const settle = (promise: Promise<unknown>) => promise.catch((error: unknown) => error)
+      const waiting = Question.ask({ sessionID: grandchild.id, questions })
+      const foreign = settle(Question.ask({ sessionID: stranger.id, questions }, controller.signal))
+      const permission = settle(
+        PermissionNext.ask(
+          {
+            sessionID: child.id,
+            permission: "bash",
+            patterns: ["rm -rf build"],
+            metadata: {},
+            always: [],
+            ruleset: [],
+          },
+          controller.signal,
+        ),
+      )
+      try {
+        await Bun.sleep(10)
+        const response = await RuntimeRoutes().request(`/snapshot?sessionID=${parent.id}`)
+        const snapshot = (await response.json()) as {
+          questions: Array<{ id: string; sessionID: string }>
+          permissions: Array<{ sessionID: string }>
+        }
+        expect(snapshot.questions.map((item) => item.sessionID)).toEqual([grandchild.id])
+        expect(snapshot.permissions.map((item) => item.sessionID)).toEqual([child.id])
+        const own = await RuntimeRoutes().request(`/snapshot?sessionID=${stranger.id}`)
+        expect(((await own.json()) as { questions: unknown[]; permissions: unknown[] }).permissions).toEqual([])
+
+        const decision = await RuntimeRoutes().request("/decision", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: "question",
+            sessionID: grandchild.id,
+            requestID: snapshot.questions[0]!.id,
+            answers: [["B"]],
+          }),
+        })
+        expect(decision.status).toBe(200)
+        expect(await waiting).toEqual([["B"]])
+      } finally {
+        controller.abort()
+        await Promise.all([foreign, permission])
+      }
+    },
+  })
+})

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { PermissionNext } from "../../src/permission/next"
 import { ToolSelection } from "../../src/session/tool-selection"
+import type { MessageV2 } from "../../src/session/message-v2"
 
 describe("tool selection", () => {
   test("keeps the first user turn fresh across assistant tool-loop steps", () => {
@@ -457,4 +458,36 @@ test("installed custom tools are discoverable while permission, direct-answer an
     }),
   ).toBe(false)
   expect(ToolSelection.enabled("local_lab_summary", { permission: [], tools: { "*": false } })).toBe(false)
+})
+
+test("skill activation spans every step of the request, not only the span since the newest continuation", () => {
+  const skill = (id: string, messageID: string, status: "completed" | "error", metadata?: Record<string, unknown>) => ({
+    id,
+    sessionID: "ses_skills",
+    messageID,
+    type: "tool",
+    tool: "skill",
+    callID: `call_${id}`,
+    state:
+      status === "completed"
+        ? { status, input: {}, output: "", title: "", metadata, time: { start: 0, end: 1 } }
+        : { status, input: {}, error: "missing", time: { start: 0, end: 1 } },
+  })
+  const messages = [
+    { info: { id: "u1", role: "user" }, parts: [] },
+    {
+      info: { id: "a1", role: "assistant" },
+      parts: [skill("s1", "a1", "completed", { capability: "RDKit", allowedTools: ["python", "chem_toolkit"] })],
+    },
+    { info: { id: "c1", role: "user" }, parts: [] },
+    {
+      info: { id: "a2", role: "assistant" },
+      parts: [skill("s2", "a2", "error"), skill("s3", "a2", "completed", { allowedTools: ["bash", 42] })],
+    },
+  ] as unknown as MessageV2.WithParts[]
+
+  const activation = ToolSelection.activation(messages)
+  expect([...activation.capabilities]).toEqual(["RDKit"])
+  expect([...activation.tools]).toEqual(["python", "chem_toolkit", "bash"])
+  expect(ToolSelection.activation(messages.slice(2)).capabilities.size).toBe(0)
 })

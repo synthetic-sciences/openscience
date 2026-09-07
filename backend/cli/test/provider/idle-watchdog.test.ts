@@ -125,7 +125,7 @@ describe("provider activity watchdog", () => {
   })
 
   test("bounds headers by default but makes response inactivity limits opt-in", () => {
-    expect(Provider.resolveConnectTimeout(undefined)).toBe(120_000)
+    expect(Provider.resolveConnectTimeout(undefined)).toBe(300_000)
     expect(Provider.resolveIdleTimeout(undefined)).toBe(false)
     expect(Provider.resolveOutputIdleTimeout(undefined)).toBe(false)
     expect(Provider.resolveConnectTimeout(false)).toBe(false)
@@ -195,7 +195,7 @@ describe("provider activity watchdog", () => {
         expect((await watchdog.next(() => reader!.read())).done).toBe(true)
         expect(requests).toBe(1)
         expect(timings).toHaveLength(1)
-        expect(timings[0]).toMatchObject({ outcome: "completed", idleTimeoutMs: false, connectTimeoutMs: 120_000 })
+        expect(timings[0]).toMatchObject({ outcome: "completed", idleTimeoutMs: false, connectTimeoutMs: 300_000 })
         expect(timings[0].completedAt - timings[0].startedAt).toBeGreaterThan(900_000)
       } finally {
         user.abort(new DOMException("fixture cleanup", "AbortError"))
@@ -326,8 +326,8 @@ describe("provider activity watchdog", () => {
     )
     void response.catch(() => {})
     try {
-      await time.advance(120_001)
-      await expect(response).rejects.toMatchObject({ phase: "connect", timeoutMs: 120_000 })
+      await time.advance(300_001)
+      await expect(response).rejects.toMatchObject({ phase: "connect", timeoutMs: 300_000 })
       expect(signal?.aborted).toBe(true)
       expect(timings).toHaveLength(1)
       expect(timings[0]).toMatchObject({ outcome: "idle_timeout", timeoutPhase: "connect", idleTimeoutMs: false })

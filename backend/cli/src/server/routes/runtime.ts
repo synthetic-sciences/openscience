@@ -241,7 +241,7 @@ export const RuntimeRoutes = lazy(() => {
       describeRoute({
         summary: "Resynchronize a research session",
         description:
-          "Returns durable run receipts, an event cursor and live pending decisions belonging to this server process. Replayed decision events are historical; only pending requests in a fresh snapshot are actionable.",
+          "Returns durable run receipts, an event cursor and live pending decisions belonging to this server process, including decisions raised by delegated child sessions of this session. Replayed decision events are historical; only pending requests in a fresh snapshot are actionable.",
         operationId: "runtime.snapshot",
         responses: {
           200: { description: "Runtime snapshot", content: { "application/json": { schema: resolver(Snapshot) } } },
@@ -260,13 +260,20 @@ export const RuntimeRoutes = lazy(() => {
           PermissionNext.list(),
           Question.list(),
         ])
+        // A delegated child's tool prompt blocks the parent's run just the
+        // same, so it must be visible and answerable from the root snapshot.
+        const owned = async <T extends { sessionID: string }>(items: T[]) => {
+          const result: T[] = []
+          for (const item of items) if (await RuntimeEvents.belongs(sessionID, item.sessionID)) result.push(item)
+          return result
+        }
         return c.json({
           sessionID,
           runs,
           oldestSequence: replay.oldestSequence,
           latestSequence: replay.latestSequence,
-          permissions: permissions.filter((item) => item.sessionID === sessionID),
-          questions: questions.filter((item) => item.sessionID === sessionID),
+          permissions: await owned(permissions),
+          questions: await owned(questions),
           decisionScope: "connected_runtime" as const,
         })
       },

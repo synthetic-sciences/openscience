@@ -112,7 +112,57 @@ export namespace RuntimeEvents {
     active: new Map<string, string>(),
     subscriptions: new Map<string, Set<Subscriber>>(),
     progress: new Map<string, Progress>(),
+    // A session's parent is immutable, so one lookup per session suffices.
+    parents: new Map<string, string | undefined>(),
   }))
+
+  // Every session that emits while some run is active lands in the parent
+  // cache; a cache this size costs one extra record read per entry to rebuild.
+  const PARENT_CACHE_LIMIT = 4_096
+
+  /** The parent of a session, read once. A session record is written before
+   * the session is announced or produces events, so a missing record means a
+   * root or foreign session rather than a not-yet-created child. */
+  async function parent(sessionID: string): Promise<string | undefined> {
+    const parents = state().parents
+    if (parents.has(sessionID)) return parents.get(sessionID)
+    const session = await Storage.read<{ parentID?: unknown }>(["session", Instance.project.id, sessionID]).catch(
+      () => undefined,
+    )
+    if (parents.size >= PARENT_CACHE_LIMIT) parents.clear()
+    const value = typeof session?.parentID === "string" ? session.parentID : undefined
+    parents.set(sessionID, value)
+    return value
+  }
+
+  /** Ancestor chain of a session, nearest first. */
+  async function ancestors(sessionID: string): Promise<string[]> {
+    const chain: string[] = []
+    let current: string | undefined = sessionID
+    while (current && !chain.includes(current)) {
+      chain.push(current)
+      current = await parent(current)
+    }
+    return chain
+  }
+
+  /** True when `sessionID` is `rootID` or one of its delegated descendants. */
+  export async function belongs(rootID: string, sessionID: string) {
+    if (rootID === sessionID) return true
+    return (await ancestors(sessionID)).includes(rootID)
+  }
+
+  /** The nearest active ancestor's run. Delegated children work under the
+   * parent's run, so their tool prompts and progress belong to the same
+   * public journal. */
+  async function inherited(sessionID: string) {
+    const active = state().active
+    if (!active.size) return
+    for (const ancestor of await ancestors(sessionID)) {
+      const runID = active.get(ancestor)
+      if (runID) return { sessionID: ancestor, runID }
+    }
+  }
 
   function key(sessionID: string) {
     return ["runtime_event", Instance.project.id, sessionID]
@@ -627,7 +677,8 @@ export namespace RuntimeEvents {
     return notify(event)
   }
 
-  /** Capture an internal event only while a public runtime run owns the session. */
+  /** Capture an internal event only while a public runtime run owns the
+   * session or one of its ancestors. */
   function captureSessionID(type: string, properties: Record<string, unknown>) {
     const direct = properties.sessionID
     if (typeof direct === "string") return direct
@@ -645,18 +696,24 @@ export namespace RuntimeEvents {
     if (!properties || typeof properties !== "object" || Array.isArray(properties)) return
     const sessionID = captureSessionID(payload.type, properties as Record<string, unknown>)
     if (!sessionID) return
-    const runID = state().active.get(sessionID)
-    if (!runID) return
+    // A root session's streamed progress must be scheduled in the same
+    // event-loop turn as its bus delivery, or its deltas reorder around the
+    // run's completion; only a delegated child pays for the ancestor walk.
+    const direct = state().active.get(sessionID)
+    const run = direct ? { sessionID, runID: direct } : await inherited(sessionID)
+    if (!run) return
+    // The journal belongs to the run's root session; the event properties keep
+    // naming the child session that produced them.
     const input = {
-      sessionID,
-      runID,
+      sessionID: run.sessionID,
+      runID: run.runID,
       type: payload.type,
       properties: properties as Record<string, unknown>,
     }
     const streaming = progressInput(input)
     if (streaming) return scheduleProgress(streaming)
-    const stream = progress(sessionID, runID)
-    await flushProgress(sessionID)
+    const stream = progress(run.sessionID, run.runID)
+    await flushProgress(run.sessionID)
     await queue(stream, async () => {
       await append({ ...input, requireActive: true })
     })

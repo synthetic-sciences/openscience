@@ -601,13 +601,23 @@ export namespace MessageV2 {
     return isContinuing(finish) && (finish !== "unknown" || hasLocalResult)
   }
 
+  /** Consecutive continuation turns that may end at the output limit without a
+   * completed tool result or new text before the loop stops asking. */
+  export const OUTPUT_STALL_LIMIT = 2
+
+  /** Resume a truncated turn while its continuations keep producing work. There
+   * is no attempt ceiling: a long document written in chunks is progress. Two
+   * consecutive continuations that only replay the same truncated output (a
+   * `write` larger than the output cap) stop the loop, because every such round
+   * bills the full output budget for nothing. */
   export function outputRecovery(input: {
     finish?: string
     unanswered: boolean
     bare: boolean
-    attempts: number
-  }): "none" | "continue" {
+    stalled: number
+  }): "none" | "continue" | "fail" {
     if (input.finish !== "length" || !input.unanswered || input.bare) return "none"
+    if (input.stalled >= OUTPUT_STALL_LIMIT) return "fail"
     return "continue"
   }
 
@@ -955,6 +965,38 @@ export namespace MessageV2 {
     return IMAGE_TOKENS
   }
 
+  // Providers bill a PDF per page (roughly 1.5–3k tokens each), not per
+  // transport byte: a 450 KB scan is a few pages, while its base64 data URL
+  // estimated at ~150k tokens and was refused before any request was sent.
+  // Page objects hidden inside compressed object streams are not visible to
+  // this scan, so the count is a floor of one page.
+  export const PDF_PAGE_TOKENS = 3_000
+  const pdfPageCache = new Map<string, number>()
+
+  export function pdfPages(url: string) {
+    const payload = mediaIdentity(url)
+    const key = `${payload.length}:${Bun.hash(payload)}`
+    const cached = pdfPageCache.get(key)
+    if (cached !== undefined) return cached
+    const bytes = Buffer.from(payload, "base64").toString("latin1")
+    const pages = bytes.match(/\/Type\s*\/Page(?![s\w])/g)?.length ?? 0
+    const count = Math.max(1, pages)
+    if (pdfPageCache.size >= 64) pdfPageCache.clear()
+    pdfPageCache.set(key, count)
+    return count
+  }
+
+  /** Estimate a non-image attachment the way the provider will bill it. Files
+   * without a per-page contract keep the character heuristic of their bytes. */
+  export function documentTokens(mime: string, url: string) {
+    if (mime === "application/pdf") return pdfPages(url) * PDF_PAGE_TOKENS
+    return Token.estimate(url)
+  }
+
+  function inlineDocument(mime: string) {
+    return !mime.startsWith("image/") && mime !== "text/plain" && mime !== "application/x-directory"
+  }
+
   // Anthropic (and most providers) reject a single image over 5 MB with an HTTP 400.
   // P1's flat token estimate neither counts an oversized image accurately nor prevents
   // that error, so a single big figure can hard-fail the turn. P2.4 guards it WITHOUT an
@@ -1098,6 +1140,7 @@ export namespace MessageV2 {
     skills: number
     image: number
     images: number
+    document: number
     total: number
   }
 
@@ -1108,7 +1151,17 @@ export namespace MessageV2 {
   // — so a prune visibly shrinks the breakdown. `system` covers the prompt strings that
   // are not part of the message log. Powers P0 context-composition telemetry.
   export function composition(input: WithParts[], options?: { system?: string[] }): Composition {
-    const out: Composition = { system: 0, text: 0, reasoning: 0, tool: 0, skills: 0, image: 0, images: 0, total: 0 }
+    const out: Composition = {
+      system: 0,
+      text: 0,
+      reasoning: 0,
+      tool: 0,
+      skills: 0,
+      image: 0,
+      images: 0,
+      document: 0,
+      total: 0,
+    }
     for (const s of options?.system ?? []) out.system += Token.estimate(s)
     const superseded = supersededOutputs(input)
 
@@ -1143,6 +1196,8 @@ export namespace MessageV2 {
             if (nudge) out.text += Token.estimate(nudge)
             else if (!addImage(part.url)) out.text += Token.estimate(DUPLICATE_IMAGE)
           }
+          // text/plain and directory files travel as text parts and are counted there.
+          if (inlineDocument(part.mime)) out.document += documentTokens(part.mime, part.url)
           continue
         }
         if (part.type === "tool") {
@@ -1162,18 +1217,21 @@ export namespace MessageV2 {
                 : part.state.output
             out[bucket] += Token.estimate(body)
             if (!compacted && !superseded.has(part.id))
-              for (const a of part.state.attachments ?? [])
+              for (const a of part.state.attachments ?? []) {
                 if (a.mime.startsWith("image/")) {
                   const nudge = oversizedImageNudge(a.url, a.filename)
                   if (nudge) out[bucket] += Token.estimate(nudge)
                   else if (!addImage(a.url)) out[bucket] += Token.estimate(DUPLICATE_IMAGE)
+                  continue
                 }
+                if (inlineDocument(a.mime)) out.document += documentTokens(a.mime, a.url)
+              }
           }
           if (part.state.status === "error") out[bucket] += Token.estimate(part.state.error)
         }
       }
 
-    out.total = out.system + out.text + out.reasoning + out.tool + out.skills + out.image
+    out.total = out.system + out.text + out.reasoning + out.tool + out.skills + out.image + out.document
     return out
   }
 
@@ -1283,6 +1341,22 @@ export namespace MessageV2 {
     },
   )
 
+  /** Every message of the epoch that `parentID` belongs to, oldest first. A
+   * continuation's parent names the epoch's first prompt, and message ids are
+   * monotonic within a session, so the epoch is the id range from that prompt
+   * onward; older history is never read. */
+  export async function epoch(sessionID: string, parentID: string): Promise<WithParts[]> {
+    const parent = await Storage.read<Info>(["message", sessionID, parentID]).catch(() => undefined)
+    const anchor = (parent?.role === "user" && parent.internal?.epoch) || parentID
+    const selected = (await Storage.list(["message", sessionID])).filter((item) => item[2] >= anchor)
+    const result: WithParts[] = []
+    for (let start = 0; start < selected.length; start += STREAM_WINDOW) {
+      const window = selected.slice(start, start + STREAM_WINDOW)
+      result.push(...(await Promise.all(window.map((item) => get({ sessionID, messageID: item[2] })))))
+    }
+    return result
+  }
+
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
     const completed = new Set<string>() // carrier ids (parentIDs of completed summaries)
@@ -1360,7 +1434,41 @@ export namespace MessageV2 {
     return e.isRetryable
   }
 
+  /** A connection that failed before any response byte, as recorded by the
+   * provider fetch wrapper (the only place that knows whether headers arrived).
+   * Nothing reached the model, so sending the request again cannot duplicate
+   * a paid dispatch. */
+  export function transportFailure(error: unknown): { code: string; message: string } | undefined {
+    const seen = new Set<unknown>()
+    const pending = [error]
+    while (pending.length) {
+      const current = pending.shift()
+      if (!current || typeof current !== "object" || seen.has(current)) continue
+      seen.add(current)
+      const shape = current as { name?: unknown; phase?: unknown; code?: unknown; message?: unknown; cause?: unknown }
+      if (shape.name === "ProviderTransportError" && shape.phase === "connect") {
+        return {
+          code: typeof shape.code === "string" ? shape.code : "unknown",
+          message: typeof shape.message === "string" ? shape.message : "",
+        }
+      }
+      pending.push(shape.cause)
+      if (current instanceof AggregateError) pending.push(...current.errors)
+    }
+  }
+
   export function fromError(e: unknown, ctx: { providerID: string }) {
+    const transport = transportFailure(e)
+    if (transport) {
+      return new MessageV2.APIError(
+        {
+          message: `Could not connect to the provider: ${transport.message}`,
+          isRetryable: true,
+          metadata: { code: transport.code, phase: "connect", message: transport.message },
+        },
+        { cause: e },
+      ).toObject()
+    }
     switch (true) {
       // A credential revision cancelled the turn: a clean abort whose message
       // names the cause.

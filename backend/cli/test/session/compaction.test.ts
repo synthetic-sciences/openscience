@@ -1189,8 +1189,9 @@ describe("session.compaction.selectTail", () => {
     expect(SessionCompaction.messageTokens(a("a1", "x".repeat(40)))).toBe(10)
   })
 
-  test("messageTokens counts a non-image file (PDF) by payload size, not 0", () => {
-    // toModelMessages ships the full base64; the tail budget must not see a big PDF as ~0.
+  test("messageTokens counts a non-image file (PDF) by page count, not 0", () => {
+    // toModelMessages ships the full base64, but providers bill pages; the
+    // tail budget must neither see a big PDF as ~0 nor as its transport bytes.
     const url = "data:application/pdf;base64," + "A".repeat(4000)
     const pdf = {
       info: {
@@ -1205,7 +1206,8 @@ describe("session.compaction.selectTail", () => {
         { id: "u1f", sessionID: "s", messageID: "u1", type: "file", mime: "application/pdf", filename: "x.pdf", url },
       ],
     } as unknown as MessageV2.WithParts
-    expect(SessionCompaction.messageTokens(pdf)).toBeGreaterThan(900)
+    expect(SessionCompaction.messageTokens(pdf)).toBe(MessageV2.PDF_PAGE_TOKENS)
+    expect(SessionCompaction.messageTokens(pdf)).toBe(MessageV2.composition([pdf]).document)
   })
 
   test("messageTokens scores a compacted tool call as its 1-line summary, not the cleared body", () => {
@@ -1322,5 +1324,18 @@ describe("session.compaction.selectTail", () => {
 
     expect(tailStartId).toBe("u2")
     expect(SessionCompaction.protectedContext(msgs, "cc").map((message) => message.info.id)).toEqual(["u2", "u3", "cc"])
+  })
+})
+
+describe("compaction.recentImages", () => {
+  test("is a config knob whose default keeps one inline image", () => {
+    expect(SessionCompaction.KEEP_RECENT_IMAGES).toBe(1)
+    expect(SessionCompaction.recentImages({})).toBe(1)
+    expect(SessionCompaction.recentImages({ compaction: {} })).toBe(1)
+    expect(SessionCompaction.recentImages({ compaction: { recentImages: 4 } })).toBe(4)
+    expect(SessionCompaction.recentImages({ compaction: { recentImages: 0 } })).toBe(0)
+    expect(Config.Info.parse({ compaction: { recentImages: 3 } }).compaction?.recentImages).toBe(3)
+    expect(() => Config.Info.parse({ compaction: { recentImages: -1 } })).toThrow()
+    expect(() => Config.Info.parse({ compaction: { recentImages: 1.5 } })).toThrow()
   })
 })
