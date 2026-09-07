@@ -33,6 +33,17 @@ const mount = (view: () => JSX.Element) => {
 
 const settle = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// FileReader completion depends on the event loop, not a fixed render delay.
+const waitFor = async <T>(read: () => T | null | undefined, timeout = 2_000) => {
+  const until = Date.now() + timeout
+  for (;;) {
+    const value = read()
+    if (value) return value
+    if (Date.now() > until) return undefined
+    await settle(25)
+  }
+}
+
 let unique = 0
 const props = (over: Record<string, unknown> = {}) => ({
   file: { name: "notes.md", path: `notes-${(unique += 1)}.md`, volume: "weights", size: 12 },
@@ -79,9 +90,9 @@ describe("remote file view", () => {
         }) as never,
       ),
     )
-    await settle()
+    const image = await waitFor(() => host.querySelector("[data-remote-image]"))
 
-    expect(host.querySelector("[data-remote-image]")?.getAttribute("src")).toStartWith("data:image/png")
+    expect(image?.getAttribute("src")).toStartWith("data:image/png")
   })
 
   // frame-src does allow blob:, so a PDF keeps it -- but the bytes arrive as
