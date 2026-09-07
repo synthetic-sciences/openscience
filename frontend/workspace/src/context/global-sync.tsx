@@ -256,9 +256,12 @@ function createGlobalSync() {
   const providerScopes = new Map<string, string | undefined>()
   let providerRevision = 0
   const providerLoads = createInflightCache<ProviderListResponse>(async (key) => {
-    const [, directory = ""] = key.split("\n")
+    const [, directory = "", refresh] = key.split("\n")
+    // Only an explicit Refresh carries the flag: the server then skips its
+    // managed pricing cache and failure cooldown before answering.
+    const parameters = refresh ? { refresh: "true" as const } : undefined
     try {
-      const scoped = await sdkFor(directory, providerScopes.get(key)).provider.list()
+      const scoped = await sdkFor(directory, providerScopes.get(key)).provider.list(parameters)
       return normalizeProviderList(scoped.data!)
     } catch (error) {
       // The catalog is a property of the install, not of one project, so a
@@ -266,12 +269,12 @@ function createGlobalSync() {
       // 410) must not be able to empty it. Every model surface reads this
       // store, so failing here looked like "my API key vanished".
       console.warn("Provider catalog unavailable for this project; using the install catalog", { directory, error })
-      const global = await globalSDK.client.provider.list()
+      const global = await globalSDK.client.provider.list(parameters)
       return normalizeProviderList(global.data!)
     }
   })
-  const loadProvider = (directory: string, projectID?: string) => {
-    const key = scopeFor(directory, projectID)
+  const loadProvider = (directory: string, projectID?: string, force?: boolean) => {
+    const key = `${scopeFor(directory, projectID)}${force ? "\nrefresh" : ""}`
     providerScopes.set(key, projectID)
     return providerLoads.get(key)
   }
@@ -279,9 +282,10 @@ function createGlobalSync() {
     directory: string,
     projectID: string | undefined,
     apply: (value: ProviderListResponse) => void,
+    force?: boolean,
   ) => {
     const revision = providerRevision
-    const value = await loadProvider(directory, projectID)
+    const value = await loadProvider(directory, projectID, force)
     // Pricing/credential refresh may finish before an older bootstrap read.
     // Never let that old response remove newly available controls, including
     // when the newer read fails or belongs to a different account selection.
@@ -496,7 +500,7 @@ function createGlobalSync() {
    * model picker and the composer all read it from here. Errors surface — a
    * silent failure here looks exactly like "the key was never saved".
    */
-  async function refreshProviders() {
+  async function refreshProviders(options: { force?: boolean } = {}) {
     providerRevision++
     providerLoads.invalidate()
     const reload = async (
@@ -505,7 +509,7 @@ function createGlobalSync() {
       apply: (value: ProviderListResponse) => void,
     ) => {
       if (!directory) return
-      await updateProvider(directory, projectID, apply)
+      await updateProvider(directory, projectID, apply, options.force)
     }
     await providerRefresh.notifyAfter(async () => {
       await Promise.all([

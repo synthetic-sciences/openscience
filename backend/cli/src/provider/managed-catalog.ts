@@ -39,7 +39,9 @@ type ManagedModel = {
   temperature?: boolean
 }
 
-// Verified against https://openrouter.ai/api/v1/models on 2026-08-30.
+// Verified against https://openrouter.ai/api/v1/models and the per-model
+// endpoints (https://openrouter.ai/api/v1/models/{id}/endpoints, which report
+// max_prompt_tokens) on 2026-09-07.
 // Runtime metadata supplies prices for the actual upstream route; this fallback
 // only keeps model identity and token budgeting usable when models.dev lags.
 export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[number], ManagedModel> = {
@@ -52,9 +54,11 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     temperature: false,
     efforts: ["low", "medium", "high", "xhigh", "max"],
   },
+  // Every OpenAI-hosted GPT-5.6 endpoint reports max_prompt_tokens 922000.
   "openai/gpt-5.6-sol": {
     name: "GPT-5.6 Sol",
     context: 1_050_000,
+    maxInput: 922_000,
     output: 128_000,
     input: ["text", "image", "pdf"],
     temperature: false,
@@ -64,6 +68,7 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
   "openai/gpt-5.6-terra": {
     name: "GPT-5.6 Terra",
     context: 1_050_000,
+    maxInput: 922_000,
     output: 128_000,
     input: ["text", "image", "pdf"],
     temperature: false,
@@ -73,6 +78,7 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
   "openai/gpt-5.6-luna": {
     name: "GPT-5.6 Luna",
     context: 1_050_000,
+    maxInput: 922_000,
     output: 128_000,
     input: ["text", "image", "pdf"],
     temperature: false,

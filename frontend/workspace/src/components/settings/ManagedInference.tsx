@@ -19,6 +19,8 @@ type LoginResult = { ok: boolean; error?: string }
 type Wallet = {
   signedIn: boolean
   balanceUsd: number | null
+  /** The purchased balance minus holds for turns in flight; absent when the server does not know it. */
+  availableUsd?: number | null
   balanceRedacted?: boolean
   accessVerified?: boolean
   billingMode: Mode | null
@@ -29,7 +31,7 @@ type Wallet = {
     activationAuthorizationUsd: number
     reloadThresholdUsd: number
     reloadAmountUsd: number
-    serviceMarginPercent: number
+    fundingFeePercent: number
     processingFeeDisclosedSeparately: boolean
     reloadControlledByAce: boolean
   }
@@ -44,7 +46,7 @@ type Services = {
   sdk: Pick<ReturnType<typeof useGlobalSDK>, "url">
   sync: {
     data: { config: { billing?: { llm?: Mode | null } } }
-    refreshProviders: () => Promise<void>
+    refreshProviders: (options?: { force?: boolean }) => Promise<void>
     onProvidersRefreshed: (callback: () => void) => () => void
     onAccountRefreshed: (callback: () => void) => () => void
   }
@@ -59,7 +61,7 @@ export const accountUnavailable = (wallet: Wallet) =>
   (wallet.accessVerified !== true || (wallet.balanceUsd === null && !wallet.balanceRedacted && wallet.managedSupported))
 
 export function aceContractLabel(contract: NonNullable<Wallet["aceContract"]>) {
-  return `Ace is a $${contract.activationAuthorizationUsd} authorization, not a purchase or subscription. While Ace is on, a purchased Wallet balance below $${contract.reloadThresholdUsd} triggers one fixed $${contract.reloadAmountUsd} reload; the processing fee is disclosed separately before payment.`
+  return `Ace is a $${contract.activationAuthorizationUsd} authorization, not a purchase or subscription. While Ace is on, a purchased Wallet balance below $${contract.reloadThresholdUsd} triggers one fixed $${contract.reloadAmountUsd} reload; the processing fee is disclosed separately before payment. Ace models are billed at the provider price plus the ${contract.fundingFeePercent}% funding fee, with no other markup.`
 }
 
 const MODES: { value: Mode; title: string; body: string }[] = [
@@ -139,7 +141,10 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
       setState("wallet", undefined)
       fail(error)
     },
-    retry: (next) => accountUnavailable(next) || next.error !== undefined,
+    // A summary still marked refreshing is re-read on the recovery schedule
+    // too: the server announces the refresh's outcome, but a missed
+    // announcement must not leave "Refreshing…" on screen indefinitely.
+    retry: (next) => accountUnavailable(next) || next.error !== undefined || next.refreshing === true,
   })
   const loadWallet = recovery.load
   const loadBilling = () => {
@@ -288,6 +293,13 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
     if (state.wallet.balanceUsd === null) return "Unavailable"
     return formatCreditBalance(state.wallet.balanceUsd)
   }
+  // Holds for turns in flight come off the purchased balance before the next
+  // turn can spend it, so what is spendable now is shown beside the balance.
+  const availableLabel = () => {
+    const wallet = state.wallet
+    if (!wallet?.signedIn || wallet.balanceRedacted || typeof wallet.availableUsd !== "number") return
+    return formatCreditBalance(wallet.availableUsd)
+  }
   const accountAction = () => {
     if (state.wallet && !state.wallet.signedIn) return state.signingIn ? "Waiting for browser…" : "Sign in"
     if (state.account === "error") return "Retry"
@@ -350,6 +362,16 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
                   <span class="models-routing__sync"> Refreshing…</span>
                 </Show>
               </dd>
+              <Show when={availableLabel()}>
+                {(label) => (
+                  <>
+                    <dt>Available</dt>
+                    <dd class="models-account-summary__balance" data-secondary="true">
+                      {label()}
+                    </dd>
+                  </>
+                )}
+              </Show>
             </dl>
             <Button
               class="settings-panel-action models-secondary-action"

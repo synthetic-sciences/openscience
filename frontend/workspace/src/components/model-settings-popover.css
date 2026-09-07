@@ -628,6 +628,15 @@
   line-height: 20px;
 }
 
+.model-settings-fast-rate {
+  margin: 4px 0 0;
+  color: var(--model-control-muted);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (min-width: 720px) {
   [data-model-settings-popover]:not([data-model-settings-view="root"]) {
     width: min(344px, calc(100vw - 24px));

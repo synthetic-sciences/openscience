@@ -34,6 +34,15 @@ export const ProviderRoutes = lazy(() =>
           },
         },
       }),
+      validator(
+        "query",
+        z.object({
+          refresh: z
+            .enum(["true", "false"])
+            .optional()
+            .describe("Re-read managed model pricing now, skipping its cache and failure cooldown"),
+        }),
+      ),
       async (c) => {
         const config = await Config.get()
         const disabled = new Set(config.disabled_providers ?? [])
@@ -47,7 +56,7 @@ export const ProviderRoutes = lazy(() =>
           }
         }
 
-        const connected = await Provider.list()
+        const connected = await Provider.list({ refresh: c.req.valid("query").refresh === "true" })
         const providers = Object.assign(
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
           connected,

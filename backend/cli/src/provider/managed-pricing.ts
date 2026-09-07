@@ -46,11 +46,16 @@ const Entry = z.object({
     tiers: z.array(Tier).min(1).max(8),
     audited_at: z.string().max(32).optional(),
     source_url: z.url().max(2048).optional(),
+    funding_fee_bps: z.number().int().min(0).max(10_000).optional(),
   }),
 })
 
 export namespace ManagedPricing {
   export type Catalog = { prices: Record<string, Model>; availability: Record<string, boolean> }
+
+  /** The Wallet debit for an Ace turn is the gateway's reported OpenRouter
+   * cost plus this funding fee and nothing else; the server may state its own. */
+  export const DEFAULT_FUNDING_FEE_BPS = 550
 
   export type Model = {
     cost: {
@@ -59,7 +64,12 @@ export namespace ManagedPricing {
       cache: { read: number; write: number }
       tiers?: Array<{ input: number; output: number; cache: { read: number; write: number }; threshold: number }>
     }
-    pricing: { upstream_provider: z.infer<typeof Entry>["upstream_provider"]; audited_at?: string; source_url?: string }
+    pricing: {
+      upstream_provider: z.infer<typeof Entry>["upstream_provider"]
+      funding_fee_bps: number
+      audited_at?: string
+      source_url?: string
+    }
     limit: { context: number; output?: number }
     contextOptions: number[]
     reasoningOptions: Array<Record<string, unknown>>
@@ -145,6 +155,7 @@ export namespace ManagedPricing {
         },
         pricing: {
           upstream_provider: model.upstream_provider,
+          funding_fee_bps: model.pricing.funding_fee_bps ?? DEFAULT_FUNDING_FEE_BPS,
           audited_at: model.pricing.audited_at,
           ...(model.pricing.source_url?.startsWith("https://") ? { source_url: model.pricing.source_url } : {}),
         },
@@ -185,7 +196,15 @@ export namespace ManagedPricing {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), TIMEOUT)
     try {
-      const selected = await OpenScience.managedRequestSnapshot(snapshot.api_key, snapshot)
+      // A legacy unscoped session resolves its workspace through the account
+      // service first; that read shares the one deadline with the catalog
+      // fetch so a stalled status call cannot hold the refresh open.
+      const expired = new Promise<never>((_, reject) =>
+        controller.signal.addEventListener("abort", () => reject(new Error("Model pricing request timed out")), {
+          once: true,
+        }),
+      )
+      const selected = await Promise.race([OpenScience.managedRequestSnapshot(snapshot.api_key, snapshot), expired])
       if (fingerprint(selected) !== key) return
       // Device keys deliberately cannot read the browser administration API.
       const endpoint = `${managedApiBase()}/api/cli/model-catalog?provider=openrouter`
@@ -236,22 +255,44 @@ export namespace ManagedPricing {
     }
   }
 
-  /** Local session/cache reads only. Network refresh never blocks startup. */
-  export async function catalog(): Promise<Catalog> {
+  /** Local session/cache reads only. Network refresh never blocks startup.
+   * An explicit `force` (the user pressed Refresh) skips the TTL and the
+   * post-failure cooldown and waits, within TIMEOUT, for the answer so the
+   * caller's read reflects it. */
+  export async function catalog(options: { force?: boolean } = {}): Promise<Catalog> {
     const snapshot = await OpenScience.getFundingSnapshot().catch(() => null)
     if (!snapshot) return { prices: {}, availability: {} }
     const key = fingerprint(snapshot)
-    if ((cached?.key !== key || Date.now() - cached.at >= TTL) && pending?.key !== key) {
+    const due = cached?.key !== key || Date.now() - cached.at >= TTL
+    if ((due || options.force) && pending?.key !== key) {
       const promise = refresh(snapshot, key)
       pending = { key, promise }
       void promise.finally(() => {
         if (pending?.promise === promise) pending = undefined
       })
     }
+    if (options.force && pending?.key === key) await pending.promise
     return cached?.key === key ? cached.value : { prices: {}, availability: {} }
   }
 
-  export async function current(): Promise<Record<string, Model>> {
-    return (await catalog()).prices
+  export async function current(options: { force?: boolean } = {}): Promise<Record<string, Model>> {
+    return (await catalog(options)).prices
+  }
+
+  /** The fee the Wallet adds to a reported cost for this model. A route whose
+   * catalog entry has not loaded is still charged the fee, so the default
+   * applies rather than zero. */
+  export function fundingFeeBps(model: { pricing?: { funding_fee_bps?: number } }): number {
+    return model.pricing?.funding_fee_bps ?? DEFAULT_FUNDING_FEE_BPS
+  }
+
+  /** The funding fee as a percentage for product copy, from the catalog
+   * already held for the signed-in account (one fee applies to every model
+   * in it). Never starts a network read. */
+  export async function fundingFeePercent(): Promise<number> {
+    const snapshot = await OpenScience.getFundingSnapshot().catch(() => null)
+    const prices = snapshot && cached?.key === fingerprint(snapshot) ? cached.value.prices : {}
+    const first = Object.values(prices)[0]
+    return (first ? fundingFeeBps(first) : DEFAULT_FUNDING_FEE_BPS) / 100
   }
 }

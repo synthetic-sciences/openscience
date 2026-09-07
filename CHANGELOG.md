@@ -49,6 +49,23 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   non-English locales, which now fall back to English. Keep onboarding copy
   host-neutral, bound the browser sign-in wait, and recognise loaded skills
   from their recorded metadata rather than the receipt title alone.
+- Price Ace turns from the gateway's reported cost plus the funding fee instead
+  of a token table, so managed models never show $0 while the pricing catalog
+  loads; "Refresh options" now bypasses the pricing failure cooldown and the
+  catalog read is bounded by one timeout.
+- Refresh the Wallet after a managed turn settles rather than at the response
+  headers, announce failed background account refreshes so "Refreshing…" cannot
+  stick, and show the available balance (purchased balance less holds for turns
+  in flight) beside the purchased balance in the Wallet panel.
+- Poll the credential sync digest every 90 seconds and fetch the full payload
+  only when it changes or every five minutes.
+- Stop advertising PDF, audio and video inputs for Ace models, which the managed
+  gateway cannot carry; an attached PDF becomes a note for the model instead of
+  an error. Describe Ace pricing as the provider price plus the 5.5% funding fee
+  with no other markup, use Wallet wording in empty-balance messages, and show
+  the Fast mode rate next to the Fast toggle and in the Models panel.
+- Record the 922,000-token input limit for the GPT-5.6 Sol, Terra and Luna
+  routes and the GPT-6 Astra release date so the newest model gets its badge.
 - Wait for scientific canary artifact delivery before validating a completed
   remote computation, while preserving bounded waits and resource cleanup.
 - Start desktop onboarding with Synthetic Sciences sign-in and workspace selection,

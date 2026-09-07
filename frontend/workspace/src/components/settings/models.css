@@ -334,6 +334,13 @@
   line-height: 18px;
 }
 
+.models-routing__wallet dd[data-secondary] {
+  color: var(--text-weak);
+  font-size: var(--font-size-x-small);
+  font-weight: var(--font-weight-regular);
+  line-height: 16px;
+}
+
 .models-routing__sync {
   color: var(--text-weaker);
 }

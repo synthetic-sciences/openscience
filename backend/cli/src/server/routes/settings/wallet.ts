@@ -3,11 +3,14 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { OpenScience } from "../../../openscience"
 import { ACE_CONTRACT } from "../../../openscience/ace-contract"
+import { ManagedPricing } from "../../../provider/managed-pricing"
 import { lazy } from "@synsci/util/lazy"
 
 export const WalletState = z.object({
   signedIn: z.boolean(),
   balanceUsd: z.number().nullable(),
+  /** The purchased balance minus the gateway's holds for turns in flight; null when unknown. */
+  availableUsd: z.number().nullable(),
   balanceRedacted: z.boolean().optional(),
   accessVerified: z.boolean().optional(),
   billingMode: z.enum(["managed", "byok"]).nullable(),
@@ -18,7 +21,8 @@ export const WalletState = z.object({
     activationAuthorizationUsd: z.number().nonnegative(),
     reloadThresholdUsd: z.number().positive(),
     reloadAmountUsd: z.number().positive(),
-    serviceMarginPercent: z.number().nonnegative(),
+    /** Added to the provider price on Ace turns; the only markup. */
+    fundingFeePercent: z.number().nonnegative(),
     processingFeeDisclosedSeparately: z.boolean(),
     reloadControlledByAce: z.boolean(),
   }),
@@ -44,6 +48,7 @@ export type WalletState = z.infer<typeof WalletState>
 const SIGNED_OUT: WalletState = {
   signedIn: false,
   balanceUsd: null,
+  availableUsd: null,
   billingMode: null,
   managedSupported: false,
   managedUnlocked: false,
@@ -70,14 +75,18 @@ export function walletState(input: {
   error?: string
   summary: boolean
   transactions: OpenScience.Transaction[]
+  /** From the account's pricing catalog when it has loaded; the public default otherwise. */
+  fundingFeePercent?: number
 }): WalletState {
   const credits = input.snapshot?.credits ?? null
   const mode = input.snapshot?.billing ?? null
   const redacted = Boolean(credits?.balanceRedacted || mode?.balance_redacted)
   const balance = redacted ? null : (credits?.balanceUsd ?? (mode?.balance_verified ? mode.balance_usd : null))
+  const available = redacted || typeof credits?.availableCents !== "number" ? null : credits.availableCents / 100
   return {
     signedIn: true,
     balanceUsd: balance,
+    availableUsd: available,
     balanceRedacted: redacted,
     accessVerified: mode?.access_verified === true,
     billingMode: mode?.mode ?? null,
@@ -86,7 +95,7 @@ export function walletState(input: {
     // permission to spend from a workspace with a revoked role or usage limit.
     managedUnlocked: mode?.access_verified === true && mode.managed_supported && mode.managed_unlocked,
     aceEnabled: mode?.ace_enabled ?? false,
-    aceContract: { ...ACE_CONTRACT },
+    aceContract: { ...ACE_CONTRACT, fundingFeePercent: input.fundingFeePercent ?? ACE_CONTRACT.fundingFeePercent },
     lifetimeSpentUsd: credits?.lifetimeSpentCents == null ? null : credits.lifetimeSpentCents / 100,
     transactions: input.transactions,
     refreshing: input.refreshing,
@@ -103,13 +112,22 @@ export async function readWallet(
   > = OpenScience,
   signal?: AbortSignal,
 ): Promise<WalletState> {
+  // The catalog already held for the account, never a network read.
+  const fundingFeePercent = await ManagedPricing.fundingFeePercent()
   if (summary) {
     // The stored summary is served at once; a stale one is refreshed in the
     // background and announced as `account.updated`. A first read waits under
     // the account deadline and the request's own signal.
     const read = await settle(account.getAccountSummary({ signal }))
     if ("error" in read) {
-      return walletState({ snapshot: null, refreshing: false, error: read.error, summary: true, transactions: [] })
+      return walletState({
+        snapshot: null,
+        refreshing: false,
+        error: read.error,
+        summary: true,
+        transactions: [],
+        fundingFeePercent,
+      })
     }
     if (!read.value) return SIGNED_OUT
     return walletState({
@@ -118,6 +136,7 @@ export async function readWallet(
       error: read.value.error,
       summary: true,
       transactions: [],
+      fundingFeePercent,
     })
   }
   // The ledger view is always a fresh read; the summary it fetches is stored
@@ -141,6 +160,7 @@ export async function readWallet(
         .join(" ") || undefined,
     summary: false,
     transactions: transactions ?? [],
+    fundingFeePercent,
   })
 }
 

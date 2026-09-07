@@ -137,3 +137,47 @@ describe("Session.getUsage cost/token accounting", () => {
     expect(cached.cost).toBeCloseTo((10_000 * 12 + 100 * 45 + 270_000 * 15) / 1_000_000, 6)
   })
 })
+
+describe("Session.getUsage with a gateway-reported cost", () => {
+  const usage = { inputTokens: 1_000, outputTokens: 500, reasoningTokens: 0, cachedInputTokens: 200 } as any
+  const table = (800 * 3 + 500 * 15 + 200 * 0.3) / 1_000_000
+  const reported = (cost: unknown) =>
+    ({ openrouter: { usage: { promptTokens: 1_000, completionTokens: 500, totalTokens: 1_500, cost } } }) as any
+
+  test("the reported cost wins over the table and carries the funding fee", () => {
+    const result = Session.getUsage({ model: model(), usage, metadata: reported(0.02), fundingFeeBps: 550 })
+    expect(result.cost).toBeCloseTo(0.02 * 1.055, 10)
+    expect(result.cost).not.toBeCloseTo(table, 6)
+    // The token split is unchanged: only the price source moves.
+    expect(result.tokens).toEqual({ input: 800, output: 500, reasoning: 0, cache: { read: 200, write: 0 } })
+    // A route the provider bills directly adds no fee.
+    expect(Session.getUsage({ model: model(), usage, metadata: reported(0.02) }).cost).toBeCloseTo(0.02, 10)
+    expect(Session.getUsage({ model: model(), usage, metadata: reported(0), fundingFeeBps: 550 }).cost).toBe(0)
+  })
+
+  test("usage accounting without a cost, or an unusable one, prices from the table", () => {
+    for (const metadata of [
+      { openrouter: { usage: { promptTokens: 1_000, completionTokens: 500 } } },
+      { openrouter: {} },
+      reported("0.02"),
+      reported(Number.NaN),
+      reported(Number.POSITIVE_INFINITY),
+      reported(-0.01),
+    ]) {
+      const result = Session.getUsage({ model: model(), usage, metadata: metadata as any, fundingFeeBps: 550 })
+      expect(result.cost).toBeCloseTo(table, 10)
+    }
+  })
+
+  test("a route whose catalog has not loaded and reports no cost is zero, not a fee on nothing", () => {
+    const unpriced = { ...model(), cost: undefined, modes: {} }
+    expect(Session.getUsage({ model: unpriced, usage, fundingFeeBps: 550 }).cost).toBe(0)
+    const placeholder = { ...model(), cost: { input: 0, output: 0, cache: { read: 0, write: 0 } }, modes: {} }
+    expect(Session.getUsage({ model: placeholder, usage, metadata: { openrouter: {} } as any }).cost).toBe(0)
+    // Once the gateway reports the cost, the same unpriced route is exact.
+    expect(Session.getUsage({ model: unpriced, usage, metadata: reported(0.4), fundingFeeBps: 550 }).cost).toBeCloseTo(
+      0.422,
+      10,
+    )
+  })
+})

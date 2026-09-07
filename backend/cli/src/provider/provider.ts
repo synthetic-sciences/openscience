@@ -639,7 +639,9 @@ export namespace Provider {
     id: "gpt-6-astra",
     name: "GPT-6 Astra",
     family: "gpt",
-    release_date: "",
+    // OpenRouter's endpoint id is openai/gpt-6-astra-20260903; the date is
+    // what marks the newest model of a family as latest in the picker.
+    release_date: "2026-09-03",
     provider: { npm: "@ai-sdk/openai" },
     attachment: true,
     reasoning: true,
@@ -1736,6 +1738,7 @@ export namespace Provider {
       pricing: z
         .object({
           upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
+          funding_fee_bps: z.number().optional(),
           audited_at: z.string().optional(),
           source_url: z.string().optional(),
         })
@@ -2534,10 +2537,12 @@ export namespace Provider {
           // Never present models.dev's unrelated upstream price as Ace pricing.
           const price = catalog.prices[modelID]
           model.api = { ...model.api, ...managedModelRoute(modelID) }
-          if (price?.pricing.upstream_provider === "gemini") {
-            model.capabilities.input.audio = false
-            model.capabilities.input.video = false
-          }
+          // The gateway's request envelope carries text and image parts only,
+          // whatever the upstream model accepts; a document or media part is
+          // refused with 422, so the route never advertises those inputs.
+          model.capabilities.input.pdf = false
+          model.capabilities.input.audio = false
+          model.capabilities.input.video = false
           if (price) {
             model.cost = price.cost
             model.pricing = price.pricing
@@ -2677,7 +2682,10 @@ export namespace Provider {
     return exact ?? resolveOpenRouterAlias(s, providerID, modelID)
   }
 
-  export async function list() {
+  export async function list(options: { refresh?: boolean } = {}) {
+    // An explicit refresh waits (bounded) for the pricing answer before the
+    // state is read, so the list handed back already carries it.
+    if (options.refresh) await ManagedPricing.current({ force: true })
     const s = await state()
     // Provider state can outlive the pricing cache, including a failed initial
     // fetch. Catalog reads must revalidate pricing so Refresh can recover;
@@ -2949,7 +2957,11 @@ export namespace Provider {
             idleTimeoutMs: resolveIdleTimeout(idleTimeout),
           },
         })
-        if (managed) OpenScience.invalidateBalance()
+        // A refused request (a 402 once the reload retry is spent) may mean
+        // the balance is gone, so the cached one is dropped here. A served
+        // request is charged only after its stream ends; the processor
+        // announces that settlement, and a read at the headers would predate it.
+        if (managed && !resolved.ok) OpenScience.invalidateBalance()
         return funding ? OpenScience.validateFundingResponse(resolved, funding) : resolved
       }
 

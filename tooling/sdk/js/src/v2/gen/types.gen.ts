@@ -115,6 +115,7 @@ export type EventAccountUpdated = {
   type: "account.updated"
   properties: {
     refreshed_at: number
+    error?: string
   }
 }
 
@@ -2025,7 +2026,7 @@ export type Config = {
    */
   billing?: {
     /**
-     * How LLM inference is paid for. 'managed' uses Ace Credits; 'byok' uses only user-owned keys, subscriptions, or local models.
+     * How LLM inference is paid for. 'managed' pays from the purchased Wallet; 'byok' uses only user-owned keys, subscriptions, or local models.
      */
     llm?: "managed" | "byok" | null
     /**
@@ -2262,6 +2263,7 @@ export type Model = {
   }
   pricing?: {
     upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
+    funding_fee_bps?: number
     audited_at?: string
     source_url?: string
   }
@@ -2955,6 +2957,7 @@ export type AccountGetResponses = {
     error?: string
     user?: unknown
     balance_usd: number | null
+    available_usd: number | null
     billing_mode: {
       mode: "byok" | "managed"
       balance_cents: number
@@ -9510,6 +9513,7 @@ export type SettingsWalletGetResponses = {
   200: {
     signedIn: boolean
     balanceUsd: number | null
+    availableUsd: number | null
     balanceRedacted?: boolean
     accessVerified?: boolean
     billingMode: "managed" | "byok" | null
@@ -9520,7 +9524,7 @@ export type SettingsWalletGetResponses = {
       activationAuthorizationUsd: number
       reloadThresholdUsd: number
       reloadAmountUsd: number
-      serviceMarginPercent: number
+      fundingFeePercent: number
       processingFeeDisclosedSeparately: boolean
       reloadControlledByAce: boolean
     }
@@ -12539,6 +12543,10 @@ export type ProviderListData = {
   path?: never
   query?: {
     directory?: string
+    /**
+     * Re-read managed model pricing now, skipping its cache and failure cooldown
+     */
+    refresh?: "true" | "false"
   }
   url: "/provider"
 }
