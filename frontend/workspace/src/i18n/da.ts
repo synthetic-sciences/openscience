@@ -253,16 +253,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Opstartsscript for arbejdsområde",
   "dialog.project.edit.worktree.startup.description": "Køres efter oprettelse af et nyt arbejdsområde (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "f.eks. bun install",
-  "context.breakdown.title": "Kontekstfordeling",
-  "context.breakdown.note":
-    'Omtrentlig fordeling af input-tokens. "Andre" inkluderer værktøjsdefinitioner og overhead.',
-  "context.breakdown.system": "System",
   "context.breakdown.user": "Bruger",
   "context.breakdown.assistant": "Assistent",
   "context.breakdown.tool": "Værktøjskald",
-  "context.breakdown.other": "Andre",
 
-  "context.systemPrompt.title": "Systemprompt",
   "context.rawMessages.title": "Rå beskeder",
 
   "context.stats.session": "Session",

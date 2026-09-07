@@ -254,15 +254,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "新しいワークスペース (ワークツリー) を作成した後に実行されます。",
   "dialog.project.edit.worktree.startup.placeholder": "例: bun install",
-  "context.breakdown.title": "コンテキストの内訳",
-  "context.breakdown.note": '入力トークンのおおよその内訳です。"その他"にはツールの定義やオーバーヘッドが含まれます。',
-  "context.breakdown.system": "システム",
   "context.breakdown.user": "ユーザー",
   "context.breakdown.assistant": "アシスタント",
   "context.breakdown.tool": "ツール呼び出し",
-  "context.breakdown.other": "その他",
 
-  "context.systemPrompt.title": "システムプロンプト",
   "context.rawMessages.title": "生のメッセージ",
 
   "context.stats.session": "セッション",

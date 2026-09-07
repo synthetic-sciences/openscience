@@ -259,16 +259,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Wird nach dem Erstellen eines neuen Arbeitsbereichs (Worktree) ausgeführt.",
   "dialog.project.edit.worktree.startup.placeholder": "z. B. bun install",
-  "context.breakdown.title": "Kontext-Aufschlüsselung",
-  "context.breakdown.note":
-    'Ungefähre Aufschlüsselung der Eingabe-Token. "Andere" beinhaltet Werkzeugdefinitionen und Overhead.',
-  "context.breakdown.system": "System",
   "context.breakdown.user": "Benutzer",
   "context.breakdown.assistant": "Assistent",
   "context.breakdown.tool": "Werkzeugaufrufe",
-  "context.breakdown.other": "Andere",
 
-  "context.systemPrompt.title": "System-Prompt",
   "context.rawMessages.title": "Rohdaten der Nachrichten",
 
   "context.stats.session": "Sitzung",

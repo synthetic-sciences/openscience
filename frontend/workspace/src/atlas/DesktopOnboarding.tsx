@@ -27,6 +27,9 @@ type DesktopOnboardingOperation = {
 }
 
 const VERSION_KEY = "openscience.desktop_onboarding_version"
+/** How long the window waits for the browser sign-in to finish before it lets
+ * the user try again. */
+export const SIGN_IN_DEADLINE_MS = 5 * 60_000
 
 function cachedVersion() {
   try {
@@ -143,7 +146,7 @@ type OnboardingServer = {
 }
 
 export function DesktopOnboardingController(
-  props: ParentProps & { server: OnboardingServer; platform: Platform; desktop?: boolean },
+  props: ParentProps & { server: OnboardingServer; platform: Platform; desktop?: boolean; signInDeadlineMs?: number },
 ) {
   const desktop = props.desktop ?? new URLSearchParams(window.location.search).get("desktop") === "1"
   // A completed onboarding is remembered on this device so the shell paints
@@ -210,23 +213,31 @@ export function DesktopOnboardingController(
     if (account.pending) return
     setAccount("pending", true)
     setError(undefined)
+    let expired = false
     try {
-      const result = await settingsApi<{ ok: boolean; error?: string }>(
-        server.url,
-        fetcher(),
-        "/account/login-browser",
-        {
+      const result = await withAccountDeadline(async (deadline) => {
+        // The helper aborts its signal on every outcome; only an abort that
+        // arrives before the request settled is the deadline.
+        let settled = false
+        deadline.addEventListener("abort", () => (expired = !settled), { once: true })
+        return settingsApi<{ ok: boolean; error?: string }>(server.url, fetcher(), "/account/login-browser", {
           method: "POST",
-          signal: lifetime.signal,
-        },
-      )
+          signal: AbortSignal.any([deadline, lifetime.signal]),
+        }).finally(() => (settled = true))
+      }, props.signInDeadlineMs ?? SIGN_IN_DEADLINE_MS)
       if (lifetime.signal.aborted) return
       if (!result.ok) throw new Error(result.error || "Sign in did not complete. Try again.")
       setAccount({ connected: true, step: "project" })
       window.dispatchEvent(new Event("openscience:account-changed"))
     } catch (cause) {
       if (!lifetime.signal.aborted && account.step === "account") {
-        setError(cause instanceof Error ? cause.message : String(cause))
+        setError(
+          expired
+            ? "Sign-in did not complete in time. Try again."
+            : cause instanceof Error
+              ? cause.message
+              : String(cause),
+        )
       }
     } finally {
       if (!lifetime.signal.aborted) setAccount("pending", false)
@@ -368,7 +379,7 @@ export function DesktopOnboardingController(
                       <p class="desktop-onboarding__signin-hint" role="status" aria-live="polite">
                         {account.pending
                           ? "Choose your workspace in your browser. This window will continue automatically."
-                          : "Opens app.syntheticsciences.ai in your browser."}
+                          : "Opens Synthetic Sciences in your browser."}
                       </p>
                     </div>
                   </div>

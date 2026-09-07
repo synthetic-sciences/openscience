@@ -109,7 +109,7 @@ function fixture(
     back() {},
     forward() {},
   }
-  const mount = (desktop = true) => {
+  const mount = (desktop = true, extra: { signInDeadlineMs?: number } = {}) => {
     const host = document.createElement("div")
     document.body.append(host)
     const dispose = web.render(
@@ -118,6 +118,7 @@ function fixture(
           server,
           platform,
           desktop,
+          ...extra,
           get children() {
             const content = document.createElement("div")
             content.textContent = "Research workspace loaded"
@@ -145,7 +146,8 @@ test("a fresh desktop starts with sign-in and a separate Skip action", async () 
 
   expect(button(view.host, "Sign in with Synthetic Sciences").disabled).toBe(false)
   expect(button(view.host, "Skip").closest("footer")).not.toBeNull()
-  expect(view.host.textContent).toContain("app.syntheticsciences.ai")
+  expect(view.host.textContent).toContain("Opens Synthetic Sciences in your browser")
+  expect(view.host.textContent).not.toContain("syntheticsciences.ai")
   expect(view.host.textContent).not.toContain("Start with your research")
   expect(view.host.textContent).not.toContain("Research workspace loaded")
   expect(app.requests).toEqual(["GET /settings/preferences", "GET /account/session"])
@@ -174,6 +176,27 @@ test("browser sign-in waits for workspace approval and then advances automatical
   const resumed = app.mount()
   await until(() => resumed.host.textContent?.includes("Start with your research") === true)
   expect(resumed.host.textContent).not.toContain("Sign in with Synthetic Sciences")
+})
+
+test("browser sign-in gives up after its deadline and can be retried", async () => {
+  const approval = Promise.withResolvers<Response>()
+  const app = fixture({ login: () => approval.promise })
+  const view = app.mount(true, { signInDeadlineMs: 40 })
+  await until(() => view.host.textContent?.includes("Welcome to OpenScience") === true)
+  button(view.host, "Sign in with Synthetic Sciences").click()
+  await until(() => app.requests.includes("POST /account/login-browser"))
+  expect(button(view.host, "Waiting for sign-in…").disabled).toBe(true)
+
+  await until(() => view.host.querySelector('[role="alert"]') !== null)
+  expect(view.host.querySelector('[role="alert"]')?.textContent).toContain("Sign-in did not complete in time")
+  expect(button(view.host, "Sign in with Synthetic Sciences").disabled).toBe(false)
+  expect(view.host.textContent).not.toContain("Start with your research")
+
+  // The abandoned approval cannot advance the window later.
+  approval.resolve(Response.json({ ok: true }))
+  await Bun.sleep(25)
+  expect(view.host.textContent).not.toContain("Start with your research")
+  expect(app.state.version).toBe(0)
 })
 
 test("skipping sign-in still requires project setup before onboarding is saved", async () => {

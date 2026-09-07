@@ -23,6 +23,8 @@ import {
   artifactActions,
   generatedArtifacts,
   sessionErrorDisplay,
+  pendingOperations,
+  type PendingOperation,
   reasoningDisplayText,
   stripRedactedReasoning,
   writtenFiles,
@@ -42,7 +44,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
 import { progressStatus } from "./session-turn-progress"
 import { collapsibleTracePart, visibleResearchTrace } from "./research-trace"
-import { MarkdownFileScope } from "./markdown"
+import { MarkdownFileScope, useMarkdownFileResolvers } from "./markdown"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
 
@@ -159,26 +161,79 @@ function AssistantTrace(props: { messages: AssistantMessage[]; expanded: boolean
   )
 }
 
-function SessionErrorNotice(props: { error: unknown }) {
+function SessionErrorNotice(props: {
+  error: unknown
+  outputs: readonly string[]
+  pending: readonly PendingOperation[]
+}) {
+  const data = useData()
+  const i18n = useI18n()
   const display = () => sessionErrorDisplay(props.error)
+  const filename = (path: string) => path.split("/").pop() || path
+  // A stop always answers what survived; a failure lists it when there is something to list.
+  const receipt = () =>
+    display().state === "stopped" ||
+    (display().state === "error" && (props.outputs.length > 0 || props.pending.length > 0))
   return (
     <Card
-      variant={display().state === "paused" ? "warning" : "error"}
+      variant={display().state === "paused" ? "warning" : display().state === "error" ? "error" : "normal"}
       class="session-state-card"
       classList={{ "error-card": display().state === "error" }}
       data-state={display().state}
-      role={display().state === "paused" ? "status" : "alert"}
+      data-reason={display().reason}
+      role={display().state === "error" ? "alert" : "status"}
       aria-live="polite"
     >
-      <Show
-        when={display().state === "paused"}
-        fallback={<span data-slot="session-state-message">{display().message}</span>}
-      >
-        <Icon name="alert-circle" size="small" />
-        <div data-slot="session-state-copy">
-          <strong>{display().title}</strong>
-          <span data-slot="session-state-message">{display().message}</span>
-        </div>
+      <div data-slot="session-state-head">
+        <Show
+          when={display().state !== "error"}
+          fallback={<span data-slot="session-state-message">{display().message}</span>}
+        >
+          <Icon name={display().state === "paused" ? "alert-circle" : "circle-ban-sign"} size="small" />
+          <div data-slot="session-state-copy">
+            <strong>{display().title}</strong>
+            <span data-slot="session-state-message">{display().message}</span>
+          </div>
+        </Show>
+      </div>
+      {/* What survived the end of the turn, so nothing reads as rolled back or resumed. */}
+      <Show when={receipt()}>
+        <dl data-slot="session-stop-receipt">
+          <div data-slot="session-stop-row" data-kind="outputs">
+            <dt>{i18n.t("ui.sessionTurn.stop.outputs")}</dt>
+            <dd>
+              <Show when={props.outputs.length > 0} fallback={<span>{i18n.t("ui.sessionTurn.stop.noOutputs")}</span>}>
+                <For each={props.outputs}>
+                  {(path) => (
+                    <button
+                      type="button"
+                      data-slot="session-stop-output"
+                      title={path}
+                      onClick={() => data.openFile?.(path)}
+                    >
+                      {filename(path)}
+                    </button>
+                  )}
+                </For>
+              </Show>
+            </dd>
+          </div>
+          <Show when={props.pending.length > 0}>
+            <div data-slot="session-stop-row" data-kind="pending">
+              <dt>{i18n.t("ui.sessionTurn.stop.pending")}</dt>
+              <dd>
+                <For each={props.pending}>
+                  {(operation) => (
+                    <span data-slot="session-stop-operation" data-started={operation.started ? "true" : "false"}>
+                      {operation.title} ·{" "}
+                      {i18n.t(operation.started ? "ui.sessionTurn.stop.interrupted" : "ui.sessionTurn.stop.notStarted")}
+                    </span>
+                  )}
+                </For>
+              </dd>
+            </div>
+          </Show>
+        </dl>
       </Show>
     </Card>
   )
@@ -431,30 +486,28 @@ export function SessionTurn(
     return item
   })
 
-  // Files this turn wrote (completed write/edit/multiedit/apply_patch parts).
-  // Feeds the end-of-response "Save as artifact…" affordance on the last
-  // completed turn, which promotes a scratch file into a durable Result
-  // through the data context's saveArtifact callback.
+  // Files this turn wrote: completed write/edit/multiedit/apply_patch receipts
+  // plus the filesystem diffs the backend recorded after each step, which is
+  // how a shell command's outputs are known without guessing from its text.
+  // Recorded paths go through the same host-path rules the chat's file links
+  // use, so only project or session-scratch targets are offered. Feeds the
+  // end-of-response "Save as artifact…" affordance on the last completed turn
+  // (promoting a scratch file into a durable Result through the data context's
+  // saveArtifact callback) and the receipt of a turn that ended early.
+  const resolvers = useMarkdownFileResolvers()
+  const resolveReceipt = (path: string) => {
+    const resolve = resolvers.resolveFileReceipt ?? resolvers.resolveFile
+    return resolve ? resolve(path) : path
+  }
+  const turnParts = createMemo(() =>
+    assistantMessages().flatMap((message) => data.store.part[message.id] ?? emptyParts),
+  )
   const emptyWritten: string[] = []
-  const written = createMemo(
-    () => {
-      const collected: PartType[] = []
-      for (const m of assistantMessages()) {
-        for (const part of data.store.part[m.id] ?? emptyParts) collected.push(part)
-      }
-      return writtenFiles(collected)
-    },
-    emptyWritten,
-    { equals: same },
-  )
-  const linkedFiles = createMemo(() =>
-    writtenFiles(
-      assistantMessages().flatMap((message) => data.store.part[message.id] ?? emptyParts),
-      {
-        canonicalOnly: true,
-      },
-    ),
-  )
+  const written = createMemo(() => writtenFiles(turnParts(), { resolve: resolveReceipt }), emptyWritten, {
+    equals: same,
+  })
+  const linkedFiles = createMemo(() => writtenFiles(turnParts(), { canonicalOnly: true, resolve: resolveReceipt }))
+  const pending = createMemo(() => pendingOperations(turnParts()))
 
   const response = createMemo(() =>
     responseText(assistantMessages().flatMap((message) => data.store.part[message.id] ?? emptyParts)),
@@ -490,8 +543,11 @@ export function SessionTurn(
   const updateStickyHeight = (height: number) => {
     const root = rootRef()
     if (!root) return
-    const next = Math.ceil(height)
-    root.style.setProperty("--session-turn-sticky-height", `${next}px`)
+    // A transcript that lets the user message scroll away (position: static)
+    // offsets nothing below it.
+    const sticky = stickyRef()
+    const pinned = !!sticky && getComputedStyle(sticky).position === "sticky"
+    root.style.setProperty("--session-turn-sticky-height", `${pinned ? Math.ceil(height) : 0}px`)
   }
 
   function duration() {
@@ -552,6 +608,7 @@ export function SessionTurn(
   })
 
   const expanded = () => props.stepsExpanded ?? store.stepsExpanded ?? false
+  const traceID = () => `session-turn-trace-${props.messageID}`
   const toggleSteps = () => {
     props.onUserInteracted?.()
     if (props.onStepsExpandedToggle) return props.onStepsExpandedToggle()
@@ -674,26 +731,34 @@ export function SessionTurn(
                       <div data-slot="session-turn-message-content" aria-live="off">
                         <Message message={msg()} parts={stickyParts()} />
                       </div>
-
-                      {/* One disclosure owns this turn's trace, never the whole conversation. */}
-                      <Show when={working() || hasSteps()}>
-                        <div data-slot="session-turn-response-trigger">
+                    </div>
+                    {/* One disclosure owns this turn's trace, never the whole
+                        conversation. It has its own sticky row because the
+                        transcript lets the user message scroll away, and a long
+                        trace must stay collapsible from wherever the reader is.
+                        Request and retry status sit beside the label, never in
+                        place of it. */}
+                    <Show when={working() || hasSteps()}>
+                      <div data-slot="session-turn-trace-control" data-working={working() ? "true" : undefined}>
+                        <Show when={hasSteps()}>
                           <Button
                             type="button"
                             data-slot="session-turn-collapsible-trigger-content"
-                            data-expandable={hasSteps()}
                             variant="ghost"
                             size="small"
                             aria-expanded={expanded()}
+                            aria-controls={traceID()}
                             onClick={toggleSteps}
-                            title={working() ? statusText() : undefined}
                           >
-                            <Show when={working()}>
-                              <Spinner />
-                            </Show>
-                            <Show when={!working()}>
-                              <Icon name="chevron-down" size="small" data-slot="session-turn-trigger-icon" />
-                            </Show>
+                            <Icon name="chevron-down" size="small" data-slot="session-turn-trigger-icon" />
+                            <span data-slot="session-turn-trigger-label">
+                              {i18n.t(expanded() ? "ui.sessionTurn.steps.hide" : "ui.sessionTurn.steps.show")}
+                            </span>
+                          </Button>
+                        </Show>
+                        <Show when={working()}>
+                          <div data-slot="session-turn-live-status" aria-live="off" title={statusText()}>
+                            <Spinner />
                             <Switch>
                               <Match when={retry()}>
                                 <span data-slot="session-turn-retry-message">{retry()?.message}</span>
@@ -705,27 +770,29 @@ export function SessionTurn(
                                 </span>
                                 <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                               </Match>
-                              <Match when={working()}>
+                              <Match when={true}>
                                 <span data-slot="session-turn-status-text">{statusText()}</span>
                               </Match>
-                              <Match when={!working()}>
-                                <span data-slot="session-turn-status-text">
-                                  {i18n.t(expanded() ? "ui.sessionTurn.steps.hide" : "ui.sessionTurn.steps.show")}
-                                </span>
-                              </Match>
                             </Switch>
-                            <Show when={!working() || !phase()}>
-                              <span aria-hidden="true">·</span>
-                              <span aria-live="off" title={i18n.t("ui.sessionTurn.totalTime")}>
-                                {store.duration}
-                              </span>
-                            </Show>
-                          </Button>
-                        </div>
-                      </Show>
-                    </div>
+                          </div>
+                        </Show>
+                        <Show when={!working() || !phase()}>
+                          <span
+                            data-slot="session-turn-duration"
+                            aria-live="off"
+                            title={i18n.t("ui.sessionTurn.totalTime")}
+                          >
+                            {store.duration}
+                          </span>
+                        </Show>
+                      </div>
+                    </Show>
                     <Show when={assistantMessages().length > 0}>
-                      <div data-slot="session-turn-response-section" data-expanded={expanded() ? "true" : undefined}>
+                      <div
+                        id={traceID()}
+                        data-slot="session-turn-response-section"
+                        data-expanded={expanded() ? "true" : undefined}
+                      >
                         <MarkdownFileScope paths={linkedFiles()}>
                           <AssistantTrace
                             messages={assistantMessages()}
@@ -758,7 +825,9 @@ export function SessionTurn(
                             </span>
                           </div>
                         </Show>
-                        <Show when={error()}>{(value) => <SessionErrorNotice error={value()} />}</Show>
+                        <Show when={error()}>
+                          {(value) => <SessionErrorNotice error={value()} outputs={written()} pending={pending()} />}
+                        </Show>
                       </div>
                     </Show>
                     <Show when={requestParts().length === 0 && requestMessage() && nextQuestion()}>

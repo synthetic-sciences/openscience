@@ -1,23 +1,12 @@
 export const dict = {
   "ui.sessionTurn.steps.show": "Afficher la trace d’exécution",
   "ui.sessionTurn.steps.hide": "Masquer la trace d’exécution",
-  "ui.messagePart.reasoning.label": "Reasoning",
-  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
-  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
-  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
-  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
-  "ui.sessionTurn.progress.stalledHint":
-    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "Commenter sur ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Commentaire sur ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Ajouter un commentaire",
   "ui.lineComment.submit": "Commenter",
-  "ui.sessionTurn.trace.title": "Trace d’exécution",
-  "ui.sessionTurn.trace.detail":
-    "Activité d’outils enregistrée ; les résumés du modèle sont générés par le fournisseur.",
   "ui.sessionTurn.summary.response": "Réponse",
   "ui.sessionTurn.diff.showMore": "Afficher plus de modifications ({{count}})",
 
@@ -45,7 +34,6 @@ export const dict = {
     "Le fournisseur n'a pas encore commencé à répondre ; la requête est toujours ouverte.",
 
   "ui.messagePart.diagnostic.error": "Erreur",
-  "ui.messagePart.reasoning.providerSummary": "Résumé du modèle",
   "ui.messagePart.title.edit": "Modifier",
   "ui.messagePart.title.write": "Écrire",
   "ui.messagePart.option.typeOwnAnswer": "Tapez votre propre réponse",
@@ -94,7 +82,6 @@ export const dict = {
   "ui.tool.running.edit": "Modification",
   "ui.tool.running.write": "Écriture",
   "ui.tool.running.patch": "Application du correctif",
-  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "En cours",
   "ui.tool.status.done": "Terminé",
   "ui.tool.status.error": "Échec",
@@ -108,7 +95,6 @@ export const dict = {
   "ui.tool.summary.exit": "code de sortie {{code}}",
   "ui.tool.calls.one": "{{count}} appel",
   "ui.tool.calls.other": "{{count}} appels",
-  "ui.messagePart.reasoning.thinking": "Réflexion ({{duration}})",
 
   "ui.common.file.one": "fichier",
   "ui.common.file.other": "fichiers",

@@ -186,6 +186,89 @@ export function toolSummary(input: {
   }
 }
 
+export type TaskPhase =
+  | "preparing"
+  | "queued"
+  | "running"
+  | "failed_to_start"
+  | "failed"
+  | "partial"
+  | "timed_out"
+  | "cancelled"
+  | "completed"
+
+/**
+ * The backend records a Task part as soon as the model starts emitting its
+ * arguments and binds a child session only once dispatch succeeds, so a child
+ * id is the only proof that a worker exists. `activeMs` first appears when the
+ * child holds its capacity slot and provider work begins; before that the
+ * worker is queued.
+ */
+export function taskPhase(input: { status?: string; error?: string; metadata?: Record<string, unknown> }): TaskPhase {
+  const metadata = input.metadata ?? {}
+  const child = typeof metadata.sessionId === "string" && metadata.sessionId !== ""
+  if (input.status === "error") {
+    if (metadata.cancelled === true || toolOutcome("error", input.error) === "cancelled") return "cancelled"
+    return child ? "failed" : "failed_to_start"
+  }
+  if (input.status === "completed") {
+    if (metadata.outcome === "partial") return "partial"
+    if (metadata.outcome === "timed_out") return "timed_out"
+    if (metadata.outcome === "error") return "failed"
+    return "completed"
+  }
+  if (input.status === "running" && child) return metadata.activeMs === undefined ? "queued" : "running"
+  return "preparing"
+}
+
+/** The outcome vocabulary the delegation card is styled by. */
+export function taskOutcome(
+  phase: TaskPhase,
+): "pending" | "running" | "error" | "partial" | "timed_out" | "cancelled" | "completed" {
+  if (phase === "preparing" || phase === "queued") return "pending"
+  if (phase === "failed_to_start" || phase === "failed") return "error"
+  return phase
+}
+
+export type PendingOperation = { id: string; tool: string; title: string; started: boolean }
+
+/**
+ * Calls a stop left unfinished: still live, or closed by the runtime as
+ * cancelled. `started` says whether the call had begun executing; a call that
+ * never started took no action.
+ */
+export function pendingOperations(
+  parts: ReadonlyArray<{
+    id: string
+    type: string
+    tool?: string
+    state?: { status?: string; title?: string; input?: unknown; error?: string; metadata?: unknown }
+  }>,
+): PendingOperation[] {
+  const result: PendingOperation[] = []
+  for (const part of parts) {
+    if (part.type !== "tool" || !part.state) continue
+    const state = part.state
+    const metadata = (state.metadata ?? {}) as Record<string, unknown>
+    const live = state.status === "running" || state.status === "pending"
+    const cancelled =
+      state.status === "error" && (metadata.cancelled === true || toolOutcome("error", state.error) === "cancelled")
+    if (!live && !cancelled) continue
+    const input = (state.input ?? {}) as Record<string, unknown>
+    const description = typeof input.description === "string" ? input.description : ""
+    const started = live
+      ? state.status === "running"
+      : metadata.started !== false && !/had not started/i.test(state.error ?? "")
+    result.push({
+      id: part.id,
+      tool: part.tool ?? "",
+      title: state.title || description || humanizeToolName(part.tool ?? ""),
+      started,
+    })
+  }
+  return result
+}
+
 export function toolErrorDisplay(tool: string, value: string) {
   const cleaned = value.replace(/^Error:\s*/, "")
   if (toolOutcome("error", cleaned) === "cancelled") {
@@ -244,12 +327,32 @@ export function sessionErrorText(value: unknown): string {
   return `The connected provider account needs $${(Number(required) / 100).toFixed(2)} for this step; $${(Number(available) / 100).toFixed(2)} is available.`
 }
 
-export function sessionErrorDisplay(value: unknown): {
-  state: "paused" | "error"
+export type SessionErrorDisplay = {
+  state: "paused" | "stopped" | "error"
+  /**
+   * Why a stopped turn ended, as far as the runtime recorded it: a Stop press,
+   * an interruption the runtime named (a credential revision), a wait the
+   * runtime gave up on, or a provider that stopped answering.
+   */
+  reason?: "user" | "interrupted" | "timeout" | "provider"
   title?: string
   message: string
   action?: "retry"
-} {
+}
+
+/**
+ * A Stop press aborts the turn's controller without a reason, so the SDK's
+ * generic abort text is the only record of it. Every other abort names its
+ * cause in the recorded message.
+ */
+const genericAbort = /^(?:the operation was aborted|signal is aborted without reason|aborted)\.?$/i
+
+/**
+ * A turn that ended early is presented by what the runtime recorded, never by
+ * a generic failure: nothing here implies completed work was undone or that
+ * the turn resumes on its own.
+ */
+export function sessionErrorDisplay(value: unknown): SessionErrorDisplay {
   const error = record(value)
   const data = record(error?.data)
   const metadata = record(data?.metadata)
@@ -257,6 +360,28 @@ export function sessionErrorDisplay(value: unknown): {
   const action = metadata?.action ?? data?.action
   if (state === "paused" && action === "retry") {
     return { state: "paused", title: "Paused", message: sessionErrorText(value), action: "retry" }
+  }
+  if (error?.name === "MessageAbortedError") {
+    const recorded = typeof data?.message === "string" ? data.message.trim() : ""
+    if (!recorded || genericAbort.test(recorded)) {
+      return {
+        state: "stopped",
+        reason: "user",
+        title: "Stopped",
+        message:
+          "Stopped at your request. Completed steps and written files are kept; nothing continues automatically.",
+      }
+    }
+    return { state: "stopped", reason: "interrupted", title: "Stopped", message: recorded }
+  }
+  if (state === "stopped") {
+    const code = typeof metadata?.code === "string" ? metadata.code : ""
+    return {
+      state: "stopped",
+      reason: /timeout|timed_out/i.test(code) ? "timeout" : "provider",
+      title: "Stopped",
+      message: sessionErrorText(value),
+    }
   }
   return { state: "error", message: sessionErrorText(value) }
 }
@@ -313,6 +438,7 @@ export function generatedArtifacts(
 }
 
 const filename = (value: string) => value.replaceAll("\\", "/").split("/").pop() || value
+const absolute = /^(?:\/|[A-Za-z]:[\\/])/
 
 /**
  * A stable receipt label for a scientific execution. Models can provide a
@@ -356,24 +482,39 @@ export function scienceTaskLabel(input: { title?: unknown; code?: unknown; langu
  * Completed file receipts, preferring the runtime-resolved target over the
  * requested input path. Canonical-only mode supplies precise write/edit/patch
  * targets for bare chat links; it never guesses paths from shell or kernel code.
+ *
+ * Files a shell command or kernel changed arrive as `patch` parts: the backend
+ * diffs the project after each step and records the real paths, so they are
+ * receipts too. `resolve` runs them through the same host-path resolver the
+ * chat's file links use; a path it does not accept is left out.
  */
 export function writtenFiles(
   parts: ReadonlyArray<{
     type: string
     tool?: string
     state?: { status?: string; input?: unknown; metadata?: unknown }
+    files?: unknown
   }>,
-  options?: { canonicalOnly?: boolean },
+  options?: { canonicalOnly?: boolean; resolve?: (path: string) => string | undefined },
 ): string[] {
   const files: string[] = []
   const seen = new Set<string>()
   const push = (value: unknown) => {
     if (typeof value !== "string" || !value || seen.has(value)) return
-    if (options?.canonicalOnly && !/^(?:\/|[A-Za-z]:[\\/])/.test(value)) return
+    if (options?.canonicalOnly && !absolute.test(value)) return
     seen.add(value)
     files.push(value)
   }
   for (const part of parts) {
+    if (part.type === "patch") {
+      // The backend records patch entries as absolute worktree paths; anything
+      // else is not a receipt.
+      for (const file of Array.isArray(part.files) ? part.files : []) {
+        if (typeof file !== "string" || !absolute.test(file)) continue
+        push(options?.resolve ? options.resolve(file) : file)
+      }
+      continue
+    }
     if (part.type !== "tool" || part.state?.status !== "completed") continue
     const input = (part.state.input ?? {}) as Record<string, unknown>
     const metadata = (part.state.metadata ?? {}) as Record<string, unknown>
@@ -429,19 +570,28 @@ export function skillName(source: {
   return undefined
 }
 
-/** Discovery also carries metadata.name; only the completed load result proves
- * that instructions were delivered. Never infer a load from requested inputs. */
+const loadedPrefix = "Loaded skill: "
+
+/**
+ * Only the completed load result proves that instructions were delivered: it
+ * records the skill's name with its directory and instruction hash, where a
+ * discovery result carries the query as `name` and no directory. The title
+ * prefix remains the fallback for transcripts recorded before that metadata.
+ * Never infer a load from requested inputs.
+ */
 export function loadedSkillName(source: {
   metadata?: Record<string, unknown>
   title?: string
   status?: string
 }): string | undefined {
   if (source.status !== "completed" || source.metadata?.ok === false) return
-  if (!source.title?.startsWith("Loaded skill: ")) return
-  const title = source.title.slice("Loaded skill: ".length).trim()
+  const metadata = source.metadata ?? {}
+  const name = typeof metadata.name === "string" ? metadata.name.trim() : ""
+  const recorded = typeof metadata.contentHash === "string" || (typeof metadata.dir === "string" && metadata.dir !== "")
+  if (recorded && name) return name
+  const title = source.title?.startsWith(loadedPrefix) ? source.title.slice(loadedPrefix.length).trim() : ""
   if (!title) return
-  const name = source.metadata?.name
-  return typeof name === "string" && name.trim() ? name.trim() : title
+  return name || title
 }
 
 export function skillActivity(source: {

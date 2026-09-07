@@ -1,22 +1,12 @@
 export const dict = {
   "ui.sessionTurn.steps.show": "실행 추적 표시",
   "ui.sessionTurn.steps.hide": "실행 추적 숨기기",
-  "ui.messagePart.reasoning.label": "Reasoning",
-  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
-  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
-  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
-  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
-  "ui.sessionTurn.progress.stalledHint":
-    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "에 댓글 달기",
   "ui.lineComment.editorLabel.prefix": "",
   "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
   "ui.lineComment.placeholder": "댓글 추가",
   "ui.lineComment.submit": "댓글",
-  "ui.sessionTurn.trace.title": "실행 추적",
-  "ui.sessionTurn.trace.detail": "기록된 도구 활동이며, 모델 요약은 제공자가 생성합니다.",
   "ui.sessionTurn.summary.response": "응답",
   "ui.sessionTurn.diff.showMore": "변경 사항 더 보기 ({{count}})",
 
@@ -42,7 +32,6 @@ export const dict = {
   "ui.sessionTurn.progress.stillOpen": "제공자가 아직 응답을 시작하지 않았습니다. 요청은 아직 열려 있습니다.",
 
   "ui.messagePart.diagnostic.error": "오류",
-  "ui.messagePart.reasoning.providerSummary": "모델 요약",
   "ui.messagePart.title.edit": "편집",
   "ui.messagePart.title.write": "작성",
   "ui.messagePart.option.typeOwnAnswer": "직접 답변 입력",
@@ -91,7 +80,6 @@ export const dict = {
   "ui.tool.running.edit": "편집 중",
   "ui.tool.running.write": "쓰는 중",
   "ui.tool.running.patch": "패치 적용 중",
-  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "실행 중",
   "ui.tool.status.done": "완료",
   "ui.tool.status.error": "실패",
@@ -105,7 +93,6 @@ export const dict = {
   "ui.tool.summary.exit": "종료 코드 {{code}}",
   "ui.tool.calls.one": "{{count}}회 호출",
   "ui.tool.calls.other": "{{count}}회 호출",
-  "ui.messagePart.reasoning.thinking": "생각 중 ({{duration}})",
 
   "ui.common.file.one": "파일",
   "ui.common.file.other": "파일",

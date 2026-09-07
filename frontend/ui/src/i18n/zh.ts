@@ -5,22 +5,12 @@ type Keys = keyof typeof en
 export const dict = {
   "ui.sessionTurn.steps.show": "显示执行轨迹",
   "ui.sessionTurn.steps.hide": "隐藏执行轨迹",
-  "ui.messagePart.reasoning.label": "Reasoning",
-  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
-  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
-  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
-  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
-  "ui.sessionTurn.progress.stalledHint":
-    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "评论 ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "正在评论 ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "添加评论",
   "ui.lineComment.submit": "评论",
-  "ui.sessionTurn.trace.title": "执行轨迹",
-  "ui.sessionTurn.trace.detail": "记录的工具活动；模型摘要由提供商生成。",
   "ui.sessionTurn.summary.response": "回复",
   "ui.sessionTurn.diff.showMore": "显示更多更改（{{count}}）",
 
@@ -46,7 +36,6 @@ export const dict = {
   "ui.sessionTurn.progress.stillOpen": "提供方尚未开始响应；请求仍处于打开状态。",
 
   "ui.messagePart.diagnostic.error": "错误",
-  "ui.messagePart.reasoning.providerSummary": "模型摘要",
   "ui.messagePart.title.edit": "编辑",
   "ui.messagePart.title.write": "写入",
   "ui.messagePart.option.typeOwnAnswer": "输入自己的答案",
@@ -95,7 +84,6 @@ export const dict = {
   "ui.tool.running.edit": "编辑中",
   "ui.tool.running.write": "写入中",
   "ui.tool.running.patch": "应用补丁中",
-  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "运行中",
   "ui.tool.status.done": "完成",
   "ui.tool.status.error": "失败",
@@ -109,7 +97,6 @@ export const dict = {
   "ui.tool.summary.exit": "退出码 {{code}}",
   "ui.tool.calls.one": "{{count}} 次调用",
   "ui.tool.calls.other": "{{count}} 次调用",
-  "ui.messagePart.reasoning.thinking": "思考中（{{duration}}）",
 
   "ui.common.file.one": "个文件",
   "ui.common.file.other": "个文件",

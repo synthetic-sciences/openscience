@@ -254,15 +254,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description": "ทำงานหลังจากสร้างพื้นที่ทำงานใหม่ (worktree)",
   "dialog.project.edit.worktree.startup.placeholder": "เช่น bun install",
 
-  "context.breakdown.title": "การแบ่งบริบท",
-  "context.breakdown.note": 'การแบ่งโดยประมาณของโทเค็นนำเข้า "อื่น ๆ" รวมถึงคำนิยามเครื่องมือและโอเวอร์เฮด',
-  "context.breakdown.system": "ระบบ",
   "context.breakdown.user": "ผู้ใช้",
   "context.breakdown.assistant": "ผู้ช่วย",
   "context.breakdown.tool": "การเรียกเครื่องมือ",
-  "context.breakdown.other": "อื่น ๆ",
 
-  "context.systemPrompt.title": "พร้อมท์ระบบ",
   "context.rawMessages.title": "ข้อความดิบ",
 
   "context.stats.session": "เซสชัน",

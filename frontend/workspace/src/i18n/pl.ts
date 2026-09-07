@@ -254,15 +254,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Uruchamiany po utworzeniu nowej przestrzeni roboczej (drzewa roboczego).",
   "dialog.project.edit.worktree.startup.placeholder": "np. bun install",
-  "context.breakdown.title": "Podział kontekstu",
-  "context.breakdown.note": 'Przybliżony podział tokenów wejściowych. "Inne" obejmuje definicje narzędzi i narzut.',
-  "context.breakdown.system": "System",
   "context.breakdown.user": "Użytkownik",
   "context.breakdown.assistant": "Asystent",
   "context.breakdown.tool": "Wywołania narzędzi",
-  "context.breakdown.other": "Inne",
 
-  "context.systemPrompt.title": "Prompt systemowy",
   "context.rawMessages.title": "Surowe wiadomości",
 
   "context.stats.session": "Sesja",

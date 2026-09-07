@@ -61,6 +61,8 @@ import {
   loadedSkillName,
   skillActivity,
   stripBashMetadata,
+  taskOutcome,
+  taskPhase,
   toolOutcome,
   toolSummary,
 } from "./tool-display"
@@ -1326,29 +1328,39 @@ ToolRegistry.register({
       const value = props.metadata.model as { providerID?: string; modelID?: string } | undefined
       return [value?.providerID, value?.modelID].filter(Boolean).join(" / ") || undefined
     }
-    const outcome = () => {
-      if (props.status === "running" || props.status === "pending") return props.status
-      if (toolOutcome(props.status, props.error) === "cancelled") return "cancelled"
-      const value = props.metadata.outcome
-      if (value === "completed" || value === "partial" || value === "error" || value === "timed_out") return value
-      return props.status === "error" ? "error" : "completed"
-    }
+    // Phases come from the part state and the Task metadata the backend
+    // recorded, never from the pending placeholder alone: a delegation that
+    // fails before a child exists must not look like a worker in trouble.
+    const phase = createMemo(() => taskPhase({ status: props.status, error: props.error, metadata: props.metadata }))
+    const outcome = () => taskOutcome(phase())
     const outcomeLabel = () => {
-      if (outcome() === "running") return "Working"
-      if (outcome() === "pending") return "Queued"
-      if (outcome() === "partial") return "Partial result"
-      if (outcome() === "timed_out") return "Time limit reached"
-      if (outcome() === "error") return "Needs attention"
-      if (outcome() === "cancelled") return i18n.t("ui.tool.status.cancelled")
-      if (Number(props.metadata.failedToolCalls) > 0) return "Completed with tool errors"
-      return "Completed"
+      switch (phase()) {
+        case "preparing":
+          return i18n.t("ui.tool.task.preparing")
+        case "queued":
+          return i18n.t("ui.tool.task.queued")
+        case "running":
+          return i18n.t("ui.tool.task.running")
+        case "failed_to_start":
+          return i18n.t("ui.tool.task.failedToStart")
+        case "failed":
+          return i18n.t("ui.tool.task.failed")
+        case "partial":
+          return i18n.t("ui.tool.task.partial")
+        case "timed_out":
+          return i18n.t("ui.tool.task.timedOut")
+        case "cancelled":
+          return i18n.t("ui.tool.status.cancelled")
+        default:
+          return Number(props.metadata.failedToolCalls) > 0
+            ? i18n.t("ui.tool.task.completedWithErrors")
+            : i18n.t("ui.tool.task.completed")
+      }
     }
     const [expanded, setExpanded] = createSignal<boolean>()
     const open = () => expanded() ?? live()
     const current = () => summary().findLast((item) => item.state.status === "running")
-    const subtitle = () =>
-      (outcome() === "running" || outcome() === "pending" ? current()?.state.title : undefined) ??
-      props.input.description
+    const subtitle = () => (phase() === "running" ? current()?.state.title : undefined) ?? props.input.description
 
     const childPermission = createMemo(() => {
       const sessionId = childSessionId()
@@ -1476,7 +1488,7 @@ ToolRegistry.register({
             )}
           </Match>
           <Match when={true}>
-            <details data-component="delegation-card" data-outcome={outcome()} open={open()}>
+            <details data-component="delegation-card" data-outcome={outcome()} data-phase={phase()} open={open()}>
               <summary
                 data-slot="delegation-summary"
                 aria-label={`${outcomeLabel()} delegated research`}
@@ -1527,7 +1539,7 @@ ToolRegistry.register({
                   </Show>
                 </div>
 
-                <Show when={(outcome() === "running" || outcome() === "pending") && current()}>
+                <Show when={phase() === "running" && current()}>
                   {(item) => (
                     <div data-slot="delegation-current">
                       <Spinner />

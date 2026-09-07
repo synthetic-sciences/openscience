@@ -22,12 +22,21 @@
     display: none;
   }
 
-  [data-slot="session-turn-response-trigger"] {
+  /* The disclosure row pins below the sticky user message, or at the top when
+     the transcript lets that message scroll away, so a long trace stays
+     collapsible from wherever the reader is. */
+  [data-slot="session-turn-trace-control"] {
+    position: sticky;
+    top: calc(var(--session-title-height, 0px) + var(--session-turn-sticky-height, 0px));
+    z-index: 19;
+    width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 4px 12px;
-    min-width: 0;
+    padding: 4px 0;
+    background-color: var(--background-base);
   }
 
   [data-slot="session-turn-message-container"] {
@@ -567,7 +576,7 @@
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
-    margin: -6px -10px;
+    margin: -6px 0 -6px -10px;
     border-radius: var(--radius-xs);
     color: var(--text-weak);
     font-size: var(--font-size-small);
@@ -582,11 +591,31 @@
       transform: none;
     }
 
+    [data-slot="session-turn-trigger-label"] {
+      white-space: nowrap;
+    }
+  }
+
+  [data-slot="session-turn-live-status"] {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-weak);
+    font-size: var(--font-size-small);
+
     [data-component="spinner"] {
       width: 12px;
       height: 12px;
       flex-shrink: 0;
     }
+  }
+
+  [data-slot="session-turn-duration"] {
+    flex-shrink: 0;
+    color: var(--text-weak);
+    font-size: var(--font-size-small);
+    white-space: nowrap;
   }
 
   [data-slot="session-turn-retry-message"] {
@@ -625,24 +654,53 @@
   .session-state-card {
     min-height: 44px;
     display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 9px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
     padding: 10px 12px;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     line-height: var(--line-height-large);
 
+    [data-slot="session-state-head"] {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      min-width: 0;
+
+      > [data-component="icon"] {
+        flex-shrink: 0;
+        margin-top: 2px;
+      }
+    }
+
     &[data-state="paused"] {
       border-color: var(--border-warning-base);
       background: var(--surface-warning-weak);
       color: var(--text-on-warning-base);
+
+      [data-slot="session-state-head"] > [data-component="icon"] {
+        color: var(--icon-warning-active);
+      }
+
+      [data-slot="session-state-copy"] strong {
+        color: var(--text-on-warning-strong);
+      }
     }
 
-    &[data-state="paused"] > [data-component="icon"] {
-      flex-shrink: 0;
-      margin-top: 2px;
-      color: var(--icon-warning-active);
+    /* A stop is an outcome, not a fault: quiet chrome, the reason in words. */
+    &[data-state="stopped"] {
+      border-color: var(--border-weak-base);
+      background: var(--surface-raised-base);
+      color: var(--text-weak);
+
+      [data-slot="session-state-head"] > [data-component="icon"] {
+        color: var(--icon-weak);
+      }
+
+      [data-slot="session-state-copy"] strong {
+        color: var(--text-base);
+      }
     }
 
     [data-slot="session-state-copy"] {
@@ -651,13 +709,69 @@
       gap: 1px;
 
       strong {
-        color: var(--text-on-warning-strong);
         font-weight: var(--font-weight-medium);
       }
     }
 
     [data-slot="session-state-message"] {
       overflow-wrap: anywhere;
+    }
+
+    [data-slot="session-stop-receipt"] {
+      margin: 0;
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 4px 12px;
+      align-items: baseline;
+    }
+
+    [data-slot="session-stop-row"] {
+      display: contents;
+
+      dt {
+        white-space: nowrap;
+        color: var(--text-weaker);
+      }
+
+      dd {
+        min-width: 0;
+        margin: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 8px;
+      }
+    }
+
+    &.error-card [data-slot="session-stop-row"] dt {
+      color: inherit;
+    }
+
+    [data-slot="session-stop-output"] {
+      max-width: 100%;
+      padding: 1px 6px;
+      border: 1px solid var(--border-weak-base);
+      border-radius: var(--radius-xs);
+      background: var(--background-base);
+      color: var(--text-base);
+      font: inherit;
+      line-height: var(--line-height-normal);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+
+      &:hover {
+        background: var(--surface-raised-base-hover);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--border-focus, var(--border-base));
+        outline-offset: 1px;
+      }
+    }
+
+    [data-slot="session-stop-operation"] {
+      color: var(--text-weak);
     }
   }
 

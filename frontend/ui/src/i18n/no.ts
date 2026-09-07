@@ -1,27 +1,15 @@
 import { dict as en } from "./en"
 type Keys = keyof typeof en
 
-export const dict: Record<Keys, string> = {
+export const dict = {
   "ui.sessionTurn.steps.show": "Vis utføringsspor",
   "ui.sessionTurn.steps.hide": "Skjul utføringsspor",
-  "ui.sessionTurn.reasoning.show": "Vis resonnering",
-  "ui.sessionTurn.reasoning.hide": "Skjul resonnering",
-  "ui.messagePart.reasoning.label": "Reasoning",
-  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
-  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
-  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
-  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
-  "ui.sessionTurn.progress.stalledHint":
-    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommenterer på ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Legg til kommentar",
   "ui.lineComment.submit": "Kommenter",
-  "ui.sessionTurn.trace.title": "Utføringsspor",
-  "ui.sessionTurn.trace.detail": "Registrert verktøyaktivitet; modellsammendrag genereres av leverandøren.",
   "ui.sessionTurn.summary.response": "Svar",
   "ui.sessionTurn.diff.showMore": "Vis flere endringer ({{count}})",
 
@@ -47,7 +35,6 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.progress.stillOpen": "Leverandøren har ikke begynt å svare ennå; forespørselen er fortsatt åpen.",
 
   "ui.messagePart.diagnostic.error": "Feil",
-  "ui.messagePart.reasoning.providerSummary": "Modellsammendrag",
   "ui.messagePart.title.edit": "Rediger",
   "ui.messagePart.title.write": "Skriv",
   "ui.messagePart.option.typeOwnAnswer": "Skriv ditt eget svar",
@@ -96,7 +83,6 @@ export const dict: Record<Keys, string> = {
   "ui.tool.running.edit": "Redigerer",
   "ui.tool.running.write": "Skriver",
   "ui.tool.running.patch": "Bruker patch",
-  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "Kjører",
   "ui.tool.status.done": "Ferdig",
   "ui.tool.status.error": "Mislyktes",
@@ -110,7 +96,6 @@ export const dict: Record<Keys, string> = {
   "ui.tool.summary.exit": "exit {{code}}",
   "ui.tool.calls.one": "{{count}} kall",
   "ui.tool.calls.other": "{{count}} kall",
-  "ui.messagePart.reasoning.thinking": "Tenker ({{duration}})",
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",
@@ -157,4 +142,4 @@ export const dict: Record<Keys, string> = {
   "ui.question.review.notAnswered": "(ikke besvart)",
   "ui.question.multiHint": "(velg alle som gjelder)",
   "ui.question.custom.placeholder": "Skriv svaret ditt...",
-}
+} satisfies Partial<Record<Keys, string>>

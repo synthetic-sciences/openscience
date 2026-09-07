@@ -1,22 +1,12 @@
 export const dict = {
   "ui.sessionTurn.steps.show": "Vis udførelsesspor",
   "ui.sessionTurn.steps.hide": "Skjul udførelsesspor",
-  "ui.messagePart.reasoning.label": "Reasoning",
-  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
-  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
-  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
-  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
-  "ui.sessionTurn.progress.stalledHint":
-    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommenterer på ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Tilføj kommentar",
   "ui.lineComment.submit": "Kommenter",
-  "ui.sessionTurn.trace.title": "Udførelsesspor",
-  "ui.sessionTurn.trace.detail": "Registreret værktøjsaktivitet; modeloversigter genereres af udbyderen.",
   "ui.sessionTurn.summary.response": "Svar",
   "ui.sessionTurn.diff.showMore": "Vis flere ændringer ({{count}})",
 
@@ -42,7 +32,6 @@ export const dict = {
   "ui.sessionTurn.progress.stillOpen": "Udbyderen er endnu ikke begyndt at svare; anmodningen er stadig åben.",
 
   "ui.messagePart.diagnostic.error": "Fejl",
-  "ui.messagePart.reasoning.providerSummary": "Modeloversigt",
   "ui.messagePart.title.edit": "Rediger",
   "ui.messagePart.title.write": "Skriv",
   "ui.messagePart.option.typeOwnAnswer": "Skriv dit eget svar",
@@ -91,7 +80,6 @@ export const dict = {
   "ui.tool.running.edit": "Redigerer",
   "ui.tool.running.write": "Skriver",
   "ui.tool.running.patch": "Anvender patch",
-  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "Kører",
   "ui.tool.status.done": "Færdig",
   "ui.tool.status.error": "Mislykkedes",
@@ -105,7 +93,6 @@ export const dict = {
   "ui.tool.summary.exit": "exit {{code}}",
   "ui.tool.calls.one": "{{count}} kald",
   "ui.tool.calls.other": "{{count}} kald",
-  "ui.messagePart.reasoning.thinking": "Tænker ({{duration}})",
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",

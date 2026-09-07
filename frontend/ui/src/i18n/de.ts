@@ -5,23 +5,12 @@ type Keys = keyof typeof en
 export const dict = {
   "ui.sessionTurn.steps.show": "Ausführungsprotokoll anzeigen",
   "ui.sessionTurn.steps.hide": "Ausführungsprotokoll ausblenden",
-  "ui.messagePart.reasoning.label": "Reasoning",
-  "ui.messagePart.reasoning.elapsedHint": "Elapsed since reasoning began, including waits.",
-  "ui.sessionTurn.totalTime": "Total turn time, including model waits and tools",
-  "ui.sessionTurn.progress.preparing": "Preparing request for {{model}} ({{seconds}}s)",
-  "ui.sessionTurn.progress.preparingHint": "Still checking model access. The request has not been sent yet.",
-  "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
-  "ui.sessionTurn.progress.stalledHint":
-    "The response is still open. You can wait or stop it; stopping does not undo completed work.",
   "ui.lineComment.label.prefix": "Kommentar zu ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommentiere ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Kommentar hinzufügen",
   "ui.lineComment.submit": "Kommentieren",
-  "ui.sessionTurn.trace.title": "Ausführungsprotokoll",
-  "ui.sessionTurn.trace.detail":
-    "Aufgezeichnete Werkzeugaktivität; Modellzusammenfassungen werden vom Anbieter generiert.",
   "ui.sessionTurn.summary.response": "Antwort",
   "ui.sessionTurn.diff.showMore": "Weitere Änderungen anzeigen ({{count}})",
 
@@ -47,7 +36,6 @@ export const dict = {
   "ui.sessionTurn.progress.stillOpen": "Der Anbieter hat noch nicht geantwortet; die Anfrage ist weiterhin offen.",
 
   "ui.messagePart.diagnostic.error": "Fehler",
-  "ui.messagePart.reasoning.providerSummary": "Modellzusammenfassung",
   "ui.messagePart.title.edit": "Bearbeiten",
   "ui.messagePart.title.write": "Schreiben",
   "ui.messagePart.option.typeOwnAnswer": "Eigene Antwort eingeben",
@@ -96,7 +84,6 @@ export const dict = {
   "ui.tool.running.edit": "Bearbeitet",
   "ui.tool.running.write": "Schreibt",
   "ui.tool.running.patch": "Wendet Patch an",
-  "ui.tool.status.pending": "Preparing",
   "ui.tool.status.running": "Läuft",
   "ui.tool.status.done": "Fertig",
   "ui.tool.status.error": "Fehlgeschlagen",
@@ -110,7 +97,6 @@ export const dict = {
   "ui.tool.summary.exit": "Exit {{code}}",
   "ui.tool.calls.one": "{{count}} Aufruf",
   "ui.tool.calls.other": "{{count}} Aufrufe",
-  "ui.messagePart.reasoning.thinking": "Denkt nach ({{duration}})",
 
   "ui.common.file.one": "Datei",
   "ui.common.file.other": "Dateien",

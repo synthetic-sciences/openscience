@@ -113,3 +113,26 @@ test("discovery and failed calls never mark a skill loaded, even when the query 
     }),
   ).toEqual(["matplotlib"])
 })
+
+test("a load is recognised from its recorded metadata, with the title only as a fallback", () => {
+  const messages = [
+    { id: "user", role: "user" },
+    { id: "assistant", role: "assistant" },
+  ]
+  const load = (title: string, metadata: Record<string, unknown>) => ({
+    type: "tool",
+    tool: "skill",
+    state: { status: "completed", title, input: { name: "requested" }, metadata },
+  })
+  expect(
+    loadedSkillNamesThisTurn(messages, {
+      assistant: [
+        load("Skill: matplotlib", { name: "matplotlib", dir: "/skills/matplotlib", contentHash: "a".repeat(64) }),
+        load("Skill matches: seaborn", { name: "seaborn", dir: "", matches: ["seaborn"] }),
+        load("Loaded skill: legacy-title", {}),
+        load("Loaded skill: renamed", { name: "recorded-name", dir: "/skills/recorded-name" }),
+        load("Skill: denied", { name: "denied", dir: "/skills/denied", ok: false }),
+      ],
+    }),
+  ).toEqual(["matplotlib", "legacy-title", "recorded-name"])
+})

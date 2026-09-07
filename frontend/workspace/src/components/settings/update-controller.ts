@@ -9,13 +9,18 @@ type State = DesktopUpdateState & {
 }
 
 const controllers = new WeakMap<object, ReturnType<typeof createUpdateController>>()
-const transitional = new Set<DesktopUpdateState["phase"]>([
-  "downloading",
-  "extracting",
-  "verifying",
-  "restarting",
-  "restart_blocked",
-])
+// Phases the supervisor advances on its own. A blocked restart is not one of
+// them: it waits for the user, so polling it only burns the transport.
+const transitional = new Set<DesktopUpdateState["phase"]>(["downloading", "extracting", "verifying", "restarting"])
+const POLL_MS = 500
+const POLL_BACKOFF_AFTER = 20
+const POLL_MAX_MS = 30_000
+
+/** Half-second reads for the first ten seconds of a transition, then doubling up to a 30 s ceiling. */
+export function pollDelay(polls: number) {
+  if (polls < POLL_BACKOFF_AFTER) return POLL_MS
+  return Math.min(POLL_MAX_MS, POLL_MS * 2 ** (polls - POLL_BACKOFF_AFTER + 1))
+}
 
 export function createUpdateController(
   platform: Platform,
@@ -28,6 +33,7 @@ export function createUpdateController(
     dismissed: false,
   })
   let timer: ReturnType<typeof setTimeout> | undefined
+  let polls = 0
   const pending = new Map<string, Promise<unknown>>()
   let mutation: { action: string; promise: Promise<unknown> } | undefined
   let syncing: Promise<DesktopUpdateState | undefined> | undefined
@@ -67,9 +73,11 @@ export function createUpdateController(
 
   const schedule = () => {
     clearTimeout(timer)
+    const delay = pollDelay(polls)
+    polls++
     timer = (options.schedule ?? setTimeout)(
       () => void sync().catch((error) => setState({ phase: "failed", error: message(error) })),
-      500,
+      delay,
     )
   }
 
@@ -90,6 +98,8 @@ export function createUpdateController(
         new Error(`OpenScience is already ${mutation.action === "apply" ? "restarting" : "updating"}`),
       )
     }
+    // The user acted, so the supervisor is expected to move again soon.
+    polls = 0
     const active = run().finally(() => {
       if (mutation?.promise === active) mutation = undefined
     })
@@ -105,6 +115,7 @@ export function createUpdateController(
     check(background = false) {
       return once("check", async () => {
         if (!platform.checkUpdate) return
+        polls = 0
         setState("checking", true)
         try {
           const result = await platform.checkUpdate({ refresh: !background })

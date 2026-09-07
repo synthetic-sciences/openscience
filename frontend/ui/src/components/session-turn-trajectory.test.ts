@@ -87,7 +87,8 @@ const read = (id: string, file: string, start: number): ToolPart => ({
 })
 
 type Store = Parameters<typeof data.DataProvider>[0]["data"]
-const mount = (view: () => JSX.Element, store: Store) => {
+type Callbacks = { saveArtifact?: (path: string) => Promise<void>; openFile?: (path: string) => void }
+const mount = (view: () => JSX.Element, store: Store, callbacks: Callbacks = {}) => {
   const host = document.createElement("div")
   host.className = "session-scroller"
   document.body.append(host)
@@ -97,6 +98,8 @@ const mount = (view: () => JSX.Element, store: Store) => {
         data.DataProvider({
           data: store,
           directory: "/research",
+          onSaveArtifact: callbacks.saveArtifact,
+          onOpenFile: callbacks.openFile,
           get children() {
             return dialog.DialogProvider({
               get children() {
@@ -940,6 +943,8 @@ describe("execution inspection", () => {
         input: { subagent_type: "research", description: "Compare assays" },
         title: "Compare assays",
         metadata: {
+          sessionId: "ses_delegated",
+          activeMs: 1_500,
           summary: [{ id: "read_done", tool: "read", state: { status: "completed", title: "Read old paper" } }],
         },
         time: { start: Date.now() - 8_000 },
@@ -959,7 +964,11 @@ describe("execution inspection", () => {
       status: "running",
       title: "Compare assays",
       time: { start: Date.now() - 9_000 },
-      metadata: { summary: [{ id: "read_live", tool: "read", state: { status: "running", title: "Read new paper" } }] },
+      metadata: {
+        sessionId: "ses_delegated",
+        activeMs: 2_500,
+        summary: [{ id: "read_live", tool: "read", state: { status: "running", title: "Read new paper" } }],
+      },
     })
     await settle()
     expect(card.open).toBe(false)
@@ -1163,12 +1172,16 @@ describe("timeout recovery", () => {
       await ready(() => host.querySelector('[data-slot="session-state-message"]') !== null)
       expect(host.querySelectorAll('[data-slot="session-state-message"]')).toHaveLength(1)
       expect(host.querySelector('[data-slot="session-state-message"]')?.textContent).toBe(timeout.data.message)
+      // A wait the runtime gave up on is a stop with a recorded reason, not a generic failure.
+      const card = host.querySelector('[data-component="card"][data-state]')!
+      expect(card.getAttribute("data-state")).toBe("stopped")
+      expect(card.getAttribute("data-reason")).toBe("timeout")
+      expect(card.getAttribute("role")).toBe("status")
+      expect(card.querySelector('[data-slot="session-stop-receipt"]')?.textContent).toContain("No files were written")
       expect(host.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain(reason.text)
       expect(host.textContent).toContain(partial.text)
       expect(host.querySelector('[data-component="reasoning-part"]')?.getAttribute("data-live")).toBeNull()
-      expect(
-        host.querySelector('[data-slot="session-turn-collapsible-trigger-content"] [data-component="spinner"]'),
-      ).toBeNull()
+      expect(host.querySelector('[data-slot="session-turn-trace-control"] [data-component="spinner"]')).toBeNull()
       expect(host.querySelector('[data-slot="session-turn-retry-message"]')).toBeNull()
       expect(host.querySelector('[data-slot="session-turn-progress-hint"]')).toBeNull()
 
@@ -1194,9 +1207,7 @@ describe("timeout recovery", () => {
           "Waiting for output from openai/gpt-5.6-sol",
         ),
       )
-      expect(
-        host.querySelector('[data-slot="session-turn-collapsible-trigger-content"] [data-component="spinner"]'),
-      ).not.toBeNull()
+      expect(host.querySelector('[data-slot="session-turn-trace-control"] [data-component="spinner"]')).not.toBeNull()
     },
   )
 })
@@ -1434,5 +1445,433 @@ describe("delegated request visibility", () => {
     await ready(() => host.querySelector('[data-component="permission-prompt"]') === null)
     expect(host.querySelector('[data-component="tool-part-wrapper"]')).toBeNull()
     expect(store.part[message.id][0].type).toBe("tool")
+  })
+})
+
+describe("trace control", () => {
+  const control = (host: HTMLElement) => host.querySelector('[data-slot="session-turn-trace-control"]')
+  const toggle = (host: HTMLElement) =>
+    host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
+  const status = (host: HTMLElement) => host.querySelector('[data-slot="session-turn-live-status"]')
+  const live = (message: AssistantMessage, items: Part[], state: Store["session_status"][string]): Store => ({
+    ...empty(),
+    session_status: { [sessionID]: state },
+    message: { [sessionID]: [user, message] },
+    part: { [user.id]: [], [message.id]: items },
+  })
+
+  test("a working turn keeps an explicit, keyboard-operable Show/Hide disclosure beside its live status", async () => {
+    const message = assistant()
+    const reason: ReasoningPart = {
+      id: "prt_control_reason",
+      sessionID,
+      messageID: message.id,
+      type: "reasoning",
+      text: "Comparing the candidate datasets before choosing one.",
+      time: { start: Date.now() - 3_000 },
+    }
+    const grep: ToolPart = {
+      id: "prt_control_grep",
+      sessionID,
+      messageID: message.id,
+      type: "tool",
+      callID: "call_control_grep",
+      tool: "grep",
+      state: { status: "running", input: { pattern: "cite" }, title: "cite", time: { start: Date.now() - 1_000 } },
+    }
+    const host = mount(
+      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id }),
+      live(message, [reason, grep], { type: "busy" }),
+    )
+    await ready(() => host.querySelector('[data-slot="reasoning-part-body"] p') !== null)
+    const button = toggle(host)
+    expect(button.tagName).toBe("BUTTON")
+    expect(button.getAttribute("aria-expanded")).toBe("true")
+    expect(button.getAttribute("aria-controls")).toBe(
+      host.querySelector('[data-slot="session-turn-response-section"]')?.id ?? null,
+    )
+    expect(button.textContent).toContain("Hide reasoning and activity")
+    expect(button.querySelector('[data-slot="session-turn-trigger-icon"]')).not.toBeNull()
+    expect(button.querySelector('[data-component="spinner"]')).toBeNull()
+    expect(control(host)?.getAttribute("data-working")).toBe("true")
+    expect(status(host)?.querySelector('[data-component="spinner"]')).not.toBeNull()
+    expect(status(host)?.querySelector('[data-slot="session-turn-status-text"]')?.textContent).toBe(
+      "Searching the codebase",
+    )
+
+    button.click()
+    await ready(() => host.querySelector('[data-component="reasoning-part"]') === null)
+    expect(button.getAttribute("aria-expanded")).toBe("false")
+    expect(button.textContent).toContain("Show reasoning and activity")
+    expect(host.querySelector('[data-component="tool-part-wrapper"]')).toBeNull()
+    // Collapsing the trace never hides the live request.
+    expect(status(host)?.querySelector('[data-slot="session-turn-status-text"]')?.textContent).toBe(
+      "Searching the codebase",
+    )
+    button.click()
+    await ready(() => host.querySelector('[data-component="reasoning-part"]') !== null)
+    expect(button.getAttribute("aria-expanded")).toBe("true")
+    expect(button.textContent).toContain("Hide reasoning and activity")
+  })
+
+  test("a retry wait is reported beside the disclosure, never in place of its label", async () => {
+    const message = assistant()
+    const host = mount(
+      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id }),
+      live(message, [read("prt_retry_read", "/research/protocol.md", 1_000)], {
+        type: "retry",
+        attempt: 2,
+        next: Date.now() + 10_000,
+        message: "Reconnecting to the provider",
+      }),
+    )
+    await ready(() => status(host) !== null)
+    expect(host.querySelector('[data-slot="session-turn-retry-message"]')?.textContent).toBe(
+      "Reconnecting to the provider",
+    )
+    expect(host.querySelector('[data-slot="session-turn-retry-attempt"]')?.textContent).toBe("(#2)")
+    expect(status(host)?.querySelector('[data-component="spinner"]')).not.toBeNull()
+    const button = toggle(host)
+    expect(button.getAttribute("aria-expanded")).toBe("true")
+    expect(button.textContent).toContain("Hide reasoning and activity")
+    expect(button.querySelector('[data-component="spinner"]')).toBeNull()
+    button.click()
+    await ready(() => button.getAttribute("aria-expanded") === "false")
+    expect(button.textContent).toContain("Show reasoning and activity")
+    expect(host.querySelector('[data-slot="session-turn-retry-message"]')).not.toBeNull()
+  })
+
+  test("a finished turn shows only the disclosure and its total time", async () => {
+    const message = assistant(5_000)
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [read("prt_idle_read", "paper.tex", 1_000)] },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    expect(status(host)).toBeNull()
+    expect(control(host)?.querySelector('[data-component="spinner"]')).toBeNull()
+    expect(control(host)?.getAttribute("data-working")).toBeNull()
+    const button = toggle(host)
+    expect(button.getAttribute("aria-expanded")).toBe("false")
+    expect(button.textContent).toContain("Show reasoning and activity")
+    expect(host.querySelector('[data-slot="session-turn-duration"]')?.textContent?.trim()).not.toBe("")
+    button.click()
+    await ready(() => host.querySelectorAll('[data-component="tool-part-wrapper"]').length === 1)
+    expect(button.textContent).toContain("Hide reasoning and activity")
+  })
+
+  test("before any step exists there is nothing to disclose, only the request status", async () => {
+    const message = assistant()
+    const host = mount(
+      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id }),
+      live(message, [], { type: "busy" }),
+    )
+    await ready(() => status(host) !== null)
+    expect(host.querySelector('[data-slot="session-turn-collapsible-trigger-content"]')).toBeNull()
+    expect(status(host)?.textContent).toContain("Preparing next step")
+  })
+})
+
+describe("delegation phases", () => {
+  const input = { subagent_type: "research", description: "Compare assays" }
+  const render = (state: ToolPart["state"]) => {
+    const part: ToolPart = {
+      id: "prt_phase_task",
+      sessionID,
+      messageID: "msg_0002",
+      type: "tool",
+      callID: "call_phase_task",
+      tool: "task",
+      state,
+    }
+    const host = mount(() => parts.Part({ part, message: assistant() }), empty())
+    const card = host.querySelector('[data-component="delegation-card"]')
+    return {
+      label: card?.querySelector('[data-slot="delegation-status"]')?.textContent,
+      phase: card?.getAttribute("data-phase"),
+      outcome: card?.getAttribute("data-outcome"),
+    }
+  }
+
+  test("labels a delegation by the recorded child binding, never by the pending placeholder alone", () => {
+    expect(render({ status: "pending", input: {}, raw: "" })).toEqual({
+      label: "Preparing delegation",
+      phase: "preparing",
+      outcome: "pending",
+    })
+    expect(
+      render({ status: "running", input, title: "Compare assays", metadata: {}, time: { start: Date.now() } }),
+    ).toEqual({ label: "Preparing delegation", phase: "preparing", outcome: "pending" })
+    expect(
+      render({
+        status: "running",
+        input,
+        title: "Compare assays",
+        metadata: { sessionId: "ses_child", queuedMs: 0 },
+        time: { start: Date.now() },
+      }),
+    ).toEqual({ label: "Queued", phase: "queued", outcome: "pending" })
+    expect(
+      render({
+        status: "running",
+        input,
+        title: "Compare assays",
+        metadata: { sessionId: "ses_child", queuedMs: 40, activeMs: 0 },
+        time: { start: Date.now() },
+      }),
+    ).toEqual({ label: "Running", phase: "running", outcome: "running" })
+  })
+
+  test("separates a delegation that never started from a worker that failed, stopped early or was cancelled", () => {
+    expect(
+      render({
+        status: "error",
+        input,
+        error: "Task continuation session ses_x is not a direct child of the calling session",
+        time: { start: 1_000, end: 1_001 },
+      }),
+    ).toEqual({ label: "Delegation failed to start", phase: "failed_to_start", outcome: "error" })
+    expect(
+      render({
+        status: "error",
+        input,
+        error: "Worker crashed",
+        metadata: { sessionId: "ses_child" },
+        time: { start: 1_000, end: 1_001 },
+      }),
+    ).toEqual({ label: "Worker failed", phase: "failed", outcome: "error" })
+    expect(
+      render({
+        status: "error",
+        input,
+        error: "Tool execution aborted",
+        metadata: { sessionId: "ses_child", cancelled: true, started: true },
+        time: { start: 1_000, end: 1_001 },
+      }),
+    ).toEqual({ label: "Cancelled", phase: "cancelled", outcome: "cancelled" })
+    const completed = (metadata: Record<string, unknown>): ToolPart["state"] => ({
+      status: "completed",
+      input,
+      title: "Compare assays",
+      output: "Findings.",
+      metadata: { sessionId: "ses_child", ...metadata },
+      time: { start: 1_000, end: 2_000 },
+    })
+    expect(render(completed({ outcome: "partial" }))).toEqual({
+      label: "Partial result",
+      phase: "partial",
+      outcome: "partial",
+    })
+    expect(render(completed({ outcome: "timed_out" }))).toEqual({
+      label: "Time limit reached",
+      phase: "timed_out",
+      outcome: "timed_out",
+    })
+    expect(render(completed({ outcome: "error" }))).toEqual({
+      label: "Worker failed",
+      phase: "failed",
+      outcome: "error",
+    })
+    expect(render(completed({ outcome: "completed" }))).toEqual({
+      label: "Completed",
+      phase: "completed",
+      outcome: "completed",
+    })
+  })
+})
+
+describe("turns that ended early", () => {
+  const write: ToolPart = {
+    id: "prt_stop_write",
+    sessionID,
+    messageID: "msg_0002",
+    type: "tool",
+    callID: "call_stop_write",
+    tool: "write",
+    state: {
+      status: "completed",
+      input: { filePath: "notes.md" },
+      metadata: { filepath: "/research/notes.md" },
+      output: "Written",
+      title: "notes.md",
+      time: { start: 1_000, end: 1_100 },
+    },
+  }
+  const interrupted: ToolPart = {
+    id: "prt_stop_bash",
+    sessionID,
+    messageID: "msg_0002",
+    type: "tool",
+    callID: "call_stop_bash",
+    tool: "bash",
+    state: {
+      status: "error",
+      input: { command: "python make_report.py", description: "Build the report" },
+      error: "Tool execution aborted",
+      metadata: { cancelled: true, started: true },
+      time: { start: 1_200, end: 1_300 },
+    },
+  }
+  const unstarted: ToolPart = {
+    id: "prt_stop_read",
+    sessionID,
+    messageID: "msg_0002",
+    type: "tool",
+    callID: "call_stop_read",
+    tool: "read",
+    state: {
+      status: "error",
+      input: { filePath: "/research/data.csv" },
+      error: "Tool execution aborted. The read call had not started; no action was taken.",
+      metadata: { cancelled: true, started: false },
+      time: { start: 1_300, end: 1_300 },
+    },
+  }
+  const patch: Part = {
+    id: "prt_stop_patch",
+    sessionID,
+    messageID: "msg_0002",
+    type: "patch",
+    hash: "abc123",
+    files: ["/research/results.csv", "/research/notes.md"],
+  }
+
+  test("a Stop press ends as a stopped turn with the outputs kept and the operations left pending", async () => {
+    const message: AssistantMessage = {
+      ...assistant(Date.now()),
+      error: { name: "MessageAbortedError", data: { message: "The operation was aborted." } },
+    }
+    const opened: string[] = []
+    const store: Store = {
+      ...empty(),
+      // A stale busy status cannot restart the turn or spin anything.
+      session_status: { [sessionID]: { type: "busy" } },
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [write, interrupted, unstarted, patch] },
+    }
+    const host = mount(
+      () =>
+        web.createComponent(markdown.MarkdownImages, {
+          resolve: (src) => src,
+          resolveFile: (path) => assets.workspaceAssetPath(path, "/research"),
+          resolveFileReceipt: assets.workspaceReceiptPath,
+          openFile: (path) => opened.push(path),
+          get children() {
+            return web.createComponent(turn.SessionTurn, { sessionID, messageID: user.id, lastUserMessageID: user.id })
+          },
+        }),
+      store,
+      { openFile: (path) => opened.push(path) },
+    )
+    await ready(() => host.querySelector('[data-state="stopped"]') !== null)
+    const card = host.querySelector('[data-state="stopped"]')!
+    expect(card.getAttribute("data-reason")).toBe("user")
+    expect(card.getAttribute("role")).toBe("status")
+    expect(card.querySelector("strong")?.textContent).toBe("Stopped")
+    expect(card.querySelector('[data-slot="session-state-message"]')?.textContent).toContain("Stopped at your request")
+    expect(card.textContent).toContain("written files are kept")
+    expect(card.textContent).not.toContain("The operation was aborted")
+    expect(host.querySelector('[data-component="spinner"]')).toBeNull()
+    expect(host.querySelector('[data-slot="session-turn-live-status"]')).toBeNull()
+    expect(host.querySelector('[data-slot="session-turn-retry-message"]')).toBeNull()
+
+    const outputs = [...card.querySelectorAll<HTMLButtonElement>('[data-slot="session-stop-output"]')]
+    expect(outputs.map((item) => item.textContent)).toEqual(["notes.md", "results.csv"])
+    outputs[1].click()
+    expect(opened).toEqual(["/research/results.csv"])
+    const pending = [...card.querySelectorAll('[data-slot="session-stop-operation"]')]
+    expect(pending.map((item) => item.textContent)).toEqual(["Build the report · interrupted", "Read · not started"])
+    expect(pending.map((item) => item.getAttribute("data-started"))).toEqual(["true", "false"])
+
+    // The recorded activity stays disclosable and untouched.
+    const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    expect(toggle.textContent).toContain("Show reasoning and activity")
+    expect(store.part[message.id][1]).toBe(interrupted)
+  })
+
+  test("a named interruption keeps its recorded cause", async () => {
+    const cause =
+      "Interrupted: credentials changed (workspace-sync.expired) and every runtime that inherited the previous snapshot was stopped"
+    const message: AssistantMessage = {
+      ...assistant(Date.now()),
+      error: { name: "MessageAbortedError", data: { message: cause } },
+    }
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [write] },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    await ready(() => host.querySelector('[data-state="stopped"]') !== null)
+    const card = host.querySelector('[data-state="stopped"]')!
+    expect(card.getAttribute("data-reason")).toBe("interrupted")
+    expect(card.querySelector('[data-slot="session-state-message"]')?.textContent).toBe(cause)
+    expect(card.querySelector('[data-slot="session-stop-output"]')?.textContent).toBe("notes.md")
+    expect(card.querySelector('[data-kind="pending"]')).toBeNull()
+  })
+})
+
+describe("shell-written outputs", () => {
+  test("files a command changed are offered as session outputs from the recorded diff, resolved like file links", async () => {
+    const message = assistant(3_000)
+    const command: ToolPart = {
+      id: "prt_make",
+      sessionID,
+      messageID: message.id,
+      type: "tool",
+      callID: "call_make",
+      tool: "bash",
+      state: {
+        status: "completed",
+        input: { command: "python make_report.py > results.csv" },
+        title: "Build results",
+        output: "",
+        metadata: { exit: 0 },
+        time: { start: 1_000, end: 2_000 },
+      },
+    }
+    const patch: Part = {
+      id: "prt_make_patch",
+      sessionID,
+      messageID: message.id,
+      type: "patch",
+      hash: "def456",
+      files: ["/research/results.csv", "/session-scratch/figure.png", "/research/results.csv", "/outside/secret.txt"],
+    }
+    const saved: string[] = []
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [command, patch] },
+    }
+    const host = mount(
+      () =>
+        web.createComponent(markdown.MarkdownImages, {
+          resolve: (src) => src,
+          resolveFile: (path) => assets.workspaceAssetPath(path, "/research"),
+          resolveFileReceipt: (path) => (path.startsWith("/outside/") ? undefined : assets.workspaceReceiptPath(path)),
+          openFile: () => {},
+          get children() {
+            return web.createComponent(turn.SessionTurn, { sessionID, messageID: user.id })
+          },
+        }),
+      store,
+      {
+        saveArtifact: async (path) => {
+          saved.push(path)
+        },
+      },
+    )
+    await ready(() => host.querySelector('[data-slot="session-turn-session-outputs"]') !== null)
+    const rows = [...host.querySelectorAll('[data-slot="session-turn-output-file"]')]
+    expect(rows.map((row) => row.getAttribute("title"))).toEqual([
+      "/research/results.csv",
+      "/session-scratch/figure.png",
+    ])
+    host.querySelectorAll<HTMLButtonElement>('[data-slot="session-turn-artifact-action"]')[1].click()
+    await ready(() => saved.length === 1)
+    expect(saved).toEqual(["/session-scratch/figure.png"])
   })
 })

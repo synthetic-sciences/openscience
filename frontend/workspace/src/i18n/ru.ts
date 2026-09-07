@@ -254,16 +254,10 @@ export const dict = {
   "dialog.project.edit.worktree.startup.description":
     "Запускается после создания нового рабочего пространства (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "например, bun install",
-  "context.breakdown.title": "Разбивка контекста",
-  "context.breakdown.note":
-    'Приблизительная разбивка входных токенов. "Другое" включает определения инструментов и накладные расходы.',
-  "context.breakdown.system": "Система",
   "context.breakdown.user": "Пользователь",
   "context.breakdown.assistant": "Ассистент",
   "context.breakdown.tool": "Вызовы инструментов",
-  "context.breakdown.other": "Другое",
 
-  "context.systemPrompt.title": "Системный промпт",
   "context.rawMessages.title": "Исходные сообщения",
 
   "context.stats.session": "Сессия",
