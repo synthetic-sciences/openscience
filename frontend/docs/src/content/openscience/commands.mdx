@@ -44,10 +44,10 @@ See [Sessions](/openscience/sessions) for meanings and [Automation](/openscience
 | `openscience keys rm` | Remove a saved provider credential. |
 | `openscience connect codex` | Connect supported ChatGPT access. |
 | `openscience disconnect codex` | Disconnect that sign-in. |
-| `openscience models [provider]` | List models; alias `model`. |
-| `openscience models --flat` | Print one provider/model identifier per line. |
-| `openscience models --verbose` | Include model metadata. |
-| `openscience models --refresh` | Refresh the model catalog. |
+| `openscience model [provider]` | List models; alias `models`. |
+| `openscience model --flat` | Print one provider/model identifier per line. |
+| `openscience model --verbose` | Include model metadata. |
+| `openscience model --refresh` | Refresh the model catalog. |
 
 `auth` is an alias for `keys`. See [Models](/openscience/models).
 
@@ -95,15 +95,15 @@ See [Sessions](/openscience/sessions) for meanings and [Automation](/openscience
 
 | Command | Purpose |
 | --- | --- |
-| `openscience mcp add` / `mcp list` | Configure or inspect external tool connections. |
-| `openscience mcp auth <name>` | Authorize a connection. |
-| `openscience mcp logout <name>` | Remove its authorization. |
-| `openscience mcp remove <name>` | Remove its configuration. |
+| `openscience tools add` / `tools list` | Configure or inspect external tool connections. |
+| `openscience tools auth <name>` | Authorize a connection. |
+| `openscience tools logout <name>` | Remove its authorization. |
+| `openscience tools remove <name>` | Remove its configuration. |
 | `openscience serve` | Start a local server without opening a browser. |
 | `openscience acp --cwd <path>` | Connect through an ACP-compatible editor. |
 | `openscience pr <number>` | Check out a GitHub PR branch and launch OpenScience. |
 
-`tools` is an alias for `mcp`. The `pr` command changes the current checkout; save your work first. It does not create or merge a PR.
+`mcp` is an alias for `tools`. The `pr` command changes the current checkout; save your work first. It does not create or merge a PR.
 
 ## Maintenance
 

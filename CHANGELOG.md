@@ -10,6 +10,21 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Document the 5.5% Ace funding fee (applied once per request, with no other
+  markup; card processing fee shown separately at checkout) in the pricing, Ace,
+  and FAQ guides, the README, and the landing page. The landing page no longer
+  describes retired native provider routes and marks memory as coming soon.
+- Name the **Keys & subscriptions** access mode by its actual label in the docs,
+  correct the `model`/`tools` alias direction and the NGC API key field name,
+  restore the Mammouth custom-provider example under Custom providers, and refresh
+  stale engineering notes (landing page path, release rehearsal workflow name).
+- Align bundled skill instructions with their helpers: DrugBank loads only an
+  explicitly provided licensed export and tolerates records without a primary
+  id, BRENDA credentials come from the process environment, Zotero access is
+  explicit-request guidance gated by Zotero's local-API setting, venue templates
+  point at the real poster and schematic paths, Hugging Face Jobs drops a
+  `--filter-method` flag that `generate-responses.py` does not accept, and Open
+  Targets notes that its tests replay recorded fixtures.
 - Wait for scientific canary artifact delivery before validating a completed
   remote computation, while preserving bounded waits and resource cleanup.
 - Start desktop onboarding with Synthetic Sciences sign-in and workspace selection,

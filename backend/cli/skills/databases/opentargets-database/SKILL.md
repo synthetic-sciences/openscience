@@ -348,7 +348,9 @@ Complete target annotation reference:
 ## Data Updates and Versioning
 
 The API schema and datasets change between releases. The bundled queries were
-validated against the public schema on September 5, 2026. If a field is rejected,
+validated against the public schema on September 5, 2026. The bundled tests replay
+recorded fixtures rather than calling the live API, so re-check the live schema when
+a query fails. If a field is rejected,
 inspect the current schema rather than returning an empty result or substituting
 a biologically different field. `componentId` in helper association output is a
 GraphQL alias for the current `ScoredComponent.id` field.

@@ -27,7 +27,7 @@ Access a DrugBank export that the user is licensed to use. The skill provides gu
 
 **When to use**: Setting up local DrugBank analysis or diagnosing a missing export.
 
-**Reference**: See `references/data-access.md` for detailed authentication, download procedures, API access, caching strategies, and troubleshooting.
+**Reference**: See `references/data-access.md` for loading an explicitly provided licensed export, the current availability of DrugBank downloads, the separate hosted API, and troubleshooting.
 
 ### 2. Drug Information Queries
 
@@ -108,7 +108,7 @@ Perform structure-based analysis including molecular similarity searches, proper
 ## Typical Workflows
 
 ### Drug Discovery Workflow
-1. Use `data-access.md` to download and access latest DrugBank data
+1. Use `data-access.md` to load an explicitly provided licensed export
 2. Use `drug-queries.md` to build searchable drug database
 3. Use `chemical-analysis.md` to find similar compounds
 4. Use `targets-pathways.md` to identify shared targets
@@ -148,10 +148,10 @@ uv pip install scikit-learn         # ML/clustering (for chemical space)
 ```
 
 ### Account Setup
-Obtain an XML export through the user's authorized DrugBank access. Check the
-[official release page](https://go.drugbank.com/releases/latest): as of September 5,
-2026, academic downloads are paused. An account or installed downloader does not
-prove download entitlement. Do not fetch a different or unlicensed copy as a fallback.
+Obtain an XML export through the user's authorized DrugBank access; the helper only
+loads an explicitly provided licensed export. An account or installed downloader does
+not prove download entitlement, and `references/data-access.md` records the current
+status of DrugBank downloads. Do not fetch a different or unlicensed copy as a fallback.
 
 From the skill directory:
 
@@ -174,7 +174,7 @@ Do not silently substitute an older export when the requested version is unavail
 
 1. **Credentials**: Use environment variables or config files, never hardcode
 2. **Versioning**: Specify exact database version for reproducibility
-3. **Caching**: Cache parsed data to avoid re-downloading and re-parsing
+3. **Caching**: Cache parsed data to avoid re-parsing the export
 4. **Namespaces**: Handle XML namespaces properly when parsing
 5. **Validation**: Validate chemical structures with RDKit before use
 6. **Cross-referencing**: Use external identifiers (UniProt, PubChem) for integration
@@ -185,7 +185,7 @@ Do not silently substitute an older export when the requested version is unavail
 
 All detailed implementation guidance is organized in modular reference files:
 
-- **references/data-access.md**: Authentication, download, parsing, API access, caching
+- **references/data-access.md**: Loading a licensed export, download availability, parsing, hosted API, caching
 - **references/drug-queries.md**: XML navigation, query methods, data extraction, indexing
 - **references/interactions.md**: DDI extraction, classification, network analysis, safety scoring
 - **references/targets-pathways.md**: Target/enzyme/transporter extraction, pathway mapping, repurposing
