@@ -340,11 +340,15 @@ pre {
   [data-slot="section-title"] {
     margin-bottom: 24px;
 
+    /* Section headings carry a rule, like a run-in heading in a paper. */
     h3 {
       font-size: var(--text-title);
       color: var(--color-text-strong);
       margin-bottom: 12px;
       line-height: var(--leading);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 6px;
     }
     p {
       margin-bottom: 12px;
@@ -920,6 +924,9 @@ pre {
         margin-bottom: 16px;
         display: block;
         font-size: var(--text-title);
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 6px;
       }
       p {
         color: var(--color-text);
