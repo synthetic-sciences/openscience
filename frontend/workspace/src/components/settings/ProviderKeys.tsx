@@ -44,6 +44,12 @@ const SOURCES: Record<ProviderSource, { label: string; removable: boolean; title
     note: "set in openscience.json",
     title: "Custom provider supplied by openscience.json; edit that file to remove it",
   },
+  workspace: {
+    label: "workspace",
+    removable: false,
+    note: "synced from your workspace on app.syntheticsciences.ai",
+    title: "API key synced from your signed-in workspace; manage it on the dashboard",
+  },
   managed: {
     label: "Ace",
     removable: false,

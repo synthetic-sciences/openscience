@@ -59419,6 +59419,7 @@
               "config",
               "custom",
               "api",
+              "workspace",
               "managed"
             ]
           },

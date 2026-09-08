@@ -641,6 +641,14 @@ describe("workspace credential sync", () => {
           expect(Provider.effectiveKey(cloud.google)).toBe("fixture-cloud-google")
           expect(Provider.effectiveKey(cloud.openrouter)).toBe("fixture-cloud-router")
           expect(process.env.GITHUB_TOKEN).toBe("fixture-cloud-github")
+          // Synced keys are labelled by where they are managed, so the
+          // Credentials panel does not offer a Remove that cannot succeed.
+          expect(cloud.google.source).toBe("workspace")
+          expect(cloud.openrouter.source).toBe("workspace")
+          await Auth.set("google", { type: "api", key: "fixture-saved-google" })
+          Provider.invalidate()
+          expect((await Provider.list()).google.source).toBe("api")
+          await Auth.remove("google")
         },
       })
     } finally {

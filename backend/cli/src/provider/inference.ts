@@ -24,7 +24,7 @@ export namespace Inference {
 
   export function classify(input: {
     providerID: string
-    providerSource?: "env" | "config" | "custom" | "api" | "managed"
+    providerSource?: "env" | "config" | "custom" | "api" | "workspace" | "managed"
     baseURL?: string
     auth?: Auth.Info["type"]
   }): Source {
@@ -35,7 +35,12 @@ export namespace Inference {
     if (input.auth === "api" || input.auth === "wellknown") return "byok"
     // The resolved provider source is the route authority. A billing preference
     // alone cannot turn a surviving user-owned OpenRouter key into managed spend.
-    if (input.providerSource === "env" || input.providerSource === "config" || input.providerSource === "api") {
+    if (
+      input.providerSource === "env" ||
+      input.providerSource === "config" ||
+      input.providerSource === "api" ||
+      input.providerSource === "workspace"
+    ) {
       return "byok"
     }
     return "unknown"

@@ -124,12 +124,12 @@ export type InferenceSource = "managed" | "byok" | "chatgpt"
 /** Factual access route for a connected provider; ambiguous routes stay unlabeled. */
 export function inferenceSource(input: {
   providerID: string
-  credential: "env" | "config" | "custom" | "api" | "managed"
+  credential: "env" | "config" | "custom" | "api" | "workspace" | "managed"
   billing?: "managed" | "byok" | null
 }): InferenceSource | undefined {
   if (input.providerID === "openai-codex") return "chatgpt"
   if (input.providerID === "openrouter" && input.credential === "managed") return "managed"
-  if (input.credential === "api") return "byok"
+  if (input.credential === "api" || input.credential === "workspace") return "byok"
   if (input.providerID === "openrouter") return input.billing === "byok" ? "byok" : undefined
   if (input.credential === "env" || input.credential === "config") return "byok"
   return undefined
@@ -321,13 +321,13 @@ export function isChatModel(model: CatalogModel): boolean {
 
 export function isUserProviderConnection(input: {
   providerID: string
-  source?: "env" | "config" | "custom" | "api" | "managed"
+  source?: "env" | "config" | "custom" | "api" | "workspace" | "managed"
 }): boolean {
   // Connected rows are account-backed credentials or keys explicitly saved in
   // this UI. Ambient shell variables and project/config providers can still be
   // used for inference, but they are not integrations and must not masquerade
   // as account state here.
-  return input.source === "api"
+  return input.source === "api" || input.source === "workspace"
 }
 
 export function foldedRouteMode(model: ModelKey, target: CatalogModel): string | undefined {
