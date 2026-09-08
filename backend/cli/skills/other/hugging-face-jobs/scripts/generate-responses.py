@@ -107,6 +107,10 @@ def create_dataset_card(
 
 Note: Prompts exceeding the maximum model length were skipped and have empty responses."""
 
+    # Built outside the card template: a backslash inside an f-string
+    # replacement field is a SyntaxError before Python 3.12.
+    max_model_len_flag = f" \\\n    --max-model-len {max_model_len_used}" if max_model_len_used else ""
+
     return f"""---
 tags:
 - generated
@@ -160,7 +164,7 @@ uv run https://huggingface.co/datasets/uv-scripts/vllm/raw/main/generate-respons
     --temperature {sampling_params.temperature} \\
     --top-p {sampling_params.top_p} \\
     --top-k {sampling_params.top_k} \\
-    --max-tokens {sampling_params.max_tokens}{f" \\\\\\n    --max-model-len {max_model_len_used}" if max_model_len_used else ""}
+    --max-tokens {sampling_params.max_tokens}{max_model_len_flag}
 ```
 """
 

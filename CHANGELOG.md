@@ -48,6 +48,34 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   a turn's own context limit for mid-turn overflow checks, take Ace image
   support from the reviewed route catalogue, and stop advertising a Claude Max
   sign-in the CLI has no plugin for.
+- Fix the Homebrew update check, which queried homebrew-core and always failed;
+  Homebrew installs now resolve the latest version from GitHub releases and
+  upgrade `synthetic-sciences/tap/openscience`. `openscience upgrade` downloads
+  the installer before running it and verifies the installed version afterwards,
+  so a failed download or a no-op package-manager run is reported instead of
+  "Upgrade complete".
+- Detect AVX2 on macOS through `hw.optional.avx2_0` in the npm launcher,
+  `npx synsci` and the install step (fixing Apple Silicon and Rosetta hosts),
+  recognise Windows illegal-instruction exits, retry once with the baseline
+  build when the optimized binary crashes on a CPU without AVX2, and name
+  `--omit=optional`/`--ignore-scripts` in the "binary not found" message.
+- Report a desktop sidecar that exits during startup immediately, with its exit
+  status, log path and the last lines of its log, keep the previous run's
+  sidecar log as `openscience-sidecar.prev.log`, and refuse Linux ARM64
+  kernels without 4 KB pages in the install script with the same guidance the
+  npm launcher prints. Remote `.well-known/openscience` configuration fetches
+  time out after 10 seconds instead of stalling startup.
+- Resolve `skills/<category>/<name>/…` script references inside loaded skill
+  instructions to the skill library's real location, so bundled skills that
+  call sibling scripts work from compiled releases, not only from a source
+  checkout; correct the Hugging Face Jobs, Evaluation and Model Trainer script
+  paths and make `generate-responses.py` run on Python 3.10 and 3.11 as
+  declared; and point the shipped agent instructions at real skill names.
+- Surface a skill with invalid frontmatter (for example a missing
+  `description`) as a visible error instead of silently dropping it, join
+  Crossref's polite pool when `CROSSREF_MAILTO` or `OPENALEX_MAILTO` is set,
+  cap `Retry-After` waits from scientific sources at 15 seconds, and state in
+  the bioRxiv/medRxiv connector that keyword search covers only recent postings.
 - Treat the validated provider tool call as authoritative, so an incomplete call
   can be repaired safely without conflicting with its provisional stream event.
 - Preserve completed delegated work when a task is cancelled, report the

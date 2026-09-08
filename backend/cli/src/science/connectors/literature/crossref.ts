@@ -6,10 +6,20 @@ import { raw, snippet } from "./shared"
  * Crossref REST API — DOI metadata for ~150M scholarly works.
  *
  * `mailto` opts the requests into Crossref's "polite pool" (no key required).
+ * It comes from CROSSREF_MAILTO, falling back to the OpenAlex contact address
+ * since both services ask for the same thing, and stays optional.
  * Abstracts, when present, are JATS XML and are stripped to plain text.
  */
 
 const BASE = "https://api.crossref.org/works"
+
+// Read at call time so a contact address saved mid-session applies without a restart.
+function polite(url: string): string {
+  const email = (process.env.CROSSREF_MAILTO ?? process.env.OPENALEX_MAILTO)?.trim()
+  if (!email) return url
+  return `${url}${url.includes("?") ? "&" : "?"}mailto=${encodeURIComponent(email)}`
+}
+
 interface Author {
   given?: string
   family?: string
@@ -71,7 +81,9 @@ export const crossref: Connector = {
   async search(query, opts) {
     const rows = Math.min(opts?.limit ?? 10, 50)
     const data = await getJSON<SearchResponse>(
-      `${BASE}?query=${encodeURIComponent(query)}&rows=${rows}&select=DOI,title,subtitle,abstract,author,container-title,publisher,type,URL,score,is-referenced-by-count,issued`,
+      polite(
+        `${BASE}?query=${encodeURIComponent(query)}&rows=${rows}&select=DOI,title,subtitle,abstract,author,container-title,publisher,type,URL,score,is-referenced-by-count,issued`,
+      ),
       { signal: opts?.signal },
     )
     return (data.message?.items ?? []).map(toHit)
@@ -79,7 +91,7 @@ export const crossref: Connector = {
 
   async fetch(id, opts) {
     const doi = id.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim()
-    const data = await getJSON<WorkResponse>(`${BASE}/${encodeURIComponent(doi)}`, {
+    const data = await getJSON<WorkResponse>(polite(`${BASE}/${encodeURIComponent(doi)}`), {
       signal: opts?.signal,
     })
     return data.message ?? null

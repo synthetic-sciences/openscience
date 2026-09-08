@@ -8,6 +8,8 @@ import { ConfigMarkdown } from "../../src/config/markdown"
 import { ProjectTrust } from "../../src/project/trust"
 import { SkillTool } from "../../src/tool/skill"
 import type { Tool } from "../../src/tool/tool"
+import { Bus } from "../../src/bus"
+import { Session } from "../../src/session"
 
 async function trust() {
   const status = await ProjectTrust.status(Instance.project)
@@ -169,6 +171,47 @@ Just some content without YAML frontmatter.
       await trust()
       const skills = await Skill.all()
       expect(skills).toEqual([])
+    },
+  })
+})
+
+test("reports schema-invalid frontmatter to the user like a YAML failure instead of dropping it silently", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, ".openscience", "skill", "no-description", "SKILL.md"),
+        `---\nname: no-description\ncategory: biology\n---\n\n# Missing the required description\n`,
+      )
+      await Bun.write(
+        path.join(dir, ".openscience", "skill", "broken-yaml", "SKILL.md"),
+        `---\nname: broken-yaml\ndescription: "unterminated\n  - [nested: {\n---\n\n# Broken YAML\n`,
+      )
+      await Bun.write(
+        path.join(dir, ".openscience", "skill", "healthy", "SKILL.md"),
+        `---\nname: healthy\ndescription: Loads normally.\n---\n\n# Healthy\n`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      const reported: string[] = []
+      const unsubscribe = Bus.subscribe(Session.Event.Error, (event) => {
+        const error = event.properties.error
+        if (error?.name === "UnknownError") reported.push(error.data.message)
+      })
+      try {
+        expect((await Skill.all()).map((skill) => skill.name)).toEqual(["healthy"])
+      } finally {
+        unsubscribe()
+      }
+      const schema = reported.find((message) => message.includes("no-description/SKILL.md"))
+      expect(schema).toContain("invalid frontmatter")
+      expect(schema).toContain("description")
+      expect(reported.find((message) => message.includes("broken-yaml/SKILL.md"))).toBeDefined()
     },
   })
 })

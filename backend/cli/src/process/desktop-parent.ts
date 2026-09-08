@@ -37,6 +37,11 @@ function configured(options: Options) {
 }
 
 function processIdentity() {
+  // `ps -o lstart=` / `-ww` are BSD ps options and the supervised update
+  // handoff that consumes this receipt only exists on macOS.
+  if (process.platform !== "darwin") {
+    throw new Error("The desktop update runtime receipt is only supported on macOS")
+  }
   const started = execFileSync("/bin/ps", ["-p", String(process.pid), "-o", "lstart="], {
     encoding: "utf8",
   }).trim()

@@ -79,7 +79,8 @@ export const biorxiv: Connector = {
   id: "biorxiv",
   name: "bioRxiv / medRxiv",
   domain: "literature",
-  description: "Biology and health-sciences preprints (bioRxiv + medRxiv) via Cold Spring Harbor.",
+  description:
+    "Biology and health-sciences preprints (bioRxiv + medRxiv) via Cold Spring Harbor. Keyword search ranks only the ~100 most recent postings per server, so no match does not mean no such preprint; search by DOI for an exact record, or use europepmc/openalex for older preprints.",
   homepage: "https://www.biorxiv.org",
 
   async search(query, opts) {

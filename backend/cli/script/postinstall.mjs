@@ -74,6 +74,12 @@ function cpuSupportsAvx2(platform, arch, linuxInfo) {
     return flags.toLowerCase().split(/\s+/).includes("avx2")
   }
   if (platform !== "darwin") return undefined
+  // hw.optional.avx2_0 answers 0/1 on every Mac, including x64 Node under
+  // Rosetta where machdep.cpu.leaf7_features is an unknown oid.
+  const optional = childProcess.spawnSync("sysctl", ["-n", "hw.optional.avx2_0"], { encoding: "utf8" })
+  const flag = optional.status === 0 ? String(optional.stdout).trim() : undefined
+  if (flag === "1") return true
+  if (flag === "0") return false
   const result = childProcess.spawnSync("sysctl", ["-n", "machdep.cpu.leaf7_features"], { encoding: "utf8" })
   if (result.status !== 0) return undefined
   return result.stdout.toLowerCase().split(/\s+/).includes("avx2")

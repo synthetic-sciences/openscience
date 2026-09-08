@@ -114,6 +114,19 @@ else
         ;;
     esac
 
+    # The Bun-compiled executable crashes on Linux ARM64 kernels without 4 KB
+    # pages; refuse before downloading, exactly like the npm wrapper does.
+    # A missing getconf leaves the page size unknown and installation proceeds.
+    if [ "$os" = "linux" ] && [ "$arch" = "arm64" ]; then
+      page_size=$(getconf PAGESIZE 2>/dev/null || echo "")
+      if [[ "$page_size" =~ ^[0-9]+$ ]] && [ "$page_size" != "4096" ]; then
+        echo -e "${RED}Linux ARM64 page size ${page_size} is unsupported by OpenScience's Bun-compiled executable.${NC}"
+        echo -e "${MUTED}Use a kernel or VM configured with 4 KB pages.${NC}"
+        echo -e "${MUTED}Upstream status: https://github.com/oven-sh/bun/issues/17627${NC}"
+        exit 1
+      fi
+    fi
+
     archive_ext=".zip"
     if [ "$os" = "linux" ]; then
       archive_ext=".tar.gz"

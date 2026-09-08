@@ -383,13 +383,18 @@ export async function request(url: string, opts: HttpOptions = {}) {
   }
 }
 
-function backoffMs(res: Response | undefined, attempt: number): number {
+const MAX_BACKOFF = 15_000
+
+/** Delay before the next attempt. A source may ask to wait minutes through
+ * `Retry-After`; an agent turn cannot stall that long, so the header is
+ * honoured only up to the same ceiling as exponential backoff. */
+export function backoffMs(res: Response | undefined, attempt: number): number {
   const retryAfter = res?.headers.get("retry-after")
   if (retryAfter) {
     const seconds = Number(retryAfter)
-    if (Number.isFinite(seconds)) return seconds * 1000
+    if (Number.isFinite(seconds)) return Math.min(Math.max(seconds, 0) * 1000, MAX_BACKOFF)
   }
-  return Math.min(1000 * 2 ** attempt, 15_000) + Math.floor(Math.random() * 250)
+  return Math.min(1000 * 2 ** attempt, MAX_BACKOFF) + Math.floor(Math.random() * 250)
 }
 
 function toResponse(status: number, headers: Record<string, string>, body: string) {

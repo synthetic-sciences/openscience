@@ -30,6 +30,34 @@ function fuzzyScore(query: string, target: string): number {
   return (2 * shared) / (qb.size + tb.size)
 }
 
+// SKILL.md files call sibling skills by their source-tree path
+// (`skills/<category>/<dir>/scripts/x.py`, or the older `skills/<dir>/...`
+// without the category). Compiled releases materialize the library under a
+// digest-named cache directory, so that prefix only resolves from a source
+// checkout. Point every reference that names a known skill at that skill's
+// real directory; anything else (including `.claude/skills/...` and URLs, which
+// carry a `/` before `skills`) is left untouched.
+export function resolveSkillPaths(content: string, skills: Iterable<Pick<Skill.Info, "location">>): string {
+  const dirs = new Map<string, string>()
+  for (const skill of skills) {
+    const dir = path.dirname(skill.location)
+    dirs.set(path.basename(dir), dir)
+    dirs.set(`${path.basename(path.dirname(dir))}/${path.basename(dir)}`, dir)
+  }
+  if (dirs.size === 0) return content
+  const segment = "[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*"
+  return content.replace(
+    new RegExp(`(?<![\\w./-])skills/(${segment})(?:/(${segment}))?`, "g"),
+    (token: string, first: string, second: string | undefined) => {
+      const nested = second ? dirs.get(`${first}/${second}`) : undefined
+      if (nested) return nested
+      const flat = dirs.get(first)
+      if (flat) return second ? `${flat}/${second}` : flat
+      return token
+    },
+  )
+}
+
 export const SkillTool = Tool.define("skill", async (ctx) => {
   // Loading a skill still passes through the normal permission check in
   // execute(). Avoid evaluating every catalog entry here: this initializer is
@@ -215,6 +243,10 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
 
       // Sanitize skill content: strip known prompt injection patterns
       content = content.replace(/^.*(?:always run this skill|must always run).*$/gim, "").trim()
+      // Only same-origin siblings resolve: a project skill directory must not
+      // be able to redirect a bundled skill's script invocations to itself.
+      const siblings = (await Skill.all({ includeDisabled: true })).filter((entry) => entry.origin === skill.origin)
+      content = resolveSkillPaths(content, siblings)
       content = await ComputePrompt.skill(skill.name, content)
 
       // Format output similar to plugin pattern

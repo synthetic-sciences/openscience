@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
 import { execFile, spawn } from "node:child_process"
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { readFile, rename, rm, writeFile } from "node:fs/promises"
 import { createServer } from "node:http"
 import net from "node:net"
@@ -143,21 +143,56 @@ async function port() {
 // wait into a busy loop; the workspace URL loads the moment health passes.
 const READY_FIRST_RETRY_MS = 100
 const READY_RETRY_MS = 250
+const LOG_TAIL_LINES = 20
 
-async function ready(url) {
+function logTail(file, lines = LOG_TAIL_LINES) {
+  try {
+    return readFileSync(file, "utf8").trimEnd().split("\n").slice(-lines).join("\n")
+  } catch {
+    return ""
+  }
+}
+
+function startupExitMessage(exit, output) {
+  const reason = exit.signal ? `was terminated by ${exit.signal}` : `exited with code ${exit.code}`
+  const tail = logTail(output)
+  return [
+    `The local OpenScience service ${reason} before it was ready.`,
+    `Log: ${output}`,
+    ...(tail ? ["", tail] : []),
+  ].join("\n")
+}
+
+// The sidecar's exit is raced against the health probes so a crash at startup
+// fails immediately with its exit status and log tail instead of waiting out
+// the 30 second deadline. `close` (not `exit`) guarantees the last stdio data
+// has already been appended to the log file.
+async function ready(url, service, output) {
   const deadline = Date.now() + 30_000
   const probe = () =>
     fetch(`${url}/global/health`, { signal: AbortSignal.timeout(2_000) })
       .then((response) => response.ok)
       .catch(() => false)
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-  if (await probe()) return
-  await pause(READY_FIRST_RETRY_MS)
-  while (Date.now() < deadline) {
-    if (await probe()) return
-    await pause(READY_RETRY_MS)
+  let exit
+  const closed = new Promise((resolve) => {
+    service.once("close", (code, signal) => {
+      exit = { code, signal }
+      resolve(false)
+    })
+  })
+  const poll = async () => {
+    if (await probe()) return true
+    await pause(READY_FIRST_RETRY_MS)
+    while (Date.now() < deadline && !exit) {
+      if (await probe()) return true
+      await pause(READY_RETRY_MS)
+    }
+    return false
   }
-  throw new Error("The local OpenScience service did not start within 30 seconds.")
+  if (await Promise.race([poll(), closed])) return
+  if (exit) throw new Error(startupExitMessage(exit, output))
+  throw new Error(`The local OpenScience service did not start within 30 seconds.\nLog: ${output}`)
 }
 
 function updateHealthRequest() {
@@ -312,6 +347,15 @@ async function start() {
   const output = path.join(logs, "openscience-sidecar.log")
   mkdirSync(workspace, { recursive: true })
   mkdirSync(logs, { recursive: true })
+  // Keep the previous run's output: a failed start is otherwise wiped by the
+  // very relaunch made to investigate it.
+  if (existsSync(output)) {
+    try {
+      renameSync(output, path.join(logs, "openscience-sidecar.prev.log"))
+    } catch {
+      /* rotation is best effort; a fresh log still starts below */
+    }
+  }
   writeFileSync(output, "", { mode: 0o600 })
   state.address = `http://127.0.0.1:${selected}`
   state.serviceExecutable = path.resolve(executable)
@@ -360,7 +404,7 @@ async function start() {
     // record the unexpected exit next to the sidecar's own output instead.
     appendFileSync(output, `[desktop] OpenScience runtime exited unexpectedly (${signal ?? `code ${code}`})\n`)
   })
-  await ready(state.address)
+  await ready(state.address, state.service, output)
 }
 
 function respond(response, status, value) {
@@ -979,8 +1023,13 @@ app
         app.exit(1)
         return
       }
+      // Startup failures may carry a multi-line log tail; give it room and
+      // keep its line breaks.
+      splash.setResizable(true)
+      splash.setSize(760, 560)
+      splash.center()
       await splash.loadURL(
-        `data:text/html;charset=utf-8,${encodeURIComponent(`<main style="font:16px system-ui;padding:48px"><h1>OpenScience could not start</h1><p>${html(message)}</p></main>`)}`,
+        `data:text/html;charset=utf-8,${encodeURIComponent(`<main style="font:16px system-ui;padding:48px"><h1>OpenScience could not start</h1><p style="font-size:13px;white-space:pre-wrap;word-break:break-word">${html(message)}</p></main>`)}`,
       )
     }
   })

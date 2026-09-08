@@ -378,7 +378,7 @@ hf_jobs("uv", {"script": "./scripts/foo.py"})
 ```python
 # ✅ Inline: read the local script file and pass its *contents*
 from pathlib import Path
-script = Path("hf-jobs/scripts/foo.py").read_text()
+script = Path("skills/other/hugging-face-jobs/scripts/foo.py").read_text()
 hf_jobs("uv", {"script": script})
 
 # ✅ URL: host the script somewhere reachable
@@ -867,7 +867,7 @@ See [Webhooks Documentation](https://huggingface.co/docs/huggingface_hub/guides/
 
 ## Common Workload Patterns
 
-This repository ships ready-to-run UV scripts in `hf-jobs/scripts/`. Prefer using them instead of inventing new templates.
+This repository ships ready-to-run UV scripts in `skills/other/hugging-face-jobs/scripts/`. Prefer using them instead of inventing new templates.
 
 ### Pattern 1: Dataset → Model Responses (vLLM) — `scripts/generate-responses.py`
 
@@ -878,7 +878,7 @@ This repository ships ready-to-run UV scripts in `hf-jobs/scripts/`. Prefer usin
 ```python
 from pathlib import Path
 
-script = Path("hf-jobs/scripts/generate-responses.py").read_text()
+script = Path("skills/other/hugging-face-jobs/scripts/generate-responses.py").read_text()
 hf_jobs("uv", {
     "script": script,
     "script_args": [
@@ -907,7 +907,7 @@ Use `--filter-method none` for instruction tasks. RIP is not implemented: the sc
 ```python
 from pathlib import Path
 
-script = Path("hf-jobs/scripts/cot-self-instruct.py").read_text()
+script = Path("skills/other/hugging-face-jobs/scripts/cot-self-instruct.py").read_text()
 hf_jobs("uv", {
     "script": script,
     "script_args": [
@@ -932,7 +932,7 @@ hf_jobs("uv", {
 ```python
 from pathlib import Path
 
-script = Path("hf-jobs/scripts/finepdfs-stats.py").read_text()
+script = Path("skills/other/hugging-face-jobs/scripts/finepdfs-stats.py").read_text()
 hf_jobs("uv", {
     "script": script,
     "script_args": [

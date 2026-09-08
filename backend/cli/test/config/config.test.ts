@@ -1354,10 +1354,12 @@ test("local .openscience config can override MCP from project config", async () 
 test("project config overrides remote well-known config", async () => {
   const originalFetch = globalThis.fetch
   let fetchedUrl: string | undefined
-  const mockFetch = mock((url: string | URL | Request) => {
+  let fetchedInit: RequestInit | undefined
+  const mockFetch = mock((url: string | URL | Request, init?: RequestInit) => {
     const urlStr = url.toString()
     if (urlStr.includes(".well-known/openscience")) {
       fetchedUrl = urlStr
+      fetchedInit = init
       return Promise.resolve(
         new Response(
           JSON.stringify({
@@ -1416,6 +1418,8 @@ test("project config overrides remote well-known config", async () => {
         const config = await Config.get()
         // Verify fetch was called for wellknown config
         expect(fetchedUrl).toBe("https://example.com/.well-known/openscience")
+        // A remote host that never answers must not stall Config.get()
+        expect(fetchedInit?.signal).toBeInstanceOf(AbortSignal)
         // Project config (enabled: true) should override remote (enabled: false)
         expect(config.mcp?.jira?.enabled).toBe(true)
       },

@@ -109,7 +109,7 @@ hub_repo_details(["Qwen/Qwen2.5-0.5B"], repo_type="model")
 
 # Submit conversion job
 hf_jobs("uv", {
-    "script": open("trl/scripts/convert_to_gguf.py").read(),  # Or inline the script
+    "script": open("scripts/convert_to_gguf.py").read(),  # Or inline the script
     "flavor": "a10g-large",
     "timeout": "45m",
     "secrets": {"HF_TOKEN": "$HF_TOKEN"},

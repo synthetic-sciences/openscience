@@ -167,12 +167,65 @@ export namespace Installation {
     return desktopRequest("DELETE")
   }
 
+  // The formula is published to this tap by script/homebrew.ts; it has never
+  // been in homebrew-core, so the unqualified name only resolves once tapped.
+  export const BREW_FORMULA = "synthetic-sciences/tap/openscience"
+
   async function getBrewFormula() {
-    const tapFormula = await $`brew list --formula openscience/tap/openscience`.throws(false).quiet().text()
-    if (tapFormula.includes("openscience")) return "openscience/tap/openscience"
-    const coreFormula = await $`brew list --formula openscience`.throws(false).quiet().text()
-    if (coreFormula.includes("openscience")) return "openscience"
+    const tapFormula = await $`brew list --formula ${BREW_FORMULA}`.throws(false).quiet().text()
+    if (tapFormula.includes("openscience")) return BREW_FORMULA
     return "openscience"
+  }
+
+  // `curl … | bash` cannot report a failed download: Bun's `$` has no pipefail,
+  // so bash reads EOF and exits 0. Fetch the script to disk first.
+  async function downloadInstaller(url: string, cwd: string, env: Record<string, string>) {
+    const script = path.join(cwd, "install.sh")
+    const download = await $`curl -fsSL -o ${script} ${url}`.cwd(cwd).env(env).quiet().throws(false)
+    const size = await fs.stat(script).then(
+      (stat) => stat.size,
+      () => 0,
+    )
+    if (download.exitCode === 0 && size > 0) return script
+    const detail = download.stderr.toString("utf8").trim()
+    throw new UpgradeFailedError({
+      stderr: `Could not download the installer from ${url}${detail ? `: ${detail}` : " (empty response)"}. Check your network or proxy settings and try again.`,
+    })
+  }
+
+  // A package manager may replace the executable's versioned directory
+  // (Homebrew Cellar, pnpm store), so the command on PATH is the fallback probe.
+  async function installedVersion(cwd: string, env: Record<string, string>) {
+    const candidates = [process.execPath, Bun.which("openscience", { PATH: env.PATH ?? "" })]
+    for (const file of candidates) {
+      if (!file || !(await Bun.file(file).exists())) continue
+      const result = await $`${file} --version`.cwd(cwd).env(env).quiet().throws(false)
+      if (result.exitCode !== 0) continue
+      const version = result.stdout.toString("utf8").trim()
+      if (version) return version
+    }
+  }
+
+  async function verifyUpgrade(method: Method, target: string, cwd: string, env: Record<string, string>) {
+    const observed = await installedVersion(cwd, env)
+    if (observed === target) return
+    const hint =
+      method === "curl"
+        ? "Re-run `curl -fsSL https://openscience.sh/install | bash` and read its output."
+        : `Re-run the ${method} upgrade and read its output.`
+    if (observed === undefined) {
+      throw new UpgradeFailedError({
+        stderr: `The ${method} upgrade command finished, but the installed openscience could not be run to confirm its version. ${hint}`,
+      })
+    }
+    if (observed === VERSION) {
+      throw new UpgradeFailedError({
+        stderr: `The ${method} upgrade command finished, but openscience still reports ${VERSION}. ${hint}`,
+      })
+    }
+    throw new UpgradeFailedError({
+      stderr: `The ${method} upgrade command finished, but openscience now reports ${observed} instead of ${target}. ${hint}`,
+    })
   }
 
   export async function upgrade(method: Method, target: string) {
@@ -181,7 +234,6 @@ export namespace Installation {
       log.info("desktop update staged", { target })
       return
     }
-    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-upgrade-"))
     const allowed = [
       "PATH",
       "HOME",
@@ -204,47 +256,51 @@ export namespace Installation {
       "no_proxy",
     ]
     const env = Object.fromEntries(allowed.flatMap((key) => (process.env[key] ? [[key, process.env[key]!]] : [])))
-    let cmd
-    switch (method) {
-      case "curl":
-        // openscience.sh/install serves the repo install script. The app
-        // subdomain serves the dashboard SPA, so piping it into bash fails.
-        // Override via OPENSCIENCE_INSTALL_URL if hosting the script elsewhere.
-        cmd = $`curl -fsSL ${process.env.OPENSCIENCE_INSTALL_URL || "https://openscience.sh/install"} | bash`
-        break
-      case "npm":
-        cmd = $`npm install -g @synsci/openscience@${target}`
-        break
-      case "pnpm":
-        cmd = $`pnpm install -g @synsci/openscience@${target}`
-        break
-      case "yarn":
-        cmd = $`yarn global add @synsci/openscience@${target}`
-        break
-      case "bun":
-        cmd = $`bun install -g @synsci/openscience@${target}`
-        break
-      case "brew": {
-        const formula = await getBrewFormula()
-        cmd = $`brew upgrade ${formula}`
-        break
-      }
-      case "choco":
-        cmd = $`echo Y | choco upgrade openscience --version=${target}`
-        break
-      case "scoop":
-        cmd = $`scoop install openscience@${target}`
-        break
-      default:
-        throw new Error(`Unknown method: ${method}`)
-    }
-    const commandEnv =
-      method === "curl"
-        ? { ...env, VERSION: target }
-        : method === "brew"
-          ? { ...env, HOMEBREW_NO_AUTO_UPDATE: "1" }
-          : env
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-upgrade-"))
     try {
+      let cmd
+      switch (method) {
+        case "curl": {
+          // openscience.sh/install serves the repo install script. The app
+          // subdomain serves the dashboard SPA, so piping it into bash fails.
+          // Override via OPENSCIENCE_INSTALL_URL if hosting the script elsewhere.
+          const url = process.env.OPENSCIENCE_INSTALL_URL || "https://openscience.sh/install"
+          const script = await downloadInstaller(url, cwd, env)
+          cmd = $`bash ${script}`
+          break
+        }
+        case "npm":
+          cmd = $`npm install -g @synsci/openscience@${target}`
+          break
+        case "pnpm":
+          cmd = $`pnpm install -g @synsci/openscience@${target}`
+          break
+        case "yarn":
+          cmd = $`yarn global add @synsci/openscience@${target}`
+          break
+        case "bun":
+          cmd = $`bun install -g @synsci/openscience@${target}`
+          break
+        case "brew": {
+          const formula = await getBrewFormula()
+          cmd = $`brew upgrade ${formula}`
+          break
+        }
+        case "choco":
+          cmd = $`echo Y | choco upgrade openscience --version=${target}`
+          break
+        case "scoop":
+          cmd = $`scoop install openscience@${target}`
+          break
+        default:
+          throw new Error(`Unknown method: ${method}`)
+      }
+      const commandEnv =
+        method === "curl"
+          ? { ...env, VERSION: target }
+          : method === "brew"
+            ? { ...env, HOMEBREW_NO_AUTO_UPDATE: "1" }
+            : env
       const result = await cmd.cwd(cwd).env(commandEnv).quiet().throws(false)
       if (result.exitCode !== 0) {
         const stderr =
@@ -259,7 +315,7 @@ export namespace Installation {
         stdout: result.stdout.toString(),
         stderr: result.stderr.toString(),
       })
-      await $`${process.execPath} --version`.cwd(cwd).env(env).nothrow().quiet().text()
+      await verifyUpgrade(method, target, cwd, env)
     } finally {
       await fs.rm(cwd, { recursive: true, force: true })
     }
@@ -297,17 +353,21 @@ export namespace Installation {
     return knownTags.has(channel) ? channel : "latest"
   }
 
+  function githubLatest() {
+    return releaseFetch("https://api.github.com/repos/synthetic-sciences/OpenScience/releases/latest")
+      .then((res) => {
+        if (!res.ok) throw new Error(res.statusText)
+        return res.json()
+      })
+      .then((data: any) => data.tag_name.replace(/^v/, ""))
+  }
+
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
 
-    if (detectedMethod === "brew") {
-      return releaseFetch("https://formulae.brew.sh/api/formula/openscience.json")
-        .then((res) => {
-          if (!res.ok) throw new Error(res.statusText)
-          return res.json()
-        })
-        .then((data: any) => data.versions.stable)
-    }
+    // formulae.brew.sh only indexes homebrew-core (404 for this formula); the
+    // tap formula is generated from the GitHub release, so that is its source.
+    if (detectedMethod === "brew") return githubLatest()
 
     if (
       detectedMethod === "npm" ||
@@ -344,11 +404,6 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
-    return releaseFetch("https://api.github.com/repos/synthetic-sciences/OpenScience/releases/latest")
-      .then((res) => {
-        if (!res.ok) throw new Error(res.statusText)
-        return res.json()
-      })
-      .then((data: any) => data.tag_name.replace(/^v/, ""))
+    return githubLatest()
   }
 }

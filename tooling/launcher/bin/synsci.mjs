@@ -233,18 +233,28 @@ function globalPackage(prefix) {
   return null
 }
 
-function avx2() {
-  if (process.arch !== "x64") return undefined
+function sysctl(name) {
   try {
-    const value = execFileSync("/usr/sbin/sysctl", ["-n", "machdep.cpu.leaf7_features"], {
+    return execFileSync("/usr/sbin/sysctl", ["-n", name], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 5000,
-    })
-    return value.toLowerCase().split(/\s+/).includes("avx2")
+    }).trim()
   } catch {
     return undefined
   }
+}
+
+function avx2() {
+  if (process.arch !== "x64") return undefined
+  // hw.optional.avx2_0 answers 0/1 on every Mac, including x64 Node under
+  // Rosetta where machdep.cpu.leaf7_features is an unknown oid.
+  const optional = sysctl("hw.optional.avx2_0")
+  if (optional === "1") return true
+  if (optional === "0") return false
+  const leaf7 = sysctl("machdep.cpu.leaf7_features")
+  if (leaf7 === undefined) return undefined
+  return leaf7.toLowerCase().split(/\s+/).includes("avx2")
 }
 
 function globalMacBinary(root, version, dependencies) {

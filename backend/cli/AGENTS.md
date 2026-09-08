@@ -10,42 +10,42 @@ Load skills proactively based on the task at hand:
 
 ### Training & Post-Training
 
-- **RLHF/GRPO/DPO** → `grpo-rl-training`, `trl-fine-tuning`, `openrlhf`, `simpo`
-- **Fine-tuning** → `axolotl`, `unsloth`, `llama-factory`, `torchtune`
-- **Distributed** → `deepspeed-training`, `fsdp`, `megatron-core`, `accelerate`
+- **RLHF/GRPO/DPO** → `grpo-rl-training`, `fine-tuning-with-trl`, `openrlhf-training`, `simpo-training`
+- **Fine-tuning** → `axolotl`, `unsloth-fine-tuning`, `llama-factory`
+- **Distributed** → `deepspeed`, `pytorch-fsdp`, `training-llms-megatron`, `huggingface-accelerate`
 
 ### Inference & Serving
 
-- **High-throughput** → `vllm-inference`, `sglang`, `tensorrt-llm`
+- **High-throughput** → `serving-llms-vllm`, `sglang`, `tensorrt-llm`
 - **Local/Edge** → `llama-cpp`, `gguf-quantization`
-- **Optimization** → `flash-attention`, `gptq`, `awq`, `bitsandbytes`
+- **Optimization** → `optimizing-attention-flash`, `gptq`, `awq-quantization`, `quantizing-models-bitsandbytes`
 
 ### Evaluation & Analysis
 
-- **Benchmarking** → `lm-eval-harness`, `bigcode-eval`, `nemo-evaluator`
-- **Interpretability** → `transformer-lens`, `saelens`, `nnsight`, `pyvene`
+- **Benchmarking** → `evaluating-llms-harness`, `evaluating-code-models`, `nemo-evaluator-sdk`
+- **Interpretability** → `transformer-lens-interpretability`, `sparse-autoencoder-training`, `nnsight-remote-interpretability`, `pyvene-interventions`
 
 ### RAG & Retrieval
 
-- **Vector stores** → `chroma`, `faiss`, `pinecone`, `qdrant`
+- **Vector stores** → `chroma`, `faiss`, `pinecone`, `qdrant-vector-search`
 - **Embeddings** → `sentence-transformers`
 - **Orchestration** → `langchain`, `llamaindex`
 
 ### Agents & Structured Output
 
-- **Agent frameworks** → `langchain`, `llamaindex`, `crewai`
+- **Agent frameworks** → `langchain`, `llamaindex`, `crewai-multi-agent`
 - **Structured output** → `dspy`, `instructor`, `guidance`, `outlines`
 
 ### Multimodal
 
-- **Vision** → `clip`, `llava`, `segment-anything`, `stable-diffusion`
-- **Audio** → `whisper`, `audiocraft`
-- **Document** → `blip-2`
+- **Vision** → `clip`, `llava`, `segment-anything-model`, `stable-diffusion-image-generation`
+- **Audio** → `whisper`, `audiocraft-audio-generation`
+- **Document** → `blip-2-vision-language`
 
 ### Data & Infrastructure
 
 - **Data processing** → `ray-data`, `nemo-curator`
-- **Cloud compute** → `modal`, `skypilot`, `lambda-labs`
+- **Cloud compute** → `modal-serverless-gpu`, `skypilot-multi-cloud-orchestration`, `lambda-gpu-cloud`
 - **Experiment tracking** → `weights-and-biases`, `mlflow`, `tensorboard`
 
 ### Emerging Techniques

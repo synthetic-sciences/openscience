@@ -66,6 +66,27 @@ describe("desktop parent binding", () => {
     ).toThrow("not launched by its bound parent")
   })
 
+  test.skipIf(process.platform === "darwin")("refuses the macOS-only runtime receipt on other platforms", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "openscience-desktop-parent-"))
+    roots.push(root)
+    const token = "e".repeat(48)
+    const receipt = path.join(root, `runtime-${token}.json`)
+    expect(() =>
+      DesktopParent.watch({
+        env: {
+          OPENSCIENCE_DESKTOP_PARENT_PID: "42",
+          OPENSCIENCE_DESKTOP_PARENT_TOKEN: "f".repeat(48),
+          OPENSCIENCE_DESKTOP_PARENT_RUNTIME_RECEIPT: receipt,
+          OPENSCIENCE_DESKTOP_PARENT_UPDATE_TOKEN: token,
+          OPENSCIENCE_DESKTOP_PARENT_UPDATE_VERSION: "9.8.7",
+        },
+        parent: () => 42,
+        intervalMs: 1,
+      }),
+    ).toThrow("only supported on macOS")
+    expect(await Bun.file(receipt).exists()).toBe(false)
+  })
+
   test.skipIf(process.platform !== "darwin")(
     "writes a durable update runtime receipt before the full CLI adopts the parent guard",
     async () => {

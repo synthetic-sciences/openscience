@@ -8,10 +8,13 @@ import {
 } from "../../script/postinstall.mjs"
 
 const require = createRequire(import.meta.url)
+type Sysctl = (name: string) => { status: number | null; stdout: string }
 const wrapper = require("../../bin/openscience") as {
-  cpuSupportsAvx2(platform: string, arch: string, linuxInfo?: string): boolean | undefined
+  baselineSibling(prefix: string, entry: string): string | undefined
+  cpuSupportsAvx2(platform: string, arch: string, linuxInfo?: string, sysctl?: Sysctl): boolean | undefined
   exitCodeForResult(result: { status: number | null; signal: NodeJS.Signals | null }): number
   expectedPlatformPackages(platform: string, arch: string, musl: boolean): string[]
+  illegalInstruction(result: { status: number | null; signal: NodeJS.Signals | null }): boolean
   linuxArm64PageSizeProblem(platform: string, arch: string, pageSize?: string): string | undefined
   linuxKernelProblem(platform: string, release: string): string | undefined
   matchingVariants(prefix: string, entries: string[], preferMusl: boolean, preferBaseline?: boolean): string[]
@@ -86,6 +89,47 @@ describe("npm bin wrapper", () => {
       "@synsci/openscience-linux-x64-baseline",
       "openscience-linux-x64-baseline",
     ])
+  })
+
+  test("detects macOS AVX2 through hw.optional.avx2_0 before the Intel-only leaf7 oid", () => {
+    const table = (answers: Record<string, string>): Sysctl => {
+      return (name) => (name in answers ? { status: 0, stdout: `${answers[name]}\n` } : { status: 1, stdout: "" })
+    }
+    expect(wrapper.cpuSupportsAvx2("darwin", "x64", undefined, table({ "hw.optional.avx2_0": "1" }))).toBe(true)
+    // x64 Node under Rosetta: leaf7_features is an unknown oid, avx2_0 answers 0
+    expect(wrapper.cpuSupportsAvx2("darwin", "x64", undefined, table({ "hw.optional.avx2_0": "0" }))).toBe(false)
+    expect(
+      wrapper.cpuSupportsAvx2(
+        "darwin",
+        "x64",
+        undefined,
+        table({ "machdep.cpu.leaf7_features": "RDWRFSGS TSC_THREAD_OFFSET SGX BMI1 AVX2 SMEP BMI2" }),
+      ),
+    ).toBe(true)
+    expect(
+      wrapper.cpuSupportsAvx2("darwin", "x64", undefined, table({ "machdep.cpu.leaf7_features": "RDWRFSGS SMEP" })),
+    ).toBe(false)
+    expect(wrapper.cpuSupportsAvx2("darwin", "x64", undefined, table({}))).toBeUndefined()
+    expect(wrapper.cpuSupportsAvx2("win32", "x64", undefined, table({}))).toBeUndefined()
+  })
+
+  test("recognises an illegal-instruction crash on POSIX and Windows", () => {
+    expect(wrapper.illegalInstruction({ status: null, signal: "SIGILL" })).toBe(true)
+    expect(wrapper.illegalInstruction({ status: 3221225501, signal: null })).toBe(true)
+    expect(wrapper.illegalInstruction({ status: -1073741795, signal: null })).toBe(true)
+    expect(wrapper.illegalInstruction({ status: null, signal: "SIGSEGV" })).toBe(false)
+    expect(wrapper.illegalInstruction({ status: 1, signal: null })).toBe(false)
+  })
+
+  test("names the baseline sibling package for a non-baseline build only", () => {
+    expect(wrapper.baselineSibling("openscience-linux-x64", "openscience-linux-x64")).toBe(
+      "openscience-linux-x64-baseline",
+    )
+    expect(wrapper.baselineSibling("openscience-linux-x64", "openscience-linux-x64-musl")).toBe(
+      "openscience-linux-x64-baseline-musl",
+    )
+    expect(wrapper.baselineSibling("openscience-linux-x64", "openscience-linux-x64-baseline")).toBeUndefined()
+    expect(wrapper.baselineSibling("openscience-linux-x64", "openscience-linux-arm64")).toBeUndefined()
   })
 
   test("names the native arm64 package in diagnostics and postinstall lookup", () => {

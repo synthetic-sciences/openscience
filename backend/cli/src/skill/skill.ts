@@ -149,6 +149,15 @@ export namespace Skill {
 
     const parsed = Frontmatter.safeParse(md.data)
     if (!parsed.success) {
+      // Same visibility as a YAML failure: a skill that silently vanishes from
+      // the catalog because `description` is missing is indistinguishable from
+      // one that was never installed.
+      const detail = parsed.error.issues
+        .map((issue) => `${issue.path.join(".") || "frontmatter"}: ${issue.message}`)
+        .join("; ")
+      Bus.publish(Session.Event.Error, {
+        error: new NamedError.Unknown({ message: `Skill ${match} has invalid frontmatter (${detail})` }).toObject(),
+      })
       log.warn("invalid skill frontmatter", { path: match, issues: parsed.error.issues })
       return
     }
@@ -212,7 +221,7 @@ export namespace Skill {
     const root = await BundledSkills.root()
     if (!root) return []
     const skills: Info[] = []
-    let count = 0
+    let scanned = 0
     for (const match of (
       await Array.fromAsync(
         SKILL_GLOB.scan({
@@ -225,9 +234,11 @@ export namespace Skill {
     ).toSorted()) {
       const skill = await read(match, "default")
       if (skill) skills.push(skill)
-      count++
+      scanned++
     }
-    log.info("Loaded bundled skills", { path: root, count })
+    // `count` is what the catalog exposes; `dropped` covers retired, disabled
+    // and invalid files, so a release that ships a broken skill shows up here.
+    log.info("Loaded bundled skills", { path: root, count: skills.length, dropped: scanned - skills.length })
     return skills
   })
 

@@ -3,6 +3,7 @@ import {
   getJSON as getJSONRaw,
   getText as getTextRaw,
   request as requestRaw,
+  backoffMs,
   clearCache,
   resetRateLimits,
   orNotFound,
@@ -59,6 +60,21 @@ describe("http retry / backoff", () => {
 
     await expect(getText("https://fail.test/a", { retries: 2 })).rejects.toThrow(/429/)
     expect(calls).toBe(3) // 1 initial attempt + 2 retries
+  })
+
+  test("caps a long Retry-After at the exponential-backoff ceiling", () => {
+    const limited = (retryAfter: string) => new Response("", { status: 429, headers: { "Retry-After": retryAfter } })
+    // A source asking for minutes cannot stall the agent's turn for minutes.
+    expect(backoffMs(limited("120"), 0)).toBe(15_000)
+    expect(backoffMs(limited("3600"), 2)).toBe(15_000)
+    // Short and zero waits are still taken literally; negative values never underflow.
+    expect(backoffMs(limited("2"), 0)).toBe(2_000)
+    expect(backoffMs(limited("0"), 3)).toBe(0)
+    expect(backoffMs(limited("-5"), 0)).toBe(0)
+    // Without a usable header the exponential path applies, with the same ceiling.
+    expect(backoffMs(limited("Wed, 21 Oct 2015 07:28:00 GMT"), 0)).toBeLessThan(1_250)
+    expect(backoffMs(undefined, 10)).toBeLessThan(15_250)
+    expect(backoffMs(undefined, 10)).toBeGreaterThanOrEqual(15_000)
   })
 
   test("does not retry a non-retryable 4xx", async () => {
