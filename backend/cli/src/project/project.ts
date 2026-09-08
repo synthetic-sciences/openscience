@@ -106,14 +106,17 @@ export namespace Project {
 
   export function canonicalize(input: string) {
     const resolved = path.resolve(input)
-    let real = resolved
-    try {
-      real = realpathSync(resolved)
-    } catch {
-      // path may not exist yet — fall back to the resolved form
-    }
-    if (real.length > 1 && real.endsWith(path.sep)) real = real.slice(0, -1)
-    return real
+    const real = (() => {
+      try {
+        // Windows reports canonical casing only through the native call; the
+        // same folder typed as c:\… and C:\… must resolve to one record.
+        return process.platform === "win32" ? realpathSync.native(resolved) : realpathSync(resolved)
+      } catch {
+        // path may not exist yet — fall back to the resolved form
+        return resolved
+      }
+    })()
+    return Filesystem.trimSeparator(real)
   }
 
   function createID() {

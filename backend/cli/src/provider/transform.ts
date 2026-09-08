@@ -141,8 +141,13 @@ export namespace ProviderTransform {
       return result
     }
 
+    // The OpenRouter SDK serialises reasoning parts itself, carrying each
+    // part's signed `reasoning_details` back to the gateway. Folding them into
+    // an openaiCompatible field here would drop that signature and replay
+    // nothing the gateway reads.
     if (
       model.api.npm !== "@ai-sdk/deepseek" &&
+      model.api.npm !== "@openrouter/ai-sdk-provider" &&
       typeof model.capabilities.interleaved === "object" &&
       model.capabilities.interleaved.field
     ) {

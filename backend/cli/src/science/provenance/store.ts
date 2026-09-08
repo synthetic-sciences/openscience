@@ -14,6 +14,7 @@ import fs from "node:fs/promises"
 import { realpathSync } from "node:fs"
 import { randomUUID } from "node:crypto"
 import { Global } from "@/global"
+import { Filesystem } from "@/util/filesystem"
 import { FileLease } from "@/util/file-lease"
 import { OpenScience } from "@/openscience"
 import { ProjectLegacy } from "@/project/legacy"
@@ -234,8 +235,7 @@ function canonical(input: string) {
       return resolved
     }
   })()
-  if (real.length > 1 && real.endsWith(path.sep)) return real.slice(0, -1)
-  return real
+  return Filesystem.trimSeparator(real)
 }
 
 function scoped(input: ProjectScope): ProjectScope {

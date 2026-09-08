@@ -1,8 +1,17 @@
 import { realpathSync } from "fs"
 import { lstat, realpath, stat } from "fs/promises"
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "path"
+import path, { basename, dirname, isAbsolute, join, relative, resolve, sep } from "path"
 
 export namespace Filesystem {
+  /** Drop one trailing separator unless the path is a filesystem root. Cutting
+   * a Windows drive root `C:\` down to `C:` makes it drive-relative, and every
+   * later resolve grafts the process cwd onto it: a project opened at a drive
+   * root was then answered with a ProjectMismatchError naming the user's home. */
+  export function trimSeparator(value: string, module: Pick<typeof path, "parse" | "sep"> = path) {
+    const root = module.parse(value).root
+    return value.length > root.length && value.endsWith(module.sep) ? value.slice(0, -1) : value
+  }
+
   export const exists = (p: string) =>
     Bun.file(p)
       .stat()

@@ -466,6 +466,52 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
   })
+
+  test("OpenRouter models flagged interleaved keep their signed reasoning parts for the SDK to replay", () => {
+    const signed = [{ type: "reasoning.encrypted", id: "rs_1", data: "opaque-signature", format: "google-gemini-v1" }]
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking...", providerOptions: { openrouter: { reasoning_details: signed } } },
+          { type: "tool-call", toolCallId: "call_1", toolName: "read", input: { filePath: "notes.md" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(
+      msgs,
+      {
+        id: "google/gemini-3.1-pro-preview",
+        providerID: "openrouter",
+        api: {
+          id: "google/gemini-3.1-pro-preview",
+          url: "https://openrouter.ai/api/v1",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+        name: "Gemini 3.1 Pro",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: true,
+          toolcall: true,
+          input: { text: true, audio: false, image: true, video: false, pdf: true },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: { field: "reasoning_details" },
+        },
+        cost: { input: 0.002, output: 0.012, cache: { read: 0.0002, write: 0.0002 } },
+        limit: { context: 1_000_000, output: 65_536 },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2026-01-01",
+      },
+      {},
+    )
+
+    expect(result[0].content).toEqual(msgs[0].content)
+    expect(result[0].providerOptions?.openaiCompatible).toBeUndefined()
+  })
 })
 
 describe("ProviderTransform.message - empty image handling", () => {

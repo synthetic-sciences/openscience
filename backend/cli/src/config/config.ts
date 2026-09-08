@@ -93,7 +93,8 @@ export namespace Config {
         // Config.get() and brick the whole CLI (it's only the lowest-precedence
         // base layer) — mirror the synced-config resilience: log and continue.
         try {
-          const response = await fetch(`${key}/.well-known/openscience`)
+          // Bounded so an unreachable host cannot stall Config.get() indefinitely.
+          const response = await fetch(`${key}/.well-known/openscience`, { signal: AbortSignal.timeout(10_000) })
           if (!response.ok) throw new Error(`HTTP ${response.status}`)
           const wellknown = (await response.json()) as any
           const remoteConfig = wellknown.config ?? {}
@@ -657,12 +658,85 @@ export namespace Config {
     }
   }
 
-  export function redact(value: Info): Info {
-    if (!value.mcp) return value
+  // Provider blocks carry the user's own keys and auth headers. The served
+  // config has {env:…} references already resolved, so they must never leave
+  // the process in the clear.
+  // Works on the raw record rather than a parsed Provider so a block the strict
+  // schema rejects still cannot slip its key through unredacted.
+  function stringRecord(value: unknown): Record<string, string> | undefined {
+    if (!isRecord(value)) return undefined
+    return Object.fromEntries(Object.entries(value).filter(([, entry]) => typeof entry === "string")) as Record<
+      string,
+      string
+    >
+  }
+
+  function mapProviderSecrets(
+    entry: unknown,
+    secret: (value: string) => string | undefined,
+    record: (value: Record<string, string>) => Record<string, string>,
+  ): unknown {
+    if (!isRecord(entry)) return entry
+    const result: Record<string, unknown> = { ...entry }
+    if (isRecord(entry.options)) {
+      const options: Record<string, unknown> = { ...entry.options }
+      if (typeof options.apiKey === "string" && options.apiKey) {
+        const next = secret(options.apiKey)
+        if (next === undefined) delete options.apiKey
+        else options.apiKey = next
+      }
+      const headers = stringRecord(options.headers)
+      if (headers) options.headers = record(headers)
+      result.options = options
+    }
+    if (isRecord(entry.models)) {
+      result.models = Object.fromEntries(
+        Object.entries(entry.models).map(([id, model]) => {
+          if (!isRecord(model)) return [id, model]
+          const headers = stringRecord(model.headers)
+          return [id, headers ? { ...model, headers: record(headers) } : model]
+        }),
+      )
+    }
+    return result
+  }
+
+  function redactProvider(entry: unknown) {
+    return mapProviderSecrets(
+      entry,
+      () => MCP_SECRET_MASK,
+      (headers) => redactRecord(headers) ?? {},
+    )
+  }
+
+  // A masked provider secret means "leave what is on disk alone". Dropping it
+  // from the patch keeps the file's own form, whether a literal or an {env:…}
+  // reference, where copying the resolved value back would leak the literal.
+  function restoreProvider(entry: unknown) {
+    return mapProviderSecrets(
+      entry,
+      (value) => (value === MCP_SECRET_MASK ? undefined : value),
+      (headers) => Object.fromEntries(Object.entries(headers).filter(([, value]) => value !== MCP_SECRET_MASK)),
+    )
+  }
+
+  function mapProviders(value: Info, map: (entry: unknown) => unknown): Info {
+    if (!value.provider) return value
     return {
       ...value,
+      provider: Object.fromEntries(
+        Object.entries(value.provider).map(([id, entry]) => [id, map(entry)]),
+      ) as Info["provider"],
+    }
+  }
+
+  export function redact(value: Info): Info {
+    const withProviders = mapProviders(value, redactProvider)
+    if (!withProviders.mcp) return withProviders
+    return {
+      ...withProviders,
       mcp: Object.fromEntries(
-        Object.entries(value.mcp).map(([name, entry]) => {
+        Object.entries(withProviders.mcp).map(([name, entry]) => {
           const parsed = Mcp.safeParse(entry)
           return [name, parsed.success ? redactMcp(parsed.data) : entry]
         }),
@@ -671,11 +745,12 @@ export namespace Config {
   }
 
   export function restore(value: Info, previous: Info): Info {
-    if (!value.mcp) return value
+    const withProviders = mapProviders(value, restoreProvider)
+    if (!withProviders.mcp) return withProviders
     return {
-      ...value,
+      ...withProviders,
       mcp: Object.fromEntries(
-        Object.entries(value.mcp).map(([name, entry]) => {
+        Object.entries(withProviders.mcp).map(([name, entry]) => {
           const parsed = Mcp.safeParse(entry)
           if (!parsed.success) return [name, entry]
           const stored = Mcp.safeParse(previous.mcp?.[name])
@@ -1441,17 +1516,6 @@ export namespace Config {
     return load(text, filepath)
   }
 
-  async function loadFileWithoutMigration(filepath: string): Promise<Info> {
-    const text = await Bun.file(filepath)
-      .text()
-      .catch((err) => {
-        if (err.code === "ENOENT") return
-        throw new JsonError({ path: filepath }, { cause: err })
-      })
-    if (!text) return {}
-    return load(text, filepath)
-  }
-
   async function sealedConfigText(text: string, filepath: string): Promise<string> {
     const errors: JsoncParseError[] = []
     const value = parseJsonc(text, errors, { allowTrailingComma: true }) as unknown
@@ -1727,9 +1791,21 @@ export namespace Config {
     // credential lease, so doing this inside `write` would self-deadlock.
     await loadFile(filepath)
     const write = async () => {
-      const existing = await loadFileWithoutMigration(filepath)
+      // Merge onto the file as written, not the loaded view: loading resolves
+      // {env:…} references and rewrites plugin specifiers, and writing that
+      // back would pin resolved secrets into a project file.
+      const before = await Bun.file(filepath)
+        .text()
+        .catch((err) => {
+          if (err.code === "ENOENT") return "{}"
+          throw new JsonError({ path: filepath }, { cause: err })
+        })
+      const existing = await McpSecretStorage.reveal(parseConfig(before, filepath))
       const protectedConfig = await McpSecretStorage.protect(mergeDeep(existing, config))
-      await durableConfigWrite(filepath, JSON.stringify(protectedConfig, null, 2))
+      const text = filepath.endsWith(".jsonc")
+        ? patchJsonc(before, protectedConfig)
+        : JSON.stringify(protectedConfig, null, 2)
+      await durableConfigWrite(filepath, await sealedConfigText(text, filepath))
       await Instance.dispose({ strict: config.mcp !== undefined })
     }
     if (config.mcp === undefined) return CredentialLifecycle.serialized(write)

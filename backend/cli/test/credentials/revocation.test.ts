@@ -2,15 +2,12 @@ import { expect, test } from "bun:test"
 import { CredentialRevocation } from "../../src/credentials/revocation"
 import { MessageV2 } from "../../src/session/message-v2"
 
-test("an expired synced overlay is overlay-scoped while other revisions keep their reach", () => {
-  expect(CredentialRevocation.target("workspace-sync.expired")).toBe("overlay")
-  expect(CredentialRevocation.scope("workspace-sync.expired")).toEqual({ overlay: true })
-  for (const reason of [
-    "workspace-sync.update",
-    "workspace-sync.denied",
-    "account.replace",
-    "settings-credential.set:github",
-  ]) {
+test("every synced-overlay revision is overlay-scoped while other revisions keep their reach", () => {
+  for (const reason of ["workspace-sync.expired", "workspace-sync.update", "workspace-sync.denied"]) {
+    expect(CredentialRevocation.target(reason)).toBe("overlay")
+    expect(CredentialRevocation.scope(reason)).toEqual({ overlay: true })
+  }
+  for (const reason of ["account.replace", "settings-credential.set:github"]) {
     expect(CredentialRevocation.target(reason)).toBe("all")
     expect(CredentialRevocation.scope(reason)).toEqual({})
   }
@@ -37,8 +34,10 @@ test("a revocation names its cause on the recorded turn error", () => {
   expect(MessageV2.AbortedError.isInstance(recorded)).toBe(true)
   expect(recorded.data).toEqual({ message: CredentialRevocation.EXPIRED })
 
-  const rotated = CredentialRevocation.message("workspace-sync.update")
-  expect(rotated).toStartWith("Interrupted: credentials changed (workspace-sync.update)")
+  expect(CredentialRevocation.message("workspace-sync.update")).toBe(CredentialRevocation.CHANGED)
+  expect(CredentialRevocation.message("workspace-sync.denied")).toBe(CredentialRevocation.CHANGED)
+  const replaced = CredentialRevocation.message("account.replace")
+  expect(replaced).toStartWith("Interrupted: credentials changed (account.replace)")
 })
 
 test("only the abort itself is attributed to the revocation that cancelled a turn", () => {

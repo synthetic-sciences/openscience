@@ -84,8 +84,10 @@ export const ConfigRoutes = lazy(() =>
       async (c) => {
         using _ = log.time("providers")
         const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
+        // Same payload as GET /provider: ids, models and variants are all the
+        // browser needs, so keys and loader options stay in the process.
         return c.json({
-          providers: Object.values(providers),
+          providers: Object.values(providers).map(Provider.redact),
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
         })
       },

@@ -48,6 +48,9 @@ export function createProjectRequest(input: {
   }
   const request = (path: string, init?: RequestInit, query?: Query) => {
     const headers = new Headers(init?.headers)
+    // A route this server does not know must answer with a JSON 404, not the
+    // SPA shell; the server keys that decision on Accept.
+    if (!headers.has("accept")) headers.set("accept", "application/json")
     headers.set("x-openscience-project", projectID(input.projectID()))
     const root = input.directory()
     headers.delete("x-openscience-directory")

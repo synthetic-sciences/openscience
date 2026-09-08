@@ -18,13 +18,20 @@
  */
 export namespace CredentialRevocation {
   export const EXPIRED = "Interrupted: synchronized workspace credentials expired before they could be renewed"
+  export const CHANGED =
+    "Interrupted: synchronized workspace credentials changed and the commands and jobs that inherited the previous credentials were stopped"
   export type Target = "none" | "mcp" | "overlay" | "all"
 
   const mcp = ["mcp-auth.set:", "mcp-auth.remove:", "mcp-auth.tokens:", "mcp-auth.tokens.refresh:", "mcp-auth.client:"]
+  // A dashboard edit (update), a lost workspace grant (denied) and an expiry all
+  // replace or clear the same synced overlay and nothing else, so they reach the
+  // same children. Treating an edit as a global revocation meant adding a key
+  // on the dashboard stopped every running turn and command on the device.
+  const overlay = new Set(["workspace-sync.expired", "workspace-sync.update", "workspace-sync.denied"])
 
   export function target(reason: string): Target {
     if (reason === "mcp-auth.migrate") return "none"
-    if (reason === "workspace-sync.expired") return "overlay"
+    if (overlay.has(reason)) return "overlay"
     if (reason.startsWith("mcp-config.") || mcp.some((prefix) => reason.startsWith(prefix))) return "mcp"
     return "all"
   }
@@ -37,6 +44,7 @@ export namespace CredentialRevocation {
 
   export function message(reason: string): string {
     if (reason === "workspace-sync.expired") return EXPIRED
+    if (target(reason) === "overlay") return CHANGED
     if (target(reason) === "mcp") {
       return `Interrupted: MCP credentials changed (${reason}) and the MCP transports that inherited the previous snapshot were stopped`
     }

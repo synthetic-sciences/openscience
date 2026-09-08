@@ -120,6 +120,25 @@ function formatInitError(error: InitError, t: Translator): string {
 
       return [line, ...issues].join("\n")
     }
+    case "ProjectMismatchError": {
+      const directory = typeof data.directory === "string" ? data.directory : safeJson(data.directory)
+      return `This link points at a project that does not match the folder the server resolved (${directory}). Open the project again from the Projects list.`
+    }
+    case "ProjectDirectoryError": {
+      const directory = typeof data.directory === "string" ? data.directory : safeJson(data.directory)
+      return `The project folder ${directory} could not be used as a project root. Choose the folder again from the Projects list.`
+    }
+    case "ProjectUnknownError":
+      return "This project is no longer registered on this server. Open or create it again from the Projects list."
+    case "ProjectStaleError": {
+      const directory = typeof data.directory === "string" ? ` (${data.directory})` : ""
+      return `This project's folder is missing or was moved${directory}. Reconnect it from the Projects list.`
+    }
+    case "SessionFilesystemInvalidPathError": {
+      const path = typeof data.path === "string" ? data.path : safeJson(data.path)
+      const message = typeof data.message === "string" ? data.message : ""
+      return message || `The folder ${path} cannot be used by this session. Choose a different project folder.`
+    }
     case "UnknownError":
       return typeof data.message === "string" ? data.message : safeJson(data)
     default:
@@ -193,8 +212,14 @@ function formatErrorChain(error: unknown, t: Translator, depth = 0, parentMessag
   return indent + safeJson(error)
 }
 
-function formatError(error: unknown, t: Translator): string {
+export function formatError(error: unknown, t: Translator): string {
   return formatErrorChain(error, t, 0)
+}
+
+/** A project or folder the server refuses is bound to the current URL, so
+ * reloading reproduces it; the Projects list is the way out. */
+export function projectRecovery(detail: string): boolean {
+  return /Project(?:Mismatch|Directory|Unknown|Stale)Error|SessionFilesystemInvalidPathError/.test(detail)
 }
 
 interface ErrorPageProps {
@@ -249,8 +274,15 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   }
 
   const detail = () => formatError(props.error, language.t)
+  // A project or folder the server refuses is bound to this URL; reloading it
+  // reproduces the same error, so the way out is the Projects list.
+  const projectProblem = () => projectRecovery(detail())
+  const home = () => window.location.assign("/")
   const hint = () => {
     const text = detail().toLowerCase()
+    if (projectProblem()) {
+      return "This conversation link points at a project folder the server cannot use. Your files and saved conversations are intact; go back to Projects and open the project from there."
+    }
     if (text.includes("providerauth") || text.includes("unauthorized") || text.includes("401")) {
       return "A model provider rejected its credentials. Reload first; if it returns, reconnect that provider in Settings."
     }
@@ -345,11 +377,18 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         </div>
 
         <div style={{ display: "flex", "align-items": "center", "flex-wrap": "wrap", gap: "8px" }}>
-          <Button size="large" onClick={() => void platform.restart()}>
+          <Button
+            size="large"
+            variant={projectProblem() ? "secondary" : "primary"}
+            onClick={() => void platform.restart()}
+          >
             <span style={{ display: "inline-flex", "align-items": "center", gap: "7px" }}>
               <IconRefresh size={13} />
               {platform.platform === "desktop" ? "Restart App" : "Reload App"}
             </span>
+          </Button>
+          <Button size="large" variant={projectProblem() ? "primary" : "secondary"} onClick={home}>
+            Back to Projects
           </Button>
           <Button size="large" variant="secondary" onClick={() => void copy()}>
             <span style={{ display: "inline-flex", "align-items": "center", gap: "7px" }}>

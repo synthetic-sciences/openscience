@@ -37,7 +37,7 @@ export namespace ToolSelection {
   const code =
     /\b(?:api|backend|bash|branch|bug|build|cli|code|codebase|commit|compile|endpoint|frontend|git|github|golang|java|javascript|kotlin|lint|package manager|php|pull request|python|refactor|repo|repository|ruby|rust|sdk|server|shell|source code|swift|test suite|typecheck|typescript|working tree)\b/i
   const science =
-    /\b(?:alignment|benchmark|bioinformatics|biology|cell|chemistry|clinical|data analysis|dataset|evidence|evaluation|experiment|gene|genom(?:e|ic)|hypothesis|literature|machine learning|metric|model comparison|molecule|neural|paper|physics|protein|reproducibility|research|rna|science|scientific|sequenc(?:e|ing)|simulation|statistics?|study|transcriptom(?:e|ic)|validation)\b/i
+    /\b(?:alignment|benchmark|bioinformatics|biology|cell|chemistry|clinical|data analysis|dataset|evidence|evaluation|experiment|gene|genom(?:e|es|ic|ics)|hypothesis|literature|machine learning|metric|model comparison|molecule|neural|paper|physics|protein|reproducibility|research|rna|science|scientific|sequenc(?:e|ing)|simulation|statistics?|study|transcriptom(?:e|ic|ics)|validation)\b/i
   const scientificCatalog =
     /\b(?:alphafold[- ]?2|biopython|matplotlib|rdkit|scipy|scikit[- ]learn|boltz[- ]?2|diffdock|evo[- ]?2|genmol|molmim|msa[- ]?search|openfold[- ]?[23]|protein[- ]?mpnn|rf[- ]?diffusion|bionemo|nvidia[- ]nim)\b/i
   const work =
@@ -228,7 +228,19 @@ export namespace ToolSelection {
       /\b(?:cluster|gpu|modal|remote compute|slurm|pbs|h100)\b/i.test(text) ||
       /modal-compute|protein-binder/i.test(capability)
     const durable =
-      /\b(?:in the background|long[- ]running|multi[- ]hour|overnight|outlive (?:this|the) call|durable\s+(?:command|job|pipeline|process|task|work))\b/i.test(
+      /\b(?:in the background|long[- ]running|multi[- ]hour|overnight|all night|outlive (?:this|the) call|keep (?:this|it|them) running|durable\s+(?:command|job|pipeline|process|task|work))\b/i.test(
+        text,
+      )
+    // Work that plainly cannot finish inside one shell call: an explicit
+    // duration, a workflow manager or scheduler, a genomics or ML tool that
+    // runs for hours. Bash tells the model to reach for compute_job here, so
+    // the tool has to be on offer when the prompt reads like this.
+    const lengthy =
+      /\b(?:(?:several|many|a few|couple of|\d+\+?)\s+(?:hours?|days?)|hours?[- ]long|days?[- ]long|takes? (?:a )?(?:while|long time)|(?:will|might|could|should|would) take (?:a )?(?:while|long|hours?|days?))\b/i.test(
+        text,
+      )
+    const workflow =
+      /\b(?:nextflow|snakemake|cromwell|wdl|cwl|sbatch|qsub|bsub|fasterq-dump|fastq-dump|prefetch|fastp|fastqc|bwa(?:-mem2?)?|bowtie2?|salmon|kallisto|hisat2?|minimap2|gatk|cellranger|colabfold|alphafold|fine-?tun\w*|pre-?train\w*|epochs?|training run)\b|\b(?:star|bwa|bowtie2?|salmon|kallisto|hisat2?)\s+(?:index|align\w*|quant\w*)\b|\b(?:genome|reference) index\b|\bfastq\b/i.test(
         text,
       )
     const repository =
@@ -240,6 +252,8 @@ export namespace ToolSelection {
         compute ||
         remote ||
         durable ||
+        lengthy ||
+        workflow ||
         (scientific &&
           !repository &&
           /\b(?:align|batch|download|index|pipeline|process|quantif|run|train|workflow)\w*\b/i.test(text))

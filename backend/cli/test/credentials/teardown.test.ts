@@ -103,7 +103,7 @@ async function instance(directory: string, disposed: string[]) {
 }
 
 describe("CredentialTeardown.apply", () => {
-  for (const reason of ["workspace-sync.denied", "account.replace", "settings-credential.set:github"]) {
+  for (const reason of ["account.replace", "settings-credential.set:github"]) {
     test(`${reason} disposes live instances and stops commands spawned without the overlay`, async () => {
       const label = reason.replace(/[^a-z0-9]+/gi, "_")
       const command = await launch(label)
@@ -146,24 +146,30 @@ describe("CredentialTeardown.apply", () => {
     }
   })
 
-  test("an overlay expiry leaves instances and unstamped commands alone", async () => {
-    const command = await launch("expiry_unstamped")
-    await using tmp = await tmpdir()
-    const disposed: string[] = []
-    await instance(tmp.path, disposed)
-    try {
-      await CredentialTeardown.apply({ reason: "workspace-sync.expired" })
+  for (const [reason, label] of [
+    ["workspace-sync.expired", "expiry_unstamped"],
+    ["workspace-sync.update", "update_unstamped"],
+    ["workspace-sync.denied", "denied_unstamped"],
+  ] as const) {
+    test(`${reason} leaves instances and unstamped commands alone`, async () => {
+      const command = await launch(label)
+      await using tmp = await tmpdir()
+      const disposed: string[] = []
+      await instance(tmp.path, disposed)
+      try {
+        await CredentialTeardown.apply({ reason })
 
-      expect(disposed).toEqual([])
-      expect(command.state.exited).toBe(false)
-      expect(command.state.reason).toBeUndefined()
-      expect(CommandRuntime.list("project_expiry_unstamped", "session_expiry_unstamped")).toHaveLength(1)
-    } finally {
-      await CommandRuntime.stopAll().catch(() => undefined)
-      await Instance.provide({ directory: tmp.path, fn: () => Instance.dispose() })
-    }
-    expect(disposed).toEqual([tmp.path])
-  })
+        expect(disposed).toEqual([])
+        expect(command.state.exited).toBe(false)
+        expect(command.state.reason).toBeUndefined()
+        expect(CommandRuntime.list(`project_${label}`, `session_${label}`)).toHaveLength(1)
+      } finally {
+        await CommandRuntime.stopAll().catch(() => undefined)
+        await Instance.provide({ directory: tmp.path, fn: () => Instance.dispose() })
+      }
+      expect(disposed).toEqual([tmp.path])
+    })
+  }
 
   test("an overlay expiry reaps a stamped MCP transport whose owner server died and keeps an unstamped one", async () => {
     const stamped = await transport("mcp_stamped_dead_owner", "org_a")

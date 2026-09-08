@@ -36,4 +36,15 @@ describe("util.filesystem", () => {
 
     await rm(tmp, { recursive: true, force: true })
   })
+
+  test("trimSeparator() keeps filesystem roots intact on every platform", () => {
+    expect(Filesystem.trimSeparator("C:\\", path.win32)).toBe("C:\\")
+    expect(Filesystem.trimSeparator("C:\\Users\\me\\", path.win32)).toBe("C:\\Users\\me")
+    expect(Filesystem.trimSeparator("C:\\Users\\me", path.win32)).toBe("C:\\Users\\me")
+    expect(Filesystem.trimSeparator("\\\\server\\share\\", path.win32)).toBe("\\\\server\\share\\")
+    expect(Filesystem.trimSeparator("/", path.posix)).toBe("/")
+    expect(Filesystem.trimSeparator("/Users/me/", path.posix)).toBe("/Users/me")
+    // A drive-relative "C:" would resolve against the process cwd later.
+    expect(path.win32.resolve(Filesystem.trimSeparator("C:\\", path.win32))).toBe("C:\\")
+  })
 })

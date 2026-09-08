@@ -155,8 +155,27 @@ describe("tool selection", () => {
       "Run this in the background.",
       "Run this long running job.",
       "Run this overnight.",
+      // Work that plainly outlives one shell call, in the words users use.
+      "Download the 18 SRA runs listed in samples.csv with fasterq-dump.",
+      "Build a STAR index for hg38 and align every sample.",
+      "Fine-tune llama on this dataset, it will take a few hours.",
+      "Kick off the full pipeline, it takes about 6 hours.",
+      "Start the nextflow pipeline for the whole cohort.",
+      "Run snakemake on all samples.",
+      "Process all 400 fastq files with fastp.",
+      "Align the reads to hg38 with bwa.",
+      "Download the 1000 genomes VCFs for chromosome 22.",
+      "This will take all night, run it and tell me tomorrow.",
+      "Keep this running after you finish.",
     ]) {
       expect(ToolSelection.relevant("compute_job", { agent: "research", message })).toBe(true)
+    }
+    for (const message of [
+      "Summarize this paper in two paragraphs.",
+      "Rename the variables in this function.",
+      "What does a p-value mean?",
+    ]) {
+      expect(ToolSelection.relevant("compute_job", { agent: "research", message })).toBe(false)
     }
     expect(
       ToolSelection.relevant("modal", {
