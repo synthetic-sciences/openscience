@@ -908,6 +908,16 @@ pre {
         strong {
           color: var(--color-text-strong);
         }
+        /* The benchmark's own page; internal benchmarks have no link. */
+        a {
+          color: var(--color-text-strong);
+          text-decoration: underline;
+          text-decoration-thickness: 1px;
+          text-underline-offset: 4px;
+        }
+        a:hover {
+          color: var(--color-accent);
+        }
       }
     }
   }

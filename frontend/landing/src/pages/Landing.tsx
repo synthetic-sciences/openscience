@@ -85,7 +85,7 @@ const WHAT = [
   ["Scientific databases", "UniProt, PDB, ChEMBL, PubChem, arXiv, and 37 more, as tools"],
   ["Bundled skills", "312 skills across biology, chemistry, physics, ML, and writing"],
   ["ChatGPT Plus/Pro", "Sign in with OpenAI to use the subscription you already have"],
-  ["Your compute", "Run experiments on your laptop, cluster, or cloud GPUs"],
+  ["Manages compute", "Builds environments and scales on demand: your laptop, cluster, or GPUs"],
   ["Multi-session", "Run several agents in parallel on the same project"],
 ] as const
 

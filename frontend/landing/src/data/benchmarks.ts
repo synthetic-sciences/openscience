@@ -25,7 +25,8 @@ export type Benchmark = {
   figure: string
   /** OpenScience score, in percent. */
   score: number
-  href: string
+  /** The benchmark's own page. Omitted for internal benchmarks. */
+  href?: string
   chart: Chart
 }
 
@@ -37,7 +38,7 @@ export const BENCHMARKS: readonly Benchmark[] = [
     /* Resolution rate, in percent; cost is total cost in thousands of dollars,
        laid out roughly like the public leaderboard's Pareto view. */
     score: 38.0,
-    href: "https://terminal-bench-science.ai/?view=pareto",
+    href: "https://terminal-bench-science.ai/",
     chart: {
       kind: "pareto",
       points: [
@@ -58,11 +59,11 @@ export const BENCHMARKS: readonly Benchmark[] = [
     },
   },
   {
-    id: "frontierbench-science",
-    name: "FrontierBench (science)",
-    figure: "Performance frontier",
+    id: "terminal-bench-4-science",
+    name: "Terminal-Bench 4.0 (science)",
+    figure: "Performance frontier on the science tasks in Terminal-Bench 4.0",
     score: 44.7,
-    href: "https://github.com/synthetic-sciences/OpenScience/tree/main/evals",
+    href: "https://www.tbench.ai/",
     chart: {
       kind: "frontier",
       series: [
@@ -75,10 +76,9 @@ export const BENCHMARKS: readonly Benchmark[] = [
   },
   {
     id: "openscience-bench",
-    name: "OpenScience Bench",
+    name: "OpenScience Bench (internal)",
     figure: "Internal; against Claude Science, K-Dense (BYOK), and Codex",
     score: 58.3,
-    href: "https://github.com/synthetic-sciences/OpenScience/tree/main/evals",
     chart: {
       kind: "comparison",
       rows: [

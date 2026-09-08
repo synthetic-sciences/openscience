@@ -193,7 +193,13 @@ export function BenchmarkFigure({ benchmark, index }: { benchmark: Benchmark; in
       </div>
       <span>
         <span data-slot="fig">Fig {index}.</span>
-        {benchmark.name}
+        {benchmark.href ? (
+          <a href={benchmark.href} target="_blank" rel="noreferrer">
+            {benchmark.name}
+          </a>
+        ) : (
+          benchmark.name
+        )}
       </span>
     </div>
   )
