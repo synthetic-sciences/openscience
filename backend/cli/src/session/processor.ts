@@ -959,7 +959,6 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-input-start":
-                  toolOutcomes.claim(value.id, value.toolName)
                   if (toolOutcomes.closed(value.id)) break
                   if (toolOutcomes.part(value.id)?.state.status === "running") break
                   const part = await Session.updatePart({
@@ -987,6 +986,7 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-call": {
+                  toolOutcomes.claim(value.toolCallId, value.toolName)
                   const match = toolOutcomes.part(value.toolCallId)
                   if (match && !toolOutcomes.closed(value.toolCallId)) {
                     const part = await Session.updatePart({

@@ -10,6 +10,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Treat the validated provider tool call as authoritative, so an incomplete call
+  can be repaired safely without conflicting with its provisional stream event.
 - Preserve completed delegated work when a task is cancelled, report the
   worker's actual outcome and changed files to both the lead and UI, and bound
   silent remote response bodies without cutting off active streams. Keep the

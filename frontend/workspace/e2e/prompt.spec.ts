@@ -138,8 +138,18 @@ test("an incomplete provider tool call is recovered without a raw schema error",
       .toContain(`${token}_DONE`)
 
     const messages = await sdk.session.messages({ sessionID, limit: 50 }).then((response) => response.data ?? [])
+    const calls = messages.flatMap((message) => message.parts).filter((part) => part.type === "tool")
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({
+      tool: "invalid",
+      state: {
+        status: "completed",
+        input: { tool: "bash", failure: "invalid_input" },
+        title: "Recovered incomplete bash call",
+        metadata: { recovered: true, sourceTool: "bash" },
+      },
+    })
     const payload = JSON.stringify(messages)
-    expect(payload).toContain("Recovered incomplete bash call")
     expect(payload).not.toContain("expected string, received undefined")
     expect(payload).not.toContain("Please rewrite the input so it satisfies the expected schema")
     await expect(page.locator("body")).not.toContainText("expected string, received undefined")
