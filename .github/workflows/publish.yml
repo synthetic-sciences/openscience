@@ -131,7 +131,8 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Validate publishing and signing credentials
+      - id: credentials
+        name: Validate publishing and signing credentials
         shell: bash
         env:
           RELEASE_GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN }}
@@ -149,11 +150,29 @@ jobs:
         run: |
           set -euo pipefail
           missing=()
-          for name in RELEASE_GITHUB_TOKEN APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_NOTARY_APPLE_ID APPLE_NOTARY_PASSWORD APPLE_TEAM_ID WINDOWS_SIGNING_CLIENT_ID WINDOWS_SIGNING_TENANT_ID WINDOWS_SIGNING_ENDPOINT WINDOWS_SIGNING_ACCOUNT WINDOWS_SIGNING_PROFILE WINDOWS_SIGNING_PUBLISHER; do
+          for name in RELEASE_GITHUB_TOKEN APPLE_DEVELOPER_ID_P12_BASE64 APPLE_DEVELOPER_ID_P12_PASSWORD APPLE_NOTARY_APPLE_ID APPLE_NOTARY_PASSWORD APPLE_TEAM_ID; do
             [[ -n "${!name:-}" ]] || missing+=("$name")
           done
           if (( ${#missing[@]} )); then
             echo "::error::Missing release credentials: ${missing[*]}"
+            exit 1
+          fi
+          # Windows Artifact Signing is all-or-nothing. Until the Public Trust
+          # profile and its Entra application exist, the Windows installer is
+          # published unsigned (as before signing was introduced) with a
+          # warning; a partial configuration is a mistake and fails here.
+          windows=(WINDOWS_SIGNING_CLIENT_ID WINDOWS_SIGNING_TENANT_ID WINDOWS_SIGNING_ENDPOINT WINDOWS_SIGNING_ACCOUNT WINDOWS_SIGNING_PROFILE WINDOWS_SIGNING_PUBLISHER)
+          absent=()
+          for name in "${windows[@]}"; do
+            [[ -n "${!name:-}" ]] || absent+=("$name")
+          done
+          if (( ${#absent[@]} == 0 )); then
+            echo "windows_signing=true" >> "$GITHUB_OUTPUT"
+          elif (( ${#absent[@]} == ${#windows[@]} )); then
+            echo "::warning::Windows Artifact Signing is not configured; the Windows installer will be published unsigned."
+            echo "windows_signing=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Windows Artifact Signing is partially configured; missing: ${absent[*]}"
             exit 1
           fi
 
@@ -178,6 +197,7 @@ jobs:
       source: ${{ steps.version.outputs.source }}
       artifact_source: ${{ steps.version.outputs.artifact_source }}
       workflow_source: ${{ steps.version.outputs.workflow_source }}
+      windows_signing: ${{ steps.credentials.outputs.windows_signing }}
 
   build-cli:
     name: Build native CLI
@@ -793,8 +813,12 @@ jobs:
             git show "$WORKFLOW_SOURCE:tooling/repo/desktop-sidecar.ts" > tooling/repo/desktop-sidecar.ts
           fi
           bun tooling/repo/desktop-sidecar.ts
+      - name: Note unsigned Windows installer
+        if: matrix.signing == 'windows' && needs.version.outputs.windows_signing != 'true'
+        shell: bash
+        run: echo "::warning::Windows Artifact Signing is not configured for this repository; ${{ matrix.asset }} is published unsigned."
       - name: Authenticate Windows signer
-        if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows'
+        if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows' && needs.version.outputs.windows_signing == 'true'
         uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
         with:
           client-id: ${{ secrets.WINDOWS_SIGNING_CLIENT_ID }}
@@ -825,14 +849,14 @@ jobs:
         env:
           OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
           OPENSCIENCE_VERSION: ${{ needs.version.outputs.version }}
-          OPENSCIENCE_DESKTOP_SIGNED: ${{ matrix.signing == 'windows' }}
+          OPENSCIENCE_DESKTOP_SIGNED: ${{ matrix.signing == 'windows' && needs.version.outputs.windows_signing == 'true' }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
           WINDOWS_SIGNING_ACCOUNT: ${{ vars.WINDOWS_SIGNING_ACCOUNT }}
           WINDOWS_SIGNING_PROFILE: ${{ vars.WINDOWS_SIGNING_PROFILE }}
           WINDOWS_SIGNING_PUBLISHER: ${{ vars.WINDOWS_SIGNING_PUBLISHER }}
       - name: Verify Windows signatures
-        if: matrix.signing == 'windows'
+        if: matrix.signing == 'windows' && needs.version.outputs.windows_signing == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
