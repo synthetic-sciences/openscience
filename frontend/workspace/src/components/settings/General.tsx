@@ -269,7 +269,7 @@ export default function General() {
                         >
                           {busy() === "login" ? "Waiting for browser…" : "Sign in"}
                         </Button>
-                        <LoginApproval active={busy() === "login"} />
+                        <LoginApproval active={busy() === "login"} openLink={(url) => platform.openLink(url)} />
                       </div>
                     }
                   >
@@ -352,7 +352,7 @@ export default function General() {
                       >
                         {busy() === "workspace" ? "Waiting for browser…" : "Switch workspace"}
                       </Button>
-                      <LoginApproval active={busy() === "workspace"} />
+                      <LoginApproval active={busy() === "workspace"} openLink={(url) => platform.openLink(url)} />
                     </div>
                   </Show>
                 </AccountRow>

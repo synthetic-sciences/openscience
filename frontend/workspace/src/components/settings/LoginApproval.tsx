@@ -1,6 +1,5 @@
 import { Show, createEffect, createSignal, onCleanup, type Component } from "solid-js"
 import { showToast } from "@synsci/ui/toast"
-import { usePlatform } from "@/context/platform"
 
 export const LOGIN_APPROVAL_EVENT = "openscience:login-approval"
 
@@ -10,8 +9,7 @@ export const LOGIN_APPROVAL_EVENT = "openscience:login-approval"
  * container, a desktop without a default handler) this is the only way to
  * finish signing in before the server gives up.
  */
-export const LoginApproval: Component<{ active: boolean }> = (props) => {
-  const platform = usePlatform()
+export const LoginApproval: Component<{ active: boolean; openLink: (url: string) => void }> = (props) => {
   const [url, setUrl] = createSignal<string>()
 
   const onApproval = (event: Event) => {
@@ -37,7 +35,7 @@ export const LoginApproval: Component<{ active: boolean }> = (props) => {
       {(value) => (
         <p class="text-12-regular text-text-weak" data-login-approval>
           Browser didn't open?{" "}
-          <button type="button" class="settings-inline-link" onClick={() => platform.openLink(value())}>
+          <button type="button" class="settings-inline-link" onClick={() => props.openLink(value())}>
             Open the sign-in page
           </button>
           {" · "}

@@ -383,7 +383,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
             >
               {accountAction()}
             </Button>
-            <LoginApproval active={state.signingIn} />
+            <LoginApproval active={state.signingIn} openLink={(url) => platform.openLink(url)} />
           </div>
         </div>
         <div class="models-routing__preference">
