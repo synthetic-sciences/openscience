@@ -60,7 +60,7 @@ These are built-in database connections. Use [Connectors and MCP](/openscience/c
 | Source and documentation | Identifier | Records and uses | Declared formats |
 | --- | --- | --- | --- |
 | [arXiv](https://arxiv.org) | `arxiv` | Preprint metadata and abstracts in physics, math, CS, quantitative biology, and more. Paper text must be retrieved separately from the returned PDF link. | Structured record |
-| [bioRxiv / medRxiv](https://www.biorxiv.org) | `biorxiv` | Biology and health-sciences preprints (bioRxiv + medRxiv) via Cold Spring Harbor. | Structured record |
+| [bioRxiv / medRxiv](https://www.biorxiv.org) | `biorxiv` | Biology and health-sciences preprints (bioRxiv + medRxiv) via Cold Spring Harbor. Keyword search ranks only the ~100 most recent postings per server, so no match does not mean no such preprint; search by DOI for an exact record, or use europepmc/openalex for older preprints. | Structured record |
 | [Crossref](https://www.crossref.org) | `crossref` | Cross-publisher DOI metadata: titles, authors, venues, references, and citations. | Structured record |
 | [Europe PMC](https://europepmc.org) | `europepmc` | Life-science literature metadata and abstracts (PubMed, PMC, Agricola, patents) via EBI. | Structured record |
 | [OpenAlex](https://openalex.org) | `openalex` | Open scholarly graph of works, authors, venues, and concepts (successor to MAG). | Structured record |
