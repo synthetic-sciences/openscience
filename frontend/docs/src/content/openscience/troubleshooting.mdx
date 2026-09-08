@@ -18,6 +18,12 @@ Download the desktop build that matches your operating system and processor. If 
 
 See [Installation and updates](/openscience/installation).
 
+If Windows reports `spawn /bin/ps ENOENT`, the desktop build is running a macOS
+updater check during startup. Track the fixed installer in
+[issue #543](https://github.com/synthetic-sciences/openscience/issues/543).
+To keep working, install Node.js and run `npx synsci` in a terminal to open the
+CLI's browser workspace, which uses a separate startup path.
+
 ## No models available
 
 Open **Customize → Models** and check the selected access mode.

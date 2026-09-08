@@ -244,7 +244,9 @@ async function proveServiceHealth() {
     throw new Error("The local OpenScience runtime failed its final desktop health check")
   }
   return {
-    identity: await processIdentity(service.pid, state.serviceExecutable),
+    // Exact process identity belongs to the supervised macOS update receipt.
+    // Ordinary startup still checks runtime health on every platform.
+    identity: validateUpdateHealthRequest() ? await processIdentity(service.pid, state.serviceExecutable) : undefined,
     health: { version: health.version, run_id: health.runId },
   }
 }

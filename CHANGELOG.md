@@ -112,6 +112,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   include their pending permissions and questions in the parent's snapshot.
 - Add `compaction.recentImages` to configure how many recent images are sent
   in full with each request (default unchanged: 1).
+- Fix Windows desktop startup failing with `spawn /bin/ps ENOENT` by limiting
+  macOS updater process-identity checks to supervised update launches.
+- Require Microsoft Artifact Signing for stable Windows desktop installers,
+  including the bundled runtime and native libraries, and verify publisher,
+  signature trust, and timestamps before publishing.
 - Wait for scientific canary artifact delivery before validating a completed
   remote computation, while preserving bounded waits and resource cleanup.
 - Start desktop onboarding with Synthetic Sciences sign-in and workspace selection,

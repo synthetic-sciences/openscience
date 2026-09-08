@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
+import { windowsSigning } from "./windows-signing.mjs"
 
 const source = process.env.OPENSCIENCE_DESKTOP_SIDECAR
 if (!source) throw new Error("OPENSCIENCE_DESKTOP_SIDECAR must point to the native OpenScience runtime")
@@ -63,8 +64,9 @@ export default {
   win: {
     target: ["nsis"],
     icon: "build/icon.ico",
-    forceCodeSigning: signed,
-    signExecutable: signed,
+    ...(process.platform === "win32"
+      ? windowsSigning(process.env)
+      : { forceCodeSigning: false, signExecutable: false }),
   },
   nsis: { oneClick: false, allowToChangeInstallationDirectory: true },
   linux: { target: ["AppImage"], category: "Science;Development", icon: "build/icon.png" },
