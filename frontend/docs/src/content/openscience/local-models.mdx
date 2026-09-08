@@ -31,8 +31,8 @@ Open **Customize → Local models**.
 
 1. Start a detected runtime, or start the model server yourself.
 2. Rescan to find running endpoints.
-3. Select the models you want to add.
-4. Return to the model picker and choose one.
+3. Select the models you want to add and set their context window.
+4. Return to the model picker. Added models appear under **More models** in their own local group, ready to choose.
 
 For Ollama, the panel can copy a model-download command. Run that command in your system terminal, then rescan. Copying a command does not execute it.
 
@@ -60,17 +60,20 @@ OpenScience checks these common addresses during discovery. Your server may be c
 
 ## Context window and memory
 
-In the Ollama model selection panel, set **Context window** before adding the models. Larger windows use more memory.
+Every local connection form has a **Context window** field. Set it before adding the models; OpenScience otherwise assumes 32,768 tokens and compacts long sessions earlier than the server requires.
+
+For Ollama, the value also creates a tuned model alias with that context size, because Ollama does not expose context sizing through its compatible endpoint. Larger windows use more memory.
+
+For LM Studio, vLLM, llama.cpp, SSH-forwarded, and direct endpoints, the value only tells OpenScience how much context it may send. Configure the actual window in that server and keep the two consistent.
 
 The CLI equivalent is:
 
 ```bash
 openscience local add --url http://localhost:11434/v1 --id ollama --model qwen3:8b --context 32768
+openscience local add --url http://localhost:8000/v1 --id vllm --model my-model --context 131072
 ```
 
-This applies an Ollama context setting, rather than merely changing the displayed limit. `--context` is supported for local Ollama endpoints. Use the registered model ID printed by the command.
-
-For other servers, configure the actual context window in that server and keep the OpenScience model limits consistent with it.
+Use the registered model ID printed by the command.
 
 ## Connect a remote model you manage
 
@@ -88,7 +91,7 @@ You can also connect a LAN, VPN, or HTTPS endpoint directly. Its model requests 
 | `--url <url>` | Endpoint base URL. |
 | `--model <id>` | Register a specific model; repeat for multiple models. |
 | `--id <id>` | Name the provider in OpenScience. |
-| `--context <tokens>` | Apply a context window for local Ollama models. |
+| `--context <tokens>` | Record the context window; Ollama also gets a tuned model alias. |
 | `--key <key>` | Authenticate an endpoint that requires a key. |
 | `--project` | Save the connection in project configuration. |
 | `--default` | Set the first registered model as the default. |

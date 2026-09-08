@@ -179,13 +179,22 @@ export async function runLocalModelSetup(input: LocalSetupInput = {}): Promise<s
       const id = input.id ?? presetId ?? deriveId(baseURL)
       const ollama = presetId === "ollama" || id === "ollama" || LocalProvider.isOllamaBaseURL(baseURL)
       const context = input.context
-      if (context && !ollama) {
-        prompts.log.error("--context is supported only for a local Ollama endpoint.")
+      if (context !== undefined && (!Number.isInteger(context) || context < 1_024 || context > 2_097_152)) {
+        prompts.log.error("--context must be a whole number of tokens between 1024 and 2097152.")
         return null
       }
-      const registered = context
-        ? await Promise.all(selected.map((model) => LocalProvider.createOllamaContextModel(baseURL, model, context)))
-        : selected
+      // Ollama alone exposes no context setting over its OpenAI-compatible
+      // endpoint, so it gets a tuned alias. Every other server keeps its own
+      // window; the value only tells OpenScience how much it may send.
+      const registered =
+        context && ollama
+          ? await Promise.all(selected.map((model) => LocalProvider.createOllamaContextModel(baseURL, model, context)))
+          : selected
+      if (context && !ollama) {
+        prompts.log.info(
+          `Recording a ${context.toLocaleString()}-token context window. Make sure the server is configured to allow it.`,
+        )
+      }
       const name = presetId
         ? `${LocalProvider.PRESETS.find((p) => p.id === presetId)!.name} (local)`
         : `Local (${new URL(baseURL).host})`
@@ -248,7 +257,7 @@ const AddCommand = cmd({
       .option("key", { type: "string", describe: "api key, if the endpoint needs one" })
       .option("context", {
         type: "number",
-        describe: "Ollama context window in tokens; creates a tuned local model alias",
+        describe: "context window in tokens; Ollama gets a tuned model alias, other servers record the limit",
       })
       .option("project", { type: "boolean", describe: "write to the project config instead of global" })
       .option("default", { type: "boolean", describe: "set the first model as the default" }),

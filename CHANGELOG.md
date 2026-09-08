@@ -10,6 +10,17 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- Keep Settings usable while it refreshes: panels no longer flash their loading
+  skeleton or jump back to the top after Rescan, Save, or Add, and confirmations
+  raised inside Settings (removing a key, connector, or network rule) stack above
+  it and return to the same page instead of closing Settings.
+- Show the model picker's unconnected models as **Connect to use** rows that open
+  the connection settings, remember the last model you chose across reloads and
+  new sessions, and name the provider plus the fix when a request fails on a
+  rejected API key.
+- Reveal local models in the picker as soon as they are added, and record a
+  context window for every local, SSH, or direct endpoint (not only Ollama) so
+  long sessions on larger servers are not compacted at 32k tokens.
 - Treat the validated provider tool call as authoritative, so an incomplete call
   can be repaired safely without conflicting with its provisional stream event.
 - Preserve completed delegated work when a task is cancelled, report the
