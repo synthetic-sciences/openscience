@@ -21,6 +21,33 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Reveal local models in the picker as soon as they are added, and record a
   context window for every local, SSH, or direct endpoint (not only Ollama) so
   long sessions on larger servers are not compacted at 32k tokens.
+- Redact provider API keys and auth headers from every served configuration
+  payload (`GET /config`, `/global/config`, `/config/providers`), and keep
+  `{env:…}` references as written when a project config is saved from the UI
+  or `openscience local --project`.
+- Answer the next prompt after a failed or stopped `/compact` instead of
+  replaying the summary under it; with a compaction model that kept failing,
+  every later prompt in the session was silently swallowed.
+- Keep OpenRouter's signed reasoning replay for models flagged as interleaved
+  (Gemini 3, GLM 5, MiniMax, Kimi via BYOK OpenRouter), and pass provider error
+  details through when the body nests them under `error.message` or `detail`.
+- Scope a dashboard credential change or a lost workspace grant to the
+  commands and jobs that inherited the synced credentials. Adding a key on the
+  dashboard no longer interrupts every running turn on the device.
+- Offer `compute_job` for long-running work described in ordinary words (SRA
+  downloads, STAR/bwa alignment, Nextflow or Snakemake pipelines, fine-tuning,
+  "this will take hours"), not only for prompts naming a cluster or GPU.
+- Show the sign-in page as a link while a browser sign-in is pending, so a
+  host that cannot open a browser (SSH, containers) can still finish signing in.
+- Give the recovery page a **Back to Projects** action with plain explanations
+  for project and folder errors instead of a raw JSON payload and a reload
+  loop, ask the server for JSON on every request so an older server cannot
+  answer an unknown route with the UI shell, and stop cutting a Windows drive
+  root (`C:\`) down to a drive-relative path when a project is opened there.
+- Say that a rejected oversized request is being compacted and retried, honour
+  a turn's own context limit for mid-turn overflow checks, take Ace image
+  support from the reviewed route catalogue, and stop advertising a Claude Max
+  sign-in the CLI has no plugin for.
 - Treat the validated provider tool call as authoritative, so an incomplete call
   can be repaired safely without conflicting with its provisional stream event.
 - Preserve completed delegated work when a task is cancelled, report the
