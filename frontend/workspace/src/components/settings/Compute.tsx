@@ -12,7 +12,7 @@ import { confirmDialog } from "@/atlas/dialogs"
 import { settingsApi } from "./api"
 import { CredentialServices } from "./CredentialServices"
 import { ProviderLogo } from "./ProviderLogo"
-import { Card, PanelBody, PanelHeader, PanelScroll, RowCopy, Section } from "./_shared"
+import { Card, PanelBody, PanelHeader, PanelScroll, RowCopy, Section, steady } from "./_shared"
 import "./preference-panels.css"
 
 type Scheduler = "none" | "slurm" | "pbs"
@@ -114,7 +114,7 @@ const Compute: Component = () => {
   const dialog = useDialog()
   const fetchFn = platform.fetch ?? fetch
   const call = <T,>(path = "", init?: RequestInit) => settingsApi<T>(sdk.url, fetchFn, `/settings/compute${path}`, init)
-  const [data, control] = createResource(() => call<Info>())
+  const [data, control] = steady(createResource(() => call<Info>()))
   const [state, setState] = createStore({
     adding: false,
     busy: {} as Record<string, boolean>,

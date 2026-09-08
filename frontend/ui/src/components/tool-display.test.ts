@@ -63,6 +63,38 @@ describe("sessionErrorText", () => {
 
   test("preserves ordinary provider errors", () => {
     expect(sessionErrorText({ data: { message: "Provider is overloaded" } })).toBe("Provider is overloaded")
+    expect(
+      sessionErrorText({
+        name: "APIError",
+        data: { message: "Ace credentials are valid only on the managed gateway." },
+      }),
+    ).toBe("Ace credentials are valid only on the managed gateway.")
+  })
+
+  test("names the provider and the fix for a rejected API key", () => {
+    expect(
+      sessionErrorText({
+        name: "APIError",
+        data: { message: "API key is invalid.", statusCode: 401, metadata: { providerID: "anthropic" } },
+      }),
+    ).toBe(
+      "Anthropic rejected the request's credentials (API key is invalid). Update the key under Settings → Models → Provider API keys, or choose another model.",
+    )
+    expect(
+      sessionErrorText({
+        name: "ProviderAuthError",
+        data: { providerID: "openai", message: "API key is missing" },
+      }),
+    ).toStartWith("OpenAI rejected the request's credentials (API key is missing).")
+    expect(
+      sessionErrorText({
+        name: "APIError",
+        data: { message: "Forbidden: invalid_api_key", statusCode: 403, metadata: { providerID: "mycorp" } },
+      }),
+    ).toStartWith("Mycorp rejected the request's credentials")
+    expect(
+      sessionErrorText({ name: "APIError", data: { message: "Forbidden: region blocked", statusCode: 403 } }),
+    ).toBe("Forbidden: region blocked")
   })
 
   test("presents a recoverable provider interruption as paused", () => {

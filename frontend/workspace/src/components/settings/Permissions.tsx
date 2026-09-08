@@ -18,7 +18,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { resolveProjectRoute } from "@/utils/project-route"
 import { PermissionToolDefaults } from "../settings-permissions"
-import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
+import { PanelBody, PanelHeader, PanelScroll, Section, steady } from "./_shared"
 import "./preference-panels.css"
 
 interface StandingApproval {
@@ -48,41 +48,47 @@ const Permissions: Component = () => {
 
   const route = createMemo(() => resolveProjectRoute(params.dir, globalSync.data.project))
 
-  const [standing, { refetch }] = createResource(
-    () => route()?.directory ?? false,
-    async (directory) => {
-      const response = await sdk.client.permission.standing.list({ directory })
-      return (response.data ?? []) as StandingApproval[]
-    },
+  const [standing, { refetch }] = steady(
+    createResource(
+      () => route()?.directory ?? false,
+      async (directory) => {
+        const response = await sdk.client.permission.standing.list({ directory })
+        return (response.data ?? []) as StandingApproval[]
+      },
+    ),
   )
 
-  const [trust, trustControls] = createResource(
-    () => {
-      const value = route()
-      if (!value) return
-      return { projectID: value.projectID, directory: value.directory }
-    },
-    async (input) => {
-      const response = await sdk.client.project.trust.get(input)
-      if (!response.data) throw new Error("Project trust status was empty.")
-      return response.data
-    },
+  const [trust, trustControls] = steady(
+    createResource(
+      () => {
+        const value = route()
+        if (!value) return
+        return { projectID: value.projectID, directory: value.directory }
+      },
+      async (input) => {
+        const response = await sdk.client.project.trust.get(input)
+        if (!response.data) throw new Error("Project trust status was empty.")
+        return response.data
+      },
+    ),
   )
 
-  const [folders, folderControls] = createResource(
-    () => {
-      const value = route()
-      const sessionID = params.id
-      if (!value || !sessionID || sessionID === "new") return
-      return { sessionID, directory: value.directory }
-    },
-    async (input) => {
-      const response = await sdk.client.session.filesystem.list(input)
-      return (response.data?.grants ?? []).filter(
-        (grant): grant is FolderGrant =>
-          (grant.source === "permission" || grant.source === "api") && !grant.time.consumed && !grant.time.revoked,
-      )
-    },
+  const [folders, folderControls] = steady(
+    createResource(
+      () => {
+        const value = route()
+        const sessionID = params.id
+        if (!value || !sessionID || sessionID === "new") return
+        return { sessionID, directory: value.directory }
+      },
+      async (input) => {
+        const response = await sdk.client.session.filesystem.list(input)
+        return (response.data?.grants ?? []).filter(
+          (grant): grant is FolderGrant =>
+            (grant.source === "permission" || grant.source === "api") && !grant.time.consumed && !grant.time.revoked,
+        )
+      },
+    ),
   )
 
   const revoke = async (approval: StandingApproval) => {

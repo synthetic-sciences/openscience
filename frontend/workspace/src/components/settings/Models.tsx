@@ -24,7 +24,7 @@ import { ManagedInference } from "./ManagedInference"
 import { ProviderKeys } from "./ProviderKeys"
 import { ProviderLogo } from "./ProviderLogo"
 import { modelGroup, modelGroupLabel, modelGroupRank } from "../model-groups"
-import { FilterMenu, PanelBody, PanelHeader, PanelScroll, RowCopy, SearchInput, Section } from "./_shared"
+import { FilterMenu, PanelBody, PanelHeader, PanelScroll, RowCopy, SearchInput, Section, steady } from "./_shared"
 import { settingsApi } from "./api"
 import {
   type CapabilityPreferences,
@@ -105,11 +105,11 @@ export default function Models() {
   const [scope, setScope] = createSignal<Scope>("all")
   const [catalogOpen, setCatalogOpen] = createSignal(false)
   const [error, setError] = createSignal<string>()
-  const [preferences, preferenceActions] = createResource(() =>
-    settingsApi<CapabilityPreferences>(sdk.url, fetchFn, "/settings/preferences"),
+  const [preferences, preferenceActions] = steady(
+    createResource(() => settingsApi<CapabilityPreferences>(sdk.url, fetchFn, "/settings/preferences")),
   )
-  const [billing, billingActions] = createResource(() =>
-    settingsApi<BillingPreference>(sdk.url, fetchFn, "/settings/billing"),
+  const [billing, billingActions] = steady(
+    createResource(() => settingsApi<BillingPreference>(sdk.url, fetchFn, "/settings/billing")),
   )
   const unsubscribeBilling = sync.onProvidersRefreshed(() => void billingActions.refetch())
   onCleanup(unsubscribeBilling)

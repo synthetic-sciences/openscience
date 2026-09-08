@@ -312,8 +312,12 @@
 }
 
 .model-settings-unavailable {
-  cursor: default;
-  opacity: 0.46;
+  opacity: 0.62;
+}
+
+.model-settings-unavailable:hover,
+.model-settings-unavailable:focus-visible {
+  opacity: 1;
 }
 
 .model-settings-model {

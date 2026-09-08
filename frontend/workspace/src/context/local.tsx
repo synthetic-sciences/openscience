@@ -121,6 +121,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return isExactModelValid(configured) ? configured : undefined
         }
 
+        // The user's last explicit pick outlives a reload and a new session;
+        // the Sol default below is only for installs that never chose.
+        for (const item of models.recent.list()) {
+          const resolved = resolveModel(item)
+          if (resolved) return resolved
+        }
+
         // Resolve one connected Sol route without treating provider identities
         // as interchangeable. The active access contract decides which route
         // is eligible; Automatic still prefers the user's ChatGPT connection.
@@ -145,11 +152,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           billing: sync.data.config.billing?.llm,
         })
         if (initial) return initial
-
-        for (const item of models.recent.list()) {
-          const resolved = resolveModel(item)
-          if (resolved) return resolved
-        }
 
         const defaults = providers.default()
         for (const p of providers.connected()) {

@@ -319,10 +319,53 @@ const record = (value: unknown): Record<string, unknown> | undefined => {
   return value as Record<string, unknown>
 }
 
+const providerNames: Record<string, string> = {
+  anthropic: "Anthropic",
+  deepseek: "DeepSeek",
+  google: "Google",
+  groq: "Groq",
+  mistral: "Mistral",
+  moonshotai: "Moonshot AI",
+  openai: "OpenAI",
+  "openai-codex": "ChatGPT",
+  openrouter: "OpenRouter",
+  xai: "xAI",
+  zai: "Z.AI",
+}
+
+export function providerDisplayName(id: string): string {
+  return providerNames[id] ?? id.charAt(0).toUpperCase() + id.slice(1)
+}
+
+const credentialFailure =
+  /\b(?:api[ -]?key|x-api-key|authentication|unauthori[sz]ed|invalid_api_key|incorrect api key|credential|permission denied)\b/i
+
+/**
+ * A rejected credential is the one provider failure the user can always fix
+ * themselves, so name the provider and where its key lives rather than
+ * repeating the provider's bare "API key is invalid".
+ */
+export function credentialErrorText(value: unknown): string | undefined {
+  const error = record(value)
+  const data = record(error?.data)
+  const metadata = record(data?.metadata)
+  const message = typeof data?.message === "string" ? data.message.trim() : ""
+  const status = data?.statusCode
+  const auth =
+    error?.name === "ProviderAuthError" || status === 401 || (status === 403 && credentialFailure.test(message))
+  if (!auth) return
+  const id = typeof data?.providerID === "string" ? data.providerID : metadata?.providerID
+  const provider = typeof id === "string" && id ? providerDisplayName(id) : "The provider"
+  const detail = message ? ` (${message.replace(/[.\s]+$/, "")})` : ""
+  return `${provider} rejected the request's credentials${detail}. Update the key under Settings → Models → Provider API keys, or choose another model.`
+}
+
 export function sessionErrorText(value: unknown): string {
   const error = record(value)
   const data = record(error?.data)
   const message = typeof data?.message === "string" ? data.message : "Request failed"
+  const credential = credentialErrorText(value)
+  if (credential) return credential
   const body = typeof data?.responseBody === "string" ? data.responseBody : ""
   if (!body.includes('"error":"insufficient_balance"')) return message
 

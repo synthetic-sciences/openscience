@@ -72,4 +72,40 @@ describe("SettingsPanelStack", () => {
     expect(modelFilter.value).toBe("remember me")
     expect(host.querySelector(".settings-panel-loading")).toBeNull()
   })
+
+  const settle = () => new Promise((done) => setTimeout(done, 0))
+
+  test("a steady resource keeps the panel on screen while it refetches", async () => {
+    const harness = fixture.createRefreshingPanelFixture({ steady: true })
+    const host = mount(harness.view)
+    expect(host.querySelector(".settings-panel-loading")).not.toBeNull()
+
+    harness.resolve(["ollama"])
+    await settle()
+    const list = host.querySelector<HTMLElement>('[aria-label="Runtimes"]')!
+    expect(list.textContent).toBe("ollama")
+
+    harness.refetch()
+    await settle()
+    expect(host.querySelector(".settings-panel-loading")).toBeNull()
+    expect(host.querySelector('[aria-label="Runtimes"]')).toBe(list)
+
+    harness.resolve(["ollama", "lmstudio"])
+    await settle()
+    expect(list.textContent).toBe("ollamalmstudio")
+  })
+
+  test("a plain resource swaps the panel for its skeleton on refetch", async () => {
+    const harness = fixture.createRefreshingPanelFixture({ steady: false })
+    const host = mount(harness.view)
+    harness.resolve(["ollama"])
+    await settle()
+    expect(host.querySelector('[aria-label="Runtimes"]')).not.toBeNull()
+
+    harness.refetch()
+    await settle()
+    expect(host.querySelector(".settings-panel-loading")).not.toBeNull()
+    expect(host.querySelector('[aria-label="Runtimes"]')).toBeNull()
+    harness.resolve([])
+  })
 })

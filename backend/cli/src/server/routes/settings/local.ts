@@ -385,6 +385,7 @@ export const LocalModelsRoutes = lazy(() =>
           localPort: z.number().int().min(1_024).max(65_535).default(12_434),
           key: z.string().optional(),
           name: z.string().trim().min(1).max(80).optional(),
+          contextLimit: z.number().int().min(1_024).max(2_097_152).optional(),
         }),
       ),
       async (c) => {
@@ -411,6 +412,7 @@ export const LocalModelsRoutes = lazy(() =>
             baseURL,
             apiKey: body.key,
             models: started.value,
+            contextLimit: body.contextLimit,
             runtime,
             selfHosted: true,
           })

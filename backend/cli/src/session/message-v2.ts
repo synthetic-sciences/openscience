@@ -1544,7 +1544,9 @@ export namespace MessageV2 {
           return `${msg}: ${e.responseBody}`
         }).trim()
 
-        const metadata = e.url ? { url: e.url } : undefined
+        // The provider lets the UI point a credential failure at the right
+        // connection instead of a bare "API key is invalid".
+        const metadata = { providerID: ctx.providerID, ...(e.url ? { url: e.url } : {}) }
         return new MessageV2.APIError(
           {
             message,

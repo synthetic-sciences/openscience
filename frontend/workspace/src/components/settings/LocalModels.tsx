@@ -11,9 +11,10 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { productPreferences } from "@/context/product-preferences"
+import { useModels } from "@/context/models"
 import { settingsApi } from "./api"
 import { prepareOllamaModels, selectableLocalModels } from "./local-model-selection"
-import { Card, PanelBody, PanelHeader, PanelScroll, RowCopy, Section } from "./_shared"
+import { Card, PanelBody, PanelHeader, PanelScroll, RowCopy, Section, steady } from "./_shared"
 
 interface Detected {
   id: string
@@ -62,17 +63,17 @@ const LocalModels: Component = () => {
   const call = <T,>(path: string, init?: RequestInit) =>
     settingsApi<T>(sdk.url, fetchFn, `/settings/local${path}`, init)
 
-  const [detected, { refetch: refetchDetected }] = createResource(() =>
-    call<{ detected: Detected[] }>("/detect").then((r) => r.detected),
+  const [detected, { refetch: refetchDetected }] = steady(
+    createResource(() => call<{ detected: Detected[] }>("/detect").then((r) => r.detected)),
   )
-  const [configured, { refetch: refetchConfigured }] = createResource(() =>
-    call<{ providers: Configured[] }>("").then((r) => r.providers),
+  const [configured, { refetch: refetchConfigured }] = steady(
+    createResource(() => call<{ providers: Configured[] }>("").then((r) => r.providers)),
   )
-  const [status, { refetch: refetchStatus }] = createResource(() =>
-    call<{ runtimes: Runtime[] }>("/status").then((r) => r.runtimes),
+  const [status, { refetch: refetchStatus }] = steady(
+    createResource(() => call<{ runtimes: Runtime[] }>("/status").then((r) => r.runtimes)),
   )
-  const [preferences, { mutate: setPreferences }] = createResource(() =>
-    settingsApi<{ show_local_models: boolean }>(sdk.url, fetchFn, "/settings/preferences"),
+  const [preferences, { mutate: setPreferences }] = steady(
+    createResource(() => settingsApi<{ show_local_models: boolean }>(sdk.url, fetchFn, "/settings/preferences")),
   )
   createEffect(() => {
     const value = preferences()?.show_local_models
@@ -96,8 +97,21 @@ const LocalModels: Component = () => {
     refetch()
   }
 
+  const models = useModels()
   const [busy, setBusy] = createSignal(false)
   const [context, setContext] = createSignal("32768")
+  // The picker only surfaces a curated frontier set by default. A model the
+  // user just added by hand must show up there, or the add looks like a no-op.
+  const reveal = (providerID: string, added: string[]) => {
+    for (const modelID of added) models.setVisibility({ providerID, modelID }, true)
+  }
+  const contextTokens = () => {
+    const tokens = Number(context())
+    if (!Number.isInteger(tokens) || tokens < 1_024 || tokens > 2_097_152) {
+      throw new Error("Context must be an integer between 1,024 and 2,097,152 tokens.")
+    }
+    return tokens
+  }
   const guard = async (fn: () => Promise<unknown>, failure: string) => {
     setBusy(true)
     setError(undefined)
@@ -120,10 +134,7 @@ const LocalModels: Component = () => {
   }
   const register = async (input: { url: string; models: string[]; id?: string; name?: string; key?: string }) => {
     const ollama = isOllama(input.id, input.url)
-    const tokens = Number(context())
-    if (ollama && (!Number.isInteger(tokens) || tokens < 1_024 || tokens > 2_097_152)) {
-      throw new Error("Context must be an integer between 1,024 and 2,097,152 tokens.")
-    }
+    const tokens = contextTokens()
     const prepared = ollama
       ? await prepareOllamaModels(input.models, (model) =>
           call<{ model: string }>("/context", {
@@ -141,7 +152,7 @@ const LocalModels: Component = () => {
         key: input.key,
         models: prepared.models,
         aliases: prepared.aliases,
-        contextLimit: ollama ? tokens : undefined,
+        contextLimit: tokens,
         runtime: ollama ? "ollama" : undefined,
         merge: true,
       }),
@@ -173,12 +184,13 @@ const LocalModels: Component = () => {
         models,
       })
       await sync.refreshProviders()
+      reveal(result.id, models)
       showToast({
         variant: "success",
         title: models.length === 1 ? "Model added" : "Models added",
         description: result.tuned
-          ? `Added ${models.length} to the end of the Models catalog.`
-          : `Added ${models.length} to the end of the Models catalog. Restart the local server to enable custom Ollama context tuning.`,
+          ? `${models.length} model(s) are now available in the model picker.`
+          : `${models.length} model(s) are now available in the model picker. Restart the local server to enable custom Ollama context tuning.`,
       })
       setChoice(undefined)
       setChosen(new Set<string>())
@@ -271,20 +283,23 @@ const LocalModels: Component = () => {
       if (!Number.isInteger(localPort) || localPort < 1_024 || localPort > 65_535) {
         throw new Error("Local port must be between 1,024 and 65,535.")
       }
-      const result = await call<{ models: string[] }>("/ssh", {
+      const contextLimit = contextTokens()
+      const result = await call<{ id: string; models: string[] }>("/ssh", {
         method: "POST",
         body: JSON.stringify({
           host: sshHost().trim(),
           remotePort,
           localPort,
           key: sshKey().trim() || undefined,
+          contextLimit,
         }),
       })
       await sync.refreshProviders()
+      reveal(result.id, result.models)
       showToast({
         variant: "success",
         title: "SSH models connected",
-        description: `Added ${result.models.length} model(s) through the encrypted tunnel.`,
+        description: `${result.models.length} model(s) are now available in the model picker through the encrypted tunnel.`,
       })
     }, "Couldn't connect the SSH model host")
 
@@ -312,12 +327,13 @@ const LocalModels: Component = () => {
     guard(async () => {
       const models = [...selected()]
       if (!models.length) throw new Error("Select at least one model.")
-      await register({ url: url().trim(), key: key().trim() || undefined, models })
+      const result = await register({ url: url().trim(), key: key().trim() || undefined, models })
       await sync.refreshProviders()
+      reveal(result.id, models)
       showToast({
         variant: "success",
         title: models.length === 1 ? "Model added" : "Models added",
-        description: `Added ${models.length} to the end of the Models catalog.`,
+        description: `${models.length} model(s) are now available in the model picker.`,
       })
       setUrl("")
       setKey("")
@@ -356,7 +372,10 @@ const LocalModels: Component = () => {
           )}
         </Show>
 
-        <Section title="Catalog" description="Local models are listed after connected providers in Models.">
+        <Section
+          title="Catalog"
+          description="Models you add here appear in the model picker alongside your connected providers."
+        >
           <Card>
             <div class="settings-row">
               <RowCopy
@@ -573,27 +592,15 @@ const LocalModels: Component = () => {
                     )}
                   </For>
                 </div>
-                <Show when={isOllama(source().id, source().baseURL)}>
-                  <div class="settings-row">
-                    <RowCopy
-                      title="Context window"
-                      description="Applied to the selected models. Larger windows use more memory; the tuned alias stays out of the catalog."
-                    />
-                    <div class="ml-auto flex shrink-0 items-center gap-2">
-                      <input
-                        class="settings-field w-32 text-right font-mono"
-                        type="number"
-                        min="1024"
-                        max="2097152"
-                        step="1024"
-                        aria-label="Ollama context window in tokens"
-                        value={context()}
-                        onInput={(event) => setContext(event.currentTarget.value)}
-                      />
-                      <span class="text-11-regular text-text-weak">tokens</span>
-                    </div>
-                  </div>
-                </Show>
+                <ContextField
+                  value={context()}
+                  onInput={setContext}
+                  description={
+                    isOllama(source().id, source().baseURL)
+                      ? "Applied to the selected models as a tuned Ollama alias. Larger windows use more memory; the alias stays out of the catalog."
+                      : "How much context OpenScience may send to these models. Match the server's configured window; this does not change the server itself."
+                  }
+                />
                 <div class="flex justify-end gap-2">
                   <Button
                     size="small"
@@ -659,6 +666,11 @@ const LocalModels: Component = () => {
                 onInput={setSshKey}
               />
             </div>
+            <ContextField
+              value={context()}
+              onInput={setContext}
+              description="How much context OpenScience may send to the remote models. Match the server's configured window."
+            />
             <div class="flex justify-end">
               <Button
                 size="small"
@@ -730,6 +742,15 @@ const LocalModels: Component = () => {
                   )}
                 </For>
               </div>
+              <ContextField
+                value={context()}
+                onInput={setContext}
+                description={
+                  isOllama(undefined, listedUrl())
+                    ? "Applied to the selected models as a tuned Ollama alias. Larger windows use more memory."
+                    : "How much context OpenScience may send to these models. Match the server's configured window; this does not change the server itself."
+                }
+              />
             </Show>
           </div>
         </Section>
@@ -807,4 +828,26 @@ const Field: Component<{
       onInput={(event) => props.onInput(event.currentTarget.value)}
     />
   </label>
+)
+
+// Every local endpoint records a context window; without one, OpenScience
+// assumes 32k and compacts long research sessions far too early on servers
+// that allow much more.
+const ContextField: Component<{ value: string; description: string; onInput: (value: string) => void }> = (props) => (
+  <div class="settings-row">
+    <RowCopy title="Context window" description={props.description} />
+    <div class="ml-auto flex shrink-0 items-center gap-2">
+      <input
+        class="settings-field w-32 text-right font-mono"
+        type="number"
+        min="1024"
+        max="2097152"
+        step="1024"
+        aria-label="Context window in tokens"
+        value={props.value}
+        onInput={(event) => props.onInput(event.currentTarget.value)}
+      />
+      <span class="text-11-regular text-text-weak">tokens</span>
+    </div>
+  </div>
 )

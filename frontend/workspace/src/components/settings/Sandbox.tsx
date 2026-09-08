@@ -14,7 +14,7 @@ import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
-import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
+import { PanelBody, PanelHeader, PanelScroll, Section, steady } from "./_shared"
 import "./preference-panels.css"
 import "./sandbox.css"
 
@@ -71,7 +71,7 @@ const Sandbox: Component = () => {
   const call = <T,>(path: string, init?: RequestInit) =>
     settingsApi<T>(sdk.url, fetchFn, `/settings/sandbox${path}`, init)
 
-  const [data, { mutate, refetch }] = createResource(() => call<Payload>(""))
+  const [data, { mutate, refetch }] = steady(createResource(() => call<Payload>("")))
   const [busyKeys, setBusyKeys] = createSignal<ReadonlySet<WriteKey>>(new Set())
   const [saving, setSaving] = createSignal(false)
   const [test, setTest] = createSignal<SelfTest>()

@@ -7,6 +7,7 @@ import {
   type JSX,
   type ParentComponent,
   type Component,
+  type Resource,
 } from "solid-js"
 import { Icon } from "@synsci/ui/icon"
 import type { IconProps } from "@synsci/ui/icon"
@@ -31,6 +32,23 @@ function useDialogMount() {
     if (value) update()
   }
   return { mount, anchor, open }
+}
+
+// Panels render under the panel stack's Suspense boundary, and a resource read
+// re-suspends on every refetch. Left alone, a Rescan or Save swapped the whole
+// panel for its loading skeleton and reset the scroll position. Reading
+// `latest` keeps the current content on screen while a refresh resolves; the
+// first load still suspends into the skeleton as before.
+export function steady<T, A>(value: [Resource<T>, A]): [Resource<T>, A] {
+  const [resource, actions] = value
+  const read = (() => resource.latest) as Resource<T>
+  Object.defineProperties(read, {
+    state: { get: () => resource.state },
+    error: { get: () => resource.error },
+    loading: { get: () => resource.loading },
+    latest: { get: () => resource.latest },
+  })
+  return [read, actions]
 }
 
 // Shared visual language for the OpenScience settings panels. Matches the

@@ -821,19 +821,27 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                           id: model.provider,
                           name: providerLabels[model.provider] ?? model.provider,
                         })
+                        // No connected provider serves this model yet. The row
+                        // leads to the connection settings instead of dead-ending.
                         return (
-                          <div
+                          <button
+                            type="button"
+                            data-model-menu-item
                             data-model-quick
                             data-model-unavailable
                             class={`${row} model-settings-unavailable`}
-                            aria-label={`${model.label}, unavailable`}
+                            aria-label={`${model.label}, ${provider().name} not connected. Connect a provider`}
+                            onClick={manage}
                           >
                             <ModelMark id={provider().id} name={provider().name} />
                             <span class="model-settings-model">
                               <strong>{model.label}</strong>
-                              <small>{`${provider().name} · Unavailable`}</small>
+                              <small>{`${provider().name} · Connect to use`}</small>
                             </span>
-                          </div>
+                            <span aria-hidden="true" data-model-menu-value>
+                              ›
+                            </span>
+                          </button>
                         )
                       }
 

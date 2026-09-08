@@ -3,6 +3,7 @@ import {
   createEffect,
   createRoot,
   createSignal,
+  For,
   getOwner,
   onCleanup,
   type Owner,
@@ -27,12 +28,20 @@ type Active = {
 
 export interface ShowOptions {
   onClose?: () => void
+  /**
+   * Open above the current dialog instead of replacing it. Closing the
+   * stacked dialog returns to the one underneath with its state intact, so a
+   * confirmation raised from inside Settings does not throw the user out of
+   * Settings.
+   */
+  stack?: boolean
 }
 
 const Context = createContext<ReturnType<typeof init>>()
 
 function init() {
-  const [active, setActive] = createSignal<Active | undefined>()
+  const [stack, setStack] = createSignal<Active[]>([])
+  const active = () => stack().at(-1)
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
   const lock = { value: false }
 
@@ -58,7 +67,7 @@ function init() {
     timer.current = setTimeout(() => {
       timer.current = undefined
       current.dispose()
-      if (active()?.id === id) setActive(undefined)
+      setStack((items) => items.filter((item) => item.id !== id))
       lock.value = false
     }, 100)
   }
@@ -79,12 +88,12 @@ function init() {
     onCleanup(() => window.removeEventListener("keydown", onKeyDown, true))
   })
 
-  const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
-    // Immediately dispose any existing dialog when showing a new one
-    const current = active()
-    if (current) {
-      current.dispose()
-      setActive(undefined)
+  const show = (element: DialogElement, owner: Owner, onClose?: () => void, options?: { stack?: boolean }) => {
+    // A dialog still animating shut cannot be stacked on; finish closing it.
+    const stacked = options?.stack === true && active() !== undefined && !lock.value
+    if (!stacked) {
+      for (const item of stack()) item.dispose()
+      setStack([])
     }
 
     if (timer.current !== undefined) {
@@ -108,6 +117,9 @@ function init() {
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (open) return
+              // Only the topmost dialog answers dismissal; the one underneath a
+              // stacked dialog stays put until its turn.
+              if (active()?.id !== id) return
               close()
             }}
           >
@@ -122,12 +134,16 @@ function init() {
 
     if (!dispose || !setClosing) return
 
-    setActive({ id, node, dispose, owner, onClose, setClosing })
+    const entry: Active = { id, node, dispose, owner, onClose, setClosing }
+    setStack((items) => [...items, entry])
   }
 
   return {
     get active() {
       return active()
+    },
+    get stack() {
+      return stack()
     },
     close,
     show,
@@ -139,7 +155,9 @@ export function DialogProvider(props: ParentProps) {
   return (
     <Context.Provider value={ctx}>
       {props.children}
-      <div data-component="dialog-stack">{ctx.active?.node}</div>
+      <div data-component="dialog-stack">
+        <For each={ctx.stack}>{(item) => item.node}</For>
+      </div>
     </Context.Provider>
   )
 }
@@ -167,7 +185,7 @@ export function useDialog() {
       const base = ctx.active?.owner ?? owner
       const opts: ShowOptions =
         typeof optionsOrOnClose === "function" ? { onClose: optionsOrOnClose } : (optionsOrOnClose ?? {})
-      ctx.show(element, base, opts.onClose)
+      ctx.show(element, base, opts.onClose, { stack: opts.stack })
     },
     close() {
       ctx.close()
