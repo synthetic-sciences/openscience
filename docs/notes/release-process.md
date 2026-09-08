@@ -158,9 +158,8 @@ Configure these repository variables:
 
 The former `WINDOWS_CSC_LINK` and `WINDOWS_CSC_KEY_PASSWORD` secrets are no longer
 used. Until all six values above exist, the publish preflight records a warning
-and the Windows installer is published unsigned, as it was before Artifact
-Signing was introduced; a partial configuration fails the preflight instead.
-Once they are all set, the workflow requires a trusted, timestamped signature
+naming the missing ones and the Windows installer is published unsigned, as it
+was before Artifact Signing was introduced. Once they are all set, the workflow requires a trusted, timestamped signature
 from the configured publisher on the installer, app, sidecar, and bundled native
 libraries. A resumed
 installer must match its GitHub SHA-256 digest and pass signature verification

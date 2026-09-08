@@ -10,9 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
-- Publish the Windows desktop installer unsigned, with a workflow warning,
-  until the Microsoft Artifact Signing profile and its repository configuration
-  exist; a partial signing configuration still fails the release preflight.
+- Publish the Windows desktop installer unsigned, with a workflow warning that
+  names the missing values, until the Microsoft Artifact Signing profile and its
+  repository configuration are complete.
 - Match the new-terminal shortcut by physical key so Ctrl+Shift+` works on layouts
   where Shift+backtick reports a different symbol, and point twelve more skills at
   the real scientific-schematics script path.

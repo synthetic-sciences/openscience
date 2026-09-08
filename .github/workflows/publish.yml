@@ -157,10 +157,12 @@ jobs:
             echo "::error::Missing release credentials: ${missing[*]}"
             exit 1
           fi
-          # Windows Artifact Signing is all-or-nothing. Until the Public Trust
-          # profile and its Entra application exist, the Windows installer is
-          # published unsigned (as before signing was introduced) with a
-          # warning; a partial configuration is a mistake and fails here.
+          # Windows Artifact Signing needs every value below. The Entra
+          # application and Public Trust profile arrive last (after Microsoft's
+          # approval), so the configuration is expected to be incomplete for a
+          # while; until it is complete the Windows installer is published
+          # unsigned, as before signing was introduced, and the warning names
+          # exactly what is still missing.
           windows=(WINDOWS_SIGNING_CLIENT_ID WINDOWS_SIGNING_TENANT_ID WINDOWS_SIGNING_ENDPOINT WINDOWS_SIGNING_ACCOUNT WINDOWS_SIGNING_PROFILE WINDOWS_SIGNING_PUBLISHER)
           absent=()
           for name in "${windows[@]}"; do
@@ -168,12 +170,9 @@ jobs:
           done
           if (( ${#absent[@]} == 0 )); then
             echo "windows_signing=true" >> "$GITHUB_OUTPUT"
-          elif (( ${#absent[@]} == ${#windows[@]} )); then
-            echo "::warning::Windows Artifact Signing is not configured; the Windows installer will be published unsigned."
-            echo "windows_signing=false" >> "$GITHUB_OUTPUT"
           else
-            echo "::error::Windows Artifact Signing is partially configured; missing: ${absent[*]}"
-            exit 1
+            echo "::warning::Windows Artifact Signing is not configured (missing: ${absent[*]}); the Windows installer will be published unsigned."
+            echo "windows_signing=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Verify npm publisher
