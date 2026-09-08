@@ -1082,6 +1082,12 @@ function createGlobalSync() {
           void accountRefresh.notifyAfter(() => Promise.resolve())
           return
         }
+        case "account.login": {
+          // The sign-in page the server tried to open; the panel that started
+          // the sign-in shows it as a link in case no browser appeared.
+          window.dispatchEvent(new CustomEvent("openscience:login-approval", { detail: event.properties.approval_url }))
+          return
+        }
         case "skill.updated": {
           const version = ++skillRefreshVersion
           void globalSDK.client.global.config

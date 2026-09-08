@@ -1140,7 +1140,14 @@ export namespace SessionProcessor {
                   if (
                     !input.assistantMessage.summary &&
                     MessageV2.isContinuing(value.finishReason) &&
-                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
+                    (await SessionCompaction.isOverflow({
+                      tokens: usage.tokens,
+                      model: input.model,
+                      // The start-of-turn check honours the turn's own context
+                      // limit; judging mid-task against the full window would
+                      // let a smaller configured window overflow.
+                      context: streamInput.user.context,
+                    }))
                   ) {
                     needsCompaction = true
                   }
@@ -1156,7 +1163,14 @@ export namespace SessionProcessor {
                   if (
                     !input.assistantMessage.summary &&
                     value.finishReason === "length" &&
-                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
+                    (await SessionCompaction.isOverflow({
+                      tokens: usage.tokens,
+                      model: input.model,
+                      // The start-of-turn check honours the turn's own context
+                      // limit; judging mid-task against the full window would
+                      // let a smaller configured window overflow.
+                      context: streamInput.user.context,
+                    }))
                   ) {
                     overflow = true
                     input.assistantMessage.finish = "compact"

@@ -10,6 +10,7 @@ import { usePlatform } from "@/context/platform"
 import { AppearanceSections } from "../settings-general"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { settingsApi } from "./api"
+import { LoginApproval } from "./LoginApproval"
 import { walletBalanceLabel } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
 import { ACCOUNT_DEADLINE_MS, withAccountDeadline } from "./account-deadline"
@@ -259,14 +260,17 @@ export default function General() {
                   <Show
                     when={account()?.session}
                     fallback={
-                      <Button
-                        size="small"
-                        variant="primary"
-                        disabled={Boolean(busy())}
-                        onClick={() => void login("login")}
-                      >
-                        {busy() === "login" ? "Waiting for browser…" : "Sign in"}
-                      </Button>
+                      <div class="flex flex-col items-end">
+                        <Button
+                          size="small"
+                          variant="primary"
+                          disabled={Boolean(busy())}
+                          onClick={() => void login("login")}
+                        >
+                          {busy() === "login" ? "Waiting for browser…" : "Sign in"}
+                        </Button>
+                        <LoginApproval active={busy() === "login"} />
+                      </div>
                     }
                   >
                     <Button size="small" variant="secondary" disabled={Boolean(busy())} onClick={() => void logout()}>
@@ -339,14 +343,17 @@ export default function General() {
                     </div>
                   </Show>
                   <Show when={needsBrowserWorkspaceApproval()}>
-                    <Button
-                      size="small"
-                      variant="secondary"
-                      disabled={Boolean(busy())}
-                      onClick={() => void login("workspace")}
-                    >
-                      {busy() === "workspace" ? "Waiting for browser…" : "Switch workspace"}
-                    </Button>
+                    <div class="flex flex-col items-end">
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        disabled={Boolean(busy())}
+                        onClick={() => void login("workspace")}
+                      >
+                        {busy() === "workspace" ? "Waiting for browser…" : "Switch workspace"}
+                      </Button>
+                      <LoginApproval active={busy() === "workspace"} />
+                    </div>
                   </Show>
                 </AccountRow>
               </Show>

@@ -472,6 +472,23 @@ const SETTINGS_STYLES = `
   text-align: center;
   text-wrap: pretty;
 }
+.settings-inline-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-strong);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.settings-inline-link:hover,
+.settings-inline-link:focus-visible {
+  color: var(--color-text);
+}
+[data-login-approval] {
+  margin: var(--settings-space-2) 0 0;
+}
 .settings-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

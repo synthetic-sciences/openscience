@@ -63,11 +63,11 @@ export async function needsOnboarding(): Promise<boolean> {
 
 async function onboardByok(): Promise<void> {
   prompts.log.info(
-    "Bring your own key or sign in with ChatGPT/Codex or Claude Max — pick next. " +
+    "Bring your own provider key or sign in with ChatGPT/Codex — pick next. " +
       "Saved model credentials use an owner-only local auth file, not the system keychain.",
   )
   // Reuse the proven provider picker + key/OAuth flow. It also handles
-  // Claude Max / ChatGPT / Copilot sign-in via the provider auth plugins.
+  // ChatGPT / Copilot sign-in via the bundled auth plugins.
   await AuthLoginCommand.handler({} as never)
 }
 

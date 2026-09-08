@@ -2023,6 +2023,19 @@ export namespace OpenScience {
     GlobalBus.emit("event", { directory: "global", payload: { type: AccountUpdatedEvent.type, properties } })
   }
 
+  /** Published when a browser sign-in has an approval page to open. The
+   * workspace shows the link itself, so a host that cannot launch a browser
+   * (SSH, a container, a desktop without a default handler) still has a way
+   * to finish signing in instead of waiting out the five-minute timeout. */
+  export const AccountLoginEvent = BusEvent.define("account.login", z.object({ approval_url: z.string() }))
+
+  export function announceLogin(url: string): void {
+    GlobalBus.emit("event", {
+      directory: "global",
+      payload: { type: AccountLoginEvent.type, properties: { approval_url: url } },
+    })
+  }
+
   // The gateway settles a managed charge server-side shortly after the
   // response stream ends, so the summary is read again after this delay
   // rather than at the response headers, which predate the charge.

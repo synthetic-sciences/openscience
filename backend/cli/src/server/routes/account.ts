@@ -279,7 +279,12 @@ export const AccountRoutes = lazy(() =>
       }),
       async (c) => {
         try {
-          await OpenScience.browserLogin({ onApprovalUrl: openUrl })
+          await OpenScience.browserLogin({
+            onApprovalUrl: (url) => {
+              openUrl(url)
+              OpenScience.announceLogin(url)
+            },
+          })
           Provider.invalidate()
           emitDisposed()
           return c.json({ ok: true })

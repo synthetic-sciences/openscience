@@ -8164,6 +8164,7 @@ export class OpenScienceClient extends HeyApiClient {
       localPort?: number
       key?: string
       name?: string
+      contextLimit?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -8177,6 +8178,7 @@ export class OpenScienceClient extends HeyApiClient {
             { in: "body", key: "localPort" },
             { in: "body", key: "key" },
             { in: "body", key: "name" },
+            { in: "body", key: "contextLimit" },
           ],
         },
       ],

@@ -2633,6 +2633,10 @@ export namespace Provider {
           // The gateway's request envelope carries text and image parts only,
           // whatever the upstream model accepts; a document or media part is
           // refused with 422, so the route never advertises those inputs.
+          // Image support follows the reviewed route, not models.dev's entry,
+          // which has lagged and left vision models refusing attachments.
+          model.capabilities.input.image = reviewed.input.includes("image")
+          model.capabilities.attachment = model.capabilities.input.image
           model.capabilities.input.pdf = false
           model.capabilities.input.audio = false
           model.capabilities.input.video = false

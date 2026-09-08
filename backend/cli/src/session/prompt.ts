@@ -802,7 +802,7 @@ export namespace SessionPrompt {
           lastFinished = msg.info as MessageV2.Assistant
         if (lastUser && lastFinished) break
         const task = msg.parts.filter(
-          (part) =>
+          (part): part is MessageV2.CompactionPart | MessageV2.SubtaskPart =>
             part.type === "subtask" ||
             (part.type === "compaction" && msg.info.id === lastUser?.id && !settled.has(msg.info.id)),
         )
@@ -852,9 +852,14 @@ export namespace SessionPrompt {
               m.info.role === "user" &&
               m.parts.some((p) => p.type !== "compaction" && !(p.type === "text" && p.synthetic)),
           )?.info as MessageV2.User | undefined) ?? user
-        const detail =
+        const base =
           message ??
           "The assembled conversation still exceeds the provider's input limit after an attempt to summarize earlier history. Your conversation is preserved. Remove large attachments, choose a model with a larger input allowance, or start a new session with a short handoff."
+        // The loop retries a recoverable rejection on its own; say so, or the
+        // card reads as a dead end the user has to act on.
+        const detail = recoverable
+          ? `${base} OpenScience is compacting earlier history and will retry this request once automatically.`
+          : base
         const error = recoverable
           ? new MessageV2.ContextWindowError({ message: detail }).toObject()
           : new NamedError.Unknown({ message: detail }).toObject()

@@ -6,6 +6,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
 import { settingsApi } from "./api"
+import { LoginApproval } from "./LoginApproval"
 import { formatCreditBalance } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
 import { createAccountRecovery } from "./account-recovery"
@@ -382,6 +383,7 @@ export function ManagedInference(props: { onError?: (error: string | undefined) 
             >
               {accountAction()}
             </Button>
+            <LoginApproval active={state.signingIn} />
           </div>
         </div>
         <div class="models-routing__preference">

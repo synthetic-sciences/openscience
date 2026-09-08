@@ -1534,9 +1534,11 @@ export namespace MessageV2 {
 
           try {
             const body = JSON.parse(e.responseBody)
-            // try to extract common error message fields
-            const errMsg = body.message || body.error || body.error?.message
-            if (errMsg && typeof errMsg === "string") {
+            // OpenAI-compatible servers nest the text under error.message;
+            // vLLM/FastAPI use detail; a few return a bare error string.
+            const candidates = [body?.error?.message, body?.message, body?.error, body?.detail]
+            const errMsg = candidates.find((value) => typeof value === "string" && value.trim())
+            if (errMsg) {
               return `${msg}: ${errMsg}`
             }
           } catch {}

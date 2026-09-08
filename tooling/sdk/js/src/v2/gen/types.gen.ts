@@ -119,6 +119,13 @@ export type EventAccountUpdated = {
   }
 }
 
+export type EventAccountLogin = {
+  type: "account.login"
+  properties: {
+    approval_url: string
+  }
+}
+
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -1183,6 +1190,7 @@ export type Event =
   | EventServerInstanceDisposed
   | EventProjectTrustChanged
   | EventAccountUpdated
+  | EventAccountLogin
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileWatcherUpdated
@@ -8991,6 +8999,7 @@ export type PostSettingsLocalSshData = {
     localPort?: number
     key?: string
     name?: string
+    contextLimit?: number
   }
   path?: never
   query?: never
