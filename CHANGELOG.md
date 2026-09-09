@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Redesigned the desktop first-run flow as a full-window setup with a step indicator, a benefits list on the sign-in step, workspace choices as a single option list, and an inline provider-key section (Anthropic, OpenAI, OpenRouter) that reports when a key is saved. Same tokens as the workspace, so the first screen matches the app that follows.
+
 - Linux supervised commands inherit blocking output handles so high-volume native tools do not abort with `EAGAIN` when their output pipe fills.
 
 - Oversized incomplete Bash output lines and private-key blocks are replaced with explicit redaction markers; provenance previews are redacted before clipping.

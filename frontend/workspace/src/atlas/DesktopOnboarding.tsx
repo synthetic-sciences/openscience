@@ -2,7 +2,7 @@ import { For, Show, createEffect, createSignal, onCleanup, onMount, type ParentP
 import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
 import { TextField } from "@synsci/ui/text-field"
-import { IconFolder, IconPlus } from "@/atlas/shared/Icon"
+import { IconCheckCircle, IconChevronRight, IconFolder, IconPlus } from "@/atlas/shared/Icon"
 import { Wordmark } from "@/atlas/Wordmark"
 import { settingsApi } from "@/components/settings/api"
 import { ACCOUNT_DEADLINE_MS, withAccountDeadline } from "@/components/settings/account-deadline"
@@ -128,16 +128,25 @@ function createOnboardingProjectFlow(input: {
 
 function DesktopOnboardingLoading() {
   return (
-    <main class="desktop-onboarding" aria-label="Loading desktop setup">
-      <section class="desktop-onboarding__shell desktop-onboarding__shell--loading">
-        <Wordmark size="sm" />
-        <div class="desktop-onboarding__loading" role="status" aria-live="polite">
-          <AsciiSpinner label="Preparing your workspace…" color="var(--text-weak)" />
-        </div>
-      </section>
+    <main class="desktop-onboarding desktop-onboarding--loading" aria-label="Loading desktop setup">
+      <div class="desktop-onboarding__loading" role="status" aria-live="polite">
+        <Wordmark size="md" />
+        <AsciiSpinner label="Preparing your workspace…" color="var(--color-text-muted)" />
+      </div>
     </main>
   )
 }
+
+const STEPS = [
+  { id: "account", label: "Account" },
+  { id: "project", label: "Workspace" },
+] as const
+
+const SIGN_IN_BENEFITS = [
+  "Model access through your workspace, no keys to paste",
+  "Shared credentials and compute your team already set up",
+  "Project files and sessions stay on this device",
+]
 
 type ServerProjects = ReturnType<typeof useServer>["projects"]
 type OnboardingServer = {
@@ -348,144 +357,167 @@ export function DesktopOnboardingController(
         when={complete()}
         fallback={
           <main class="desktop-onboarding" aria-labelledby="desktop-onboarding-title" aria-busy={Boolean(busy())}>
-            <section class="desktop-onboarding__shell">
-              <header class="desktop-onboarding__header">
-                <Wordmark size="sm" />
-                <span class="desktop-onboarding__account-state">
-                  {account.step === "account"
-                    ? "Step 1 of 2"
-                    : account.connected
-                      ? "Account connected · Step 2 of 2"
-                      : "Step 2 of 2"}
-                </span>
-              </header>
+            <header class="desktop-onboarding__header">
+              <Wordmark size="sm" />
+              <ol class="desktop-onboarding__steps" aria-label="Setup progress">
+                <For each={STEPS}>
+                  {(step, index) => {
+                    const state = () =>
+                      step.id === account.step ? "current" : account.step === "project" ? "done" : "upcoming"
+                    return (
+                      <li data-state={state()} aria-current={state() === "current" ? "step" : undefined}>
+                        <span class="desktop-onboarding__step-mark" aria-hidden="true">
+                          {state() === "done" ? <IconCheckCircle size={14} strokeWidth={2} /> : index() + 1}
+                        </span>
+                        <span>{step.label}</span>
+                      </li>
+                    )
+                  }}
+                </For>
+              </ol>
+            </header>
 
+            <section class="desktop-onboarding__body">
               <Show
                 when={account.step === "project"}
                 fallback={
-                  <div class="desktop-onboarding__signin">
-                    <div class="desktop-onboarding__intro">
-                      <p>YOUR RESEARCH STARTS HERE</p>
-                      <h1 id="desktop-onboarding-title">Welcome to OpenScience</h1>
-                      <span>
-                        Sign in to Synthetic Sciences and choose any workspace you belong to. Connect its model access
-                        and shared credentials before starting your research.
-                      </span>
-                    </div>
-                    <div class="desktop-onboarding__signin-actions">
+                  <div class="desktop-onboarding__panel">
+                    <h1 id="desktop-onboarding-title">Welcome to OpenScience</h1>
+                    <p class="desktop-onboarding__lead">
+                      Sign in to Synthetic Sciences to research with your workspace's model access and shared
+                      credentials. You can also bring your own provider keys.
+                    </p>
+                    <ul class="desktop-onboarding__benefits">
+                      <For each={SIGN_IN_BENEFITS}>
+                        {(benefit) => (
+                          <li>
+                            <IconCheckCircle size={14} strokeWidth={1.5} aria-hidden="true" />
+                            <span>{benefit}</span>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                    <div class="desktop-onboarding__actions">
                       <Button variant="primary" size="large" disabled={account.pending} onClick={() => void login()}>
                         {account.pending ? "Waiting for sign-in…" : "Sign in with Synthetic Sciences"}
                       </Button>
-                      <p class="desktop-onboarding__signin-hint" role="status" aria-live="polite">
+                      <p class="desktop-onboarding__status" role="status" aria-live="polite">
                         {account.pending
-                          ? "Choose your workspace in your browser. This window will continue automatically."
+                          ? "Choose your workspace in your browser. This window continues automatically."
                           : "Opens Synthetic Sciences in your browser."}
                       </p>
                     </div>
                   </div>
                 }
               >
-                <div class="desktop-onboarding__content">
-                  <div class="desktop-onboarding__intro">
-                    <p>YOUR FIRST WORKSPACE</p>
-                    <h1 ref={projectTitle} id="desktop-onboarding-title" tabindex="-1">
-                      Start with your research
-                    </h1>
-                    <span>
-                      Open an existing folder to keep files, sessions, and results together. You can change model and
-                      compute access anytime in Customize. Project files stay on this device.
-                    </span>
-                  </div>
+                <div class="desktop-onboarding__panel">
+                  <Show when={account.connected}>
+                    <p class="desktop-onboarding__connected">
+                      <IconCheckCircle size={14} strokeWidth={1.5} aria-hidden="true" />
+                      Account connected
+                    </p>
+                  </Show>
+                  <h1 ref={projectTitle} id="desktop-onboarding-title" tabindex="-1">
+                    Start with your research
+                  </h1>
+                  <p class="desktop-onboarding__lead">
+                    Choose where OpenScience keeps this project's files, sessions, and results. Project files stay on
+                    this device.
+                  </p>
 
-                  <div class="desktop-onboarding__workspace-actions" aria-label="Choose your first workspace">
+                  <div class="desktop-onboarding__options" role="group" aria-label="Choose your first workspace">
                     <button
                       type="button"
-                      class="desktop-onboarding__workspace-action desktop-onboarding__workspace-action--primary"
+                      class="desktop-onboarding__option"
                       disabled={Boolean(busy())}
                       onClick={() => void openFolder()}
                     >
-                      <span class="desktop-onboarding__workspace-icon" aria-hidden="true">
-                        <IconFolder size={20} strokeWidth={1.5} />
+                      <span class="desktop-onboarding__option-icon" aria-hidden="true">
+                        <IconFolder size={16} strokeWidth={1.5} />
                       </span>
-                      <span>
-                        <strong>{busy() === "folder" ? "Opening folder…" : "Open a folder"}</strong>
-                        <small>Recommended · continue with an existing research directory</small>
+                      <span class="desktop-onboarding__option-copy">
+                        <strong>
+                          {busy() === "folder" ? "Opening folder…" : "Open a folder"}
+                          <span class="desktop-onboarding__option-tag">Recommended</span>
+                        </strong>
+                        <small>Continue with an existing research directory</small>
                       </span>
+                      <IconChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
                     </button>
                     <button
                       type="button"
-                      class="desktop-onboarding__workspace-action"
+                      class="desktop-onboarding__option"
                       disabled={Boolean(busy())}
                       onClick={() => void startBlank()}
                     >
-                      <span class="desktop-onboarding__workspace-icon" aria-hidden="true">
-                        <IconPlus size={18} strokeWidth={1.5} />
+                      <span class="desktop-onboarding__option-icon" aria-hidden="true">
+                        <IconPlus size={16} strokeWidth={1.5} />
                       </span>
-                      <span>
+                      <span class="desktop-onboarding__option-copy">
                         <strong>{busy() === "blank" ? "Creating project…" : "Start a blank project"}</strong>
                         <small>Create a clean workspace and connect folders later</small>
                       </span>
+                      <IconChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
                     </button>
                   </div>
 
-                  <details class="desktop-onboarding__models">
-                    <summary>
-                      <span>
-                        <strong>Model access</strong>
-                        <small>Optional · set up now or later</small>
-                      </span>
-                      <span aria-hidden="true">+</span>
-                    </summary>
-                    <div class="desktop-onboarding__model-options">
-                      <section class="desktop-onboarding__model-option desktop-onboarding__model-option--key">
-                        <div class="desktop-onboarding__model-copy">
-                          <strong>Provider key</strong>
-                          <small>Stored locally and billed directly by the provider.</small>
-                        </div>
-                        <div class="desktop-onboarding__credentials">
-                          <label>
-                            <span>Provider</span>
-                            <select
-                              value={provider()}
-                              disabled={Boolean(busy())}
-                              onChange={(event) => setProvider(event.currentTarget.value)}
-                            >
-                              <For each={providers}>{(item) => <option value={item.id}>{item.label}</option>}</For>
-                            </select>
-                          </label>
-                          <label class="desktop-onboarding__field">
-                            <span>API key</span>
-                            <TextField
-                              hideLabel
-                              type="password"
-                              value={key()}
-                              disabled={Boolean(busy())}
-                              onChange={setKey}
-                              placeholder="Paste provider key"
-                              autocomplete="off"
-                              onKeyDown={(event: KeyboardEvent) => {
-                                if (event.key !== "Enter") return
-                                event.preventDefault()
-                                void saveKey()
-                              }}
-                            />
-                          </label>
-                          <Button
-                            variant="secondary"
-                            size="small"
-                            disabled={Boolean(busy()) || !key().trim()}
-                            onClick={() => void saveKey()}
-                          >
-                            {busy() === "api" ? "Saving…" : configured() === "api" ? "Saved" : "Save key"}
-                          </Button>
-                        </div>
-                      </section>
-
-                      <p class="desktop-onboarding__note">
-                        You can also connect ChatGPT / Codex or a local runtime later in Customize → Models.
-                      </p>
+                  <section class="desktop-onboarding__models" aria-labelledby="desktop-onboarding-models">
+                    <div class="desktop-onboarding__section-head">
+                      <h2 id="desktop-onboarding-models">Model access</h2>
+                      <span>Optional</span>
                     </div>
-                  </details>
+                    <div class="desktop-onboarding__providers" role="radiogroup" aria-label="Provider">
+                      <For each={providers}>
+                        {(item) => (
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={provider() === item.id}
+                            disabled={Boolean(busy())}
+                            onClick={() => setProvider(item.id)}
+                          >
+                            {item.label}
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                    <div class="desktop-onboarding__credentials">
+                      <label class="desktop-onboarding__field">
+                        <span>API key</span>
+                        <TextField
+                          hideLabel
+                          type="password"
+                          value={key()}
+                          disabled={Boolean(busy())}
+                          onChange={setKey}
+                          placeholder={`Paste your ${providers.find((item) => item.id === provider())?.label ?? "provider"} key`}
+                          autocomplete="off"
+                          onKeyDown={(event: KeyboardEvent) => {
+                            if (event.key !== "Enter") return
+                            event.preventDefault()
+                            void saveKey()
+                          }}
+                        />
+                      </label>
+                      <Button
+                        variant="secondary"
+                        size="normal"
+                        disabled={Boolean(busy()) || !key().trim()}
+                        onClick={() => void saveKey()}
+                      >
+                        {busy() === "api" ? "Saving…" : "Save key"}
+                      </Button>
+                    </div>
+                    <p class="desktop-onboarding__note" role="status" aria-live="polite">
+                      <Show
+                        when={configured() === "api"}
+                        fallback="Stored on this device and billed by the provider. ChatGPT / Codex and local runtimes connect later in Customize → Models."
+                      >
+                        <IconCheckCircle size={14} strokeWidth={1.5} aria-hidden="true" />
+                        Key saved. Manage providers anytime in Customize → Models.
+                      </Show>
+                    </p>
+                  </section>
                 </div>
               </Show>
 
@@ -494,13 +526,15 @@ export function DesktopOnboardingController(
                   {error()}
                 </p>
               </Show>
+            </section>
 
-              <footer class="desktop-onboarding__footer">
+            <footer class="desktop-onboarding__footer">
+              <div class="desktop-onboarding__footer-inner">
                 <Show
                   when={account.step === "project"}
                   fallback={
                     <>
-                      <span>You can also use your own models and sign in later.</span>
+                      <span>Prefer your own models? Skip sign-in and add a provider key next.</span>
                       <Button class="desktop-onboarding__skip" variant="ghost" size="small" onClick={skip}>
                         Skip
                       </Button>
@@ -509,8 +543,8 @@ export function DesktopOnboardingController(
                 >
                   <span>Model setup is optional. OpenScience works with credentials and runtimes you control.</span>
                 </Show>
-              </footer>
-            </section>
+              </div>
+            </footer>
           </main>
         }
       >
