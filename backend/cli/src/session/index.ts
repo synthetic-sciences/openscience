@@ -12,6 +12,7 @@ import { Storage } from "../storage/storage"
 import { createCoalescer } from "../storage/coalescer"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
+import { SessionLoopState } from "./loop-state"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@synsci/util/fn"
@@ -263,24 +264,42 @@ export namespace Session {
       })
       const msgs = await messages({ sessionID: input.sessionID })
       const idMap = new Map<string, string>()
+      const remap = (id: string) => idMap.get(id) ?? id
 
       for (const msg of msgs) {
         if (input.messageID && msg.info.id >= input.messageID) break
         const newID = Identifier.ascending("message")
         idMap.set(msg.info.id, newID)
 
-        const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
-        const cloned = await updateMessage({
-          ...msg.info,
-          sessionID: session.id,
-          id: newID,
-          ...(parentID && { parentID }),
-        })
+        // Every message id the transcript refers to moves with the copy:
+        // the compaction tail anchor, the epoch/transaction ids the loop
+        // controller keys its state by, and the parts whose ids derive from
+        // them. Copying them verbatim made the fork drop its verbatim tail
+        // and re-finalize a compaction that was already settled.
+        const info: MessageV2.Info =
+          msg.info.role === "assistant"
+            ? {
+                ...msg.info,
+                sessionID: session.id,
+                id: newID,
+                ...(msg.info.parentID && idMap.has(msg.info.parentID)
+                  ? { parentID: idMap.get(msg.info.parentID)! }
+                  : {}),
+                ...(msg.info.tailStartId ? { tailStartId: remap(msg.info.tailStartId) } : {}),
+              }
+            : {
+                ...msg.info,
+                sessionID: session.id,
+                id: newID,
+                ...(msg.info.internal ? { internal: forkInternal(msg.info.internal, remap) } : {}),
+              }
+        const cloned = await updateMessage(info)
 
+        const transaction = msg.info.role === "user" ? forkTransaction(msg.info.internal) : undefined
         for (const part of msg.parts) {
           await updatePart({
             ...part,
-            id: Identifier.ascending("part"),
+            id: forkPartID(part.id, [msg.info.id, ...(transaction ? [transaction] : [])], remap),
             messageID: cloned.id,
             sessionID: session.id,
           })
@@ -289,6 +308,49 @@ export namespace Session {
       return session
     },
   )
+
+  const DERIVED_PART_SLOTS = [
+    "breaker",
+    "breaker-reset",
+    "continuation",
+    "finalization",
+    "carrier",
+    "contract-boundary",
+  ]
+
+  function forkTransaction(internal: MessageV2.User["internal"]) {
+    return internal && "transaction" in internal ? internal.transaction : undefined
+  }
+
+  function forkInternal(
+    internal: NonNullable<MessageV2.User["internal"]>,
+    remap: (id: string) => string,
+  ): NonNullable<MessageV2.User["internal"]> {
+    if (internal.type === "prompt") return { ...internal, epoch: remap(internal.epoch) }
+    if (internal.type === "continuation") {
+      return { ...internal, epoch: remap(internal.epoch), transaction: remap(internal.transaction) }
+    }
+    return {
+      ...internal,
+      epoch: remap(internal.epoch),
+      transaction: remap(internal.transaction),
+      ...(internal.continuationID ? { continuationID: remap(internal.continuationID) } : {}),
+      ...(internal.recovery
+        ? { recovery: { ...internal.recovery, continuationID: remap(internal.recovery.continuationID) } }
+        : {}),
+    }
+  }
+
+  /** A part whose id was derived from a message id keeps that derivation
+   * against the copied id; every other part gets a fresh id. */
+  function forkPartID(id: string, keys: string[], remap: (id: string) => string) {
+    for (const key of keys) {
+      for (const slot of DERIVED_PART_SLOTS) {
+        if (SessionLoopState.partID(key, slot) === id) return SessionLoopState.partID(remap(key), slot)
+      }
+    }
+    return Identifier.ascending("part")
+  }
 
   export const touch = fn(Identifier.schema("session"), async (sessionID) => {
     const session = await update(sessionID, (draft) => {
@@ -584,6 +646,9 @@ export namespace Session {
     }),
     async (input) => {
       await assertDirectory(input.sessionID)
+      // A streamed text part may still have a coalesced write queued; left
+      // alone it would land after the unlink and bring the part back.
+      await partWriter.discard(input.sessionID + "/" + input.messageID + "/" + input.partID)
       await Storage.remove(["part", input.messageID, input.partID])
       Bus.publish(MessageV2.Event.PartRemoved, {
         sessionID: input.sessionID,

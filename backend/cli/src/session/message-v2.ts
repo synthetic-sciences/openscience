@@ -819,7 +819,9 @@ export namespace MessageV2 {
             msg.parts.find((part) => part.type === "tool")?.id)
           : undefined
         for (const part of msg.parts) {
-          if (part.type === "text")
+          // Ignored assistant text (slash-command notices, contract markers)
+          // is shown to the user only; the user branch already skips its own.
+          if (part.type === "text" && !part.ignored)
             assistantMessage.parts.push({
               type: "text",
               text: part.text,

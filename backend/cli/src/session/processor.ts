@@ -2,7 +2,6 @@ import { MessageV2 } from "./message-v2"
 import { Log } from "@/util/log"
 import { Identifier } from "@/id/id"
 import { Session } from "."
-import { Agent } from "@/agent/agent"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
@@ -28,9 +27,9 @@ import { ToolRetryGuard } from "./tool-retry-guard"
 import { SessionResearch } from "./research"
 import { SearchDedupe } from "./search-dedupe"
 import { SessionLoopState } from "./loop-state"
+import type { Tool } from "@/tool/tool"
 import { InvalidCall } from "@/tool/invalid-call"
 import { ToolSelection } from "./tool-selection"
-import { ProjectAccess } from "@/project/access"
 import { Instance } from "@/project/instance"
 import { CredentialRevocation } from "@/credentials/revocation"
 import { abortedToolPart } from "./tool-outcome"
@@ -749,12 +748,37 @@ export namespace SessionProcessor {
       if (sessionID === input.sessionID && messageID !== input.assistantMessage.id) epochHistory = undefined
     }
 
+    const turnPartsNow = async () =>
+      turnParts(
+        [
+          ...(await history()),
+          { info: input.assistantMessage, parts: await MessageV2.parts(input.assistantMessage.id) },
+        ],
+        input.assistantMessage.parentID,
+      )
+
     const result = {
       get message() {
         return input.assistantMessage
       },
       partFromToolCall(toolCallID: string) {
         return toolOutcomes.part(toolCallID)
+      },
+      /**
+       * Ask before the same call runs a third time. The provider SDK starts
+       * execute() as soon as it parses the call, ahead of this processor's
+       * stream position, so a guard evaluated from the stream saw the tool
+       * already running; only the execution envelope can still stop it.
+       */
+      async guardRepeat(toolName: string, args: unknown, ask: Tool.Context["ask"]) {
+        if (toolName === "invalid") return
+        if (!isDoomLoop(await turnPartsNow(), toolName, args)) return
+        await ask({
+          permission: "doom_loop",
+          patterns: [toolName],
+          always: [toolName],
+          metadata: { tool: toolName, input: args },
+        })
       },
       executeTool<T extends ToolExecutionOutput>(
         toolCallID: string,
@@ -821,6 +845,10 @@ export namespace SessionProcessor {
           // This signal cancels only the provider transport. Tools already
           // executing retain their original user-controlled abort signal.
           const transport = new AbortController()
+          // Parts this attempt streamed. A transient failure retries the
+          // whole request, so they are withdrawn before the next attempt
+          // rather than left in front of the answer that replaces them.
+          const attemptParts: string[] = []
           try {
             progress("preparing")
             traceRoute = accessRoute(credentialSource, input.model)
@@ -954,6 +982,7 @@ export namespace SessionProcessor {
                     },
                     metadata: value.providerMetadata,
                   }
+                  attemptParts.push(reasoningMap[value.id].id)
                   break
 
                 case "reasoning-delta":
@@ -1035,24 +1064,13 @@ export namespace SessionProcessor {
                     await toolOutcomes.running(part as MessageV2.ToolPart)
                   }
 
-                  // An execute-first tool may already be terminal when its
-                  // stream event arrives. Keep that terminal receipt, while
-                  // still applying the same repeated-call guard as every other
-                  // observed tool call.
-                  const parts = turnParts(
-                    [
-                      ...(await history()),
-                      { info: input.assistantMessage, parts: await MessageV2.parts(input.assistantMessage.id) },
-                    ],
-                    input.assistantMessage.parentID,
-                  )
-                  const repeated =
-                    value.toolName === "invalid"
-                      ? isMalformedLoop(parts, value.input)
-                      : isDoomLoop(parts, value.toolName, value.input)
-
-                  if (repeated) {
-                    if (value.toolName === "invalid") {
+                  // The repeated-call guard for executing tools lives in the
+                  // execution envelope (guardRepeat), where an ask can still
+                  // stop the call. Only the harmless `invalid` placeholder,
+                  // which executes nothing, is judged from the stream here.
+                  if (value.toolName === "invalid") {
+                    const parts = await turnPartsNow()
+                    if (isMalformedLoop(parts, value.input)) {
                       const source = InvalidCall.signature(value.input).split(":", 1)[0]
                       blocked = true
                       await Session.updatePart({
@@ -1064,24 +1082,7 @@ export namespace SessionProcessor {
                         text: `OpenScience stopped two repeated incomplete ${source} calls before execution. No action was taken.`,
                         time: { start: Date.now(), end: Date.now() },
                       } satisfies MessageV2.TextPart)
-                      break
                     }
-                    const agent = await Agent.get(input.assistantMessage.agent)
-                    await PermissionNext.ask(
-                      {
-                        permission: "doom_loop",
-                        patterns: [value.toolName],
-                        sessionID: input.assistantMessage.sessionID,
-                        mode: (await ProjectAccess.status(Instance.project)).mode,
-                        metadata: {
-                          tool: value.toolName,
-                          input: value.input,
-                        },
-                        always: [value.toolName],
-                        ruleset: agent.permission,
-                      },
-                      input.abort,
-                    )
                   }
                   break
                 }
@@ -1097,16 +1098,18 @@ export namespace SessionProcessor {
                 case "error":
                   throw value.error
 
-                case "start-step":
+                case "start-step": {
                   snapshot = tracking ? await Snapshot.track() : undefined
-                  await Session.updatePart({
+                  const step = await Session.updatePart({
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
                     sessionID: input.sessionID,
                     snapshot,
                     type: "step-start",
                   })
+                  attemptParts.push(step.id)
                   break
+                }
 
                 case "finish-step":
                   const funded = requiresWalletBalance(credentialSource)
@@ -1213,6 +1216,7 @@ export namespace SessionProcessor {
                     },
                     metadata: value.providerMetadata,
                   }
+                  attemptParts.push(currentText.id)
                   break
 
                 case "text-delta":
@@ -1324,6 +1328,15 @@ export namespace SessionProcessor {
                     message: action.message,
                     next: Date.now() + delay,
                   })
+                  // No tool ran (that would have been a drain), so nothing of
+                  // this attempt is authoritative; the retry starts clean.
+                  for (const partID of attemptParts) {
+                    await Session.removePart({
+                      sessionID: input.sessionID,
+                      messageID: input.assistantMessage.id,
+                      partID,
+                    }).catch(() => undefined)
+                  }
                   await SessionRetry.sleep(delay, input.abort).catch(() => {})
                   continue
                 }

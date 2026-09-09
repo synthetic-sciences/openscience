@@ -308,6 +308,17 @@ export namespace SessionPrompt {
 
   export const controlled = fn(RuntimePromptInput, (input) => withCancellation(input.sessionID, () => prompt(input)))
 
+  /**
+   * The HTTP entry point. A session with a running turn queues the message
+   * under that turn's controller; otherwise the prompt owns a cancellation
+   * reservation from its first await, so `/stop` can reach a preparation
+   * that is waiting on a permission card instead of reporting no active turn.
+   */
+  export const submit = fn(RuntimePromptInput, (input) => {
+    if (state()[input.sessionID] || pending().has(input.sessionID)) return prompt(input)
+    return withCancellation(input.sessionID, () => prompt(input))
+  })
+
   export const prompt = fn(RuntimePromptInput, async (input) => {
     const reservation = pending().get(input.sessionID)
     if (reservation && reservation !== preparation(input.sessionID)) throw new Session.BusyError(input.sessionID)
@@ -2012,7 +2023,10 @@ export namespace SessionPrompt {
         inputSchema: toolInputSchema(input.model, item),
         async execute(args, options) {
           const ctx = context(args, options)
-          return input.processor.executeTool(options.toolCallId, item.id, args, () => item.execute(args, ctx))
+          return input.processor.executeTool(options.toolCallId, item.id, args, async () => {
+            await input.processor.guardRepeat(item.id, args, ctx.ask)
+            return item.execute(args, ctx)
+          })
         },
       })
     }
@@ -2056,6 +2070,7 @@ export namespace SessionPrompt {
       item.execute = async (args, opts) => {
         const ctx = context(args, opts)
         return input.processor.executeTool(opts.toolCallId, key, args, async () => {
+          await input.processor.guardRepeat(key, args, ctx.ask)
           return PlanMode.run(key, ctx.agent, async () => {
             await Plugin.trigger(
               "tool.execute.before",
@@ -3840,6 +3855,9 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     await Session.update(
       input.session.id,
       (draft) => {
+        // The user may have renamed the session while the title request was
+        // in flight; their name stands.
+        if (!Session.isDefaultTitle(draft.title)) return
         const cleaned = text
           .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
           .split("\n")

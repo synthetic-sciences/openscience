@@ -220,6 +220,25 @@ describe("session.message-v2.toModelMessage", () => {
     expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
+  test("drops ignored assistant text the same way it drops ignored user text", () => {
+    // A slash-command notice pair (/status, /stop): the user line and the
+    // assistant answer are both display-only and must not reach the model.
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("m-notice"),
+        parts: [{ ...basePart("m-notice", "p1"), type: "text", text: "/status", ignored: true }] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo("m-notice-reply", "m-notice"),
+        parts: [
+          { ...basePart("m-notice-reply", "a1"), type: "text", text: "### Session status", ignored: true },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
+  })
+
   test("includes synthetic text parts", () => {
     const messageID = "m-user"
 

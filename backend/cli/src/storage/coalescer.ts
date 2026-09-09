@@ -41,6 +41,16 @@ export function createCoalescer<T>(
       pending.set(key, { value, timer })
     },
     flushNow: run,
+    /** Forget a queued value and wait out a write already in progress, so a
+     * removal that follows cannot be undone by a late flush. */
+    async discard(key: string) {
+      const entry = pending.get(key)
+      if (entry) {
+        clearTimeout(entry.timer)
+        pending.delete(key)
+      }
+      await active.get(key)?.catch(() => undefined)
+    },
     async flushAll() {
       const keys = new Set([...pending.keys(), ...active.keys()])
       await Promise.all([...keys].map(run))
