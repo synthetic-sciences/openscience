@@ -105,6 +105,48 @@ export function workspaceAssetPath(src: string, root: string, base = ""): string
   if (candidate === owner || candidate.startsWith(`${owner}/`)) return target
 }
 
+/** The served-file route the UI itself uses for images. A model that echoes
+ * one of those URLs back into prose is still pointing at a file. */
+function rawRoutePath(value: string, origin?: string): string | undefined {
+  const candidate = (() => {
+    if (value.startsWith("/file/raw?")) return new URL(value, "http://raw.invalid")
+    if (!/^https?:\/\//i.test(value)) return
+    try {
+      const url = new URL(value)
+      const page = origin ? new URL(origin) : undefined
+      const sameOrigin = page ? url.origin === page.origin : false
+      if (!sameOrigin && !loopback.has(url.hostname)) return
+      return url
+    } catch {
+      return
+    }
+  })()
+  if (!candidate || !candidate.pathname.endsWith("/file/raw")) return
+  const path = candidate.searchParams.get("path")
+  return path || undefined
+}
+
+/**
+ * Resolve a link in the conversation to a file the Files tab can show.
+ *
+ * Agents write into session scratch and connected folders as well as the
+ * project, and they link those results with absolute paths. Left as ordinary
+ * anchors, such links resolve against the app origin and open a broken
+ * `localhost` page (in the desktop shell, in an external browser). Opening
+ * them in the Files tab is not a grant: the viewer keeps its session and the
+ * backend authorizes the read, exactly as for tool-card receipts.
+ */
+export function chatFilePath(src: string, root: string, origin?: string): string | undefined {
+  const value = src.trim()
+  const raw = rawRoutePath(value, origin)
+  if (raw) return raw
+  const inside = workspaceAssetPath(value, root)
+  if (inside) return inside
+  const resolved = localAssetPath(value)
+  if (!resolved) return
+  return resolved.startsWith("/") || windows.test(resolved) ? resolved : undefined
+}
+
 /** Exact runtime file receipts may target session scratch or a connected
  * directory, just like tool-card links. This is a path-shape check, not a
  * permission grant: the viewer keeps its session and the backend authorizes

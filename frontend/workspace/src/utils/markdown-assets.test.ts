@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   alignLoopbackAssetHost,
   assetUrl,
+  chatFilePath,
   localAssetPath,
   resolvePath,
   workspaceAssetPath,
@@ -72,6 +73,31 @@ describe("markdown asset resolution", () => {
         url: raw,
       }),
     ).toBe("/private/tmp/generated.png")
+  })
+
+  test("opens conversation links to scratch, connected and served files in the Files tab", () => {
+    const root = "/work/project"
+    const origin = "http://localhost:4096"
+    expect(chatFilePath("results/table.csv", root, origin)).toBe("results/table.csv")
+    expect(chatFilePath("/work/project/results/table.csv", root, origin)).toBe("/work/project/results/table.csv")
+    // Session scratch and connected folders live outside the project; the
+    // backend authorizes the read, the link must not become a localhost page.
+    expect(chatFilePath("/Users/me/.openscience/scratch/46411193/report.md", root, origin)).toBe(
+      "/Users/me/.openscience/scratch/46411193/report.md",
+    )
+    expect(chatFilePath("C:\\data\\report.md", root, origin)).toBe("C:/data/report.md")
+    expect(chatFilePath("file:///Users/me/data/report.md", root, origin)).toBe("/Users/me/data/report.md")
+    // The UI's own served-file route, echoed back by a model.
+    expect(chatFilePath("/file/raw?path=%2Fwork%2Fproject%2Fout.png&project=prj_1", root, origin)).toBe(
+      "/work/project/out.png",
+    )
+    expect(chatFilePath(raw("/tmp/out/report.md"), root, origin)).toBe("/tmp/out/report.md")
+    expect(chatFilePath("http://localhost:4096/file/raw?path=%2Ftmp%2Fa.md", root, origin)).toBe("/tmp/a.md")
+    // Genuine web links stay in the browser.
+    expect(chatFilePath("https://example.com/file/raw?path=%2Fetc%2Fpasswd", root, origin)).toBeUndefined()
+    expect(chatFilePath("https://doi.org/10.1000/xyz", root, origin)).toBeUndefined()
+    expect(chatFilePath("mailto:team@example.com", root, origin)).toBeUndefined()
+    expect(chatFilePath("#section", root, origin)).toBeUndefined()
   })
 
   test("decodes markdown-encoded references before building the query", () => {

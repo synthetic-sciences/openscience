@@ -32,7 +32,7 @@ import { ProjectWorkspaceFrame } from "@/atlas/ProjectWorkspaceFrame"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
 import { decode64, setCurrentDirectory } from "@/utils/base64"
-import { assetUrl, workspaceAssetPath, workspaceReceiptPath } from "@/utils/markdown-assets"
+import { assetUrl, chatFilePath, workspaceReceiptPath } from "@/utils/markdown-assets"
 import { rawFileQuery } from "@/utils/project-file"
 import { projectPrefs } from "@/atlas/store/projectPrefs"
 import { missingProject, ProjectUnavailable } from "./project-availability"
@@ -273,7 +273,7 @@ export default function Layout(props: ParentProps) {
                         }),
                       ),
                   })
-                const file = (href: string) => workspaceAssetPath(href, directory())
+                const file = (href: string) => chatFilePath(href, directory(), globalThis.location?.origin)
 
                 return (
                   <DataProvider
