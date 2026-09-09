@@ -30,10 +30,6 @@ const LOGOS: Record<string, Logo> = {
   },
 }
 
-export const SCIENTIFIC_TOOL_LOGO_SOURCES = Object.fromEntries(
-  Object.entries(LOGOS).map(([id, logo]) => [id, logo.source]),
-)
-
 export const ScientificToolLogo: Component<{ id: string; name: string; hosted?: boolean }> = (props) => {
   const logo = () => LOGOS[props.id]
   return (

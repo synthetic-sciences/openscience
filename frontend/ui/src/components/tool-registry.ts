@@ -37,7 +37,7 @@ export function registerTool(input: { name: string; render?: ToolComponent }) {
   return input
 }
 
-export function getTool(name: string, metadata?: Record<string, unknown>) {
+function getTool(name: string, metadata?: Record<string, unknown>) {
   const named = state[name]?.render
   if (named) return named
 

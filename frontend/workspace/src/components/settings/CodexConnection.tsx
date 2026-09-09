@@ -112,5 +112,3 @@ export const CodexConnection: Component<{
     </div>
   )
 }
-
-export default CodexConnection

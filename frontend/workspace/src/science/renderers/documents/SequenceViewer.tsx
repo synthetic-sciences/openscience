@@ -301,5 +301,3 @@ export function SequenceViewer(props: ArtifactRenderProps) {
     </div>
   )
 }
-
-export default SequenceViewer

@@ -133,7 +133,7 @@ export function matchKeybind(keybinds: Keybind[], event: KeyboardEvent): boolean
   return false
 }
 
-export function formatKeybind(config: string): string {
+function formatKeybind(config: string): string {
   if (!config || config === "none") return ""
 
   const keybinds = parseKeybind(config)

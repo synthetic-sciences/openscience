@@ -129,10 +129,6 @@ export async function releaseBiologySession(projectID: string, sessionID: string
   await BiologyKernelLifecycle.releaseSession(projectID, sessionID)
 }
 
-export async function releaseBiologyProject(projectID: string) {
-  await BiologyKernelLifecycle.releaseProject(projectID)
-}
-
 async function cleanupIdle() {
   const now = Date.now()
   const idle = 30 * 60 * 1000 // 30 min

@@ -203,5 +203,3 @@ export const StartupUpdateCheck: Component = () => {
     </Show>
   )
 }
-
-export default StartupUpdateCheck

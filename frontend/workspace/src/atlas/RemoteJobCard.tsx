@@ -12,7 +12,7 @@ export function jobLive(job: Job) {
   return lifecycle.delivery === "pending" || lifecycle.recoverable || attentionResource.has(lifecycle.resource)
 }
 
-export function modalBillingRisk(job: Job) {
+function modalBillingRisk(job: Job) {
   return job.target.kind === "modal" && attentionResource.has(job.lifecycle?.resource ?? "unknown")
 }
 

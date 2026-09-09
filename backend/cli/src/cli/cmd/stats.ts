@@ -109,7 +109,7 @@ async function getAllSessions(): Promise<Session.Info[]> {
   return sessions
 }
 
-export async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
+async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
   const sessions = await getAllSessions()
   const MS_IN_DAY = 24 * 60 * 60 * 1000
 
@@ -312,7 +312,7 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
   return stats
 }
 
-export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number) {
+function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number) {
   const width = 56
 
   function renderRow(label: string, value: string): string {

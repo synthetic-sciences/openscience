@@ -332,5 +332,3 @@ function compare(left: string, right: string, type: string) {
 
 const number = (value: number | undefined) =>
   value === undefined ? "—" : new Intl.NumberFormat(undefined, { maximumSignificantDigits: 5 }).format(value)
-
-export default DataTableView

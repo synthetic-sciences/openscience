@@ -119,7 +119,7 @@ async function sha256(input: string): Promise<string> {
 }
 
 /** Deterministic content id from a node's identifying payload. */
-export async function contentId(payload: unknown): Promise<string> {
+async function contentId(payload: unknown): Promise<string> {
   const canonical = JSON.stringify(stable(payload))
   return (await sha256(canonical)).slice(0, 16)
 }

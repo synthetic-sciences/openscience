@@ -55,7 +55,7 @@ const STEP_BODY: Record<"mac" | "win" | "linux", string> = {
  * permission denial. Lives next to the new-project button; click opens a
  * compact recovery sheet with a deliberate settings link and recheck.
  */
-export function FdaChip(): JSX.Element {
+function FdaChip(): JSX.Element {
   const sdk = useGlobalSDK()
   const [dismissed, setDismissed] = createSignal(
     typeof localStorage !== "undefined" && localStorage.getItem(DISMISS_KEY) === "1",

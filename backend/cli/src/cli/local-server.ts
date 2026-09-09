@@ -1,7 +1,7 @@
 import { base64Encode } from "@synsci/util/encode"
 
-export const DEFAULT_LOCAL_PORT = 4096
-export const FALLBACK_LOCAL_PORT = 4097
+const DEFAULT_LOCAL_PORT = 4096
+const FALLBACK_LOCAL_PORT = 4097
 export const LOCAL_WORKSPACE_PORTS = [DEFAULT_LOCAL_PORT, FALLBACK_LOCAL_PORT] as const
 
 export function localServerBase(port = DEFAULT_LOCAL_PORT) {

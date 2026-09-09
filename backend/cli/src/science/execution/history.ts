@@ -31,7 +31,7 @@ const ArtifactRecord = z.object({
   version_id: z.string().optional(),
 })
 
-export const ExecutionRecord = z.object({
+const ExecutionRecord = z.object({
   id: z.string(),
   session_id: z.string(),
   sequence: z.number().int().positive(),

@@ -3,7 +3,7 @@ import { JobBroker } from "@/compute/job-broker"
 
 export const CapabilityMaturity = z.enum(["verified", "experimental", "blocked"])
 export type CapabilityMaturity = z.infer<typeof CapabilityMaturity>
-export const CapabilityStatus = CapabilityMaturity
+const CapabilityStatus = CapabilityMaturity
 export type CapabilityStatus = CapabilityMaturity
 export const CapabilityAvailabilityState = z.enum([
   "ready",
@@ -35,7 +35,7 @@ export const CapabilityCategory = z.enum([
   "document",
 ])
 export type CapabilityCategory = z.infer<typeof CapabilityCategory>
-export const CapabilityPackagePin = z
+const CapabilityPackagePin = z
   .string()
   .trim()
   .regex(/^[A-Za-z0-9_.-]+==[^=<>!~\s]+$/, "Capability packages must use an exact version pin")
@@ -160,7 +160,7 @@ export const CapabilityRuntime = z
     }
   })
 export type CapabilityRuntime = z.infer<typeof CapabilityRuntime>
-export const CapabilityHosted = z
+const CapabilityHosted = z
   .object({
     kind: z.literal("nvidia_nim"),
     adapter_id: z.enum([
@@ -181,7 +181,7 @@ export const CapabilityHosted = z
   })
   .strict()
 export type CapabilityHosted = z.infer<typeof CapabilityHosted>
-export const CapabilitySetup = z
+const CapabilitySetup = z
   .object({
     instructions: z.string().trim().min(1).max(1_000),
     requirements: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
@@ -257,5 +257,5 @@ export const CapabilityWorkload = z
   })
   .strict()
 export type CapabilityWorkload = z.infer<typeof CapabilityWorkload>
-export const CapabilityCompiledJob = JobBroker.Input.extend({ capability: JobBroker.CapabilityBinding })
+const CapabilityCompiledJob = JobBroker.Input.extend({ capability: JobBroker.CapabilityBinding })
 export type CapabilityCompiledJob = z.infer<typeof CapabilityCompiledJob>

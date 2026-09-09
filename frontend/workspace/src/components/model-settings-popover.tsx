@@ -54,7 +54,7 @@ export function modelRadioTabKey(keys: string[], selected?: string, focused?: st
   return keys[0]
 }
 
-export function modelRadioNavigationTarget(scope: HTMLElement, target: EventTarget | null, key: string) {
+function modelRadioNavigationTarget(scope: HTMLElement, target: EventTarget | null, key: string) {
   if (!MODEL_RADIO_KEYS.includes(key as (typeof MODEL_RADIO_KEYS)[number])) return undefined
   if (!(target instanceof HTMLElement) || target.getAttribute("role") !== "radio") return undefined
   const items = Array.from(scope.querySelectorAll<HTMLButtonElement>('[role="radio"]:not([disabled])')).filter(

@@ -116,7 +116,7 @@ function normalize(value: string) {
   return `${prefix}${parts.join("/")}` || prefix || "."
 }
 
-export function resolveContextFile(
+function resolveContextFile(
   directory: string,
   path: string,
   options?: { scope?: "project" | "session" | "auto"; sessionID?: string },

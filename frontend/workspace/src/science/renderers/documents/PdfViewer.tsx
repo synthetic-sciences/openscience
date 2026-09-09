@@ -466,5 +466,3 @@ export function PdfViewer(props: ArtifactRenderProps) {
     </section>
   )
 }
-
-export default PdfViewer

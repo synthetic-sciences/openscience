@@ -459,11 +459,6 @@ export async function resolveCredentialFields(
   return fields
 }
 
-export async function hasCredentialFields(id: string, names: string[]): Promise<boolean> {
-  const fields = await resolveCredentialFields(id)
-  return !!fields && names.every((name) => !!fields[name])
-}
-
 async function atomicSecretWrite(filepath: string, content: string): Promise<void> {
   await using operation = await DataRootBarrier.enter(filepath)
   const temp = `${filepath}.${process.pid}.${crypto.randomUUID()}.tmp`

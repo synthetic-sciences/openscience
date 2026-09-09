@@ -333,7 +333,7 @@ const providerNames: Record<string, string> = {
   zai: "Z.AI",
 }
 
-export function providerDisplayName(id: string): string {
+function providerDisplayName(id: string): string {
   return providerNames[id] ?? id.charAt(0).toUpperCase() + id.slice(1)
 }
 
@@ -345,7 +345,7 @@ const credentialFailure =
  * themselves, so name the provider and where its key lives rather than
  * repeating the provider's bare "API key is invalid".
  */
-export function credentialErrorText(value: unknown): string | undefined {
+function credentialErrorText(value: unknown): string | undefined {
   const error = record(value)
   const data = record(error?.data)
   const metadata = record(data?.metadata)

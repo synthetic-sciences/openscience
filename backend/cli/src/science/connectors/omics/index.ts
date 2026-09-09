@@ -24,6 +24,6 @@ import { depmap } from "./depmap"
 export { geo, arrayexpress, gtex, hpa, expressionAtlas, singleCellAtlas, depmap }
 
 /** All omics connectors, in catalogue order. */
-export const omicsConnectors: Connector[] = [geo, arrayexpress, gtex, hpa, expressionAtlas, singleCellAtlas, depmap]
+const omicsConnectors: Connector[] = [geo, arrayexpress, gtex, hpa, expressionAtlas, singleCellAtlas, depmap]
 
 export default omicsConnectors

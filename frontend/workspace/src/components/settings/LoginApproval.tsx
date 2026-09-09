@@ -1,7 +1,7 @@
 import { Show, createEffect, createSignal, onCleanup, type Component } from "solid-js"
 import { showToast } from "@synsci/ui/toast"
 
-export const LOGIN_APPROVAL_EVENT = "openscience:login-approval"
+const LOGIN_APPROVAL_EVENT = "openscience:login-approval"
 
 /**
  * The sign-in page the server tried to open, offered as a link while a

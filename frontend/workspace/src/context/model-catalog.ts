@@ -94,7 +94,7 @@ export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
   "deepseek/deepseek-v4-flash",
 ])
 
-export function openrouterModelAlias(providerID: string, modelID: string): ModelKey | undefined {
+function openrouterModelAlias(providerID: string, modelID: string): ModelKey | undefined {
   if (providerID === "openrouter") return undefined
   const vendor = OPENROUTER_PROVIDER_PREFIX[providerID] ?? providerID
   const base = modelID.replace(/^~/, "")

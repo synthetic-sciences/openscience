@@ -104,7 +104,7 @@ export const CORE_SMOKES: Record<CoreSmokeID, CapabilitySmoke> = {
   ),
 }
 
-export const smokeProfiles: Record<CoreSmokeID, SmokeProfile> = {
+const smokeProfiles: Record<CoreSmokeID, SmokeProfile> = {
   scipy: { source: scripts.scipy, contract: CORE_SMOKES.scipy },
   matplotlib: { source: scripts.matplotlib, contract: CORE_SMOKES.matplotlib },
   "scikit-learn": { source: scripts["scikit-learn"], contract: CORE_SMOKES["scikit-learn"] },

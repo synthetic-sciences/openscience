@@ -41,5 +41,3 @@ export function ImageView(props: ArtifactRenderProps): JSX.Element {
     </Show>
   )
 }
-
-export default ImageView

@@ -59,5 +59,3 @@ function ScienceArtifactFallback(props: { kind: ArtifactKind; data: unknown }): 
     </div>
   )
 }
-
-export default ScienceArtifact

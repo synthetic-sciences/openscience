@@ -29,7 +29,7 @@ type DesktopOnboardingOperation = {
 const VERSION_KEY = "openscience.desktop_onboarding_version"
 /** How long the window waits for the browser sign-in to finish before it lets
  * the user try again. */
-export const SIGN_IN_DEADLINE_MS = 5 * 60_000
+const SIGN_IN_DEADLINE_MS = 5 * 60_000
 
 function cachedVersion() {
   try {
@@ -51,13 +51,13 @@ const providers = [
   { id: "openrouter", label: "OpenRouter" },
 ]
 
-export function folderProjectName(path: string) {
+function folderProjectName(path: string) {
   const normalized = path.trim().replace(/[\\/]+$/u, "")
   const name = normalized.split(/[\\/]/u).filter(Boolean).at(-1)?.trim()
   return name?.slice(0, 100) || "Research project"
 }
 
-export function onboardingDraftFingerprint(draft: ProjectCreateInput) {
+function onboardingDraftFingerprint(draft: ProjectCreateInput) {
   // Match the canonical values accepted by the project route. Array order is
   // intentionally preserved because it is part of that route's fingerprint.
   return JSON.stringify({
@@ -69,7 +69,7 @@ export function onboardingDraftFingerprint(draft: ProjectCreateInput) {
   })
 }
 
-export function createOnboardingProjectFlow(input: {
+function createOnboardingProjectFlow(input: {
   create: (project: ProjectCreateInput & { operation_id: string }) => Promise<ProjectRecord>
   markComplete: () => Promise<unknown>
   activate: (project: ProjectRecord) => void | Promise<void>
@@ -126,7 +126,7 @@ export function createOnboardingProjectFlow(input: {
   }
 }
 
-export function DesktopOnboardingLoading() {
+function DesktopOnboardingLoading() {
   return (
     <main class="desktop-onboarding" aria-label="Loading desktop setup">
       <section class="desktop-onboarding__shell desktop-onboarding__shell--loading">

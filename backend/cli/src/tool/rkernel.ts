@@ -578,7 +578,7 @@ class RKernelManager implements KernelManager {
 }
 
 /** Process-wide singleton manager. */
-export const rKernels = new RKernelManager()
+const rKernels = new RKernelManager()
 KernelRuntime.register(rKernels)
 KernelProcessIdentity.onExit(() => rKernels.shutdownAllSync())
 

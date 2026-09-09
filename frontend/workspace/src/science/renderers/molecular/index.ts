@@ -12,9 +12,8 @@
  *   import { registrations as molecular } from "./molecular"
  *   for (const r of molecular) register(r.kind, r.component)
  *
- * A convenience `registerAll(register)` helper is also exported for callers that
- * prefer to pass the registry's `register` function directly. Neither this file
- * nor the components touch `../registry`, `../index.ts`, or `ScienceArtifact`.
+ * Neither this file nor the components touch `../registry`, `../index.ts`, or
+ * `ScienceArtifact`.
  */
 import type { ArtifactKind, ArtifactRenderer } from "../registry"
 import { ProteinStructure } from "./ProteinStructure"
@@ -32,9 +31,5 @@ export const registrations: RendererRegistration[] = [
   // RDKit.js — 2D chemical depiction from SMILES / Mol block
   { kind: "chem-2d", component: Chem2D },
 ]
-
-export function registerAll(register: (kind: ArtifactKind, renderer: ArtifactRenderer) => void): void {
-  for (const r of registrations) register(r.kind, r.component)
-}
 
 export { ProteinStructure, Chem2D }

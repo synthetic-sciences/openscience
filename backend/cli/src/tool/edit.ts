@@ -196,11 +196,11 @@ function levenshtein(a: string, b: string): number {
   return matrix[a.length][b.length]
 }
 
-export const SimpleReplacer: Replacer = function* (_content, find) {
+const SimpleReplacer: Replacer = function* (_content, find) {
   yield find
 }
 
-export const LineTrimmedReplacer: Replacer = function* (content, find) {
+const LineTrimmedReplacer: Replacer = function* (content, find) {
   const originalLines = content.split("\n")
   const searchLines = find.split("\n")
 
@@ -240,7 +240,7 @@ export const LineTrimmedReplacer: Replacer = function* (content, find) {
   }
 }
 
-export const BlockAnchorReplacer: Replacer = function* (content, find) {
+const BlockAnchorReplacer: Replacer = function* (content, find) {
   const originalLines = content.split("\n")
   const searchLines = find.split("\n")
 
@@ -375,7 +375,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
   }
 }
 
-export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) {
+const WhitespaceNormalizedReplacer: Replacer = function* (content, find) {
   const normalizeWhitespace = (text: string) => text.replace(/\s+/g, " ").trim()
   const normalizedFind = normalizeWhitespace(find)
 
@@ -419,7 +419,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
   }
 }
 
-export const IndentationFlexibleReplacer: Replacer = function* (content, find) {
+const IndentationFlexibleReplacer: Replacer = function* (content, find) {
   const removeIndentation = (text: string) => {
     const lines = text.split("\n")
     const nonEmptyLines = lines.filter((line) => line.trim().length > 0)
@@ -447,7 +447,7 @@ export const IndentationFlexibleReplacer: Replacer = function* (content, find) {
   }
 }
 
-export const EscapeNormalizedReplacer: Replacer = function* (content, find) {
+const EscapeNormalizedReplacer: Replacer = function* (content, find) {
   const unescapeString = (str: string): string => {
     return str.replace(/\\(n|t|r|'|"|`|\\|\n|\$)/g, (match, capturedChar) => {
       switch (capturedChar) {
@@ -496,7 +496,7 @@ export const EscapeNormalizedReplacer: Replacer = function* (content, find) {
   }
 }
 
-export const MultiOccurrenceReplacer: Replacer = function* (content, find) {
+const MultiOccurrenceReplacer: Replacer = function* (content, find) {
   // This replacer yields all exact matches, allowing the replace function
   // to handle multiple occurrences based on replaceAll parameter
   let startIndex = 0
@@ -510,7 +510,7 @@ export const MultiOccurrenceReplacer: Replacer = function* (content, find) {
   }
 }
 
-export const TrimmedBoundaryReplacer: Replacer = function* (content, find) {
+const TrimmedBoundaryReplacer: Replacer = function* (content, find) {
   const trimmedFind = find.trim()
 
   if (trimmedFind === find) {
@@ -536,7 +536,7 @@ export const TrimmedBoundaryReplacer: Replacer = function* (content, find) {
   }
 }
 
-export const ContextAwareReplacer: Replacer = function* (content, find) {
+const ContextAwareReplacer: Replacer = function* (content, find) {
   const findLines = find.split("\n")
   if (findLines.length < 3) {
     // Need at least 3 lines to have meaningful context

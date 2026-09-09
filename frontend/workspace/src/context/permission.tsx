@@ -50,7 +50,7 @@ function hasAutoAcceptPermissionConfig(permission: unknown) {
   return false
 }
 
-export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
+export const { provider: PermissionProvider } = createSimpleContext({
   name: "Permission",
   init: () => {
     const params = useParams()

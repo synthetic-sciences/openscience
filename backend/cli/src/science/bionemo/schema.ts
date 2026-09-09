@@ -211,7 +211,7 @@ const boltzPolymer = z
   })
 
 // https://docs.nvidia.com/nim/bionemo/boltz2/latest/inference.html
-export const Boltz2Input = z
+const Boltz2Input = z
   .object({
     polymers: z.array(boltzPolymer).min(1).max(12),
     ligands: nullable(z.array(ligand).max(20)),
@@ -250,7 +250,7 @@ export const Boltz2Input = z
       })
   })
 
-export const DiffDockInput = z
+const DiffDockInput = z
   .object({
     protein: presentText("protein structure"),
     ligand: presentText("ligand"),
@@ -264,7 +264,7 @@ export const DiffDockInput = z
   })
   .strict()
 
-export const Evo2Input = z
+const Evo2Input = z
   .object({
     sequence: presentText("DNA sequence", 1_000_000),
     num_tokens: nullable(safeInteger.min(1).max(1_000_000)),
@@ -289,7 +289,7 @@ const numericString = (minimum: number, maximum: number) =>
 const numeric = (minimum: number, maximum: number) =>
   z.union([z.number().min(minimum).max(maximum), numericString(minimum, maximum)])
 
-export const GenMolInput = z
+const GenMolInput = z
   .object({
     smiles: presentText("SAFE or SMILES input", 20_000),
     num_molecules: safeInteger.min(1).max(1_000).optional(),
@@ -301,7 +301,7 @@ export const GenMolInput = z
   })
   .strict()
 
-export const MolMIMInput = z
+const MolMIMInput = z
   .object({
     algorithm: z.enum(["CMA-ES", "none"]).optional(),
     smi: presentText("seed molecule", 20_000),
@@ -315,7 +315,7 @@ export const MolMIMInput = z
   })
   .strict()
 
-export const MSASearchInput = z
+const MSASearchInput = z
   .object({
     // Database names are runtime-configurable and case-insensitive in the current NIM.
     // https://docs.nvidia.com/nim/bionemo/msa-search/2.4.0/api-reference.html
@@ -397,7 +397,7 @@ const structuralTemplate = z
   })
   .strict()
 
-export const OpenFold2Input = z
+const OpenFold2Input = z
   .object({
     sequence: amino.max(1_000),
     input_id: nullable(requestTag),
@@ -535,7 +535,7 @@ const openFold3InputItem = z
 // structural templates, but health.api.nvidia.com does not currently expose
 // that field, so strict parsing rejects it rather than risking silent omission.
 // https://docs.api.nvidia.com/nim/reference/openfold-openfold3-infer
-export const OpenFold3Input = z
+const OpenFold3Input = z
   .object({
     request_id: nullable(requestTag),
     inputs: z.array(openFold3InputItem).length(1),
@@ -544,7 +544,7 @@ export const OpenFold3Input = z
 
 const optionalJsonl = nullable(z.string().max(5_000_000))
 
-export const ProteinMPNNInput = z
+const ProteinMPNNInput = z
   .object({
     input_pdb: nullable(presentText("input PDB")),
     input_pdb_asset: nullable(z.string().min(1).max(370)),
@@ -573,7 +573,7 @@ export const ProteinMPNNInput = z
   })
 
 // https://docs.nvidia.com/nim/bionemo/rfdiffusion/latest/endpoints.html
-export const RFDiffusionInput = z
+const RFDiffusionInput = z
   .object({
     input_pdb: nullable(presentText("input PDB")),
     input_pdb_asset: nullable(z.string().min(1).max(370)),

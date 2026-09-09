@@ -500,9 +500,6 @@ export const Terminal = (props: TerminalProps) => {
         }
       })
       cleanups.push(() => (onKey as unknown as { dispose?: VoidFunction }).dispose?.())
-      // t.onScroll((ydisp) => {
-      // console.log("Scroll position:", ydisp)
-      // })
     }
 
     void run().catch((err) => {

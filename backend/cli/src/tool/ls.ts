@@ -6,7 +6,7 @@ import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectory, isAuthorizedPath, sessionToolDirectory } from "./external-directory"
 
-export const IGNORE_PATTERNS = [
+const IGNORE_PATTERNS = [
   "node_modules/",
   "__pycache__/",
   ".git/",

@@ -50,7 +50,7 @@ export class WellKnownAuthApprovalRequired extends Error {
   }
 }
 
-export class WellKnownAuthDeclined extends Error {
+class WellKnownAuthDeclined extends Error {
   constructor() {
     super("The well-known auth command was not approved")
     this.name = "WellKnownAuthDeclined"
@@ -123,7 +123,7 @@ export async function fetchWellKnownAuth(
 
 /** Require a fresh local decision for the exact argv. Non-interactive callers
  * fail closed: piping input or running in CI is never treated as consent. */
-export async function approveWellKnownAuthCommand(
+async function approveWellKnownAuthCommand(
   command: string[],
   options: {
     interactive?: boolean
@@ -346,7 +346,7 @@ export const KeysCommand = cmd({
   async handler() {},
 })
 
-export const AuthListCommand = cmd({
+const AuthListCommand = cmd({
   command: "list",
   aliases: ["ls"],
   describe: "list providers",
@@ -675,7 +675,7 @@ async function runCodexAuthFlow(): Promise<boolean> {
   return true
 }
 
-export const AuthCodexCommand = cmd({
+const AuthCodexCommand = cmd({
   command: ["signin", "codex"],
   describe: "sign in with ChatGPT / Codex (Plus/Pro/Business subscription)",
   async handler() {
@@ -761,7 +761,7 @@ export const DisconnectCommand = cmd({
   },
 })
 
-export const AuthLogoutCommand = cmd({
+const AuthLogoutCommand = cmd({
   command: ["remove", "rm", "logout"],
   describe: "remove a saved provider key",
   async handler() {

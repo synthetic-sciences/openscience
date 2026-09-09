@@ -1,7 +1,7 @@
 export const MIN_PANE_WIDTH = 320
 export const DEFAULT_PANE_WIDTH = 400
 export const INLINE_PANE_BREAKPOINT = 1100
-export const INLINE_PANE_CHROME = 568
+const INLINE_PANE_CHROME = 568
 export const MIN_CONVERSATION_WIDTH = 420
 
 export function paneWidthKey(project: string) {

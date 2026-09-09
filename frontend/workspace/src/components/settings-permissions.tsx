@@ -5,7 +5,7 @@ import { Component, For, createMemo, createSignal, type JSX } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import type { Config } from "@synsci/sdk/v2/client"
-import { PanelBody, PanelHeader, PanelScroll, Section } from "./settings/_shared"
+import { Section } from "./settings/_shared"
 import { commitPermissionDefault, permissionActionFor, type PermissionAction } from "./settings/permission-defaults"
 
 const ACTIONS = [
@@ -118,22 +118,6 @@ const ITEMS = [
     description: "settings.permissions.tool.doom_loop.description",
   },
 ] as const
-
-export const SettingsPermissions: Component = () => {
-  const language = useLanguage()
-
-  return (
-    <PanelScroll>
-      <PanelHeader
-        title={language.t("settings.permissions.title")}
-        description={language.t("settings.permissions.description")}
-      />
-      <PanelBody>
-        <PermissionToolDefaults />
-      </PanelBody>
-    </PanelScroll>
-  )
-}
 
 // Tool allow/ask/deny defaults, rendered without page chrome so it can be
 // composed as a section inside the unified Permissions panel.

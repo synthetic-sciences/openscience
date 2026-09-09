@@ -37,7 +37,7 @@ function fuzzyScore(query: string, target: string): number {
 // checkout. Point every reference that names a known skill at that skill's
 // real directory; anything else (including `.claude/skills/...` and URLs, which
 // carry a `/` before `skills`) is left untouched.
-export function resolveSkillPaths(content: string, skills: Iterable<Pick<Skill.Info, "location">>): string {
+function resolveSkillPaths(content: string, skills: Iterable<Pick<Skill.Info, "location">>): string {
   const dirs = new Map<string, string>()
   for (const skill of skills) {
     const dir = path.dirname(skill.location)

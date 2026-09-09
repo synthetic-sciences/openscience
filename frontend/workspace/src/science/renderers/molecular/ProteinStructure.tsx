@@ -507,5 +507,3 @@ function buttonStyle(): JSX.CSSProperties {
     cursor: "pointer",
   }
 }
-
-export default ProteinStructure

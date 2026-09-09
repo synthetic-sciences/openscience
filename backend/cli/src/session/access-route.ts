@@ -9,10 +9,6 @@ export type AccessRoute = "managed" | "byok" | "chatgpt" | "subscription" | "loc
 
 const OAUTH_PROVIDERS = new Set(["anthropic", "openai", "openai-codex", "github-copilot", "github-copilot-enterprise"])
 
-export function isCodexOAuthProvider(providerID: string): boolean {
-  return providerID === "openai-codex"
-}
-
 export async function resolveCredentialSource(providerID: string, _modelID: string): Promise<CredentialSource> {
   const auth = await Auth.get(providerID).catch(() => undefined)
   const provider = await Provider.getProvider(providerID).catch(() => undefined)

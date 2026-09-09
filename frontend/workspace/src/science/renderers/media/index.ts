@@ -16,4 +16,3 @@ export interface RendererRegistration {
 export const registrations: RendererRegistration[] = [{ kind: "image", component: ImageView }]
 
 export { ImageView }
-export default registrations

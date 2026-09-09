@@ -1204,5 +1204,3 @@ function fence(lang: string, body: string): string {
   while (body.includes(ticks)) ticks += "`"
   return `${ticks}${lang}\n${body}\n${ticks}`
 }
-
-export default FilePreview

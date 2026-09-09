@@ -6,7 +6,7 @@ import { ACE_CONTRACT } from "../../../openscience/ace-contract"
 import { ManagedPricing } from "../../../provider/managed-pricing"
 import { lazy } from "@synsci/util/lazy"
 
-export const WalletState = z.object({
+const WalletState = z.object({
   signedIn: z.boolean(),
   balanceUsd: z.number().nullable(),
   /** The purchased balance minus the gateway's holds for turns in flight; null when unknown. */

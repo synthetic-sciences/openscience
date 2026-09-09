@@ -13,7 +13,7 @@ const actions: JSX.CSSProperties = {
   padding: "4px 20px 20px",
 }
 
-/** Promise-based, focus-contained alternatives to browser confirm/prompt/alert.
+/** Promise-based, focus-contained alternatives to browser confirm/prompt.
  * They stack above whatever dialog raised them, so answering one returns to
  * that dialog instead of closing it. */
 export function confirmDialog(
@@ -101,40 +101,6 @@ export function promptDialog(
         </ModalDialog>
       ),
       { onClose: () => done(null), stack: true },
-    )
-  })
-}
-
-export function alertDialog(
-  dialog: DialogController,
-  opts: { title: string; message?: string; danger?: boolean },
-): Promise<void> {
-  return new Promise((resolve) => {
-    let settled = false
-    const done = () => {
-      if (settled) return
-      settled = true
-      resolve()
-      dialog.close()
-    }
-
-    dialog.show(
-      () => (
-        <ModalDialog
-          fit
-          transition
-          role={opts.danger ? "alertdialog" : "dialog"}
-          title={opts.title}
-          description={opts.message}
-        >
-          <div style={actions}>
-            <Button autofocus size="normal" variant="primary" onClick={done}>
-              OK
-            </Button>
-          </div>
-        </ModalDialog>
-      ),
-      { onClose: done, stack: true },
     )
   })
 }

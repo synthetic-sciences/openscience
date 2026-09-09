@@ -123,7 +123,7 @@ async function listingJson(response: Response) {
   throw new ListingResponseError(response.status, concise(body || `Request failed (${response.status})`))
 }
 
-export function fileListingFailure(value: unknown, source = "This folder") {
+function fileListingFailure(value: unknown, source = "This folder") {
   if (value instanceof ListingResponseError) {
     if (value.status === 401 || value.status === 403)
       return `${source} is no longer connected. Reconnect it from the source menu.`

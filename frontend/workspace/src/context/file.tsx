@@ -124,17 +124,6 @@ function unquoteGitPath(input: string) {
   return new TextDecoder().decode(new Uint8Array(bytes))
 }
 
-export function selectionFromLines(range: SelectedLineRange): FileSelection {
-  const startLine = Math.min(range.start, range.end)
-  const endLine = Math.max(range.start, range.end)
-  return {
-    startLine,
-    endLine,
-    startChar: 0,
-    endChar: 0,
-  }
-}
-
 function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
   if (range.start <= range.end) return range
 

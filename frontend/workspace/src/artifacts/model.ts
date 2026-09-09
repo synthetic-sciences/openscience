@@ -86,12 +86,6 @@ export function groupArtifacts(rows: ArtifactInfo[]): { kind: ArtifactKind; coun
     .toSorted((a, b) => a.kind.localeCompare(b.kind))
 }
 
-export function formatArtifactKind(kind: ArtifactKind): string {
-  if (kind === "genomics") return "genomics"
-  if (kind === "spectrum") return "mass spec"
-  return kind
-}
-
 export function artifactActions(artifact: ArtifactInfo): ArtifactAction[] {
   const path = artifact.path
   const actions: Record<ArtifactKind, Array<Omit<ArtifactAction, "prompt"> & { instruction: string }>> = {

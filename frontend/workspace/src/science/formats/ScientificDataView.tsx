@@ -850,5 +850,3 @@ function empty(): JSX.CSSProperties {
     "text-align": "center",
   }
 }
-
-export default ScientificDataView

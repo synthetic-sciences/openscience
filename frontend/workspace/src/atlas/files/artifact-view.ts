@@ -6,7 +6,7 @@ export interface View {
   sizes: boolean
 }
 
-export const VIEW_KEY = "openscience:artifacts-view"
+const VIEW_KEY = "openscience:artifacts-view"
 export const DEFAULT_VIEW: View = { sort: "created", layout: "grid", sizes: false }
 
 interface Storage {

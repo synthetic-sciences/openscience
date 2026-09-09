@@ -1,6 +1,6 @@
 import { SettingsApiError } from "./api"
 
-export const isOpenScienceOllamaAlias = (model: string) => /^openscience\/.+-ctx-\d+(?::latest)?$/i.test(model)
+const isOpenScienceOllamaAlias = (model: string) => /^openscience\/.+-ctx-\d+(?::latest)?$/i.test(model)
 
 export const selectableLocalModels = (models: string[]) => models.filter((model) => !isOpenScienceOllamaAlias(model))
 

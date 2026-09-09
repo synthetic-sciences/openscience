@@ -41,7 +41,7 @@ export const SessionCommand = cmd({
   async handler() {},
 })
 
-export const SessionListCommand = cmd({
+const SessionListCommand = cmd({
   command: "list",
   describe: "list sessions",
   builder: (yargs: Argv) => {

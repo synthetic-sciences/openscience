@@ -21,7 +21,7 @@ function reason(error: unknown) {
 }
 
 /** Save a BYOK credential and select it as one compensating transaction. */
-export async function configureOnboardingProviderKey(
+async function configureOnboardingProviderKey(
   providerID: string,
   auth: Auth.Info,
   dependencies: OnboardingAuthDependencies,

@@ -126,7 +126,7 @@ const DANGEROUS_ENV = new Set([
 /** Repository dotenv is data/workload configuration, never an authority to
  * reconfigure the OpenScience host. This predicate runs before Flag, Config,
  * Global, provider SDK, and plugin modules are imported. */
-export function isProjectDotenvAllowed(key: string): boolean {
+function isProjectDotenvAllowed(key: string): boolean {
   if (DANGEROUS_ENV.has(key)) return false
   if (key.startsWith("OPENSCIENCE_") || key.startsWith("SYNSC_")) return false
   if (key.startsWith("GIT_CONFIG_") || key.startsWith("NPM_CONFIG_")) return false

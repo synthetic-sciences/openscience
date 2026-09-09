@@ -153,7 +153,7 @@ export function parseFilesystemSnapshot(value: unknown, identity: FilesystemIden
   }
 }
 
-export function activeFilesystemGrants(snapshot?: FilesystemSnapshot) {
+function activeFilesystemGrants(snapshot?: FilesystemSnapshot) {
   return (snapshot?.grants ?? []).filter((grant) => !grant.time.consumed && !grant.time.revoked)
 }
 
@@ -170,18 +170,6 @@ export function sessionFilesystemRoot(snapshot?: FilesystemSnapshot) {
   return activeFilesystemGrants(snapshot).find(
     (grant) => grant.source === "workspace" && grant.scope === "session" && grant.access === "write",
   )?.path
-}
-
-export function filesystemRole(grant: Pick<FilesystemGrant, "access">) {
-  if (grant.access === "write") return "Read & write"
-  return "Read only"
-}
-
-export function filesystemScope(grant: Pick<FilesystemGrant, "scope">) {
-  if (grant.scope === "once") return "One request"
-  if (grant.scope === "installation") return "Every project"
-  if (grant.scope === "project") return "This project"
-  return "This session"
 }
 
 export function findFilesystemGrant(

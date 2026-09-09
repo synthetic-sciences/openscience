@@ -195,5 +195,3 @@ export function Chem2D(props: ArtifactRenderProps): JSX.Element {
     </div>
   )
 }
-
-export default Chem2D

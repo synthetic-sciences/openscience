@@ -27,7 +27,7 @@ export async function runDataRootMiddleware<T>(
   return await operation.during(async () => await action())
 }
 
-export async function runInDataRootScope<T>(action: () => T | Promise<T>): Promise<T> {
+async function runInDataRootScope<T>(action: () => T | Promise<T>): Promise<T> {
   const operation = dataRootOperation
   if (!operation) return await action()
   return await operation.during(async () => await action())

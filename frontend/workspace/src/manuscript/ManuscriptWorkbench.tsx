@@ -999,5 +999,3 @@ function notice(): JSX.CSSProperties {
     color: "var(--color-warning)",
   }
 }
-
-export default ManuscriptWorkbench

@@ -20,7 +20,7 @@ const ENTITIES: Record<string, string> = {
 }
 
 /** Decode the handful of XML/HTML entities that show up in scholarly metadata. */
-export function decodeEntities(input: string): string {
+function decodeEntities(input: string): string {
   return input
     .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => safeCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d) => safeCodePoint(parseInt(d, 10)))

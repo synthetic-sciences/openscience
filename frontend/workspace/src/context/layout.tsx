@@ -13,19 +13,6 @@ import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
-export function getAvatarColors(key?: string) {
-  if (key && AVATAR_COLOR_KEYS.includes(key as AvatarColorKey)) {
-    return {
-      background: `var(--avatar-background-${key})`,
-      foreground: `var(--avatar-text-${key})`,
-    }
-  }
-  return {
-    background: "var(--surface-info-base)",
-    foreground: "var(--text-base)",
-  }
-}
-
 type SessionTabs = {
   active?: string
   all: string[]

@@ -26,8 +26,8 @@ export interface SkillPreferences {
 }
 
 export const SKILL_PREFERENCES_EVENT = "openscience:skill-preferences"
-export const SKILL_PINNED_KEY = "openscience.skills.pinned.v1"
-export const SKILL_RECENT_KEY = "openscience.skills.recent.v1"
+const SKILL_PINNED_KEY = "openscience.skills.pinned.v1"
+const SKILL_RECENT_KEY = "openscience.skills.recent.v1"
 const RECENT_LIMIT = 8
 
 const isAction = (value: unknown): value is SkillPermissionAction =>

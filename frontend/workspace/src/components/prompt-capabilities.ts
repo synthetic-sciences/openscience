@@ -58,7 +58,7 @@ export const DELEGATION_AUTONOMY: Array<{
   },
 ]
 
-export const DEFAULT_DELEGATION: DelegationSettings = {
+const DEFAULT_DELEGATION: DelegationSettings = {
   level: "standard",
   autonomy: "balanced",
 }
@@ -72,10 +72,6 @@ export function delegationSettings(preferences?: CapabilityPreferences): Delegat
     workerModel: preferences?.delegation_worker_model ?? undefined,
     autonomy: preferences?.delegation_autonomy ?? DEFAULT_DELEGATION.autonomy,
   }
-}
-
-export function delegationLabel(settings: DelegationSettings) {
-  return DELEGATION_LEVELS.find((option) => option.value === settings.level)?.label ?? "Auto"
 }
 
 export const CAPABILITY_PREFERENCES_EVENT = "openscience:capability-preferences"
@@ -103,7 +99,7 @@ const LABELS: Record<string, string> = {
   "physics-critique": "Physics critique",
 }
 
-export const CORE_SPECIALISTS = ["biology", "physics", "ml"] as const
+const CORE_SPECIALISTS = ["biology", "physics", "ml"] as const
 
 export function isCoreSpecialist(name: string) {
   return CORE_SPECIALISTS.some((specialist) => specialist === name)

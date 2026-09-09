@@ -30,4 +30,3 @@ export const registrations: RendererRegistration[] = [
 ]
 
 export { GenomeTrack, MsaViewer }
-export default registrations

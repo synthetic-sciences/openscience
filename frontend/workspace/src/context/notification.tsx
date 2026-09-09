@@ -52,7 +52,7 @@ function pruneNotifications(list: Notification[]) {
   return pruned.slice(pruned.length - MAX_NOTIFICATIONS)
 }
 
-export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
+export const { provider: NotificationProvider } = createSimpleContext({
   name: "Notification",
   init: () => {
     const params = useParams()

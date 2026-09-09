@@ -8,7 +8,7 @@ import {
   type CoreScienceCondaPlatform,
 } from "./conda-locks"
 
-export const CORE_SCIENCE_PACKAGES = [
+const CORE_SCIENCE_PACKAGES = [
   "biopython==1.88",
   "contourpy==1.3.3",
   "cycler==0.12.1",
@@ -86,8 +86,6 @@ export const CORE_SCIENCE_RUNTIME = CapabilityRuntime.parse({
   resources: { cpus: 1, memory_gb: 2, time_minutes: 10, gpu: "none" },
   network: { build: "package_index_only", execution: "none" },
 })
-
-export const CORE_SCIENCE_ENVIRONMENT = CORE_SCIENCE_RUNTIME.pack_id
 
 export function capabilityPlatform(host?: CondaLockHost) {
   const current = condaLockPlatform(host)

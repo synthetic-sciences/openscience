@@ -3,7 +3,7 @@ import { createMemo } from "solid-js"
 import { currentDirectory, currentProjectID } from "@/utils/base64"
 
 // Provider-agnostic ordering: lead with the mainstream BYOK/OAuth providers.
-export const popularProviders = [
+const popularProviders = [
   "anthropic",
   "openai",
   "google",

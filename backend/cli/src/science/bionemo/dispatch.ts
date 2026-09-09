@@ -24,7 +24,7 @@ const EgressBucket = z
   })
   .strict()
 
-export const BioNemoHostedEgressSummary = z
+const BioNemoHostedEgressSummary = z
   .object({
     input_kinds: z.array(z.string().min(1).max(64)).min(1).max(16),
     sequences: EgressBucket.extend({ lengths: z.array(z.number().int().nonnegative()).max(32) }).optional(),

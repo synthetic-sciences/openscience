@@ -134,5 +134,3 @@ export const ProvenanceQueryTool = Tool.define("provenance_query", {
 })
 
 export const ProvenanceTools = [ProvenanceRecordTool, ProvenanceQueryTool]
-
-export const PROVENANCE_TOOL_IDS = new Set(["provenance_record", "provenance_query"])

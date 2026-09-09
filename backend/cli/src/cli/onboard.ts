@@ -49,18 +49,6 @@ async function markOnboarded(): Promise<void> {
   } catch {}
 }
 
-/** Whether to auto-launch the first-run wizard from the default command.
- *  Gated on an interactive TTY plus "nothing configured yet"; suppressed in
- *  CI, when piped, once the marker is set, or via OPENSCIENCE_NO_ONBOARD=1. */
-export async function needsOnboarding(): Promise<boolean> {
-  if (process.env.OPENSCIENCE_NO_ONBOARD === "1") return false
-  if (process.env.CI) return false
-  if (!process.stdin.isTTY || !process.stdout.isTTY) return false
-  if (await isConfigured()) return false
-  if (await isOnboarded()) return false
-  return true
-}
-
 async function onboardByok(): Promise<void> {
   prompts.log.info(
     "Bring your own provider key or sign in with ChatGPT/Codex — pick next. " +
@@ -89,7 +77,7 @@ function onboardSkip(): void {
 }
 
 /** Local-first model setup. Every credential remains under the user's control. */
-export async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
+async function runOnboarding(opts?: { force?: boolean }): Promise<void> {
   prompts.intro(opts?.force ? "OpenScience setup" : "Welcome to OpenScience")
 
   const choice = await prompts.select({

@@ -149,8 +149,6 @@ const ALIASES: Record<string, keyof typeof SOURCES> = {
   "vast-ai": "vast",
 }
 
-export const PROVIDER_LOGO_IDS = Object.keys(SOURCES)
-
 export function providerLogoSource(id: string) {
   const normalized = id.trim().toLowerCase()
   return SOURCES[ALIASES[normalized] ?? normalized] ?? ({ kind: "fallback" } as const)

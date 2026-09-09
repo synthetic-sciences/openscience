@@ -274,5 +274,3 @@ export function MsaViewer(props: ArtifactRenderProps) {
     </div>
   )
 }
-
-export default MsaViewer

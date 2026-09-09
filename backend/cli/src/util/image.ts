@@ -44,7 +44,7 @@ export function detectImageMime(bytes: Uint8Array): string | undefined {
 /**
  * Detect image MIME from a base64-encoded string.
  */
-export function detectImageMimeFromBase64(base64: string): string | undefined {
+function detectImageMimeFromBase64(base64: string): string | undefined {
   const clean = base64.replace(/\s/g, "")
   const slice = clean.slice(0, 24) // enough bytes for magic detection
   const bytes = Buffer.from(slice, "base64")

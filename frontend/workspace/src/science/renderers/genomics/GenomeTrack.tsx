@@ -148,5 +148,3 @@ export function GenomeTrack(props: ArtifactRenderProps) {
     </div>
   )
 }
-
-export default GenomeTrack

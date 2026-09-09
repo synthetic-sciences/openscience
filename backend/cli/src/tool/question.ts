@@ -4,7 +4,7 @@ import { Question } from "../question"
 import { MessageV2 } from "../session/message-v2"
 import DESCRIPTION from "./question.txt"
 
-export const QuestionReason = z.enum(["planning", "consequential", "missing_authority"])
+const QuestionReason = z.enum(["planning", "consequential", "missing_authority"])
 
 type QuestionDecisionMetadata = {
   answers: string[][]

@@ -334,5 +334,3 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
 })
 
 export const ScienceTools = [ScienceListDbsTool, ScienceSearchTool, ScienceFetchTool]
-
-export const SCIENCE_TOOL_IDS = new Set(["science_list_dbs", "science_search", "science_fetch"])

@@ -33,4 +33,3 @@ export const registrations: RendererRegistration[] = [
 ]
 
 export { LatexView, PdfViewer, SequenceViewer }
-export default registrations

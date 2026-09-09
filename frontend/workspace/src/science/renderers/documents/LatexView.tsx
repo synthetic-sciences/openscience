@@ -131,5 +131,3 @@ export function LatexView(props: ArtifactRenderProps) {
     </div>
   )
 }
-
-export default LatexView

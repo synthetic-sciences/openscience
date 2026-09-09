@@ -98,7 +98,7 @@ export function slashMode(command: Pick<SlashCommand, "trigger">): SlashMode | u
   if (command.trigger === "plan" || command.trigger === "goal") return command.trigger
 }
 
-export function slashRank(command: SlashCommand) {
+function slashRank(command: SlashCommand) {
   if (command.resultRank !== undefined) return command.resultRank
   const core = SLASH_NATIVE.findIndex((name) => name === command.trigger)
   if (core >= 0) return core

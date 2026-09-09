@@ -43,7 +43,7 @@ export function traceFamily(tool: string): TraceFamily {
   return "other"
 }
 
-export function traceLabel(family: TraceFamily, count: number) {
+function traceLabel(family: TraceFamily, count: number) {
   if (family === "context")
     return `Reviewed ${count} ${count === 1 ? "file or code search" : "files and code searches"}`
   if (family === "sources") return `Checked ${count} external ${count === 1 ? "source" : "sources"}`

@@ -765,5 +765,3 @@ function button(): JSX.CSSProperties {
     cursor: "pointer",
   }
 }
-
-export default BinaryScienceView
