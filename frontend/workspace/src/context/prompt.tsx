@@ -3,6 +3,7 @@ import { createSimpleContext } from "@synsci/ui/context"
 import { batch, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import type { FileSelection } from "@/context/file"
+import { attachBytes, detachBytes, dropBytelessAttachments } from "./prompt-attachments"
 import { Persist, persisted } from "@/utils/persist"
 import { checksum } from "@synsci/util/encode"
 import { useSDK } from "./sdk"
@@ -133,7 +134,7 @@ function createPromptSession(dir: string, id: string | undefined) {
   const legacy = `${dir}/prompt${id ? "/" + id : ""}.v2`
 
   const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "prompt", [legacy]),
+    { ...Persist.scoped(dir, id, "prompt", [legacy]), migrate: dropBytelessAttachments },
     createStore<{
       prompt: Prompt
       cursor?: number
@@ -167,7 +168,7 @@ function createPromptSession(dir: string, id: string | undefined) {
 
   return {
     ready,
-    current: createMemo(() => store.prompt),
+    current: createMemo(() => attachBytes(store.prompt)),
     cursor: createMemo(() => store.cursor),
     dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),
     context: {
@@ -182,7 +183,7 @@ function createPromptSession(dir: string, id: string | undefined) {
       },
     },
     set(prompt: Prompt, cursorPosition?: number) {
-      const next = clonePrompt(prompt)
+      const next = detachBytes(clonePrompt(prompt))
       batch(() => {
         setStore("prompt", next)
         if (cursorPosition !== undefined) setStore("cursor", cursorPosition)

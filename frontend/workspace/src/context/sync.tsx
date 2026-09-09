@@ -17,6 +17,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const sdk = useSDK()
 
     type Child = ReturnType<(typeof globalSync)["child"]>
+    type Store = Child[0]
     type Setter = Child[1]
 
     const child = () => globalSync.child(sdk.directory, { projectID: sdk.projectID })
@@ -42,6 +43,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const loadMessages = async (input: {
       directory: string
       client: typeof sdk.client
+      store: Store
       setStore: Setter
       sessionID: string
       limit: number
@@ -51,6 +53,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       if (meta.loading[key]) return
 
       setMeta("loading", key, true)
+      // SSE keeps streaming while this request is in flight. Entities it
+      // changes meanwhile are newer than the response bytes and must win;
+      // otherwise entering a streaming session rolled its text backwards.
+      const startedAt = globalSync.transcript.revision(input.directory, input.sessionID)
       await retry(() => input.client.session.messages({ sessionID: input.sessionID, limit: input.limit }))
         .then((messages) => {
           const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
@@ -58,19 +64,30 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             .map((x) => x.info)
             .filter((m) => !!m?.id)
             .sort((a, b) => a.id.localeCompare(b.id))
-          const next = input.preserveMessages?.length
-            ? mergeHydratedMessages(input.preserveMessages, incoming)
-            : incoming
+          const changes = globalSync.transcript.changesSince(input.directory, input.sessionID, startedAt)
+          const live = input.store.message[input.sessionID] ?? []
+          const next = mergeHydratedMessages(input.preserveMessages?.length ? input.preserveMessages : live, incoming, {
+            preserveCached: !!input.preserveMessages?.length,
+            preferCached: changes.messages.changed,
+            removed: changes.messages.removed,
+          })
 
           batch(() => {
             input.setStore("message", input.sessionID, reconcile(next, { key: "id" }))
 
             for (const message of items) {
+              if (changes.messages.removed.has(message.info.id)) continue
+              const incomingParts = message.parts.filter((p) => !!p?.id).sort((a, b) => a.id.localeCompare(b.id))
+              const liveParts = input.store.part[message.info.id] ?? []
               input.setStore(
                 "part",
                 message.info.id,
                 reconcile(
-                  message.parts.filter((p) => !!p?.id).sort((a, b) => a.id.localeCompare(b.id)),
+                  mergeHydratedMessages(liveParts, incomingParts, {
+                    preserveCached: false,
+                    preferCached: changes.parts.changed,
+                    removed: changes.parts.removed,
+                  }),
                   { key: "id" },
                 ),
               )
@@ -179,6 +196,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             ? loadMessages({
                 directory,
                 client,
+                store,
                 setStore,
                 sessionID,
                 limit: plan.limit,
@@ -302,7 +320,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           async loadMore(sessionID: string, count = chunk) {
             const directory = sdk.scope
             const client = sdk.client
-            const [, setStore] = child()
+            const [store, setStore] = child()
             const key = keyFor(directory, sessionID)
             if (meta.loading[key]) return
             if (meta.complete[key]) return
@@ -311,6 +329,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             await loadMessages({
               directory,
               client,
+              store,
               setStore,
               sessionID,
               limit: currentLimit + count,

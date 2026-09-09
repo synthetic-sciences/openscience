@@ -1,4 +1,4 @@
-import { usePlatform } from "@/context/platform"
+import { usePlatform, type Platform } from "@/context/platform"
 import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@synsci/util/encode"
 import { createResource, type Accessor } from "solid-js"
@@ -327,8 +327,12 @@ export const Persist = {
   },
 }
 
-export function removePersisted(target: { storage?: string; key: string }) {
-  const platform = usePlatform()
+/**
+ * Callers that remove from a timer or a `pagehide` handler run with no Solid
+ * owner, where `usePlatform()` throws; they pass the platform they captured
+ * while one was available.
+ */
+export function removePersisted(target: { storage?: string; key: string }, platform: Platform = usePlatform()) {
   const isDesktop = platform.platform === "desktop" && !!platform.storage
 
   if (isDesktop) {

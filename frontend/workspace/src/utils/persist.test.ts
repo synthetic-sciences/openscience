@@ -86,6 +86,25 @@ function mount<T>(body: () => T) {
 
 const key = (name: string) => `openscience.global.dat:${name}`
 
+describe("removePersisted outside a Solid owner", () => {
+  test("removes with a platform captured earlier, as the layout prune timer must", async () => {
+    const storage = quotaStorage(Infinity)
+    const target = subject.Persist.session("/work/alpha", "ses_old", "prompt")
+    const stored = `${target.storage}:${target.key}`
+    storage.setItem(stored, '{"draft":"keep me"}')
+
+    // No owner here: this is a timer callback, not a component.
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        expect(() => subject.removePersisted(target)).toThrow()
+        subject.removePersisted(target, web)
+        resolve()
+      }, 0)
+    })
+    expect(storage.getItem(stored)).toBeNull()
+  })
+})
+
 describe("persisted local storage", () => {
   test("coalesces a burst of mutations into one write and skips unchanged values", () => {
     const storage = quotaStorage(Infinity)

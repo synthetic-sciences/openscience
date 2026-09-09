@@ -285,6 +285,59 @@ describe("project bootstrap", () => {
     expect(reports).toHaveLength(1)
   })
 
+  test("a reconnect clears the working state of a session that finished while the stream was down", async () => {
+    const fake = createFakeServer(projects)
+    const sync = mount(fake.fetch)
+    await until(() => !!sync())
+    const app = sync()!
+    const [store] = app.child("/research/a", { projectID: "prj_a" })
+    await until(() => app.ready && store.status === "complete")
+
+    fake.emit(
+      { type: "session.status", properties: { sessionID: "ses_busy", status: { type: "busy" } } },
+      "/research/a",
+    )
+    await until(() => store.session_status["ses_busy"]?.type === "busy")
+
+    // The server finished the turn while the stream was down, so its status
+    // list (busy sessions only) comes back empty on reconnect.
+    fake.emit({ type: "server.connected", properties: {} })
+    await until(() => store.session_status["ses_busy"] === undefined)
+    expect(store.session_status["ses_busy"]).toBeUndefined()
+  })
+
+  test("transcript mutations arriving during a snapshot request are reported for the merge", async () => {
+    const fake = createFakeServer(projects)
+    const sync = mount(fake.fetch)
+    await until(() => !!sync())
+    const app = sync()!
+    const [store] = app.child("/research/a", { projectID: "prj_a" })
+    await until(() => app.ready && store.status === "complete")
+
+    // A route-entry snapshot begins here; SSE keeps streaming meanwhile.
+    const startedAt = app.transcript.revision("/research/a", "ses_live")
+    const part = { id: "prt_live", sessionID: "ses_live", messageID: "msg_live", type: "text", text: "abcd" }
+    fake.emit({ type: "message.part.updated", properties: { part } }, "/research/a")
+    await until(() => store.part["msg_live"]?.[0]?.id === "prt_live")
+    fake.emit(
+      {
+        type: "message.part.removed",
+        properties: { sessionID: "ses_live", messageID: "msg_live", partID: "prt_gone" },
+      },
+      "/research/a",
+    )
+    await settle(50)
+
+    const changes = app.transcript.changesSince("/research/a", "ses_live", startedAt)
+    expect([...changes.parts.changed]).toEqual(["prt_live"])
+    expect([...changes.parts.removed]).toEqual(["prt_gone"])
+    // Nothing before the request began is reported.
+    expect(
+      app.transcript.changesSince("/research/a", "ses_live", app.transcript.revision("/research/a", "ses_live")).parts
+        .changed.size,
+    ).toBe(0)
+  })
+
   test("Home warms only the most recently used project, after the launch screen paints", async () => {
     const fake = createFakeServer(projects)
     const sync = mount(fake.fetch)

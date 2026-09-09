@@ -883,7 +883,9 @@ function createGlobalSync() {
 
       Promise.all([
         sdk.path.get().then((x) => setStore("path", x.data!)),
-        sdk.session.status().then((x) => setStore("session_status", x.data!)),
+        // The list holds only busy sessions; a plain set would keep a session
+        // that finished while the stream was down marked as working forever.
+        sdk.session.status().then((x) => setStore("session_status", reconcile(x.data ?? {}))),
         loadSessions(directory, projectID),
         sdk.vcs.get().then((x) => {
           const next = x.data ?? store.vcs
@@ -1565,6 +1567,18 @@ function createGlobalSync() {
     refreshProviders,
     onProvidersRefreshed: providerRefresh.add,
     onAccountRefreshed: accountRefresh.add,
+    /** Which transcript entities SSE changed since a snapshot request began,
+     * so a slower response never rolls a live message or part backwards. */
+    transcript: {
+      revision: (directory: string, sessionID: string) => transcriptState(directory, sessionID).revision,
+      changesSince: (directory: string, sessionID: string, revision: number) => {
+        const mutations = transcriptState(directory, sessionID)
+        return {
+          messages: transcriptChangesSince(mutations.messages, revision),
+          parts: transcriptChangesSince(mutations.parts, revision),
+        }
+      },
+    },
     project: {
       loadSessions,
       resolve: resolveProject,
