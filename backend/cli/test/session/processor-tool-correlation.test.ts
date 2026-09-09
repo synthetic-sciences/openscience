@@ -117,6 +117,51 @@ describe("SessionProcessor tool outcome correlation", () => {
     })
   })
 
+  test("keeps one part when execute starts while the streamed placeholder is still being written", async () => {
+    // Single-chunk tool calls (local models, small arguments) deliver
+    // tool-input-start and the SDK's execute() almost together. The pending
+    // write for the placeholder is still in flight when execute registers the
+    // running receipt, and the running part must not get a second identity.
+    const updates: MessageV2.ToolPart[] = []
+    const gate = Promise.withResolvers<void>()
+    const coordinator = SessionProcessor.createToolOutcomeCoordinator({
+      abort: new AbortController().signal,
+      identity: { messageID: "msg_tool_correlation", sessionID: "ses_tool_correlation" },
+      async updatePart(part) {
+        updates.push(part)
+      },
+    })
+    const placeholder: MessageV2.ToolPart = {
+      id: "part_call_race",
+      sessionID: "ses_tool_correlation",
+      messageID: "msg_tool_correlation",
+      type: "tool",
+      callID: "call_race",
+      tool: "webfetch",
+      state: { status: "pending", input: {}, raw: "" },
+    }
+    const persisted = coordinator.pending(placeholder, async () => {
+      await gate.promise
+      updates.push(placeholder)
+    })
+    expect(persisted).toBeDefined()
+    const execution = coordinator.execute(
+      "call_race",
+      { url: "https://example.com" },
+      async () => ({ title: "Fetch", output: "ok", metadata: {} }),
+      "webfetch",
+    )
+    gate.resolve()
+    await persisted
+    await execution
+
+    expect(updates.map((part) => part.id)).toEqual(["part_call_race", "part_call_race", "part_call_race"])
+    expect(updates.map((part) => part.state.status)).toEqual(["pending", "running", "completed"])
+    // A late tool-input-start for the settled call must not reopen it either.
+    expect(coordinator.pending({ ...placeholder, id: "part_call_race_late" })).toBeUndefined()
+    expect(coordinator.part("call_race")).toBeUndefined()
+  })
+
   test("uses execution timing when a fast tool settles before its streamed call arrives", async () => {
     const { coordinator, updates } = fixture()
     await coordinator.execute("call_fast", {}, async () => ({ title: "Fast read", output: "done", metadata: {} }))

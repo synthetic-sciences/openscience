@@ -409,6 +409,7 @@ export namespace SessionProcessor {
     const active = new Map<string, Promise<void>>()
     const executions = new Map<string, { signature: string; promise: Promise<ToolExecutionOutput> }>()
     const metadataWrites = new Map<string, Promise<void>>()
+    const pendingWrites = new Map<string, Promise<void>>()
     const terminalParts = new Map<string, MessageV2.ToolPart>()
     const names = new Map<string, string>()
     const applying = new Set<string>()
@@ -427,6 +428,7 @@ export namespace SessionProcessor {
         // authors. Serialize those writes before the terminal result so a slow
         // progress update can never restore an already-completed part to
         // `running` after execute() returns.
+        await pendingWrites.get(callID)
         await metadataWrites.get(callID)
         const match = toolcalls[callID]
         if (!match || match.state.status !== "running" || settled.has(callID)) return false
@@ -500,8 +502,22 @@ export namespace SessionProcessor {
       closed(callID: string) {
         return settled.has(callID)
       },
-      pending(part: MessageV2.ToolPart) {
+      pending(part: MessageV2.ToolPart, write?: () => Promise<unknown>) {
+        // The provider SDK invokes execute() on its own schedule, so the call
+        // may already be registered as running (or settled) by the time the
+        // consumer reaches its tool-input-start event. A second registration
+        // would leave an orphan part stuck in `running` forever and send two
+        // tool results for one call ID on the next request.
+        const existing = toolcalls[part.callID]
+        if (settled.has(part.callID) || (existing && existing.state.status !== "pending")) return
         toolcalls[part.callID] = part
+        if (!write) return Promise.resolve()
+        const persisted = write().then(
+          () => undefined,
+          () => undefined,
+        )
+        pendingWrites.set(part.callID, persisted)
+        return persisted
       },
       async delta(callID: string, delta: string) {
         const match = toolcalls[callID]
@@ -588,6 +604,9 @@ export namespace SessionProcessor {
         const canonical = names.get(callID)
         const register = (() => {
           if (!canonical || !input.identity || previous?.state.status === "running") return Promise.resolve()
+          // Reuse the streamed placeholder's identity and wait for its write so
+          // the running receipt cannot be overtaken by the pending one.
+          const placeholder = pendingWrites.get(callID) ?? Promise.resolve()
           const part: MessageV2.ToolPart = {
             id: previous?.id ?? Identifier.ascending("part"),
             messageID: input.identity.messageID,
@@ -603,7 +622,7 @@ export namespace SessionProcessor {
             },
           }
           toolcalls[callID] = part
-          return input.updatePart(part).then(() => undefined)
+          return placeholder.then(() => input.updatePart(part)).then(() => undefined)
         })()
         const execution = Promise.resolve()
           .then(() => register)
@@ -958,11 +977,12 @@ export namespace SessionProcessor {
                   }
                   break
 
-                case "tool-input-start":
+                case "tool-input-start": {
                   if (toolOutcomes.closed(value.id)) break
-                  if (toolOutcomes.part(value.id)?.state.status === "running") break
-                  const part = await Session.updatePart({
-                    id: toolOutcomes.part(value.id)?.id ?? Identifier.ascending("part"),
+                  const known = toolOutcomes.part(value.id)
+                  if (known && known.state.status !== "pending") break
+                  const part: MessageV2.ToolPart = {
+                    id: known?.id ?? Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "tool",
@@ -973,9 +993,13 @@ export namespace SessionProcessor {
                       input: {},
                       raw: "",
                     },
-                  })
-                  toolOutcomes.pending(part as MessageV2.ToolPart)
+                  }
+                  // Register before the first await: execute() can start while
+                  // this write is in flight and must find this part, not open a
+                  // second one for the same call.
+                  await toolOutcomes.pending(part, () => Session.updatePart(part))
                   break
+                }
 
                 case "tool-input-delta":
                   await toolOutcomes.delta(value.id, value.delta)
