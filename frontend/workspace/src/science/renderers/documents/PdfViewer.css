@@ -179,7 +179,7 @@
 }
 
 .pdf-viewer-thumbnail.is-active {
-  border-color: var(--color-border-base);
+  border-color: var(--color-border);
   background: var(--color-surface-solid);
   color: var(--color-text);
 }

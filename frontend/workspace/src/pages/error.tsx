@@ -316,7 +316,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         "font-family": FONT_SANS,
         padding: "32px",
         background:
-          "radial-gradient(circle at 50% 25%, color-mix(in srgb, var(--color-danger) 6%, transparent), transparent 34%), var(--color-bg)",
+          "radial-gradient(circle at 50% 25%, color-mix(in srgb, var(--color-error) 6%, transparent), transparent 34%), var(--color-bg)",
       }}
     >
       <main
@@ -341,8 +341,8 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               "align-items": "center",
               "justify-content": "center",
               "border-radius": "10px",
-              background: "color-mix(in srgb, var(--color-danger) 10%, transparent)",
-              color: "var(--color-danger)",
+              background: "color-mix(in srgb, var(--color-error) 10%, transparent)",
+              color: "var(--color-error)",
               "flex-shrink": 0,
             }}
           >

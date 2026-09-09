@@ -42,7 +42,7 @@
 }
 
 .session-undo-preview__more {
-  color: var(--color-text-weaker);
+  color: var(--color-text-faint);
 }
 
 .session-undo-bar {

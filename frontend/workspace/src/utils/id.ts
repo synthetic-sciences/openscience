@@ -26,6 +26,21 @@ export namespace Identifier {
   export function descending(prefix: Prefix, given?: string) {
     return generateID(prefix, true, given)
   }
+
+  /**
+   * An ascending id that sorts after `highest`. The 48-bit time prefix wraps
+   * every ~795 days (last on 2026-08-14), so a fresh id can sort before the
+   * ids of a session that predates the wrap. The server bumps its ids past the
+   * session's highest for exactly this reason; an optimistic id must do the
+   * same, or the server answers with a different id and the optimistic
+   * message lingers at the top of the transcript.
+   */
+  export function after(prefix: Prefix, highest: string | undefined) {
+    const natural = create(prefix, false)
+    if (!highest || natural > highest) return natural
+    const bumped = ((BigInt("0x" + highest.slice(4, 16)) + 1n) & 0xffffffffffffn).toString(16).padStart(12, "0")
+    return prefixes[prefix] + "_" + bumped + natural.slice(16)
+  }
 }
 
 function generateID(prefix: Prefix, descending: boolean, given?: string): string {

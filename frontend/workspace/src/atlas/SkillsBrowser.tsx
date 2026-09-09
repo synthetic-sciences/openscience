@@ -334,7 +334,7 @@ export function SkillLibraryDialog(props: { onPick: (name: string) => void; init
   }
 
   return (
-    <Dialog title="Skill Library" size="large" class="atlas-skill-library" transition>
+    <Dialog title="Skill library" size="large" class="atlas-skill-library" transition>
       <div class="atlas-skill-library__body">
         <div class="atlas-skill-library__search" data-focus-frame>
           <IconSearch size={16} strokeWidth={1.5} />

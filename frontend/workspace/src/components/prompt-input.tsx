@@ -2263,7 +2263,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       filename: attachment.filename,
     }))
 
-    const messageID = Identifier.ascending("message")
+    const known = sessionDirectory === projectDirectory ? sync.data : globalSync.child(sessionDirectory)[0]
+    const messageID = Identifier.after("message", known.message[session.id]?.at(-1)?.id)
     const textPart = {
       id: Identifier.ascending("part"),
       type: "text" as const,

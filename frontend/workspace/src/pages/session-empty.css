@@ -1,0 +1,89 @@
+/* Empty session canvas: sits in the conversation column above the composer dock. */
+.session-empty {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 24px calc(var(--workspace-composer-reserve, 160px) + 24px);
+}
+
+.session-empty__inner {
+  display: flex;
+  width: min(560px, 100%);
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.session-empty__eyebrow {
+  margin: 0;
+  color: var(--color-text-faint);
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+.session-empty__title {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-family-sans);
+  font-size: 22px;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.session-empty__hint {
+  margin: 0;
+  max-width: 440px;
+  color: var(--color-text-muted);
+  font-family: var(--font-family-sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.session-empty__starters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.session-empty__starter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+  font-family: var(--font-family-sans);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.session-empty__starter:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+}
+
+.session-empty__starter:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .session-empty__title {
+    font-size: 19px;
+  }
+}

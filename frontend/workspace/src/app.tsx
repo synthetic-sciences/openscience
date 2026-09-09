@@ -39,7 +39,7 @@ const Loading = () => (
 const NotFound = () => (
   <main class="app-not-found" aria-labelledby="not-found-title">
     <span class="app-not-found__eyebrow">404</span>
-    <h1 id="not-found-title">Page Not Found</h1>
+    <h1 id="not-found-title">Page not found</h1>
     <p>This address does not match a project, session, or OpenScience workspace.</p>
     <A class="app-not-found__action" href="/">
       Back to Projects

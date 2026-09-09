@@ -223,7 +223,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
             type="button"
             size="small"
             variant="secondary"
-            aria-label="Manage Result"
+            aria-label="Manage result"
             aria-haspopup="menu"
             aria-expanded={action() !== undefined}
             onClick={() => (action() ? closeActions() : setAction("menu"))}
@@ -295,7 +295,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
                     </Match>
                     <Match when={current() === "rename"}>
                       <form onSubmit={rename} style={actionForm()}>
-                        <strong style={heading()}>Rename Result</strong>
+                        <strong style={heading()}>Rename result</strong>
                         <TextField
                           type="text"
                           label="Result name"

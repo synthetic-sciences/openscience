@@ -51,12 +51,11 @@ import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
 import { createStore } from "solid-js/store"
-import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
 import { progressStatus } from "./session-turn-progress"
-import { collapsibleTracePart, visibleResearchTrace } from "./research-trace"
+import { collapsibleTracePart, elapsedLabel, visibleResearchTrace } from "./research-trace"
 import { MarkdownFileScope, useMarkdownFileResolvers } from "./markdown"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
@@ -589,19 +588,9 @@ export function SessionTurn(
     const msg = message()
     if (!msg) return ""
     const completed = lastAssistantMessage()?.time.completed
-    const from = DateTime.fromMillis(msg.time.created)
-    const to = completed ? DateTime.fromMillis(completed) : DateTime.now()
-    const interval = Interval.fromDateTimes(from, to)
-    const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
-
-    const locale = i18n.locale()
-    const human = interval.toDuration(unit).normalize().reconfigure({ locale }).toHuman({
-      notation: "compact",
-      unitDisplay: "narrow",
-      compactDisplay: "short",
-      showZeros: false,
-    })
-    return locale.startsWith("zh") ? human.replaceAll("、", "") : human
+    // The same "6m 10s" form the activity rows use, instead of a list-formatted
+    // "6m, 10s" that read as two separate values.
+    return elapsedLabel((completed ?? Date.now()) - msg.time.created)
   }
 
   const autoScroll = createAutoScroll({

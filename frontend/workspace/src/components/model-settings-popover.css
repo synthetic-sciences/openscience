@@ -112,7 +112,7 @@
 [data-model-effort-chip] strong {
   display: block;
   overflow: hidden;
-  max-width: 88px;
+  max-width: 116px;
   font-weight: var(--font-weight-regular);
   line-height: 20px;
   text-overflow: ellipsis;

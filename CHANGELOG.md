@@ -505,6 +505,18 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   to an older snapshot.
 - Stop warning about a retained staging file after every successful save;
   native file errors now carry an error code like the fs module's.
+- Stop showing a sent message twice in sessions created before 14 August 2026:
+  the message id's time prefix wrapped that day, so the composer's optimistic
+  copy sorted to the top of the transcript and stayed there until reload. The
+  composer now proposes an id that sorts after the session's newest message,
+  the same way the server does.
+- Give a new session an empty state: the project name, a heading, and three
+  starters that seed the composer, instead of a blank canvas.
+- Show turn durations as `6m 10s` like the activity rows (was `6m, 10s`), let
+  the effort chip show "Provider default" without truncation, use sentence
+  case for remaining Title Case labels (Jump to latest, Manage result, Rename
+  result, Skill library, Add server, Manage servers, Page not found), and route
+  the recovery page's accent through the defined error colour token.
 
 ## v2.0.71–v2.0.72 — 2026-09-05
 

@@ -151,7 +151,7 @@
 }
 
 .session-sidebar__archived > summary > span {
-  color: var(--color-text-weaker);
+  color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
 }
 
@@ -280,7 +280,7 @@
 }
 
 .session-compaction__label > span {
-  color: var(--color-text-weaker);
+  color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
 }
 
@@ -393,7 +393,7 @@
 }
 
 .workspace-header__context-percent {
-  color: var(--color-text-weaker);
+  color: var(--color-text-faint);
 }
 
 @media (pointer: coarse) {

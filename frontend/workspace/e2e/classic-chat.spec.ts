@@ -178,7 +178,7 @@ for (const intent of ["reading", "jump", "navigate"] as const) {
       await page.getByRole("button", { name: "Load earlier messages", exact: true }).click()
       await expect.poll(() => pending).toBe(true)
       const original = await scroller.elementHandle()
-      if (intent === "jump") await page.getByRole("button", { name: "Jump to Latest", exact: true }).click()
+      if (intent === "jump") await page.getByRole("button", { name: "Jump to latest", exact: true }).click()
       if (intent === "navigate") {
         await page.locator(`[data-session-tab="${other.id}"]`).click()
         await expect(page.getByRole("heading", { name: "Other conversation", exact: true })).toHaveCount(1)
@@ -693,7 +693,7 @@ test("classic long-chat disclosures preserve the reader, stay per-turn, and surv
     await dragInspector(page, -185, checkHeading)
     await dragInspector(page, 185, checkHeading)
 
-    await page.getByRole("button", { name: "Jump to Latest", exact: true }).click()
+    await page.getByRole("button", { name: "Jump to latest", exact: true }).click()
     await settleLayout(page)
     const checkBottom = async () => {
       const remaining = await page

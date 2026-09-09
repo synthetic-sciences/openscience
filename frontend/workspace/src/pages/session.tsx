@@ -47,6 +47,9 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconHome,
+  IconBookOpen,
+  IconFlask,
+  IconFolder,
   IconPlus,
   IconSearch,
   IconSettings,
@@ -79,6 +82,7 @@ import { createTraceExpansion } from "@/pages/session-trace"
 import { estimate, latestContext, type ContextEstimate, type ContextSample } from "@/pages/session-context"
 import "./session-header.css"
 import "./session-undo.css"
+import "./session-empty.css"
 import "../components/chat-surface.css"
 
 type SyncSession = ReturnType<typeof useSync>["data"]["session"][number]
@@ -1192,6 +1196,9 @@ export default function Page(): JSX.Element {
                     <span>Opening your last session…</span>
                   </div>
                 </Match>
+                <Match when={params.id && messages().length === 0}>
+                  <SessionEmptyState project={projectName()} />
+                </Match>
                 <Match when={params.id && messages().length > 0}>
                   {/* Scoped to just the scroll area (not the revert banner / Composer
                       below) so the jump-to-latest pill's position:absolute resolves
@@ -1411,9 +1418,9 @@ export default function Page(): JSX.Element {
 
                     <div class="session-jump-latest-rail" aria-live="polite">
                       <Show when={chatScroll.userScrolled()}>
-                        <button type="button" class="session-jump-latest" onClick={followLatest} title="Jump to Latest">
+                        <button type="button" class="session-jump-latest" onClick={followLatest} title="Jump to latest">
                           <IconChevronDown size={13} strokeWidth={1.6} />
-                          Jump to Latest
+                          Jump to latest
                         </button>
                       </Show>
                     </div>
@@ -1458,6 +1465,51 @@ export default function Page(): JSX.Element {
               </div>
             </section>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const EMPTY_SESSION_STARTERS = [
+  {
+    icon: IconBookOpen,
+    title: "Survey the literature",
+    prompt: "Survey the recent literature on ",
+  },
+  {
+    icon: IconFlask,
+    title: "Plan an experiment",
+    prompt: "Help me design an experiment to test whether ",
+  },
+  {
+    icon: IconFolder,
+    title: "Work with my files",
+    prompt: "Look through the files in this project and summarise what they contain, then ",
+  },
+] as const
+
+/** The first thing a new session shows: what this project is, and three ways
+ *  to begin that seed the composer rather than sending on the user's behalf. */
+function SessionEmptyState(props: { project: string }) {
+  return (
+    <div class="session-empty" role="region" aria-label="Start a session">
+      <div class="session-empty__inner">
+        <p class="session-empty__eyebrow">{props.project}</p>
+        <h2 class="session-empty__title">What would you like to work on?</h2>
+        <p class="session-empty__hint">
+          Describe a research task below. OpenScience reads this project's files, searches sources, runs analyses, and
+          keeps the results here.
+        </p>
+        <div class="session-empty__starters">
+          <For each={EMPTY_SESSION_STARTERS}>
+            {(starter) => (
+              <button type="button" class="session-empty__starter" onClick={() => uiStore.setPrefill(starter.prompt)}>
+                <starter.icon size={14} strokeWidth={1.5} />
+                <span>{starter.title}</span>
+              </button>
+            )}
+          </For>
         </div>
       </div>
     </div>
