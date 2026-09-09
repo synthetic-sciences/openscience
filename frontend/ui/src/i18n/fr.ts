@@ -118,9 +118,9 @@ export const dict = {
   "ui.permission.allow": "Autoriser pour…",
   "ui.permission.allowSession": "Cette conversation",
   "ui.permission.allowProject": "Ce projet",
-  "ui.permission.grantRead": "Accorder un accès en lecture seule à {path}",
-  "ui.permission.grantWrite": "Accorder un accès en lecture et écriture à {path}",
-  "ui.permission.allowHost": "Autoriser l'accès réseau à {host}",
+  "ui.permission.grantRead": "Accorder un accès en lecture seule à {{path}}",
+  "ui.permission.grantWrite": "Accorder un accès en lecture et écriture à {{path}}",
+  "ui.permission.allowHost": "Autoriser l'accès réseau à {{host}}",
 
   "ui.message.expand": "Développer le message",
   "ui.message.collapse": "Réduire le message",

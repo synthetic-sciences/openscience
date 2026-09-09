@@ -25,6 +25,8 @@ import { AuthorityProcessLedger } from "./authority-process"
 import { MCP } from "@/mcp"
 import { CredentialProcessLedger } from "@/credentials/process-ledger"
 import { Agent } from "@/agent/agent"
+import { PermissionNext } from "@/permission/next"
+import { MessageV2 } from "@/session/message-v2"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeEvents } from "@/runtime/events"
 import { SessionPrompt } from "@/session/prompt"
@@ -416,6 +418,25 @@ export async function InstanceBootstrap() {
   Bus.subscribe(ProjectAccess.Event.Changed, async (payload) => {
     if (!payload.properties.narrowing) {
       await Promise.all([invalidateProjectExecutionCaches(), invalidateProjectTokenCache(Instance.project.id)])
+      // Cards already waiting were evaluated under the narrower mode. Apply
+      // the rebuilt rules to them so widening access clears routine prompts.
+      await PermissionNext.reconsider({
+        mode: payload.properties.status.mode,
+        ruleset: async (request) => {
+          if (!request.tool) return
+          const message = await MessageV2.get({
+            sessionID: request.sessionID,
+            messageID: request.tool.messageID,
+          }).catch(() => undefined)
+          if (message?.info.role !== "assistant") return
+          const [agent, session] = await Promise.all([
+            Agent.get(message.info.agent),
+            Session.get(request.sessionID).catch(() => undefined),
+          ])
+          if (!agent) return
+          return PermissionNext.merge(agent.permission, session?.permission ?? [])
+        },
+      }).catch((error) => Log.Default.error("failed to reconsider pending approvals", { error }))
       return
     }
     const jobs = import("../compute/jobs").then((module) => module.ComputeJobs.cancelProject(Instance.project.id))

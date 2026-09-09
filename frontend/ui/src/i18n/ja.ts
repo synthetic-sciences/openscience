@@ -116,9 +116,9 @@ export const dict = {
   "ui.permission.allow": "許可対象…",
   "ui.permission.allowSession": "この会話",
   "ui.permission.allowProject": "このプロジェクト",
-  "ui.permission.grantRead": "{path} への読み取り専用アクセスを許可",
-  "ui.permission.grantWrite": "{path} への読み書きアクセスを許可",
-  "ui.permission.allowHost": "{host} へのネットワークアクセスを許可",
+  "ui.permission.grantRead": "{{path}} への読み取り専用アクセスを許可",
+  "ui.permission.grantWrite": "{{path}} への読み書きアクセスを許可",
+  "ui.permission.allowHost": "{{host}} へのネットワークアクセスを許可",
 
   "ui.message.expand": "メッセージを展開",
   "ui.message.collapse": "メッセージを折りたたむ",

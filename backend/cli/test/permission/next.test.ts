@@ -1382,3 +1382,55 @@ test("Ask always ignores prior grants while Ask risky requires a user grant", as
     },
   })
 })
+
+test("widening to Full access clears pending routine prompts but keeps explicit asks and denies", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ask = (id: string, permission: string, pattern: string, ruleset: PermissionNext.Ruleset) =>
+        PermissionNext.ask({
+          id,
+          sessionID: "session_widen",
+          permission,
+          patterns: [pattern],
+          metadata: {},
+          always: [pattern],
+          tool: { messageID: "msg_widen", callID: `call_${id}` },
+          ruleset,
+          mode: "approve",
+        })
+      // Two fetches raised under Ask risky, plus one the user's policy pins to ask.
+      const fetch = ask("permission_widen_fetch", "webfetch", "https://example.test/paper", [
+        { permission: "webfetch", pattern: "*", action: "ask" },
+      ])
+      const host = ask("permission_widen_host", "network", "example.test", [
+        { permission: "network", pattern: "*", action: "ask" },
+      ])
+      const pinned = ask("permission_widen_pinned", "websearch", "genes", [
+        { permission: "websearch", pattern: "*", action: "ask" },
+      ])
+      expect((await PermissionNext.list()).map((request) => request.id).sort()).toEqual([
+        "permission_widen_fetch",
+        "permission_widen_host",
+        "permission_widen_pinned",
+      ])
+
+      // The rebuilt Full-access ruleset allows fetch and network; websearch stays
+      // at ask because an explicit user rule follows the built-in allow.
+      const full: PermissionNext.Ruleset = [
+        { permission: "webfetch", pattern: "*", action: "allow" },
+        { permission: "network", pattern: "*", action: "allow" },
+        { permission: "websearch", pattern: "*", action: "allow" },
+        { permission: "websearch", pattern: "*", action: "ask" },
+      ]
+      await PermissionNext.reconsider({ mode: "full", ruleset: async () => full })
+
+      await expect(fetch).resolves.toBeUndefined()
+      await expect(host).resolves.toBeUndefined()
+      expect((await PermissionNext.list()).map((request) => request.id)).toEqual(["permission_widen_pinned"])
+      await PermissionNext.reply({ requestID: "permission_widen_pinned", reply: "reject" })
+      await expect(pinned).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+    },
+  })
+})

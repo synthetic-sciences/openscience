@@ -121,9 +121,9 @@ export const dict = {
   "ui.permission.allowSession": "Denne samtalen",
   "ui.permission.allowProject": "Dette prosjektet",
   "ui.permission.scopeGlobal": "Globalt",
-  "ui.permission.grantRead": "Gi skrivebeskyttet tilgang til {path}",
-  "ui.permission.grantWrite": "Gi lese- og skrivetilgang til {path}",
-  "ui.permission.allowHost": "Tillat nettverkstilgang til {host}",
+  "ui.permission.grantRead": "Gi skrivebeskyttet tilgang til {{path}}",
+  "ui.permission.grantWrite": "Gi lese- og skrivetilgang til {{path}}",
+  "ui.permission.allowHost": "Tillat nettverkstilgang til {{host}}",
 
   "ui.message.expand": "Utvid melding",
   "ui.message.collapse": "Skjul melding",

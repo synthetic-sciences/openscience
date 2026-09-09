@@ -480,6 +480,55 @@ export namespace PermissionNext {
     }
   }
 
+  /**
+   * Re-evaluate this project's pending requests under a widened action mode.
+   * A card raised under Ask risky otherwise stays on screen after the user
+   * switches to Full access, which reads as "it still asks". The caller
+   * supplies the freshly rebuilt ruleset for each request's agent; explicit
+   * denies and unknown permission kinds keep asking exactly as a new request
+   * would.
+   */
+  export async function reconsider(input: {
+    mode: ProjectAccess.Mode
+    ruleset: (request: Request) => Promise<Ruleset | undefined>
+  }) {
+    const s = await state()
+    for (const [id, pending] of Object.entries(s.pending)) {
+      if (pending.mode === input.mode) continue
+      const permission = pending.info.permission
+      const configured = await input.ruleset(pending.info)
+      if (!configured || s.pending[id] !== pending) continue
+      const granted = approvals(s, pending.info.sessionID)
+      const policy = REMOTE_PLAN.has(permission)
+        ? configured.filter((rule) => rule.action !== "allow")
+        : spendFilter(permission, configured)
+      const approved = spendFilter(permission, granted)
+      const actions = pending.info.patterns.map((pattern) =>
+        modeAction({
+          mode: input.mode,
+          permission,
+          configured: evaluate(permission, pattern, policy).action,
+          granted: evaluate(permission, pattern, approved).action,
+          metadata: pending.info.metadata,
+        }),
+      )
+      if (!actions.length || actions.some((action) => action !== "allow")) {
+        pending.mode = input.mode
+        continue
+      }
+      delete s.pending[id]
+      pending.cleanup()
+      await materialize(pending.info, "session").catch((error) => {
+        pending.reject(error)
+        throw error
+      })
+      await pending.trace
+      await SessionTraceStore.approvalReplied({ sessionID: pending.info.sessionID, requestID: id, reply: "once" })
+      Bus.publish(Event.Replied, { sessionID: pending.info.sessionID, requestID: id, reply: "once" })
+      pending.resolve()
+    }
+  }
+
   export const reply = fn(
     z.object({
       requestID: Identifier.schema("permission"),
@@ -578,7 +627,9 @@ export namespace PermissionNext {
         await persist(s)
       }
 
-      await materialize(existing.info, input.reply === "always" ? "installation" : "project").catch((error) => {
+      // Folder access never crosses projects, whichever scope was chosen: a
+      // machine-wide reply still materializes as this project's grant.
+      await materialize(existing.info, "project").catch((error) => {
         existing.reject(error)
         throw error
       })

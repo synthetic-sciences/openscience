@@ -120,9 +120,9 @@ export const dict = {
   "ui.permission.allow": "允许范围…",
   "ui.permission.allowSession": "此对话",
   "ui.permission.allowProject": "此项目",
-  "ui.permission.grantRead": "授予对 {path} 的只读访问权限",
-  "ui.permission.grantWrite": "授予对 {path} 的读写访问权限",
-  "ui.permission.allowHost": "允许网络访问 {host}",
+  "ui.permission.grantRead": "授予对 {{path}} 的只读访问权限",
+  "ui.permission.grantWrite": "授予对 {{path}} 的读写访问权限",
+  "ui.permission.allowHost": "允许网络访问 {{host}}",
 
   "ui.message.expand": "展开消息",
   "ui.message.collapse": "收起消息",

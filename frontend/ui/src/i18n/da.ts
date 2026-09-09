@@ -116,9 +116,9 @@ export const dict = {
   "ui.permission.allow": "Tillad for…",
   "ui.permission.allowSession": "Denne samtale",
   "ui.permission.allowProject": "Dette projekt",
-  "ui.permission.grantRead": "Giv skrivebeskyttet adgang til {path}",
-  "ui.permission.grantWrite": "Giv læse- og skriveadgang til {path}",
-  "ui.permission.allowHost": "Tillad netværksadgang til {host}",
+  "ui.permission.grantRead": "Giv skrivebeskyttet adgang til {{path}}",
+  "ui.permission.grantWrite": "Giv læse- og skriveadgang til {{path}}",
+  "ui.permission.allowHost": "Tillad netværksadgang til {{host}}",
 
   "ui.message.expand": "Udvid besked",
   "ui.message.collapse": "Skjul besked",

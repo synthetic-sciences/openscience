@@ -218,6 +218,9 @@ export function PermissionActions(props: { respond: (response: PermissionReply) 
     }
     const network = props.metadata?.network
     if (network?.host) return i18n.t("ui.permission.allowHost", { host: network.host })
+    // A fetch prompt with no address is impossible to judge.
+    const url = props.metadata?.url
+    if (typeof url === "string" && url.trim()) return url.trim()
     const query = props.metadata?.query
     if (typeof query === "string" && query.trim()) return `“${query.trim()}”`
     return undefined
@@ -251,10 +254,17 @@ export function PermissionActions(props: { respond: (response: PermissionReply) 
         }),
         button(i18n.t("ui.permission.allowSession"), "secondary", () => props.respond("session")),
         button(i18n.t("ui.permission.allowProject"), "secondary", () => props.respond("project")),
-        button(special ? i18n.t("ui.permission.scopeGlobal") : i18n.t("ui.permission.allowAlways"), "secondary", () =>
-          props.respond("always"),
-        ),
       )
+      // Folder access stays within the project that approved it, so a
+      // machine-wide scope is not offered for filesystem prompts.
+      if (!props.metadata?.filesystem?.path) {
+        append(
+          actions,
+          button(special ? i18n.t("ui.permission.scopeGlobal") : i18n.t("ui.permission.allowAlways"), "secondary", () =>
+            props.respond("always"),
+          ),
+        )
+      }
       return actions
     }
     append(

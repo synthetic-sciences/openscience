@@ -258,13 +258,20 @@ describe("Modal permission card", () => {
     }
   })
 
-  test("generic filesystem, network, and query approvals reveal all scopes and cancel restores the trigger", async () => {
+  test("generic filesystem, network, and query approvals reveal their scopes and cancel restores the trigger", async () => {
     const cases = [
       { filesystem: { access: "read", path: "results/table.csv" } },
       { network: { host: "api.example.test" } },
+      { url: "https://api.example.test/v1/papers?q=egfr" },
       { query: "approve this search" },
     ]
-    for (const metadata of cases) {
+    const summaries = [
+      "Grant read-only access to results/table.csv",
+      "Allow network access to api.example.test",
+      "https://api.example.test/v1/papers?q=egfr",
+      "“approve this search”",
+    ]
+    for (const [index, metadata] of cases.entries()) {
       const responses: string[] = []
       const container = document.createElement("div")
       document.body.append(container)
@@ -278,6 +285,8 @@ describe("Modal permission card", () => {
       )
 
       try {
+        // The card must say what is being approved: the folder, host or address.
+        expect(container.querySelector('[data-slot="permission-summary"]')?.textContent).toBe(summaries[index])
         const trigger = container.querySelector('button[data-variant="secondary"]') as HTMLButtonElement | null
         expect(trigger).toBeTruthy()
         trigger?.click()
@@ -285,7 +294,10 @@ describe("Modal permission card", () => {
         const text = container.textContent ?? ""
         expect(text).toContain("This conversation")
         expect(text).toContain("This project")
-        expect(text).toContain("Allow always")
+        // Folder access never carries into another project; only network and
+        // search approvals may be granted machine-wide.
+        if ("filesystem" in metadata) expect(text).not.toContain("Allow always")
+        else expect(text).toContain("Allow always")
         const cancel = Array.from(container.querySelectorAll("button")).find(
           (button) => button.textContent === "Cancel",
         ) as HTMLButtonElement | undefined
