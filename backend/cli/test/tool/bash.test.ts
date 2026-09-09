@@ -496,7 +496,15 @@ describe("tool.bash truncation", () => {
         expect(updates).toBeLessThan(200)
         const saved = await Bun.file((result.metadata as any).outputPath).text()
         expect(saved).not.toContain("sk-largeoutput0123456789")
-        expect(saved.split("\n").length).toBeGreaterThan(300_000)
+        expect(
+          saved.split("\n").length,
+          JSON.stringify({
+            exit: result.metadata.exit,
+            output: result.output.slice(-1200),
+            savedTail: saved.slice(-600),
+            size: saved.length,
+          }),
+        ).toBeGreaterThan(300_000)
       },
     })
   }, 60_000)
