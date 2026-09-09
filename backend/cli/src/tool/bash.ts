@@ -431,14 +431,31 @@ export const BashTool = Tool.define("bash", async () => {
           publishTimer ??= setTimeout(publish, PREVIEW_INTERVAL)
         },
       })
-      const heads = { stdout: "", stderr: "" }
+      const head = () =>
+        new BashOutput.Capture({
+          redact,
+          maxBytes: PROVENANCE_HEAD,
+          maxLines: Truncate.MAX_LINES,
+          previewOnly: true,
+          open: () => {
+            throw new Error("Provenance heads do not write output files")
+          },
+        })
+      const heads = { stdout: head(), stderr: head() }
+      let outputError: unknown
       const decoders = { stdout: new StringDecoder("utf-8"), stderr: new StringDecoder("utf-8") }
-      const record = (channel: keyof typeof heads) => (chunk: Buffer) => {
-        const text = decoders[channel].write(chunk)
-        if (heads[channel].length <= PROVENANCE_HEAD) {
-          heads[channel] += text.slice(0, PROVENANCE_HEAD + 1 - heads[channel].length)
+      const record = (channel: keyof typeof heads, child: ReturnType<typeof spawn>) => (chunk: Buffer) => {
+        if (outputError) return
+        try {
+          const text = decoders[channel].write(chunk)
+          heads[channel].write(text)
+          capture.write(text)
+        } catch (error) {
+          outputError = error
+          void Shell.killTree(child, { exited: () => exited, detached: process.platform !== "win32" }).catch(
+            () => undefined,
+          )
         }
-        capture.write(text)
       }
 
       let exited = false
@@ -487,8 +504,8 @@ export const BashTool = Tool.define("bash", async () => {
               stdio: ["ignore", "pipe", "pipe"],
               detached: process.platform !== "win32",
             })
-            child.stdout?.on("data", record("stdout"))
-            child.stderr?.on("data", record("stderr"))
+            child.stdout?.on("data", record("stdout", child))
+            child.stderr?.on("data", record("stderr", child))
           } catch (error) {
             Sandbox.cleanup(sandbox)
             throw error
@@ -576,11 +593,20 @@ export const BashTool = Tool.define("bash", async () => {
           // even when the command itself is reported as an error.
           for (const channel of ["stdout", "stderr"] as const) {
             const rest = decoders[channel].end()
-            if (rest) capture.write(rest)
+            if (rest) {
+              capture.write(rest)
+              heads[channel].write(rest)
+            }
           }
+          return Promise.all([capture.end(), heads.stdout.end(), heads.stderr.end()]).finally(() => {
+            if (publishTimer) clearTimeout(publishTimer)
+            publishTimer = undefined
+          })
+        })
+        .then(() => {
+          if (outputError) throw outputError
           return capture.end()
         })
-        .then(() => capture.end())
 
       const completed = Date.now()
       const files = before
@@ -612,8 +638,8 @@ export const BashTool = Tool.define("bash", async () => {
         command: params.command,
         cwd,
         exit: proc.exitCode,
-        stdout: heads.stdout,
-        stderr: heads.stderr,
+        stdout: heads.stdout.current(),
+        stderr: heads.stderr.current(),
         startedAt: started,
         completedAt: completed,
       }).catch(() => undefined)

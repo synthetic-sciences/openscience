@@ -25,6 +25,7 @@ async function scratch() {
 }
 
 const identity = (text: string) => text
+const pem = (edge: string) => `-----${edge} PRIVATE KEY-----`
 
 describe("BashOutput.Capture", () => {
   test("keeps small output in memory without touching the disk", async () => {
@@ -115,14 +116,13 @@ describe("BashOutput.Capture", () => {
     })
     const chunk = "x".repeat(16 * 1024)
     for (let i = 0; i < 16; i++) capture.write(chunk)
-    // Everything beyond the hold limit has already been flushed to the file.
-    expect((await sink.text()).length).toBeGreaterThanOrEqual(BashOutput.HOLD_LIMIT)
     const summary = await capture.end()
-    expect(summary.bytes).toBe(16 * 16 * 1024)
-    expect((await sink.text()).length).toBe(16 * 16 * 1024)
+    expect(summary.preview).toContain("[REDACTED: oversized output line]")
+    expect(summary.bytes).toBeLessThan(1024)
+    expect(sink.opened).toBe(0)
   })
 
-  test("a forced flush of an overlong line cuts at whitespace so a straddling secret stays whole", async () => {
+  test("an oversized incomplete line cannot leak a split quoted secret", async () => {
     await using sink = await scratch()
     const capture = new BashOutput.Capture({
       redact: OpenScience.redactSecrets,
@@ -130,13 +130,42 @@ describe("BashOutput.Capture", () => {
       maxLines: 10,
       open: () => sink.open(),
     })
-    const [head, tail] = ["sk-straddle0123", "456789"]
-    capture.write("x".repeat(BashOutput.HOLD_LIMIT + 10) + ` token=${head}`)
-    capture.write(`${tail} tail\n`)
+    capture.write("x".repeat(BashOutput.HOLD_LIMIT) + ' password="sensitive first ')
+    capture.write('second half"\nnext line\n')
+    const summary = await capture.end()
+    expect(summary.preview).toBe("[REDACTED: oversized output line]\nnext line\n")
+  })
+
+  test("oversized PEM bodies remain redacted across a split END marker", async () => {
+    await using sink = await scratch()
+    const capture = new BashOutput.Capture({
+      redact: OpenScience.redactSecrets,
+      maxBytes: 1024,
+      maxLines: 10,
+      open: () => sink.open(),
+    })
+    capture.write(`before\n${pem("BEGIN")}\n`)
+    for (let i = 0; i < 100; i++) capture.write("sensitive".repeat(100) + "\n")
+    capture.write("-----EN")
+    capture.write("D PRIVATE KEY-----\nafter\n")
+    const summary = await capture.end()
+    expect(summary.preview).toBe("before\n[REDACTED]\nafter\n")
+  })
+
+  test("a provenance head never exposes a private key cut at the preview limit", async () => {
+    const capture = new BashOutput.Capture({
+      redact: OpenScience.redactSecrets,
+      maxBytes: 2000,
+      maxLines: 2000,
+      previewOnly: true,
+      open: () => {
+        throw new Error("must not open")
+      },
+    })
+    capture.write(`before\n${pem("BEGIN")}\n` + "body".repeat(1000) + "\n")
+    capture.write(`${pem("END")}\nafter\n`)
     await capture.end()
-    const saved = await sink.text()
-    expect(saved).not.toContain(head + tail)
-    expect(saved.endsWith(" token=[REDACTED] tail\n")).toBe(true)
+    expect(capture.current()).toBe("before\n[REDACTED]\nafter\n")
   })
 
   test("bounded memory and linear time for a large noisy stream", async () => {

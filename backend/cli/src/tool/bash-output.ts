@@ -10,23 +10,20 @@ import type { FileSink } from "bun"
  * keeps only the head preview the model receives, and streams everything else
  * to an owned output file that is opened the moment the preview overflows.
  *
- * Redaction boundaries: the patterns in OpenScience.redactSecrets never span a
- * newline except the PEM block, so text is redacted in whole lines and an
- * unterminated `-----BEGIN … PRIVATE KEY-----` is held back until its END
- * marker arrives. A registered secret that straddles two chunks therefore
- * still lands in one redaction pass. Both holds are capped so a command that
- * never prints a newline cannot grow the pending buffer without bound.
+ * Complete lines are redacted together. Open private-key blocks are held
+ * until their END marker; oversized incomplete lines and key blocks are
+ * discarded with an explicit redaction marker instead of exposing fragments.
  */
 export namespace BashOutput {
   /** Longest run kept unflushed while waiting for a newline or a PEM END. */
   export const HOLD_LIMIT = 64 * 1024
-  const PEM_BEGIN = "-----BEGIN"
-  const PEM_END = "-----END"
 
   export interface Options {
     redact: (text: string) => string
     maxBytes: number
     maxLines: number
+    /** Retain a redacted head only (for provenance), without opening a file. */
+    previewOnly?: boolean
     /** Opened once, when the preview first overflows. Receives every redacted
      * byte from the start of the output. */
     open: () => FileSink
@@ -60,11 +57,13 @@ export namespace BashOutput {
     private lines = 0
     private sink: FileSink | undefined
     private ended = false
+    private dropping: "line" | "pem" | undefined
+    private marker = ""
 
     constructor(private readonly options: Options) {}
 
     write(chunk: Buffer | string): void {
-      if (this.ended) return
+      if (this.ended || (this.options.previewOnly && this.previewClosed)) return
       const text = typeof chunk === "string" ? chunk : chunk.toString()
       if (!text) return
       this.parts.push(text)
@@ -97,36 +96,58 @@ export namespace BashOutput {
     }
 
     private flush(final: boolean): void {
-      const pending = this.parts.length === 1 ? this.parts[0] : this.parts.join("")
-      const emit = (() => {
-        if (final) return pending
-        const newline = pending.lastIndexOf("\n")
-        if (newline < 0) {
-          // A single line past the hold limit is flushed anyway, at its last
-          // whitespace when it has one: no secret pattern spans whitespace, so
-          // the cut cannot split a token between two redaction passes.
-          if (pending.length <= HOLD_LIMIT) return ""
-          const space = pending.search(/\s\S*$/)
-          return space > 0 ? pending.slice(0, space + 1) : pending
+      let pending = this.parts.length === 1 ? this.parts[0] : this.parts.join("")
+      if (this.dropping) {
+        const input = this.marker + pending
+        const end = this.dropping === "line" ? /\n/.exec(input) : /-----END(?: [A-Z0-9]+)? PRIVATE KEY-----/.exec(input)
+        if (!end) {
+          // Only the bounded marker tail is needed to recognize a split END.
+          this.marker = this.dropping === "pem" ? input.slice(-128) : ""
+          this.parts = []
+          this.pendingLength = 0
+          return
         }
-        const complete = pending.slice(0, newline + 1)
-        // Keep an open PEM block together so its body lines cannot escape the
-        // multi-line pattern by arriving in a different pass.
-        const begin = complete.lastIndexOf(PEM_BEGIN)
-        if (begin >= 0 && !complete.includes(PEM_END, begin) && complete.length - begin <= HOLD_LIMIT) {
-          return complete.slice(0, begin)
+        pending = input.slice(end.index + end[0].length)
+        if (this.dropping === "line") pending = "\n" + pending
+        this.dropping = undefined
+        this.marker = ""
+        this.parts = pending ? [pending] : []
+        this.pendingLength = pending.length
+      }
+      const newline = pending.lastIndexOf("\n")
+      let end = final ? pending.length : newline + 1
+      const begin = [...pending.matchAll(/-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----/g)].at(-1)
+      if (begin && !/-----END(?: [A-Z0-9]+)? PRIVATE KEY-----/.test(pending.slice(begin.index))) {
+        if (pending.length - begin.index > HOLD_LIMIT || final) {
+          this.accept(this.options.redact(pending.slice(0, begin.index)))
+          this.accept("[REDACTED]")
+          this.dropping = "pem"
+          this.marker = pending.slice(-128)
+          this.parts = []
+          this.pendingLength = 0
+          return
         }
-        return complete
-      })()
-      if (!emit) return
-      const rest = pending.slice(emit.length)
+        end = Math.min(end, begin.index)
+      }
+      if (!end && pending.length > HOLD_LIMIT) {
+        // There is no safe arbitrary cut: quoted and registered secrets may
+        // contain whitespace or straddle it. Omit this overlong logical line
+        // rather than leak a fragment or retain unbounded raw output.
+        this.accept("[REDACTED: oversized output line]")
+        this.dropping = "line"
+        this.parts = []
+        this.pendingLength = 0
+        return
+      }
+      if (!end) return
+      const rest = pending.slice(end)
       this.parts = rest ? [rest] : []
       this.pendingLength = rest.length
-      this.accept(this.options.redact(emit))
+      this.accept(this.options.redact(pending.slice(0, end)))
     }
 
     private accept(text: string): void {
-      if (!text) return
+      if (!text || (this.options.previewOnly && this.previewClosed)) return
       const size = Buffer.byteLength(text, "utf-8")
       const newlines = count(text, "\n")
       this.bytes += size
@@ -157,9 +178,11 @@ export namespace BashOutput {
       this.previewBytes += Buffer.byteLength(kept, "utf-8")
       this.previewLines += count(kept, "\n")
       this.previewClosed = true
-      this.sink = this.options.open()
-      this.sink.write(this.preview)
-      this.sink.write(text.slice(kept.length))
+      if (!this.options.previewOnly) {
+        this.sink = this.options.open()
+        this.sink.write(this.preview)
+        this.sink.write(text.slice(kept.length))
+      }
       this.options.onPreview?.(this.preview)
     }
 
