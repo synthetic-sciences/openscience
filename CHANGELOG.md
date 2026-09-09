@@ -104,6 +104,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   results in the conversation's working area, connected folders, `file://`
   links and echoed `/file/raw` URLs, instead of navigating to a `localhost`
   page (opened in an external browser from the desktop app).
+- Tighten the approval prompt: the action being approved is the headline with
+  **Approval required** as the eyebrow above it, the controls are 24px
+  (**Deny** · **Allow…** · **Allow once**), and the prompt no longer paints a
+  second frame inside the warning border.
 - Redesign the delegated-agent card in the conversation: one header row in the
   same voice as the tool rows around it (agent, task, status, duration, ops),
   a flat body hanging from an outcome-coloured rail instead of boxes inside a

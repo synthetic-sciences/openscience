@@ -713,9 +713,9 @@
     grid-template-columns: 16px minmax(0, 1fr) auto;
     align-items: center;
     gap: 8px;
-    min-height: 32px;
-    padding: 4px 8px 4px 0;
-    border-radius: var(--radius-sm);
+    min-height: 26px;
+    padding: 2px 6px 2px 0;
+    border-radius: var(--radius-xs);
     list-style: none;
     cursor: pointer;
 
@@ -804,12 +804,12 @@
 
   /* The body hangs from a rail aligned under the mark. */
   [data-slot="delegation-body"] {
-    margin: 2px 0 4px 7px;
+    margin: 2px 0 6px 7px;
     padding: 4px 0 2px 16px;
     border-left: 2px solid var(--delegation-rail);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
   }
 
   /* The wrapper already frames a pending request in the warning colour; the
@@ -891,10 +891,12 @@
     color: var(--text-critical-base);
   }
 
+  /* A worker's prose is one step quieter and denser than the lead's answer. */
   [data-slot="delegation-findings"] [data-component="markdown"] {
     margin-top: 0;
     color: var(--text-weak);
-    font-size: var(--font-size-medium);
+    font-size: var(--font-size-small);
+    line-height: 18px;
 
     > :first-child {
       margin-top: 0;
@@ -902,6 +904,16 @@
 
     > :last-child {
       margin-bottom: 0;
+    }
+
+    p,
+    ul,
+    ol {
+      margin: 4px 0;
+    }
+
+    li {
+      margin: 1px 0;
     }
 
     /* A worker's headings sit below the lead's own; its opening heading acts
@@ -1562,44 +1574,53 @@
   cursor: pointer;
 }
 
+/*
+ * An approval reads as a question with its answers on one line: the action
+ * being approved is the headline, "Approval required" the eyebrow, and the
+ * controls are compact so the card stays the height of two text lines. The
+ * wrapper already carries the warning frame; nothing here adds a second one.
+ */
 [data-component="permission-prompt"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 8px 12px;
-  min-height: 44px;
-  padding: 8px 10px 8px 12px;
-  background-color: var(--surface-raised-base);
+  gap: 6px 16px;
+  min-height: 40px;
+  padding: 7px 8px 7px 10px;
   border-top: 1px solid var(--border-weaker-base);
-  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
 
   [data-slot="permission-context"] {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 8px;
     min-width: 0;
-    flex: 1 1 220px;
+    flex: 1 1 240px;
 
     [data-component="icon"] {
       flex: 0 0 auto;
-      color: var(--icon-weak);
+      color: var(--icon-warning-base);
     }
   }
 
   [data-slot="permission-copy"] {
     display: grid;
     align-items: start;
-    gap: 1px;
+    gap: 0;
     min-width: 0;
   }
 
   [data-slot="permission-origin"] {
-    flex: 0 0 auto;
-    color: var(--text-base);
-    font-size: var(--font-size-small);
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    color: var(--text-weaker);
+    font-size: var(--font-size-x-small);
+    line-height: 14px;
+
+    &[data-primary] {
+      color: var(--text-base);
+      font-size: var(--font-size-small);
+      font-weight: var(--font-weight-medium);
+      line-height: 18px;
+    }
   }
 
   [data-slot="permission-summary"] {
@@ -1607,28 +1628,36 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--text-base);
     font-size: var(--font-size-small);
-    color: var(--text-weak);
+    font-weight: var(--font-weight-medium);
+    line-height: 18px;
   }
 
   [data-slot="permission-actions"] {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     justify-content: flex-end;
     flex-wrap: wrap;
     margin-left: auto;
 
-    [data-component="button"] {
-      min-height: 32px;
+    [data-component="button"][data-size="small"] {
+      height: 24px;
+      min-height: 24px;
+      padding: 0 8px;
+      font-size: var(--font-size-small);
+      line-height: 24px;
+      border-radius: var(--radius-xs);
     }
-  }
 
-  &[data-expanded="true"] [data-slot="permission-actions"] {
-    gap: 4px;
-    padding: 3px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-inset-base);
+    [data-component="button"][data-variant="ghost"] {
+      color: var(--text-weak);
+
+      &:hover:not(:disabled) {
+        color: var(--text-base);
+      }
+    }
   }
 
   [data-slot="permission-summary"][data-kind="remote-compute"],
@@ -1636,6 +1665,8 @@
   [data-slot="permission-summary"][data-kind="environment-mutation"] {
     display: grid;
     gap: 5px;
+    white-space: normal;
+    font-weight: var(--font-weight-regular);
   }
 
   [data-slot="permission-compute-title"] {
@@ -1688,12 +1719,16 @@
     align-items: stretch;
     flex-direction: column;
     min-height: 0;
-    padding: 8px 12px;
-    background-color: var(--surface-raised-strong);
+    padding: 10px 12px;
     border-top: 0;
 
+    [data-slot="permission-origin"] {
+      color: var(--text-weaker);
+      font-size: var(--font-size-x-small);
+    }
+
     [data-slot="permission-actions"] {
-      gap: 4px;
+      gap: 6px;
       align-self: flex-end;
     }
   }

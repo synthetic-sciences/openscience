@@ -307,15 +307,17 @@ export function PermissionActions(props: { respond: (response: PermissionReply) 
     })
     const context = el("div", { "data-slot": "permission-context" })
     const copy = el("div", { "data-slot": "permission-copy" })
+    const text = summary()
+    // The thing being approved is the headline; "Approval required" is the
+    // eyebrow above it. Without a summary the eyebrow carries the line.
     append(
       copy,
       el(
         "span",
-        { "data-slot": "permission-origin" },
+        { "data-slot": "permission-origin", "data-primary": !text },
         scopes ? i18n.t("ui.permission.chooseScope") : i18n.t("ui.permission.required"),
       ),
     )
-    const text = summary()
     if (text) append(copy, el("span", { "data-slot": "permission-summary", title: text }, text))
     append(context, shieldIcon(), copy)
     root.replaceChildren(context, renderActions(false))
