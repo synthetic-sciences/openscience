@@ -1,11 +1,26 @@
 import { describe, expect, test } from "bun:test"
 import { readFile } from "node:fs/promises"
-import { decodeCodeBlockEntities, highlightSnippet, registerOpenScienceDiffTheme, retryable } from "./marked"
+import {
+  decodeCodeBlockEntities,
+  highlightSnippet,
+  parseMarkdown,
+  registerOpenScienceDiffTheme,
+  retryable,
+} from "./marked"
 import { markdownFallback } from "../components/markdown"
 
 const source = await readFile(new URL("./marked.tsx", import.meta.url), "utf8")
 
 describe("markdown runtime loading", () => {
+  test("keeps decoded file paths inside the link attribute", async () => {
+    const pathname = '/tmp/a"><img src="https://example.test/tracker">&result.txt'
+    const html = await parseMarkdown(`[result](file://${encodeURI(pathname).replaceAll('"', "%22")})`)
+    const doc = new DOMParser().parseFromString(html, "text/html")
+    expect(doc.querySelectorAll("a").length).toBe(1)
+    expect(doc.querySelector("a")?.getAttribute("href")).toBe(pathname)
+    expect(doc.querySelector("img")).toBeNull()
+  })
+
   test("registers the OpenScience theme before first-use highlighting", async () => {
     const html = await highlightSnippet("const result = 42", "javascript")
 

@@ -322,6 +322,12 @@ export async function request(url: string, opts: HttpOptions = {}) {
         opts.signal?.throwIfAborted()
         if (!res.ok && isRetryable(res.status) && attempt < retries) {
           const backoff = backoffMs(res, attempt)
+          if (backoff > MAX_BACKOFF) {
+            throw new HttpStatusError(
+              res.status,
+              `HTTP ${res.status} for ${url}: source requests a ${Math.ceil(backoff / 1000)} second cooldown; no automatic retry`,
+            )
+          }
           clearTimeout(timer)
           await sleep(backoff, opts.signal)
           continue
@@ -385,16 +391,16 @@ export async function request(url: string, opts: HttpOptions = {}) {
 
 const MAX_BACKOFF = 15_000
 
-/** Delay before the next attempt. A source may ask to wait minutes through
- * `Retry-After`; an agent turn cannot stall that long, so the header is
- * honoured only up to the same ceiling as exponential backoff. */
+/** Preserve server cooldowns; request() returns promptly when they exceed its retry budget. */
 export function backoffMs(res: Response | undefined, attempt: number): number {
-  const retryAfter = res?.headers.get("retry-after")
+  const retryAfter = res?.headers.get("retry-after")?.trim()
   if (retryAfter) {
     const seconds = Number(retryAfter)
-    if (Number.isFinite(seconds)) return Math.min(Math.max(seconds, 0) * 1000, MAX_BACKOFF)
+    if (Number.isFinite(seconds)) return Math.max(seconds, 0) * 1000
+    const date = Date.parse(retryAfter)
+    if (Number.isFinite(date)) return Math.max(0, date - Date.now())
   }
-  return Math.min(1000 * 2 ** attempt, MAX_BACKOFF) + Math.floor(Math.random() * 250)
+  return Math.min(1000 * 2 ** attempt + Math.floor(Math.random() * 250), MAX_BACKOFF)
 }
 
 function toResponse(status: number, headers: Record<string, string>, body: string) {

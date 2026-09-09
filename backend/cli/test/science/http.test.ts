@@ -62,11 +62,11 @@ describe("http retry / backoff", () => {
     expect(calls).toBe(3) // 1 initial attempt + 2 retries
   })
 
-  test("caps a long Retry-After at the exponential-backoff ceiling", () => {
+  test("preserves server cooldowns including HTTP dates", () => {
     const limited = (retryAfter: string) => new Response("", { status: 429, headers: { "Retry-After": retryAfter } })
-    // A source asking for minutes cannot stall the agent's turn for minutes.
-    expect(backoffMs(limited("120"), 0)).toBe(15_000)
-    expect(backoffMs(limited("3600"), 2)).toBe(15_000)
+    // Long cooldowns are surfaced to the caller without an early retry.
+    expect(backoffMs(limited("120"), 0)).toBe(120_000)
+    expect(backoffMs(limited("3600"), 2)).toBe(3_600_000)
     // Short and zero waits are still taken literally; negative values never underflow.
     expect(backoffMs(limited("2"), 0)).toBe(2_000)
     expect(backoffMs(limited("0"), 3)).toBe(0)
@@ -76,6 +76,19 @@ describe("http retry / backoff", () => {
     expect(backoffMs(undefined, 10)).toBeLessThan(15_250)
     expect(backoffMs(undefined, 10)).toBeGreaterThanOrEqual(15_000)
   })
+
+  test.each(["120", new Date(Date.now() + 120_000).toUTCString()])(
+    "returns a long cooldown without retrying: %s",
+    async (header) => {
+      let calls = 0
+      globalThis.fetch = (async () => {
+        calls++
+        return new Response("busy", { status: 429, headers: { "Retry-After": header } })
+      }) as unknown as typeof fetch
+      await expect(getText("https://cooldown.test/a")).rejects.toThrow("no automatic retry")
+      expect(calls).toBe(1)
+    },
+  )
 
   test("does not retry a non-retryable 4xx", async () => {
     let calls = 0

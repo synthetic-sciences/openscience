@@ -512,7 +512,11 @@ const loadJsParser = retryable(async () => {
           // Models link local results as file:// URLs. The sanitizer drops that
           // scheme outright, so hand the plain path on instead; the file-link
           // resolver decides whether it opens in the Files tab.
-          const target = localFilePath(href) ?? href
+          const local = localFilePath(href)
+          const target =
+            local === undefined
+              ? href
+              : local.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
           return `<a href="${target}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
         },
       },

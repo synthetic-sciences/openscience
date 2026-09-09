@@ -58,7 +58,7 @@ describe("launcher signal handling (#190)", () => {
     }
   })
 
-  test("retries with the baseline sibling when the optimized binary dies with SIGILL", async () => {
+  test("selects the baseline when the read-only startup probe dies with SIGILL", async () => {
     const tmpHome = await mkdtemp(path.join(os.tmpdir(), "openscience-sigill-home-"))
     const tmpPkg = await mkdtemp(path.join(os.tmpdir(), "openscience-sigill-pkg-"))
     const launcherCopy = path.join(tmpPkg, "bin", "openscience")
@@ -93,8 +93,54 @@ describe("launcher signal handling (#190)", () => {
 
       expect(exitCode, stderr).toBe(0)
       expect(stdout).toContain("baseline ran --version")
-      expect(stderr).toContain("retrying with the baseline build")
+      expect(stderr).toContain("using the baseline build")
       expect(stderr).not.toContain("incompatible")
+    } finally {
+      await rm(tmpHome, { recursive: true, force: true })
+      await rm(tmpPkg, { recursive: true, force: true })
+    }
+  })
+
+  test("never replays a command that writes before crashing", async () => {
+    const tmpHome = await mkdtemp(path.join(os.tmpdir(), "openscience-sigill-home-"))
+    const tmpPkg = await mkdtemp(path.join(os.tmpdir(), "openscience-sigill-pkg-"))
+    const launcherCopy = path.join(tmpPkg, "bin", "openscience")
+    // Mirror the wrapper's own platform naming so the host resolves these
+    // packages; the baseline sibling only exists for x64 in real releases, but
+    // the fallback logic is name-based and the same on every host.
+    const platforms: Record<string, string> = { darwin: "darwin", linux: "linux", win32: "windows" }
+    const platform = platforms[process.platform] ?? process.platform
+    const base = `openscience-${platform}-${process.arch}`
+    const scoped = path.join(tmpPkg, "node_modules", "@synsci")
+    const optimized = path.join(scoped, base, "bin", "openscience")
+    const baseline = path.join(scoped, `${base}-baseline`, "bin", "openscience")
+
+    try {
+      await mkdir(path.dirname(launcherCopy), { recursive: true })
+      await copyFile(launcherSource, launcherCopy)
+      await mkdir(path.dirname(optimized), { recursive: true })
+      await mkdir(path.dirname(baseline), { recursive: true })
+      await writeFile(
+        optimized,
+        '#!/bin/sh\nif [ "$1" = "--version" ]; then exit 0; fi\necho written >> "$HOME/writes"\nkill -s ILL $$\n',
+      )
+      await chmod(optimized, 0o755)
+      await writeFile(baseline, '#!/bin/sh\necho "baseline ran $*"\n')
+      await chmod(baseline, 0o755)
+
+      const env: Record<string, string | undefined> = { ...process.env, HOME: tmpHome }
+      delete env.OPENSCIENCE_BIN_PATH
+      const proc = Bun.spawn(["node", launcherCopy, "run"], { env, stdout: "pipe", stderr: "pipe" })
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ])
+
+      expect(exitCode).not.toBe(0)
+      expect(stdout).not.toContain("baseline ran")
+      expect(await readFile(path.join(tmpHome, "writes"), "utf8")).toBe("written\n")
+      expect(stderr).toContain("SIGILL")
     } finally {
       await rm(tmpHome, { recursive: true, force: true })
       await rm(tmpPkg, { recursive: true, force: true })

@@ -195,19 +195,22 @@ export namespace Installation {
 
   // A package manager may replace the executable's versioned directory
   // (Homebrew Cellar, pnpm store), so the command on PATH is the fallback probe.
-  async function installedVersion(cwd: string, env: Record<string, string>) {
+  async function installedVersion(target: string, cwd: string, env: Record<string, string>) {
     const candidates = [process.execPath, Bun.which("openscience", { PATH: env.PATH ?? "" })]
+    let observed: string | undefined
     for (const file of candidates) {
       if (!file || !(await Bun.file(file).exists())) continue
       const result = await $`${file} --version`.cwd(cwd).env(env).quiet().throws(false)
       if (result.exitCode !== 0) continue
       const version = result.stdout.toString("utf8").trim()
-      if (version) return version
+      if (version === target) return version
+      if (version) observed ??= version
     }
+    return observed
   }
 
   async function verifyUpgrade(method: Method, target: string, cwd: string, env: Record<string, string>) {
-    const observed = await installedVersion(cwd, env)
+    const observed = await installedVersion(target, cwd, env)
     if (observed === target) return
     const hint =
       method === "curl"

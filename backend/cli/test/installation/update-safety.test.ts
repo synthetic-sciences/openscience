@@ -111,6 +111,20 @@ describe("Installation update safety", () => {
     }
   })
 
+  test("verifies the updated PATH command when the old versioned executable still exists", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-upgrade-retained-"))
+    const bin = path.join(root, "bin")
+    await fs.mkdir(bin)
+    await fs.writeFile(path.join(bin, "npm"), "#!/bin/sh\nexit 0\n", { mode: 0o755 })
+    await fs.writeFile(path.join(bin, "openscience"), "#!/bin/sh\necho 9.9.9\n", { mode: 0o755 })
+    try {
+      const result = await upgradeWith(bin, "npm", "9.9.9")
+      expect(result.code, result.stderr).toBe(0)
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+
   test("fails the upgrade when the installed version does not reach the target", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-upgrade-verify-"))
     const bin = path.join(root, "bin")

@@ -143,6 +143,16 @@ function run(target, fallback) {
     process.exit(1)
   }
 
+  // Only a read-only startup probe may fall back. A real command can perform
+  // side effects before SIGILL, so never replay it after a crash.
+  if (fallback) {
+    const probe = childProcess.spawnSync(target, ["--version"], { timeout: 10_000, stdio: "ignore" })
+    if (illegalInstruction(probe)) {
+      console.error(`openscience startup probe failed; using the baseline build at ${fallback}.`)
+      target = fallback
+    }
+  }
+
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
     stdio: "inherit",
   })
@@ -152,12 +162,6 @@ function run(target, fallback) {
     process.exit(1)
   }
   const crashed = illegalInstruction(result)
-  if (crashed && fallback) {
-    // The optimized build dies on its first AVX2 instruction before doing any
-    // work, so the baseline sibling can safely take over this invocation.
-    console.error(`openscience crashed with an illegal instruction; retrying with the baseline build at ${fallback}.`)
-    run(fallback)
-  }
   if (result.signal || crashed) {
     console.error(
       `openscience was terminated by ${result.signal || "an illegal instruction (exit status 0xC000001D)"}. ` +
