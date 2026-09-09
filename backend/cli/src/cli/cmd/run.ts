@@ -1,5 +1,6 @@
 import type { Argv } from "yargs"
 import type z from "zod"
+import { writeSync } from "node:fs"
 import path from "path"
 import fs from "node:fs/promises"
 import { isUtf8 } from "node:buffer"
@@ -149,7 +150,7 @@ export function claimToolPartEmission(emitted: Set<string>, part: MessageV2.Tool
 export async function execute(input: RunInput): Promise<number> {
   const sdk = input.sdk
   const sessionID = input.sessionID
-  const out = input.stdout ?? process.stdout
+  const out = input.stdout ?? stdout
   const json = input.format === "json"
 
   const printEvent = (color: string, type: string, title: string) => {
@@ -346,15 +347,15 @@ export async function execute(input: RunInput): Promise<number> {
 
           if (part.text.length > prev.length && part.text.startsWith(prev)) {
             if (prev.length === 0 && !isPiped) UI.println()
-            process.stdout.write(part.text.slice(prev.length))
+            stdout.write(part.text.slice(prev.length))
             textBuffers.set(part.id, part.text)
           } else if (part.text !== prev) {
-            process.stdout.write(EOL + part.text)
+            stdout.write(EOL + part.text)
             textBuffers.set(part.id, part.text)
           }
 
           if (part.time?.end) {
-            process.stdout.write(EOL)
+            stdout.write(EOL)
             if (!isPiped) UI.println()
             textBuffers.delete(part.id)
           }
@@ -600,7 +601,8 @@ export const RunCommand = cmd({
     }
 
     const typed = runMessage([...args.message, ...(args["--"] || [])])
-    const message = process.stdin.isTTY ? typed : typed + "\n" + (await Bun.stdin.text())
+    const piped = await pipedInput(typed.trim().length > 0)
+    const message = piped === undefined ? typed : typed + "\n" + piped
 
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")
@@ -666,3 +668,51 @@ export const RunCommand = cmd({
     process.exit(code)
   },
 })
+
+/**
+ * Output for a run goes through blocking writes to fd 1. process.exit discards
+ * whatever the async stdout stream has not yet handed to the pipe, and Bun
+ * reports that stream as drained while megabytes are still pending; the final
+ * burst of a JSON run (tool receipts, then `done`) regularly exceeds the pipe
+ * buffer, and a run whose `done` line never arrives reads as a failure to
+ * every parser. A blocking write returns only once the pipe has the bytes.
+ * Exported for tests.
+ */
+export const stdout = {
+  write(text: string): void {
+    const bytes = Buffer.from(text)
+    let offset = 0
+    while (offset < bytes.length) {
+      try {
+        offset += writeSync(1, bytes, offset, bytes.length - offset)
+      } catch (error) {
+        // A non-blocking pipe reports EAGAIN when the consumer lags; wait for it.
+        if ((error as NodeJS.ErrnoException).code !== "EAGAIN") throw error
+        Bun.sleepSync(2)
+      }
+    }
+  },
+}
+
+/**
+ * Piped input is appended to the message. A pipe that nobody closes would
+ * make that wait forever with no explanation, so a caller who already gave a
+ * message is told what the process is waiting for. Exported for tests.
+ */
+export async function pipedInput(
+  hasMessage: boolean,
+  input: { isTTY: boolean; text: () => Promise<string>; warn: (message: string) => void; graceMs?: number } = {
+    isTTY: !!process.stdin.isTTY,
+    text: () => Bun.stdin.text(),
+    warn: UI.error,
+  },
+): Promise<string | undefined> {
+  if (input.isTTY) return undefined
+  const text = input.text()
+  if (!hasMessage) return text
+  const hint = setTimeout(
+    () => input.warn("Waiting for piped input on stdin to end; redirect from /dev/null when there is none."),
+    input.graceMs ?? 750,
+  )
+  return text.finally(() => clearTimeout(hint))
+}

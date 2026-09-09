@@ -1759,6 +1759,60 @@ describe("global config writes are visible to the next Config.get()", () => {
     })
   })
 
+  test("Config.updateGlobal patches a JSONC file as written: scalars, comments and defaults survive", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(Global.Path.config, "openscience.jsonc")
+    await fs.writeFile(
+      file,
+      [
+        "{",
+        "  // keep me",
+        '  "permission": "allow",',
+        '  "keybinds": { "leader": "ctrl+a" },',
+        '  "agent": { "research": { "model": "x/y", "maxSteps": 40 } }',
+        "}",
+        "",
+      ].join("\n"),
+    )
+    Config.global.reset()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Config.updateGlobal({ model: "openai/gpt-5" })
+        const text = await fs.readFile(file, "utf8")
+        expect(text).toContain("// keep me")
+        expect((await Config.get()).model).toBe("openai/gpt-5")
+        // The string form is still a string, the single keybind is still
+        // alone, and the agent did not gain schema defaults.
+        const raw = JSON.parse(text.replace(/^\s*\/\/.*$/m, ""))
+        expect(raw.permission).toBe("allow")
+        expect(raw.keybinds).toEqual({ leader: "ctrl+a" })
+        expect(raw.agent.research).toEqual({ model: "x/y", maxSteps: 40 })
+        expect(raw.model).toBe("openai/gpt-5")
+
+        // A patch whose parsed form is an object still lands on the scalar.
+        await Config.updateGlobal({ permission: { edit: "ask" } } as any)
+        const next = JSON.parse((await fs.readFile(file, "utf8")).replace(/^\s*\/\/.*$/m, ""))
+        expect(next.permission).toEqual({ edit: "ask" })
+      },
+    })
+  })
+
+  test("Config.updateGlobal keeps a JSON file free of schema defaults", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(Global.Path.config, "openscience.json")
+    await fs.writeFile(file, JSON.stringify({ keybinds: { leader: "ctrl+a" }, permission: "allow" }))
+    Config.global.reset()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Config.updateGlobal({ model: "openai/gpt-5" })
+        const raw = JSON.parse(await fs.readFile(file, "utf8"))
+        expect(raw).toEqual({ keybinds: { leader: "ctrl+a" }, permission: "allow", model: "openai/gpt-5" })
+      },
+    })
+  })
+
   test("Config.setSandbox (patchConfigPath's global branch, shared by setMcp/setProvider/unsetGlobal)", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

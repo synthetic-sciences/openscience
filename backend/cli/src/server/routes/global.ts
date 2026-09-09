@@ -252,7 +252,10 @@ export const GlobalRoutes = lazy(() =>
       }),
       validator("json", Config.Info),
       async (c) => {
-        const config = c.req.valid("json")
+        // Validated above, but written as sent: the schema's parsed form
+        // expands scalars and fills defaults that must not land in the file.
+        c.req.valid("json")
+        const config = (await c.req.json()) as Config.Info
         const restored = Config.restore(config, await Config.getGlobal())
         const next = await Config.updateGlobal(restored)
         return c.json(Config.redact(next))

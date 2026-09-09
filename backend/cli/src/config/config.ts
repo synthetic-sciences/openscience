@@ -15,8 +15,10 @@ import { Auth } from "../auth"
 import {
   type ParseError as JsoncParseError,
   applyEdits,
+  findNodeAtLocation,
   modify,
   parse as parseJsonc,
+  parseTree,
   printParseErrorCode,
 } from "jsonc-parser"
 import { Instance } from "../project/instance"
@@ -1800,11 +1802,12 @@ export namespace Config {
           if (err.code === "ENOENT") return "{}"
           throw new JsonError({ path: filepath }, { cause: err })
         })
-      const existing = await McpSecretStorage.reveal(parseConfig(before, filepath))
-      const protectedConfig = await McpSecretStorage.protect(mergeDeep(existing, config))
+      const existing = await McpSecretStorage.reveal(rawConfig(before, filepath))
+      const merged = mergeDeep(existing, config)
+      assertValid(merged, filepath)
       const text = filepath.endsWith(".jsonc")
-        ? patchJsonc(before, protectedConfig)
-        : JSON.stringify(protectedConfig, null, 2)
+        ? patchJsonc(before, await McpSecretStorage.protect(config))
+        : JSON.stringify(await McpSecretStorage.protect(merged), null, 2)
       await durableConfigWrite(filepath, await sealedConfigText(text, filepath))
       await Instance.dispose({ strict: config.mcp !== undefined })
     }
@@ -1845,7 +1848,14 @@ export namespace Config {
   }
 
   function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
-    if (!isRecord(patch)) {
+    // Descend only into an existing object. Where the file holds a scalar
+    // (`"permission": "allow"`) or nothing, the patch value replaces the node
+    // whole; descending would ask jsonc-parser to index into a string.
+    const existing = path.length
+      ? findNodeAtLocation(parseTree(input) ?? { type: "null", offset: 0, length: 0 }, path)
+      : undefined
+    const descend = isRecord(patch) && (path.length === 0 || existing?.type === "object")
+    if (!descend) {
       const edits = modify(input, path, patch, {
         formattingOptions: {
           insertSpaces: true,
@@ -1855,10 +1865,27 @@ export namespace Config {
       return applyEdits(input, edits)
     }
 
-    return Object.entries(patch).reduce((result, [key, value]) => {
+    return Object.entries(patch as Record<string, unknown>).reduce((result, [key, value]) => {
       if (value === undefined) return result
       return patchJsonc(result, value, [...path, key])
     }, input)
+  }
+
+  /**
+   * The file's own value, validated but not transformed. Schema transforms
+   * expand `"permission": "allow"` into an object and fill every keybind
+   * default; writing that view back would freeze defaults into the user's
+   * file and turn a scalar into an object the next patch cannot descend.
+   */
+  function rawConfig(text: string, filepath: string): Info {
+    parseConfig(text, filepath)
+    return (parseJsonc(text, [], { allowTrailingComma: true }) ?? {}) as Info
+  }
+
+  function assertValid(config: unknown, filepath: string) {
+    const parsed = Info.safeParse(config)
+    if (parsed.success) return
+    throw new InvalidError({ path: filepath, issues: parsed.error.issues })
   }
 
   /**
@@ -2098,21 +2125,24 @@ export namespace Config {
           throw new JsonError({ path: filepath }, { cause: err })
         })
 
-      const existingProtected = parseConfig(before, filepath)
-      const existing = await McpSecretStorage.reveal(existingProtected)
-      const protectedMerged = await McpSecretStorage.protect(mergeDeep(existing, config))
+      const existing = await McpSecretStorage.reveal(rawConfig(before, filepath))
+      const merged = mergeDeep(existing, config)
+      assertValid(merged, filepath)
       const next = await (async () => {
         if (!filepath.endsWith(".jsonc")) {
+          const protectedMerged = await McpSecretStorage.protect(merged)
           const protectedText = await sealedConfigText(JSON.stringify(protectedMerged, null, 2), filepath)
           await durableConfigWrite(filepath, protectedText)
           return parseConfig(protectedText, filepath)
         }
 
-        const updated = patchJsonc(before, protectedMerged)
+        // Patch only what the caller changed so comments and untouched
+        // values survive as written.
+        const updated = patchJsonc(before, await McpSecretStorage.protect(config))
         const protectedText = await sealedConfigText(updated, filepath)
-        const merged = parseConfig(protectedText, filepath)
+        const result = parseConfig(protectedText, filepath)
         await durableConfigWrite(filepath, protectedText)
-        return merged
+        return result
       })()
 
       global.reset()

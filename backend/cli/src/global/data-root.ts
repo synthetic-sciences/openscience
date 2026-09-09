@@ -73,6 +73,7 @@ export namespace DataRoot {
    */
   export async function ensure(config: string, initial: string, explicit: boolean): Promise<Managed> {
     const requested = path.resolve(initial)
+    if (!explicit) await assertRecordedTargetPresent(config, requested)
     await fs.mkdir(requested, { recursive: true })
     const target = await fs.realpath(requested)
     if (explicit) return { path: target, target, managed: false }
@@ -90,6 +91,49 @@ export namespace DataRoot {
     }
     await link(target, destination)
     return { path: destination, target, managed: true }
+  }
+
+  export class UnavailableError extends Error {
+    constructor(
+      readonly target: string,
+      recordedAt: string,
+    ) {
+      super(
+        `The OpenScience data location ${target} is not available (recorded at ${recordedAt}). ` +
+          "Reconnect the drive or restore the folder, or set OPENSCIENCE_DATA_DIR to start from another location.",
+      )
+      this.name = "DataRootUnavailableError"
+    }
+  }
+
+  /**
+   * A recorded location that cannot be reached is not an invitation to create
+   * it. Doing so silently started a fresh install (no sessions, signed out)
+   * and, under an unmounted /Volumes name on macOS, made the real disk mount
+   * elsewhere for good. Only a first boot or an explicit root may create.
+   */
+  async function assertRecordedTargetPresent(config: string, requested: string) {
+    const destination = path.join(config, LINK_NAME)
+    const stat = await fs.lstat(destination).catch(() => undefined)
+    if (stat?.isSymbolicLink()) {
+      const recorded = await fs.readlink(destination).catch(() => undefined)
+      const target = recorded ? path.resolve(path.dirname(destination), recorded) : requested
+      const present = await fs
+        .stat(target)
+        .then((info) => info.isDirectory())
+        .catch(() => false)
+      if (!present) throw new UnavailableError(target, destination)
+      return
+    }
+    // No link yet, but the legacy pointer named this root: it must exist too.
+    const pointer = path.join(config, "data-location")
+    const pointed = (await fs.readFile(pointer, "utf8").catch(() => "")).trim()
+    if (!pointed || path.resolve(pointed) !== requested) return
+    const present = await fs
+      .stat(requested)
+      .then((info) => info.isDirectory())
+      .catch(() => false)
+    if (!present) throw new UnavailableError(requested, pointer)
   }
 
   /** Retarget the stable data-root link while the relocation barrier has

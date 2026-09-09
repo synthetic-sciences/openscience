@@ -66,6 +66,13 @@ export namespace DataRelocation {
     path.join("settings", "memory", "index.db-shm"),
   ])
 
+  // Installed binaries (the curl installer's own CLI, language servers) belong
+  // to this machine, not to the user's data. Copying them made every
+  // relocation hash a few hundred megabytes of tools, and a reset then
+  // replaced the CLI on PATH with the version copied at relocation time.
+  // Logs stay with the data so the current log file continues across a switch.
+  const machineLocal = new Set(["bin"])
+
   interface Journal {
     version: 1
     id: string
@@ -320,7 +327,7 @@ export namespace DataRelocation {
       for (const entry of entries) {
         const relative = path.join(current.relative, entry.name)
         if (relative === path.join("artifact-store", "partial")) continue
-        if (skipped.has(relative) || appTransient(relative, entry.name)) continue
+        if (machineLocal.has(relative) || skipped.has(relative) || appTransient(relative, entry.name)) continue
         const from = path.join(current.source, entry.name)
         const to = path.join(current.destination, entry.name)
         const stat = await fs.lstat(from)
@@ -391,7 +398,7 @@ export namespace DataRelocation {
       for (const entry of await fs.readdir(current.directory, { withFileTypes: true })) {
         const relative = path.join(current.relative, entry.name)
         if (relative === path.join("artifact-store", "partial")) continue
-        if (skipped.has(relative) || appTransient(relative, entry.name)) continue
+        if (machineLocal.has(relative) || skipped.has(relative) || appTransient(relative, entry.name)) continue
         const filepath = path.join(current.directory, entry.name)
         if (entry.isDirectory()) {
           stack.push({ directory: filepath, relative })
@@ -506,6 +513,18 @@ export namespace DataRelocation {
       if (!target) throw new Error("Storage relocation recovery could not find the verified staged or published copy")
       if (journal.backup && !backup) {
         throw new Error("Storage relocation recovery could not find the preserved pre-reset directory")
+      }
+    }
+
+    // A reset moved the whole default root aside. The tools installed there
+    // were never part of the copy, so bring each one back unless the
+    // published root already has its own.
+    if (journal.backup) {
+      for (const name of machineLocal) {
+        const kept = path.join(journal.backup, name)
+        const home = path.join(journal.target, name)
+        if (!(await targetDirectory(kept)) || (await targetDirectory(home))) continue
+        await durableRename(kept, home)
       }
     }
 

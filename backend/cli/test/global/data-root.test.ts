@@ -905,3 +905,38 @@ describe("managed data root", () => {
     20_000,
   )
 })
+
+describe("DataRoot.ensure with a recorded location that is gone", () => {
+  test("refuses to recreate the target of the managed link", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const target = path.join(base, "volume", "openscience")
+    await fs.mkdir(target, { recursive: true })
+    const first = await DataRoot.ensure(config, target, false)
+    expect(first.managed).toBe(true)
+    // The drive is unmounted: the link stays, its target does not.
+    await fs.rm(path.join(base, "volume"), { recursive: true, force: true })
+
+    await expect(DataRoot.ensure(config, path.join(base, "home", ".openscience"), false)).rejects.toBeInstanceOf(
+      DataRoot.UnavailableError,
+    )
+    await expect(DataRoot.ensure(config, target, false)).rejects.toThrow("is not available")
+    expect(await fs.stat(target).catch(() => undefined)).toBeUndefined()
+    expect(await fs.stat(path.join(base, "home")).catch(() => undefined)).toBeUndefined()
+  })
+
+  test("refuses to recreate a root named only by the legacy pointer, but still creates a first root", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const missing = path.join(base, "moved", "openscience")
+    await fs.mkdir(config, { recursive: true })
+    await fs.writeFile(path.join(config, "data-location"), `${missing}\n`)
+    await expect(DataRoot.ensure(config, missing, false)).rejects.toBeInstanceOf(DataRoot.UnavailableError)
+    expect(await fs.stat(missing).catch(() => undefined)).toBeUndefined()
+
+    const fresh = path.join(base, "home", ".openscience")
+    const created = await DataRoot.ensure(config, fresh, false)
+    expect(created.managed).toBe(true)
+    expect((await fs.stat(fresh)).isDirectory()).toBe(true)
+  })
+})

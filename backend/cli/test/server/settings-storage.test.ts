@@ -661,13 +661,24 @@ describe("Storage Settings integration", () => {
       'import path from "node:path"',
       "const target = process.argv.at(-1)",
       'await fs.writeFile(path.join(Global.Path.data, "default-only.txt"), "old default")',
+      // The curl installer's CLI lives in the default root's bin; it is machine
+      // state, not data, so relocation must not copy it and a later upgrade
+      // written there must survive a reset.
+      // The installer always writes to the default root's own path, never
+      // through the data-root link.
+      'const installed = path.join(process.env.OPENSCIENCE_TEST_HOME, ".openscience", "bin", "openscience")',
+      "await fs.mkdir(path.dirname(installed), { recursive: true })",
+      'await fs.writeFile(installed, "v2.0.80")',
       'let response = await StorageRoutes().request("/location", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: target }) })',
       "if (response.status !== 200) throw new Error(await response.text())",
+      'if (await Bun.file(path.join(target, "bin", "openscience")).exists()) throw new Error("relocation copied the installed CLI")',
+      'await fs.writeFile(installed, "v2.0.83")',
       'await fs.writeFile(path.join(Global.Path.data, "target-era.txt"), "kept")',
       'response = await StorageRoutes().request("/location", { method: "DELETE" })',
       "if (response.status !== 200) throw new Error(await response.text())",
       "const body = await response.json()",
       'if (!body.backup) throw new Error("reset did not preserve the prior default")',
+      'if (await Bun.file(installed).text() !== "v2.0.83") throw new Error("reset replaced the installed CLI with a stale copy")',
       'if (await Bun.file(path.join(Global.Path.data, "target-era.txt")).text() !== "kept") throw new Error("target-era write was lost")',
       'if (await Bun.file(path.join(target, "target-era.txt")).text() !== "kept") throw new Error("custom safety copy was removed")',
       'if (await Bun.file(path.join(body.backup, "default-only.txt")).text() !== "old default") throw new Error("default safety copy was removed")',
