@@ -326,6 +326,15 @@ describe("parseTaskHandoff", () => {
     expect(parseTaskHandoff(undefined).text).toBe("")
   })
 
+  test("keeps malformed output filenames readable instead of crashing the transcript", () => {
+    const line = String.raw`- "report\q.csv": artifact_id=art_1, version_id=ver_1`
+    const result = parseTaskHandoff(
+      `Saved outputs (immutable versions; use artifact read_file with these exact IDs):\n${line}`,
+    )
+    expect(result.outputs).toEqual([])
+    expect(result.text).toBe(line)
+  })
+
   test("pluralizes operation counts", () => {
     expect(pluralize(1, "op")).toBe("1 op")
     expect(pluralize(3, "op")).toBe("3 ops")

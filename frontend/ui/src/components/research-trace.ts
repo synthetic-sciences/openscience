@@ -165,7 +165,7 @@ export type TaskHandoff = {
 }
 
 const sessionLine = /^Task session ses_\w+: .*Reuse this sessionId to continue the same worker\.$/
-const savedOutput = /^- "((?:[^"\\]|\\.)*)": artifact_id=(\S+?),/
+const savedOutput = /^- "((?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*)": artifact_id=(\S+?),/
 const receipts = /^Execution receipts: /
 
 /**
