@@ -112,6 +112,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const fallbackModel = createMemo<ModelKey | undefined>(() => {
+        // The composer's last explicit choice outranks every default: it is the
+        // user's most recent intent, and it must survive leaving the project.
+        const chosen = models.selected.get()
+        if (chosen) {
+          if (isExactModelValid(chosen)) return chosen
+          const routed = resolveModel(chosen)
+          if (routed) return routed
+        }
+
         if (sync.data.config.model) {
           const [providerID, ...parts] = sync.data.config.model.split("/")
           const modelID = parts.join("/")
@@ -121,8 +130,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return isExactModelValid(configured) ? configured : undefined
         }
 
-        // The user's last explicit pick outlives a reload and a new session;
-        // the Sol default below is only for installs that never chose.
+        // Earlier picks whose exact route is gone still beat the Sol default,
+        // which is only for installs that never chose.
         for (const item of models.recent.list()) {
           const resolved = resolveModel(item)
           if (resolved) return resolved
@@ -217,10 +226,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const val = recentList[next]
         if (!val) return
 
-        model.set({
-          providerID: val.provider.id,
-          modelID: val.id,
-        })
+        model.set({ providerID: val.provider.id, modelID: val.id }, { remember: true })
       }
 
       return {
@@ -230,13 +236,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         pinned,
         list: models.list,
         cycle,
-        set(model: ModelKey | undefined, options?: { recent?: boolean }) {
+        set(model: ModelKey | undefined, options?: { recent?: boolean; remember?: boolean }) {
           batch(() => {
             const currentAgent = agent.current()
             const selected = model
             const next = selected ?? fallbackModel()
             if (currentAgent) setEphemeral("model", currentAgent.name, next)
             if (selected) models.setVisibility(selected, true)
+            // Only the user's own picks are remembered across projects; an
+            // agent's configured model applies to that agent alone.
+            if (selected && (options?.recent || options?.remember)) models.selected.set(selected)
             if (options?.recent && selected) models.recent.push(selected)
           })
         },
