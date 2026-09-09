@@ -173,9 +173,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
                     component={(p) => (
                       <Show when={p.params.id ?? "new"}>
                         <CommentsProvider>
-                          <Suspense fallback={<Loading />}>
-                            <Session />
-                          </Suspense>
+                          <Session fallback={<Loading />} />
                         </CommentsProvider>
                       </Show>
                     )}
