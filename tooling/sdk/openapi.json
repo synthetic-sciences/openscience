@@ -28896,6 +28896,8 @@
                             "type": "string",
                             "enum": [
                               "workspace",
+                              "project",
+                              "skill",
                               "permission",
                               "api",
                               "tool",
@@ -29127,6 +29129,8 @@
                       "type": "string",
                       "enum": [
                         "workspace",
+                        "project",
+                        "skill",
                         "permission",
                         "api",
                         "tool",
@@ -29295,6 +29299,8 @@
                       "type": "string",
                       "enum": [
                         "workspace",
+                        "project",
+                        "skill",
                         "permission",
                         "api",
                         "tool",
@@ -53227,6 +53233,8 @@
                     "type": "string",
                     "enum": [
                       "workspace",
+                      "project",
+                      "skill",
                       "permission",
                       "api",
                       "tool",

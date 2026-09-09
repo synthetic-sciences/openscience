@@ -213,7 +213,13 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error("Failed to parse command")
       }
       const directories = new Map<string, SessionFilesystem.Access>()
-      if (!contained(cwd)) directories.set(cwd, "write")
+      // A working directory is the folder itself; granting its parent would
+      // turn `cd /tmp` into read access to /private on macOS.
+      const folders = new Set<string>()
+      if (!contained(cwd)) {
+        directories.set(cwd, "write")
+        folders.add(cwd)
+      }
       const patterns = new Set<string>()
       const always = new Set<string>()
 
@@ -261,6 +267,7 @@ export const BashTool = Tool.define("bash", async () => {
                     : "write"
                 const current = directories.get(normalized)
                 if (!current || access === "write") directories.set(normalized, access)
+                if (command[0] === "cd") folders.add(normalized)
               }
             }
           }
@@ -288,7 +295,7 @@ export const BashTool = Tool.define("bash", async () => {
           )
         }
         if (authority.sandbox.enabled) {
-          const parent = path.dirname(directory)
+          const parent = folders.has(directory) ? directory : path.dirname(directory)
           const glob = path.join(parent, "*")
           await ctx.ask({
             permission: "external_directory",

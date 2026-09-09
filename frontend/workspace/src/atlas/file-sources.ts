@@ -1,6 +1,6 @@
 export type FilesystemAccess = "read" | "write"
 export type FilesystemScope = "once" | "session" | "project" | "installation"
-export type FilesystemSource = "workspace" | "permission" | "api" | "tool" | "handoff"
+export type FilesystemSource = "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
 
 export interface FilesystemGrant {
   id: string
@@ -110,6 +110,8 @@ export function parseFilesystemSnapshot(value: unknown, identity: FilesystemIden
         grant.scope !== "project" &&
         grant.scope !== "installation") ||
       (grant.source !== "workspace" &&
+        grant.source !== "project" &&
+        grant.source !== "skill" &&
         grant.source !== "permission" &&
         grant.source !== "api" &&
         grant.source !== "tool" &&
@@ -155,8 +157,13 @@ export function activeFilesystemGrants(snapshot?: FilesystemSnapshot) {
   return (snapshot?.grants ?? []).filter((grant) => !grant.time.consumed && !grant.time.revoked)
 }
 
+/** Folders the user connected or approved for this project. The project's
+ * own roots, skill directories and one-shot tool grants are runtime authority,
+ * not working files. */
 export function connectedFilesystemGrants(snapshot?: FilesystemSnapshot) {
-  return activeFilesystemGrants(snapshot).filter((grant) => grant.source === "permission" || grant.source === "api")
+  return activeFilesystemGrants(snapshot).filter(
+    (grant) => (grant.source === "permission" || grant.source === "api") && grant.scope !== "installation",
+  )
 }
 
 export function sessionFilesystemRoot(snapshot?: FilesystemSnapshot) {

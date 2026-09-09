@@ -9,6 +9,7 @@ import { Truncate } from "../../src/tool/truncation"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { Shell } from "../../src/shell/shell"
 import { Config } from "../../src/config/config"
+import { Filesystem } from "../../src/util/filesystem"
 
 async function context() {
   const session = await executionSession()
@@ -194,6 +195,11 @@ describe("tool.bash permissions", () => {
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
+        // The folder itself is the grant. Its parent would hand the session
+        // every sibling, and `cd /tmp` would become access to /private on macOS.
+        const canonical = (await Filesystem.canonical(target)) ?? target
+        expect(extDirReq?.metadata.filesystem).toEqual({ path: canonical, access: "read" })
+        expect(extDirReq?.patterns).toEqual([path.join(canonical, "*")])
       },
     })
   })

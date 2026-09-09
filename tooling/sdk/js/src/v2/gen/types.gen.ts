@@ -159,7 +159,7 @@ export type EventSessionFilesystemChanged = {
       path: string
       access: "read" | "write"
       scope: "once" | "session" | "project" | "installation"
-      source: "workspace" | "permission" | "api" | "tool" | "handoff"
+      source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
       time: {
         created: number
         consumed?: number
@@ -11312,7 +11312,7 @@ export type SessionFilesystemListResponses = {
       path: string
       access: "read" | "write"
       scope: "once" | "session" | "project" | "installation"
-      source: "workspace" | "permission" | "api" | "tool" | "handoff"
+      source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
       time: {
         created: number
         consumed?: number
@@ -11381,7 +11381,7 @@ export type SessionFilesystemGrantResponses = {
     path: string
     access: "read" | "write"
     scope: "once" | "session" | "project" | "installation"
-    source: "workspace" | "permission" | "api" | "tool" | "handoff"
+    source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
     time: {
       created: number
       consumed?: number
@@ -11426,7 +11426,7 @@ export type SessionFilesystemRevokeResponses = {
     path: string
     access: "read" | "write"
     scope: "once" | "session" | "project" | "installation"
-    source: "workspace" | "permission" | "api" | "tool" | "handoff"
+    source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
     time: {
       created: number
       consumed?: number

@@ -164,7 +164,7 @@ test("trust, filesystem, and session revocation reclaim PTY and biology children
   }
 }, 120_000)
 
-test("installation-scope revocation reaps killed-owner children from another project", async () => {
+test("a folder revocation in one project leaves another project's killed-owner children to their own project", async () => {
   if (process.platform === "win32") return
   for (const kind of ["pty", "biology"] as const) {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), `openscience-authority-installation-${kind}-`))
@@ -200,6 +200,9 @@ test("installation-scope revocation reaps killed-owner children from another pro
       owner.kill("SIGKILL")
       await owner.exited
 
+      // Folder authority never crosses projects any more: the widest scope a
+      // grant can take is its own project, so project A's revocation is not
+      // project B's business, even for an "installation" request.
       await run(
         root,
         "revoke-filesystem",
@@ -208,6 +211,21 @@ test("installation-scope revocation reaps killed-owner children from another pro
         setupA.sessionID,
         setupA.grantID,
         setupA.shell,
+      )
+      await Bun.sleep(500)
+      expect(await Bun.file(path.join(root, "data", "authority-processes.json")).json()).toMatchObject([
+        { pid: entry.pid, project_id: setupB.projectID },
+      ])
+
+      // Project B's own revocation still reaps its orphaned children.
+      await run(
+        root,
+        "revoke-filesystem",
+        workspaceB,
+        path.join(root, "unused-b"),
+        setupB.sessionID,
+        setupB.grantID,
+        setupB.shell,
       )
       expect(await gone(entry)).toBe(true)
       expect(await gone(entry.descendant)).toBe(true)

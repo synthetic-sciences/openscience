@@ -31,7 +31,11 @@ export namespace SessionFilesystem {
   export const Scope = z.enum(["once", "session", "project", "installation"])
   export type Scope = z.infer<typeof Scope>
 
-  export const Source = z.enum(["workspace", "permission", "api", "tool", "handoff"])
+  // `project` is the automatic authority over the project's own roots and
+  // `skill` the read access a loaded skill's directory receives. Both are
+  // runtime dependencies, not folders the user connected, and the UI lists
+  // them apart from `permission` and `api` grants.
+  export const Source = z.enum(["workspace", "project", "skill", "permission", "api", "tool", "handoff"])
   export type Source = z.infer<typeof Source>
 
   export const Grant = z.object({
@@ -422,7 +426,7 @@ export namespace SessionFilesystem {
             path: value,
             access: "write",
             scope: "session",
-            source: "api",
+            source: "project",
             time: { created: Date.now() },
           }))
         : []),
@@ -507,7 +511,9 @@ export namespace SessionFilesystem {
     if (input.source === "tool" || input.source === "handoff") {
       throw new InvalidPathError({ path: input.path })
     }
-    return insert(input)
+    // Every project holds only its own folder access. The widest scope a
+    // caller can request is therefore the project that made the request.
+    return insert({ ...input, scope: input.scope === "installation" ? "project" : input.scope })
   }
 
   /**
@@ -924,11 +930,14 @@ export namespace SessionFilesystem {
 
   export async function state(sessionID: string) {
     const record = await ensure(sessionID)
-    const [shared, global] = await Promise.all([project(sessionID), installation()])
+    // Filesystem authority stops at the project: a folder approved while
+    // working in one project never becomes reachable from another. Older
+    // installation-wide records stay on disk but no longer apply anywhere.
+    const shared = await project(sessionID)
     const result = State.parse({
       ...record,
-      revision: record.revision + shared.revision + global.revision - 2,
-      grants: [...record.grants, ...shared.grants, ...global.grants],
+      revision: record.revision + shared.revision - 1,
+      grants: [...record.grants, ...shared.grants],
     })
     await SessionWorkspace.revise(sessionID, result.revision)
     return result
@@ -964,7 +973,7 @@ export namespace SessionFilesystem {
             !grant.time.consumed &&
             !grant.time.revoked &&
             grant.scope !== "once" &&
-            (grant.source === "permission" || grant.source === "api"),
+            (grant.source === "permission" || grant.source === "api" || grant.source === "project"),
         )
         .map((grant) => grant.path),
     ])

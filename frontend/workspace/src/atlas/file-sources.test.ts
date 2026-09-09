@@ -98,7 +98,8 @@ describe("filesystem source isolation", () => {
   test("shows only active connected folders and preserves read versus publish authority", () => {
     const grants = connectedFilesystemGrants(snapshot)
 
-    expect(grants.map((grant) => grant.id)).toEqual(["fsg_read", "fsg_publish", "fsg_installation"])
+    // A legacy installation-wide grant is not this project's working folder.
+    expect(grants.map((grant) => grant.id)).toEqual(["fsg_read", "fsg_publish"])
     expect(findFilesystemGrant(snapshot, "/data/reference/genes.csv", "read")?.id).toBe("fsg_read")
     expect(findFilesystemGrant(snapshot, "/data/reference/genes.csv", "write")).toBeUndefined()
     expect(findFilesystemGrant(snapshot, "/data/publish/report.pdf", "write")?.id).toBe("fsg_publish")
@@ -132,6 +133,46 @@ describe("filesystem source isolation", () => {
 
     expect(parsed?.grants.map((grant) => grant.source)).toEqual(["workspace", "tool", "api"])
     expect(connectedFilesystemGrants(parsed).map((grant) => grant.id)).toEqual(["fsg_read"])
+  })
+
+  test("keeps the project's own roots and skill directories out of Working files", () => {
+    const mixed = {
+      ...snapshot,
+      grants: [
+        snapshot.grants[0],
+        {
+          id: "fsg_project",
+          path: "/work/alpha-worktree",
+          access: "write",
+          scope: "session",
+          source: "project",
+          time: { created: 2 },
+        },
+        {
+          id: "fsg_skill",
+          path: "/opt/openscience/skills/ml-training/ml-benchmark-evaluation",
+          access: "read",
+          scope: "session",
+          source: "skill",
+          time: { created: 3 },
+        },
+        snapshot.grants[1],
+      ],
+    } satisfies FilesystemSnapshot
+
+    const parsed = parseFilesystemSnapshot(mixed, {
+      sessionID: "ses_alpha",
+      projectID: "prj_alpha",
+      directory: "/work/alpha",
+    })
+
+    expect(parsed?.grants.map((grant) => grant.source)).toEqual(["workspace", "project", "skill", "api"])
+    expect(connectedFilesystemGrants(parsed).map((grant) => grant.id)).toEqual(["fsg_read"])
+    // Both still authorize reads for the viewer.
+    expect(findFilesystemGrant(parsed, "/work/alpha-worktree/results/out.csv", "write")?.id).toBe("fsg_project")
+    expect(
+      findFilesystemGrant(parsed, "/opt/openscience/skills/ml-training/ml-benchmark-evaluation/SKILL.md", "read")?.id,
+    ).toBe("fsg_skill")
   })
 
   test("accepts delegated handoff authority without presenting it as a connected folder", () => {

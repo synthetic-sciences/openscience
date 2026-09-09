@@ -224,7 +224,7 @@ describe("session filesystem grants", () => {
               path: root,
               access: "write",
               scope: "session",
-              source: "api",
+              source: "project",
             }),
           )
           expect(await SessionFilesystem.processReadRoots(session.id)).toEqual(
@@ -232,10 +232,10 @@ describe("session filesystem grants", () => {
           )
           await expect(
             SessionFilesystem.authorize({ sessionID: session.id, path: paper, access: "read" }),
-          ).resolves.toMatchObject({ path: paper, grant: { source: "api" } })
+          ).resolves.toMatchObject({ path: paper, grant: { source: "project" } })
           await expect(
             SessionFilesystem.authorize({ sessionID: session.id, path: revision, access: "write" }),
-          ).resolves.toMatchObject({ path: revision, grant: { source: "api" } })
+          ).resolves.toMatchObject({ path: revision, grant: { source: "project" } })
           await expect(
             SessionFilesystem.grant({
               sessionID: session.id,
@@ -304,7 +304,7 @@ describe("session filesystem grants", () => {
           }),
         )
         expect(await SessionFilesystem.list(session.id)).toContainEqual(
-          expect.objectContaining({ path: tmp.path, access: "write", scope: "session", source: "api" }),
+          expect.objectContaining({ path: tmp.path, access: "write", scope: "session", source: "project" }),
         )
 
         const grant = await SessionFilesystem.grant({
@@ -335,7 +335,7 @@ describe("session filesystem grants", () => {
         }),
       )
       expect(grants).toContainEqual(
-        expect.objectContaining({ path: tmp.path, access: "write", scope: "session", source: "api" }),
+        expect.objectContaining({ path: tmp.path, access: "write", scope: "session", source: "project" }),
       )
       await expect(
         SessionFilesystem.authorize({
@@ -771,14 +771,14 @@ describe("session filesystem grants", () => {
     })
   })
 
-  test("materializes Always as installation scope across projects and revokes it everywhere", async () => {
+  test("keeps an Always folder approval inside the project that granted it", async () => {
     await using external = await tmpdir({
       init: (dir) => Bun.write(path.join(dir, "shared.txt"), "installation"),
     })
     await using first = await tmpdir()
     await using second = await tmpdir()
 
-    const grantID = await Instance.provide({
+    await Instance.provide({
       directory: first.path,
       fn: async () => {
         const session = await Session.create({})
@@ -796,18 +796,18 @@ describe("session filesystem grants", () => {
           ruleset: [],
         })
         const prompt = await wait(session.id)
-        if (!prompt) throw new Error("installation permission was not requested")
+        if (!prompt) throw new Error("folder permission was not requested")
         await PermissionNext.reply({ requestID: prompt.id, reply: "always" })
         await request
-        const grant = (await SessionFilesystem.list(session.id)).find(
-          (item) => item.path === external.path && item.scope === "installation",
-        )
-        expect(grant).toBeDefined()
+        const grants = await SessionFilesystem.list(session.id)
+        const grant = grants.find((item) => item.path === external.path)
+        // The widest folder scope is the project; nothing is written machine-wide.
+        expect(grant).toMatchObject({ scope: "project", source: "permission" })
+        expect(grants.some((item) => item.scope === "installation")).toBe(false)
         expect((await File.read(path.join(external.path, "shared.txt"), { sessionID: session.id })).content).toBe(
           "installation",
         )
         await Session.remove(session.id)
-        return grant!.id
       },
     })
 
@@ -816,16 +816,68 @@ describe("session filesystem grants", () => {
       fn: async () => {
         const session = await Session.create({})
         const target = path.join(external.path, "shared.txt")
-        expect((await File.read(target, { sessionID: session.id })).content).toBe("installation")
-        const revoked = await SessionFilesystem.revoke(session.id, grantID)
-        expect(revoked).toMatchObject({ id: grantID, scope: "installation", time: { revoked: expect.any(Number) } })
+        // Another project never inherits that approval.
+        expect((await SessionFilesystem.list(session.id)).some((item) => item.path === external.path)).toBe(false)
         await expect(File.read(target, { sessionID: session.id })).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
         await Session.remove(session.id)
       },
     })
   })
 
-  test("stops live compute in every project when installation authority changes", async () => {
+  test("ignores legacy installation-wide grants and clamps new ones to the project", async () => {
+    await using external = await tmpdir({
+      init: (dir) => Bun.write(path.join(dir, "shared.txt"), "legacy"),
+    })
+    await using first = await tmpdir()
+    await using second = await tmpdir()
+
+    await Instance.provide({
+      directory: first.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const grant = await SessionFilesystem.grant({
+          sessionID: session.id,
+          path: external.path,
+          access: "read",
+          scope: "installation",
+        })
+        expect(grant.scope).toBe("project")
+        expect((await File.read(path.join(external.path, "shared.txt"), { sessionID: session.id })).content).toBe(
+          "legacy",
+        )
+        await Session.remove(session.id)
+      },
+    })
+
+    // A record left behind by an older release must not reach another project.
+    await Storage.write(["installation_filesystem"], {
+      version: 1,
+      revision: 2,
+      grants: [
+        {
+          id: `fsg_${crypto.randomUUID()}`,
+          path: external.path,
+          access: "read",
+          scope: "installation",
+          source: "permission",
+          time: { created: Date.now() },
+        },
+      ],
+    })
+    await Instance.provide({
+      directory: second.path,
+      fn: async () => {
+        const session = await Session.create({})
+        expect((await SessionFilesystem.list(session.id)).some((item) => item.scope === "installation")).toBe(false)
+        await expect(
+          File.read(path.join(external.path, "shared.txt"), { sessionID: session.id }),
+        ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("stops live compute only in the project whose folder authority changes", async () => {
     if (!Sandbox.available()) return
     await using external = await tmpdir()
     await using first = await tmpdir()
@@ -881,11 +933,12 @@ describe("session filesystem grants", () => {
           scope: "installation",
         }),
     })
-    const stopped = await Promise.all([
-      ComputeJobs.wait(one.job.id, { root: roots.first, workspace: one.workspace, timeout: 5_000 }),
-      ComputeJobs.wait(two.job.id, { root: roots.second, workspace: two.workspace, timeout: 5_000 }),
-    ])
-    expect(stopped.map((job) => job.status)).toEqual(["cancelled", "cancelled"])
+    expect(grant.scope).toBe("project")
+    const stopped = await ComputeJobs.wait(one.job.id, { root: roots.first, workspace: one.workspace, timeout: 5_000 })
+    expect(stopped.status).toBe("cancelled")
+    const untouched = await ComputeJobs.get(two.job.id, { root: roots.second, workspace: two.workspace })
+    expect(untouched?.status).toBe("running")
+    await ComputeJobs.cancel(two.job.id, { root: roots.second, workspace: two.workspace })
 
     await Instance.provide({
       directory: first.path,

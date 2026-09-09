@@ -236,7 +236,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           path: dir,
           access: "read",
           scope: "session",
-          source: "permission",
+          source: "skill",
         })
       }
       let content = loaded.content
