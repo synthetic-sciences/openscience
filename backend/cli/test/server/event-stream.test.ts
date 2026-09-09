@@ -45,6 +45,50 @@ async function frames(body: ReadableStream<Uint8Array>, until: (frame: Frame) =>
 }
 
 describe("event.subscribe", () => {
+  test("an overflowing queue keeps non-part events and asks the client to resync", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const fetch = Server.internalFetch()
+        const response = await fetch(`http://openscience.internal/event?directory=${encodeURIComponent(projectRoot)}`)
+        expect(response.status).toBe(200)
+
+        // More events than the queue holds, none of them coalescable. The
+        // oldest part updates are dropped first; the pings survive, and one
+        // server.connected frame precedes the backlog so the client resyncs.
+        for (let version = 0; version < 500; version++) {
+          await Bus.publish(MessageV2.Event.PartUpdated, {
+            part: {
+              id: `prt_overflow_${version}`,
+              sessionID: "ses_event_stream",
+              messageID: "msg_event_stream",
+              type: "text",
+              text: String(version),
+            },
+            delta: String(version),
+          })
+        }
+        for (let n = 0; n < 2000; n++) await Bus.publish(Ping, { n })
+        await Bus.publish(Ping, { n: -1 })
+
+        const received = await frames(response.body!, (frame) => frame.properties.n === -1)
+        const pings = received
+          .filter((frame) => frame.type === Ping.type && frame.properties.n !== -1)
+          .map((frame) => frame.properties.n)
+        // Once no part update is left to drop, the queue gives up its oldest
+        // ping; the marker itself is never the victim.
+        expect(pings.length).toBeGreaterThanOrEqual(1999)
+        expect(pings.every((n, index) => index === 0 || n! > pings[index - 1]!)).toBe(true)
+        const connected = received
+          .map((frame, index) => [frame.type, index] as const)
+          .filter(([type]) => type === "server.connected")
+        // The handshake frame plus one resync marker raised by the overflow.
+        expect(connected.length).toBe(2)
+        expect(received.filter((frame) => frame.type === MessageV2.Event.PartUpdated.type).length).toBeLessThan(500)
+      },
+    })
+  })
+
   test("a client that never reads its socket does not stall awaited publishes", async () => {
     await Instance.provide({
       directory: projectRoot,

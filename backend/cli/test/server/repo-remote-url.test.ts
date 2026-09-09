@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { assertSafeRemoteUrl } from "../../src/server/routes/repo"
+import { assertSafeBranch, assertSafeRemoteUrl } from "../../src/server/routes/repo"
 
 describe("assertSafeRemoteUrl", () => {
   test("accepts normal https / ssh / git@ remotes", () => {
@@ -30,5 +30,34 @@ describe("assertSafeRemoteUrl", () => {
     expect(() => assertSafeRemoteUrl("file:///etc/passwd")).toThrow("unsupported remote URL scheme")
     expect(() => assertSafeRemoteUrl("not a url")).toThrow("unsupported remote URL scheme")
     expect(() => assertSafeRemoteUrl("")).toThrow("remote URL required")
+  })
+})
+
+describe("assertSafeBranch", () => {
+  test("accepts ordinary branch names", () => {
+    for (const name of ["main", "feature/x", "release-2.0", "user/topic_1", "v1.2.3"]) {
+      expect(assertSafeBranch(name)).toBe(name)
+    }
+    expect(assertSafeBranch("  main  ")).toBe("main")
+  })
+
+  test("rejects option injection and names git would refuse", () => {
+    for (const name of [
+      "--mirror",
+      "-f",
+      "--all",
+      "a..b",
+      "a@{1}",
+      "a b",
+      "/lead",
+      "trail/",
+      "dot.",
+      ".hidden",
+      "x.lock",
+      "@",
+      "",
+    ]) {
+      expect(() => assertSafeBranch(name)).toThrow()
+    }
   })
 })

@@ -17,6 +17,14 @@ function mimeToModality(mime: string): Modality | undefined {
   return undefined
 }
 
+function signedThinking(options: unknown): boolean {
+  if (!options || typeof options !== "object") return false
+  const anthropic = (options as Record<string, unknown>).anthropic
+  if (!anthropic || typeof anthropic !== "object") return false
+  const block = anthropic as Record<string, unknown>
+  return typeof block.signature === "string" || typeof block.redactedData === "string"
+}
+
 export namespace ProviderTransform {
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
@@ -72,9 +80,12 @@ export namespace ProviderTransform {
           }
           if (!Array.isArray(msg.content)) return msg
           const filtered = msg.content.filter((part) => {
-            if (part.type === "text" || part.type === "reasoning") {
-              return part.text !== ""
-            }
+            if (part.type === "text") return part.text !== ""
+            // A signed thinking block whose text the API omitted, and every
+            // redacted_thinking block, replays with empty text. Anthropic
+            // rejects a turn whose thinking sequence was edited or partially
+            // dropped, so only an unsigned empty reasoning part is noise.
+            if (part.type === "reasoning") return part.text !== "" || signedThinking(part.providerOptions)
             return true
           })
           if (filtered.length === 0) return undefined

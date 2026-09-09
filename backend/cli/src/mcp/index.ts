@@ -605,7 +605,18 @@ export namespace MCP {
       await Promise.all(
         Object.entries(config).map(async ([key, mcp]) => {
           if (!isMcpConfigured(mcp)) {
-            log.error("Ignoring MCP config entry without type", { key })
+            // `{ enabled }` alone only toggles a server defined in another
+            // config layer. Turning one off is a normal disabled server; an
+            // enable with nothing to enable is shown, not silently dropped.
+            if (mcp.enabled === false) {
+              status[key] = { status: "disabled" }
+              return
+            }
+            log.warn("MCP config entry has no server definition", { key })
+            status[key] = {
+              status: "failed",
+              error: `No server definition: add "type": "local" with a command, or "type": "remote" with a url.`,
+            }
             return
           }
 
@@ -1040,9 +1051,13 @@ export namespace MCP {
     const config = cfg.mcp ?? {}
     const result: Record<string, Status> = {}
 
-    // Include all configured MCPs from config, not just connected ones
+    // Include all configured MCPs from config, not just connected ones. An
+    // entry without a server definition keeps the status state() gave it.
     for (const [key, mcp] of Object.entries(config)) {
-      if (!isMcpConfigured(mcp)) continue
+      if (!isMcpConfigured(mcp)) {
+        if (s.status[key]) result[key] = s.status[key]
+        continue
+      }
       result[key] = s.status[key] ?? { status: "disabled" }
     }
 

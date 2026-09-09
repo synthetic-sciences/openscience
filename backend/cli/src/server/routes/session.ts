@@ -4,6 +4,7 @@ import { stream } from "hono/streaming"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Session } from "../../session"
+import { Provider } from "../../provider/provider"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "../../session/prompt"
 import { SessionCompaction } from "../../session/compaction"
@@ -819,11 +820,17 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
       async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        // The headers go out before the turn runs because a research turn can
+        // outlast a client's header timeout; once they are committed, an error
+        // can only end the body. Resolve what the caller most often gets wrong
+        // first, so an unknown session or model still answers 404/400.
+        await Session.get(sessionID)
+        if (body.model) await Provider.getModel(body.model.providerID, body.model.modelID)
         c.status(200)
         c.header("Content-Type", "application/json")
         return stream(c, async (stream) => {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
           const msg = await SessionPrompt.prompt({ ...body, sessionID })
           stream.write(JSON.stringify(msg))
         })

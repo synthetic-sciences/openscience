@@ -50,6 +50,22 @@ export function assertSafeRemoteUrl(url: unknown): string {
   return value
 }
 
+/** A branch name is passed to git as a positional, and git accepts options
+ *  after positionals: `--mirror`, `--force` or `--all` in this field would
+ *  rewrite the remote. Only names git itself accepts for a branch pass.
+ *  Exported for tests. */
+export function assertSafeBranch(branch: unknown): string {
+  const value = String(branch ?? "").trim()
+  if (!value) throw new Error("branch required")
+  if (value.startsWith("-")) throw new Error("invalid branch name")
+  // git check-ref-format --branch, expressed as a pattern: no control or
+  // space characters, no "..", no "@{", no path components that begin with a
+  // dot or end with ".lock", no leading or trailing slash, no trailing dot.
+  const forbidden = /[\x00-\x20\x7f~^:?*[\\]|\.\.|@\{|\/\/|^\/|\/$|\.$|(^|\/)\.|\.lock(\/|$)/
+  if (forbidden.test(value) || value === "@") throw new Error("invalid branch name")
+  return value
+}
+
 async function run(command: string, args: string[], cwd: string, ok: number[] = [0]): Promise<RunResult> {
   const launched = await AuthoritySignal.exclusive(async () => {
     await ProjectTrust.require(Instance.project, "repository")
@@ -245,12 +261,12 @@ async function commit(directory: string, message: unknown) {
 
 async function push(directory: string, branch: unknown) {
   if (!directory) throw new Error("directory required")
-  const current = String(branch || (await git(["branch", "--show-current"], directory).then((x) => x.out))).trim()
-  if (!current) throw new Error("branch required")
+  const current = assertSafeBranch(branch || (await git(["branch", "--show-current"], directory).then((x) => x.out)))
   const upstream = await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], directory)
     .then((x) => x.out)
     .catch(() => "")
-  const args = upstream ? ["push"] : ["push", "-u", "origin", current]
+  // An explicit refspec after `--` leaves git nothing to read as an option.
+  const args = upstream ? ["push"] : ["push", "-u", "origin", "--", `refs/heads/${current}:refs/heads/${current}`]
   const result = await git(args, directory)
   return { pushed: true, output: result.out || result.err }
 }

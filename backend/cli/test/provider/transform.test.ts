@@ -702,6 +702,31 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
+  test("keeps signed and redacted thinking blocks whose text is empty", () => {
+    // `display: "omitted"` thinking arrives as a signature with no text, and
+    // redacted_thinking never has text; both must replay verbatim or the next
+    // turn of the tool loop is rejected.
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "", providerOptions: { anthropic: { signature: "sig_abc" } } },
+          { type: "reasoning", text: "", providerOptions: { anthropic: { redactedData: "EmwKAhgB…" } } },
+          { type: "reasoning", text: "" },
+          { type: "tool-call", toolCallId: "call_1", toolName: "read", input: {} },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result[0].content).toEqual([
+      { type: "reasoning", text: "", providerOptions: { anthropic: { signature: "sig_abc" } } },
+      { type: "reasoning", text: "", providerOptions: { anthropic: { redactedData: "EmwKAhgB…" } } },
+      { type: "tool-call", toolCallId: "call_1", toolName: "read", input: {} },
+    ])
+  })
+
   test("removes entire message when all parts are empty", () => {
     const msgs = [
       { role: "user", content: "Hello" },

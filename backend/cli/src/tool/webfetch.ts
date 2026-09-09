@@ -431,14 +431,14 @@ export const WebFetchTool = Tool.define("webfetch", {
       }
 
       const body = await collectBoundedBody(response, MAX_RESPONSE_SIZE)
-      const content = new TextDecoder().decode(body)
+      const content = decodeBody(body, contentType, mime)
 
       const title = `${params.url} (${contentType})`
 
       // Handle content based on requested format and actual content type
       switch (params.format) {
         case "markdown":
-          if (contentType.includes("text/html")) {
+          if (mime === "text/html" || mime === "application/xhtml+xml") {
             const markdown = convertHTMLToMarkdown(content)
             return {
               output: markdown,
@@ -453,7 +453,7 @@ export const WebFetchTool = Tool.define("webfetch", {
           }
 
         case "text":
-          if (contentType.includes("text/html")) {
+          if (mime === "text/html" || mime === "application/xhtml+xml") {
             const text = await extractTextFromHTML(content)
             return {
               output: text,
@@ -510,6 +510,34 @@ export const WebFetchTool = Tool.define("webfetch", {
     }
   },
 })
+
+/** The charset the response declares, falling back to a `<meta charset>` or
+ *  http-equiv declaration in the first 2 KiB of an HTML body. Exported for tests. */
+export function responseCharset(contentType: string, mime: string, body: Uint8Array): string | undefined {
+  const header = /;\s*charset\s*=\s*"?([A-Za-z0-9._:-]+)"?/i.exec(contentType)?.[1]
+  if (header) return header
+  if (mime !== "text/html" && mime !== "application/xhtml+xml") return
+  const head = new TextDecoder("latin1").decode(body.subarray(0, 2048))
+  return (
+    /<meta[^>]+charset\s*=\s*["']?\s*([A-Za-z0-9._:-]+)/i.exec(head)?.[1] ??
+    /<\?xml[^>]+encoding\s*=\s*["']([A-Za-z0-9._:-]+)["']/i.exec(head)?.[1]
+  )
+}
+
+/** Decode a text body in its declared charset; anything unknown or absent
+ *  is UTF-8. A wrong label would otherwise turn every accented or CJK
+ *  character into U+FFFD before the page reaches the model. */
+export function decodeBody(body: Uint8Array, contentType: string, mime: string): string {
+  const charset = responseCharset(contentType, mime, body)
+  if (charset) {
+    try {
+      return new TextDecoder(charset).decode(body)
+    } catch {
+      // Unknown label: fall through to UTF-8.
+    }
+  }
+  return new TextDecoder().decode(body)
+}
 
 function parseContentLength(value: string | null) {
   if (!value) return undefined

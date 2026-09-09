@@ -653,7 +653,9 @@ export function replace(content: string, oldString: string, newString: string, r
       if (index === -1) continue
       notFound = false
       if (replaceAll) {
-        return content.replaceAll(search, newString)
+        // A string replacement still expands `$$`, `$&`, `$\`` and `$'`; the
+        // model's text is literal, exactly as in the single-match branch.
+        return content.split(search).join(newString)
       }
       const lastIndex = content.lastIndexOf(search)
       if (index !== lastIndex) continue

@@ -808,11 +808,20 @@ export namespace Server {
                     queue[index] = event
                     return
                   }
+                  // Drop a queued part update before anything else: the
+                  // client reconciles whole parts, whereas a dropped status,
+                  // finish, permission or question leaves it stale for good.
+                  const oldestPart = queue.findIndex((item) => partID(item) !== undefined)
+                  const victim =
+                    oldestPart >= 0 ? oldestPart : queue.findIndex((item) => item.type !== "server.connected")
+                  queue.splice(victim >= 0 ? victim : 0, 1)
                   if (!state.overflowed) {
                     state.overflowed = true
                     log.warn("event queue overflow; dropping oldest events", { limit: EVENT_QUEUE_LIMIT })
+                    // Whatever was lost, the client re-hydrates on this frame
+                    // exactly as it does after a reconnect.
+                    queue.unshift({ type: "server.connected", properties: {} } as QueuedEvent)
                   }
-                  queue.shift()
                 }
                 queue.push(event)
                 void drain()

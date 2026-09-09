@@ -3,6 +3,8 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { FileIdentity } from "../../src/file/identity"
 import { SafeFileIO } from "../../src/file/safe-io"
+import { Global } from "../../src/global"
+import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
 const supported = process.platform === "darwin" || process.platform === "linux"
@@ -165,3 +167,21 @@ test.skipIf(!supported)(
     }
   },
 )
+
+test.skipIf(!supported)("a completed write leaves no staging file behind and does not warn about one", async () => {
+  await using fixture = await tmpdir()
+  const target = path.join(fixture.path, "notes.md")
+  await SafeFileIO.write(target, "first")
+  const approved = await SafeFileIO.read(target)
+  await SafeFileIO.write(target, "second", approved)
+  expect(await fs.readFile(target, "utf8")).toBe("second")
+  expect((await fs.readdir(fixture.path)).filter((file) => file.startsWith(".openscience-"))).toEqual([])
+  // The staging file was already removed by the write itself; its absence is
+  // the expected end state, not a retained file to recover.
+  await Log.flush()
+  const log = await fs.readFile(path.join(Global.Path.log, "dev.log"), "utf8").catch(() => "")
+  const retained = log
+    .split("\n")
+    .filter((line) => line.includes("retained for recovery") && line.includes(fixture.path))
+  expect(retained).toEqual([])
+})

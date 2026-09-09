@@ -3,6 +3,7 @@ import crypto from "node:crypto"
 import nodefs, { constants as FS } from "node:fs"
 import fs from "node:fs/promises"
 import path from "node:path"
+import util from "node:util"
 import { dlopen, FFIType, toArrayBuffer, type Pointer } from "bun:ffi"
 import { WindowsSafeIO } from "./windows-safe-io"
 import { Log } from "../util/log"
@@ -183,10 +184,24 @@ export namespace SafeDirectoryIO {
     return Buffer.from(`${basename(value)}\0`)
   }
 
+  const codes: Record<number, string> = { [EINTR]: "EINTR", [ENOENT]: "ENOENT", [EEXIST]: "EEXIST" }
+
   function error(action: string, target: string, errno: number) {
-    const result = new Error(`${action} failed for ${target} (errno ${errno})`) as NodeJS.ErrnoException
+    // Callers branch on `code` like they do for fs errors; an errno alone made
+    // every ENOENT look like an unexpected failure (and warned on every save).
+    const code = codes[errno] ?? systemErrorName(errno)
+    const result = new Error(`${action} failed for ${target} (${code ?? `errno ${errno}`})`) as NodeJS.ErrnoException
     result.errno = errno
+    if (code) result.code = code
     return result
+  }
+
+  function systemErrorName(errno: number) {
+    try {
+      return util.getSystemErrorName(-errno)
+    } catch {
+      return undefined
+    }
   }
 
   function invoke(action: string, target: string, call: () => number) {
