@@ -249,7 +249,12 @@ describe("ProjectsWorkbench", () => {
       }),
     )
     empty.querySelector<HTMLButtonElement>('button[aria-label="New project"]')?.click()
-    expect(empty.querySelector(".science-home__state")?.textContent).toContain("No projects yet")
+    expect(empty.querySelector(".science-home__state")?.textContent).toContain("Create your first project")
+    // The empty state carries its own create action so a first run never has
+    // to find the toolbar button.
+    const before = calls.length
+    empty.querySelector<HTMLButtonElement>(".science-home__state button")?.click()
+    expect(calls.length).toBe(before + 1)
     expect(empty.querySelector('[aria-label="Import existing folder"]')).toBeNull()
     cleanups.pop()?.()
     empty.remove()
@@ -267,6 +272,6 @@ describe("ProjectsWorkbench", () => {
       .find((button) => button.textContent?.includes("Clear search"))
       ?.click()
 
-    expect(calls).toEqual(["create", "query:"])
+    expect(calls).toEqual(["create", "create", "query:"])
   })
 })

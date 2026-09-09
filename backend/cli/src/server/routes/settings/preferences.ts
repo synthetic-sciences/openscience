@@ -44,6 +44,9 @@ const Stored = z.object({
   // browser storage cannot remember setup. Persist the completed wizard
   // revision in the shared local settings store instead.
   desktop_onboarding_version: z.number().int().min(0).default(0),
+  // The step a partially completed setup should resume at. Account state is
+  // read from the server, but whether Ace was skipped is only known here.
+  desktop_onboarding_step: z.enum(["account", "ace", "connect", "done"]).default("account"),
   // A create request can commit even when its response or the completion write
   // is lost. Bind each exact onboarding draft to its opaque create operation in
   // the same port-independent app store so a remounted desktop retries safely.
@@ -83,6 +86,7 @@ const PreferencesPatch = z.object({
   show_trace: Stored.shape.show_trace.removeDefault().optional(),
   show_local_models: Stored.shape.show_local_models.removeDefault().optional(),
   desktop_onboarding_version: Stored.shape.desktop_onboarding_version.removeDefault().optional(),
+  desktop_onboarding_step: Stored.shape.desktop_onboarding_step.removeDefault().optional(),
   atlas_enabled: Stored.shape.atlas_enabled.removeDefault().optional(),
   delegation_enabled: Stored.shape.delegation_enabled.removeDefault().optional(),
   delegation_specialist: Stored.shape.delegation_specialist.removeDefault().optional(),
@@ -135,6 +139,17 @@ async function mutate(fn: (current: Stored) => Stored): Promise<Stored> {
   })
   if (!result) throw new Error("OpenScience did not persist the settings update")
   return result
+}
+
+/** The setup revision every install sees once; bump when the flow changes enough to show again. */
+export const ONBOARDING_VERSION = 2
+
+/** Read the shared local preferences (used by the CLI setup as well as the routes). */
+export const readPreferences = stored
+
+/** Merge a validated patch into the shared local preferences. */
+export function patchPreferences(patch: Partial<Stored>) {
+  return mutate((current) => Stored.parse({ ...current, ...patch }))
 }
 
 export const SettingsPreferencesRoutes = lazy(() =>

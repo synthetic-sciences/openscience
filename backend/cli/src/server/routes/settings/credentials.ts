@@ -440,6 +440,31 @@ async function validDecryptedFields(id: string, entry: StoreEntry): Promise<Reco
 
 /** Resolve one encrypted service credential for a trusted in-process adapter.
  * Values are never returned by HTTP routes and never copied into process.env. */
+/** Encrypt and persist the non-empty fields of one service credential. */
+export async function saveCredential(id: string, fields: Record<string, string>, label?: string) {
+  return mutateCredentialStore(id, `settings-credential.set:${id}`, async () => {
+    const stored = await updateStore(async (current) => {
+      const entry = current[id] ?? { fields: {}, updated_at: new Date().toISOString() }
+      if (entry.removal) {
+        throw new Error(`Credential ${id} removal is pending; retry removal before reconnecting`)
+      }
+      const next = { ...entry.fields }
+      for (const [name, value] of Object.entries(fields)) {
+        const trimmed = value.trim()
+        if (!trimmed) continue
+        next[name] = await encrypt(trimmed)
+      }
+      current[id] = {
+        label: label ?? entry.label,
+        fields: next,
+        updated_at: new Date().toISOString(),
+        source: "local",
+      }
+    })
+    return stored
+  })
+}
+
 export async function resolveCredentialFields(
   id: string,
   options: { required?: string[] } = {},
@@ -721,27 +746,7 @@ export const CredentialsRoutes = lazy(() =>
         if (id === "gcp" && gcp && !validField(id, "service_account_json", gcp)) {
           return c.json({ error: "Google Cloud service account credentials must be a JSON object" }, 400)
         }
-        await mutateCredentialStore(id, `settings-credential.set:${id}`, async () => {
-          const stored = await updateStore(async (current) => {
-            const entry = current[id] ?? { fields: {}, updated_at: new Date().toISOString() }
-            if (entry.removal) {
-              throw new Error(`Credential ${id} removal is pending; retry removal before reconnecting`)
-            }
-            const fields = { ...entry.fields }
-            for (const [name, value] of Object.entries(body.fields)) {
-              const trimmed = value.trim()
-              if (!trimmed) continue
-              fields[name] = await encrypt(trimmed)
-            }
-            current[id] = {
-              label: body.label ?? entry.label,
-              fields,
-              updated_at: new Date().toISOString(),
-              source: "local",
-            }
-          })
-          return stored
-        })
+        await saveCredential(id, body.fields, body.label)
         return c.json({ services: await view(await readStore()) })
       },
     )

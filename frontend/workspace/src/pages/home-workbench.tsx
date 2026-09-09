@@ -184,9 +184,12 @@ export function ProjectsWorkbench(props: {
             <Match when={props.state === "empty"}>
               <section class="science-home__state science-home__state--empty">
                 <div>
-                  <strong>No projects yet</strong>
-                  <span>Start a new project to bring your research, sources, and compute together.</span>
+                  <strong>Create your first project</strong>
+                  <span>Open a research folder or start blank, then send your first message.</span>
                 </div>
+                <button class="science-home__button" type="button" onClick={props.onCreate}>
+                  New project
+                </button>
               </section>
             </Match>
 

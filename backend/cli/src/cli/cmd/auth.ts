@@ -663,7 +663,7 @@ export const AuthLoginCommand = cmd({
 /** Run the Codex (ChatGPT subscription) OAuth flow. Shared by `keys signin` and
  *  the ChatGPT branch of `keys add` so both reach the exact same flow. Returns
  *  true when the flow ran, false when the codex auth plugin is unavailable. */
-async function runCodexAuthFlow(): Promise<boolean> {
+export async function runCodexAuthFlow(): Promise<boolean> {
   const plugin = await Plugin.list().then((x) => x.find((p) => p.auth?.provider === "openai-codex"))
   if (!plugin || !plugin.auth) {
     prompts.log.error("Codex auth plugin not available")

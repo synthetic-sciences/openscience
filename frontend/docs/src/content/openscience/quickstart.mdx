@@ -22,18 +22,28 @@ openscience ~/research/my-project
 
 `npx synsci` is an alternative launcher that installs and opens OpenScience. It requires Node.js and npm.
 
-## 2. Sign in and set up your desktop workspace
+## 2. Set up your account, Ace, and connections
 
-The desktop app starts with **Sign in with Synthetic Sciences**. Continue at
-[app.syntheticsciences.ai](https://app.syntheticsciences.ai) in your browser and
-choose any workspace you belong to. After sign-in, OpenScience automatically
-shows **Start with your research**. Open an existing folder or start a blank project.
+The first launch walks through four short steps. The desktop app shows them as
+cards; `openscience` in a terminal asks the same questions inline before it opens
+the workspace. Every install sees the setup once.
 
-If you prefer to use your own provider access or local models without signing in,
-select **Skip** at the bottom right. You will reach the same project setup screen
-and can sign in later from **Customize → General**. The setup screen also has an
-optional **Model access** section where you can save an Anthropic, OpenAI, or
-OpenRouter key right away.
+1. **Account.** Select **Continue with Synthetic Sciences**. Your browser opens
+   [app.syntheticsciences.ai](https://app.syntheticsciences.ai), where you sign up
+   or sign in and choose a workspace you belong to. An account is required; on a
+   machine without a browser, paste a sign-in key instead.
+2. **Ace** (recommended, optional). **Turn on Ace** opens your billing page.
+   Ace is a $0 activation, pay as you go: managed frontier models, literature
+   search through Firecrawl, scientific schematics and image generation, and one
+   team wallet. OpenScience notices when Ace is on and continues. **Skip for
+   now** keeps your own keys as the model source.
+3. **Connect your own models** (optional). Connect a ChatGPT / Codex
+   subscription, add Anthropic, OpenAI, OpenRouter, or Firecrawl keys, or detect a
+   Modal compute profile. Keys are stored in an owner-only file on this device.
+4. **Done.** **Open workspace** shows the Projects page. Select **New project**,
+   open a folder or start blank, and send your first message.
+
+You can change any of these later in **Customize**.
 
 ## 3. Choose model access
 

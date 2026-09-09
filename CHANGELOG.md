@@ -8,7 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-- Redesigned the desktop first-run flow as a full-window setup with a step indicator, a benefits list on the sign-in step, workspace choices as a single option list, and an inline provider-key section (Anthropic, OpenAI, OpenRouter) that reports when a key is saved. Same tokens as the workspace, so the first screen matches the app that follows.
+- New first-run setup, shown once to every install from this release on: a centered card with four steps. Account (required, browser sign-up/sign-in or a pasted key), Ace (recommended, opens billing and continues when Ace is on), connect your own models (ChatGPT / Codex, Anthropic, OpenAI, OpenRouter, Firecrawl keys, Modal detection, with provider logos and inline key entry), and done. Project creation moved to the Projects page, whose empty state now offers **New project**. The terminal install runs the same four steps inline the first time `openscience` starts (`openscience init` repeats them); scripted, CI, and restarted launches skip it.
 
 - Linux supervised commands inherit blocking output handles so high-volume native tools do not abort with `EAGAIN` when their output pipe fills.
 

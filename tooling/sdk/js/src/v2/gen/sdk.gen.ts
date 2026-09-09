@@ -1836,6 +1836,7 @@ export class Preferences extends HeyApiClient {
       show_trace?: boolean
       show_local_models?: boolean
       desktop_onboarding_version?: number
+      desktop_onboarding_step?: "account" | "ace" | "connect" | "done"
       atlas_enabled?: boolean
       delegation_enabled?: boolean
       delegation_specialist?: string | null
@@ -1861,6 +1862,7 @@ export class Preferences extends HeyApiClient {
             { in: "body", key: "show_trace" },
             { in: "body", key: "show_local_models" },
             { in: "body", key: "desktop_onboarding_version" },
+            { in: "body", key: "desktop_onboarding_step" },
             { in: "body", key: "atlas_enabled" },
             { in: "body", key: "delegation_enabled" },
             { in: "body", key: "delegation_specialist" },

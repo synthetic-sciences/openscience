@@ -7,8 +7,8 @@ const read = (name: string) => readFileSync(fileURLToPath(new URL(name, import.m
 
 describe("shared Iconoir system", () => {
   test("covers the stable public API with distinct semantic glyphs", () => {
-    expect(Object.keys(iconSpecs)).toHaveLength(110)
-    expect(new Set(Object.values(iconSpecs).map((entry) => entry.source)).size).toBe(97)
+    expect(Object.keys(iconSpecs)).toHaveLength(111)
+    expect(new Set(Object.values(iconSpecs).map((entry) => entry.source)).size).toBe(98)
 
     expect(iconSpecs.models.source).toBe("brain-electricity")
     expect(iconSpecs.providers.source).toBe("database-settings")

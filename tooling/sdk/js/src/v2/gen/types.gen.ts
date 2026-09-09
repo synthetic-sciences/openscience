@@ -8851,6 +8851,7 @@ export type SettingsPreferencesGetResponses = {
     show_trace?: boolean
     show_local_models?: boolean
     desktop_onboarding_version?: number
+    desktop_onboarding_step?: "account" | "ace" | "connect" | "done"
     desktop_onboarding_operations?: {
       [key: string]: string
     }
@@ -8878,6 +8879,7 @@ export type SettingsPreferencesUpdateData = {
     show_trace?: boolean
     show_local_models?: boolean
     desktop_onboarding_version?: number
+    desktop_onboarding_step?: "account" | "ace" | "connect" | "done"
     atlas_enabled?: boolean
     delegation_enabled?: boolean
     delegation_specialist?: string | null
@@ -8909,6 +8911,7 @@ export type SettingsPreferencesUpdateResponses = {
     show_trace?: boolean
     show_local_models?: boolean
     desktop_onboarding_version?: number
+    desktop_onboarding_step?: "account" | "ace" | "connect" | "done"
     desktop_onboarding_operations?: {
       [key: string]: string
     }

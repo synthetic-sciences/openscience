@@ -1,6 +1,7 @@
 import { Server } from "../../server/server"
 import { Installation } from "../../installation"
 import { UI } from "../ui"
+import { Onboarding } from "../onboard"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { openUrl } from "../../util/open-url"
@@ -56,6 +57,16 @@ export const WebCommand = cmd({
         UI.error(`Cannot open ${args.project}: no such directory (run \`openscience --help\` to list commands)`)
         process.exit(1)
       }
+    }
+    // First launch at a terminal: the same account → Ace → connections setup
+    // the desktop shows, once per install. Setup needs an account, so a
+    // cancelled wizard ends the launch instead of opening a half-configured UI.
+    if (await Onboarding.shouldRun()) {
+      UI.empty()
+      UI.println(UI.logo("  "))
+      UI.empty()
+      const outcome = await Onboarding.run()
+      if (outcome === "cancelled") return
     }
     const opts = await resolveNetworkOptions(args)
     const directory = args.project ? process.cwd() : undefined
