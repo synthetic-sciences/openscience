@@ -284,7 +284,7 @@ export function SessionTabStrip(props: {
                         if (restoreFocus) focus(typeof target === "string" ? target : props.active)
                       }}
                     >
-                      <IconX size={11} strokeWidth={1.5} />
+                      <IconX size={12} strokeWidth={1.5} />
                     </button>
                   </Show>
                 </div>

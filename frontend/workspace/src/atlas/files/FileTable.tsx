@@ -124,7 +124,7 @@ export function FileTable(props: {
                     disabled={props.busy}
                     onClick={() => props.onRename?.(row)}
                   >
-                    <IconEdit size={13} strokeWidth={1.5} />
+                    <IconEdit size={12} strokeWidth={1.5} />
                   </button>
                   <button
                     type="button"
@@ -135,7 +135,7 @@ export function FileTable(props: {
                     disabled={props.busy}
                     onClick={() => props.onTrash?.(row)}
                   >
-                    <IconTrash size={13} strokeWidth={1.5} />
+                    <IconTrash size={12} strokeWidth={1.5} />
                   </button>
                 </span>
               </Show>

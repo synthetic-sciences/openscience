@@ -40,9 +40,9 @@ export function TrashList(props: {
               <div class="files-row files-row--trash" data-file-trash-row={file.id}>
                 <span class="files-row__glyph" aria-hidden="true">
                   {file.kind === "directory" ? (
-                    <IconFolder size={15} strokeWidth={1.45} />
+                    <IconFolder size={16} strokeWidth={1.5} />
                   ) : (
-                    <IconFile size={15} strokeWidth={1.45} />
+                    <IconFile size={16} strokeWidth={1.5} />
                   )}
                 </span>
                 <span class="files-row__name files-row__identity">
@@ -60,7 +60,7 @@ export function TrashList(props: {
                     disabled={props.busy}
                     onClick={() => props.onRestoreFile(file)}
                   >
-                    <IconRefresh size={13} strokeWidth={1.5} />
+                    <IconRefresh size={12} strokeWidth={1.5} />
                     Restore
                   </button>
                   <button
@@ -72,7 +72,7 @@ export function TrashList(props: {
                     disabled={props.busy}
                     onClick={() => props.onPurgeFile(file)}
                   >
-                    <IconTrash size={13} strokeWidth={1.5} />
+                    <IconTrash size={12} strokeWidth={1.5} />
                   </button>
                 </span>
               </div>
@@ -86,7 +86,7 @@ export function TrashList(props: {
             {(artifact) => (
               <div class="files-row files-row--trash" data-trash-row={artifact.id}>
                 <span class="files-row__glyph" aria-hidden="true">
-                  <IconFile size={15} strokeWidth={1.45} />
+                  <IconFile size={16} strokeWidth={1.5} />
                 </span>
                 <span class="files-row__name files-row__identity">
                   <span data-trash-name>{artifact.title}</span>
@@ -105,7 +105,7 @@ export function TrashList(props: {
                   disabled={props.busy}
                   onClick={() => props.onRestore(artifact)}
                 >
-                  <IconRefresh size={13} strokeWidth={1.5} />
+                  <IconRefresh size={12} strokeWidth={1.5} />
                   Restore
                 </button>
               </div>

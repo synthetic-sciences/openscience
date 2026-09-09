@@ -405,7 +405,7 @@ export function DesktopOnboardingController(
                       onClick={() => void openFolder()}
                     >
                       <span class="desktop-onboarding__workspace-icon" aria-hidden="true">
-                        <IconFolder size={19} strokeWidth={1.55} />
+                        <IconFolder size={20} strokeWidth={1.5} />
                       </span>
                       <span>
                         <strong>{busy() === "folder" ? "Opening folder…" : "Open a folder"}</strong>
@@ -419,7 +419,7 @@ export function DesktopOnboardingController(
                       onClick={() => void startBlank()}
                     >
                       <span class="desktop-onboarding__workspace-icon" aria-hidden="true">
-                        <IconPlus size={18} strokeWidth={1.65} />
+                        <IconPlus size={18} strokeWidth={1.5} />
                       </span>
                       <span>
                         <strong>{busy() === "blank" ? "Creating project…" : "Start a blank project"}</strong>

@@ -169,7 +169,7 @@ export function FileToolbar(props: FileToolbarProps): JSX.Element {
           title="Close file"
           onClick={() => props.onClose?.()}
         >
-          <IconX size={16} strokeWidth={1.55} />
+          <IconX size={16} strokeWidth={1.5} />
         </button>
       </Show>
     </header>

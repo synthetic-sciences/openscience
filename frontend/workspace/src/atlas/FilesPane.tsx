@@ -1200,7 +1200,7 @@ export function FilesPane(
                 aria-label="Clear file search"
                 onClick={() => setFilter("")}
               >
-                <IconX size={12} strokeWidth={1.6} />
+                <IconX size={12} strokeWidth={1.5} />
               </button>
             </Show>
           </div>
@@ -1249,7 +1249,7 @@ export function FilesPane(
                 setFilter("")
               }}
             >
-              <IconFolder size={14} strokeWidth={1.45} />
+              <IconFolder size={14} strokeWidth={1.5} />
             </button>
             <For each={path()}>
               {(part, index) => {
@@ -1294,7 +1294,7 @@ export function FilesPane(
               aria-label="Close folder connection form"
               onClick={() => setConnect("open", false)}
             >
-              <IconX size={13} strokeWidth={1.6} />
+              <IconX size={12} strokeWidth={1.5} />
             </button>
           </div>
           <div class="files-connect__row">

@@ -1676,10 +1676,22 @@
     flex-wrap: wrap;
   }
 
+  /* The "More" trigger is ~88px wide; leave it room on the same row and let
+     the location tabs scroll instead of wrapping the trigger underneath. */
   .files-workspace-switcher {
-    max-width: calc(100% - 70px);
+    max-width: calc(100% - 96px);
     overflow-x: auto;
     scrollbar-width: none;
+  }
+
+  .files-browser__toolbar .files-source {
+    flex: none;
+  }
+
+  /* Inactive locations keep their icon and tooltip; only the active one
+     spends the width on a label, so nothing is clipped mid-word. */
+  .files-workspace-switcher__tab:not(.is-active) > span:last-child {
+    display: none;
   }
 
   .files-workspace-switcher::-webkit-scrollbar {

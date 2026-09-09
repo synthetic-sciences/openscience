@@ -149,7 +149,7 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
         fallback={
           <div class="terminal-surface__empty">
             <span class="terminal-surface__empty-mark" aria-hidden="true">
-              <IconTerminal size={17} strokeWidth={1.35} />
+              <IconTerminal size={16} strokeWidth={1.5} />
             </span>
             <strong>Local terminal unavailable</strong>
             <p>Connect to the local OpenScience server to run commands inside this project.</p>
@@ -169,7 +169,7 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
             fallback={
               <div class="terminal-surface__empty">
                 <span class="terminal-surface__empty-mark" aria-hidden="true">
-                  <IconTerminal size={17} strokeWidth={1.35} />
+                  <IconTerminal size={16} strokeWidth={1.5} />
                 </span>
                 <strong>Project terminal</strong>
                 <p>Start a clean shell in this session. Open another tab only when you need parallel work.</p>
@@ -206,7 +206,7 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
                         aria-label={`Close ${pty.title}`}
                         onClick={() => void terminal.close(pty.id)}
                       >
-                        <IconX size={10} strokeWidth={1.7} />
+                        <IconX size={10} strokeWidth={1.5} />
                       </button>
                     </div>
                   )}
@@ -220,7 +220,7 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
                 title={authority.message() ?? "New terminal"}
                 aria-label={state.starting ? "Starting terminal" : "New terminal"}
               >
-                <IconPlus size={12} strokeWidth={1.7} />
+                <IconPlus size={12} strokeWidth={1.5} />
                 <span>{state.starting ? "Starting…" : "New"}</span>
               </button>
             </div>
@@ -267,7 +267,7 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
                   <IconChevronRight size={12} strokeWidth={1.5} />
                 </button>
                 <button type="button" onClick={closeSearch} aria-label="Close search" title="Close search (Esc)">
-                  <IconX size={11} strokeWidth={1.6} />
+                  <IconX size={12} strokeWidth={1.5} />
                 </button>
               </form>
             </Show>
@@ -276,7 +276,7 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
               <Show when={state.connecting}>
                 <div class="terminal-surface__connecting" role="status" aria-live="polite">
                   <span class="terminal-surface__connecting-mark" aria-hidden="true">
-                    <IconTerminal size={14} strokeWidth={1.35} />
+                    <IconTerminal size={14} strokeWidth={1.5} />
                   </span>
                   <span>Starting terminal…</span>
                 </div>

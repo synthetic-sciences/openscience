@@ -118,7 +118,7 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
         <div class="external-file-access" role="region" aria-label="File access required">
           <div class="external-file-access__content">
             <span class="external-file-access__icon" aria-hidden="true">
-              <IconFolder size={22} strokeWidth={1.35} />
+              <IconFolder size={22} strokeWidth={1.5} />
             </span>
             <div class="external-file-access__copy">
               <h2>Connect a folder</h2>

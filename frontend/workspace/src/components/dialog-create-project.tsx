@@ -101,7 +101,7 @@ export function DialogCreateProject(props: {
                   onClick={props.onChooseSources}
                 >
                   <span class="project-create__source-icon" aria-hidden="true">
-                    <IconFolderAdd size={17} strokeWidth={1.55} />
+                    <IconFolderAdd size={16} strokeWidth={1.5} />
                   </span>
                   <span class="project-create__source-empty-copy">
                     <strong>Add source folders</strong>
@@ -115,7 +115,7 @@ export function DialogCreateProject(props: {
                   {(path) => (
                     <div class="project-create__source-row">
                       <span class="project-create__source-row-icon" aria-hidden="true">
-                        <IconFolder size={15} strokeWidth={1.5} />
+                        <IconFolder size={16} strokeWidth={1.5} />
                       </span>
                       <span class="project-create__source-copy">
                         <strong>{path.split("/").filter(Boolean).at(-1) ?? path}</strong>
@@ -128,7 +128,7 @@ export function DialogCreateProject(props: {
                         class="project-create__remove-source"
                         onClick={() => props.onRemoveSource?.(path)}
                       >
-                        <IconX size={14} strokeWidth={1.6} />
+                        <IconX size={14} strokeWidth={1.5} />
                       </button>
                     </div>
                   )}
@@ -139,7 +139,7 @@ export function DialogCreateProject(props: {
                   disabled={state.busy || (props.sources ?? []).length >= 10}
                   onClick={props.onChooseSources}
                 >
-                  <IconPlus size={13} strokeWidth={1.7} />
+                  <IconPlus size={12} strokeWidth={1.5} />
                   Add folders
                 </button>
               </div>

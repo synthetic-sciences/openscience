@@ -118,7 +118,7 @@ export function SourceMenu(props: {
       >
         <span class="files-source__glyph" aria-hidden="true">
           {props.triggerLabel ? (
-            <IconMoreH size={15} strokeWidth={1.5} />
+            <IconMoreH size={16} strokeWidth={1.5} />
           ) : (
             glyph(props.active.kind)({ size: 15, strokeWidth: 1.5 })
           )}
@@ -270,7 +270,7 @@ export function SourceMenu(props: {
                 }}
               >
                 <span class="files-menu__glyph" aria-hidden="true">
-                  <IconFolderAdd size={15} strokeWidth={1.5} />
+                  <IconFolderAdd size={16} strokeWidth={1.5} />
                 </span>
                 <span>
                   <span class="files-menu__label">Add folder…</span>

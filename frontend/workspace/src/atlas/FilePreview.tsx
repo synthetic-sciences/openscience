@@ -915,7 +915,7 @@ export function FileView(props: {
                 when={view.status === "interrupted"}
                 fallback={
                   <section class="atlas-file-error" role="alert" aria-live="polite">
-                    <IconFile size={20} strokeWidth={1.4} />
+                    <IconFile size={20} strokeWidth={1.5} />
                     <h2>Couldn’t open this file</h2>
                     <p>{view.error?.message ?? "The file could not be read."}</p>
                     <button
@@ -929,7 +929,7 @@ export function FileView(props: {
                 }
               >
                 <section class="atlas-file-error" role="status" aria-live="polite">
-                  <IconFile size={20} strokeWidth={1.4} />
+                  <IconFile size={20} strokeWidth={1.5} />
                   <h2>File preview interrupted</h2>
                   <p>The read ended before it finished. Your file was not changed.</p>
                   <button

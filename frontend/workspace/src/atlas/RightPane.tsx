@@ -448,7 +448,7 @@ export function RightPane(
                     title="Workspace layout"
                     aria-label="Workspace layout"
                   >
-                    <IconSplit size={16} strokeWidth={1.45} />
+                    <IconSplit size={16} strokeWidth={1.5} />
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Portal>
                     <DropdownMenu.Content class="research-inspector__layout-menu">
@@ -482,8 +482,8 @@ export function RightPane(
                   aria-label={expanded() ? "Restore inspector" : "Open inspector full screen"}
                   aria-pressed={expanded()}
                 >
-                  <Show when={expanded()} fallback={<IconExpand size={16} strokeWidth={1.55} />}>
-                    <IconCollapse size={16} strokeWidth={1.55} />
+                  <Show when={expanded()} fallback={<IconExpand size={16} strokeWidth={1.5} />}>
+                    <IconCollapse size={16} strokeWidth={1.5} />
                   </Show>
                 </button>
               </Show>
@@ -495,8 +495,8 @@ export function RightPane(
                 aria-label={narrow() ? "Back to conversation" : "Close context"}
                 data-modal-initial-focus
               >
-                <Show when={narrow()} fallback={<IconX size={17} strokeWidth={1.6} />}>
-                  <IconChevronLeft size={17} strokeWidth={1.6} />
+                <Show when={narrow()} fallback={<IconX size={16} strokeWidth={1.5} />}>
+                  <IconChevronLeft size={16} strokeWidth={1.5} />
                 </Show>
               </button>
             </div>
@@ -704,7 +704,7 @@ function WorkTabStrip(props: {
               aria-label={`Close ${workTabLabel(tab)}`}
               onClick={() => props.onClose(tab.id)}
             >
-              <IconX size={11} strokeWidth={1.5} />
+              <IconX size={12} strokeWidth={1.5} />
             </button>
           </div>
         )}

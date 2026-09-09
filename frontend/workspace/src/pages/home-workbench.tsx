@@ -94,7 +94,7 @@ export function ProjectsWorkbench(props: {
           </button>
           <span class="science-home__bar-divider" aria-hidden="true" />
           <button class="science-home__icon" type="button" aria-label="Settings" onClick={props.onSettings}>
-            <IconSettings size={15} strokeWidth={1.5} />
+            <IconSettings size={16} strokeWidth={1.5} />
           </button>
         </div>
       </AppHeader>
@@ -122,7 +122,7 @@ export function ProjectsWorkbench(props: {
                 aria-label="New project"
                 onClick={props.onCreate}
               >
-                <IconPlus size={15} strokeWidth={1.5} />
+                <IconPlus size={16} strokeWidth={1.5} />
                 New project
               </button>
             </div>
@@ -131,7 +131,7 @@ export function ProjectsWorkbench(props: {
           <Show when={recent()}>
             <div class="science-home__toolbar" aria-label="Project controls">
               <label class="science-home__search" for="science-home-project-search">
-                <IconSearch size={16} strokeWidth={1.45} />
+                <IconSearch size={16} strokeWidth={1.5} />
                 <input
                   ref={input}
                   id="science-home-project-search"
@@ -148,7 +148,7 @@ export function ProjectsWorkbench(props: {
                 />
                 <Show when={props.query}>
                   <button type="button" aria-label="Clear search" onClick={clearSearch}>
-                    <IconX size={13} strokeWidth={1.55} />
+                    <IconX size={12} strokeWidth={1.5} />
                   </button>
                 </Show>
               </label>
@@ -271,8 +271,8 @@ export function ProjectsWorkbench(props: {
                             title={project.pinned ? "Unpin project" : "Pin project"}
                             onClick={() => props.onPin(project)}
                           >
-                            <Show when={project.pinned} fallback={<IconPin size={15} strokeWidth={1.4} />}>
-                              <IconPinFilled size={15} strokeWidth={1.4} />
+                            <Show when={project.pinned} fallback={<IconPin size={16} strokeWidth={1.5} />}>
+                              <IconPinFilled size={16} strokeWidth={1.5} />
                             </Show>
                           </button>
                           <button
@@ -282,7 +282,7 @@ export function ProjectsWorkbench(props: {
                             title="Archive project"
                             onClick={() => props.onArchive(project)}
                           >
-                            <IconArchive size={14} strokeWidth={1.4} />
+                            <IconArchive size={14} strokeWidth={1.5} />
                           </button>
                         </div>
                       </li>
@@ -293,10 +293,10 @@ export function ProjectsWorkbench(props: {
               <Show when={props.archivedProjects.length > 0}>
                 <details class="science-home__archived">
                   <summary>
-                    <IconArchive size={14} strokeWidth={1.45} />
+                    <IconArchive size={14} strokeWidth={1.5} />
                     <span>Archived</span>
                     <span class="science-home__archived-count">{props.archivedProjects.length}</span>
-                    <IconChevronRight class="science-home__archived-chevron" size={12} strokeWidth={1.45} />
+                    <IconChevronRight class="science-home__archived-chevron" size={12} strokeWidth={1.5} />
                   </summary>
                   <ul aria-label="Archived projects">
                     <For each={props.archivedProjects}>

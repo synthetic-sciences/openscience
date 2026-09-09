@@ -140,7 +140,7 @@ function FdaSheet(props: {
         <div class="folder-access-actions">
           <Show when={url()}>
             <a href={url()!} target="_self" class="folder-access-action folder-access-action--primary">
-              <IconArrowRight size={12} strokeWidth={1.6} />
+              <IconArrowRight size={12} strokeWidth={1.5} />
               Open privacy settings
             </a>
           </Show>
@@ -154,7 +154,7 @@ function FdaSheet(props: {
             }}
             disabled={busy()}
           >
-            <IconRefresh size={12} strokeWidth={1.6} />
+            <IconRefresh size={12} strokeWidth={1.5} />
             {busy() ? "Checking…" : "Recheck"}
           </button>
           <button type="button" class="folder-access-action folder-access-action--dismiss" onClick={props.onDismiss}>

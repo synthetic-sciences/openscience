@@ -158,7 +158,7 @@ export function RemoteFileView(props: RemoteFileViewProps): JSX.Element {
           data-remote-download
           onClick={() => props.onDownload(props.file)}
         >
-          <IconDownload size={13} strokeWidth={1.6} />
+          <IconDownload size={12} strokeWidth={1.5} />
           Download
         </button>
         <button
@@ -167,7 +167,7 @@ export function RemoteFileView(props: RemoteFileViewProps): JSX.Element {
           aria-label={`Close ${props.file.name}`}
           onClick={() => props.onClose()}
         >
-          <IconX size={13} strokeWidth={1.6} />
+          <IconX size={12} strokeWidth={1.5} />
         </button>
       </header>
 

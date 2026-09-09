@@ -212,7 +212,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
               disabled={downloading()}
               onClick={() => void download(version())}
             >
-              <IconDownload size={14} strokeWidth={1.6} />
+              <IconDownload size={14} strokeWidth={1.5} />
               {downloading() ? "Downloading…" : "Download"}
             </Button>
           )}
@@ -228,7 +228,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
             aria-expanded={action() !== undefined}
             onClick={() => (action() ? closeActions() : setAction("menu"))}
           >
-            <IconMoreH size={14} strokeWidth={1.6} />
+            <IconMoreH size={14} strokeWidth={1.5} />
             Manage
           </Button>
 
@@ -277,7 +277,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
                         style={menuItem()}
                         onClick={() => setAction("rename")}
                       >
-                        <IconEdit size={14} strokeWidth={1.55} />
+                        <IconEdit size={14} strokeWidth={1.5} />
                         Rename
                       </Button>
                       <Button
@@ -289,7 +289,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
                         style={{ ...menuItem(), ...dangerText() }}
                         onClick={() => setAction("delete")}
                       >
-                        <IconTrash size={14} strokeWidth={1.55} />
+                        <IconTrash size={14} strokeWidth={1.5} />
                         Move to trash
                       </Button>
                     </Match>
@@ -332,7 +332,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
                           disabled={busy()}
                           style={dangerText()}
                         >
-                          <IconTrash size={14} strokeWidth={1.6} />
+                          <IconTrash size={14} strokeWidth={1.5} />
                           {busy() ? "Moving…" : "Move to trash"}
                         </Button>
                         <Button

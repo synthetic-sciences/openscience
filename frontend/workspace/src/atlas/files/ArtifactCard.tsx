@@ -108,7 +108,7 @@ export function ArtifactCard(props: CardProps): JSX.Element {
         aria-expanded={open()}
         onClick={() => setOpen(!open())}
       >
-        <IconMoreH size={15} strokeWidth={1.6} />
+        <IconMoreH size={16} strokeWidth={1.5} />
       </button>
 
       <Show when={open()}>

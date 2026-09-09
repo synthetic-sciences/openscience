@@ -348,16 +348,16 @@ export function ManuscriptWorkbench(props: {
           live source + preview
         </span>
         <button type="button" style={toolButton(panel() === "citations")} onClick={() => toggle("citations")}>
-          <IconBookOpen size={11} /> Citations
+          <IconBookOpen size={12} /> Citations
         </button>
         <button type="button" style={toolButton(panel() === "figures")} onClick={() => toggle("figures")}>
-          <IconFile size={11} /> Figures
+          <IconFile size={12} /> Figures
         </button>
         <button type="button" style={toolButton(panel() === "review")} onClick={toggleReview}>
-          <IconCheckCircle size={11} /> Review
+          <IconCheckCircle size={12} /> Review
         </button>
         <button type="button" style={toolButton(panel() === "publish")} onClick={openPublish}>
-          <IconDownload size={11} /> Publish
+          <IconDownload size={12} /> Publish
         </button>
       </div>
 
@@ -640,7 +640,7 @@ function BrowserShell(props: { component: string; title: string; detail: string;
 function Search(props: { value: string; placeholder: string; onInput: (value: string) => void }): JSX.Element {
   return (
     <label style={{ ...input(), display: "flex", "align-items": "center", gap: "6px" }}>
-      <IconSearch size={11} />
+      <IconSearch size={12} />
       <input
         value={props.value}
         onInput={(event) => props.onInput(event.currentTarget.value)}

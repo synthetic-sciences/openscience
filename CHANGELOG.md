@@ -517,6 +517,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   case for remaining Title Case labels (Jump to latest, Manage result, Rename
   result, Skill library, Add server, Manage servers, Page not found), and route
   the recovery page's accent through the defined error colour token.
+- Draw every interface icon on the 12/14/16/20 scale with one stroke weight
+  (sizes of 11, 13, 15, 17 and 19 and seven stroke widths rendered slightly
+  blurred next to each other), and keep the Files pane's location tabs and
+  **More** menu on one row at narrow widths (inactive tabs collapse to their
+  icons instead of the menu wrapping underneath).
 
 ## v2.0.71–v2.0.72 — 2026-09-05
 
