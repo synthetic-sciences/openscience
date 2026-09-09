@@ -129,7 +129,7 @@ export async function answer(runtime: OpenScienceRuntime, sessionID: string, req
 }
 ```
 
-Permission responses include `once`, `session`, `project`, `always`, and `reject`; `always` grants installation-wide authority. A private adapter should expose only the scopes its authenticated user is allowed to grant. Use `question_reject` to dismiss a question.
+Permission responses include `once`, `session`, `project`, `always`, and `reject`; `always` grants installation-wide authority for network hosts and searches, while a folder (`external_directory`) approval is always kept within the requesting project. A private adapter should expose only the scopes its authenticated user is allowed to grant. Use `question_reject` to dismiss a question.
 
 An identical reply returns the stored receipt. A changed reply returns 409. Unknown, expired, or wrong-session requests cannot be claimed. A receipt marked `indeterminate` means the runtime cannot confirm whether a decision completed across an interruption; inspect state rather than repeating the action. For multiple server processes, route a pending decision back to the process that owns its continuation.
 

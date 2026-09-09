@@ -78,6 +78,33 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   the bioRxiv/medRxiv connector that keyword search covers only recent postings.
 - Treat the validated provider tool call as authoritative, so an incomplete call
   can be repaired safely without conflicting with its provisional stream event.
+- Keep the model you picked in the composer when you leave a project, open
+  another one, or reload; the install default is used only until you choose.
+- Stop the conversation from going blank after approving an action or any
+  other background refresh: the session page no longer sits under a Suspense
+  boundary that swapped the whole transcript for its loading spinner while a
+  refetch was pending, which could leave it empty until the project was
+  reopened.
+- Record one tool receipt per provider call. When a tool call arrived in a
+  single chunk (local models, short arguments) the executor could register the
+  call before its streamed placeholder was written, leaving a duplicate part
+  stuck in **running** and sending two tool results for one call ID on the
+  next request.
+- Switching a project to **Full access** now settles the approval cards that
+  were already waiting under **Ask risky**, and fetch prompts show the address
+  being fetched; folder and host prompts showed a literal `{path}`/`{host}`
+  instead of the folder or host.
+- Open files the agent links in the conversation in the Files tab, including
+  results in the conversation's working area, connected folders, `file://`
+  links and echoed `/file/raw` URLs, instead of navigating to a `localhost`
+  page (opened in an external browser from the desktop app).
+- Keep folder access inside the project that approved it: **Allow always** is
+  no longer offered for folder prompts and never creates an installation-wide
+  grant, older installation-wide folder grants no longer apply, a shell working
+  directory outside the project is granted itself rather than its parent
+  (`cd /tmp` no longer granted `/private`), and the Files tab's **Working
+  files** list no longer shows the project's own root or loaded skill
+  directories as connected folders.
 - Preserve completed delegated work when a task is cancelled, report the
   worker's actual outcome and changed files to both the lead and UI, and bound
   silent remote response bodies without cutting off active streams. Keep the
