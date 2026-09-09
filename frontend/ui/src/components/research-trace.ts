@@ -153,6 +153,65 @@ export function stripTaskMetadata(value?: string) {
   return (value ?? "").replace(/\s*<task_metadata>[\s\S]*?<\/task_metadata>\s*/g, "").trim()
 }
 
+export type TaskHandoff = {
+  /** Runtime notes about how the worker stopped, without their brackets. */
+  notes: string[]
+  /** The worker's own findings, ready for Markdown. */
+  text: string
+  /** Files the worker saved as immutable Results. */
+  outputs: { filename: string; artifactID?: string }[]
+  /** Whether `text` opens with its own heading, so a caller need not add one. */
+  headed: boolean
+}
+
+const sessionLine = /^Task session ses_\w+: .*Reuse this sessionId to continue the same worker\.$/
+const savedOutput = /^- "((?:[^"\\]|\\.)*)": artifact_id=(\S+?),/
+const receipts = /^Execution receipts: /
+
+/**
+ * The Task tool's output is written for the lead model: a session line to
+ * continue the worker, bracketed stop notes, the findings, then evidence the
+ * lead can act on. The card shows only what a reader needs.
+ */
+export function parseTaskHandoff(value?: string): TaskHandoff {
+  const lines = stripTaskMetadata(value).split("\n")
+  const notes: string[] = []
+  const outputs: TaskHandoff["outputs"] = []
+  const body: string[] = []
+  let leading = true
+  let saved = false
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (leading && trimmed === "") continue
+    if (leading && sessionLine.test(trimmed)) continue
+    if (leading && /^\[.*\]$/.test(trimmed)) {
+      notes.push(trimmed.slice(1, -1))
+      continue
+    }
+    leading = false
+    if (trimmed.startsWith("Saved outputs (immutable versions;")) {
+      saved = true
+      continue
+    }
+    if (saved) {
+      const match = savedOutput.exec(trimmed)
+      if (match) {
+        outputs.push({ filename: JSON.parse(`"${match[1]}"`), artifactID: match[2] })
+        continue
+      }
+      saved = false
+    }
+    if (receipts.test(trimmed)) continue
+    body.push(line)
+  }
+  const text = body.join("\n").trim()
+  return { notes, text, outputs, headed: /^#{1,6}\s/.test(text) }
+}
+
+export function pluralize(count: number, noun: string, plural = `${noun}s`) {
+  return `${count} ${count === 1 ? noun : plural}`
+}
+
 /** Whole seconds for a counter that is still ticking. */
 export function elapsedLabel(value: number) {
   const seconds = Math.max(0, Math.floor(value / 1000))

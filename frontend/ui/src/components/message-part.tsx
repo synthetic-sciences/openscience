@@ -72,7 +72,8 @@ import { ToolRegistry, type ToolProps } from "./tool-registry"
 import {
   elapsedLabel,
   formatTaskDuration,
-  stripTaskMetadata,
+  parseTaskHandoff,
+  pluralize,
   summarizeTaskActivity,
   traceFamily,
 } from "./research-trace"
@@ -1330,7 +1331,7 @@ ToolRegistry.register({
 
     const childSessionId = () => props.metadata.sessionId as string | undefined
     const activity = createMemo(() => summarizeTaskActivity(summary()))
-    const findings = createMemo(() => stripTaskMetadata(props.output ?? props.error))
+    const handoff = createMemo(() => parseTaskHandoff(props.output ?? props.error))
     const live = () => props.status === "running" || props.status === "pending"
     const now = useClock(() => live() && !!props.time?.start)
     const duration = () => {
@@ -1372,9 +1373,9 @@ ToolRegistry.register({
       }
     }
     const [expanded, setExpanded] = createSignal<boolean>()
-    const open = () => expanded() ?? live()
     const current = () => summary().findLast((item) => item.state.status === "running")
-    const subtitle = () => (phase() === "running" ? current()?.state.title : undefined) ?? props.input.description
+    const agentLabel = () =>
+      i18n.t("ui.tool.agent", { type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)) })
 
     const childPermission = createMemo(() => {
       const sessionId = childSessionId()
@@ -1391,6 +1392,16 @@ ToolRegistry.register({
     })
 
     const childRequest = createMemo(() => childPermission() ?? childQuestion())
+    const attention = () => (childPermission() ? "permission" : childQuestion() ? "question" : undefined)
+    // A worker waiting on the user must stay visible; otherwise the card
+    // follows the user's last choice and defaults to open while it runs.
+    const open = () => (attention() ? true : (expanded() ?? live()))
+    const statusLabel = () =>
+      attention() === "permission"
+        ? i18n.t("ui.tool.task.needsApproval")
+        : attention() === "question"
+          ? i18n.t("ui.tool.task.hasQuestion")
+          : outcomeLabel()
 
     const childToolPart = createMemo(() => {
       const request = childRequest()
@@ -1421,7 +1432,7 @@ ToolRegistry.register({
       })
     }
 
-    const handleSubtitleClick = () => {
+    const openAgent = () => {
       const sessionId = childSessionId()
       if (sessionId && data.navigateToSession) {
         data.navigateToSession(sessionId)
@@ -1450,207 +1461,211 @@ ToolRegistry.register({
       )
     }
 
+    const familyIcon = (family: string) =>
+      family === "context"
+        ? "glasses"
+        : family === "sources"
+          ? "window-cursor"
+          : family === "commands"
+            ? "console"
+            : family === "changes"
+              ? "code-lines"
+              : family === "images"
+                ? "photo"
+                : family === "skills"
+                  ? "sparkles"
+                  : "activity"
+
+    const [operations, setOperations] = createSignal(false)
+
     return (
       <div data-component="tool-part-wrapper" data-permission={!!childPermission()} data-question={!!childQuestion()}>
-        <Switch>
-          <Match when={childPermission()}>
-            <>
-              <Show
-                when={childToolPart()}
-                fallback={
-                  <BasicTool
-                    icon="task"
-                    defaultOpen={true}
-                    trigger={{
-                      title: i18n.t("ui.tool.agent", {
-                        type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)),
-                      }),
-                      subtitle: props.input.description,
-                    }}
-                    onSubtitleClick={handleSubtitleClick}
-                  />
-                }
-              >
-                {renderChildToolPart()}
+        <details
+          data-component="delegation-card"
+          data-outcome={outcome()}
+          data-phase={phase()}
+          data-attention={attention()}
+          open={open()}
+        >
+          <summary
+            data-slot="delegation-summary"
+            aria-label={`${statusLabel()}: ${agentLabel()}`}
+            onClick={(event) => {
+              event.preventDefault()
+              if (attention()) return
+              setExpanded(!open())
+            }}
+          >
+            <span data-slot="delegation-mark" aria-hidden="true">
+              <Show when={live() && !attention()} fallback={<Icon name="research" size="small" />}>
+                <Spinner />
               </Show>
-              <PermissionActions respond={respond} metadata={childPermission()?.metadata} />
-            </>
-          </Match>
-          <Match when={childQuestion()}>
-            {(request) => (
-              <>
+            </span>
+            <span data-slot="delegation-heading">
+              <strong>{agentLabel()}</strong>
+              <Show when={props.input.description}>
+                <span data-slot="delegation-description">{String(props.input.description)}</span>
+              </Show>
+            </span>
+            <span data-slot="delegation-summary-meta">
+              <span data-slot="delegation-status">{statusLabel()}</span>
+              <Show when={duration()}>{(value) => <span>{value()}</span>}</Show>
+              <Show when={props.metadata.toolCalls !== undefined}>
+                <span>{pluralize(Number(props.metadata.toolCalls), "op")}</span>
+              </Show>
+              <Icon name="chevron-down" size="small" />
+            </span>
+          </summary>
+
+          <div data-slot="delegation-body">
+            <Show when={attention()}>
+              <div data-slot="delegation-attention" data-kind={attention()}>
                 <Show
                   when={childToolPart()}
                   fallback={
-                    <BasicTool
-                      icon="task"
-                      defaultOpen={true}
-                      trigger={{
-                        title: i18n.t("ui.tool.agent", {
-                          type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)),
-                        }),
-                        subtitle: props.input.description,
-                      }}
-                      onSubtitleClick={handleSubtitleClick}
-                    />
+                    <div data-slot="delegation-attention-fallback">
+                      <Icon name="research" size="small" />
+                      <span>{String(props.input.description ?? agentLabel())}</span>
+                    </div>
                   }
                 >
                   {renderChildToolPart()}
                 </Show>
-                <QuestionPrompt request={request()} />
-              </>
-            )}
-          </Match>
-          <Match when={true}>
-            <details data-component="delegation-card" data-outcome={outcome()} data-phase={phase()} open={open()}>
-              <summary
-                data-slot="delegation-summary"
-                aria-label={`${outcomeLabel()} delegated research`}
-                onClick={(event) => {
-                  event.preventDefault()
-                  setExpanded(!open())
-                }}
-              >
-                <div data-slot="delegation-mark">
-                  <Icon name="research" size="normal" />
-                </div>
-                <div data-slot="delegation-heading">
-                  <strong>
-                    {i18n.t("ui.tool.agent", {
-                      type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)),
-                    })}
-                  </strong>
-                  <Show when={subtitle()}>
-                    <p>{subtitle()}</p>
-                  </Show>
-                </div>
-                <div data-slot="delegation-summary-meta">
-                  <span data-slot="delegation-status">{outcomeLabel()}</span>
-                  <Show when={duration()}>{(value) => <span>{value()}</span>}</Show>
-                  <Show when={props.metadata.toolCalls !== undefined}>
-                    <span>{Number(props.metadata.toolCalls)} ops</span>
-                  </Show>
-                  <Icon name="chevron-down" size="small" />
-                </div>
-              </summary>
-
-              <div data-slot="delegation-body">
-                <div data-slot="delegation-toolbar">
-                  <div data-slot="delegation-metrics" aria-label="Delegated research details">
-                    <Show when={model()}>{(value) => <span>{value()}</span>}</Show>
-                    <Show when={props.metadata.effort}>
-                      <span>{sentenceCaseLabel(String(props.metadata.effort))} effort</span>
-                    </Show>
-                    <Show when={Number(props.metadata.failedToolCalls) > 0}>
-                      <span data-failed>{Number(props.metadata.failedToolCalls)} failed</span>
-                    </Show>
-                  </div>
-                  <Show when={childSessionId() && data.navigateToSession}>
-                    <button type="button" data-slot="delegation-open" onClick={handleSubtitleClick}>
-                      Open agent
-                      <Icon name="arrow-right" size="small" />
-                    </button>
-                  </Show>
-                </div>
-
-                <Show when={phase() === "running" && current()}>
-                  {(item) => (
-                    <div data-slot="delegation-current">
-                      <Spinner />
-                      <span>Current activity</span>
-                      <strong>{item().state.title || getToolInfo(item().tool).title}</strong>
-                    </div>
-                  )}
+                <Show when={childPermission()}>
+                  <PermissionActions respond={respond} metadata={childPermission()?.metadata} />
                 </Show>
-
-                <Show when={findings()}>
-                  {(value) => (
-                    <div data-slot="delegation-findings" data-error={props.status === "error" ? "true" : undefined}>
-                      <span data-slot="delegation-section-label">
-                        {outcome() === "cancelled"
-                          ? i18n.t("ui.tool.status.cancelled")
-                          : props.status === "error"
-                            ? "Error"
-                            : "Findings"}
-                      </span>
-                      <Markdown text={value()} />
-                    </div>
-                  )}
-                </Show>
-
-                <Show when={activity().length > 0}>
-                  <div data-slot="delegation-activity">
-                    <span data-slot="delegation-section-label">Activity</span>
-                    <For each={activity()}>
-                      {(group) => (
-                        <div data-slot="delegation-activity-row" data-family={group.family}>
-                          <Icon
-                            name={
-                              group.family === "context"
-                                ? "glasses"
-                                : group.family === "sources"
-                                  ? "window-cursor"
-                                  : group.family === "commands"
-                                    ? "console"
-                                    : group.family === "changes"
-                                      ? "code-lines"
-                                      : group.family === "images"
-                                        ? "photo"
-                                        : group.family === "skills"
-                                          ? "sparkles"
-                                          : "activity"
-                            }
-                            size="small"
-                          />
-                          <div>
-                            <strong>{group.label}</strong>
-                            <span>{group.detail}</span>
-                          </div>
-                          <Show when={group.failed > 0}>
-                            <span data-slot="delegation-activity-failed">{group.failed} failed</span>
-                          </Show>
-                        </div>
-                      )}
-                    </For>
-                  </div>
-                </Show>
-
-                <Show when={summary().length > 0}>
-                  <details data-slot="delegation-raw">
-                    <summary>
-                      Operations <span>· {summary().length}</span>
-                    </summary>
-                    <div data-component="task-tools">
-                      <For each={summary()}>
-                        {(item) => {
-                          const info = getToolInfo(item.tool)
-                          return (
-                            <div data-slot="task-tool-item" data-status={item.state.status}>
-                              <Icon name={info.icon} size="small" />
-                              <span data-slot="task-tool-title">{info.title}</span>
-                              <Show when={item.state.title}>
-                                <span data-slot="task-tool-subtitle">{item.state.title}</span>
-                              </Show>
-                              <span data-slot="task-tool-status">
-                                {i18n.t(
-                                  item.state.status === "completed"
-                                    ? "ui.tool.status.done"
-                                    : item.state.status === "error"
-                                      ? "ui.tool.status.error"
-                                      : "ui.tool.status.running",
-                                )}
-                              </span>
-                            </div>
-                          )
-                        }}
-                      </For>
-                    </div>
-                  </details>
-                </Show>
+                <Show when={childQuestion()}>{(request) => <QuestionPrompt request={request()} />}</Show>
               </div>
-            </details>
-          </Match>
-        </Switch>
+            </Show>
+
+            <Show when={phase() === "running" && !attention() && current()}>
+              {(item) => (
+                <div data-slot="delegation-current">
+                  <Spinner />
+                  <span>{item().state.title || getToolInfo(item().tool).title}</span>
+                </div>
+              )}
+            </Show>
+
+            <Show when={handoff().notes.length > 0}>
+              <ul data-slot="delegation-notes" data-outcome={outcome()}>
+                <For each={handoff().notes}>{(note) => <li>{note}</li>}</For>
+              </ul>
+            </Show>
+
+            <Show when={handoff().text}>
+              {(value) => (
+                <div data-slot="delegation-findings" data-error={props.status === "error" ? "true" : undefined}>
+                  <Show when={!handoff().headed}>
+                    <span data-slot="delegation-section-label">
+                      {outcome() === "cancelled"
+                        ? i18n.t("ui.tool.status.cancelled")
+                        : props.status === "error"
+                          ? "Error"
+                          : "Findings"}
+                    </span>
+                  </Show>
+                  <Markdown text={value()} />
+                </div>
+              )}
+            </Show>
+
+            <Show when={handoff().outputs.length > 0}>
+              <div data-slot="delegation-outputs">
+                <span data-slot="delegation-section-label">Saved to Results</span>
+                <div>
+                  <For each={handoff().outputs}>
+                    {(file) => (
+                      <button
+                        type="button"
+                        data-slot="delegation-output"
+                        disabled={!file.artifactID || !data.openArtifact}
+                        onClick={() => file.artifactID && data.openArtifact?.(file.artifactID)}
+                      >
+                        <Icon name="file" size="small" />
+                        {file.filename}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
+
+            <Show when={activity().length > 0}>
+              <ol data-slot="delegation-activity" aria-label="Worker activity">
+                <For each={activity()}>
+                  {(group) => (
+                    <li data-slot="delegation-activity-row" data-family={group.family}>
+                      <Icon name={familyIcon(group.family)} size="small" />
+                      <strong>{group.label}</strong>
+                      <span>{group.detail === group.family ? "" : group.detail}</span>
+                      <Show when={group.failed > 0}>
+                        <em data-slot="delegation-activity-failed">{pluralize(group.failed, "failure")}</em>
+                      </Show>
+                    </li>
+                  )}
+                </For>
+              </ol>
+            </Show>
+
+            <Show when={operations() && summary().length > 0}>
+              <div data-component="task-tools">
+                <For each={summary()}>
+                  {(item) => {
+                    const info = getToolInfo(item.tool)
+                    return (
+                      <div data-slot="task-tool-item" data-status={item.state.status}>
+                        <Icon name={info.icon} size="small" />
+                        <span data-slot="task-tool-title">{info.title}</span>
+                        <Show when={item.state.title}>
+                          <span data-slot="task-tool-subtitle">{item.state.title}</span>
+                        </Show>
+                        <span data-slot="task-tool-status">
+                          {i18n.t(
+                            item.state.status === "completed"
+                              ? "ui.tool.status.done"
+                              : item.state.status === "error"
+                                ? "ui.tool.status.error"
+                                : "ui.tool.status.running",
+                          )}
+                        </span>
+                      </div>
+                    )
+                  }}
+                </For>
+              </div>
+            </Show>
+            <div data-slot="delegation-footer">
+              <span data-slot="delegation-metrics" aria-label="Delegated research details">
+                <Show when={model()}>{(value) => <span>{value()}</span>}</Show>
+                <Show when={props.metadata.effort}>
+                  <span>{sentenceCaseLabel(String(props.metadata.effort))} effort</span>
+                </Show>
+                <Show when={Number(props.metadata.failedToolCalls) > 0}>
+                  <span data-failed>{pluralize(Number(props.metadata.failedToolCalls), "failed call")}</span>
+                </Show>
+              </span>
+              <span data-slot="delegation-actions">
+                <Show when={summary().length > 0}>
+                  <button
+                    type="button"
+                    data-slot="delegation-link"
+                    aria-expanded={operations()}
+                    onClick={() => setOperations(!operations())}
+                  >
+                    {operations() ? "Hide operations" : `${pluralize(summary().length, "operation")}`}
+                  </button>
+                </Show>
+                <Show when={childSessionId() && data.navigateToSession}>
+                  <button type="button" data-slot="delegation-link" data-primary onClick={openAgent}>
+                    Open agent
+                    <Icon name="arrow-right" size="small" />
+                  </button>
+                </Show>
+              </span>
+            </div>
+          </div>
+        </details>
       </div>
     )
   },

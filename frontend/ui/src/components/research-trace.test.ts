@@ -3,6 +3,8 @@ import {
   collapsibleTracePart,
   elapsedLabel,
   formatTaskDuration,
+  parseTaskHandoff,
+  pluralize,
   stripTaskMetadata,
   summarizeTaskActivity,
   type ResearchTraceEntry,
@@ -283,5 +285,50 @@ describe("delegation summaries", () => {
     expect(formatTaskDuration(800)).toBe("800ms")
     expect(formatTaskDuration(7_800)).toBe("7.8s")
     expect(formatTaskDuration(125_000)).toBe("2m 5s")
+  })
+})
+
+describe("parseTaskHandoff", () => {
+  test("separates the lead-facing preamble and evidence from the worker's findings", () => {
+    const output = [
+      "Task session ses_abc123: partial (max_steps). Reuse this sessionId to continue the same worker.",
+      "[Child reached its bounded step limit; partial result follows.]",
+      "## Findings",
+      "",
+      "Two assays disagree on the IC50.",
+      "",
+      "Saved outputs (immutable versions; use artifact read_file with these exact IDs):",
+      '- "assays.csv": artifact_id=art_1, version_id=ver_1, bytes=120, sha256=abc',
+      '- "note \\"quoted\\".md": artifact_id=art_2, version_id=ver_2, bytes=12, sha256=def',
+      "Execution receipts: 3 shell calls, 2 with outer exit 0, 1 failed. Full receipts remain in the child trace.",
+      "<task_metadata>",
+      "sessionId: ses_abc123",
+      "</task_metadata>",
+    ].join("\n")
+    expect(parseTaskHandoff(output)).toEqual({
+      notes: ["Child reached its bounded step limit; partial result follows."],
+      text: "## Findings\n\nTwo assays disagree on the IC50.",
+      outputs: [
+        { filename: "assays.csv", artifactID: "art_1" },
+        { filename: 'note "quoted".md', artifactID: "art_2" },
+      ],
+      headed: true,
+    })
+  })
+
+  test("keeps plain findings untouched and reports that they need a label", () => {
+    expect(parseTaskHandoff("The comparison is ready; one source could not be retrieved.")).toEqual({
+      notes: [],
+      text: "The comparison is ready; one source could not be retrieved.",
+      outputs: [],
+      headed: false,
+    })
+    expect(parseTaskHandoff(undefined).text).toBe("")
+  })
+
+  test("pluralizes operation counts", () => {
+    expect(pluralize(1, "op")).toBe("1 op")
+    expect(pluralize(3, "op")).toBe("3 ops")
+    expect(pluralize(2, "source", "sources")).toBe("2 sources")
   })
 })

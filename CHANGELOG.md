@@ -104,6 +104,14 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   results in the conversation's working area, connected folders, `file://`
   links and echoed `/file/raw` URLs, instead of navigating to a `localhost`
   page (opened in an external browser from the desktop app).
+- Redesign the delegated-agent card in the conversation: one header row in the
+  same voice as the tool rows around it (agent, task, status, duration, ops),
+  a flat body hanging from an outcome-coloured rail instead of boxes inside a
+  box, the worker's findings without the lead-facing session preamble, saved
+  Results as openable chips, quiet footer metadata with **Open agent** and
+  **N operations** as text actions, and a card that stays in place when the
+  worker needs an approval or asks a question (status reads **Needs your
+  approval**) rather than being swapped for a bare tool row.
 - Stream shell output instead of buffering it (#564): the Bash tool redacts
   each completed run of lines once and writes everything past the 50 KiB /
   2,000-line preview straight into the owned output file, so a command that
