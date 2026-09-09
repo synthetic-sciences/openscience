@@ -453,6 +453,59 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   behavior tests, consolidate the sidebar-action harness without dropping its
   callback regression, and correct contributor and release-verification guidance.
 
+### Fixed
+
+- Stop a repeated tool call before it runs: the third identical call used to
+  execute while its approval card was still showing, and a deny only ended
+  the turn afterwards. The check now sits in front of the tool itself and
+  honours the session's own permission rules.
+- Keep only the answer that succeeded when a provider fails mid-stream and
+  the request is retried; the half-written text of the failed attempt no
+  longer stays in the transcript or in the model's context.
+- Fork a compacted session with its verbatim tail intact and without
+  re-finalizing a settled compaction; every message id the copy refers to
+  (tail anchor, epoch, transaction, continuation, derived part ids) now moves
+  with it.
+- Let **Stop** reach a prompt that is waiting on an attachment permission card,
+  keep a rename made while the title was being generated, and stop replaying
+  slash-command notices (`/status`, `/stop`) to the model as assistant text.
+- Write the replacement literally when the edit tool replaces every match:
+  `$$`, `$&` and `$'` in the new text were expanded as replacement patterns.
+- Replay Anthropic thinking blocks whose text the API omitted, and every
+  `redacted_thinking` block, instead of dropping them; the API rejected the
+  next turn of the tool loop as an edited thinking sequence.
+- Answer 404/400 from `POST /session/:id/message` for an unknown session or
+  model instead of an empty 200 body; honour the declared charset when the
+  fetch tool decodes a page; validate the branch passed to the repository push
+  route and push an explicit refspec so a field cannot carry git options; and
+  ask the client to resync when the per-session event stream overflows,
+  dropping part updates before status, finish, permission or question events.
+- Save configuration as written: a `"permission": "allow"` string in
+  `openscience.jsonc` made every later global write fail, and a JSON file
+  gained every keybind default and agent default it never set. Patches now
+  merge onto the raw file and touch only the keys that changed, and an MCP
+  entry that only sets `enabled` shows as disabled or as missing its
+  definition instead of vanishing from Settings.
+- Deliver the final `done` line of `openscience run --format json` to a slow
+  consumer (output is written through blocking writes, since `process.exit`
+  discarded what the pipe had not taken), and say what the run is waiting for
+  when a message was given but stdin is an open pipe.
+- Leave the installed CLI alone when the data location is relocated or reset
+  (`bin/` is machine state; a reset used to restore the binary copied at
+  relocation time over an upgraded one), and refuse to recreate a recorded
+  data location whose drive is not mounted instead of starting from an empty
+  install.
+- Keep the workspace up when the preferences request fails, clear a session's
+  "working" state on reconnect when it finished while the stream was down,
+  keep attachment bytes out of persisted drafts (one multi-megabyte image
+  evicted every other saved workspace key and disabled persistence for the
+  page), place the cursor correctly around conversation pills restored from
+  history, remove pruned session state without throwing from the scroll
+  timer, and stop a route-entry refresh from rolling live streamed text back
+  to an older snapshot.
+- Stop warning about a retained staging file after every successful save;
+  native file errors now carry an error code like the fs module's.
+
 ## v2.0.71–v2.0.72 — 2026-09-05
 
 ### Changed

@@ -83,6 +83,8 @@ Open **Customize → Storage** to see the active data location and disk usage. U
 
 If a move is interrupted, return to Storage and follow the recovery action. Avoid manually moving the active data directory while the app is writing to it.
 
+A move carries your sessions, artifacts, settings, and logs. Installed programs under the data location's `bin/` folder (the CLI placed there by the installer, language servers) stay on this machine and are not copied; a reset keeps whatever is installed there now. If the chosen location is on a drive that is not mounted when OpenScience starts, it refuses to start rather than beginning again from an empty folder; reconnect the drive, or set `OPENSCIENCE_DATA_DIR` to start from another location.
+
 For the resolved paths on your installation:
 
 ```bash

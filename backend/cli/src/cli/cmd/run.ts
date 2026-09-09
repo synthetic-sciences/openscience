@@ -224,6 +224,10 @@ export async function execute(input: RunInput): Promise<number> {
   let errorMsg: string | undefined
   let rejected = false
   let finished = false
+  // Whether the turn produced any assistant output. A prompt rejected before
+  // the loop starts now also ends idle, so idle alone no longer separates a
+  // usage failure from a turn that ran and then errored.
+  let started = false
   let tokens = RunEvents.tokens()
   let cost = 0
   const errored = Promise.withResolvers<void>()
@@ -300,6 +304,7 @@ export async function execute(input: RunInput): Promise<number> {
       if (event.type === "message.part.updated") {
         const part = event.properties.part
         if (part.sessionID !== sessionID) continue
+        started = true
 
         if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
           if (!claimToolPartEmission(emittedToolParts, part)) continue
@@ -428,15 +433,15 @@ export async function execute(input: RunInput): Promise<number> {
         ...(input.bare ? { tools: { "*": false } } : {}),
       })
 
-  // A prompt that fails before the loop starts publishes `session.error` but
-  // never `session.idle`, and the HTTP body is empty. A turn that ran still
-  // ends with `session.idle`, so give the stream a moment to settle first.
+  // A prompt that fails before the loop starts publishes `session.error` with
+  // an empty HTTP body and no assistant output. A turn that ran still ends
+  // with `session.idle`, so give the stream a moment to settle first.
   const failed = !!result.error || !result.data?.info
   const settled = await settle(processor, failed ? IDLE_GRACE_MS.failed : IDLE_GRACE_MS.settled)
   finished = true
   controller.abort()
 
-  if (failed && !settled) {
+  if (failed && (!settled || !started)) {
     await settle(errored.promise, 250)
     if (errorMsg) {
       emit({
