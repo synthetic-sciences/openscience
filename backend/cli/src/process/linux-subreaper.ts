@@ -32,6 +32,7 @@ function openLibrary(): Library {
           args: [FFIType.i32, FFIType.u64, FFIType.u64, FFIType.u64, FFIType.u64],
           returns: FFIType.i32,
         },
+        fcntl: { args: [FFIType.i32, FFIType.i32, FFIType.i32], returns: FFIType.i32 },
         waitpid: {
           args: [FFIType.i32, FFIType.ptr, FFIType.i32],
           returns: FFIType.i32,
@@ -224,6 +225,8 @@ export namespace LinuxSubreaper {
   }
 
   export interface Handle {
+    /** Restore blocking output before a native payload inherits Bun's pipes. */
+    blockingOutput(): void
     /** Stop the complete current closure so no process can fork while an
      * owner/identity decision is temporarily unverifiable. */
     pause(primary?: Primary): Promise<Paused[]>
@@ -253,6 +256,7 @@ export namespace LinuxSubreaper {
       arg4: number,
       arg5: number,
     ) => number
+    const fcntl = library.symbols.fcntl as unknown as (fd: number, command: number, value: number) => number
     const waitpid = library.symbols.waitpid as unknown as (pid: number, status: number, options: number) => number
     const errnoLocation = library.symbols.__errno_location as unknown as () => number | bigint | null
     try {
@@ -283,6 +287,17 @@ export namespace LinuxSubreaper {
       }
 
       return {
+        blockingOutput() {
+          // Bun initializes inherited stdout/stderr as nonblocking. Native
+          // programs expect writes to wait for pipe capacity, not fail EAGAIN.
+          // This is called only in the dedicated launcher, before payload spawn.
+          for (const fd of [1, 2]) {
+            const flags = fcntl(fd, 3, 0)
+            if (flags < 0 || fcntl(fd, 4, flags & ~0x800) < 0) {
+              throw new Error(`Cannot restore blocking output for descriptor ${fd}`)
+            }
+          }
+        },
         async pause(primary) {
           while (true) {
             try {

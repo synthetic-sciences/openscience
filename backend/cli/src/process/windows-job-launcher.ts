@@ -113,6 +113,7 @@ export namespace WindowsJobLauncher {
     // Internal launchers enter through index.ts, whose static graph installs
     // the server's signal handlers. Replace those with this supervisor's
     // forwarding contract so a signal is not translated twice.
+    subreaper.blockingOutput()
     const child = spawn(file, commandArgs, {
       cwd: process.cwd(),
       env: process.env,
