@@ -107,6 +107,8 @@ export const dict = {
   "ui.tool.task.completed": "Completed",
   "ui.tool.task.completedWithErrors": "Completed with tool errors",
   "ui.tool.task.needsApproval": "Needs your approval",
+  "ui.tool.task.fusionWorker": "Fusion worker",
+  "ui.tool.task.fusionHandoff": "handoff {{handoff}} · lineage {{lineage}}",
   "ui.tool.task.hasQuestion": "Has a question for you",
   "ui.tool.summary.lines.one": "{{count}} line",
   "ui.tool.summary.lines.other": "{{count}} lines",

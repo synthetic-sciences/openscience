@@ -78,9 +78,11 @@ import {
   delegatedSpecialist,
   delegationSettings,
   DELEGATION_AUTONOMY,
+  DELEGATION_STRATEGIES,
   DELEGATION_LEVELS,
   type CapabilityPreferences,
   type DelegationAutonomy,
+  type DelegationStrategy,
   type DelegationLevel,
   type DelegationSettings,
   publishCapabilityPreferences,
@@ -259,24 +261,42 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
   }
   const delegation = createMemo(() => delegationSettings(capabilities()))
+  // The pair Fusion will run: the selected model leads; the configured worker
+  // model executes. Without a worker model the worker is the lead itself,
+  // which keeps a persistent context but saves nothing on price.
+  const fusionPairLabel = () => {
+    const lead = local.model.current()
+    const worker = delegation().workerModel
+    if (!lead) return "Choose a model to lead."
+    if (!worker || (worker.providerID === lead.providerID && worker.modelID === lead.id)) {
+      return `Lead and worker: ${lead.name}. Pick a cheaper worker model in Customize → Models to save on execution.`
+    }
+    return `Lead: ${lead.name} · Worker: ${worker.modelID} (persistent session, resumed for every execute task)`
+  }
   const configuredConnectorCount = createMemo(
     () =>
       Object.values(globalSync.data.config.mcp ?? {}).filter(
         (value) => !!value && typeof value === "object" && "type" in value,
       ).length,
   )
-  const saveDelegation = (patch: { level?: DelegationLevel; autonomy?: DelegationAutonomy }) => {
+  const saveDelegation = (patch: {
+    level?: DelegationLevel
+    autonomy?: DelegationAutonomy
+    strategy?: DelegationStrategy
+  }) => {
     const current = delegation()
     const next = {
       level: patch.level ?? current.level,
       workerModel: current.workerModel,
       autonomy: patch.autonomy ?? current.autonomy,
+      strategy: patch.strategy ?? current.strategy,
     }
     saveCapabilities({
       delegation_enabled: next.level !== "off",
       delegation_level: next.level,
       delegation_worker_model: next.workerModel ?? null,
       delegation_autonomy: next.autonomy,
+      delegation_strategy: next.strategy,
     })
   }
   const projectAccess = async (projectID: string, init?: RequestInit) => {
@@ -2894,6 +2914,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           options={DELEGATION_AUTONOMY}
                           onSelect={(value) => saveDelegation({ autonomy: value as DelegationAutonomy })}
                         />
+                        <ResearchSlider
+                          label="Workers"
+                          value={delegation().strategy}
+                          options={DELEGATION_STRATEGIES}
+                          onSelect={(value) => saveDelegation({ strategy: value as DelegationStrategy })}
+                        />
+                        <Show when={delegation().strategy === "fusion"}>
+                          <p class="workspace-composer__research-note" data-testid="fusion-pair">
+                            {fusionPairLabel()}
+                          </p>
+                        </Show>
                       </Show>
                       <div class="workspace-composer__research-access">
                         <Show

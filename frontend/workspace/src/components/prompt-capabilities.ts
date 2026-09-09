@@ -4,12 +4,15 @@ export type CapabilityPreferences = {
   delegation_level?: DelegationLevel | "light"
   delegation_worker_model?: DelegationModel | null
   delegation_autonomy?: DelegationAutonomy
+  delegation_strategy?: DelegationStrategy
   /** @deprecated Accepted from older local servers but no longer used. */
   delegation_diversity?: "focused" | "balanced" | "exploratory"
 }
 
 export type DelegationLevel = "off" | "standard" | "high"
 export type DelegationAutonomy = "interactive" | "balanced" | "autonomous"
+/** `fusion` binds one persistent worker (the worker model) to the lead. */
+export type DelegationStrategy = "parallel" | "fusion"
 
 export type DelegationModel = {
   providerID: string
@@ -28,6 +31,7 @@ export type DelegationSettings = {
   level: DelegationLevel
   workerModel?: DelegationModel
   autonomy: DelegationAutonomy
+  strategy: DelegationStrategy
 }
 
 export const DELEGATION_LEVELS: Array<{ value: DelegationLevel; label: string }> = [
@@ -58,9 +62,15 @@ export const DELEGATION_AUTONOMY: Array<{
   },
 ]
 
+export const DELEGATION_STRATEGIES: Array<{ value: DelegationStrategy; label: string }> = [
+  { value: "parallel", label: "Parallel" },
+  { value: "fusion", label: "Fusion" },
+]
+
 const DEFAULT_DELEGATION: DelegationSettings = {
   level: "standard",
   autonomy: "balanced",
+  strategy: "parallel",
 }
 
 export function delegationSettings(preferences?: CapabilityPreferences): DelegationSettings {
@@ -71,6 +81,7 @@ export function delegationSettings(preferences?: CapabilityPreferences): Delegat
     level,
     workerModel: preferences?.delegation_worker_model ?? undefined,
     autonomy: preferences?.delegation_autonomy ?? DEFAULT_DELEGATION.autonomy,
+    strategy: preferences?.delegation_strategy ?? DEFAULT_DELEGATION.strategy,
   }
 }
 

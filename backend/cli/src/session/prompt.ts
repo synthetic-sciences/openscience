@@ -79,6 +79,7 @@ import { KernelRuntime } from "@/science/kernel/registry"
 import { SessionCheckpoint } from "./checkpoint"
 import { ToolSelection } from "./tool-selection"
 import { SessionLoopState } from "./loop-state"
+import { Fusion } from "./fusion"
 import { ContractProgress } from "./contract-progress"
 import { FileLease } from "@/util/file-lease"
 import { Global } from "@/global"
@@ -2222,7 +2223,12 @@ export namespace SessionPrompt {
     } as const
   }
 
-  export function researchEffortReminder(value: unknown, delegation?: unknown, enabled?: boolean) {
+  export function researchEffortReminder(
+    value: unknown,
+    delegation?: unknown,
+    enabled?: boolean,
+    fusion?: { lead: Fusion.Model },
+  ) {
     const effort = MessageV2.resolveResearchEffort(value)
     const settings = MessageV2.resolveDelegationSettings(delegation, { effort, enabled })
     const posture =
@@ -2238,9 +2244,16 @@ export namespace SessionPrompt {
             ? "Delegation is High. Aggressively parallelize independent research and verification when useful."
             : "Delegation is Normal. Naturally parallelize genuinely independent work when it improves the result."
     const interaction = decisionPolicy(settings.autonomy)
+    // Only the lead runs Fusion; a worker inherits the settings with level off
+    // and must not be told it has a worker of its own.
+    const fusionPosture =
+      fusion && settings.strategy === "fusion" && settings.level !== "off"
+        ? [Fusion.leadPosture({ lead: fusion.lead, worker: settings.workerModel ?? fusion.lead })]
+        : []
     return [
       `Research effort: ${effort.toUpperCase()}. ${posture}`,
       `${delegationPosture} The model may use as many useful workers as available machine capacity permits, and must integrate their findings in the lead response.`,
+      ...fusionPosture,
       `Independence: ${settings.autonomy}. ${interaction.instruction} Apply this posture to the lead and workers. It never overrides the permission mode.`,
     ].join("\n")
   }
@@ -2865,11 +2878,13 @@ export namespace SessionPrompt {
     const effort = userMessage.info.role === "user" ? userMessage.info.effort : undefined
     const delegationSettings = userMessage.info.role === "user" ? userMessage.info.delegationSettings : undefined
     const delegationEnabled = userMessage.info.role === "user" ? userMessage.info.delegation : undefined
+    const lead =
+      userMessage.info.role === "user" && !input.session.parentID ? { lead: userMessage.info.model } : undefined
     const research = route.direct
       ? PROMPT_DIRECT
       : route.inspection
         ? PROMPT_INSPECTION
-        : [PROMPT_RESEARCH, researchEffortReminder(effort, delegationSettings, delegationEnabled)].join("\n\n")
+        : [PROMPT_RESEARCH, researchEffortReminder(effort, delegationSettings, delegationEnabled, lead)].join("\n\n")
     const prompts = {
       plan: PROMPT_PLAN,
       write: PROMPT_WRITE,
@@ -2881,7 +2896,7 @@ export namespace SessionPrompt {
     const selected = ToolSelection.minimalResearchAgent(input.agent.name)
       ? route.direct || route.inspection
         ? undefined
-        : researchEffortReminder(effort, delegationSettings, delegationEnabled)
+        : researchEffortReminder(effort, delegationSettings, delegationEnabled, lead)
       : prompts[input.agent.name as keyof typeof prompts]
     const system = [...legacy, ...(selected ? [systemReminder(selected)] : [])]
 

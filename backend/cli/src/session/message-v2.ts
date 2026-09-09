@@ -28,6 +28,10 @@ export namespace MessageV2 {
   export const DelegationLevel = z.enum(["off", "light", "standard", "high"])
   export type DelegationLevel = z.infer<typeof DelegationLevel>
   export const DelegationAutonomy = z.enum(["interactive", "balanced", "autonomous"])
+  /** `parallel` is ordinary Research delegation: fresh children per Task call.
+   * `fusion` binds one persistent worker to the lead for execute work. */
+  export const DelegationStrategy = z.enum(["parallel", "fusion"])
+  export type DelegationStrategy = z.infer<typeof DelegationStrategy>
   export const DelegationSettings = z.object({
     level: DelegationLevel.default("standard"),
     workerModel: z
@@ -37,6 +41,7 @@ export namespace MessageV2 {
       })
       .optional(),
     autonomy: DelegationAutonomy.default("balanced"),
+    strategy: DelegationStrategy.default("parallel"),
   })
   export type DelegationSettings = z.infer<typeof DelegationSettings>
 

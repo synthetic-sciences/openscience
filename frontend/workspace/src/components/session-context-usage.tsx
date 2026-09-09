@@ -44,9 +44,22 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       }),
   )
 
+  // The lead's own provider cost plus what its delegated workers spent. Each
+  // Task result carries the child turn's usage, so the readout is the whole
+  // run rather than only the messages in this session.
+  const workerCost = createMemo(() =>
+    messages().reduce((sum, message) => {
+      if (message.role !== "assistant") return sum
+      return (sync.data.part[message.id] ?? []).reduce((inner, part) => {
+        if (part.type !== "tool" || part.tool !== "task" || part.state.status !== "completed") return inner
+        const usage = (part.state.metadata as { usage?: { cost?: unknown } } | undefined)?.usage
+        return inner + (typeof usage?.cost === "number" ? usage.cost : 0)
+      }, sum)
+    }, 0),
+  )
   const cost = createMemo(() => {
-    const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return usd().format(total)
+    const lead = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
+    return usd().format(lead + workerCost())
   })
 
   const context = createMemo(() => {
@@ -111,6 +124,11 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         <span class="text-text-invert-strong">{cost()}</span>
         <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
       </div>
+      <Show when={workerCost() > 0}>
+        <div class="text-text-invert-base">
+          {language.t("context.usage.workerCost", { cost: usd().format(workerCost()) })}
+        </div>
+      </Show>
     </div>
   )
 

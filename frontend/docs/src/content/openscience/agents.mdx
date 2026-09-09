@@ -52,6 +52,15 @@ In the research controls, delegation determines how readily OpenScience divides 
 
 These settings guide collaboration. They do not replace your action-approval settings or a service's spending controls.
 
+### Workers: Parallel or Fusion
+
+**Workers** chooses how delegated execution is run:
+
+- **Parallel** (default): each execute task starts its own worker, and independent workers can run at the same time.
+- **Fusion**: the model you selected stays the lead and hands substantial, well-specified work to one persistent worker that runs on the **Worker model** from **Customize → Models**. The same worker is resumed for every execute task in the conversation, so it keeps its history instead of paying to rebuild context on each handoff. The lead keeps the scientific judgment: which claim is tested, whether the data supports it, fitting assumptions, inclusion rules and the conclusions.
+
+Fusion follows the "sidekick" pattern from Cognition's Devin Fusion: two capable agents with separate, persistent contexts, where the expensive model takes few actions and the cheaper one executes. Choose a cheaper worker model to save on execution; with no worker model set, Fusion still keeps one persistent worker but on the same model as the lead. The Tools menu shows the pair, delegated task cards show the handoff number and lineage, and the session cost readout includes what the worker spent. Each turn may make a bounded number of handoffs (six by default); the worker never publishes results or launches paid compute — those stay with the lead.
+
 Open a delegated task to inspect its tool activity and current assignment. Reused workers
 keep their earlier conversation, while the heading identifies their active assignment.
 Stopping the lead also cancels its active delegated work, including workers preparing

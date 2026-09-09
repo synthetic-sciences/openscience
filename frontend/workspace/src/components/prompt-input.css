@@ -754,6 +754,13 @@ form.workspace-composer .workspace-composer__research-controls {
   padding: 4px 0 0;
 }
 
+form.workspace-composer .workspace-composer__research-note {
+  margin: -4px 4px 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-x-small);
+  line-height: 1.45;
+}
+
 form.workspace-composer .workspace-composer__research-slider {
   min-width: 0;
   display: grid;

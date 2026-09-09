@@ -461,6 +461,7 @@ describe("session loop restart state", () => {
     source.info.delegationSettings = {
       level: "off",
       autonomy: "balanced",
+      strategy: "parallel",
     }
     source.info.system = "stay local"
     source.info.variant = "careful"
@@ -472,6 +473,7 @@ describe("session loop restart state", () => {
       delegationSettings: {
         level: "off",
         autonomy: "balanced",
+        strategy: "parallel",
       },
       system: "stay local",
       variant: "careful",

@@ -65,6 +65,9 @@ const Stored = z.object({
     .default(null),
   // Independence applies to both the lead and delegated workers.
   delegation_autonomy: z.enum(["interactive", "balanced", "autonomous"]).default("balanced"),
+  // Fusion binds one persistent worker (the worker model) to the lead for
+  // execute work; parallel is ordinary per-call delegation.
+  delegation_strategy: z.enum(["parallel", "fusion"]).default("parallel"),
   // Deprecated no-op retained so older 2.x clients and settings files still round-trip.
   delegation_diversity: z.enum(["focused", "balanced", "exploratory"]).default("balanced"),
 })
@@ -86,6 +89,7 @@ const PreferencesPatch = z.object({
   delegation_level: Stored.shape.delegation_level.removeDefault().optional(),
   delegation_worker_model: Stored.shape.delegation_worker_model.removeDefault().optional(),
   delegation_autonomy: Stored.shape.delegation_autonomy.removeDefault().optional(),
+  delegation_strategy: Stored.shape.delegation_strategy.removeDefault().optional(),
   delegation_diversity: Stored.shape.delegation_diversity.removeDefault().optional(),
 })
 

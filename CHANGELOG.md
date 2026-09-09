@@ -14,6 +14,17 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 - Keep launcher CPU fallback confined to a read-only startup probe, respect scientific-source cooldowns without early retries, preserve special characters in local file links, and verify upgrades when the old versioned executable remains on disk.
 
+### Added
+
+- **Fusion**, an opt-in way to run delegated work: the model you selected stays
+  the lead and hands substantial, well-specified work to one persistent worker
+  on the configured Worker model, which is resumed for every execute task
+  instead of a fresh child per handoff. Choose **Workers → Fusion** in the
+  composer's Tools menu; the menu shows the lead/worker pair, task cards show
+  the handoff number and lineage, the cost readout includes the worker's spend,
+  and each turn is bounded to six handoffs. Publication and paid compute stay
+  with the lead. Ordinary (Parallel) delegation is unchanged.
+
 ### Changed
 
 - Keep Settings usable while it refreshes: panels no longer flash their loading
