@@ -100,6 +100,13 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   results in the conversation's working area, connected folders, `file://`
   links and echoed `/file/raw` URLs, instead of navigating to a `localhost`
   page (opened in an external browser from the desktop app).
+- Stream shell output instead of buffering it (#564): the Bash tool redacts
+  each completed run of lines once and writes everything past the 50 KiB /
+  2,000-line preview straight into the owned output file, so a command that
+  prints hundreds of megabytes no longer holds all of it in memory or rescans
+  the whole history for secrets on every chunk; the live output card is
+  refreshed on a timer rather than per chunk, and a secret split across two
+  chunks or a multi-line private key is still redacted.
 - Keep folder access inside the project that approved it: **Allow always** is
   no longer offered for folder prompts and never creates an installation-wide
   grant, older installation-wide folder grants no longer apply, a shell working

@@ -51,6 +51,35 @@ export namespace Truncate {
     return rule.action !== "deny"
   }
 
+  /** A fresh owned output path; the file is created by whoever writes it. */
+  export function file(): string {
+    return path.join(DIR, Identifier.ascending("tool"))
+  }
+
+  export function hint(filepath: string, agent?: Agent.Info): string {
+    return hasTaskTool(agent)
+      ? `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
+      : `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
+  }
+
+  /** The model-facing text for a truncated result: the kept preview, what was
+   * left out, and where the full output lives. */
+  export function message(
+    input: { preview: string; removed: number; unit: "bytes" | "lines"; filepath: string; direction?: "head" | "tail" },
+    agent?: Agent.Info,
+  ): string {
+    const note = `...${input.removed} ${input.unit} truncated...`
+    const guidance = hint(input.filepath, agent)
+    return (input.direction ?? "head") === "head"
+      ? `${input.preview}\n\n${note}\n\n${guidance}`
+      : `${note}\n\n${guidance}\n\n${input.preview}`
+  }
+
+  export async function grant(filepath: string, sessionID?: string): Promise<void> {
+    if (!sessionID?.startsWith("ses_")) return
+    await SessionFilesystem.grantToolOutput({ sessionID, path: filepath })
+  }
+
   export async function output(text: string, options: Options = {}, agent?: Agent.Info): Promise<Result> {
     const maxLines = options.maxLines ?? MAX_LINES
     const maxBytes = options.maxBytes ?? MAX_BYTES
@@ -93,24 +122,14 @@ export namespace Truncate {
     const unit = hitBytes ? "bytes" : "lines"
     const preview = out.join("\n")
 
-    const id = Identifier.ascending("tool")
-    const filepath = path.join(DIR, id)
+    const filepath = file()
     await Bun.write(Bun.file(filepath), text)
-    if (options.sessionID?.startsWith("ses_")) {
-      await SessionFilesystem.grantToolOutput({
-        sessionID: options.sessionID,
-        path: filepath,
-      })
+    await grant(filepath, options.sessionID)
+
+    return {
+      content: message({ preview, removed, unit, filepath, direction }, agent),
+      truncated: true,
+      outputPath: filepath,
     }
-
-    const hint = hasTaskTool(agent)
-      ? `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
-      : `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
-    const message =
-      direction === "head"
-        ? `${preview}\n\n...${removed} ${unit} truncated...\n\n${hint}`
-        : `...${removed} ${unit} truncated...\n\n${hint}\n\n${preview}`
-
-    return { content: message, truncated: true, outputPath: filepath }
   }
 }

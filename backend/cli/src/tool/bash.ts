@@ -1,6 +1,8 @@
 import z from "zod"
 import { spawn } from "child_process"
+import { mkdirSync } from "node:fs"
 import { finished } from "node:stream/promises"
+import { StringDecoder } from "node:string_decoder"
 import { Tool } from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
@@ -16,6 +18,8 @@ import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
+import { BashOutput } from "./bash-output"
+import { Agent } from "../agent/agent"
 import { OpenScience } from "@/openscience"
 import { Sandbox } from "@/sandbox/sandbox"
 import { SessionFilesystem } from "@/session/filesystem"
@@ -29,6 +33,10 @@ import { KernelEnvironmentMutation } from "@/science/kernel/environment-mutation
 import { FileOutputReceipts } from "@/file/output-receipts"
 
 const MAX_METADATA_LENGTH = 30_000
+/** How often the live output card is refreshed while a command runs. */
+const PREVIEW_INTERVAL = 200
+/** Characters of each stream kept for the provenance record (clip() adds the marker). */
+const PROVENANCE_HEAD = 2000
 const DEFAULT_TIMEOUT = Flag.OPENSCIENCE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 0
 
 export const log = Log.create({ service: "bash-tool" })
@@ -382,8 +390,6 @@ export const BashTool = Tool.define("bash", async () => {
       }).catch(() => undefined)
 
       const started = Date.now()
-      const streams = { stdout: "", stderr: "" }
-      let output = ""
 
       ctx.metadata({
         metadata: {
@@ -400,21 +406,39 @@ export const BashTool = Tool.define("bash", async () => {
         }
       }
 
-      const append = (chunk: Buffer) => {
-        output += chunk.toString()
-        const redacted = redact(output)
-        ctx.metadata({
-          metadata: {
-            output:
-              redacted.length > MAX_METADATA_LENGTH ? redacted.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : redacted,
-            description: params.description,
-          },
-        })
+      // Output is bounded end to end: the model's head preview and the
+      // provenance heads stay in memory, everything past the preview streams
+      // into an owned output file, and the live card is refreshed on a timer
+      // rather than once per chunk.
+      const outputFile = Truncate.file()
+      const clipPreview = (text: string) =>
+        text.length > MAX_METADATA_LENGTH ? text.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : text
+      let publishTimer: ReturnType<typeof setTimeout> | undefined
+      // Annotated to break the publish ↔ capture inference cycle.
+      const publish = (): void => {
+        publishTimer = undefined
+        ctx.metadata({ metadata: { output: clipPreview(capture.current()), description: params.description } })
       }
-
-      const capture = (channel: keyof typeof streams) => (chunk: Buffer) => {
-        streams[channel] += chunk.toString()
-        append(chunk)
+      const capture: BashOutput.Capture = new BashOutput.Capture({
+        redact,
+        maxBytes: Truncate.MAX_BYTES,
+        maxLines: Truncate.MAX_LINES,
+        open: () => {
+          mkdirSync(Truncate.DIR, { recursive: true })
+          return Bun.file(outputFile).writer()
+        },
+        onPreview: () => {
+          publishTimer ??= setTimeout(publish, PREVIEW_INTERVAL)
+        },
+      })
+      const heads = { stdout: "", stderr: "" }
+      const decoders = { stdout: new StringDecoder("utf-8"), stderr: new StringDecoder("utf-8") }
+      const record = (channel: keyof typeof heads) => (chunk: Buffer) => {
+        const text = decoders[channel].write(chunk)
+        if (heads[channel].length <= PROVENANCE_HEAD) {
+          heads[channel] += text.slice(0, PROVENANCE_HEAD + 1 - heads[channel].length)
+        }
+        capture.write(text)
       }
 
       let exited = false
@@ -463,8 +487,8 @@ export const BashTool = Tool.define("bash", async () => {
               stdio: ["ignore", "pipe", "pipe"],
               detached: process.platform !== "win32",
             })
-            child.stdout?.on("data", capture("stdout"))
-            child.stderr?.on("data", capture("stderr"))
+            child.stdout?.on("data", record("stdout"))
+            child.stderr?.on("data", record("stderr"))
           } catch (error) {
             Sandbox.cleanup(sandbox)
             throw error
@@ -538,12 +562,25 @@ export const BashTool = Tool.define("bash", async () => {
             }, timeout + 100)
           : undefined
 
-      await Promise.all([completion, drain]).finally(() => {
-        if (timeoutTimer) clearTimeout(timeoutTimer)
-        ctx.abort.removeEventListener("abort", abortHandler)
-        CommandRuntime.finish(command.id)
-        Sandbox.cleanup(sandbox)
-      })
+      const summary = await Promise.all([completion, drain])
+        .finally(() => {
+          if (timeoutTimer) clearTimeout(timeoutTimer)
+          ctx.abort.removeEventListener("abort", abortHandler)
+          CommandRuntime.finish(command.id)
+          Sandbox.cleanup(sandbox)
+          if (publishTimer) clearTimeout(publishTimer)
+          publishTimer = undefined
+        })
+        .finally(() => {
+          // Both streams have ended (or the spawn failed): settle the capture
+          // even when the command itself is reported as an error.
+          for (const channel of ["stdout", "stderr"] as const) {
+            const rest = decoders[channel].end()
+            if (rest) capture.write(rest)
+          }
+          return capture.end()
+        })
+        .then(() => capture.end())
 
       const completed = Date.now()
       const files = before
@@ -575,8 +612,8 @@ export const BashTool = Tool.define("bash", async () => {
         command: params.command,
         cwd,
         exit: proc.exitCode,
-        stdout: streams.stdout,
-        stderr: streams.stderr,
+        stdout: heads.stdout,
+        stderr: heads.stderr,
         startedAt: started,
         completedAt: completed,
       }).catch(() => undefined)
@@ -596,15 +633,22 @@ export const BashTool = Tool.define("bash", async () => {
         resultMetadata.push(stopped.reason ?? "User aborted the command")
       }
 
-      if (resultMetadata.length > 0) {
-        output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
-      }
-
-      const redactedOutput = redact(output)
-      const clipped =
-        redactedOutput.length > MAX_METADATA_LENGTH
-          ? redactedOutput.slice(0, MAX_METADATA_LENGTH) + "\n\n..."
-          : redactedOutput
+      const notes =
+        resultMetadata.length > 0 ? "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>" : ""
+      if (summary.truncated) await Truncate.grant(outputFile, ctx.sessionID)
+      const output =
+        (summary.truncated
+          ? Truncate.message(
+              {
+                preview: summary.preview,
+                removed: summary.removed.count,
+                unit: summary.removed.unit,
+                filepath: outputFile,
+              },
+              await Agent.get(ctx.agent).catch(() => undefined),
+            )
+          : summary.preview) + notes
+      const clipped = clipPreview(output)
       ctx.metadata({
         metadata: {
           output: clipped,
@@ -623,8 +667,12 @@ export const BashTool = Tool.define("bash", async () => {
           provenanceID: node?.id,
           execution_environment: KernelEnvironmentMutation.subprocessIdentity(runtime, cwd),
           ...files,
+          // Truncation happened while streaming; the generic post-execute
+          // pass must not materialize the output again.
+          truncated: summary.truncated,
+          ...(summary.truncated ? { outputPath: outputFile } : {}),
         },
-        output: redactedOutput,
+        output,
       }
     },
   }

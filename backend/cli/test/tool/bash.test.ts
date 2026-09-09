@@ -464,6 +464,43 @@ describe("tool.bash truncation", () => {
     })
   })
 
+  test("streams a large noisy output in linear time with a throttled live preview", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const base = await context()
+        let updates = 0
+        const testCtx = {
+          ...base,
+          metadata() {
+            updates++
+          },
+        }
+        const bytes = 20_000_000
+        const started = Date.now()
+        // The previous capture re-ran redaction over the whole accumulated
+        // output on every chunk; 20 MB in pipe-sized chunks took minutes.
+        const result = await bash.execute(
+          {
+            command: `yes 'token=sk-largeoutput0123456789 filler text for the stream' | head -c ${bytes}`,
+            description: "Generate a large noisy stream",
+          },
+          testCtx,
+        )
+        expect(Date.now() - started).toBeLessThan(20_000)
+        expect((result.metadata as any).truncated).toBe(true)
+        expect(result.output).not.toContain("sk-largeoutput0123456789")
+        expect(result.output.length).toBeLessThan(Truncate.MAX_BYTES + 2_000)
+        // One live update per interval, not one per chunk.
+        expect(updates).toBeLessThan(200)
+        const saved = await Bun.file((result.metadata as any).outputPath).text()
+        expect(saved).not.toContain("sk-largeoutput0123456789")
+        expect(saved.split("\n").length).toBeGreaterThan(300_000)
+      },
+    })
+  }, 60_000)
+
   test("full output is saved to file when truncated", async () => {
     await Instance.provide({
       directory: projectRoot,
