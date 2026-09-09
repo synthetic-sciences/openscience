@@ -104,6 +104,14 @@ export namespace Fusion {
     return undefined
   }
 
+  /** Idempotent: a lead deleted without a binding is not an error. */
+  export async function remove(parentSessionID: string) {
+    await Storage.remove(key(parentSessionID)).catch((error) => {
+      if (Storage.NotFoundError.isInstance(error)) return
+      throw error
+    })
+  }
+
   export function same(a: Model, b: Model) {
     return a.providerID === b.providerID && a.modelID === b.modelID
   }

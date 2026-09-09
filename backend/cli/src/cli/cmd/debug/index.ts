@@ -44,9 +44,10 @@ export const DebugCommand = cmd({
 const PathsCommand = cmd({
   command: "paths",
   describe: "show global paths (data, config, cache, state)",
-  handler() {
+  async handler() {
+    // dataTarget resolves the managed data-root link; print the path, not the promise.
     for (const [key, value] of Object.entries(Global.Path)) {
-      console.log(key.padEnd(10), value)
+      console.log(key.padEnd(10), await value)
     }
   },
 })

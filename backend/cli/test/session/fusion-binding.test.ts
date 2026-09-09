@@ -150,3 +150,23 @@ describe("Fusion binding", () => {
     })
   })
 })
+
+test("removing the lead session removes its binding, and removing twice is harmless", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const parent = "ses_fusion_parent_000000000004"
+      await Fusion.resolve({
+        parentSessionID: parent,
+        userMessageID: Identifier.ascending("message"),
+        worker: terra,
+        mint: () => Identifier.descending("session"),
+      })
+      expect(await Fusion.get(parent)).toBeDefined()
+      await Fusion.remove(parent)
+      await Fusion.remove(parent)
+      expect(await Fusion.get(parent)).toBeUndefined()
+    },
+  })
+})

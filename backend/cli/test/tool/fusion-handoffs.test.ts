@@ -34,7 +34,7 @@ const sse = (body: string) =>
  * every assignment with a status line. Requests are told apart by the model
  * they name and by whether the `task` tool is offered.
  */
-function fusionProvider(handoffs: number) {
+function fusionProvider(handoffs: number, options: { explicitContinuation?: boolean } = {}) {
   const seen = { lead: 0, worker: 0, workerModels: new Set<string>(), workerPrompts: [] as string[] }
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -55,6 +55,11 @@ function fusionProvider(handoffs: number) {
       }
       seen.lead++
       if (seen.lead <= handoffs) {
+        // A lead that remembers the worker id names it explicitly; that must
+        // still count as a Fusion handoff on the bound worker.
+        const previous = options.explicitContinuation
+          ? /Task session (ses_[A-Za-z0-9]+):/.exec(JSON.stringify(body.messages))?.[1]
+          : undefined
         return sse(
           `${chunk(model, { role: "assistant", content: "" })}${chunk(
             model,
@@ -70,6 +75,7 @@ function fusionProvider(handoffs: number) {
                       description: `Handoff ${seen.lead}`,
                       prompt: `Assignment ${seen.lead}: report the status line only.`,
                       subagent_type: "execute",
+                      ...(previous ? { session_id: previous } : {}),
                     }),
                   },
                 },
@@ -89,8 +95,12 @@ function fusionProvider(handoffs: number) {
 
 const worker = { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_COMPACT_MODEL }
 
-async function runTurn(strategy: "fusion" | "parallel", handoffs: number) {
-  const provider = fusionProvider(handoffs)
+async function runTurn(
+  strategy: "fusion" | "parallel",
+  handoffs: number,
+  options: { explicitContinuation?: boolean } = {},
+) {
+  const provider = fusionProvider(handoffs, options)
   try {
     await using tmp = await tmpdir({
       git: true,
@@ -162,4 +172,12 @@ test("ordinary parallel delegation is unchanged: each handoff spawns its own chi
   expect(run.children).toHaveLength(2)
   expect(run.binding).toBeUndefined()
   for (const state of run.tasks) expect(state?.metadata.fusion).toBeUndefined()
+}, 60_000)
+
+test("an explicit session_id naming the bound worker is still a Fusion handoff", async () => {
+  const run = await runTurn("fusion", 2, { explicitContinuation: true })
+  expect(run.children).toHaveLength(1)
+  expect(run.tasks).toHaveLength(2)
+  expect((run.tasks[1]?.metadata.fusion as { handoff: number }).handoff).toBe(2)
+  expect(run.binding).toMatchObject({ handoffs: 2, turn: { handoffs: 2 } })
 }, 60_000)

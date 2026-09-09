@@ -464,18 +464,25 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // Fusion binds the lead to one persistent execute worker. Resolution is
       // serialized per lead and lands before the attempt is reserved, so two
       // dispatches in one step share the worker and a restart finds the same
-      // binding. An explicit session_id from the model still wins.
+      // binding. An explicit session_id naming another child is an ordinary
+      // continuation; one naming the bound worker is a Fusion handoff.
       const fusion =
-        settings.strategy === "fusion" && params.subagent_type === "execute" && !continuation
+        settings.strategy === "fusion" && params.subagent_type === "execute"
           ? await Fusion.exclusive(
               ctx.sessionID,
               async () => {
+                const bound = await Fusion.get(ctx.sessionID)
+                if (continuation && continuation.id !== bound?.workerSessionID) return undefined
                 const existing = await TaskAttempt.read(identity)
-                if (existing?.childSessionID) {
+                if (existing?.childSessionID && bound && bound.workerSessionID === existing.childSessionID) {
                   // A retried or resumed attempt keeps the worker it already had.
-                  const bound = await Fusion.get(ctx.sessionID)
-                  if (bound && bound.workerSessionID === existing.childSessionID)
-                    return { binding: bound, fresh: false }
+                  return { binding: bound, fresh: false }
+                }
+                if (continuation && bound && !Fusion.same(bound.worker, configuredWorker)) {
+                  // The model insists on the previous worker while the preference
+                  // now names another model: honour the request as an ordinary
+                  // continuation instead of forking a new lineage under it.
+                  return undefined
                 }
                 return Fusion.resolve({
                   parentSessionID: ctx.sessionID,
