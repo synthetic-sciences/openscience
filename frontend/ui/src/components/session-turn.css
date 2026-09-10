@@ -691,13 +691,6 @@
       border-left: 0;
       color: var(--text-weak);
     }
-
-    &[data-kind="thought"] [data-slot="reasoning-part-body"] [data-component="markdown"],
-    &[data-kind="thought"] [data-slot="reasoning-part-body"] [data-component="markdown"] :is(p, li, blockquote) {
-      font-size: var(--font-size-medium);
-      font-weight: var(--font-weight-regular);
-      line-height: 20px;
-    }
   }
 
   /* One level for every row of the trace: 13/20, regular weight, verb in the

@@ -374,14 +374,14 @@
 }
 
 /* The shared turn header gives every descendant paragraph an extra-loose
-   180% leading. Reasoning/text parts live inside that header, so explicitly
-   restore the same 14/21 reading rhythm as the final assistant response. */
+   180% leading. A thought is part of the trace, so its text sits at the
+   operation level with the rows around it, not at answer size. */
 .session-scroller [data-component="reasoning-part"] [data-component="markdown"],
 .session-scroller [data-component="reasoning-part"] [data-component="markdown"] :is(p, li, blockquote) {
   font-family: var(--font-family-sans);
-  font-size: var(--chat-prose-font-size);
+  font-size: var(--chat-operation-font-size);
   font-weight: var(--font-weight-regular);
-  line-height: var(--chat-prose-line-height);
+  line-height: var(--chat-operation-line-height);
 }
 
 .session-scroller [data-component="collapsible"] {
