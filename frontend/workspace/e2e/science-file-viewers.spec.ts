@@ -11,12 +11,12 @@ test("markdown files render and can toggle their editable source", async ({ page
   // Markdown regions, so assert the preview container instead of assuming one.
   await expect(view(page).locator(".atlas-file-document")).toBeVisible()
   await expect(
-    view(page).getByText("The open-source AI workbench for scientific research", { exact: true }),
+    view(page).getByText("The open-source AI workbench for scientific research.", { exact: true }),
   ).toBeVisible()
   await view(page).getByRole("tab", { name: "Edit", exact: true }).click()
   await expect(view(page).getByRole("tab", { name: "Preview", exact: true })).toBeVisible()
   await expect(view(page).getByRole("textbox", { name: "README.md source", exact: true })).toContainText(
-    "### The open-source AI workbench for scientific research",
+    "**The open-source AI workbench for scientific research.**",
   )
 })
 
