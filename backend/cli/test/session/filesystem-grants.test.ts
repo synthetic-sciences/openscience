@@ -937,6 +937,16 @@ describe("session filesystem grants", () => {
     const stopped = await ComputeJobs.wait(one.job.id, { root: roots.first, workspace: one.workspace, timeout: 5_000 })
     expect(stopped.status).toBe("cancelled")
     const untouched = await ComputeJobs.get(two.job.id, { root: roots.second, workspace: two.workspace })
+    if (untouched?.status !== "running") {
+      // This has failed on CI without a trail. Name every actor that can end
+      // a job before the assertion does: the job record itself, and the
+      // durable authority and credential revisions other tests may have left.
+      const authority = await Storage.read(["authority", "revision"]).catch(() => undefined)
+      const credential = await Bun.file(path.join(Global.Path.data, "credential-revision.json"))
+        .json()
+        .catch(() => undefined)
+      console.error("untouched job was not running", JSON.stringify({ untouched, authority, credential }, null, 2))
+    }
     expect(untouched?.status).toBe("running")
     await ComputeJobs.cancel(two.job.id, { root: roots.second, workspace: two.workspace })
 
