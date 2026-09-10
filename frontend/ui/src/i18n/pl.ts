@@ -22,7 +22,6 @@ export const dict = {
   "ui.sessionTurn.status.runningCommands": "Uruchamianie poleceń",
   "ui.sessionTurn.status.thinking": "Myślenie",
   "ui.sessionTurn.status.gatheringThoughts": "Zbieranie myśli",
-  "ui.sessionTurn.status.consideringNextSteps": "Rozważanie kolejnych kroków",
   "ui.sessionTurn.progress.connecting": "Łączenie z {{model}}…",
   "ui.sessionTurn.progress.stillConnecting": "Nadal trwa łączenie z {{model}} ({{seconds}}s)",
   "ui.sessionTurn.progress.waitingFirstToken": "Oczekiwanie na rozpoczęcie odpowiedzi {{model}} ({{seconds}}s)",

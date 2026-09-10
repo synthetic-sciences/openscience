@@ -26,7 +26,6 @@ export const dict = {
   "ui.sessionTurn.status.runningCommands": "正在运行命令",
   "ui.sessionTurn.status.thinking": "思考中",
   "ui.sessionTurn.status.gatheringThoughts": "正在整理思路",
-  "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
   "ui.sessionTurn.progress.connecting": "正在连接 {{model}}…",
   "ui.sessionTurn.progress.stillConnecting": "仍在连接 {{model}}（{{seconds}}秒）",
   "ui.sessionTurn.progress.waitingFirstToken": "等待 {{model}} 开始响应（{{seconds}}秒）",

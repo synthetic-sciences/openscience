@@ -3,7 +3,7 @@ import { readdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import type { SessionRequestProgress } from "@synsci/sdk/v2/client"
 import { dict as en } from "../i18n/en"
-import { PROGRESS_HINT_MS, PROGRESS_SLOW_MS, progressStatus } from "./session-turn-progress"
+import { PROGRESS_HINT_MS, PROGRESS_SLOW_MS, headerProgress, progressStatus } from "./session-turn-progress"
 
 const since = 1_000_000
 const base: SessionRequestProgress = {
@@ -133,5 +133,23 @@ describe("request phase status copy", () => {
         for (const name of Object.keys(item.params)) expect(mod.dict[item.key]).toContain(`{{${name}}}`)
       }
     }
+  })
+})
+
+describe("headerProgress", () => {
+  test("only a retry countdown or a conflict wait earn a label of their own", () => {
+    expect(headerProgress(at("preparing"), since + 40_000)).toBeUndefined()
+    expect(headerProgress(at("connecting"), since + 5_000)).toBeUndefined()
+    expect(headerProgress(at("waiting_first_token"), since + 20_000)).toBeUndefined()
+    expect(headerProgress(at("streaming", { lastOutputAt: since }), since + 90_000)).toBeUndefined()
+    expect(headerProgress(undefined, since)).toBeUndefined()
+    expect(headerProgress(at("retry_wait", { retryAfterMs: 8_000 }), since + 1_000)).toEqual({
+      key: "ui.sessionTurn.progress.retryWait",
+      params: { seconds: 7 },
+    })
+    expect(headerProgress(at("conflict_wait"), since + 4_000)).toEqual({
+      key: "ui.sessionTurn.progress.conflictWait",
+      params: { seconds: 4 },
+    })
   })
 })

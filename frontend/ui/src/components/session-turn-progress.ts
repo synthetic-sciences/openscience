@@ -56,3 +56,12 @@ export function progressStatus(progress: SessionRequestProgress | undefined, now
       return
   }
 }
+
+/** The phases the header names while a turn runs. A retry countdown and a
+ * conflict wait change what the reader might do next; every other phase — the
+ * access check, the connect, a body that has gone quiet — reads as thinking,
+ * with the elapsed clock beside it and the request detail one hover away. */
+export function headerProgress(progress: SessionRequestProgress | undefined, now: number): ProgressStatus | undefined {
+  if (progress?.phase !== "retry_wait" && progress?.phase !== "conflict_wait") return
+  return progressStatus(progress, now)
+}

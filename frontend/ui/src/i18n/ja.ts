@@ -22,7 +22,6 @@ export const dict = {
   "ui.sessionTurn.status.runningCommands": "コマンドを実行中",
   "ui.sessionTurn.status.thinking": "思考中",
   "ui.sessionTurn.status.gatheringThoughts": "考えをまとめています",
-  "ui.sessionTurn.status.consideringNextSteps": "次のステップを検討中",
   "ui.sessionTurn.progress.connecting": "{{model}} に接続中…",
   "ui.sessionTurn.progress.stillConnecting": "{{model}} にまだ接続中（{{seconds}}秒）",
   "ui.sessionTurn.progress.waitingFirstToken": "{{model}} の応答開始を待機中（{{seconds}}秒）",

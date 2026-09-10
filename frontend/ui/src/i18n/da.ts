@@ -22,7 +22,6 @@ export const dict = {
   "ui.sessionTurn.status.runningCommands": "Kører kommandoer",
   "ui.sessionTurn.status.thinking": "Tænker",
   "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
-  "ui.sessionTurn.status.consideringNextSteps": "Overvejer næste skridt",
   "ui.sessionTurn.progress.connecting": "Forbinder til {{model}}…",
   "ui.sessionTurn.progress.stillConnecting": "Forbinder stadig til {{model}} ({{seconds}}s)",
   "ui.sessionTurn.progress.waitingFirstToken": "Venter på at {{model}} starter ({{seconds}}s)",
