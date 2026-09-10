@@ -8,6 +8,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+## v2.0.90–v2.0.91 — 2026-09-10
+
+v2.0.91 republishes the v2.0.90 source unchanged; two publish dispatches
+landed on the same commit.
+
 ### Changed
 
 - OpenScience is installed through the desktop app, npm (`@synsci/openscience`,
