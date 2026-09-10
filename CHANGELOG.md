@@ -9,6 +9,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 ## Unreleased
 
 ## v2.0.89 — 2026-09-10
+
 ### Changed
 
 - A remote model stream that stops producing bytes is given up after ten
