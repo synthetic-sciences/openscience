@@ -45,7 +45,7 @@ type UpdateResult = z.infer<typeof Result>
 type UpdateInstallResult = z.infer<typeof InstallResult>
 
 export function supportsAutomaticUpdate(method: string) {
-  return ["curl", "npm", "pnpm", "yarn", "bun", "brew", "choco", "scoop", "desktop"].includes(method)
+  return ["curl", "npm", "pnpm", "yarn", "bun", "choco", "scoop", "desktop"].includes(method)
 }
 
 export function desktopUpdateShutdownAuthorized(authorization: string | undefined, token: string | undefined) {

@@ -134,9 +134,9 @@ describe("automatic update support", () => {
   })
 
   test("supports every installer implemented by the upgrader", () => {
-    expect(
-      ["curl", "npm", "pnpm", "yarn", "bun", "brew", "choco", "scoop", "desktop"].every(supportsAutomaticUpdate),
-    ).toBe(true)
+    expect(["curl", "npm", "pnpm", "yarn", "bun", "choco", "scoop", "desktop"].every(supportsAutomaticUpdate)).toBe(
+      true,
+    )
     expect(supportsAutomaticUpdate("unknown")).toBe(false)
   })
 

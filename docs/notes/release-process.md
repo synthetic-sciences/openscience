@@ -1,7 +1,7 @@
 # Release process
 
 OpenScience ships as native binaries and an npm package
-(`@synsci/openscience`). Releases are cut from `main` — never from a feature
+(`@synsci/openscience`). Releases are cut from `main`, never from a feature
 branch. This note is the maintainer procedure; contributors only need the
 "Releases and versioning" section of [CONTRIBUTING.md](../../CONTRIBUTING.md):
 never bump a version in a pull request, and add user-visible changes to the
@@ -82,8 +82,7 @@ never bump a version in a pull request, and add user-visible changes to the
    verifies the checksum manifests → verifies the Linux x64 and ARM64 npm
    wrappers on native runners → publishes the CLI, SDK, plugin, and launcher
    packages to npm with provenance → makes the release public only after every
-   updater lifecycle and publication gate succeeds → attempts the Homebrew tap
-   update using the now-public archive URLs → records an npm deployment. If no older digest-bound signed stable
+   updater lifecycle and publication gate succeeds → records an npm deployment. If no older digest-bound signed stable
    updater ZIP exists for an architecture, the release fails closed.
 
    The publish job commits the generated package-version changes. It pushes that
@@ -93,7 +92,7 @@ never bump a version in a pull request, and add user-visible changes to the
 
 ## Conventions
 
-- The repo bundles features into **patch** bumps unless a change is breaking —
+- The repo bundles features into **patch** bumps unless a change is breaking;
   a feature release does not automatically imply a minor bump here.
 - `bump` accepts `patch`, `minor`, or `major`. A reviewed resume or retry may
   provide an exact stable `version`; new releases normally derive the next
@@ -117,10 +116,9 @@ packages report the new version and expected dist-tags. Confirm that the GitHub
 release is not a draft, the tag targets the release commit, and the assets include the
 11 platform archives, `checksums.txt`, `desktop-checksums.txt`, two macOS DMGs,
 two architecture-specific macOS updater ZIPs, one Windows EXE, and two Linux
-AppImages: 20 release assets in total. Inspect the publish run for Homebrew,
-launcher warnings. Windows signing, macOS signing, notarization, immutable
-asset verification, and both native updater lifecycles are fatal gates. Homebrew updates remain non-fatal
-and may need owner follow-up. Publishing the `synsci` launcher is required in
+AppImages: 20 release assets in total. Inspect the publish run for launcher
+warnings. Windows signing, macOS signing, notarization, immutable
+asset verification, and both native updater lifecycles are fatal gates. Publishing the `synsci` launcher is required in
 both test and production releases; a launcher failure leaves the GitHub release
 as a draft. Never bypass the updater lifecycle job or replace a stable macOS
 asset with an ad-hoc-signed build.
@@ -175,23 +173,6 @@ are outside this signing path.
 Signing identifies the publisher, but new downloads can still display
 [SmartScreen reputation warnings](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
 Do not claim that signing immediately removes every Windows warning.
-
-## Homebrew publication
-
-The official tap is `synthetic-sciences/homebrew-tap`; its root `openscience.rb`
-is generated from all four macOS/Linux x64/ARM64 archive hashes. Verify the tap
-commit and formula version as part of release completion, since a tap failure is
-reported separately from an already-public npm/desktop release.
-
-Configure a write-enabled SSH deploy key on that tap only, and store its private
-key in the OpenScience repository's `HOMEBREW_TAP_SSH_KEY` secret. The publisher
-uses temporary mode-0600 key files, GitHub host keys obtained over HTTPS, strict
-host verification and an isolated Git environment, then removes local key files.
-It never stores credentials in clone URLs. A dedicated `HOMEBREW_TAP_TOKEN`
-remains supported for existing setups; the deploy key takes precedence.
-
-Unchanged formulas do not create commits. Updates use a normal non-force push,
-and the publish log records the resulting tap commit for independent checking.
 
 ## Isolated npm test installs
 

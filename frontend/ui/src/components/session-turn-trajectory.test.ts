@@ -622,6 +622,77 @@ describe("chronological activity in a turn", () => {
     expect(host.querySelector('[data-slot="session-turn-activity-mode"]')).toBeNull()
   })
 
+  test("a finished turn keeps a burst of one call visible as that call's own row", async () => {
+    // A single write between two thoughts is a burst of one entry: it has no
+    // header to fold, so a closed collapsible must never hide the call itself.
+    const message = assistant(5_000)
+    const write: ToolPart = {
+      id: "prt_single_write",
+      sessionID,
+      messageID: message.id,
+      type: "tool",
+      callID: "call_single_write",
+      tool: "write",
+      state: {
+        status: "completed",
+        input: { filePath: "/project/results/raw_activities.csv", content: "…" },
+        output: "",
+        title: "raw_activities.csv",
+        metadata: { filepath: "/project/results/raw_activities.csv" },
+        time: { start: 1_000, end: 1_500 },
+      },
+    }
+    const thoughts: Part[] = [
+      {
+        id: "prt_single_thought_a",
+        sessionID,
+        messageID: message.id,
+        type: "reasoning",
+        text: "Pull the raw activities first.",
+        time: { start: 100, end: 900 },
+      },
+      write,
+      {
+        id: "prt_single_thought_b",
+        sessionID,
+        messageID: message.id,
+        type: "reasoning",
+        text: "Now fit the curves.",
+        time: { start: 2_000, end: 2_900 },
+      },
+      {
+        id: "prt_single_answer",
+        sessionID,
+        messageID: message.id,
+        type: "text",
+        text: "Done.",
+        time: { start: 3_000, end: 3_100 },
+      },
+    ]
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: thoughts },
+    }
+    const host = mount(
+      () =>
+        web.createComponent(codeContext.CodeComponentProvider, {
+          component: () => null,
+          get children() {
+            return web.createComponent(turn.SessionTurn, { sessionID, messageID: user.id })
+          },
+        }),
+      store,
+    )
+    host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!.click()
+    await ready(() => host.querySelector('[data-component="tool-part-wrapper"]') !== null)
+    const row = host.querySelector('[data-component="tool-part-wrapper"]')!
+    const group = row.closest('[data-component="trace-group"]')!
+    expect(group.getAttribute("data-header")).toBe("false")
+    expect(row.closest('[data-slot="collapsible-content"]')).toBeNull()
+    expect(row.textContent).toContain("raw_activities.csv")
+  })
+
   test("repeated reads and the live call retain their individual chronological rows", async () => {
     const message = assistant()
     const grep: ToolPart = {

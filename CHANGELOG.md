@@ -8,6 +8,19 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Changed
+
+- OpenScience is installed through the desktop app, npm (`@synsci/openscience`,
+  `npx synsci`) or the standalone installer. The Homebrew tap is retired: the
+  publish workflow no longer maintains a formula, and `openscience upgrade`
+  no longer offers `brew` as an install method.
+
+### Fixed
+
+- A finished turn kept a burst of one tool call inside a folded group with no
+  header, so a lone write or command between two thoughts vanished from the
+  trace. It renders as its own row again.
+
 ## v2.0.89 — 2026-09-10
 
 ### Changed

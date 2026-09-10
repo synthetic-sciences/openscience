@@ -6,9 +6,11 @@ import { SessionPrompt } from "../session/prompt"
 import { CredentialLifecycle } from "./lifecycle"
 import { CredentialProcessLedger } from "./process-ledger"
 import { CredentialRevocation } from "./revocation"
+import { Log } from "../util/log"
 
 /** The server-side response to a published credential revision. */
 export namespace CredentialTeardown {
+  const log = Log.create({ service: "credential.teardown" })
   export async function apply(event: Pick<CredentialLifecycle.Event, "reason">): Promise<void> {
     const target = CredentialRevocation.target(event.reason)
     if (target === "none") return
@@ -48,11 +50,15 @@ export namespace CredentialTeardown {
     // before disposal aborts it so the transcript records why it stopped.
     const reason = CredentialRevocation.message(event.reason)
     await Instance.each(() => SessionPrompt.interrupt(new CredentialRevocation.Interruption(event.reason)))
-    await Promise.all([
+    const [jobs] = await Promise.all([
       ComputeJobs.cancelCredentialProcesses(),
       CommandRuntime.stopAll(reason),
       CredentialProcessLedger.revoke("mcp"),
       Instance.disposeAll({ strict: true }),
     ])
+    // A revision that stops work is worth one line naming its cause: without
+    // it, a compute job that ends "cancelled" in the middle of a session has
+    // no trail back to the credential change that stopped it.
+    if (jobs > 0) log.warn("credential revision stopped compute jobs", { reason: event.reason, jobs })
   }
 }

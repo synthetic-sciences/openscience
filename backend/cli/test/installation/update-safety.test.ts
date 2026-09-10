@@ -50,17 +50,6 @@ describe("Installation update safety", () => {
     expect(urls).toEqual([`https://registry.npmjs.org/@synsci/openscience/${Installation.npmReleaseChannel()}`])
   })
 
-  test("resolves Homebrew releases from GitHub because the formula is not in homebrew-core", async () => {
-    const urls: string[] = []
-    globalThis.fetch = (async (input: string | URL | Request) => {
-      urls.push(String(input))
-      return Response.json({ tag_name: "v9.9.9" })
-    }) as typeof globalThis.fetch
-
-    expect(await Installation.latest("brew")).toBe("9.9.9")
-    expect(urls).toEqual(["https://api.github.com/repos/synthetic-sciences/OpenScience/releases/latest"])
-  })
-
   // The post-upgrade probe runs `process.execPath --version`; under the test
   // runner that is Bun itself, so an upgrade only verifies when it targets
   // Bun's own version.
@@ -135,29 +124,6 @@ describe("Installation update safety", () => {
       const result = await upgradeWith(bin, "npm", "9.9.9")
       expect(result.code).toBe(3)
       expect(result.stderr).toContain(`now reports ${installed} instead of 9.9.9`)
-    } finally {
-      await fs.rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test("upgrades the Homebrew formula from the synthetic-sciences tap", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-upgrade-brew-"))
-    const bin = path.join(root, "bin")
-    const calls = path.join(root, "brew.txt")
-    await fs.mkdir(bin)
-    await fs.writeFile(
-      path.join(bin, "brew"),
-      `#!/bin/sh\necho "$@" >> '${calls}'\ncase "$1" in list) echo openscience ;; esac\n`,
-      { mode: 0o755 },
-    )
-
-    try {
-      const result = await upgradeWith(bin, "brew", installed)
-      expect(result.code, result.stderr).toBe(0)
-      expect((await fs.readFile(calls, "utf8")).trim().split("\n")).toEqual([
-        "list --formula synthetic-sciences/tap/openscience",
-        "upgrade synthetic-sciences/tap/openscience",
-      ])
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }
