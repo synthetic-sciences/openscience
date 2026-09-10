@@ -30,7 +30,7 @@
 }
 
 .scientific-tool-row + .scientific-tool-row {
-  border-top: 1px solid var(--border-weak-base);
+  border-top: 1px solid var(--color-border-weak);
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
@@ -75,7 +75,7 @@
 
 .scientific-tool-row__title strong {
   overflow: hidden;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
@@ -85,7 +85,7 @@
 
 .scientific-tool-row__title small,
 .scientific-tool-row__copy > span {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 16px;
 }
@@ -120,7 +120,7 @@
   padding: 1px 4px;
   border-radius: var(--settings-radius-pill);
   background: transparent;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-regular);
   line-height: 16px;
@@ -128,11 +128,11 @@
 }
 
 .scientific-tool-status[data-tone="warning"] {
-  color: var(--text-warning-base);
+  color: var(--color-text-warning);
 }
 
 .scientific-tool-status[data-tone="danger"] {
-  color: var(--text-danger);
+  color: var(--color-text-danger);
 }
 
 .scientific-tool-status__dot {
@@ -140,7 +140,7 @@
   height: 6px;
   flex: 0 0 6px;
   border-radius: 50%;
-  background: var(--icon-success-base);
+  background: var(--color-icon-success);
 }
 
 .settings-dialog .scientific-tools-panel [data-component="button"].scientific-tool-action {
@@ -150,7 +150,7 @@
   padding: 0 10px;
   border: 0;
   background: var(--settings-surface-muted);
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   box-shadow: none;
 }
@@ -167,7 +167,7 @@
   min-height: var(--tools-control-height);
   border: 0;
   background: transparent;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   box-shadow: none;
 }
 
@@ -176,7 +176,7 @@
   .scientific-tools-panel
   [data-component="icon-button"].scientific-tool-source:focus-visible:not(:disabled) {
   background: var(--settings-surface-hover);
-  color: var(--text-strong);
+  color: var(--color-text);
 }
 
 .scientific-tools-notice {
@@ -186,7 +186,7 @@
   padding: 8px 12px;
   border-radius: var(--settings-radius-control);
   background: var(--settings-surface-muted);
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 18px;
   text-wrap: pretty;
@@ -194,7 +194,7 @@
 
 .scientific-tools-footnote {
   margin: 0;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 16px;
   text-wrap: pretty;

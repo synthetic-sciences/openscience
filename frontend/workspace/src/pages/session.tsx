@@ -162,6 +162,9 @@ export default function Page(): JSX.Element {
   const sessionTabs = createSessionTabs()
   const hydration = new Map<string, Promise<void>>()
   const prewarmed = new Set<string>()
+  // A transcript that failed to load must say so instead of posing as a new,
+  // empty conversation.
+  const [loadFailure, setLoadFailure] = createSignal<{ id: string; message: string }>()
 
   const hydrateSession = (id: string) => {
     const pending = hydration.get(id)
@@ -385,11 +388,13 @@ export default function Page(): JSX.Element {
       () => params.id,
       (id) => {
         if (!id || id === "new") return
+        setLoadFailure(undefined)
         ;(async () => {
           try {
             await hydrateSession(id)
           } catch (error) {
-            discardUnavailableSession(id, error)
+            if (discardUnavailableSession(id, error)) return
+            setLoadFailure({ id, message: error instanceof Error ? error.message : String(error) })
           }
         })()
       },
@@ -1196,6 +1201,41 @@ export default function Page(): JSX.Element {
                     <span>Opening your last session…</span>
                   </div>
                 </Match>
+                <Match when={params.id && messages().length === 0 && loadFailure()?.id === params.id}>
+                  <div class="session-empty" role="alert">
+                    <div class="session-empty__inner">
+                      <h2 class="session-empty__title">This conversation didn't load</h2>
+                      <p class="session-empty__hint">{loadFailure()?.message}</p>
+                      <div class="session-empty__starters">
+                        <button
+                          type="button"
+                          class="session-empty__starter"
+                          onClick={() => {
+                            const id = params.id
+                            if (!id) return
+                            setLoadFailure(undefined)
+                            void hydrateSession(id).catch((error) => {
+                              if (discardUnavailableSession(id, error)) return
+                              setLoadFailure({ id, message: error instanceof Error ? error.message : String(error) })
+                            })
+                          }}
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </Match>
+                <Match when={params.id && messages().length === 0 && activeSession()?.parentID}>
+                  <div class="session-empty" role="region" aria-label="Worker session">
+                    <div class="session-empty__inner">
+                      <h2 class="session-empty__title">Waiting for the lead's brief</h2>
+                      <p class="session-empty__hint">
+                        This worker starts when its lead delegates a task. Its work and handoff will appear here.
+                      </p>
+                    </div>
+                  </div>
+                </Match>
                 <Match when={params.id && messages().length === 0}>
                   <SessionEmptyState project={projectName()} />
                 </Match>
@@ -1460,7 +1500,24 @@ export default function Page(): JSX.Element {
                       </button>
                     </div>
                   </Show>
-                  <PromptInput onSubmit={followLatest} />
+                  {/* A worker session belongs to its lead: the lead writes its
+                      brief and reads its handoff. Messages go to the lead. */}
+                  <Show
+                    when={!activeSession()?.parentID}
+                    fallback={
+                      <div class="session-worker-readonly" role="note">
+                        <span>This is a worker session. It takes instructions from its lead, not from the chat.</span>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/${params.dir}/session/${activeSession()!.parentID}`)}
+                        >
+                          Message the lead
+                        </button>
+                      </div>
+                    }
+                  >
+                    <PromptInput onSubmit={followLatest} />
+                  </Show>
                 </div>
               </div>
             </section>

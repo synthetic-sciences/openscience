@@ -569,31 +569,182 @@
     }
   }
 
+  /* "Worked for 2m 3s ›": the one line that owns the trace. Reads as text,
+     not as a control, until hovered. */
   [data-slot="session-turn-collapsible-trigger-content"] {
     max-width: 100%;
     min-height: 32px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    margin: -6px 0 -6px -10px;
+    gap: 6px;
+    padding: 6px 8px;
+    margin: -6px 0 -6px -8px;
     border-radius: var(--radius-xs);
     color: var(--text-weak);
     font-size: var(--font-size-small);
     cursor: pointer;
 
-    [data-slot="session-turn-trigger-icon"] {
+    /* The chevron follows the label, the way a disclosure reads in Cursor. */
+    > [data-component="icon"] {
+      order: 2;
       flex-shrink: 0;
+    }
+
+    [data-slot="session-turn-trigger-icon"] {
       transform: rotate(-90deg);
+      transition: transform 150ms var(--ease-standard, ease);
     }
 
     &[aria-expanded="true"] [data-slot="session-turn-trigger-icon"] {
       transform: none;
     }
 
+    [data-component="spinner"] {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+    }
+
     [data-slot="session-turn-trigger-label"] {
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      color: var(--text-base);
+    }
+
+    &[aria-expanded="true"] [data-slot="session-turn-trigger-label"],
+    &:hover [data-slot="session-turn-trigger-label"] {
+      color: var(--text-strong);
+    }
+
+    [data-slot="session-turn-duration"] {
+      order: 3;
+    }
+  }
+
+  /* Trace rows: a verb, a muted summary, a chevron that appears on hover.
+     Groups fold a burst of exploration or edits behind one line; their
+     nested entries hang off a hairline rail. */
+  [data-component="trace-group"] {
+    width: 100%;
+    background: transparent;
+
+    > [data-slot="collapsible-trigger"] {
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: none;
+      text-align: left;
+      border-radius: var(--radius-xs);
+    }
+
+    > [data-slot="collapsible-trigger"]:hover [data-component="trace-row"],
+    > [data-slot="collapsible-trigger"]:focus-visible [data-component="trace-row"] {
+      color: var(--text-strong);
+    }
+
+    > [data-slot="collapsible-trigger"]:focus-visible {
+      outline: 2px solid var(--border-selected);
+      outline-offset: -2px;
+    }
+
+    > [data-slot="collapsible-content"][data-closed] {
+      display: none;
+    }
+
+    [data-slot="trace-group-body"] {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin: 2px 0 6px 7px;
+      padding-left: 12px;
+      border-left: 1px solid var(--border-weak-base);
+    }
+
+    /* A burst of one call is just that call's row. */
+    &[data-header="false"] [data-slot="trace-group-body"] {
+      margin: 0;
+      padding-left: 0;
+      border-left: 0;
+    }
+
+    /* The body already draws the rail; nested rows sit right against it. */
+    [data-slot="trace-group-body"]
+      [data-component="tool-part-wrapper"]
+      > [data-component="collapsible"]
+      > [data-slot="collapsible-trigger"] {
+      height: 32px;
+      padding: 4px 8px 4px 2px;
+    }
+
+    &[data-kind="thought"] [data-component="reasoning-part"] {
+      margin: 0;
+    }
+
+    &[data-kind="thought"] [data-slot="reasoning-part-body"] {
+      margin: 0;
+      padding: 2px 0 4px;
+      border-left: 0;
+      color: var(--text-weak);
+    }
+  }
+
+  [data-component="trace-row"] {
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px 4px 0;
+    color: var(--text-base);
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+    cursor: pointer;
+
+    [data-component="spinner"] {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+    }
+
+    [data-slot="trace-row-label"] {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
       white-space: nowrap;
     }
+
+    [data-slot="trace-row-chevron"] {
+      flex-shrink: 0;
+      color: var(--icon-weak);
+      opacity: 0;
+      transform: rotate(-90deg);
+      transition:
+        opacity 150ms var(--ease-standard, ease),
+        transform 150ms var(--ease-standard, ease);
+    }
+
+    &[data-open="true"] [data-slot="trace-row-chevron"] {
+      transform: none;
+    }
+
+    &:hover [data-slot="trace-row-chevron"],
+    &[data-open="true"] [data-slot="trace-row-chevron"] {
+      opacity: 1;
+    }
+  }
+
+  /* Narration between tool bursts reads as part of the trace, quieter than
+     the final answer. */
+  [data-slot="trace-entry"][data-narration="true"] [data-slot="text-part-body"] {
+    margin-top: 6px;
+    margin-bottom: 4px;
+  }
+
+  [data-slot="trace-entry"][data-narration="true"] [data-component="markdown"],
+  [data-slot="trace-entry"][data-narration="true"] [data-component="markdown"] :is(p, li) {
+    color: var(--text-weak);
   }
 
   [data-slot="session-turn-live-status"] {
@@ -803,42 +954,59 @@
   [data-slot="session-turn-session-outputs"] {
     width: 100%;
     min-width: 0;
-    border: 1px solid var(--border-weak-base);
-    border-radius: var(--radius-sm);
-    background: var(--background-base);
 
-    > header {
+    > summary {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 5px;
-      padding: 7px 9px;
+      gap: 6px;
+      min-height: 28px;
+      padding: 4px 8px 4px 0;
+      border-radius: var(--radius-xs);
       color: var(--text-weak);
-      font-size: var(--font-size-x-small);
-      font-weight: var(--font-weight-medium);
-      border-bottom: 1px solid var(--border-weak-base);
+      font-size: var(--font-size-small);
+      line-height: var(--line-height-large);
+      list-style: none;
+      cursor: pointer;
 
-      > span:first-child {
-        display: flex;
-        min-width: 0;
-        flex-direction: column;
-        gap: 1px;
+      &::-webkit-details-marker {
+        display: none;
+      }
+
+      &:hover {
+        color: var(--text-strong);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--border-selected);
+        outline-offset: -2px;
+      }
+
+      [data-component="icon"] {
+        flex-shrink: 0;
+        color: var(--icon-weak);
+        transform: rotate(-90deg);
+        transition: transform 150ms var(--ease-standard, ease);
       }
 
       strong {
         color: var(--text-base);
-        font-weight: var(--font-weight-medium);
+        font-weight: var(--font-weight-regular);
       }
 
       small {
-        color: var(--text-weak);
-        font-size: var(--font-size-2x-small);
-        font-weight: var(--font-weight-normal);
+        color: var(--text-weaker);
+        font-size: var(--font-size-small);
       }
     }
 
+    &[open] > summary [data-component="icon"] {
+      transform: none;
+    }
+
     > [data-slot="session-turn-artifact-save"] {
-      padding: 8px;
+      margin: 2px 0 6px 7px;
+      padding: 2px 0 2px 12px;
+      border-left: 1px solid var(--border-weak-base);
     }
   }
 

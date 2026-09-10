@@ -478,8 +478,8 @@ const header = (): JSX.CSSProperties => ({
   "align-items": "center",
   gap: "10px",
   padding: "14px 16px",
-  "border-bottom": "1px solid var(--border-weak-base)",
-  background: "var(--surface-raised-stronger-non-alpha)",
+  "border-bottom": "1px solid var(--color-border-weak)",
+  background: "var(--color-surface-solid)",
 })
 const actionAnchor = (): JSX.CSSProperties => ({ position: "relative", display: "inline-flex", flex: "none" })
 const actionScrim = (): JSX.CSSProperties => ({
@@ -497,8 +497,8 @@ const fileIcon = (): JSX.CSSProperties => ({
   height: "32px",
   display: "grid",
   "place-items": "center",
-  color: "var(--icon-base)",
-  background: "var(--surface-raised-base-hover)",
+  color: "var(--color-icon)",
+  background: "var(--color-surface-raised-hover)",
   "border-radius": "var(--radius-sm)",
 })
 const title = (): JSX.CSSProperties => ({
@@ -506,14 +506,14 @@ const title = (): JSX.CSSProperties => ({
   overflow: "hidden",
   "text-overflow": "ellipsis",
   "white-space": "nowrap",
-  color: "var(--text-strong)",
+  color: "var(--color-text)",
   "font-size": "13px",
   "font-weight": "var(--font-weight-emphasis)",
 })
 const meta = (): JSX.CSSProperties => ({
   display: "block",
   "margin-top": "2px",
-  color: "var(--text-weak)",
+  color: "var(--color-text-muted)",
   "font-size": "11px",
 })
 const actionPanel = (): JSX.CSSProperties => ({
@@ -526,8 +526,8 @@ const actionPanel = (): JSX.CSSProperties => ({
   display: "flex",
   "flex-direction": "column",
   gap: "4px",
-  border: "1px solid var(--border-weak-base)",
-  background: "var(--surface-raised-stronger-non-alpha)",
+  border: "1px solid var(--color-border-weak)",
+  background: "var(--color-surface-solid)",
   "border-radius": "var(--radius-md)",
   "box-shadow": "var(--atlas-shadow-md)",
 })
@@ -542,7 +542,7 @@ const menuItem = (): JSX.CSSProperties => ({
   border: 0,
   "border-radius": "var(--radius-sm)",
   background: "transparent",
-  color: "var(--text-strong)",
+  color: "var(--color-text)",
   "font-family": FONT_SANS,
   "font-size": "12px",
   "text-align": "left",
@@ -560,7 +560,7 @@ const actionForm = (): JSX.CSSProperties => ({
   gap: "10px",
   padding: "6px",
 })
-const dangerText = (): JSX.CSSProperties => ({ color: "var(--text-on-critical-base)" })
+const dangerText = (): JSX.CSSProperties => ({ color: "var(--color-text-on-error)" })
 const body = (): JSX.CSSProperties => ({ flex: 1, "min-height": 0, overflow: "auto" })
 const section = (): JSX.CSSProperties => ({
   margin: "0 auto",
@@ -570,10 +570,10 @@ const section = (): JSX.CSSProperties => ({
   "flex-direction": "column",
   gap: "14px",
 })
-const heading = (): JSX.CSSProperties => ({ margin: 0, color: "var(--text-strong)", "font-size": "15px" })
+const heading = (): JSX.CSSProperties => ({ margin: 0, color: "var(--color-text)", "font-size": "15px" })
 const copy = (): JSX.CSSProperties => ({
   margin: 0,
-  color: "var(--text-weak)",
+  color: "var(--color-text-muted)",
   "font-size": "12px",
   "line-height": 1.55,
 })
@@ -588,7 +588,7 @@ const image = (): JSX.CSSProperties => ({
 const pre = (): JSX.CSSProperties => ({
   margin: 0,
   padding: "20px 18px 48px",
-  color: "var(--text-strong)",
+  color: "var(--color-text)",
   "font-family": FONT_SANS,
   "font-size": "12px",
   "line-height": 1.65,

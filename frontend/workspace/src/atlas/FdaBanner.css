@@ -10,7 +10,7 @@
   border-radius: var(--radius-md);
   padding: 0 0.7rem;
   background: color-mix(in srgb, var(--color-warning) 9%, transparent);
-  color: color-mix(in srgb, var(--color-warning) 62%, var(--text-strong));
+  color: color-mix(in srgb, var(--color-warning) 62%, var(--color-text));
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
@@ -25,7 +25,7 @@
 .folder-access-chip:hover {
   border-color: color-mix(in srgb, var(--color-warning) 48%, transparent);
   background: color-mix(in srgb, var(--color-warning) 15%, transparent);
-  color: var(--text-strong);
+  color: var(--color-text);
 }
 
 .folder-access-chip:active {
@@ -33,7 +33,7 @@
 }
 
 .folder-access-chip:focus-visible {
-  outline: 1px solid var(--text-strong);
+  outline: 1px solid var(--color-text);
   outline-offset: 2px;
 }
 
@@ -68,7 +68,7 @@
   max-width: 62ch;
   margin-left: 0 !important;
   padding: 0 1.35rem 1.1rem;
-  color: var(--text-base);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-small);
   line-height: 1.55;
   text-wrap: pretty;
@@ -90,10 +90,10 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 0.7rem;
-  border: 1px solid color-mix(in srgb, var(--color-warning) 22%, var(--border-weak-base));
+  border: 1px solid color-mix(in srgb, var(--color-warning) 22%, var(--color-border-weak));
   border-radius: var(--atlas-radius-lg);
   padding: 0.8rem 0.9rem;
-  background: color-mix(in srgb, var(--color-warning) 6%, var(--surface-base));
+  background: color-mix(in srgb, var(--color-warning) 6%, var(--color-surface-base));
 }
 
 .folder-access-status__dot {
@@ -110,7 +110,7 @@
 }
 
 .folder-access-status strong {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
@@ -118,7 +118,7 @@
 }
 
 .folder-access-status small {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-family: var(--font-family-sans);
   font-size: 0.72rem;
   line-height: 1.45;
@@ -141,7 +141,7 @@
   grid-template-columns: 1.45rem minmax(0, 1fr);
   align-items: start;
   gap: 0.65rem;
-  color: var(--text-base);
+  color: var(--color-text-secondary);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   line-height: 1.5;
@@ -153,10 +153,10 @@
   height: 1.45rem;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: var(--radius-md);
-  background: var(--surface-raised-base);
-  color: var(--text-weak);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
   content: counter(access-step);
   font-family: var(--font-family-mono);
   font-size: 0.68rem;
@@ -164,11 +164,11 @@
 }
 
 .folder-access-steps code {
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: var(--radius-sm);
   padding: 0.08rem 0.3rem;
-  background: var(--surface-raised-base);
-  color: var(--text-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
   font-family: var(--font-family-mono);
   font-size: 0.72rem;
   white-space: nowrap;
@@ -213,23 +213,23 @@
 }
 
 .folder-access-action:focus-visible {
-  outline: 1px solid var(--text-strong);
+  outline: 1px solid var(--color-text);
   outline-offset: 2px;
 }
 
 .folder-access-action--primary {
-  border-color: var(--border-weak-base);
+  border-color: var(--color-border-weak);
   background: var(--button-primary-base);
-  color: var(--icon-invert-base);
+  color: var(--color-icon-invert);
 }
 
 .folder-access-action--primary:hover {
-  background: var(--icon-strong-hover);
+  background: var(--color-icon-strong-hover);
 }
 
 .folder-access-action--secondary {
   background: var(--button-secondary-base);
-  color: var(--text-strong);
+  color: var(--color-text);
   box-shadow: var(--shadow-xs-border);
 }
 
@@ -245,12 +245,12 @@
 .folder-access-action--dismiss {
   justify-self: end;
   background: transparent;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
 }
 
 .folder-access-action--dismiss:hover {
-  background: var(--surface-raised-base-hover);
-  color: var(--text-strong);
+  background: var(--color-surface-raised-hover);
+  color: var(--color-text);
 }
 
 @media (max-width: 34rem) {

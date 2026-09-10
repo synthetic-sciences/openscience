@@ -26,7 +26,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--text-strong);
+  color: var(--color-text);
   text-align: left;
   transition: background-color 150ms ease;
 }
@@ -47,16 +47,16 @@
   justify-content: center;
   border-radius: var(--settings-radius-control);
   background: var(--settings-surface-muted);
-  color: var(--text-warning-base);
+  color: var(--color-text-warning);
 }
 
 .settings-preferences-panel--sandbox .settings-sandbox-status-mark[data-tone="success"] {
-  background: color-mix(in srgb, var(--icon-success-base) 10%, transparent);
-  color: var(--icon-success-base);
+  background: color-mix(in srgb, var(--color-icon-success) 10%, transparent);
+  color: var(--color-icon-success);
 }
 
 .settings-preferences-panel--sandbox .settings-sandbox-disclosure-icon {
-  color: var(--icon-weak-base);
+  color: var(--color-icon-muted);
   transition: transform 200ms ease;
 }
 
@@ -85,14 +85,14 @@
 
 .settings-preferences-panel--sandbox .settings-sandbox-backend-details dt {
   margin: 0 0 2px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 16px;
 }
 
 .settings-preferences-panel--sandbox .settings-sandbox-backend-details dd {
   margin: 0;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-family: var(--font-mono);
   font-size: var(--font-size-x-small);
   line-height: 17px;
@@ -114,7 +114,7 @@
 .settings-preferences-panel--sandbox .settings-sandbox-path-row code {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   line-height: 18px;
   text-overflow: ellipsis;
@@ -145,7 +145,7 @@
   grid-template-columns: 8px minmax(0, 1fr) max-content;
   align-items: center;
   gap: var(--settings-space-2);
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
@@ -155,11 +155,11 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--text-danger);
+  background: var(--color-text-danger);
 }
 
 .settings-preferences-panel--sandbox .settings-sandbox-result__dot[data-tone="success"] {
-  background: var(--icon-success-base);
+  background: var(--color-icon-success);
 }
 
 .settings-preferences-panel--sandbox .settings-sandbox-checks {
@@ -177,14 +177,14 @@
   grid-template-columns: 16px minmax(120px, auto) minmax(0, 1fr);
   align-items: start;
   gap: var(--settings-space-2);
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   line-height: 18px;
 }
 
 .settings-preferences-panel--sandbox .settings-sandbox-check__detail {
   min-width: 0;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 18px;
   overflow-wrap: anywhere;

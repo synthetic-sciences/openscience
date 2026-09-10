@@ -7,8 +7,8 @@
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   border: 0;
   border-radius: var(--radius-md);
-  background: var(--surface-raised-strong);
-  color: var(--text-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .workspace-composer__setup > span {
@@ -26,7 +26,7 @@
 
 .workspace-composer__setup small {
   overflow: hidden;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 17px;
   text-overflow: ellipsis;
@@ -39,8 +39,8 @@
   padding-inline: 10px;
   border: 0;
   border-radius: var(--radius-xs);
-  background: var(--surface-base);
-  color: var(--text-strong);
+  background: var(--color-surface-base);
+  color: var(--color-text);
   font: inherit;
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
@@ -48,7 +48,7 @@
 }
 
 .workspace-composer__setup button:hover {
-  background: var(--surface-raised-base-hover);
+  background: var(--color-surface-raised-hover);
 }
 
 .workspace-composer__context {
@@ -62,18 +62,18 @@
   padding: 4px 5px 4px 7px;
   border: 0;
   border-radius: var(--radius-xs);
-  background: var(--surface-weak);
+  background: var(--color-surface-weak);
   transition: background-color 150ms var(--ease-standard);
 }
 
 .workspace-composer__context-item:hover {
-  background: var(--surface-raised-base-hover);
+  background: var(--color-surface-raised-hover);
 }
 
 .workspace-composer__context-heading {
   min-width: 0;
   min-height: 20px;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
@@ -94,7 +94,7 @@
 .workspace-composer__context-comment {
   margin-left: 20px;
   padding-right: 4px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 15px;
@@ -109,7 +109,7 @@
 
 .workspace-composer__dropzone {
   border-radius: inherit;
-  background: var(--surface-raised-stronger-non-alpha);
+  background: var(--color-surface-solid);
   backdrop-filter: blur(3px);
 }
 
@@ -118,7 +118,7 @@
   grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   column-gap: 9px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
 }
 
 .workspace-composer__dropzone-copy > [data-component="icon"] {
@@ -126,14 +126,14 @@
 }
 
 .workspace-composer__dropzone-copy strong {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 17px;
 }
 
 .workspace-composer__dropzone-copy span {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 15px;
@@ -150,7 +150,7 @@
   padding: 5px 5px 5px 6px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: var(--surface-weak);
+  background: var(--color-surface-weak);
 }
 
 .workspace-composer__attachment-open {
@@ -185,8 +185,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-base);
-  color: var(--text-weak);
+  background: var(--color-surface-base);
+  color: var(--color-text-muted);
 }
 
 .workspace-composer__attachment-preview {
@@ -208,14 +208,14 @@
 }
 
 .workspace-composer__attachment-copy strong {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
 }
 
 .workspace-composer__attachment-copy span {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 15px;
 }
@@ -236,7 +236,7 @@
 
 .workspace-composer__attachment-remove:hover,
 .workspace-composer__attachment-remove:focus-visible {
-  background: var(--surface-raised-base-hover);
+  background: var(--color-surface-raised-hover);
   opacity: 1;
 }
 
@@ -272,11 +272,11 @@
   overscroll-behavior: contain;
   border: 1px solid var(--color-border-weak, var(--color-border));
   border-radius: var(--radius-xl);
-  background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
+  background: var(--color-surface-solid);
   background-clip: padding-box;
   box-shadow:
     var(--atlas-shadow-md),
-    inset 0 1px color-mix(in srgb, var(--text-strong) 5%, transparent);
+    inset 0 1px color-mix(in srgb, var(--color-text) 5%, transparent);
   font-family: var(--font-family-sans);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
@@ -288,7 +288,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-base);
+  color: var(--color-text-secondary);
   text-align: left;
   cursor: pointer;
   transition:
@@ -298,13 +298,13 @@
 
 .workspace-composer__suggestion:hover,
 .workspace-composer__suggestion:focus-visible {
-  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+  background: var(--color-bg-subtle, var(--color-surface-raised-hover));
 }
 
 .workspace-composer__suggestion-heading,
 .workspace-composer__suggestion-empty {
   padding: 5px 8px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 18px;
 }
@@ -328,8 +328,8 @@
   display: grid;
   place-items: center;
   border-radius: var(--radius-sm);
-  background: var(--surface-base-hover);
-  color: var(--text-weak);
+  background: var(--color-hover);
+  color: var(--color-text-muted);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
 }
@@ -349,14 +349,14 @@
 }
 
 .workspace-composer__conversation-row strong {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 17px;
 }
 
 .workspace-composer__conversation-row small {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 15px;
 }
@@ -364,8 +364,8 @@
 form.workspace-composer [data-component="prompt-input"] [data-type="conversation"] {
   padding: 1px 4px;
   border-radius: var(--radius-xs);
-  background: var(--surface-interactive-weak);
-  color: var(--text-link-base);
+  background: var(--color-interactive-muted);
+  color: var(--color-text-link);
 }
 
 .workspace-composer__slash-group {
@@ -383,14 +383,14 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
   min-height: 24px;
   display: block;
   padding: 4px 8px 2px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
 }
 
 .workspace-composer__suggestion:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: -2px;
 }
 
@@ -408,19 +408,19 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
   display: grid;
   place-items: center;
   border-radius: var(--radius-sm);
-  background: var(--surface-base-hover);
-  color: var(--text-weaker);
+  background: var(--color-hover);
+  color: var(--color-text-faint);
 }
 
 .workspace-composer__suggestion:hover .workspace-composer__slash-icon,
 .workspace-composer__suggestion:focus-visible .workspace-composer__slash-icon {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
 }
 
 .workspace-composer__slash-name {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
@@ -429,7 +429,7 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
 }
 
 .workspace-composer__slash-detail {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 16px;
 }
@@ -437,7 +437,7 @@ form.workspace-composer [data-component="prompt-input"] [data-type="conversation
 .workspace-composer__slash-meta {
   max-width: 76px;
   overflow: hidden;
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
   font-size: var(--font-size-small);
   line-height: 16px;
   text-overflow: ellipsis;
@@ -478,9 +478,9 @@ form.workspace-composer {
   --composer-editor-padding-block-end: 5px;
   --composer-editor-padding-inline: 14px;
   min-height: 88px;
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: var(--radius-xl);
-  background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
+  background: var(--color-surface-solid);
   box-shadow: none;
   transition:
     border-color 150ms var(--ease-standard),
@@ -488,8 +488,8 @@ form.workspace-composer {
 }
 
 form.workspace-composer:focus-within {
-  border-color: var(--border-base);
-  box-shadow: var(--focus-lit);
+  border-color: var(--color-border);
+  box-shadow: var(--color-focus-lit);
 }
 
 .workspace-composer__editor {
@@ -497,7 +497,7 @@ form.workspace-composer:focus-within {
   max-height: 240px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--border-base) transparent;
+  scrollbar-color: var(--color-border) transparent;
 }
 
 .workspace-composer__editor[data-composer-mode="shell"] {
@@ -530,8 +530,8 @@ form.workspace-composer :is([data-component="prompt-input"], .workspace-composer
 
 form.workspace-composer [data-component="prompt-input"] {
   display: block;
-  color: var(--text-strong);
-  caret-color: var(--text-strong);
+  color: var(--color-text);
+  caret-color: var(--color-text);
   overflow-wrap: anywhere;
   text-align: start;
   white-space: pre-wrap;
@@ -541,7 +541,7 @@ form.workspace-composer .workspace-composer__placeholder {
   position: absolute;
   inset: 0 0 auto;
   overflow: hidden;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   pointer-events: none;
   text-align: start;
   text-overflow: ellipsis;
@@ -578,7 +578,7 @@ form.workspace-composer .workspace-composer__attach {
   justify-content: center;
   padding: 0;
   border-radius: var(--radius-sm);
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-weight: var(--font-weight-regular);
   transition:
     background-color 150ms var(--ease-standard),
@@ -588,8 +588,8 @@ form.workspace-composer .workspace-composer__attach {
 
 form.workspace-composer .workspace-composer__attach:hover:not(:disabled),
 form.workspace-composer .workspace-composer__attach:focus-visible {
-  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
-  color: var(--text-strong);
+  background: var(--color-bg-subtle, var(--color-surface-raised-hover));
+  color: var(--color-text);
 }
 
 form.workspace-composer .workspace-composer__attach:active:not(:disabled) {
@@ -605,8 +605,8 @@ form.workspace-composer .workspace-composer__intent {
   padding: 0 10px 0 6px;
   border: 0;
   border-radius: var(--composer-radius-pill);
-  background: var(--surface-raised-base-hover);
-  color: var(--text-weak);
+  background: var(--color-surface-raised-hover);
+  color: var(--color-text-muted);
   font: inherit;
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
@@ -619,12 +619,12 @@ form.workspace-composer .workspace-composer__intent {
 
 form.workspace-composer .workspace-composer__intent:hover,
 form.workspace-composer .workspace-composer__intent:focus-visible {
-  background: var(--surface-raised-base-active);
-  color: var(--text-strong);
+  background: var(--color-surface-raised-active);
+  color: var(--color-text);
 }
 
 form.workspace-composer .workspace-composer__intent:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
 }
 
@@ -638,7 +638,7 @@ form.workspace-composer .workspace-composer__intent-close {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: currentColor;
 }
 
@@ -662,7 +662,7 @@ form.workspace-composer .workspace-composer__research-tools > summary {
   gap: 3px;
   padding: 0 7px;
   border-radius: var(--radius-sm);
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-regular);
@@ -683,12 +683,12 @@ form.workspace-composer .workspace-composer__research-tools > summary::-webkit-d
 form.workspace-composer .workspace-composer__research-tools > summary:hover,
 form.workspace-composer .workspace-composer__research-tools > summary:focus-visible,
 form.workspace-composer .workspace-composer__research-tools[open] > summary {
-  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
-  color: var(--text-strong);
+  background: var(--color-bg-subtle, var(--color-surface-raised-hover));
+  color: var(--color-text);
 }
 
 form.workspace-composer .workspace-composer__research-tools > summary:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: -2px;
 }
 
@@ -721,7 +721,7 @@ form.workspace-composer .workspace-composer__research-tools-menu {
   scrollbar-width: thin;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
+  background: var(--color-surface-solid);
   background-clip: padding-box;
   box-shadow: var(--atlas-shadow-md);
 }
@@ -735,13 +735,13 @@ form.workspace-composer .workspace-composer__research-tools-header {
   align-items: center;
   gap: 4px;
   padding: 0 3px 5px 7px;
-  border-bottom: 1px solid var(--border-weak-base);
+  border-bottom: 1px solid var(--color-border-weak);
 }
 
 form.workspace-composer .workspace-composer__research-tools-header > span {
   min-width: 0;
   flex: 1;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
@@ -773,7 +773,7 @@ form.workspace-composer .workspace-composer__research-slider {
 
 form.workspace-composer .workspace-composer__research-slider-label {
   overflow: hidden;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
@@ -791,8 +791,8 @@ form.workspace-composer .workspace-composer__research-slider > [role="radiogroup
   padding: 4px;
   border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
   border-radius: var(--radius-md);
-  background: var(--color-bg-subtle, var(--surface-raised-base));
-  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--text-strong) 4%, transparent);
+  background: var(--color-bg-subtle, var(--color-surface-raised));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--color-text) 4%, transparent);
 }
 
 form.workspace-composer .workspace-composer__research-slider button {
@@ -802,7 +802,7 @@ form.workspace-composer .workspace-composer__research-slider button {
   border: 0;
   border-radius: var(--composer-radius-segment);
   background: transparent;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font: inherit;
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
@@ -817,20 +817,20 @@ form.workspace-composer .workspace-composer__research-slider button {
 }
 
 form.workspace-composer .workspace-composer__research-slider button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--surface-raised-base-hover) 62%, transparent);
-  color: var(--text-strong);
+  background: color-mix(in srgb, var(--color-surface-raised-hover) 62%, transparent);
+  color: var(--color-text);
 }
 
 form.workspace-composer .workspace-composer__research-slider button[aria-checked="true"] {
-  background: var(--color-surface-solid, var(--surface-raised-stronger-non-alpha));
-  color: var(--text-strong);
+  background: var(--color-surface-solid);
+  color: var(--color-text);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--color-border) 86%, transparent),
-    0 1px 2px color-mix(in srgb, var(--text-strong) 10%, transparent);
+    0 1px 2px color-mix(in srgb, var(--color-text) 10%, transparent);
 }
 
 form.workspace-composer .workspace-composer__research-slider button:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: -2px;
 }
 
@@ -853,7 +853,7 @@ form.workspace-composer .workspace-composer__research-choice > summary {
   padding: 4px 8px;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-base);
+  color: var(--color-text-secondary);
 }
 
 form.workspace-composer .workspace-composer__research-access {
@@ -876,11 +876,11 @@ form.workspace-composer button.workspace-composer__research-control {
 
 form.workspace-composer button.workspace-composer__research-control:hover,
 form.workspace-composer button.workspace-composer__research-control:focus-visible {
-  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+  background: var(--color-bg-subtle, var(--color-surface-raised-hover));
 }
 
 form.workspace-composer button.workspace-composer__research-control:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: -2px;
 }
 
@@ -891,7 +891,7 @@ form.workspace-composer button.workspace-composer__research-control:active {
 form.workspace-composer .workspace-composer__research-setting-label {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
@@ -902,7 +902,7 @@ form.workspace-composer .workspace-composer__research-setting-label {
 form.workspace-composer .workspace-composer__research-setting-value {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   line-height: 16px;
@@ -912,7 +912,7 @@ form.workspace-composer .workspace-composer__research-setting-value {
 }
 
 form.workspace-composer .workspace-composer__research-connectors > [data-component="icon"] {
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
 }
 
 form.workspace-composer .workspace-composer__research-choice {
@@ -934,11 +934,11 @@ form.workspace-composer .workspace-composer__research-choice > summary::-webkit-
 form.workspace-composer .workspace-composer__research-choice > summary:hover,
 form.workspace-composer .workspace-composer__research-choice > summary:focus-visible,
 form.workspace-composer .workspace-composer__research-choice[open] > summary {
-  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+  background: var(--color-bg-subtle, var(--color-surface-raised-hover));
 }
 
 form.workspace-composer .workspace-composer__research-choice > summary:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: -2px;
 }
 
@@ -951,7 +951,7 @@ form.workspace-composer .workspace-composer__research-choice > summary > strong 
 }
 
 form.workspace-composer .workspace-composer__research-choice > summary > [data-component="icon"] {
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
 }
 
 form.workspace-composer .workspace-composer__research-choice-menu {
@@ -963,7 +963,7 @@ form.workspace-composer .workspace-composer__research-choice-menu {
   padding: 4px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-bg-subtle, var(--surface-raised-base));
+  background: var(--color-bg-subtle, var(--color-surface-raised));
   box-shadow: none;
   scrollbar-width: thin;
 }
@@ -993,7 +993,7 @@ form.workspace-composer .workspace-composer__research-choice-menu > button {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-base);
+  color: var(--color-text-secondary);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -1006,11 +1006,11 @@ form.workspace-composer .workspace-composer__research-choice-menu > button {
 form.workspace-composer .workspace-composer__research-choice-menu > button:hover:not(:disabled),
 form.workspace-composer .workspace-composer__research-choice-menu > button:focus-visible,
 form.workspace-composer .workspace-composer__research-choice-menu > button[aria-checked="true"] {
-  background: var(--color-bg-subtle, var(--surface-raised-base-hover));
+  background: var(--color-bg-subtle, var(--color-surface-raised-hover));
 }
 
 form.workspace-composer .workspace-composer__research-choice-menu > button:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: -2px;
 }
 
@@ -1024,7 +1024,7 @@ form.workspace-composer .workspace-composer__research-choice-menu > button:disab
 }
 
 form.workspace-composer .workspace-composer__research-choice-menu > button[data-tone="warning"][aria-checked="true"] {
-  color: var(--color-warning, var(--text-warning-base));
+  color: var(--color-warning, var(--color-text-warning));
 }
 
 form.workspace-composer .workspace-composer__research-choice-menu > button > span {
@@ -1045,7 +1045,7 @@ form.workspace-composer .workspace-composer__research-choice-menu > button stron
 }
 
 form.workspace-composer .workspace-composer__research-choice-menu > button small {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 16px;
   text-wrap: pretty;
@@ -1057,15 +1057,15 @@ form.workspace-composer .workspace-composer__research-access-retry {
   margin-top: 5px;
   border: 0;
   border-radius: var(--radius-sm);
-  background: var(--surface-critical-weak);
-  color: var(--text-critical-base);
+  background: var(--color-error-muted);
+  color: var(--color-text-error);
   font: inherit;
   font-size: var(--font-size-x-small);
   cursor: pointer;
 }
 
 form.workspace-composer .workspace-composer__research-access-retry:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: -2px;
 }
 
@@ -1079,24 +1079,24 @@ form.workspace-composer .workspace-composer__send {
 }
 
 form.workspace-composer .workspace-composer__send[data-composer-action="idle"]:disabled {
-  background-color: var(--color-bg-subtle, var(--surface-raised-base-hover));
+  background-color: var(--color-bg-subtle, var(--color-surface-raised-hover));
 }
 
 form.workspace-composer .workspace-composer__send[data-composer-action="idle"]:disabled [data-slot="icon-svg"] {
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
 }
 
 form.workspace-composer .workspace-composer__send[data-composer-action="stop"] {
-  background-color: var(--surface-critical-strong);
+  background-color: var(--color-error);
 }
 
 form.workspace-composer .workspace-composer__send[data-composer-action="stop"]:hover:not(:disabled),
 form.workspace-composer .workspace-composer__send[data-composer-action="stop"]:focus-visible {
-  background-color: var(--icon-critical-hover);
+  background-color: var(--color-icon-error-hover);
 }
 
 form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [data-slot="icon-svg"] {
-  color: var(--icon-invert-base);
+  color: var(--color-icon-invert);
 }
 
 form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [data-component="icon"] {

@@ -52,17 +52,17 @@ describe("live interaction radius contract", () => {
     expect(files.composer.match(/color-mix/g)).toHaveLength(6)
     expect(files.composer).toContain("border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent)")
     expect(files.composer).toContain(
-      "background: color-mix(in srgb, var(--surface-raised-base-hover) 62%, transparent)",
+      "background: color-mix(in srgb, var(--color-surface-raised-hover) 62%, transparent)",
     )
     expect(files.chat.match(/color-mix/g)).toHaveLength(4)
     expect(files.chat).toContain("border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent)")
     expect(files.settings.match(/color-mix/g)).toHaveLength(1)
     expect(files.servers.match(/color-mix/g)).toHaveLength(2)
 
-    expect(files.composer).toContain("border: 1px solid var(--border-weak-base)")
+    expect(files.composer).toContain("border: 1px solid var(--color-border-weak)")
     expect(files.chat).toContain("box-shadow: none")
-    expect(files.servers).toContain("border: 1px solid var(--border-base)")
-    expect(files.servers).toContain("border-top: 1px solid var(--border-weak-base)")
+    expect(files.servers).toContain("border: 1px solid var(--color-border)")
+    expect(files.servers).toContain("border-top: 1px solid var(--color-border-weak)")
     expect(files.settings).toContain("--model-control-shadow: var(--atlas-shadow-md)")
     expect(files.settings).toContain("box-shadow: var(--model-control-shadow)")
     expect(Object.values(files).join("\n")).not.toContain("#000")

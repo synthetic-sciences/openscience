@@ -27,7 +27,7 @@
   overflow: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--atlas-radius-xs);
-  background: var(--surface-base);
+  background: var(--color-surface-base);
   list-style: none;
 }
 
@@ -54,7 +54,7 @@
   padding: 2px 4px 2px 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--atlas-radius-sm);
-  background: var(--surface-base);
+  background: var(--color-surface-base);
   color: var(--color-text-muted);
   font-family: var(--font-sans);
   font-size: var(--font-size-small);
@@ -97,7 +97,7 @@
 
 .session-undo-bar__restore:hover,
 .session-undo-bar__restore:focus-visible {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
 }
 
 .session-undo-bar__restore:focus-visible {
@@ -131,4 +131,39 @@
   .session-undo-bar__restore {
     transition: none;
   }
+}
+
+/* Worker sessions have no composer: one line says why and where to write. */
+.session-worker-readonly {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--atlas-radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.session-worker-readonly button {
+  all: unset;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: var(--atlas-radius-sm);
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.session-worker-readonly button:hover {
+  background: var(--color-bg-subtle);
+}
+
+.session-worker-readonly button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
 }

@@ -87,7 +87,7 @@
 
 .science-home__icon:hover,
 .science-home__server:hover {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
@@ -252,7 +252,7 @@
 }
 
 .science-home__search button:hover {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
@@ -292,7 +292,7 @@
 
 .science-home__project-row:hover,
 .science-home__project-row:focus-within {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
 }
 
 .science-home__project {
@@ -408,7 +408,7 @@
 
 .science-home__archived > summary:hover,
 .science-home__archived > summary:focus-visible {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
@@ -427,7 +427,7 @@
   margin-left: auto;
   padding: 0 6px;
   border-radius: var(--atlas-radius-pill);
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
@@ -482,7 +482,7 @@
 }
 
 .science-home__archived button:hover {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
@@ -557,7 +557,7 @@
 
 .science-home__button:hover {
   border-color: var(--color-border-strong);
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
 }
 
 .science-home__button--primary {

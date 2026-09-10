@@ -139,7 +139,7 @@
 .skills-workspace__views button:focus-visible,
 .skills-workspace__bulk button:focus-visible,
 .skills-workspace__density select:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 
@@ -545,7 +545,7 @@
 }
 
 .skills-workspace__pin:focus-visible {
-  outline: 2px solid var(--focus-lit-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: -2px;
 }
 

@@ -3,7 +3,7 @@
   min-height: 0;
   max-height: min(calc(100dvh - 2rem), 42rem);
   align-self: center;
-  background: var(--surface-raised-stronger-non-alpha);
+  background: var(--color-surface-solid);
 }
 
 .project-create-dialog [data-slot="dialog-header"] {
@@ -11,7 +11,7 @@
 }
 
 .project-create-dialog [data-slot="dialog-title"] {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: 1.125rem;
   font-weight: var(--font-weight-emphasis);
   letter-spacing: -0.018em;
@@ -22,7 +22,7 @@
   max-width: 58ch;
   margin: 0 !important;
   padding: 0 3.25rem 1rem 1.25rem;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: 0.8125rem;
   line-height: 1.5;
   text-wrap: pretty;
@@ -55,7 +55,7 @@
 .project-create__label,
 .project-create__section-heading h2 {
   margin: 0;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-family: var(--font-family-sans);
   font-size: 0.8125rem;
   font-weight: var(--font-weight-emphasis);
@@ -65,7 +65,7 @@
 
 .project-create__section-heading p {
   margin: 0.2rem 0 0;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-family: var(--font-family-sans);
   font-size: 0.75rem;
   font-weight: var(--font-weight-regular);
@@ -80,9 +80,9 @@
   gap: 0.65rem;
   overflow: hidden;
   padding: 0 0.8rem;
-  border: 1px solid var(--border-base);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--surface-base);
+  background: var(--color-surface-base);
   transition:
     border-color var(--duration-fast) var(--ease-standard),
     box-shadow var(--duration-fast) var(--ease-standard),
@@ -90,13 +90,13 @@
 }
 
 .project-create__input-frame:focus-within {
-  border-color: var(--focus-lit-ring);
-  background: var(--surface-raised-base);
-  box-shadow: var(--focus-lit);
+  border-color: var(--color-focus-ring);
+  background: var(--color-surface-raised);
+  box-shadow: var(--color-focus-lit);
 }
 
 .project-create__input-frame:has(input[aria-invalid="true"]) {
-  border-color: color-mix(in srgb, var(--text-danger) 46%, var(--border-base));
+  border-color: color-mix(in srgb, var(--color-text-danger) 46%, var(--color-border));
 }
 
 .project-create__input-icon,
@@ -106,7 +106,7 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
 }
 
 .project-create__input {
@@ -115,7 +115,7 @@
   min-width: 0;
   height: 100%;
   flex: 1;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-family: var(--font-family-sans);
   font-size: 0.875rem;
   font-weight: var(--font-weight-regular);
@@ -123,7 +123,7 @@
 }
 
 .project-create__input::placeholder {
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
   opacity: 1;
 }
 
@@ -137,10 +137,10 @@
   align-items: center;
   gap: 0.7rem;
   padding: 0.6rem 0.75rem;
-  border: 1px solid var(--border-base);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-base);
+  color: var(--color-text-secondary);
   text-align: left;
   transition:
     border-color var(--duration-fast) var(--ease-standard),
@@ -149,8 +149,8 @@
 }
 
 .project-create__source-empty:hover:not(:disabled) {
-  border-color: var(--border-strong-base);
-  background: var(--surface-base-hover);
+  border-color: var(--color-border-strong);
+  background: var(--color-hover);
 }
 
 .project-create__source-empty:active:not(:disabled) {
@@ -178,7 +178,7 @@
 .project-create__source-empty-copy strong,
 .project-create__source-copy strong {
   overflow: hidden;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-family: var(--font-family-sans);
   font-size: 0.8125rem;
   font-weight: var(--font-weight-emphasis);
@@ -190,7 +190,7 @@
 .project-create__source-empty-copy span,
 .project-create__source-copy > span {
   overflow: hidden;
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
   font-family: var(--font-family-sans);
   font-size: 0.75rem;
   font-weight: var(--font-weight-regular);
@@ -201,7 +201,7 @@
 
 .project-create__source-list {
   overflow: hidden;
-  border: 1px solid var(--border-base);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: transparent;
 }
@@ -216,7 +216,7 @@
 }
 
 .project-create__source-row + .project-create__source-row {
-  border-top: 1px solid var(--border-base);
+  border-top: 1px solid var(--color-border);
 }
 
 .project-create__source-copy {
@@ -233,7 +233,7 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
   transition:
     background var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard),
@@ -241,8 +241,8 @@
 }
 
 .project-create__remove-source:hover {
-  background: var(--surface-base-hover);
-  color: var(--text-strong);
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 .project-create__remove-source:active {
@@ -259,8 +259,8 @@
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  border-top: 1px solid var(--border-base);
-  color: var(--text-base);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
   font-family: var(--font-family-sans);
   font-size: 0.75rem;
   font-weight: var(--font-weight-medium);
@@ -270,13 +270,13 @@
 }
 
 .project-create__add-more:hover:not(:disabled) {
-  background: var(--surface-base-hover);
-  color: var(--text-strong);
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 .project-create__error {
   margin: 0;
-  color: var(--text-danger);
+  color: var(--color-text-danger);
   font-family: var(--font-family-sans);
   font-size: 0.75rem;
   line-height: 1.45;
@@ -288,7 +288,7 @@
   justify-content: flex-end;
   gap: 0.5rem;
   padding: 0.75rem 1.25rem 0.85rem;
-  border-top: 1px solid var(--border-base);
+  border-top: 1px solid var(--color-border);
 }
 
 .project-create__footer [data-component="button"] {

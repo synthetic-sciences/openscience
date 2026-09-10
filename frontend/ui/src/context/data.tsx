@@ -88,6 +88,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     onSaveArtifact?: SaveArtifactFn
     onLoadComputeJob?: (id: string) => Promise<ComputeJobDetails | undefined>
     onResolveFileReceipts?: (sessionID: string, paths: readonly string[]) => Promise<string[]>
+    /** Open the host's credential settings; question cards that ask for a login offer it. */
+    onOpenCredentials?: () => void
   }) => {
     return {
       get store() {
@@ -105,6 +107,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       saveArtifact: props.onSaveArtifact,
       loadComputeJob: props.onLoadComputeJob,
       resolveFileReceipts: props.onResolveFileReceipts,
+      openCredentials: props.onOpenCredentials,
     }
   },
 })

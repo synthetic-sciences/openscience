@@ -51,7 +51,7 @@
 }
 
 .settings-skills .skills-workspace__summary {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--settings-type-helper);
   font-weight: var(--font-weight-regular);
   line-height: var(--settings-leading-helper);
@@ -118,7 +118,7 @@
 
 .settings-skills .skills-workspace .settings-control[aria-label="Add skill"] {
   background: var(--settings-surface-active);
-  color: var(--text-strong);
+  color: var(--color-text);
 }
 
 .settings-skills .skills-workspace .settings-control[aria-label="Add skill"]:hover,
@@ -172,7 +172,7 @@
   padding: 1px 7px;
   border: 0;
   border-radius: var(--settings-radius-pill);
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--settings-type-helper);
   font-weight: var(--font-weight-medium);
   line-height: var(--settings-leading-helper);

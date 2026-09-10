@@ -81,7 +81,7 @@
 .artifact-menu__separator {
   height: 1px;
   margin: 3px 6px;
-  background: var(--color-border-weak-base);
+  background: var(--color-border-weak);
 }
 
 .artifact-card__sub {

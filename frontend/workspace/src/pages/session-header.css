@@ -41,13 +41,13 @@
 
 .workspace-header__sessions:hover,
 .workspace-header__back:hover {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
 .workspace-header__sessions:active,
 .workspace-header__back:active {
-  background: var(--surface-base-active);
+  background: var(--color-active);
   transform: scale(0.96);
 }
 
@@ -141,7 +141,7 @@
 
 .session-sidebar__archived > summary:hover,
 .session-sidebar__archived > summary:focus-visible {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
@@ -200,7 +200,7 @@
 
 .session-sidebar__archived-row > button:hover,
 .session-sidebar__archived-row > button:focus-visible {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
@@ -210,7 +210,7 @@
 .session-turn-action:focus-visible,
 .session-compaction__file:hover,
 .session-compaction__file:focus-visible {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
@@ -378,7 +378,7 @@
 
 .workspace-header__context:hover,
 .workspace-header__context:focus-visible {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 

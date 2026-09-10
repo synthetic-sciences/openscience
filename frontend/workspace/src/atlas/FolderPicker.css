@@ -4,11 +4,11 @@
 .folder-picker-dialog {
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--border-base);
+  border: 1px solid var(--color-border);
   border-radius: var(--atlas-radius-md);
-  background: var(--surface-raised-stronger-non-alpha);
+  background: var(--color-surface-solid);
   box-shadow: var(--atlas-shadow-float);
-  color: var(--text-base);
+  color: var(--color-text-secondary);
 }
 
 .folder-picker-dialog [data-slot="dialog-header"] {
@@ -34,7 +34,7 @@
   display: grid;
   grid-template-columns: 188px minmax(0, 1fr);
   overflow: hidden;
-  border-top: 1px solid var(--border-weak-base);
+  border-top: 1px solid var(--color-border-weak);
 }
 
 .folder-picker__sidebar {
@@ -45,8 +45,8 @@
   overflow-x: hidden;
   overflow-y: auto;
   padding: 16px 12px;
-  border-right: 1px solid var(--border-weak-base);
-  background: var(--surface-raised-stronger-non-alpha);
+  border-right: 1px solid var(--color-border-weak);
+  background: var(--color-surface-solid);
 }
 
 .folder-picker__sidebar-group,
@@ -66,7 +66,7 @@
 
 .folder-picker__section-label {
   padding: 0 8px 6px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 17px;
@@ -83,7 +83,7 @@
   border: 0;
   border-radius: var(--atlas-radius-xs);
   background: transparent;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -94,13 +94,13 @@
 
 .folder-picker__sidebar-row:hover,
 .folder-picker__sidebar-row:focus-visible {
-  background: var(--surface-raised-base-hover);
-  color: var(--text-strong);
+  background: var(--color-surface-raised-hover);
+  color: var(--color-text);
 }
 
 .folder-picker__sidebar-row[data-active="true"] {
-  background: var(--surface-raised-base-active);
-  color: var(--text-strong);
+  background: var(--color-surface-raised-active);
+  color: var(--color-text);
 }
 
 .folder-picker__sidebar-row:focus-visible,
@@ -110,7 +110,7 @@
 .folder-picker__choose:focus-visible,
 .folder-picker__retry:focus-visible,
 .folder-picker__go:focus-visible {
-  outline: 1px solid var(--focus-lit-ring);
+  outline: 1px solid var(--color-focus-ring);
   outline-offset: -2px;
 }
 
@@ -140,7 +140,7 @@
 }
 
 .folder-picker__sidebar-sublabel {
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
   font-family: var(--font-family-mono);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
@@ -154,7 +154,7 @@
   flex-direction: column;
   gap: 12px;
   padding: 16px 18px 18px;
-  background: var(--surface-raised-stronger-non-alpha);
+  background: var(--color-surface-solid);
 }
 
 .folder-picker__location {
@@ -164,9 +164,9 @@
   align-items: center;
   gap: 6px;
   padding: 4px 6px;
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: var(--atlas-radius-sm);
-  background: var(--surface-raised-base);
+  background: var(--color-surface-raised);
 }
 
 .folder-picker__navigation {
@@ -187,13 +187,13 @@
   border: 0;
   border-radius: var(--atlas-radius-xs);
   background: transparent;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   cursor: pointer;
 }
 
 .folder-picker__icon-button:hover:not(:disabled) {
-  background: var(--surface-raised-base-hover);
-  color: var(--text-strong);
+  background: var(--color-surface-raised-hover);
+  color: var(--color-text);
 }
 
 .folder-picker__icon-button:disabled {
@@ -205,7 +205,7 @@
   width: 1px;
   height: 18px;
   flex: 0 0 1px;
-  background: var(--border-weak-base);
+  background: var(--color-border-weak);
 }
 
 .folder-picker__breadcrumbs {
@@ -233,7 +233,7 @@
   border: 0;
   border-radius: var(--atlas-radius-xs);
   background: transparent;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
@@ -244,12 +244,12 @@
 }
 
 .folder-picker__breadcrumb:hover {
-  background: var(--surface-raised-base-hover);
-  color: var(--text-strong);
+  background: var(--color-surface-raised-hover);
+  color: var(--color-text);
 }
 
 .folder-picker__breadcrumb[data-current="true"] {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-weight: var(--font-weight-medium);
 }
 
@@ -260,7 +260,7 @@
   flex: 0 0 14px;
   align-items: center;
   justify-content: center;
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
 }
 
 .folder-picker__breadcrumb-separator [data-slot="icon-svg"] {
@@ -286,18 +286,18 @@
   align-items: center;
   gap: 7px;
   padding: 3px 6px 3px 10px;
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: var(--atlas-radius-sm);
-  background: var(--surface-raised-base);
-  color: var(--text-weak);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
   transition:
     border-color var(--duration-fast) var(--ease-standard),
     box-shadow var(--duration-fast) var(--ease-standard);
 }
 
 .folder-picker__field:focus-within {
-  border-color: var(--focus-lit-ring);
-  box-shadow: var(--focus-lit);
+  border-color: var(--color-focus-ring);
+  box-shadow: var(--color-focus-lit);
 }
 
 .folder-picker__field input {
@@ -307,7 +307,7 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-regular);
@@ -315,7 +315,7 @@
 }
 
 .folder-picker__field input::placeholder {
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
 }
 
 .folder-picker__path-field input {
@@ -326,7 +326,7 @@
 .folder-picker__field-label,
 .folder-picker__count {
   flex: 0 0 auto;
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
@@ -343,10 +343,10 @@
 .folder-picker__choose {
   min-height: 34px;
   padding: 0 10px;
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: var(--atlas-radius-xs);
-  background: var(--surface-raised-base);
-  color: var(--text-base);
+  background: var(--color-surface-raised);
+  color: var(--color-text-secondary);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
@@ -357,8 +357,8 @@
 .folder-picker__go:hover:not(:disabled),
 .folder-picker__retry:hover,
 .folder-picker__choose:hover {
-  background: var(--surface-raised-base-hover);
-  color: var(--text-strong);
+  background: var(--color-surface-raised-hover);
+  color: var(--color-text);
 }
 
 .folder-picker__go:disabled {
@@ -371,7 +371,7 @@
   min-height: 0;
   overflow-y: auto;
   flex: 1;
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: var(--atlas-radius-sm);
   background: transparent;
   transition: opacity var(--duration-fast) var(--ease-standard);
@@ -394,7 +394,7 @@
   width: 32%;
   height: 100%;
   display: block;
-  background: var(--text-interactive-base);
+  background: var(--color-text-interactive);
   animation: folder-picker-loading 1.1s var(--ease-standard) infinite;
 }
 
@@ -414,7 +414,7 @@
   align-items: center;
   gap: 4px;
   padding: 4px 6px 4px 4px;
-  border-bottom: 1px solid var(--border-weak-base);
+  border-bottom: 1px solid var(--color-border-weak);
 }
 
 .folder-picker__row:last-child {
@@ -423,7 +423,7 @@
 
 .folder-picker__row:hover,
 .folder-picker__row:focus-within {
-  background: var(--surface-raised-base-hover);
+  background: var(--color-surface-raised-hover);
 }
 
 .folder-picker__row-open {
@@ -437,7 +437,7 @@
   border: 0;
   border-radius: var(--atlas-radius-xs);
   background: transparent;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -447,7 +447,7 @@
   min-width: 0;
   overflow: hidden;
   flex: 1;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 19px;
@@ -462,12 +462,12 @@
   flex: 0 0 18px;
   align-items: center;
   justify-content: center;
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
   opacity: 0.72;
 }
 
 .folder-picker__pick-label {
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
   font-size: var(--font-size-small);
   line-height: 18px;
 }
@@ -492,7 +492,7 @@
   justify-content: center;
   gap: 7px;
   padding: 28px 24px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-regular);
   line-height: 19px;
@@ -500,7 +500,7 @@
 }
 
 .folder-picker__empty strong {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
 }
@@ -508,7 +508,7 @@
 .folder-picker__empty p {
   max-width: 410px;
   margin: 0;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
 }
 
 .folder-picker__empty code {
@@ -517,7 +517,7 @@
 }
 
 .folder-picker__empty--error > [data-component="icon"] {
-  color: var(--text-danger, var(--icon-critical-base));
+  color: var(--color-text-danger, var(--color-icon-error));
 }
 
 .folder-picker__footer {
@@ -535,7 +535,7 @@
   align-items: center;
   gap: 7px;
   overflow: hidden;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-family: var(--font-family-mono);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
@@ -596,7 +596,7 @@
     overflow-y: hidden;
     padding: 8px 12px;
     border-right: 0;
-    border-bottom: 1px solid var(--border-weak-base);
+    border-bottom: 1px solid var(--color-border-weak);
   }
 
   .folder-picker__sidebar-group {
@@ -680,7 +680,7 @@
   .folder-picker__location,
   .folder-picker__field,
   .folder-picker__list {
-    background: var(--surface-raised-stronger-non-alpha);
+    background: var(--color-surface-solid);
   }
 }
 

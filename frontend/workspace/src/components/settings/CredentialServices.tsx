@@ -30,6 +30,40 @@ export const CredentialServices: Component<{
   const [name, setName] = createSignal("")
   const [field, setField] = createSignal("api_key")
   const [secret, setSecret] = createSignal("")
+  // Logins this computer already holds (gh, hf): offered as a one-click import
+  // so publishing never needs a token pasted into a chat.
+  type HostCredential = { service: "github" | "huggingface"; available: boolean; source?: string }
+  const [host, setHost] = createSignal<HostCredential[]>([])
+  const hostSource = (id: string) => {
+    const match = host().find((item) => item.service === id && item.available)
+    if (!match) return undefined
+    return match.source === "gh"
+      ? "the gh CLI login"
+      : match.source === "huggingface-cli"
+        ? "the hf CLI login"
+        : match.source === "token-file"
+          ? "the Hugging Face token file"
+          : "the shell environment"
+  }
+  const importHost = async (service: Service) => {
+    if (saving()) return
+    setSaving(true)
+    setError(undefined)
+    const result = await settingsApi<{ services: Service[] }>(
+      sdk.url,
+      platform.fetch ?? fetch,
+      "/settings/credentials/host/import",
+      { method: "POST", body: JSON.stringify({ service: service.id }) },
+    ).catch((cause) => {
+      setError(cause instanceof Error ? cause.message : String(cause))
+      return undefined
+    })
+    setSaving(false)
+    if (!result) return
+    invalidateCredentials(sdk.url)
+    invalidateScientificTools(sdk.url)
+    setServices(result.services)
+  }
   const category = (service: Service) => {
     if (service.category) return service.category
     if (["aws", "gcp", "azure"].includes(service.id)) return "compute"
@@ -48,6 +82,13 @@ export const CredentialServices: Component<{
     })
     if (result) setServices(result.services)
     setLoading(false)
+    if (props.category !== "integration") return
+    const found = await settingsApi<HostCredential[]>(
+      sdk.url,
+      platform.fetch ?? fetch,
+      "/settings/credentials/host",
+    ).catch(() => undefined)
+    if (found) setHost(found)
   }
 
   onMount(() => void load())
@@ -216,8 +257,21 @@ export const CredentialServices: Component<{
                             : ""}
                         </span>
                       </Show>
+                      <Show when={!service.connected && hostSource(service.id)}>
+                        <span>Found on this computer via {hostSource(service.id)}.</span>
+                      </Show>
                     </div>
                     <div class="settings-list-actions ml-auto max-w-full flex-wrap justify-end">
+                      <Show when={!service.connected && hostSource(service.id)}>
+                        <Button
+                          size="small"
+                          variant="primary"
+                          disabled={saving()}
+                          onClick={() => void importHost(service)}
+                        >
+                          Use this computer's login
+                        </Button>
+                      </Show>
                       <Show when={service.connected && service.source !== "account"}>
                         <button
                           type="button"

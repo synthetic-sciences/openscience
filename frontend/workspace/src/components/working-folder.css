@@ -1,0 +1,131 @@
+/* Composer chip: where relative paths land. Same chrome as the Tools chip. */
+.working-folder {
+  position: relative;
+  flex: 0 0 auto;
+  height: 34px;
+}
+
+.working-folder > summary {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 200px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-medium);
+  line-height: 1;
+  list-style: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 150ms var(--ease-standard),
+    color 150ms var(--ease-standard);
+}
+
+.working-folder > summary::-webkit-details-marker {
+  display: none;
+}
+
+.working-folder__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.working-folder > summary:hover,
+.working-folder > summary:focus-visible,
+.working-folder[open] > summary {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+.working-folder > summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.working-folder > summary [data-component="icon"]:last-child {
+  transition: transform 150ms var(--ease-standard);
+}
+
+.working-folder[open] > summary [data-component="icon"]:last-child {
+  transform: rotate(180deg);
+}
+
+.working-folder__menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 40;
+  display: flex;
+  width: min(320px, calc(100vw - 24px));
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-solid);
+  background-clip: padding-box;
+  box-shadow: var(--atlas-shadow-md);
+}
+
+.working-folder__hint {
+  margin: 0;
+  padding: 6px 8px 8px;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-small);
+}
+
+.working-folder__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.working-folder__option:hover,
+.working-folder__option:focus-visible {
+  background: var(--color-bg-subtle);
+  outline: none;
+}
+
+.working-folder__option[aria-checked="true"] {
+  color: var(--color-text);
+}
+
+.working-folder__option-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.working-folder__option-copy strong {
+  font-size: var(--font-size-medium);
+  font-weight: var(--font-weight-medium);
+}
+
+.working-folder__option-copy small {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .working-folder > summary,
+  .working-folder > summary [data-component="icon"]:last-child {
+    transition: none;
+  }
+}

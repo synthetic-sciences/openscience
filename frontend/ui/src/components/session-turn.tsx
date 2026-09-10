@@ -21,12 +21,14 @@ import {
   createResource,
   createSignal,
   For,
+  type JSX,
   Match,
   on,
   onCleanup,
   ParentProps,
   Show,
   Switch,
+  untrack,
 } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part, QuestionPrompt } from "./message-part"
@@ -55,7 +57,9 @@ import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
 import { progressStatus } from "./session-turn-progress"
-import { collapsibleTracePart, elapsedLabel, visibleResearchTrace } from "./research-trace"
+import { collapsibleTracePart, elapsedLabel, visibleResearchTrace, type ResearchTraceEntry } from "./research-trace"
+import { buildTraceRows, editedLabel, exploredLabel, thoughtLabel, type TraceRow } from "./trace-rows"
+import { Collapsible } from "./collapsible"
 import { MarkdownFileScope, useMarkdownFileResolvers } from "./markdown"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
@@ -140,35 +144,161 @@ function isGeneratedTool(part: PartType | undefined): part is ToolPart {
   return part?.type === "tool" && part.tool === "artifact" && part.state.status === "completed"
 }
 
-function AssistantTrace(props: { messages: AssistantMessage[]; expanded: boolean; pendingRequestCallID?: string }) {
+/** One collapsible line of the trace: a verb, a muted summary, a chevron.
+ * Nested content is the ordinary part renderer, so details stay identical.
+ * A burst of one shows its part directly; the header appears once a second
+ * call joins, without remounting the first. */
+function TraceGroupRow(props: {
+  kind: "explored" | "edited" | "thought"
+  label: string
+  live?: boolean
+  working?: boolean
+  header?: boolean
+  children: JSX.Element
+}) {
+  const [manual, setManual] = createSignal<boolean>()
+  // Bursts stay open while the turn works so progress reads live, then fold
+  // to their one-line summary; a thought streams open and folds when it ends.
+  // The reader's own choice always wins.
+  const open = () => manual() ?? (props.kind === "thought" ? !!props.live : !!props.working)
+  return (
+    <Collapsible
+      open={open()}
+      onOpenChange={(value) => setManual(value)}
+      // Nested parts stay mounted while folded: a pending request or a draft
+      // answer inside a burst must survive the fold, and find-in-page still works.
+      forceMount
+      data-component="trace-group"
+      data-kind={props.kind}
+      data-live={props.live ? "true" : undefined}
+      data-header={props.header === false ? "false" : "true"}
+    >
+      <Show when={props.header !== false}>
+        <Collapsible.Trigger>
+          <div data-component="trace-row" data-open={open() ? "true" : undefined}>
+            <Show when={props.live}>
+              <Spinner />
+            </Show>
+            <span data-slot="trace-row-label">{props.label}</span>
+            <Icon name="chevron-down" size="small" data-slot="trace-row-chevron" />
+          </div>
+        </Collapsible.Trigger>
+      </Show>
+      <Collapsible.Content>
+        <div data-slot="trace-group-body">{props.children}</div>
+      </Collapsible.Content>
+    </Collapsible>
+  )
+}
+
+function AssistantTrace(props: {
+  messages: AssistantMessage[]
+  expanded: boolean
+  working: boolean
+  pendingRequestCallID?: string
+}) {
   const data = useData()
   const emptyParts: PartType[] = []
   const pendingChildRequest = (sessionID: string) =>
     !!(data.store.permission?.[sessionID]?.[0] || data.store.question?.[sessionID]?.[0])
-  const trace = createMemo(() =>
+  const entries = createMemo(() =>
     visibleResearchTrace(
       props.messages.flatMap((message) =>
         (data.store.part[message.id] ?? emptyParts).map((part) => ({
           message,
           part,
-          hidden:
-            (!props.expanded && collapsibleTracePart(part, props.pendingRequestCallID, pendingChildRequest)) ||
-            (part.type === "tool" && part.tool === "todoread") ||
-            isGeneratedTool(part),
+          hidden: (part.type === "tool" && part.tool === "todoread") || isGeneratedTool(part),
         })),
       ),
     ),
   )
-  const traceByID = createMemo(() => new Map(trace().map((entry) => [entry.part.id, entry])))
-  const traceIDs = createMemo(() => trace().map((entry) => entry.part.id), [], { equals: same })
+  // Collapsed, the turn shows what the reader asked for: the answer, plus
+  // anything that still needs them (a failure, a pending request). Expanded,
+  // the whole trace appears as rows, chronological, with narration in place.
+  const rows = createMemo(() => {
+    const all = buildTraceRows(entries())
+    if (props.expanded) return all
+    return all.filter((row) => {
+      if (row.kind === "text") return !row.narration
+      if (row.kind === "tool" || row.kind === "agent")
+        return !collapsibleTracePart(row.entry.part, props.pendingRequestCallID, pendingChildRequest)
+      return false
+    })
+  })
+  // A burst keeps the key of its first call, so a call that joins it later
+  // never remounts what the reader already opened.
+  const keyOf = (row: TraceRow) =>
+    row.kind === "explored" || row.kind === "edited" ? `burst:${row.entries[0]!.part.id}` : row.entry.part.id
+  const rowByKey = createMemo(() => new Map(rows().map((row) => [keyOf(row), row])))
+  const keys = createMemo(() => rows().map(keyOf), [], { equals: same })
+  const live = (entry: ResearchTraceEntry) =>
+    entry.part.type === "reasoning" && !entry.part.time?.end && !entry.message.time.completed
 
+  // The kind of a row never changes under a stable key, so pick the renderer
+  // once and let only labels stay reactive. Re-picking on every store change
+  // would remount the part and drop a pending question's draft.
   return (
-    <For each={traceIDs()}>
-      {(partID) => (
-        <Show when={traceByID().get(partID)}>
-          {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
-        </Show>
-      )}
+    <For each={keys()}>
+      {(key) => {
+        const row = () => rowByKey().get(key)
+        const kind = untrack(row)?.kind
+        return (
+          <Show when={row()}>
+            {(current) => {
+              if (kind === "thought") {
+                const value = () => current() as Extract<TraceRow, { kind: "thought" }>
+                return (
+                  <TraceGroupRow
+                    kind="thought"
+                    live={live(value().entry)}
+                    working={props.working}
+                    label={thoughtLabel(value().seconds, live(value().entry))}
+                  >
+                    <Part part={value().entry.part} message={value().entry.message} hideCopy />
+                  </TraceGroupRow>
+                )
+              }
+              if (kind === "explored" || kind === "edited") {
+                const value = () => current() as Extract<TraceRow, { kind: "explored" | "edited" }>
+                const ids = createMemo(() => value().entries.map((entry) => entry.part.id), [], { equals: same })
+                const byID = createMemo(() => new Map(value().entries.map((entry) => [entry.part.id, entry])))
+                return (
+                  <TraceGroupRow
+                    kind={kind}
+                    working={props.working}
+                    header={value().entries.length > 1}
+                    label={
+                      kind === "explored"
+                        ? exploredLabel(value() as Extract<TraceRow, { kind: "explored" }>)
+                        : editedLabel(value() as Extract<TraceRow, { kind: "edited" }>)
+                    }
+                  >
+                    <For each={ids()}>
+                      {(id) => (
+                        <Show when={byID().get(id)}>
+                          {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
+                        </Show>
+                      )}
+                    </For>
+                  </TraceGroupRow>
+                )
+              }
+              const value = () => current() as Extract<TraceRow, { kind: "text" | "tool" | "agent" }>
+              return (
+                <div
+                  data-slot="trace-entry"
+                  data-narration={(() => {
+                    const row = value()
+                    return row.kind === "text" && row.narration ? "true" : undefined
+                  })()}
+                >
+                  <Part part={value().entry.part} message={value().entry.message} hideCopy />
+                </div>
+              )
+            }}
+          </Show>
+        )
+      }}
     </For>
   )
 }
@@ -762,6 +892,9 @@ export function SessionTurn(
                         trace must stay collapsible from wherever the reader is.
                         Request and retry status sit beside the label, never in
                         place of it. */}
+                    {/* One line owns the trace, the way Cursor does it: while
+                        working it is the live status; afterwards it reads
+                        "Worked for 2m 3s" and folds the whole trace. */}
                     <Show when={working() || hasSteps()}>
                       <div data-slot="session-turn-trace-control" data-working={working() ? "true" : undefined}>
                         <Show when={hasSteps()}>
@@ -772,42 +905,49 @@ export function SessionTurn(
                             size="small"
                             aria-expanded={expanded()}
                             aria-controls={traceID()}
+                            aria-label={i18n.t(expanded() ? "ui.sessionTurn.steps.hide" : "ui.sessionTurn.steps.show")}
+                            title={i18n.t("ui.sessionTurn.totalTime")}
                             onClick={toggleSteps}
                           >
+                            <Show when={working()}>
+                              <Spinner />
+                            </Show>
                             <Icon name="chevron-down" size="small" data-slot="session-turn-trigger-icon" />
                             <span data-slot="session-turn-trigger-label">
-                              {i18n.t(expanded() ? "ui.sessionTurn.steps.hide" : "ui.sessionTurn.steps.show")}
+                              <Switch>
+                                <Match when={working() && retry()}>
+                                  <span data-slot="session-turn-retry-message">{retry()?.message}</span>
+                                  <span data-slot="session-turn-retry-seconds">
+                                    · {i18n.t("ui.sessionTurn.retry.retrying")}
+                                    {store.retrySeconds > 0
+                                      ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
+                                      : ""}
+                                  </span>
+                                  <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                                </Match>
+                                <Match when={working()}>
+                                  <span data-slot="session-turn-status-text">{statusText()}</span>
+                                </Match>
+                                <Match when={true}>
+                                  {i18n.t("ui.sessionTurn.workedFor", { duration: store.duration })}
+                                </Match>
+                              </Switch>
                             </span>
+                            <Show when={working()}>
+                              <span data-slot="session-turn-duration" aria-live="off">
+                                {store.duration}
+                              </span>
+                            </Show>
                           </Button>
                         </Show>
-                        <Show when={working()}>
+                        <Show when={working() && !hasSteps()}>
                           <div data-slot="session-turn-live-status" aria-live="off" title={statusText()}>
                             <Spinner />
-                            <Switch>
-                              <Match when={retry()}>
-                                <span data-slot="session-turn-retry-message">{retry()?.message}</span>
-                                <span data-slot="session-turn-retry-seconds">
-                                  · {i18n.t("ui.sessionTurn.retry.retrying")}
-                                  {store.retrySeconds > 0
-                                    ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
-                                    : ""}
-                                </span>
-                                <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
-                              </Match>
-                              <Match when={true}>
-                                <span data-slot="session-turn-status-text">{statusText()}</span>
-                              </Match>
-                            </Switch>
+                            <span data-slot="session-turn-status-text">{statusText()}</span>
+                            <span data-slot="session-turn-duration" aria-live="off">
+                              {store.duration}
+                            </span>
                           </div>
-                        </Show>
-                        <Show when={!working() || !phase()}>
-                          <span
-                            data-slot="session-turn-duration"
-                            aria-live="off"
-                            title={i18n.t("ui.sessionTurn.totalTime")}
-                          >
-                            {store.duration}
-                          </span>
                         </Show>
                       </div>
                     </Show>
@@ -821,6 +961,7 @@ export function SessionTurn(
                           <AssistantTrace
                             messages={assistantMessages()}
                             expanded={expanded()}
+                            working={working()}
                             pendingRequestCallID={requestTool()?.callID}
                           />
                         </MarkdownFileScope>
@@ -1050,14 +1191,16 @@ export function SessionTurn(
                       </div>
                     </Show>
                     <Show when={isLastUserMessage() && !working() && !!data.saveArtifact && written().length > 0}>
-                      <section data-slot="session-turn-session-outputs">
-                        <header>
-                          <span>
-                            <strong>Session outputs</strong>
-                            <small>Saved in this session. Keep important deliverables in Results.</small>
-                          </span>
-                          <span>{artifactActions(written()).length}</span>
-                        </header>
+                      {/* One quiet line by default; the file list opens on demand. */}
+                      <details data-slot="session-turn-session-outputs">
+                        <summary>
+                          <Icon name="chevron-down" size="small" />
+                          <strong>
+                            {artifactActions(written()).length}{" "}
+                            {artifactActions(written()).length === 1 ? "file" : "files"} written this turn
+                          </strong>
+                          <small>Save the ones that matter to Results</small>
+                        </summary>
                         <div data-slot="session-turn-artifact-save">
                           <For each={artifactActions(written())}>
                             {(action) => {
@@ -1096,7 +1239,7 @@ export function SessionTurn(
                             }}
                           </For>
                         </div>
-                      </section>
+                      </details>
                     </Show>
                   </Match>
                 </Switch>

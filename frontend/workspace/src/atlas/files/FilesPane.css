@@ -222,7 +222,7 @@
 .files-menu__sep {
   height: 1px;
   margin: 7px 8px;
-  background: var(--color-border-weak-base);
+  background: var(--color-border-weak);
 }
 
 .files-table {
@@ -895,7 +895,7 @@
   width: 100%;
   min-height: 36px;
   padding: 0 8px;
-  border: 1px solid var(--color-border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: calc(var(--atlas-radius-xs) - 2px);
   background: var(--color-bg);
   color: var(--color-text);
@@ -907,7 +907,7 @@
   min-width: 0;
   min-height: 36px;
   padding: 0 10px;
-  border: 1px solid var(--color-border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: var(--atlas-radius-xs);
   background: var(--color-bg);
   color: var(--color-text);
@@ -933,7 +933,7 @@
 .files-connect__submit {
   min-height: 34px;
   padding: 0 11px;
-  border: 1px solid var(--color-border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: var(--atlas-radius-xs);
   background: none;
   color: var(--color-text-muted);

@@ -104,7 +104,7 @@
 }
 
 .session-scroller [data-component="user-message"] {
-  --user-message-surface: var(--surface-weak);
+  --user-message-surface: var(--color-surface-weak);
   --user-message-radius: var(--radius-sm);
 }
 
@@ -186,7 +186,7 @@
    Keep a modest title/section/subsection hierarchy for long research answers. */
 .session-scroller [data-slot="assistant-prose"] :is(h1, h2, h3, h4, h5, h6) {
   margin-block: 24px 8px;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: 1em;
   font-weight: var(--font-weight-emphasis);
   line-height: 1.4;
@@ -238,7 +238,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
-  scrollbar-color: var(--border-base) transparent;
+  scrollbar-color: var(--color-border) transparent;
 }
 
 .session-scroller [data-slot="assistant-prose"] :is(pre, .katex-display)::-webkit-scrollbar {
@@ -247,7 +247,7 @@
 }
 
 .session-scroller [data-slot="assistant-prose"] :is(pre, .katex-display)::-webkit-scrollbar-thumb {
-  background: var(--border-base);
+  background: var(--color-border);
   border-radius: var(--radius-xs);
 }
 
@@ -281,7 +281,7 @@
   height: 0;
   margin-block: 24px;
   border: 0;
-  border-top: 1px solid var(--border-weak-base);
+  border-top: 1px solid var(--color-border-weak);
 }
 
 .session-scroller [data-slot="assistant-prose"] > :first-child {
@@ -309,7 +309,7 @@
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   scrollbar-width: thin;
-  scrollbar-color: var(--border-base) transparent;
+  scrollbar-color: var(--color-border) transparent;
 }
 
 .session-scroller [data-slot="assistant-prose"] [data-component="markdown-table"]:focus-visible {
@@ -341,7 +341,7 @@
 
 .session-scroller [data-slot="assistant-prose"] th {
   background: color-mix(in srgb, var(--color-bg-subtle) 76%, transparent);
-  color: var(--color-text-muted, var(--text-weak));
+  color: var(--color-text-muted);
   font-weight: var(--font-weight-emphasis);
 }
 
@@ -350,7 +350,7 @@
 }
 
 .session-scroller [data-slot="session-turn-collapsible-trigger-content"] {
-  color: var(--color-text-muted, var(--text-weak));
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
 }
@@ -359,7 +359,7 @@
   gap: 5px;
   margin-left: 4px;
   padding: 0 0 0 10px;
-  border-left-color: var(--border-weak-base);
+  border-left-color: var(--color-border-weak);
 }
 
 .session-scroller [data-slot="session-turn-status-text"] {
@@ -481,7 +481,7 @@
 }
 
 .session-scroller [data-slot="session-turn-generated"] > header {
-  color: var(--color-text-muted, var(--text-weak));
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
   letter-spacing: normal;

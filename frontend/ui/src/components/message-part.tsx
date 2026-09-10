@@ -1507,17 +1507,21 @@ ToolRegistry.register({
                 <Spinner />
               </Show>
             </span>
+            {/* What the worker is doing leads; who is doing it sits at the
+                right in the quiet colour, and the state reads on its own line. */}
             <span data-slot="delegation-heading">
-              <strong>{agentLabel()}</strong>
-              <Show when={props.input.description}>
-                <span data-slot="delegation-description">{String(props.input.description)}</span>
-              </Show>
+              <span data-slot="delegation-title">{String(props.input.description || agentLabel())}</span>
+              <span data-slot="delegation-subline">
+                <span data-slot="delegation-status">{statusLabel()}</span>
+                <Show when={duration()}>{(value) => <span>{value()}</span>}</Show>
+                <Show when={props.metadata.toolCalls !== undefined}>
+                  <span>{pluralize(Number(props.metadata.toolCalls), "op")}</span>
+                </Show>
+              </span>
             </span>
             <span data-slot="delegation-summary-meta">
-              <span data-slot="delegation-status">{statusLabel()}</span>
-              <Show when={duration()}>{(value) => <span>{value()}</span>}</Show>
-              <Show when={props.metadata.toolCalls !== undefined}>
-                <span>{pluralize(Number(props.metadata.toolCalls), "op")}</span>
+              <Show when={props.input.description}>
+                <span data-slot="delegation-agent">{agentLabel()}</span>
               </Show>
               <Icon name="chevron-down" size="small" />
             </span>
@@ -2259,6 +2263,15 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   })
 
   const question = createMemo(() => questions()[store.tab])
+  // A question that asks for a login or token is a credential request: point
+  // at the encrypted store instead of letting a secret land in the chat.
+  const credential = createMemo(
+    () =>
+      !!data.openCredentials &&
+      /\b(credentials?|tokens?|api\s*keys?|log\s*in|login|sign\s*in|gh auth|hf auth|hugging\s*face|github)\b/i.test(
+        `${question()?.header ?? ""} ${question()?.question ?? ""}`,
+      ),
+  )
   const confirm = createMemo(() => !single() && store.tab === questions().length)
   const options = createMemo(() => question()?.options ?? [])
   const input = createMemo(() => store.custom[store.tab] ?? "")
@@ -2385,6 +2398,14 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
             {question()?.question}
             {multi() ? " " + i18n.t("ui.question.multiHint") : ""}
           </div>
+          <Show when={credential()}>
+            <div data-slot="question-credential">
+              <span>{i18n.t("ui.question.credentialHint")}</span>
+              <button type="button" onClick={() => data.openCredentials?.()}>
+                {i18n.t("ui.question.openCredentials")}
+              </button>
+            </div>
+          </Show>
           <div data-slot="question-options">
             <For each={options()}>
               {(opt, i) => {

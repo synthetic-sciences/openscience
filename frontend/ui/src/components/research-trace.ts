@@ -44,14 +44,14 @@ export function traceFamily(tool: string): TraceFamily {
 }
 
 function traceLabel(family: TraceFamily, count: number) {
-  if (family === "context")
-    return `Reviewed ${count} ${count === 1 ? "file or code search" : "files and code searches"}`
-  if (family === "sources") return `Checked ${count} external ${count === 1 ? "source" : "sources"}`
-  if (family === "commands") return `Ran ${count} build or verification ${count === 1 ? "step" : "steps"}`
-  if (family === "changes") return `Recorded ${count} change ${count === 1 ? "operation" : "operations"}`
-  if (family === "images") return `Generated ${count} ${count === 1 ? "image" : "images"}`
-  if (family === "skills") return `Loaded ${count} ${count === 1 ? "skill" : "skills"}`
-  return `Completed ${count} research ${count === 1 ? "operation" : "operations"}`
+  const noun = (one: string, many: string) => `${count} ${count === 1 ? one : many}`
+  if (family === "context") return `Read ${noun("file", "files")}`
+  if (family === "sources") return `Searched ${noun("source", "sources")}`
+  if (family === "commands") return `Ran ${noun("command", "commands")}`
+  if (family === "changes") return `Edited ${noun("file", "files")}`
+  if (family === "images") return `Generated ${noun("image", "images")}`
+  if (family === "skills") return `Loaded ${noun("skill", "skills")}`
+  return `Completed ${noun("operation", "operations")}`
 }
 
 export function compact(values: string[], limit = 3) {

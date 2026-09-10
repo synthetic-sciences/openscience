@@ -269,7 +269,7 @@ describe("delegation summaries", () => {
         family: "changes",
         count: 2,
         failed: 0,
-        label: "Recorded 2 change operations",
+        label: "Edited 2 files",
         detail: "Update two files · Update two more files",
       },
     ])

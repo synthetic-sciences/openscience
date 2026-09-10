@@ -45,7 +45,7 @@
 
 .connectors-panel .settings-control--search:focus-within,
 .connectors-panel .settings-field:focus {
-  border-color: var(--border-strong-base);
+  border-color: var(--color-border-strong);
   box-shadow: none;
 }
 
@@ -67,7 +67,7 @@
 }
 
 .connectors-panel .settings-button[data-variant="ghost"] {
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--color-border-weak);
   background: transparent;
 }
 
@@ -121,27 +121,27 @@
 }
 
 .connectors-catalog__title strong {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
 }
 
 .connectors-catalog__title span {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
 }
 
 .connectors-catalog__row[data-state="unavailable"] .connectors-catalog__title span {
-  color: var(--text-danger);
+  color: var(--color-text-danger);
 }
 
 .connectors-catalog__copy p {
   display: block;
   margin: 2px 0 0;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 16px;
   text-wrap: pretty;
@@ -151,7 +151,7 @@
   display: grid;
   gap: 8px;
   padding: 0 48px 14px 52px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 16px;
 }
@@ -173,13 +173,13 @@
 }
 
 .connectors-catalog__details dt {
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
 }
 
 .connectors-catalog__details dd {
   margin: 0;
   overflow-wrap: anywhere;
-  color: var(--text-strong);
+  color: var(--color-text);
 }
 
 .connectors-catalog__details .connectors-detail-action {
@@ -217,7 +217,7 @@
   padding: 8px 12px;
   border-radius: var(--settings-radius-control);
   background: transparent;
-  color: var(--text-base);
+  color: var(--color-text-secondary);
   list-style: none;
   cursor: pointer;
   transition:
@@ -234,7 +234,7 @@
 .connectors-manual > summary:focus-visible,
 .connectors-manual[open] > summary {
   background: var(--settings-surface-hover);
-  color: var(--text-strong);
+  color: var(--color-text);
 }
 
 .connectors-manual > summary:focus-visible {
@@ -262,7 +262,7 @@
 
 .connectors-manual > summary small {
   overflow: hidden;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 16px;
   text-overflow: ellipsis;
@@ -270,7 +270,7 @@
 }
 
 .connectors-manual > summary [data-component="icon"] {
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
   transition: transform 150ms ease;
 }
 
@@ -329,14 +329,14 @@
 }
 
 .connectors-oauth strong {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
 }
 
 .connectors-oauth span {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 16px;
 }
@@ -372,7 +372,7 @@
   border: 1px solid transparent;
   border-radius: var(--connectors-radius);
   background: var(--settings-surface-muted);
-  color: var(--icon-strong-base);
+  color: var(--color-icon-strong);
 }
 
 .connectors-identity .settings-provider-logo {
@@ -393,7 +393,7 @@
 .connectors-copy__title strong {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
@@ -403,7 +403,7 @@
 
 .connectors-copy__title > span {
   flex: 0 0 auto;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 16px;
 }
@@ -411,7 +411,7 @@
 .connectors-copy > p {
   margin: 1px 0 0;
   overflow: hidden;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-family: var(--font-family-mono);
   font-size: var(--font-size-x-small);
   line-height: 16px;
@@ -424,7 +424,7 @@
   flex-wrap: wrap;
   gap: 4px 12px;
   margin-top: 2px;
-  color: var(--text-weaker);
+  color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   line-height: 16px;
@@ -436,7 +436,7 @@
   align-items: center;
   justify-self: start;
   gap: 6px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
@@ -448,23 +448,23 @@
   height: 6px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: var(--icon-disabled);
+  background: var(--color-icon-disabled);
 }
 
 .connectors-status[data-tone="active"] > span {
-  background: var(--icon-success-base);
+  background: var(--color-icon-success);
 }
 
 .connectors-status[data-tone="pending"] > span {
-  background: var(--icon-warning-base);
+  background: var(--color-icon-warning);
 }
 
 .connectors-status[data-tone="error"] {
-  color: var(--text-danger);
+  color: var(--color-text-danger);
 }
 
 .connectors-status[data-tone="error"] > span {
-  background: var(--text-danger);
+  background: var(--color-text-danger);
 }
 
 .connectors-row__actions {
@@ -490,7 +490,7 @@
 
 .connectors-action {
   padding: 0 10px;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
 }
@@ -499,7 +499,7 @@
 .connectors-refresh:hover,
 .connectors-detail-action:hover,
 .connectors-panel [data-component="icon-button"]:hover:not(:disabled) {
-  background: var(--surface-raised-base-hover);
+  background: var(--color-surface-raised-hover);
 }
 
 .connectors-panel :is(button, [data-component="icon-button"]):active:not(:disabled) {
@@ -523,7 +523,7 @@
 }
 
 .connectors-inspection__loading {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
 }
 
@@ -533,14 +533,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
 }
 
 .connectors-inspection-state button {
   min-height: 32px;
   padding-inline: 8px;
-  color: var(--text-base);
+  color: var(--color-text-secondary);
   font-weight: var(--font-weight-medium);
 }
 
@@ -560,7 +560,7 @@
   align-items: center;
   gap: 6px;
   min-height: 24px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
 }
 
 .connectors-capability h3 {
@@ -592,7 +592,7 @@
 .connectors-capability__name {
   margin: 0;
   overflow: hidden;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-family: var(--font-family-mono);
   font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
@@ -606,7 +606,7 @@
   display: -webkit-box;
   margin: 1px 0 0;
   overflow: hidden;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 16px;
   -webkit-box-orient: vertical;
@@ -621,7 +621,7 @@
   gap: 4px;
   margin-top: 12px;
   padding-top: 8px;
-  border-top: 1px solid var(--border-weak-base);
+  border-top: 1px solid var(--color-border-weak);
 }
 
 .connectors-detail-action,
@@ -630,14 +630,14 @@
   align-items: center;
   gap: 6px;
   padding: 0 8px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
 }
 
 .connectors-detail-action--danger:hover {
-  color: var(--text-danger);
-  background: var(--surface-critical-weak);
+  color: var(--color-text-danger);
+  background: var(--color-error-muted);
 }
 
 .connectors-refresh {
@@ -664,7 +664,7 @@
 }
 
 .connectors-form__lead strong {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   line-height: 18px;
@@ -672,7 +672,7 @@
 
 .connectors-form__lead p {
   margin: 2px 0 0;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 18px;
   text-wrap: pretty;
@@ -698,7 +698,7 @@
   align-items: center;
   gap: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-weak-base);
+  border-bottom: 1px solid var(--color-border-weak);
 }
 
 .connectors-form__grid {
@@ -724,7 +724,7 @@
 
 .connectors-form__select > span,
 .connectors-panel .connectors-form__field label > span {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
@@ -737,7 +737,7 @@
 
 .connectors-form__hint {
   margin: -4px 0 0;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 16px;
   text-wrap: pretty;

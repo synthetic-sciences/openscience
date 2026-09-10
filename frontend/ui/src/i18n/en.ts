@@ -1,6 +1,7 @@
 export const dict = {
   "ui.sessionTurn.steps.show": "Show reasoning and activity",
   "ui.sessionTurn.steps.hide": "Hide reasoning and activity",
+  "ui.sessionTurn.workedFor": "Worked for {{duration}}",
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Commenting on ",
@@ -147,6 +148,8 @@ export const dict = {
   "ui.permission.grantRead": "Grant read-only access to {{path}}",
   "ui.permission.grantWrite": "Grant read & write access to {{path}}",
   "ui.permission.allowHost": "Allow network access to {{host}}",
+  "ui.question.credentialHint": "Add logins under Customize → Credentials, never in the chat.",
+  "ui.question.openCredentials": "Open Credentials",
 
   "ui.message.expand": "Expand message",
   "ui.message.collapse": "Collapse message",

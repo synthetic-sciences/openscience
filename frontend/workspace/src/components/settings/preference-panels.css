@@ -68,18 +68,18 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--settings-radius-control);
-  background: var(--surface-base-hover);
-  color: var(--icon-strong-base);
+  background: var(--color-hover);
+  color: var(--color-icon-strong);
 }
 
 .settings-preference-icon[data-tone="success"] {
-  background: color-mix(in srgb, var(--icon-success-base) 11%, var(--settings-surface-muted));
-  color: var(--icon-success-base);
+  background: color-mix(in srgb, var(--color-icon-success) 11%, var(--settings-surface-muted));
+  color: var(--color-icon-success);
 }
 
 .settings-preference-icon[data-tone="warning"] {
-  background: color-mix(in srgb, var(--text-warning-base) 12%, var(--settings-surface-muted));
-  color: var(--text-warning-base);
+  background: color-mix(in srgb, var(--color-text-warning) 12%, var(--settings-surface-muted));
+  color: var(--color-text-warning);
 }
 
 .settings-row-copy {
@@ -91,14 +91,14 @@
 }
 
 .settings-row-copy strong {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--settings-type-body);
   font-weight: var(--font-weight-medium);
   line-height: var(--settings-leading-body);
 }
 
 .settings-row-copy span {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--settings-type-helper);
   line-height: var(--settings-leading-helper);
 }
@@ -113,7 +113,7 @@
   border: 0;
   border-radius: 999px;
   background: var(--settings-surface-muted);
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
   line-height: 16px;
@@ -130,13 +130,13 @@
 }
 
 .settings-preference-status[data-tone="success"] {
-  background: color-mix(in srgb, var(--icon-success-base) 10%, transparent);
-  color: var(--icon-success-base);
+  background: color-mix(in srgb, var(--color-icon-success) 10%, transparent);
+  color: var(--color-icon-success);
 }
 
 .settings-preference-status[data-tone="warning"] {
-  background: color-mix(in srgb, var(--text-warning-base) 10%, transparent);
-  color: var(--text-warning-base);
+  background: color-mix(in srgb, var(--color-text-warning) 10%, transparent);
+  color: var(--color-text-warning);
 }
 
 .settings-preference-action {
@@ -150,7 +150,7 @@
   border: 0;
   border-radius: var(--settings-radius-control);
   background: var(--settings-surface-muted);
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   transition:
@@ -174,12 +174,12 @@
 
 .settings-preference-action[data-variant="quiet"] {
   background: transparent;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
 }
 
 .settings-preference-action[data-variant="danger"] {
   background: transparent;
-  color: var(--text-danger);
+  color: var(--color-text-danger);
 }
 
 .settings-preference-action:disabled {
@@ -215,7 +215,7 @@
 }
 
 .settings-preference-domain-list code {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 18px;
   font-variant-numeric: slashed-zero;
@@ -257,8 +257,8 @@
 }
 
 .settings-preferences-panel .settings-alert[data-tone="success"] {
-  background: color-mix(in srgb, var(--icon-success-base) 7%, transparent);
-  color: var(--text-strong);
+  background: color-mix(in srgb, var(--color-icon-success) 7%, transparent);
+  color: var(--color-text);
 }
 
 /* Background saves announce inline beside the affected section heading, the
@@ -266,7 +266,7 @@
 .settings-preferences-panel .settings-network-save-state,
 .settings-preferences-panel .settings-sandbox-save-state {
   min-width: 48px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   line-height: 18px;
@@ -329,13 +329,13 @@
   margin: 0;
   padding: 0;
   border-radius: 0;
-  color: var(--text-strong);
+  color: var(--color-text);
   text-align: left;
   transition: color 150ms ease;
 }
 
 .settings-preferences-panel--network .settings-network-disclosure:hover {
-  color: var(--text-base);
+  color: var(--color-text-secondary);
 }
 
 .settings-preferences-panel--network .settings-network-disclosure .settings-row-copy {
@@ -344,12 +344,12 @@
 
 .settings-preferences-panel--network .settings-network-disclosure__icon {
   flex: 0 0 auto;
-  color: var(--icon-weak-base);
+  color: var(--color-icon-muted);
   transition: color 150ms ease;
 }
 
 .settings-preferences-panel--network .settings-network-disclosure:hover .settings-network-disclosure__icon {
-  color: var(--icon-strong-base);
+  color: var(--color-icon-strong);
 }
 
 .settings-preferences-panel--network .settings-preference-disclosure {
@@ -439,14 +439,14 @@
 }
 
 .settings-compute-config-import__heading h4 {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
 }
 
 .settings-compute-config-import__heading p {
   margin-top: 2px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 1.45;
   text-wrap: pretty;
@@ -469,7 +469,7 @@
 .settings-compute-host-notes-copy {
   max-width: 72ch;
   margin-top: var(--settings-space-2);
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 1.45;
   white-space: pre-line;
@@ -484,7 +484,7 @@
 
 .settings-compute-host-notes-editor > p {
   margin: 0;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   line-height: 1.45;
 }
@@ -578,7 +578,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--surface-brand-base);
+  background: var(--color-brand);
 }
 
 .settings-sandbox-checks {
@@ -592,13 +592,13 @@
   grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr);
   align-items: start;
   gap: var(--settings-space-2);
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   line-height: 18px;
 }
 
 .settings-sandbox-check__detail {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   text-wrap: pretty;
 }
 
@@ -608,7 +608,7 @@
 }
 
 .settings-account-card > * + * {
-  border-top: 1px solid var(--border-weak-base);
+  border-top: 1px solid var(--color-border-weak);
 }
 
 .settings-account-logo .settings-provider-logo {
@@ -631,7 +631,7 @@
 
 .settings-account-value {
   max-width: min(320px, 100%);
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;

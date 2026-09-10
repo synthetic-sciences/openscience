@@ -20,6 +20,8 @@ import { FileProvider } from "@/context/file"
 import { PromptProvider } from "@/context/prompt"
 
 import { DataProvider } from "@synsci/ui/context"
+import { useDialog } from "@synsci/ui/context/dialog"
+import { DialogSettings } from "@/components/dialog-settings"
 import { MarkdownImages } from "@synsci/ui/markdown"
 import { iife } from "@synsci/util/iife"
 import type { QuestionAnswer } from "@synsci/sdk/v2"
@@ -167,6 +169,7 @@ export default function Layout(props: ParentProps) {
               {iife(() => {
                 const sync = useSync()
                 const sdk = useSDK()
+                const dialog = useDialog()
                 const receipts = sessionReceipts(sdk.request)
 
                 const respond = (input: {
@@ -288,6 +291,7 @@ export default function Layout(props: ParentProps) {
                     onLoadComputeJob={receipts.job}
                     onResolveFileReceipts={receipts.files}
                     onSaveArtifact={saveArtifact}
+                    onOpenCredentials={() => dialog.show(() => <DialogSettings initial="credentials" />)}
                   >
                     <MarkdownImages
                       resolve={image}

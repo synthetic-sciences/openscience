@@ -8,15 +8,15 @@
   [data-model-effort-chip],
   [data-model-settings-popover]
 ) {
-  --model-control-surface: var(--surface-raised-stronger-non-alpha);
-  --model-control-raised: var(--surface-raised-strong);
-  --model-control-hover: var(--surface-raised-strong-hover);
-  --model-control-selected: var(--surface-interactive-weak);
-  --model-control-border: var(--border-weak-base);
-  --model-control-border-strong: var(--border-base);
-  --model-control-text: var(--text-strong);
-  --model-control-muted: var(--text-weak);
-  --model-control-faint: var(--text-weaker);
+  --model-control-surface: var(--color-surface-solid);
+  --model-control-raised: var(--color-surface);
+  --model-control-hover: var(--color-surface-hover);
+  --model-control-selected: var(--color-interactive-muted);
+  --model-control-border: var(--color-border-weak);
+  --model-control-border-strong: var(--color-border);
+  --model-control-text: var(--color-text);
+  --model-control-muted: var(--color-text-muted);
+  --model-control-faint: var(--color-text-faint);
   --model-control-shadow: var(--atlas-shadow-md);
   font-family: var(
     --font-family-sans,
@@ -123,7 +123,7 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  color: var(--text-interactive-base);
+  color: var(--color-text-interactive);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
 }
@@ -503,7 +503,7 @@
 
 .model-settings-check {
   flex: 0 0 auto;
-  color: var(--text-interactive-base);
+  color: var(--color-text-interactive);
 }
 
 .model-settings-option-section {
@@ -521,7 +521,7 @@
 }
 
 .model-settings-options-unavailable [role="alert"] {
-  color: var(--text-critical-base);
+  color: var(--color-text-error);
 }
 
 [data-model-effort-panel] {
@@ -694,7 +694,7 @@
       :disabled
     ) {
     background: var(--color-bg-subtle);
-    color: var(--text-strong);
+    color: var(--color-text);
   }
 
   [data-mobile-model-settings-overlay] {
@@ -702,7 +702,7 @@
     inset: 0;
     z-index: 60;
     display: block;
-    background: color-mix(in srgb, var(--background-base) 64%, transparent);
+    background: color-mix(in srgb, var(--color-bg) 64%, transparent);
     backdrop-filter: blur(2px);
   }
 
@@ -732,11 +732,11 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 14px 0 20px;
-    border-bottom: 1px solid var(--border-weak-base);
+    border-bottom: 1px solid var(--color-border-weak);
   }
 
   .model-settings-popover__header [data-kobalte-popover-title] {
-    color: var(--text-strong);
+    color: var(--color-text);
     font-size: var(--font-size-large);
     font-weight: var(--font-weight-medium);
     letter-spacing: -0.01em;
@@ -745,7 +745,7 @@
   .model-settings-popover__header [data-component="icon-button"] {
     width: 40px;
     height: 40px;
-    color: var(--text-weak);
+    color: var(--color-text-muted);
   }
 
   .model-settings-popover__close {

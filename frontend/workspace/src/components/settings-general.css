@@ -5,7 +5,7 @@
   min-height: 32px;
   align-items: center;
   gap: 10px;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -13,7 +13,7 @@
   width: auto;
   min-width: 0;
   flex: 1;
-  accent-color: var(--icon-strong-base);
+  accent-color: var(--color-icon-strong);
 }
 
 .settings-sound-volume input:disabled {
@@ -23,7 +23,7 @@
 .settings-sound-volume output {
   flex: 0 0 auto;
   width: 4ch;
-  color: var(--text-base);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-small);
   text-align: right;
 }
@@ -33,7 +33,7 @@
   width: 100%;
   flex-wrap: nowrap;
   justify-content: space-between;
-  color: var(--text-base);
+  color: var(--color-text-secondary);
   text-align: left;
 }
 
@@ -51,14 +51,14 @@
 }
 
 .settings-update-history strong {
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
 }
 
 .settings-update-history small,
 .settings-update-history time {
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
 }
 

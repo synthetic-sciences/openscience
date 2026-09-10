@@ -9,11 +9,11 @@
   align-items: center;
   gap: 10px;
   padding: 8px 8px 8px 10px;
-  border: 1px solid var(--border-base);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--surface-raised-stronger-non-alpha) 94%, transparent);
+  background: color-mix(in srgb, var(--color-surface-solid) 94%, transparent);
   box-shadow: var(--atlas-shadow-md, var(--shadow-lg));
-  color: var(--text-base);
+  color: var(--color-text-secondary);
   translate: -50% 0;
   backdrop-filter: blur(20px) saturate(1.08);
   -webkit-backdrop-filter: blur(20px) saturate(1.08);
@@ -26,8 +26,8 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: var(--radius-sm);
-  background: var(--surface-interactive-weak);
-  color: var(--text-interactive-base);
+  background: var(--color-interactive-muted);
+  color: var(--color-text-interactive);
 }
 
 .startup-update__copy {
@@ -40,7 +40,7 @@
 
 .startup-update__copy strong {
   overflow: hidden;
-  color: var(--text-strong);
+  color: var(--color-text);
   font-size: var(--font-size-medium);
   font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
@@ -49,7 +49,7 @@
 
 .startup-update__copy small {
   overflow: hidden;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -62,15 +62,15 @@
   overflow: hidden;
   border: 0;
   border-radius: 999px;
-  accent-color: var(--text-interactive-base);
+  accent-color: var(--color-text-interactive);
 }
 
 .startup-update__copy progress::-webkit-progress-bar {
-  background: var(--surface-interactive-weak);
+  background: var(--color-interactive-muted);
 }
 
 .startup-update__copy progress::-webkit-progress-value {
-  background: var(--text-interactive-base);
+  background: var(--color-text-interactive);
 }
 
 .startup-update__dismiss {
@@ -82,13 +82,13 @@
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
 }
 
 .startup-update__dismiss:hover,
 .startup-update__dismiss:focus-visible {
-  background: var(--surface-base-hover);
-  color: var(--text-base);
+  background: var(--color-hover);
+  color: var(--color-text-secondary);
 }
 
 @media (max-width: 640px) {

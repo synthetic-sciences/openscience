@@ -64,7 +64,7 @@
 .command-palette__header {
   flex: 0 0 auto;
   padding: 4px 10px 3px;
-  border-bottom: 1px solid var(--border-weak-base);
+  border-bottom: 1px solid var(--color-border-weak);
   background: var(--color-surface-solid);
 }
 
@@ -353,7 +353,7 @@
   align-items: center;
   gap: 15px;
   padding: 0 14px;
-  border-top: 1px solid var(--border-weak-base);
+  border-top: 1px solid var(--color-border-weak);
   color: var(--color-text-faint);
   background: var(--color-surface-solid);
   font-size: var(--font-size-x-small);

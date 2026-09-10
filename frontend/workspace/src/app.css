@@ -8,14 +8,14 @@
   flex-direction: column;
   gap: 12px;
   padding: clamp(48px, 10vh, 96px) 28px;
-  color: var(--text-strong);
+  color: var(--color-text);
 }
 
 .app-not-found__eyebrow {
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-emphasis);
   letter-spacing: var(--letter-spacing-normal);
-  color: var(--text-weak);
+  color: var(--color-text-muted);
 }
 
 .app-not-found h1 {
@@ -28,7 +28,7 @@
 .app-not-found p {
   max-width: 48ch;
   margin: 0;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-base);
   line-height: 1.6;
   text-wrap: pretty;
@@ -43,7 +43,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: var(--button-primary-base);
-  color: var(--icon-invert-base);
+  color: var(--color-icon-invert);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-emphasis);
   text-decoration: none;
@@ -51,7 +51,7 @@
 }
 
 .app-not-found__action:hover {
-  background: var(--icon-strong-hover);
+  background: var(--color-icon-strong-hover);
 }
 
 .project-availability__loading {
@@ -66,10 +66,10 @@
   width: min(100%, 560px);
   overflow: hidden;
   padding: 10px 12px;
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--color-border-weak);
   border-radius: var(--radius-md);
-  background: var(--surface-raised-base);
-  color: var(--text-weak);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -83,17 +83,17 @@
 }
 
 .app-not-found__action--quiet {
-  border: 1px solid var(--border-weak-base);
+  border: 1px solid var(--color-border-weak);
   background: transparent;
-  color: var(--text-strong);
+  color: var(--color-text);
 }
 
 .app-not-found__action--quiet:hover {
-  background: var(--surface-raised-base);
+  background: var(--color-surface-raised);
 }
 
 .project-unavailable .project-unavailable__note {
   max-width: none;
-  color: var(--text-weak);
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
 }

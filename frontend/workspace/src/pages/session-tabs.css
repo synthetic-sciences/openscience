@@ -50,12 +50,12 @@
 }
 
 .workspace-session-tab:hover {
-  background: var(--surface-base-hover);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
 .workspace-session-tab[data-active="true"] {
-  background: var(--surface-base-active);
+  background: var(--color-active);
   color: var(--color-text);
 }
 
@@ -138,7 +138,7 @@
 }
 
 .workspace-session-tab .workspace-tab__close:hover {
-  background: var(--surface-base-active);
+  background: var(--color-active);
   color: var(--color-text);
   opacity: 1;
 }

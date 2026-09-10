@@ -65,6 +65,7 @@ import {
 } from "@/atlas/skill-permissions"
 import { DialogSettings } from "./dialog-settings"
 import { SkillLibraryDialog } from "@/atlas/SkillsBrowser"
+import { WorkingFolderChip, type WorkingRootChoice } from "./working-folder"
 import "./prompt-input.css"
 import {
   ATTACHMENT_ACCEPT,
@@ -315,6 +316,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     async (projectID) => ({ projectID, value: await loadResearchAccess(projectID) }),
   )
   const [researchAccessSaving, setResearchAccessSaving] = createSignal(false)
+  // Where a not-yet-created session will work; the chip sends it with create.
+  const [pendingWorkingRoot, setPendingWorkingRoot] = createSignal<WorkingRootChoice>(undefined)
   const currentResearchAccess = () => {
     if (researchAccess.error) return
     const current = researchAccess.latest
@@ -2009,8 +2012,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           ? store.bootstrapID
           : Identifier.descending("session")
       setStore({ bootstrapID: candidate, bootstrapDirectory: sessionDirectory })
+      const workingRoot = pendingWorkingRoot()
       session = await client.session
-        .create({ id: candidate })
+        .create({ id: candidate, ...(workingRoot ? { workingRoot } : {}) })
         .then((x) => x.data ?? undefined)
         .catch(async (err) => {
           const recovery = await client.session
@@ -3010,6 +3014,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </section>
                   </div>
                 </details>
+                <WorkingFolderChip
+                  client={sdk.client}
+                  sessionID={params.id && params.id !== "new" ? params.id : undefined}
+                  pending={pendingWorkingRoot()}
+                  onPending={setPendingWorkingRoot}
+                />
                 <Show when={store.intent}>
                   {(intent) => (
                     <Tooltip placement="top" value={`Exit ${intent()} mode`}>

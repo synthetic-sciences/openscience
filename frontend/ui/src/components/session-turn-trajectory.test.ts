@@ -292,10 +292,11 @@ describe("reasoning rows", () => {
     await ready(() => again.querySelector('[data-slot="session-turn-collapsible-trigger-content"]') !== null)
     expect(again.querySelector('[data-component="reasoning-part"]')).toBeNull()
     const restored = again.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
-    expect(restored.textContent).toContain("Show reasoning and activity")
+    expect(restored.getAttribute("aria-label")).toBe("Show reasoning and activity")
+    expect(restored.textContent).toContain("Worked for")
     restored.click()
     await ready(() => again.textContent?.includes("New streamed evidence.") === true)
-    expect(restored.textContent).toContain("Hide reasoning and activity")
+    expect(restored.getAttribute("aria-label")).toBe("Hide reasoning and activity")
     expect(store.part[message.id][0]).toMatchObject({ text: continued })
     expect(again.textContent).not.toContain("Detailed")
     expect(again.textContent).not.toContain("Compact")
@@ -311,9 +312,25 @@ describe("reasoning rows", () => {
     const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
     expect(host.querySelector('[data-component="reasoning-part"]')).toBeNull()
     const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
-    expect(toggle.textContent).toContain("Show reasoning and activity")
+    expect(toggle.getAttribute("aria-label")).toBe("Show reasoning and activity")
+    expect(toggle.textContent).toContain("Worked for")
     toggle.click()
-    await ready(() => host.querySelector('[data-component="reasoning-part"]') !== null)
+    // A finished thought is one folded "Thought" row; its text opens on demand.
+    await ready(() => host.querySelector('[data-component="trace-group"][data-kind="thought"]') !== null)
+    expect(host.querySelector('[data-component="trace-row"]')?.textContent).toContain("Thought 1s")
+    expect(host.querySelector('[data-component="reasoning-part"]')).not.toBeNull()
+    expect(
+      host
+        .querySelector('[data-component="trace-group"] [data-slot="collapsible-content"]')
+        ?.hasAttribute("data-closed"),
+    ).toBe(true)
+    host.querySelector<HTMLButtonElement>('[data-component="trace-group"] [data-slot="collapsible-trigger"]')!.click()
+    await ready(
+      () =>
+        host
+          .querySelector('[data-component="trace-group"] [data-slot="collapsible-content"]')
+          ?.hasAttribute("data-closed") === false,
+    )
     toggle.click()
     await ready(() => host.querySelector('[data-component="reasoning-part"]') === null)
   })
@@ -965,7 +982,7 @@ describe("execution inspection", () => {
     const card = host.querySelector<HTMLDetailsElement>('[data-component="delegation-card"]')!
     expect(card.open).toBe(true)
     expect(card.querySelector('[data-slot="delegation-current"]')).toBeNull()
-    expect(card.querySelector('[data-slot="delegation-summary-meta"]')?.textContent).toContain("8s")
+    expect(card.querySelector('[data-slot="delegation-subline"]')?.textContent).toContain("8s")
     card.querySelector<HTMLElement>("summary")!.click()
     await settle()
     expect(card.open).toBe(false)
@@ -1502,28 +1519,26 @@ describe("trace control", () => {
     expect(button.getAttribute("aria-controls")).toBe(
       host.querySelector('[data-slot="session-turn-response-section"]')?.id ?? null,
     )
-    expect(button.textContent).toContain("Hide reasoning and activity")
+    // While working, the one header line carries the live request and stays
+    // the keyboard-operable disclosure.
+    expect(button.getAttribute("aria-label")).toBe("Hide reasoning and activity")
     expect(button.querySelector('[data-slot="session-turn-trigger-icon"]')).not.toBeNull()
-    expect(button.querySelector('[data-component="spinner"]')).toBeNull()
+    expect(button.querySelector('[data-component="spinner"]')).not.toBeNull()
     expect(control(host)?.getAttribute("data-working")).toBe("true")
-    expect(status(host)?.querySelector('[data-component="spinner"]')).not.toBeNull()
-    expect(status(host)?.querySelector('[data-slot="session-turn-status-text"]')?.textContent).toBe(
-      "Searching the codebase",
-    )
+    expect(status(host)).toBeNull()
+    expect(button.querySelector('[data-slot="session-turn-status-text"]')?.textContent).toBe("Searching the codebase")
 
     button.click()
     await ready(() => host.querySelector('[data-component="reasoning-part"]') === null)
     expect(button.getAttribute("aria-expanded")).toBe("false")
-    expect(button.textContent).toContain("Show reasoning and activity")
+    expect(button.getAttribute("aria-label")).toBe("Show reasoning and activity")
     expect(host.querySelector('[data-component="tool-part-wrapper"]')).toBeNull()
     // Collapsing the trace never hides the live request.
-    expect(status(host)?.querySelector('[data-slot="session-turn-status-text"]')?.textContent).toBe(
-      "Searching the codebase",
-    )
+    expect(button.querySelector('[data-slot="session-turn-status-text"]')?.textContent).toBe("Searching the codebase")
     button.click()
     await ready(() => host.querySelector('[data-component="reasoning-part"]') !== null)
     expect(button.getAttribute("aria-expanded")).toBe("true")
-    expect(button.textContent).toContain("Hide reasoning and activity")
+    expect(button.getAttribute("aria-label")).toBe("Hide reasoning and activity")
   })
 
   test("a retry wait is reported beside the disclosure, never in place of its label", async () => {
@@ -1537,19 +1552,18 @@ describe("trace control", () => {
         message: "Reconnecting to the provider",
       }),
     )
-    await ready(() => status(host) !== null)
+    await ready(() => host.querySelector('[data-slot="session-turn-retry-message"]') !== null)
     expect(host.querySelector('[data-slot="session-turn-retry-message"]')?.textContent).toBe(
       "Reconnecting to the provider",
     )
     expect(host.querySelector('[data-slot="session-turn-retry-attempt"]')?.textContent).toBe("(#2)")
-    expect(status(host)?.querySelector('[data-component="spinner"]')).not.toBeNull()
     const button = toggle(host)
+    expect(button.querySelector('[data-component="spinner"]')).not.toBeNull()
     expect(button.getAttribute("aria-expanded")).toBe("true")
-    expect(button.textContent).toContain("Hide reasoning and activity")
-    expect(button.querySelector('[data-component="spinner"]')).toBeNull()
+    expect(button.getAttribute("aria-label")).toBe("Hide reasoning and activity")
     button.click()
     await ready(() => button.getAttribute("aria-expanded") === "false")
-    expect(button.textContent).toContain("Show reasoning and activity")
+    expect(button.getAttribute("aria-label")).toBe("Show reasoning and activity")
     expect(host.querySelector('[data-slot="session-turn-retry-message"]')).not.toBeNull()
   })
 
@@ -1566,11 +1580,12 @@ describe("trace control", () => {
     expect(control(host)?.getAttribute("data-working")).toBeNull()
     const button = toggle(host)
     expect(button.getAttribute("aria-expanded")).toBe("false")
-    expect(button.textContent).toContain("Show reasoning and activity")
-    expect(host.querySelector('[data-slot="session-turn-duration"]')?.textContent?.trim()).not.toBe("")
+    expect(button.getAttribute("aria-label")).toBe("Show reasoning and activity")
+    expect(button.textContent).toMatch(/^Worked for \d/)
     button.click()
     await ready(() => host.querySelectorAll('[data-component="tool-part-wrapper"]').length === 1)
-    expect(button.textContent).toContain("Hide reasoning and activity")
+    expect(button.getAttribute("aria-label")).toBe("Hide reasoning and activity")
+    expect(button.textContent).toMatch(/^Worked for \d/)
   })
 
   test("before any step exists there is nothing to disclose, only the request status", async () => {
@@ -1799,7 +1814,8 @@ describe("turns that ended early", () => {
     // The recorded activity stays disclosable and untouched.
     const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
     expect(toggle.getAttribute("aria-expanded")).toBe("false")
-    expect(toggle.textContent).toContain("Show reasoning and activity")
+    expect(toggle.getAttribute("aria-label")).toBe("Show reasoning and activity")
+    expect(toggle.textContent).toContain("Worked for")
     expect(store.part[message.id][1]).toBe(interrupted)
   })
 
@@ -1931,6 +1947,10 @@ describe("shell-written outputs", () => {
       },
     )
     await ready(() => host.querySelector('[data-slot="session-turn-session-outputs"]') !== null)
+    // One folded line by default; the files are there to open on demand.
+    const outputs = host.querySelector<HTMLDetailsElement>('details[data-slot="session-turn-session-outputs"]')!
+    expect(outputs.open).toBe(false)
+    expect(outputs.querySelector("summary")?.textContent).toContain("2 files written this turn")
     const rows = [...host.querySelectorAll('[data-slot="session-turn-output-file"]')]
     expect(rows.map((row) => row.getAttribute("title"))).toEqual([
       "/research/results.csv",
