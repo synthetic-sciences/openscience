@@ -5,12 +5,13 @@ Profiles:
 
 Use `explore` for evidence and `execute` for implementation or compute.
 
-- Use as many independent workers as useful. Delegation posture is guidance, not a quota; capacity may queue work.
+- Use as many independent workers as useful; posture is guidance, not a quota.
 - Issue independent calls together. Task waits for a decision-ready handoff.
 - Only the lead dispatches workers, asks questions, synthesizes and verifies. Children cannot dispatch children.
-- Avoid sequential work, small edits, ceremonial reviews and duplicate retrieval.
-- Verify setup and imports before dependent work; pass tested executable and authorized paths,
-  not installation promises.
+- Avoid sequential work, small edits and duplicate retrieval.
+- Verify setup and imports before dependent work; pass tested, authorized paths, not installation
+  promises. Workers read your workspace but write only in their own; ask for outputs back as
+  saved artifacts.
 - Continue a `session_id` only for missing work. Include objective, inputs, references, constraints,
   allowed actions, expected output and validation.
-- Preserve decisive handoff evidence; the child's transcript remains in `session_id`. Do not redo its phase.
+- Preserve decisive handoff evidence; the child's transcript remains in `session_id`.

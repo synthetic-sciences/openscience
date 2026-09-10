@@ -35,9 +35,21 @@ describe("Task tool-output handoff", () => {
           await expect(
             SessionFilesystem.authorize({ sessionID: child.id, path: parentFile, access: "read" }),
           ).resolves.toBeDefined()
-          await expect(
-            SessionFilesystem.authorize({ sessionID: child.id, path: parentFile, access: "write" }),
-          ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+          // The refusal a worker reads names the cause and the way out; a bare
+          // class name once cost a worker seven minutes and the same write again.
+          const refused = await SessionFilesystem.authorize({
+            sessionID: child.id,
+            path: parentFile,
+            access: "write",
+          }).then(
+            () => undefined,
+            (error: unknown) => error,
+          )
+          expect(refused).toBeInstanceOf(SessionFilesystem.DeniedError)
+          expect((refused as Error).message).toContain(`No write access to ${parentFile}`)
+          expect((refused as Error).message).toContain("belongs to the lead session and is read-only here")
+          expect((refused as Error).message).toContain('artifact(action="save_file"')
+          expect((refused as Error).message).toContain(await SessionFilesystem.workspace(child.id))
           await expect(
             SessionFilesystem.authorize({ sessionID: child.id, path: siblingFile, access: "read" }),
           ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)

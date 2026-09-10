@@ -1198,13 +1198,13 @@ export namespace Config {
                 .positive()
                 .max(2_147_483_647)
                 .describe(
-                  "Maximum provider response-body inactivity in milliseconds; resets on every body chunk, including keepalives and streamed private reasoning. Remote endpoints default to 1800000 (30 minutes); local endpoints default to disabled.",
+                  "Maximum provider response-body inactivity in milliseconds; resets on every body chunk, including keepalives and streamed private reasoning. Remote endpoints default to 600000 (10 minutes), the managed Ace gateway to 300000 (5 minutes); local endpoints default to disabled.",
                 ),
               z.literal(false).describe("Disable the provider inactivity watchdog."),
             ])
             .optional()
             .describe(
-              "Maximum provider response-body inactivity in milliseconds. Remote endpoints default to 1800000 (30 minutes); local endpoints (loopback or .local base URLs and bundled local providers) default to disabled. Set false to disable.",
+              "Maximum provider response-body inactivity in milliseconds. Remote endpoints default to 600000 (10 minutes) and the managed Ace gateway to 300000 (5 minutes); local endpoints (loopback or .local base URLs and bundled local providers) default to disabled. Set false to disable.",
             ),
           connectTimeout: z
             .union([z.number().int().positive().max(2_147_483_647), z.literal(false)])

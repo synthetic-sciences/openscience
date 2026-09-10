@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test"
+import { managedApiBase } from "../../src/endpoints"
 import { Config } from "../../src/config/config"
 import { Provider } from "../../src/provider/provider"
 import { SessionProcessor } from "../../src/session/processor"
@@ -129,8 +130,22 @@ describe("provider activity watchdog", () => {
     expect(Provider.resolveIdleTimeout(undefined)).toBe(false)
     expect(Provider.resolveOutputIdleTimeout(undefined)).toBe(false)
     expect(Provider.defaultIdleTimeout({ providerID: "openrouter", baseURL: "https://openrouter.ai/api/v1" })).toBe(
-      1_800_000,
+      600_000,
     )
+    // The test preload points the managed base at loopback, which the local
+    // rule would claim first; a remote managed origin shows the gateway tier.
+    const base = process.env["OPENSCIENCE_API_BASE"]
+    process.env["OPENSCIENCE_API_BASE"] = "https://managed.test"
+    try {
+      expect(
+        Provider.defaultIdleTimeout({
+          providerID: "openrouter",
+          baseURL: `${managedApiBase()}/api/llm/proxy/openrouter/v1`,
+        }),
+      ).toBe(300_000)
+    } finally {
+      process.env["OPENSCIENCE_API_BASE"] = base
+    }
     expect(Provider.defaultIdleTimeout({ providerID: "ollama" })).toBe(false)
     expect(Provider.defaultIdleTimeout({ providerID: "custom", baseURL: "http://127.0.0.1:11434/v1" })).toBe(false)
     expect(Provider.defaultIdleTimeout({ providerID: "custom", baseURL: "http://inference.local/v1" })).toBe(false)
@@ -531,13 +546,13 @@ describe("provider activity watchdog", () => {
       expect(new TextDecoder().decode((await reader.read()).value)).toBe(": response started\n\n")
       const pending = reader.read()
       void pending.catch(() => {})
-      await time.advance(1_800_001)
-      await expect(pending).rejects.toMatchObject({ phase: "stream", timeoutMs: 1_800_000 })
+      await time.advance(600_001)
+      await expect(pending).rejects.toMatchObject({ phase: "stream", timeoutMs: 600_000 })
       expect(timings).toHaveLength(1)
       expect(timings[0]).toMatchObject({
         outcome: "idle_timeout",
         timeoutPhase: "stream",
-        idleTimeoutMs: 1_800_000,
+        idleTimeoutMs: 600_000,
       })
     } finally {
       time.restore()
@@ -571,7 +586,7 @@ describe("provider activity watchdog", () => {
         ": still processing\n\n",
       ]) {
         const pending = reader.read()
-        await time.advance(1_200_000)
+        await time.advance(400_000)
         source.enqueue(encoder.encode(activity))
         expect(new TextDecoder().decode((await pending).value)).toBe(activity)
       }
@@ -579,8 +594,8 @@ describe("provider activity watchdog", () => {
       closed = true
       expect((await reader.read()).done).toBe(true)
       expect(timings).toHaveLength(1)
-      expect(timings[0]).toMatchObject({ outcome: "completed", idleTimeoutMs: 1_800_000 })
-      expect(timings[0].completedAt - timings[0].startedAt).toBeGreaterThan(1_800_000)
+      expect(timings[0]).toMatchObject({ outcome: "completed", idleTimeoutMs: 600_000 })
+      expect(timings[0].completedAt - timings[0].startedAt).toBeGreaterThan(600_000)
     } finally {
       if (!closed) source.close()
       time.restore()

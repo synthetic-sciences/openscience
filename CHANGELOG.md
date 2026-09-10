@@ -10,6 +10,17 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- A remote model stream that stops producing bytes is given up after ten
+  minutes, and on the Ace gateway after five, instead of thirty. Keepalives and
+  streamed private reasoning still reset the clock, so a thinking model is
+  never cut off; a connection that died without closing no longer holds a
+  worker for most of an hour.
+- The task tool tells the lead that workers read its workspace but write only in
+  their own, and a worker is told the same, so a brief no longer sends a worker
+  to write where it cannot. When a worker stops on a provider error, the lead is
+  told to finish that step itself rather than send the same brief to the same
+  worker again.
+
 - While a turn runs, its header reads as one calm word for what is happening:
   Thinking, or the activity of the tool that is running, beside the elapsed
   clock. Preparing, sending, waiting-for-output and quiet-stream phases no
@@ -21,6 +32,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- A refused file path now says why and what to do: which folders this session
+  may read or write, and, for a lead's folder, that it is read-only here and
+  files go back as saved artifacts. The bare error name a worker used to see
+  sent it back into minutes of thought and the same denied write.
 - The wallet balance check before an Ace request now waits up to 8 seconds
   instead of 3, so a slow afternoon at the account service no longer turns every
   step into a paused turn and a retry countdown.
