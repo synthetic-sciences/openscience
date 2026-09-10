@@ -15,6 +15,7 @@ import { DataRootBarrier } from "@/global/data-root-barrier"
 import { ToolOutputPath } from "@/tool/tool-output-path"
 import { Lock } from "@/util/lock"
 import { Log } from "@/util/log"
+import { fetchWithFreshConnection } from "@/util/fetch"
 import { managedApiBase } from "@/endpoints"
 import {
   BYOK_LLM_BASE_URL_KEYS,
@@ -375,7 +376,7 @@ async function atomicWrite(filepath: string, content: string, mode = 0o600): Pro
 function atlasFetch(input: string, init: RequestInit = {}, timeoutMs = ATLAS_FETCH_TIMEOUT_MS): Promise<Response> {
   const timeout = AbortSignal.timeout(timeoutMs)
   const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout
-  return fetch(input, { ...init, signal })
+  return fetchWithFreshConnection(input, { ...init, signal })
 }
 
 async function readWorkspaceScope(key: string): Promise<WorkspaceScope | null | undefined> {
@@ -789,7 +790,9 @@ export namespace OpenScience {
     headers: Record<string, string>,
     signal: AbortSignal,
   ): Promise<number | undefined> {
-    const response = await fetch(`${apiBase()}/api/cli/sync/version`, { headers, signal }).catch(() => undefined)
+    const response = await fetchWithFreshConnection(`${apiBase()}/api/cli/sync/version`, { headers, signal }).catch(
+      () => undefined,
+    )
     if (!response) return
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined)
@@ -858,7 +861,10 @@ export namespace OpenScience {
           return (synced = { state: "ready", organization_id: session.organization_id, synced_at: Date.now() })
         const result = await Promise.race([
           (async () => {
-            const response = await fetch(`${apiBase()}/api/cli/sync`, { headers, signal: controller.signal })
+            const response = await fetchWithFreshConnection(`${apiBase()}/api/cli/sync`, {
+              headers,
+              signal: controller.signal,
+            })
             if (!response.ok) return { response }
             return { response, body: await response.json() }
           })(),

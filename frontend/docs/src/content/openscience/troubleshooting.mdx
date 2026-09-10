@@ -50,7 +50,13 @@ A pending reservation can reduce available funds before the final charge appears
 
 ## A response is slow or times out
 
-Check whether the app is connecting, waiting for output, receiving output, or running a tool. A wait before the first response can include connection and service processing time.
+The running header shows **Thinking** or the active tool, with elapsed time.
+Hover over it for connection and provider details. A wait before the first
+response can include connection and service processing time.
+
+Inference and Ace credential requests use fresh connections to avoid stale
+connection reuse in the bundled runtime. This prevents one source of long
+connection waits; it does not shorten a model's reasoning or an upstream queue.
 
 Start with a short request and verify the selected model. For a self-hosted model, check server load, memory, context size, and whether it can complete a request directly.
 
@@ -72,6 +78,10 @@ If a `--bare` request works but research tasks fail, verify tool calling and red
 ## Files are missing or the wrong copy opens
 
 Confirm that you opened the intended project. In Files, check **Project files** and **Session scratch** separately. Read the location shown in the preview.
+
+Local result links using `file:` or `sandbox:` open in Files. These prefixes do
+not grant access to a folder: the server still checks the current session's
+file permissions.
 
 For protected folders on macOS, grant the folder access the operating system requests to the app or terminal you are using, then reopen the folder. A project path must exist and be accessible on the machine running OpenScience.
 

@@ -3,6 +3,7 @@ import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@synsci/util/encode"
+import { localFilePath } from "@synsci/util/path"
 import {
   ComponentProps,
   ParentProps,
@@ -25,6 +26,17 @@ const max = 200
 const cache = new Map<string, Entry>()
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
+  // Also cover images, raw HTML and native Markdown parsers. Normalize only
+  // validated local URLs before URI sanitization; never allow arbitrary schemes.
+  DOMPurify.addHook("uponSanitizeAttribute", (node, attribute) => {
+    if (!(
+      (node.nodeName === "A" && attribute.attrName === "href") ||
+      (node.nodeName === "IMG" && attribute.attrName === "src")
+    ))
+      return
+    const path = localFilePath(attribute.attrValue)
+    if (path) attribute.attrValue = path
+  })
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
     if (!(node instanceof HTMLAnchorElement)) return
     const target = node.getAttribute("target")

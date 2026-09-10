@@ -22,6 +22,16 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   durable authority record now names the last revision addressed to each
   project and the last addressed to all of them, so a watcher that finds a gap
   it cannot replay resyncs only when something in that gap was for it.
+- Inference and Ace credential requests use fresh connections, avoiding Bun's
+  reuse of unresponsive pooled sockets that could delay a simple reply for
+  minutes before the gateway received it. Streaming, cancellation and the
+  managed request's billing-safe idempotency policy are unchanged.
+- OpenAI tools through OpenRouter explicitly preserve optional inputs. Searches
+  no longer have to invent date bounds when none were requested; required
+  fields and supplied filters still pass the same runtime validation.
+- Local `sandbox:` result links and images open through the Files viewer,
+  including generated plots and CSVs, instead of losing their destination
+  during Markdown sanitization. File access remains checked by the backend.
 - A finished turn kept a burst of one tool call inside a folded group with no
   header, so a lone write or command between two thoughts vanished from the
   trace. It renders as its own row again.
