@@ -69,7 +69,7 @@ if (mode === "loop-parent") {
               sessionId: settled.childSessionID,
               startedAt: settled.createdAt,
               activeMs: settled.activeMs ?? 0,
-              remainingMs: TaskAttempt.remaining(settled, 300),
+              remainingMs: TaskAttempt.remaining(settled, 2_000),
             },
             output: "ACTIVE_BUDGET_RECOVERED",
           }),

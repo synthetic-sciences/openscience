@@ -1271,7 +1271,9 @@ export namespace SessionPrompt {
             ...part,
             state: {
               status: "error",
-              error: executionError ? `Tool execution failed: ${executionError.message}` : "Tool execution failed",
+              error: executionError
+                ? `Tool execution failed: ${SessionProcessor.errorText(executionError)}`
+                : "Tool execution failed",
               time: {
                 start: part.state.status === "running" ? part.state.time.start : Date.now(),
                 end: Date.now(),

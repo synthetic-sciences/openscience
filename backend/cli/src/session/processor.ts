@@ -61,6 +61,32 @@ export namespace SessionProcessor {
     return (end >= 0 && marker.startsWith(clean.slice(end)) ? clean.slice(0, end) : clean).trim().length > 0
   }
 
+  /** What the model reads when a tool throws. A NamedError built without a
+   * message carries its facts only in `data`, and `error.message` is then the
+   * class name: that bare name is all a worker got for a refused write, and it
+   * thought for seven minutes before trying the same write again. Render the
+   * facts instead, so the failure names what happened. */
+  export function errorText(error: unknown): string {
+    if (!(error instanceof Error)) return String(error)
+    const named = error as Error & { toObject?: () => { name: string; data: unknown } }
+    if (error.message !== error.name || typeof named.toObject !== "function") return error.message
+    const data = named.toObject().data
+    if (!data || typeof data !== "object") return error.message
+    const facts = Object.entries(data as Record<string, unknown>)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([field, value]) => {
+        if (typeof value === "object") {
+          const inner = value as Record<string, unknown>
+          if (typeof inner.message === "string") return `${field}: ${inner.message}`
+          return `${field}: ${JSON.stringify(value)}`
+        }
+        return `${field}: ${String(value)}`
+      })
+    if (facts.length === 0) return error.message
+    const text = `${error.name}: ${facts.join("; ")}`
+    return text.length > 600 ? `${text.slice(0, 597)}...` : text
+  }
+
   export function managedPauseError(message: string) {
     return new MessageV2.APIError({
       message,
@@ -456,7 +482,7 @@ export namespace SessionProcessor {
               status: "error",
               input: outcome.input ?? match.state.input,
               ...(match.state.raw ? { raw: match.state.raw } : {}),
-              error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
+              error: errorText(outcome.error),
               ...(metadata ? { metadata } : {}),
               time,
             },

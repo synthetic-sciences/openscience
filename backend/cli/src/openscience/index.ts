@@ -840,7 +840,10 @@ export namespace OpenScience {
         timer = setTimeout(() => {
           controller.abort()
           reject(new Error("Credential sync timed out. Retry when connected."))
-        }, options.timeoutMs ?? 8_000)
+          // Background work on a 90 s tick: the account service has taken
+          // 8–12 s on slow afternoons, and a cap below that flapped the
+          // Settings indicator to "error" every minute. Match the wallet read.
+        }, options.timeoutMs ?? 15_000)
       })
       try {
         const version = await Promise.race([probeSyncVersion(session, headers, controller.signal), deadline])
