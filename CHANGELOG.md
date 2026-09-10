@@ -32,6 +32,17 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- A tool error whose class carries its facts only in structured data (a trust
+  or authority refusal, a missing model, a failed MCP call) now reaches the
+  model as those facts, not as the bare class name.
+- A process that missed a burst of authority changes (two folder grants inside
+  one poll, a trust change next to a grant) applied every event it missed from
+  the record's retained history instead of stopping every kernel, terminal and
+  compute job it owned; the conservative stop-everything resync remains for a
+  gap the history no longer covers.
+- The background credential sync waits up to 15 seconds for the account
+  service instead of 8, so a slow afternoon no longer flaps the Settings
+  indicator to "error" every minute.
 - A refused file path now says why and what to do: which folders this session
   may read or write, and, for a lead's folder, that it is read-only here and
   files go back as saved artifacts. The bare error name a worker used to see

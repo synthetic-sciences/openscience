@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import z from "zod"
+import { NamedError } from "@synsci/util/error"
 import { Identifier } from "../../src/id/id"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
@@ -46,6 +48,41 @@ function fixture() {
 }
 
 describe("SessionProcessor tool outcome correlation", () => {
+  test("a NamedError thrown by a tool reaches the model with its facts, not its class name", async () => {
+    const { coordinator, updates } = fixture()
+    const Denied = NamedError.create(
+      "FixtureDeniedError",
+      z.object({
+        path: z.string(),
+        access: z.string(),
+        remediation: z.object({ code: z.string(), message: z.string() }),
+        detail: z.string().optional(),
+      }),
+    )
+    const error = new Denied({
+      path: "/lead/titanic_eda.py",
+      access: "write",
+      remediation: { code: "trust_project_required", message: "Trust the project first." },
+    })
+    expect(error.message).toBe("FixtureDeniedError")
+    expect(SessionProcessor.errorText(error)).toBe(
+      "FixtureDeniedError: path: /lead/titanic_eda.py; access: write; remediation: Trust the project first.",
+    )
+    // An error that already speaks for itself is left alone, as is a plain string.
+    expect(SessionProcessor.errorText(new Error("disk full"))).toBe("disk full")
+    expect(SessionProcessor.errorText("boom")).toBe("boom")
+
+    await coordinator.running(running("call_denied", { filePath: "/lead/titanic_eda.py" }))
+    await coordinator
+      .execute("call_denied", { filePath: "/lead/titanic_eda.py" }, async () => {
+        throw error
+      })
+      .catch(() => undefined)
+    expect(updates.at(-1)).toMatchObject({
+      state: { status: "error", error: expect.stringContaining("path: /lead/titanic_eda.py; access: write") },
+    })
+  })
+
   test("persists raw streamed tool input through the terminal state", async () => {
     const { coordinator, updates } = fixture()
     coordinator.pending({

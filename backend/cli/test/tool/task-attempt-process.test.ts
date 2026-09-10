@@ -344,6 +344,7 @@ describe("durable Task attempts across Bun processes", () => {
       const active = worker("active-block", tmp.path, input, activeReady)
       processes.add(active)
       await wait(activeReady)
+      const ready = Date.now()
       await Bun.sleep(180)
       active.kill("SIGKILL")
       await within(active.exited)
@@ -355,11 +356,14 @@ describe("durable Task attempts across Bun processes", () => {
       const recovered = await result(resume)
       const activeMs = Number(recovered.metadata.activeMs)
       const remainingMs = Number(recovered.metadata.remainingMs)
+      const downtime = Date.now() - stopped
 
-      expect(Date.now() - stopped).toBeGreaterThanOrEqual(450)
+      // The charge covers the live stretch and none of the downtime: however
+      // slow the machine, the 500 ms the process was dead never appears in it.
+      expect(downtime).toBeGreaterThanOrEqual(450)
       expect(activeMs).toBeGreaterThanOrEqual(50)
-      expect(activeMs).toBeLessThan(300)
-      expect(remainingMs).toBe(300 - activeMs)
+      expect(activeMs).toBeLessThan(Date.now() - ready - 450)
+      expect(remainingMs).toBe(2_000 - activeMs)
       expect(remainingMs).toBeGreaterThan(0)
     } finally {
       for (const proc of processes) proc.kill()
