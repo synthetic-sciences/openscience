@@ -12,6 +12,21 @@ import {
 const raw = (path: string) => `http://127.0.0.1:4096/file/raw?path=${encodeURIComponent(path)}&project=prj_1`
 
 describe("markdown asset resolution", () => {
+  test("resolves sandbox result URLs without granting unrelated workspace reads", () => {
+    const path = "/Users/me/.openscience/scratch/plot.png"
+    expect(chatFilePath(`sandbox:${path}`, "/work/project")).toBe(path)
+    expect(workspaceAssetPath(`sandbox:${path}`, "/work/project")).toBeUndefined()
+    expect(localAssetPath("sandbox:/C:/research/plot%20one.png")).toBe("C:/research/plot one.png")
+    expect(localAssetPath("/C:/research/plot%20one.png")).toBe("C:/research/plot one.png")
+    for (const value of [
+      "sandbox://remote.test/a.csv",
+      "sandbox:relative.csv",
+      "sandbox:/%2Fevil.test/a",
+      "sandbox:/tmp/a%00.csv",
+    ]) {
+      expect(chatFilePath(value, "/work/project")).toBeUndefined()
+    }
+  })
   test("exact completed receipts preserve filesystem bytes without broadening raw Markdown links", () => {
     for (const path of [
       "/research/note.md",

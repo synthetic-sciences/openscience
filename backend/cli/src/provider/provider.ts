@@ -54,6 +54,7 @@ import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
 import { LocalProvider } from "./local"
+import { fetchWithFreshConnection } from "../util/fetch"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -1038,6 +1039,23 @@ export namespace Provider {
     const normalized = { ...body }
     delete normalized.tool_choice
     return normalized
+  }
+
+  export function normalizeOpenRouterRequestBody(value: Record<string, unknown>) {
+    if (typeof value.model !== "string" || !value.model.startsWith("openai/") || !Array.isArray(value.tools))
+      return value
+    return {
+      ...value,
+      tools: value.tools.map((tool: unknown) => {
+        if (typeof tool !== "object" || tool === null || !("type" in tool) || tool.type !== "function") return tool
+        if (!("function" in tool) || typeof tool.function !== "object" || tool.function === null) return tool
+        if ("strict" in tool.function) return tool
+        // OpenRouter forwards these tools to Responses, whose default strict
+        // mode makes optional fields required. Preserve our actual schema;
+        // runtime validation still enforces every required field and constraint.
+        return { ...tool, function: { ...tool.function, strict: false } }
+      }),
+    }
   }
 
   export function normalizeAstraRequestBody(value: Record<string, unknown>) {
@@ -2953,8 +2971,16 @@ export namespace Provider {
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, then add an activity watchdog.
         // A configured `timeout` is still an opt-in total wall-clock cap.
-        const fetchFn = customFetch ?? fetch
+        const fetchFn = customFetch ?? fetchWithFreshConnection
         const opts = { ...(init ?? {}) }
+
+        if (
+          model.api.npm === "@openrouter/ai-sdk-provider" &&
+          typeof opts.body === "string" &&
+          opts.method === "POST"
+        ) {
+          opts.body = JSON.stringify(normalizeOpenRouterRequestBody(JSON.parse(opts.body)))
+        }
 
         if (model.api.npm === "@ai-sdk/deepseek" && opts.body && opts.method === "POST") {
           const body = normalizeDeepSeekRequestBody(JSON.parse(opts.body as string))

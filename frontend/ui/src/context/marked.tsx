@@ -2,6 +2,7 @@ import type { BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import type { ThemeRegistrationResolved } from "@pierre/diffs"
 import { backslashMath, guardedDollarMath } from "./marked-math"
+import { localFilePath } from "@synsci/util/path"
 
 // Heavy render deps (katex ~150KB gzip, shiki grammar registry, the marked
 // extensions) are loaded on FIRST USE, not at module load — so first paint (the
@@ -432,18 +433,6 @@ const codeBlockEntities = {
 /** Decode exactly one HTML-entity layer from Marked's escaped code. A single
  * replacement pass keeps input such as `&amp;lt;` literal instead of turning it
  * into `<` through a second, unsafe decode. */
-function localFilePath(href: string): string | undefined {
-  if (!/^file:/i.test(href)) return
-  try {
-    const url = new URL(href)
-    if (url.hostname && url.hostname !== "localhost") return
-    const pathname = decodeURIComponent(url.pathname)
-    return /^\/[A-Za-z]:\//.test(pathname) ? pathname.slice(1) : pathname
-  } catch {
-    return
-  }
-}
-
 export function decodeCodeBlockEntities(input: string) {
   return input.replace(
     /&(lt|gt|amp|quot|#39);/g,
@@ -485,7 +474,7 @@ const loadJsParser = retryable(async () => {
       renderer: {
         link({ href, title, text }) {
           const titleAttr = title ? ` title="${title}"` : ""
-          // Models link local results as file:// URLs. The sanitizer drops that
+          // Models link local results as file: or sandbox: URLs. The sanitizer drops that
           // scheme outright, so hand the plain path on instead; the file-link
           // resolver decides whether it opens in the Files tab.
           const local = localFilePath(href)

@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test"
 import katex from "katex"
 import morphdom from "morphdom"
+import { parseMarkdown } from "../context/marked"
 import {
   openFileLink,
   resolveFileLinks,
@@ -11,6 +12,42 @@ import {
 } from "./markdown"
 
 const tex = "\\delta\\omega/\\omega < 10^{-6}"
+
+test("sandbox result URLs survive parsing and sanitization and open exactly once in Files", async () => {
+  const path = "/Users/me/.openscience/workspaces/session/mean sem.png"
+  const root = document.createElement("div")
+  root.innerHTML = sanitize(
+    await parseMarkdown(`[View plot](sandbox:${encodeURI(path)})\n\n![plot](sandbox:${encodeURI(path)})`),
+  )
+  expect(root.querySelector("a")?.getAttribute("href")).toBe(path)
+  expect(root.querySelector("img")?.getAttribute("src")).toBe(path)
+  const opened: string[] = []
+  resolveFileLinks(root, (href) => (href === path ? path : undefined))
+  root.addEventListener("click", (event) => openFileLink(root, event, (file) => opened.push(file)))
+  root.querySelector("a")!.click()
+  expect(opened).toEqual([path])
+  expect(root.querySelector("a")?.hasAttribute("target")).toBe(false)
+})
+
+test("local URL normalization covers native HTML without allowing remote or executable schemes", () => {
+  const root = document.createElement("div")
+  root.innerHTML = sanitize(
+    '<a href="sandbox:/tmp/a%22%3E%3Cimg%3E.csv">result</a><a href="file:///C:/data/plot.png">windows</a>',
+  )
+  expect(root.querySelectorAll("a")[0].getAttribute("href")).toBe('/tmp/a"><img>.csv')
+  expect(root.querySelectorAll("a")[1].getAttribute("href")).toBe("/C:/data/plot.png")
+  expect(root.querySelector("img")).toBeNull()
+  for (const url of [
+    "sandbox://remote.test/a.csv",
+    "sandbox:javascript:alert(1)",
+    "sandbox:/%2Fevil.test/a",
+    "sandbox:/tmp/a%00.csv",
+    "javascript:alert(1)",
+  ]) {
+    root.innerHTML = sanitize(`<a href="${url}">unsafe</a>`)
+    expect(root.querySelector("a")?.hasAttribute("href")).toBe(false)
+  }
+})
 
 describe("sanitize (KaTeX MathML annotation)", () => {
   test("keeps the <annotation> wrapper so raw TeX doesn't leak as visible text", () => {
