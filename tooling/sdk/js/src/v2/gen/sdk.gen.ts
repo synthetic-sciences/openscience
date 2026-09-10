@@ -353,6 +353,9 @@ import type {
   SettingsComputeSshTestResponses,
   SettingsComputeSshUpdateErrors,
   SettingsComputeSshUpdateResponses,
+  SettingsCredentialsHostResponses,
+  SettingsCredentialsImportHostErrors,
+  SettingsCredentialsImportHostResponses,
   SettingsCredentialsListResponses,
   SettingsCredentialsRemoveResponses,
   SettingsCredentialsSetResponses,
@@ -835,6 +838,53 @@ export class Credentials extends HeyApiClient {
     return (options?.client ?? this.client).get<SettingsCredentialsListResponses, unknown, ThrowOnError>({
       url: "/settings/credentials",
       ...options,
+    })
+  }
+
+  /**
+   * Credentials this machine already holds
+   *
+   * Whether GitHub (gh login) and Hugging Face (hf token) credentials exist on this computer, and where they come from. Never returns values.
+   */
+  public host<ThrowOnError extends boolean = false>(
+    parameters?: {
+      fresh?: "true" | "false"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "fresh" }] }])
+    return (options?.client ?? this.client).get<SettingsCredentialsHostResponses, unknown, ThrowOnError>({
+      url: "/settings/credentials/host",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Import a credential this machine already holds
+   *
+   * Copy the machine's GitHub or Hugging Face token into OpenScience's encrypted credential store.
+   */
+  public importHost<ThrowOnError extends boolean = false>(
+    parameters: {
+      service: "github" | "huggingface"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "service" }] }])
+    return (options?.client ?? this.client).post<
+      SettingsCredentialsImportHostResponses,
+      SettingsCredentialsImportHostErrors,
+      ThrowOnError
+    >({
+      url: "/settings/credentials/host/import",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

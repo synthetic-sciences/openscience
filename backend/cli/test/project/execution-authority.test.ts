@@ -67,6 +67,14 @@ test("session execution authority is inspectable through the project route", asy
   expect(ExecutionAuthority.Decision.parse({ ...decision, sandbox: legacySandbox }).sandbox.requireProjectTrust).toBe(
     false,
   )
+  // A fresh decision names the owned scratch directory beside the working
+  // directory. Decisions persisted in compute job histories by earlier builds
+  // have no such field and must keep parsing: one old record must never make a
+  // project's history "corrupt" and take the credential barrier down with it.
+  expect(decision.scratch).toBeDefined()
+  const { scratch, ...persisted } = decision
+  expect(scratch).toBe(decision.workspace)
+  expect(ExecutionAuthority.Decision.parse(persisted).scratch).toBeUndefined()
 })
 
 test("untrusted projects run routine terminals, shells, and kernels only in an enforced sandbox", async () => {

@@ -542,7 +542,7 @@ export const BashTool = Tool.define("bash", async () => {
           ? await HostCredentials.publishEnv(sandbox.temporary, await HostCredentials.discover()).catch(() => ({}))
           : {}
         return OpenScience.withSubprocessEnv(process.env, async (env, overlay) => {
-          const cache = sandbox.sandboxed ? Sandbox.cacheEnvironment(current.scratch) : {}
+          const cache = sandbox.sandboxed ? Sandbox.cacheEnvironment(current.scratch ?? current.workspace) : {}
           let child: ReturnType<typeof spawn>
           const wrapped = await CommandRuntime.wrap({
             file: sandbox.file,

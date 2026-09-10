@@ -7,6 +7,7 @@ import path from "node:path"
 import os from "node:os"
 import z from "zod"
 import { Global } from "../global"
+import { Log } from "../util/log"
 import { OpenScience } from "../openscience"
 import { KernelEnvironmentMutation } from "../science/kernel/environment-mutation"
 import { Shell } from "../shell/shell"
@@ -50,6 +51,7 @@ export class ComputeJobsCorruptError extends Error {
 }
 
 export namespace ComputeJobs {
+  const teardownLog = Log.create({ service: "compute-jobs" })
   export const Scheduler = z.enum(["none", "slurm", "pbs"])
   export type Scheduler = z.infer<typeof Scheduler>
 
@@ -4308,7 +4310,21 @@ export namespace ComputeJobs {
     const roots = await credentialRoots()
     const cancelled = new Set<string>()
     for (const root of roots) {
-      const stored = await read(root).catch((error) => preserve(root, error))
+      // The ledger above already killed every identity-owned process. A
+      // history this build cannot read is preserved for inspection and skipped:
+      // one project's unreadable file must not fail the credential barrier and
+      // with it every request the server would otherwise serve.
+      const stored = await read(root)
+        .catch((error) => preserve(root, error))
+        .catch((error) => {
+          if (!(error instanceof ComputeJobsCorruptError)) throw error
+          teardownLog.error("skipping unreadable compute history during credential teardown", {
+            root,
+            error: error.message,
+          })
+          return undefined
+        })
+      if (!stored) continue
       for (const job of stored) {
         if (job.target.kind === "modal" || !job.pid || !job.process_identity) continue
         await CredentialProcessLedger.killExact({

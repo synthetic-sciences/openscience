@@ -199,7 +199,17 @@ export namespace CredentialLifecycle {
       complete.add(pending[index]!)
       return []
     })
-    if (failures.length) throw new AggregateError(failures, "Credential invalidation did not complete")
+    if (failures.length) {
+      // The aggregate hides its causes from every caller; name them here so a
+      // refusal to launch work can be traced to the handler that refused.
+      log.error("credential handlers failed", {
+        reason: event.reason,
+        errors: failures.map((failure) =>
+          failure instanceof Error ? `${failure.name}: ${failure.message}` : String(failure),
+        ),
+      })
+      throw new AggregateError(failures, "Credential invalidation did not complete")
+    }
   }
 
   async function reconcile(revision: Revision, local = false): Promise<boolean> {

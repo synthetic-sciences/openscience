@@ -7,9 +7,30 @@ type DefaultServerInput = {
   dev: boolean
 }
 
+const loopback = (url: string) => /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(url)
+
+/** A stored default names a server the user picked while the UI was served
+ * from somewhere else. When this page itself came from a loopback OpenScience
+ * server, that server is alive by definition, while a stored loopback port is
+ * often a sidecar or dev server that has since exited: preferring it leaves
+ * the page failing to fetch from nothing. Remote defaults are still honoured. */
+function staleLoopbackDefault(input: DefaultServerInput) {
+  // A build configured for a separate API server is not served by that API.
+  return (
+    !input.dev &&
+    !input.configured &&
+    !!input.stored &&
+    loopback(input.stored) &&
+    loopback(input.origin) &&
+    normalize(input.stored) !== normalize(input.origin)
+  )
+}
+
+const normalize = (url: string) => url.replace(/\/+$/, "").toLowerCase()
+
 export function resolveDefaultServerUrl(input: DefaultServerInput) {
   if (input.explicit) return input.explicit
-  if (input.stored) return input.stored
+  if (input.stored && !staleLoopbackDefault(input)) return input.stored
   if (input.configured) return input.configured
   if (input.dev) return "http://localhost:4096"
   return input.origin

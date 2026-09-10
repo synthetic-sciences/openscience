@@ -51,8 +51,11 @@ export namespace ExecutionAuthority {
      * omitted this and recover through their historical workspace value. */
     directory: z.string().optional(),
     workspace: z.string(),
-    /** The session's owned scratch directory; caches and staged files go here, never into a working folder. */
-    scratch: z.string(),
+    /** The session's owned scratch directory; caches and staged files go here,
+     * never into a working folder. Optional because decisions are persisted in
+     * compute job histories written before the field existed; those records
+     * are read for display and teardown, never to launch new work. */
+    scratch: z.string().optional(),
     readable: z.array(z.string()),
     writable: z.array(z.string()),
     sandbox: z.object({

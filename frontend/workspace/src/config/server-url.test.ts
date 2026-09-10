@@ -31,6 +31,21 @@ describe("resolveDefaultServerUrl", () => {
   test("falls back to the static origin only when no server is configured", () => {
     expect(resolveDefaultServerUrl(base)).toBe("http://127.0.0.1:3010")
   })
+
+  test("a page served by a loopback server ignores a stale loopback default from another port", () => {
+    // A desktop sidecar or an earlier dev server picked a new port since the
+    // default was stored; the server that just served this page is the one to use.
+    expect(resolveDefaultServerUrl({ ...base, stored: "http://127.0.0.1:57536" })).toBe("http://127.0.0.1:3010")
+    expect(resolveDefaultServerUrl({ ...base, stored: "http://localhost:4096" })).toBe("http://127.0.0.1:3010")
+    // The same server under another spelling is not stale.
+    expect(resolveDefaultServerUrl({ ...base, stored: "http://127.0.0.1:3010/" })).toBe("http://127.0.0.1:3010/")
+    // A remote default is a deliberate choice and still wins.
+    expect(resolveDefaultServerUrl({ ...base, stored: "https://lab.example.org" })).toBe("https://lab.example.org")
+    // The Vite dev origin serves no API, so its stored default stays authoritative.
+    expect(
+      resolveDefaultServerUrl({ ...base, dev: true, origin: "http://localhost:5173", stored: "http://localhost:4096" }),
+    ).toBe("http://localhost:4096")
+  })
 })
 
 describe("resolveDesktopServerUrl", () => {

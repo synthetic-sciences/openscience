@@ -60,6 +60,19 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   connection rows are plain logos with one control each. Three text styles from
   the shared scale, so every step reads the same.
 
+### Fixed
+
+- A compute job history one build cannot read no longer takes the whole server
+  down. Credential teardown used to reject on the first unreadable
+  `jobs.json`, and every request then failed with "Credential invalidation did
+  not complete"; the unreadable history is preserved and skipped instead, and
+  the inner handler errors are logged by name. The execution decision's new
+  `scratch` field is optional so histories written by earlier builds keep
+  parsing.
+- A page served by a local OpenScience server no longer defers to a stored
+  default server on another loopback port (a desktop sidecar or dev server that
+  has since exited), which showed as "Failed to fetch" against a dead server.
+
 ### Removed
 
 - The desktop onboarding-operation endpoints and the `desktop_onboarding_operations`

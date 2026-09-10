@@ -1457,6 +1457,250 @@
         ]
       }
     },
+    "/settings/credentials/host": {
+      "get": {
+        "operationId": "settings.credentials.host",
+        "summary": "Credentials this machine already holds",
+        "description": "Whether GitHub (gh login) and Hugging Face (hf token) credentials exist on this computer, and where they come from. Never returns values.",
+        "responses": {
+          "200": {
+            "description": "Host credential status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "service": {
+                        "type": "string",
+                        "enum": [
+                          "github",
+                          "huggingface"
+                        ]
+                      },
+                      "available": {
+                        "type": "boolean"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "environment",
+                          "gh",
+                          "huggingface-cli",
+                          "token-file"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "service",
+                      "available"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "fresh",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.credentials.host({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/credentials/host/import": {
+      "post": {
+        "operationId": "settings.credentials.importHost",
+        "summary": "Import a credential this machine already holds",
+        "description": "Copy the machine's GitHub or Hugging Face token into OpenScience's encrypted credential store.",
+        "responses": {
+          "200": {
+            "description": "Services",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "services": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "category": {
+                            "type": "string",
+                            "enum": [
+                              "compute",
+                              "integration"
+                            ]
+                          },
+                          "custom": {
+                            "type": "boolean"
+                          },
+                          "fields": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "password",
+                                    "text",
+                                    "textarea"
+                                  ]
+                                },
+                                "optional": {
+                                  "type": "boolean"
+                                },
+                                "placeholder": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "label",
+                                "type",
+                                "optional"
+                              ]
+                            }
+                          },
+                          "connected": {
+                            "type": "boolean"
+                          },
+                          "set_fields": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "updated_at": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "source": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "local",
+                                  "account"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "organization_id": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "description",
+                          "category",
+                          "custom",
+                          "fields",
+                          "connected",
+                          "set_fields",
+                          "updated_at",
+                          "source",
+                          "organization_id"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "services"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "service": {
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "huggingface"
+                    ]
+                  }
+                },
+                "required": [
+                  "service"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.credentials.importHost({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/credentials/{id}": {
       "put": {
         "operationId": "settings.credentials.set",
@@ -9068,7 +9312,6 @@
                           "grantRevision",
                           "generation",
                           "workspace",
-                          "scratch",
                           "readable",
                           "writable",
                           "sandbox"
@@ -11712,7 +11955,6 @@
                         "grantRevision",
                         "generation",
                         "workspace",
-                        "scratch",
                         "readable",
                         "writable",
                         "sandbox"
@@ -15508,7 +15750,6 @@
                         "grantRevision",
                         "generation",
                         "workspace",
-                        "scratch",
                         "readable",
                         "writable",
                         "sandbox"
@@ -18181,7 +18422,6 @@
                         "grantRevision",
                         "generation",
                         "workspace",
-                        "scratch",
                         "readable",
                         "writable",
                         "sandbox"
@@ -20854,7 +21094,6 @@
                         "grantRevision",
                         "generation",
                         "workspace",
-                        "scratch",
                         "readable",
                         "writable",
                         "sandbox"
@@ -25137,7 +25376,6 @@
                     "grantRevision",
                     "generation",
                     "workspace",
-                    "scratch",
                     "readable",
                     "writable",
                     "sandbox"
@@ -40774,7 +41012,6 @@
                                   "grantRevision",
                                   "generation",
                                   "workspace",
-                                  "scratch",
                                   "readable",
                                   "writable",
                                   "sandbox"
@@ -41399,7 +41636,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -42036,7 +42272,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -42673,7 +42908,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -43454,7 +43688,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -44064,7 +44297,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -44707,7 +44939,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -45351,7 +45582,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -46205,7 +46435,6 @@
                                   "grantRevision",
                                   "generation",
                                   "workspace",
-                                  "scratch",
                                   "readable",
                                   "writable",
                                   "sandbox"
@@ -46830,7 +47059,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -47467,7 +47695,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -48104,7 +48331,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -48896,7 +49122,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -49506,7 +49731,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -50155,7 +50379,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -50805,7 +51028,6 @@
                             "grantRevision",
                             "generation",
                             "workspace",
-                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -57197,7 +57419,6 @@
               "grantRevision",
               "generation",
               "workspace",
-              "scratch",
               "readable",
               "writable",
               "sandbox"

@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { Global } from "../../src/global"
 import { ComputeJobs, ComputeJobsCorruptError } from "../../src/compute/jobs"
 import { SshAdapter } from "../../src/compute/ssh/adapter"
 import { ModalAdapter } from "../../src/compute/modal/adapter"
@@ -1342,6 +1343,25 @@ describe("ComputeJobs local lifecycle", () => {
 
     expect(await ComputeJobs.cancelCredentialProcesses()).toBe(1)
     expect((await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })).status).toBe("cancelled")
+  })
+
+  test("credential teardown skips a history it cannot read instead of failing the barrier", async () => {
+    // One project's unreadable jobs.json (an older record shape, a torn write)
+    // used to reject cancelCredentialProcesses, and the credential lifecycle
+    // then refused every launch and every request on the server.
+    const projects = path.join(Global.Path.data, "compute", "projects")
+    const root = path.join(projects, `corrupt-history-${process.pid}`)
+    const filepath = path.join(root, "jobs.json")
+    const bytes = '[{"id":"historic","authority":{}}]'
+    await fs.mkdir(root, { recursive: true })
+    await fs.writeFile(filepath, bytes, { mode: 0o600 })
+    try {
+      await expect(ComputeJobs.cancelCredentialProcesses()).resolves.toBeGreaterThanOrEqual(0)
+      expect(await Bun.file(filepath).text()).toBe(bytes)
+      expect(await Bun.file(`${filepath}.corrupt-${process.pid}`).text()).toBe(bytes)
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
   })
 
   const posixTest = process.platform === "win32" ? test.skip : test
