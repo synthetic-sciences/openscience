@@ -13,6 +13,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Stopping a turn now cancels the MCP tool call that is still running: OpenScience sends the protocol cancellation to the server instead of abandoning the request, ignores a reply that arrives afterwards, and releases the update lease the call was holding.
 - The shell installer uses CPU flags exposed by Windows POSIX environments and defaults to the baseline archive when they are absent or unreadable, so x86-64 Windows hosts without confirmed AVX2 support avoid an optimized binary that dies with an illegal instruction.
 - The global event stream the workspace subscribes to now buffers a bounded number of events per connection instead of growing the server's memory for as long as a browser tab stays stalled, and a tab that misses events re-hydrates on the next `server.connected` frame exactly as it does after a reconnect.
+- Attaching a large file no longer discards workspace state you did not touch, and the composer now says the draft is not saved instead of losing it silently.
 
 ## v2.0.88 — 2026-09-10
 

@@ -16,7 +16,31 @@ type PersistTarget = {
 
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "openscience.global.dat"
+// Storage access that fails for any reason other than one value being too
+// large (private browsing, a blocked origin) makes every key hopeless, so the
+// cache becomes the only store. A single value the quota cannot hold is not
+// that, and must never cost the other keys their persistence.
 const fallback = { disabled: false }
+// Key -> the serialized length that would not fit. Retried once the value
+// shrinks enough, or once a removal hands the space back.
+const refused = new Map<string, number>()
+// Keys already announced. Kept apart from `refused` so that freeing space,
+// which is a reason to retry every refused key, is not also a reason to tell
+// the user again about one that is still failing.
+const reported = new Set<string>()
+// Serialized string length, so roughly double that many bytes once stored.
+// Re-serializing anything shorter costs little enough that any shrink earns
+// another attempt; past it the cost is what stalls the composer, so only a
+// halving does, which is the difference between dropping an attachment and
+// editing the text beside it. The test is on the value in hand rather than the
+// one that failed, so a payload that has fallen under the line is cheap again
+// however large it used to be.
+const RETRY_COARSE_LENGTH = 1024 * 1024
+
+function worthRetry(length: number, dropped: number) {
+  if (length < RETRY_COARSE_LENGTH) return length < dropped
+  return length * 2 <= dropped
+}
 const FLUSH_CAP_MS = 250
 
 const CACHE_MAX_ENTRIES = 500
@@ -88,70 +112,70 @@ function quota(error: unknown) {
   return false
 }
 
-type Evict = { key: string; size: number }
+export type PersistFailure = { key: string }
+
+const listeners = new Set<(failure: PersistFailure) => void>()
 
 /**
- * Make room for `keep` by dropping its siblings, largest first. Only keys in
- * the same store family (sharing `family`, the store's own prefix) qualify:
- * one bloated store must never erase another store's data.
+ * A refused write is the one storage failure a user can act on: what they are
+ * looking at will not survive a reload. Let the UI say so instead of losing it
+ * quietly.
  */
-function evict(storage: Storage, family: string, keep: string, value: string) {
-  const total = storage.length
-  const indexes = Array.from({ length: total }, (_, index) => index)
-  const items: Evict[] = []
-
-  for (const index of indexes) {
-    const name = storage.key(index)
-    if (!name) continue
-    if (!name.startsWith(family)) continue
-    if (name === keep) continue
-    const stored = storage.getItem(name)
-    items.push({ key: name, size: stored?.length ?? 0 })
+export function onPersistFailure(listener: (failure: PersistFailure) => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
   }
-
-  items.sort((a, b) => b.size - a.size)
-
-  for (const item of items) {
-    storage.removeItem(item.key)
-    cacheDelete(item.key)
-
-    try {
-      storage.setItem(keep, value)
-      cacheSet(keep, value)
-      return true
-    } catch (error) {
-      if (!quota(error)) throw error
-    }
-  }
-
-  return false
 }
 
-function write(storage: Storage, key: string, value: string, family?: string) {
+const recoveries = new Set<(key: string) => void>()
+
+/**
+ * The other half of the story: a key that was reported and then stored. A
+ * message telling someone to free up room outlives its truth the moment they
+ * do, so the UI needs to hear about this to take it back.
+ */
+export function onPersistRecovered(listener: (key: string) => void) {
+  recoveries.add(listener)
+  return () => {
+    recoveries.delete(listener)
+  }
+}
+
+/** Persistence observers are advisory UI: one broken observer must not stop the flush. */
+function announce(notify: () => void) {
+  try {
+    notify()
+  } catch {
+    return
+  }
+}
+
+type WriteResult = "stored" | "refused"
+
+/**
+ * A quota failure from `setItem` leaves the existing entry unchanged. Keep
+ * that atomic boundary: removing the current key or any sibling in pursuit of
+ * a retry can turn one refused draft into silent loss of previously saved
+ * state. Report only this key instead. The value is offered to the tab's cache
+ * on the way past, but the cache has a ceiling of its own that anything large
+ * enough to be refused here has usually already passed, so a refused draft is
+ * generally not kept anywhere.
+ */
+function write(storage: Storage, key: string, value: string): WriteResult {
   try {
     storage.setItem(key, value)
     cacheSet(key, value)
-    return true
+    return "stored"
   } catch (error) {
     if (!quota(error)) throw error
   }
 
-  try {
-    storage.removeItem(key)
-    cacheDelete(key)
-    storage.setItem(key, value)
-    cacheSet(key, value)
-    return true
-  } catch (error) {
-    if (!quota(error)) throw error
-  }
-
-  const ok = family ? evict(storage, family, key, value) : false
-  if (!ok) cacheSet(key, value)
-  return ok
+  cacheSet(key, value)
+  return "refused"
 }
 
-type Pending = { value: string; family?: string }
+type Pending = { value: string }
 const pending = new Map<string, Pending>()
 const queue = { cancel: undefined as (() => void) | undefined }
 
@@ -169,14 +193,29 @@ export function flushPersisted() {
   if (fallback.disabled) return
 
   for (const [key, item] of items) {
-    try {
-      if (write(localStorage, key, item.value, item.family)) continue
-    } catch {
-      fallback.disabled = true
-      return
+    const dropped = refused.get(key)
+    if (dropped !== undefined && !worthRetry(item.value.length, dropped)) continue
+
+    const result = (() => {
+      try {
+        return write(localStorage, key, item.value)
+      } catch {
+        fallback.disabled = true
+        return undefined
+      }
+    })()
+    if (result === undefined) return
+
+    if (result === "stored") {
+      refused.delete(key)
+      if (reported.delete(key)) for (const listener of recoveries) announce(() => listener(key))
+      continue
     }
-    fallback.disabled = true
-    return
+
+    refused.set(key, item.value.length)
+    if (reported.has(key)) continue
+    reported.add(key)
+    for (const listener of listeners) announce(() => listener({ key }))
   }
 }
 
@@ -224,20 +263,23 @@ function read(key: string) {
  * match what is already cached (hence stored or queued) and coalesce the rest
  * into one deferred write per key.
  */
-function enqueue(key: string, value: string, family?: string) {
+function enqueue(key: string, value: string) {
   if (cacheGet(key) === value) return
   cacheSet(key, value)
   if (fallback.disabled) return
-  pending.set(key, { value, family })
+  pending.set(key, { value })
   schedule()
 }
 
 function remove(key: string) {
   pending.delete(key)
   cacheDelete(key)
+  refused.delete(key)
+  reported.delete(key)
   if (fallback.disabled) return
   try {
     localStorage.removeItem(key)
+    refused.clear()
   } catch {
     fallback.disabled = true
   }
@@ -296,13 +338,11 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
   const item = (key: string) => base + key
   return {
     getItem: (key) => read(item(key)),
-    setItem: (key, value) => enqueue(item(key), value, base),
+    setItem: (key, value) => enqueue(item(key), value),
     removeItem: (key) => remove(item(key)),
   }
 }
 
-// Direct keys belong to no store family, so a quota failure on one of them
-// never evicts anything.
 function localStorageDirect(): SyncStorage {
   return {
     getItem: read,
