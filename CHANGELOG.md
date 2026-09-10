@@ -17,6 +17,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Opening a project no longer stops its own kernels, terminals and compute jobs
+  because of an authority change some other project never acknowledged. The
+  durable authority record now names the last revision addressed to each
+  project and the last addressed to all of them, so a watcher that finds a gap
+  it cannot replay resyncs only when something in that gap was for it.
 - A finished turn kept a burst of one tool call inside a folded group with no
   header, so a lone write or command between two thoughts vanished from the
   trace. It renders as its own row again.

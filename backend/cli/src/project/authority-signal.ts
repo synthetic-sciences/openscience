@@ -56,6 +56,13 @@ export namespace AuthoritySignal {
     // its own process's settled work (already applied through the in-process
     // bus) or another process's, which still earns the conservative resync.
     history: HistoryEvent.array().default([]),
+    // The last revision that touched each project, and the last that reached
+    // every project (an installation-wide grant). A watcher that knows its
+    // project can tell from these alone whether a gap it cannot replay held
+    // anything addressed to it. A stale unsettled entry once made every new
+    // watcher walk a two-hundred-revision gap and stop everything it owned.
+    projects: z.record(z.string(), z.number().int().positive()).default({}),
+    global: z.number().int().nonnegative().default(0),
   })
   type State = z.infer<typeof State>
   const HISTORY = 16
@@ -99,6 +106,7 @@ export namespace AuthoritySignal {
         backlog.push({ revision: previous.revision, event: previous.event })
       }
       const revision = (previous?.revision ?? 0) + 1
+      const everywhere = parsed.kind === "filesystem" && parsed.scope === "installation"
       return {
         version: 1,
         revision,
@@ -108,6 +116,8 @@ export namespace AuthoritySignal {
         event: parsed,
         backlog,
         history: [...(previous?.history ?? []), { revision, event: parsed, origin: process.pid }].slice(-HISTORY),
+        projects: { ...(previous?.projects ?? {}), [parsed.projectID]: revision },
+        global: everywhere ? revision : (previous?.global ?? 0),
       }
     })
   }
@@ -149,11 +159,24 @@ export namespace AuthoritySignal {
     return true
   }
 
+  /** Whether any revision after `since` was addressed to this project, or to
+   * every project. Records written before these fields existed report nothing
+   * and leave the caller to resync. */
+  function addressed(state: State, since: number, projectID: string) {
+    return state.global > since || (state.projects[projectID] ?? 0) > since
+  }
+
   /** Poll a tiny revision record. A skipped revision causes a conservative
    * resync signal because the last event alone cannot describe every affected
    * process, unless the record shows the gap to be this process's own settled
-   * work. The timer is unref'd and disposed with its project instance. */
-  export async function watch(handler: (change: Change) => Promise<boolean | void>, pollMs = 200) {
+   * work, or a watcher that named its project can see nothing in the gap was
+   * addressed to it. The timer is unref'd and disposed with its project
+   * instance. */
+  export async function watch(
+    handler: (change: Change) => Promise<boolean | void>,
+    pollMs = 200,
+    scope?: { projectID: string },
+  ) {
     const initial = await current()
     const firstPending = initial
       ? Math.min(...initial.backlog.map((item) => item.revision), ...(initial.pending ? [initial.revision] : []))
@@ -166,6 +189,7 @@ export namespace AuthoritySignal {
     // no longer names, earns the resync.
     const catchUp = async (state: State, upTo: number) => {
       if (upTo <= revision + 1 || ownSettledGap(state, revision, upTo)) return
+      if (scope && Object.keys(state.projects).length > 0 && !addressed(state, revision, scope.projectID)) return
       await handler({ type: "resync", revision: upTo - 1 })
     }
     const poll = async () => {
