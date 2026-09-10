@@ -66,8 +66,14 @@ export namespace Provider {
   // Raw body activity includes keepalives and private reasoning, so this only
   // expires a remote response that has stopped producing bytes altogether.
   // Local runtimes keep the deadline disabled because slow inference can be
-  // legitimately silent (see defaultIdleTimeout).
-  export const DEFAULT_REMOTE_IDLE_TIMEOUT_MS = 1_800_000
+  // legitimately silent (see defaultIdleTimeout). Ten minutes of byte silence
+  // from a remote endpoint is a dead connection, not a thinking model; the
+  // earlier half-hour turned one hung stream into a 45-minute worker failure.
+  export const DEFAULT_REMOTE_IDLE_TIMEOUT_MS = 600_000
+  // The managed gateway and OpenRouter keep a live stream ticking with
+  // keepalive comments and streamed private reasoning, so five silent minutes
+  // there is a connection that died without closing.
+  export const DEFAULT_MANAGED_IDLE_TIMEOUT_MS = 300_000
   export const DEFAULT_OUTPUT_IDLE_TIMEOUT_MS = false
 
   export type RequestContext = {
@@ -1196,7 +1202,8 @@ export namespace Provider {
   }
 
   export function defaultIdleTimeout(input: { providerID: string; baseURL?: unknown }): number | false {
-    return localEndpoint(input) ? false : DEFAULT_REMOTE_IDLE_TIMEOUT_MS
+    if (localEndpoint(input)) return false
+    return isAtlasProxyBaseURL(input.baseURL) ? DEFAULT_MANAGED_IDLE_TIMEOUT_MS : DEFAULT_REMOTE_IDLE_TIMEOUT_MS
   }
 
   /** Pin a user-owned key to a public endpoint when stale proxy config remains. */

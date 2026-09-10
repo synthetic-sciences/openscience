@@ -143,6 +143,7 @@ export namespace SessionFilesystem {
       sessionID: z.string(),
       path: z.string(),
       access: Access,
+      message: z.string().optional(),
     }),
   )
 
@@ -266,6 +267,30 @@ export namespace SessionFilesystem {
     return { root, workspace: grant.path }
   }
 
+  /** The refusal a model reads. A bare class name once sent a worker back into
+   * seven minutes of thought and the same denied write; the message names the
+   * places this session can use and, for a lead's folder, how to hand files
+   * back instead. */
+  function denial(record: State, target: string, access: Access) {
+    const live = record.grants.filter((grant) => !grant.time.revoked && grant.scope !== "once")
+    const usable = [
+      ...new Set(
+        live.filter((grant) => (access === "write" ? grant.access === "write" : true)).map((grant) => grant.path),
+      ),
+    ]
+    const lead = live.find((grant) => grant.source === "handoff" && Filesystem.contains(grant.path, target))
+    const handoff = lead
+      ? ` ${lead.path} belongs to the lead session and is read-only here: write under this session's own workspace and hand files back with artifact(action="save_file", path=...).`
+      : ""
+    const where = usable.length ? ` This session can ${access} under: ${usable.join(", ")}.` : ""
+    return new DeniedError({
+      sessionID: record.sessionID,
+      path: target,
+      access,
+      message: `No ${access} access to ${target} from this session.${handoff}${where}`,
+    })
+  }
+
   function assertPrivate(record: State, target: string, access: Access) {
     const boundary = isolated(record)
     if (!boundary) return
@@ -282,11 +307,7 @@ export namespace SessionFilesystem {
       )
     )
       return
-    throw new DeniedError({
-      sessionID: record.sessionID,
-      path: target,
-      access,
-    })
+    throw denial(record, target, access)
   }
 
   async function read(sessionID: string): Promise<State> {
@@ -734,13 +755,7 @@ export namespace SessionFilesystem {
         return b.path.length - a.path.length
       })
     const grant = matches[0]
-    if (!grant) {
-      throw new DeniedError({
-        sessionID: input.sessionID,
-        path: target,
-        access: input.access,
-      })
-    }
+    if (!grant) throw denial(record, target, input.access)
     if (grant.scope === "once") {
       const consumed = Date.now()
       await Storage.update<State>(key(input.sessionID), (draft) => {

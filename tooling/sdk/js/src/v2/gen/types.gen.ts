@@ -1851,7 +1851,7 @@ export type ProviderConfig = {
      */
     timeout?: number | false
     /**
-     * Maximum provider response-body inactivity in milliseconds. Remote endpoints default to 1800000 (30 minutes); local endpoints (loopback or .local base URLs and bundled local providers) default to disabled. Set false to disable.
+     * Maximum provider response-body inactivity in milliseconds. Remote endpoints default to 600000 (10 minutes) and the managed Ace gateway to 300000 (5 minutes); local endpoints (loopback or .local base URLs and bundled local providers) default to disabled. Set false to disable.
      */
     idleTimeout?: number | false
     /**

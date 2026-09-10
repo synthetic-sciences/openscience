@@ -692,7 +692,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                   "Do not return a diary of searches, reads, or commands. Your final response is a decision-ready handoff to the lead, not a second user-facing report.",
                   "Use only the Markdown sections that carry substance: Outcome; Findings; Evidence; Changes / outputs; Limitations; Next action.",
                   "Preserve exact paths, identifiers, numeric results, commands, and error strings when they matter. Distinguish observed evidence from inference. If blocked or partial, say exactly what remains.",
-                  'Save important scratch outputs with artifact(action="save_file", path=...) before returning. The lead receives immutable artifact/version handles and can read them without access to your private scratch. A saved file proves an output exists, not that its claims or tests passed.',
+                  'The lead\'s workspace is read-only for you: write under your own workspace. Save important scratch outputs with artifact(action="save_file", path=...) before returning. The lead receives immutable artifact/version handles and can read them without access to your private scratch. A saved file proves an output exists, not that its claims or tests passed.',
                   "Do not wrap the response in XML or JSON and do not restate these instructions.",
                   settings.autonomy === "interactive"
                     ? "If the assignment contains a genuinely consequential ambiguity, return one precise question to the lead instead of guessing."
@@ -790,7 +790,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               : taskOutcome.stopReason === "tool_partial"
                 ? ["[One or more child tool operations remain partial or unsettled; treat this as a partial result.]"]
                 : taskOutcome.stopReason === "provider_error"
-                  ? ["[Child stopped on a provider error; its usable partial result follows.]"]
+                  ? [
+                      "[Child stopped on a provider error; its usable partial result follows. The worker's model or connection failed, not the task: finish this step yourself now rather than sending the same brief to the same worker again.]",
+                    ]
                   : taskOutcome.stopReason === "cancelled"
                     ? ["[Child was cancelled; completed actions and usable partial evidence follow.]"]
                     : taskOutcome.stopReason === "empty_handoff"
