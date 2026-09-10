@@ -377,12 +377,13 @@ export namespace Storage {
   // makes that assumption true by construction, and unlike relocating temp
   // files it also hides debris already left on disk by earlier runs.
   const glob = new Bun.Glob("**/*.json")
-  export async function list(prefix: string[]) {
+  export async function list(prefix: string[], attempt = 0): Promise<string[][]> {
     const dir = await state().then((x) => x.dir)
+    const root = path.join(dir, ...prefix)
     try {
       const result = await Array.fromAsync(
         glob.scan({
-          cwd: path.join(dir, ...prefix),
+          cwd: root,
           onlyFiles: true,
         }),
       ).then((results) => results.map((x) => [...prefix, ...x.slice(0, -5).split(path.sep)]))
@@ -390,7 +391,18 @@ export namespace Storage {
       return result
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
-      if (code === "ENOENT" || code === "ENOTDIR") return []
+      if (code === "ENOENT" || code === "ENOTDIR") {
+        // A missing prefix is an empty listing. A sibling record being
+        // replaced under the scan is not: its temp file can vanish between the
+        // directory read and its stat, and reporting that as "no keys" would
+        // hide every session in the project for one caller. Look again.
+        const exists = await fs
+          .stat(root)
+          .then((info) => info.isDirectory())
+          .catch(() => false)
+        if (exists && attempt < 3) return list(prefix, attempt + 1)
+        return []
+      }
       log.error("failed to list storage keys", { prefix, error })
       throw error
     }
