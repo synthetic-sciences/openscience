@@ -1,49 +1,41 @@
-.DS_Store
+# Dependencies and build output
 node_modules
-.worktrees
-.sst
-.env
-.idea
-.vscode
-*~
-playground
-tmp
 dist
 ts-dist
 .turbo
-**/.serena
-.serena/
-/result
-refs
-Session.vim
-/openscience.json
-a.out
 target
-.scripts
-.direnv/
-
-# Local dev files
-openscience-dev
-logs/
+a.out
 *.bun-build
 __pycache__/
 *.pyc
+
+# Local environment and editor state
+.env
+.idea
+.vscode
+.direnv/
+*~
+.DS_Store
+
+# Local runtime and tooling artifacts (never commit)
+openscience-dev
+logs/
+tmp
+playground
+.worktrees
 .vercel
-
-*.traineddata
-.claude/
-
-# Local runtime / tooling artifacts (never commit)
-.playwright-mcp/
+/openscience.json
+/result
 .openscience/node_modules/
 .openscience/bun.lock
-.superpowers/
-# Internal planning docs (specs/plans) stay local, not in the repo
-docs/superpowers/
-legacy-chat-ui/
-
-# Local design references and PDF screenshot exports
-.ui-reference/
-
-# Harbor adapter local virtualenv
+.playwright-mcp/
 tooling/harbor/.venv/
+*.traineddata
+
+# Agent scratch directories that must stay local
+.claude/
+**/.serena
+.serena/
+.superpowers/
+docs/superpowers/
+.ui-reference/

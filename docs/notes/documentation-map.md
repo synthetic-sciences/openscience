@@ -1,6 +1,6 @@
 # Documentation source map
 
-This is the maintainer index for the public documentation refresh. The audit starts from main commit `7dabbf08` (2026-09-05), then follows the current source on this branch. See [repository-index.md](repository-index.md) for the repository inventory.
+This is the maintainer index that connects supported product behavior to the public guides. When a change alters what a user sees, find its page here and update it in the same pull request.
 
 Public guides explain supported user workflows. Existing architecture, contributor, release, and extension notes remain the reference for implementation work. Public documentation should not copy internal service composition into setup instructions.
 

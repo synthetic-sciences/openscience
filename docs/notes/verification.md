@@ -64,7 +64,7 @@ Notes:
 - The model catalog is fixtured in tests, so the suite is deterministic and runs
   offline; a nightly job checks the live catalog for delistings separately.
 - Synthetic Sciences account routes degrade gracefully when signed out or
-  offline — exercise both states when touching them.
+  offline; exercise both states when touching them.
 
 ## Release-specific evidence boundaries
 

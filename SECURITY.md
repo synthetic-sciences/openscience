@@ -36,7 +36,7 @@ Requests to model providers, scientific data sources, MCP servers, and other con
 ## Supported versions
 
 Security fixes ship in the latest release on npm (`@synsci/openscience`). Please
-upgrade to the newest version before reporting — earlier versions are not patched.
+upgrade to the newest version before reporting; earlier versions are not patched.
 
 | Version            | Supported |
 | ------------------ | --------- |

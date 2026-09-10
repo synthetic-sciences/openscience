@@ -86,7 +86,6 @@ export namespace Installation {
     if (installed.includes("/.pnpm/") || installed.includes("/pnpm/global/")) return "pnpm" as const
     if (installed.includes("/scoop/apps/openscience/")) return "scoop" as const
     if (installed.includes("/chocolatey/")) return "choco" as const
-    if (installed.includes("/cellar/openscience/")) return "brew" as const
     if (installed.includes("/node_modules/@synsci/openscience-")) return "npm" as const
     if (script.includes("/node_modules/@synsci/openscience/")) return "npm" as const
     if (exec.includes("/.local/bin/")) return "curl" as const
@@ -167,16 +166,6 @@ export namespace Installation {
     return desktopRequest("DELETE")
   }
 
-  // The formula is published to this tap by script/homebrew.ts; it has never
-  // been in homebrew-core, so the unqualified name only resolves once tapped.
-  export const BREW_FORMULA = "synthetic-sciences/tap/openscience"
-
-  async function getBrewFormula() {
-    const tapFormula = await $`brew list --formula ${BREW_FORMULA}`.throws(false).quiet().text()
-    if (tapFormula.includes("openscience")) return BREW_FORMULA
-    return "openscience"
-  }
-
   // `curl … | bash` cannot report a failed download: Bun's `$` has no pipefail,
   // so bash reads EOF and exits 0. Fetch the script to disk first.
   async function downloadInstaller(url: string, cwd: string, env: Record<string, string>) {
@@ -194,7 +183,7 @@ export namespace Installation {
   }
 
   // A package manager may replace the executable's versioned directory
-  // (Homebrew Cellar, pnpm store), so the command on PATH is the fallback probe.
+  // (pnpm store), so the command on PATH is the fallback probe.
   async function installedVersion(target: string, cwd: string, env: Record<string, string>) {
     const candidates = [process.execPath, Bun.which("openscience", { PATH: env.PATH ?? "" })]
     let observed: string | undefined
@@ -284,11 +273,6 @@ export namespace Installation {
         case "bun":
           cmd = $`bun install -g @synsci/openscience@${target}`
           break
-        case "brew": {
-          const formula = await getBrewFormula()
-          cmd = $`brew upgrade ${formula}`
-          break
-        }
         case "choco":
           cmd = $`echo Y | choco upgrade openscience --version=${target}`
           break
@@ -298,12 +282,7 @@ export namespace Installation {
         default:
           throw new Error(`Unknown method: ${method}`)
       }
-      const commandEnv =
-        method === "curl"
-          ? { ...env, VERSION: target }
-          : method === "brew"
-            ? { ...env, HOMEBREW_NO_AUTO_UPDATE: "1" }
-            : env
+      const commandEnv = method === "curl" ? { ...env, VERSION: target } : env
       const result = await cmd.cwd(cwd).env(commandEnv).quiet().throws(false)
       if (result.exitCode !== 0) {
         const stderr =
@@ -367,10 +346,6 @@ export namespace Installation {
 
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
-
-    // formulae.brew.sh only indexes homebrew-core (404 for this formula); the
-    // tap formula is generated from the GitHub release, so that is its source.
-    if (detectedMethod === "brew") return githubLatest()
 
     if (
       detectedMethod === "npm" ||

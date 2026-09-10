@@ -159,6 +159,15 @@ function TraceGroupRow(props: {
   // to their one-line summary; a thought streams open and folds when it ends.
   // The reader's own choice always wins.
   const open = () => manual() ?? (props.kind === "thought" ? !!props.live : !!props.working)
+  // A burst of one call is that call's own row: nothing to fold, so it never
+  // sits inside a collapsible that a finished turn would close over it.
+  if (props.header === false) {
+    return (
+      <div data-component="trace-group" data-kind={props.kind} data-header="false">
+        <div data-slot="trace-group-body">{props.children}</div>
+      </div>
+    )
+  }
   return (
     <Collapsible
       open={open()}
@@ -169,19 +178,17 @@ function TraceGroupRow(props: {
       data-component="trace-group"
       data-kind={props.kind}
       data-live={props.live ? "true" : undefined}
-      data-header={props.header === false ? "false" : "true"}
+      data-header="true"
     >
-      <Show when={props.header !== false}>
-        <Collapsible.Trigger>
-          <div data-component="trace-row" data-open={open() ? "true" : undefined}>
-            <Show when={props.live}>
-              <Spinner />
-            </Show>
-            <span data-slot="trace-row-label">{props.label}</span>
-            <Icon name="chevron-down" size="small" data-slot="trace-row-chevron" />
-          </div>
-        </Collapsible.Trigger>
-      </Show>
+      <Collapsible.Trigger>
+        <div data-component="trace-row" data-open={open() ? "true" : undefined}>
+          <Show when={props.live}>
+            <Spinner />
+          </Show>
+          <span data-slot="trace-row-label">{props.label}</span>
+          <Icon name="chevron-down" size="small" data-slot="trace-row-chevron" />
+        </div>
+      </Collapsible.Trigger>
       <Collapsible.Content>
         <div data-slot="trace-group-body">{props.children}</div>
       </Collapsible.Content>

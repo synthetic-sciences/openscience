@@ -162,6 +162,5 @@ if (Script.preview) {
       .then((value) => value.trim())
     if (current !== releaseSha) throw new Error(`Release checkout moved from ${releaseSha} to ${current}`)
     await $`gh release edit v${Script.version} --draft=false`.cwd(releaseRoot)
-    await $`./backend/cli/script/publish.ts --homebrew-only`.cwd(releaseRoot)
   }
 }

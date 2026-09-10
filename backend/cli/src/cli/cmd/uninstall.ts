@@ -144,7 +144,6 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
       pnpm: "pnpm uninstall -g @synsci/openscience",
       bun: "bun remove -g @synsci/openscience",
       yarn: "yarn global remove @synsci/openscience",
-      brew: "brew uninstall openscience",
       choco: "choco uninstall openscience",
       scoop: "scoop uninstall openscience",
     }
@@ -195,7 +194,6 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
       pnpm: ["pnpm", "uninstall", "-g", "@synsci/openscience"],
       bun: ["bun", "remove", "-g", "@synsci/openscience"],
       yarn: ["yarn", "global", "remove", "@synsci/openscience"],
-      brew: ["brew", "uninstall", "openscience"],
       choco: ["choco", "uninstall", "openscience"],
       scoop: ["scoop", "uninstall", "openscience"],
     }
