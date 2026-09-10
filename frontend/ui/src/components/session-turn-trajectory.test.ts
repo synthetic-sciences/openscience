@@ -1044,6 +1044,8 @@ describe("execution inspection", () => {
     })
     const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id }), store)
     const status = () => host.querySelector('[data-slot="session-turn-status-text"]')?.textContent ?? ""
+    const detail = () =>
+      host.querySelector('[data-slot="session-turn-collapsible-trigger-content"]')?.getAttribute("title") ?? ""
     await ready(() => status().includes("Running commands"))
     setStore("session_progress", {
       [sessionID]: {
@@ -1069,8 +1071,11 @@ describe("execution inspection", () => {
     })
     await settle()
     // The model is still generating arguments; no command is executing yet.
-    expect(status()).toContain("No new output from")
+    // The header reads as thinking; the quiet stream is a hover away.
+    expect(status()).toBe("Thinking")
     expect(status()).not.toContain("Running commands")
+    expect(detail()).toMatch(/No new output from openai\/gpt-5\.6-sol for (59|60)s/)
+    expect(detail()).toContain("The response is still open.")
     setStore("part", first.id, 0, {
       ...command,
       state: {
@@ -1098,8 +1103,18 @@ describe("execution inspection", () => {
         stalls: 0,
       },
     })
-    await ready(() => status().includes("Waiting for output from openai/gpt-5.6-sol"))
+    await ready(() => detail().includes("Waiting for output from openai/gpt-5.6-sol (7s)"))
+    expect(status()).toBe("Thinking")
     expect(status()).not.toContain("Running commands")
+    // A retry countdown is the one request phase worth its own words.
+    setStore("session_progress", sessionID, {
+      ...store.session_progress![sessionID],
+      phase: "retry_wait",
+      since: Date.now(),
+      retryAfterMs: 8_000,
+    })
+    await ready(() => status().includes("Retrying in"))
+    expect(status()).toMatch(/Retrying in [78]s/)
   })
 })
 
@@ -1230,10 +1245,11 @@ describe("timeout recovery", () => {
         since: Date.now(),
       })
       await ready(() =>
-        (host.querySelector('[data-slot="session-turn-status-text"]')?.textContent ?? "").includes(
-          "Waiting for output from openai/gpt-5.6-sol",
-        ),
+        (
+          host.querySelector('[data-slot="session-turn-collapsible-trigger-content"]')?.getAttribute("title") ?? ""
+        ).includes("Waiting for output from openai/gpt-5.6-sol"),
       )
+      expect(host.querySelector('[data-slot="session-turn-status-text"]')?.textContent).toBe("Thinking")
       expect(host.querySelector('[data-slot="session-turn-trace-control"] [data-component="spinner"]')).not.toBeNull()
     },
   )
@@ -1594,7 +1610,7 @@ describe("trace control", () => {
     )
     await ready(() => status(host) !== null)
     expect(host.querySelector('[data-slot="session-turn-collapsible-trigger-content"]')).toBeNull()
-    expect(status(host)?.textContent).toContain("Preparing next step")
+    expect(status(host)?.textContent).toContain("Thinking")
   })
 })
 

@@ -8,8 +8,22 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Changed
+
+- While a turn runs, its header reads as one calm word for what is happening:
+  Thinking, or the activity of the tool that is running, beside the elapsed
+  clock. Preparing, sending, waiting-for-output and quiet-stream phases no
+  longer take turns on the line; the request detail ("No new output from
+  openai/gpt-5.6-sol for 58s") sits in the tooltip, and only a retry countdown
+  or a conflict wait still speaks for itself.
+- A tool's body renders as a receipt: a loaded skill's SKILL.md and other
+  tool output sit at the meta type level with headings brought down to it.
+
 ### Fixed
 
+- The wallet balance check before an Ace request now waits up to 8 seconds
+  instead of 3, so a slow afternoon at the account service no longer turns every
+  step into a paused turn and a retry countdown.
 - Stopping a turn now cancels the MCP tool call that is still running: OpenScience sends the protocol cancellation to the server instead of abandoning the request, ignores a reply that arrives afterwards, and releases the update lease the call was holding.
 - The shell installer uses CPU flags exposed by Windows POSIX environments and defaults to the baseline archive when they are absent or unreadable, so x86-64 Windows hosts without confirmed AVX2 support avoid an optimized binary that dies with an illegal instruction.
 - The global event stream the workspace subscribes to now buffers a bounded number of events per connection instead of growing the server's memory for as long as a browser tab stays stalled, and a tab that misses events re-hydrates on the next `server.connected` frame exactly as it does after a reconnect.

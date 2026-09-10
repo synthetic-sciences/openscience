@@ -1670,7 +1670,10 @@ export namespace OpenScience {
   // the background, up to this age. A missing, non-positive or older value
   // blocks on the fetch so an empty wallet is noticed promptly.
   const BALANCE_STALE_MAX_MS = 5 * 60_000
-  const BALANCE_FETCH_TIMEOUT_MS = 3_000
+  // The account service has answered in 1–2 s on slow afternoons; a 3 s cap
+  // turned those into a paused turn and a retry countdown before every step.
+  // Match the credential sync's patience instead.
+  const BALANCE_FETCH_TIMEOUT_MS = 8_000
 
   /** Expire the cached balance after a spend or credential change. A positive
    * value is kept past its TTL so the next check serves it while a refresh runs

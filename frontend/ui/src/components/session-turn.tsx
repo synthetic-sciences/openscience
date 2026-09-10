@@ -54,7 +54,7 @@ import { createStore } from "solid-js/store"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
-import { progressStatus } from "./session-turn-progress"
+import { headerProgress, progressStatus } from "./session-turn-progress"
 import { collapsibleTracePart, elapsedLabel, visibleResearchTrace, type ResearchTraceEntry } from "./research-trace"
 import { buildTraceRows, editedLabel, exploredLabel, thoughtLabel, type TraceRow } from "./trace-rows"
 import { Collapsible } from "./collapsible"
@@ -795,25 +795,21 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  // Waiting belongs to the current request. Completed tools from earlier
-  // steps must never replace it with a stale execution label.
-  const phase = createMemo(() => {
-    const current = progress()
-    const status = progressStatus(current, store.now)
-    const latest = assistantMessages().at(-1)
-    const running =
-      latest &&
-      (data.store.part[latest.id] ?? emptyParts).some((part) => part.type === "tool" && part.state.status === "running")
-    if (current?.phase === "streaming" && running) return
-    if (current?.phase === "streaming" && !status?.hint && rawStatus()) return
-    return status
+  // The header names what the reader can act on: a retry countdown or a
+  // conflict wait. A request being prepared, sent or quietly streamed reads
+  // as thinking, and the tool that is running reads as its own activity. The
+  // clock beside the label keeps the wait honest; the request detail
+  // ("Waiting for output from …", "No new output for 58s") sits in the tooltip.
+  const phase = createMemo(() => headerProgress(progress(), store.now))
+  const detail = createMemo(() => {
+    const status = progressStatus(progress(), store.now)
+    if (!status) return
+    return [i18n.t(status.key, status.params), status.hint ? i18n.t(status.hint) : ""].filter(Boolean).join(" ")
   })
   const statusText = createMemo(() => {
     const live = phase()
     if (live) return i18n.t(live.key, live.params)
-    const current = rawStatus()
-    if (current) return current
-    return i18n.t("ui.sessionTurn.status.consideringNextSteps")
+    return rawStatus() ?? i18n.t("ui.sessionTurn.status.thinking")
   })
 
   return (
@@ -869,7 +865,7 @@ export function SessionTurn(
                             aria-expanded={expanded()}
                             aria-controls={traceID()}
                             aria-label={i18n.t(expanded() ? "ui.sessionTurn.steps.hide" : "ui.sessionTurn.steps.show")}
-                            title={i18n.t("ui.sessionTurn.totalTime")}
+                            title={(working() && detail()) || i18n.t("ui.sessionTurn.totalTime")}
                             onClick={toggleSteps}
                           >
                             <Show when={working()}>
@@ -907,7 +903,7 @@ export function SessionTurn(
                           </Button>
                         </Show>
                         <Show when={working() && !hasSteps()}>
-                          <div data-slot="session-turn-live-status" aria-live="off" title={statusText()}>
+                          <div data-slot="session-turn-live-status" aria-live="off" title={detail() ?? statusText()}>
                             <Spinner />
                             <span data-slot="session-turn-status-text">{statusText()}</span>
                             <span data-slot="session-turn-duration" aria-live="off">

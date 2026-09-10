@@ -460,6 +460,26 @@
   line-height: var(--chat-meta-line-height);
 }
 
+/* A tool's body is a receipt, not a document: a loaded skill's SKILL.md or a
+   command's notes render at the meta level with their headings brought down
+   to it, so nothing inside a folded row ever outweighs the answer. */
+.session-scroller [data-component="tool-output"] [data-component="markdown"] {
+  font-size: var(--chat-meta-font-size);
+  line-height: var(--chat-meta-line-height);
+}
+
+.session-scroller [data-component="tool-output"] [data-component="markdown"] :is(h1, h2, h3, h4, h5, h6) {
+  margin: 8px 0 2px;
+  font-size: var(--chat-meta-font-size);
+  line-height: var(--chat-meta-line-height);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.session-scroller [data-component="tool-output"] [data-component="markdown"] :is(p, ul, ol, pre) {
+  margin: 2px 0;
+}
+
 /* Every trajectory row is one 32px line: a live call, the placeholder a
    write shows before its diff exists, a folded reasoning clock. Rows then
    swap state without moving anything below them. */
