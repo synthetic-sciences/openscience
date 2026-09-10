@@ -120,89 +120,93 @@ const authoritySync = Instance.state(
   async () => {
     const directory = Instance.directory
     const projectID = Instance.project.id
-    return AuthoritySignal.watch(async (change) => {
-      // A runtime never mints an instance: without one there is nothing to stop.
-      if (!Instance.has(directory)) return false
-      return Instance.provide({
-        directory,
-        projectID,
-        fn: async () => {
-          if (change.type === "resync") {
-            const sessions = []
-            for await (const session of Session.list()) sessions.push(session.id)
-            await Promise.all([
-              stopSessions(sessions),
-              LSP.dispose(),
-              MCP.disposeLocal(),
-              invalidateProjectExecutionCaches(),
-            ])
-            await Promise.all([
-              AuthorityProcessLedger.revoke({ projectID }),
-              CredentialProcessLedger.revoke({ kind: "mcp", projectID }),
-              CredentialProcessLedger.revoke({ kind: "provider", projectID }),
-              invalidateProjectTokenCache(projectID),
-            ])
-            return true
-          }
-          const event = change.event
-          if (event.kind === "trust") {
-            if (event.projectID !== projectID) return false
-            if (!event.denied) {
-              await invalidateProjectExecutionCaches()
+    return AuthoritySignal.watch(
+      async (change) => {
+        // A runtime never mints an instance: without one there is nothing to stop.
+        if (!Instance.has(directory)) return false
+        return Instance.provide({
+          directory,
+          projectID,
+          fn: async () => {
+            if (change.type === "resync") {
+              const sessions = []
+              for await (const session of Session.list()) sessions.push(session.id)
+              await Promise.all([
+                stopSessions(sessions),
+                LSP.dispose(),
+                MCP.disposeLocal(),
+                invalidateProjectExecutionCaches(),
+              ])
+              await Promise.all([
+                AuthorityProcessLedger.revoke({ projectID }),
+                CredentialProcessLedger.revoke({ kind: "mcp", projectID }),
+                CredentialProcessLedger.revoke({ kind: "provider", projectID }),
+                invalidateProjectTokenCache(projectID),
+              ])
               return true
             }
-            const jobs = import("../compute/jobs").then((module) => module.ComputeJobs.cancelProject(projectID))
-            const biology = BiologyKernelLifecycle.releaseProject(projectID)
-            await Promise.all([
-              Pty.releaseAll(),
-              KernelRuntime.releaseProject(projectID),
-              CommandRuntime.stopProject(projectID),
-              LSP.dispose(),
-              MCP.disposeLocal(),
-              invalidateProjectExecutionCaches(),
-              biology,
-              jobs,
-            ])
-            await Promise.all([
-              AuthorityProcessLedger.revoke({ projectID }),
-              CredentialProcessLedger.revoke({ kind: "mcp", projectID }),
-              CredentialProcessLedger.revoke({ kind: "provider", projectID }),
-              invalidateProjectTokenCache(projectID),
-            ])
-            return true
-          }
-          if (event.kind === "access") {
-            if (event.projectID !== projectID) return false
-            if (event.narrowing === false) {
-              await Promise.all([invalidateProjectExecutionCaches(), invalidateProjectTokenCache(projectID)])
+            const event = change.event
+            if (event.kind === "trust") {
+              if (event.projectID !== projectID) return false
+              if (!event.denied) {
+                await invalidateProjectExecutionCaches()
+                return true
+              }
+              const jobs = import("../compute/jobs").then((module) => module.ComputeJobs.cancelProject(projectID))
+              const biology = BiologyKernelLifecycle.releaseProject(projectID)
+              await Promise.all([
+                Pty.releaseAll(),
+                KernelRuntime.releaseProject(projectID),
+                CommandRuntime.stopProject(projectID),
+                LSP.dispose(),
+                MCP.disposeLocal(),
+                invalidateProjectExecutionCaches(),
+                biology,
+                jobs,
+              ])
+              await Promise.all([
+                AuthorityProcessLedger.revoke({ projectID }),
+                CredentialProcessLedger.revoke({ kind: "mcp", projectID }),
+                CredentialProcessLedger.revoke({ kind: "provider", projectID }),
+                invalidateProjectTokenCache(projectID),
+              ])
               return true
             }
-            const jobs = import("../compute/jobs").then((module) => module.ComputeJobs.cancelProject(projectID))
-            const biology = BiologyKernelLifecycle.releaseProject(projectID)
-            await Promise.all([
-              Pty.releaseAll(),
-              KernelRuntime.releaseProject(projectID),
-              CommandRuntime.stopProject(projectID),
-              LSP.dispose(),
-              MCP.disposeLocal(),
-              invalidateProjectExecutionCaches(),
-              biology,
-              jobs,
-            ])
-            await Promise.all([
-              AuthorityProcessLedger.revoke({ projectID }),
-              CredentialProcessLedger.revoke({ kind: "mcp", projectID }),
-              CredentialProcessLedger.revoke({ kind: "provider", projectID }),
-              invalidateProjectTokenCache(projectID),
-            ])
+            if (event.kind === "access") {
+              if (event.projectID !== projectID) return false
+              if (event.narrowing === false) {
+                await Promise.all([invalidateProjectExecutionCaches(), invalidateProjectTokenCache(projectID)])
+                return true
+              }
+              const jobs = import("../compute/jobs").then((module) => module.ComputeJobs.cancelProject(projectID))
+              const biology = BiologyKernelLifecycle.releaseProject(projectID)
+              await Promise.all([
+                Pty.releaseAll(),
+                KernelRuntime.releaseProject(projectID),
+                CommandRuntime.stopProject(projectID),
+                LSP.dispose(),
+                MCP.disposeLocal(),
+                invalidateProjectExecutionCaches(),
+                biology,
+                jobs,
+              ])
+              await Promise.all([
+                AuthorityProcessLedger.revoke({ projectID }),
+                CredentialProcessLedger.revoke({ kind: "mcp", projectID }),
+                CredentialProcessLedger.revoke({ kind: "provider", projectID }),
+                invalidateProjectTokenCache(projectID),
+              ])
+              return true
+            }
+            if (event.scope !== "installation" && event.projectID !== projectID) return false
+            await stopFilesystem(event.sessionID, event.scope)
             return true
-          }
-          if (event.scope !== "installation" && event.projectID !== projectID) return false
-          await stopFilesystem(event.sessionID, event.scope)
-          return true
-        },
-      })
-    })
+          },
+        })
+      },
+      200,
+      { projectID },
+    )
   },
   async (watcher) => {
     await watcher[Symbol.asyncDispose]()

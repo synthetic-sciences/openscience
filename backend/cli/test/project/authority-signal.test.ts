@@ -33,6 +33,83 @@ describe("AuthoritySignal.watch", () => {
     }
   })
 
+  test("a fresh watcher behind a stale unsettled entry does not stop its own project over a gap that never named it", async () => {
+    // What CI showed: an entry from an earlier project left pending at revision
+    // 133, two hundred later revisions for other projects, and every new
+    // watcher walking from 132, finding a gap the history could not cover and
+    // stopping everything it owned. Only a revision addressed to this project,
+    // or to every project, may cost it a resync.
+    await using tmp = await tmpdir({ git: true })
+    void tmp
+    const stale = await AuthoritySignal.publish({
+      kind: "filesystem",
+      projectID: "prj_stale",
+      sessionID: "ses_stale",
+      scope: "session",
+    })
+    for (let index = 0; index < 40; index++) {
+      const published = await AuthoritySignal.publish(trust(`prj_other_${index}`))
+      await AuthoritySignal.settle(published.revision)
+    }
+    // Another process's writes are what a gap cannot vouch for.
+    await Storage.update<{ history: Array<{ origin: number }> }>(["authority", "revision"], (draft) => {
+      for (const item of draft.history) item.origin = process.pid + 1
+    })
+    const seen: AuthoritySignal.Change[] = []
+    const watcher = await AuthoritySignal.watch(
+      async (change) => {
+        seen.push(change)
+        return change.type === "event" && change.event.projectID === "prj_mine"
+      },
+      1_000_000,
+      { projectID: "prj_mine" },
+    )
+    try {
+      await watcher.poll()
+      // The stale entry is offered (and declined); nothing in the gap resyncs.
+      expect(seen.map((change) => change.type)).not.toContain("resync")
+      expect(seen[0]).toMatchObject({ type: "event", revision: stale.revision })
+      seen.length = 0
+      const mine = await AuthoritySignal.publish(trust("prj_mine"))
+      await watcher.poll()
+      expect(seen).toEqual([{ type: "event", revision: mine.revision, event: mine.event }])
+    } finally {
+      await watcher[Symbol.asyncDispose]()
+    }
+  })
+
+  test("a fresh watcher behind a stale entry still resyncs when the gap did name its project", async () => {
+    await using tmp = await tmpdir({ git: true })
+    void tmp
+    await AuthoritySignal.publish({
+      kind: "filesystem",
+      projectID: "prj_stale",
+      sessionID: "ses_stale",
+      scope: "session",
+    })
+    for (let index = 0; index < 40; index++) {
+      const published = await AuthoritySignal.publish(trust(index === 20 ? "prj_mine" : `prj_other_${index}`))
+      await AuthoritySignal.settle(published.revision)
+    }
+    await Storage.update<{ history: Array<{ origin: number }> }>(["authority", "revision"], (draft) => {
+      for (const item of draft.history) item.origin = process.pid + 1
+    })
+    const seen: AuthoritySignal.Change[] = []
+    const watcher = await AuthoritySignal.watch(
+      async (change) => {
+        seen.push(change)
+      },
+      1_000_000,
+      { projectID: "prj_mine" },
+    )
+    try {
+      await watcher.poll()
+      expect(seen.some((change) => change.type === "resync")).toBe(true)
+    } finally {
+      await watcher[Symbol.asyncDispose]()
+    }
+  })
+
   test("a gap holding another process's settled work still resyncs conservatively", async () => {
     await using tmp = await tmpdir({ git: true })
     void tmp
