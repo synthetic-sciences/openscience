@@ -17,6 +17,20 @@ export namespace FileLease {
     during<T>(action: () => Promise<T>): Promise<T>
   }
 
+  // Where each lease this process holds was acquired. A waiter that times out
+  // on a lock owned by its own process can then name the call site holding
+  // it; until now a wedged in-process holder was indistinguishable from
+  // another process.
+  const held = new Map<string, string>()
+
+  function holder(current: unknown) {
+    if (!exactOwner(current)) return "an unreadable owner"
+    const where = current.pid === process.pid ? held.get(current.token) : undefined
+    const age = Math.round((Date.now() - current.created) / 1000)
+    const who = current.pid === process.pid ? "this process" : `process ${current.pid}`
+    return `${who} for ${age}s${where ? `, acquired at ${where}` : ""}`
+  }
+
   function running(pid: number) {
     try {
       process.kill(pid, 0)
@@ -103,9 +117,12 @@ export namespace FileLease {
       filepath = path.join(await fs.realpath(parent), path.basename(filepath))
 
       const open = async (): Promise<Awaited<ReturnType<typeof fs.open>>> => {
-        const expired = () => {
+        const expired = (current: unknown) => {
           if (Date.now() - blocked.at < timeoutMs) return
-          throw new Error(`Timed out waiting for another OpenScience process to release ${filepath}`)
+          // Callers classify this failure by its prefix; the holder follows it.
+          throw new Error(
+            `Timed out waiting for another OpenScience process to release ${filepath} (held by ${holder(current)})`,
+          )
         }
         while (true) {
           cancelled(signal)
@@ -148,7 +165,7 @@ export namespace FileLease {
               blocked.at = Date.now()
             }
           }
-          expired()
+          expired(recovery.current)
           await pause(signal)
         }
       }
@@ -163,6 +180,14 @@ export namespace FileLease {
           await fs.rm(filepath, { force: true }).catch(() => undefined)
           throw error
         })
+      held.set(
+        token,
+        (new Error().stack ?? "")
+          .split("\n")
+          .slice(2, 6)
+          .map((line) => line.trim())
+          .join(" <- "),
+      )
       let closing = false
       let uses = 0
       let drained: (() => void) | undefined
@@ -192,6 +217,7 @@ export namespace FileLease {
           closing = true
           disposal = (async () => {
             await drain()
+            held.delete(token)
             await handle.close().catch(() => undefined)
             const owner = await Bun.file(filepath)
               .json()
