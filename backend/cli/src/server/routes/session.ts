@@ -246,6 +246,29 @@ export const SessionRoutes = lazy(() =>
         return c.json(grant)
       },
     )
+    .put(
+      "/:sessionID/filesystem/working-root",
+      describeRoute({
+        summary: "Choose the session's working directory",
+        description:
+          "Pin relative tool paths to a connected read/write folder, to session scratch, or return to automatic (the single connected folder when there is one).",
+        operationId: "session.filesystem.workingRoot",
+        responses: {
+          200: {
+            description: "Versioned filesystem grant state",
+            content: { "application/json": { schema: resolver(SessionFilesystem.Snapshot) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: Session.get.schema })),
+      validator("json", z.object({ workingRoot: SessionFilesystem.WorkingRoot.nullable() })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await Session.assertDirectory(sessionID)
+        return c.json(await SessionFilesystem.setWorkingRoot(sessionID, c.req.valid("json").workingRoot))
+      },
+    )
     .delete(
       "/:sessionID/filesystem/:grantID",
       describeRoute({

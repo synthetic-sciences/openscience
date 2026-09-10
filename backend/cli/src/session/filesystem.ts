@@ -93,6 +93,12 @@ export namespace SessionFilesystem {
   >()
   const bindings = new WeakSet<object>()
 
+  /** Where relative tool paths resolve. Unset means automatic: the connected
+   * read/write folder when the project has one, otherwise session scratch.
+   * "scratch" pins the owned scratch directory even when folders are connected. */
+  export const WorkingRoot = z.union([z.literal("scratch"), z.string().min(1)])
+  export type WorkingRoot = z.infer<typeof WorkingRoot>
+
   export const State = z.object({
     version: z.literal(1),
     revision: z.number().int().positive(),
@@ -100,6 +106,7 @@ export namespace SessionFilesystem {
     projectID: z.string(),
     directory: z.string(),
     grants: Grant.array(),
+    workingRoot: WorkingRoot.optional(),
   })
   export type State = z.infer<typeof State>
 
@@ -120,6 +127,8 @@ export namespace SessionFilesystem {
 
   export const Snapshot = State.extend({
     workspace: SessionWorkspace.Info,
+    /** The directory relative tool paths resolve against right now. */
+    toolDirectory: z.string(),
     enforcement: z.object({
       broker: z.literal("enforced"),
       processWrite: z.literal("grant_only"),
@@ -303,6 +312,17 @@ export namespace SessionFilesystem {
     })
   }
 
+  /** Connected read/write folders of the current project, newest first: the
+   * choices a new session can work in before it exists. */
+  export async function projectWorkingRoots() {
+    const record = await Storage.read<ProjectState>(projectKey()).catch((error) => {
+      if (Storage.NotFoundError.isInstance(error)) return
+      throw error
+    })
+    if (!record) return []
+    return workingRootCandidates(ProjectState.parse(record))
+  }
+
   async function project(sessionID: string) {
     const load = () =>
       Storage.read<ProjectState>(projectKey()).catch((error) => {
@@ -389,7 +409,7 @@ export namespace SessionFilesystem {
   export async function initialize(
     sessionID: string,
     directory: string,
-    options: { revokeExisting?: boolean; workspace?: "isolated" | "project" } = {},
+    options: { revokeExisting?: boolean; workspace?: "isolated" | "project"; workingRoot?: WorkingRoot } = {},
   ) {
     const root = await canonical(directory)
     const worktree = await canonical(Instance.worktree)
@@ -438,6 +458,7 @@ export namespace SessionFilesystem {
       projectID: Instance.project.id,
       directory: root,
       grants,
+      ...(options.workingRoot ? { workingRoot: options.workingRoot } : {}),
     }
     let inserted = false
     const stored = await Storage.upsert<State>(key(sessionID), (current) => {
@@ -952,6 +973,7 @@ export namespace SessionFilesystem {
     return {
       ...filesystem,
       workspace,
+      toolDirectory: resolveToolDirectory(filesystem, workspace.scratchRoot),
       enforcement: {
         broker: "enforced",
         processWrite: "grant_only",
@@ -994,9 +1016,75 @@ export namespace SessionFilesystem {
     return record.grants.filter((grant) => grant.scope !== "once" && permits(grant, "write")).map((grant) => grant.path)
   }
 
+  /** The session's owned scratch directory: caches, staged downloads, tool
+   * side outputs. Never a user folder, so callers may create files freely. */
   export async function workspace(sessionID: string) {
     const record = await ensure(sessionID)
     return SessionWorkspace.touch(sessionID).then((value) => value.scratchRoot)
+  }
+
+  /** Connected folders the user can work in directly: durable read/write roots
+   * they attached, newest first. Project-owned and scratch grants are not
+   * candidates; the former is an opaque managed root for app projects. */
+  export function workingRootCandidates(record: Pick<State, "grants">) {
+    return record.grants
+      .filter(
+        (grant) =>
+          (grant.source === "api" || grant.source === "permission") &&
+          grant.scope !== "once" &&
+          permits(grant, "write"),
+      )
+      .toSorted((left, right) => right.time.created - left.time.created)
+  }
+
+  /**
+   * Where relative tool paths resolve. An explicit choice wins while its grant
+   * stays active and falls back to scratch once revoked, never to a folder the
+   * user did not choose. Without a choice, the single connected read/write
+   * folder is the working directory (the newest one when several are
+   * connected), and scratch remains the default for projects with none.
+   */
+  export function resolveToolDirectory(record: Pick<State, "grants" | "workingRoot">, scratch: string) {
+    const candidates = workingRootCandidates(record)
+    if (record.workingRoot === "scratch") return scratch
+    if (record.workingRoot) {
+      const chosen = candidates.find((grant) => grant.path === record.workingRoot)
+      return chosen ? chosen.path : scratch
+    }
+    return candidates[0]?.path ?? scratch
+  }
+
+  /** The directory relative tool paths resolve against: the working folder
+   * when there is one, otherwise scratch. Storage-only callers keep using
+   * `workspace()`, which never points at a user folder. */
+  export async function toolDirectory(sessionID: string) {
+    const record = await state(sessionID)
+    const scratch = await SessionWorkspace.touch(sessionID).then((value) => value.scratchRoot)
+    return resolveToolDirectory(record, scratch)
+  }
+
+  /** Pin or release the session's working directory. A path must name an
+   * active connected read/write folder; `null` returns to automatic. */
+  export async function setWorkingRoot(sessionID: string, value: WorkingRoot | null) {
+    const current = await state(sessionID)
+    const next = value === null || value === "scratch" ? value : await canonical(value)
+    if (typeof next === "string" && next !== "scratch") {
+      const allowed = workingRootCandidates(current).some((grant) => grant.path === next)
+      if (!allowed) throw new DeniedError({ sessionID, path: next, access: "write" })
+    }
+    await Storage.update<State>(key(sessionID), (draft) => {
+      if (next === null) delete draft.workingRoot
+      else draft.workingRoot = next
+      draft.revision++
+    })
+    const signal = await AuthoritySignal.publish({
+      kind: "filesystem",
+      projectID: current.projectID,
+      sessionID,
+      scope: "session",
+    })
+    await AuthoritySignal.settle(signal.revision)
+    return snapshot(sessionID)
   }
 
   export async function revoke(sessionID: string, grantID: string) {

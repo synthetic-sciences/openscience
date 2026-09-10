@@ -22,6 +22,8 @@ import { BashOutput } from "./bash-output"
 import { Agent } from "../agent/agent"
 import { OpenScience } from "@/openscience"
 import { Sandbox } from "@/sandbox/sandbox"
+import { NetworkCommands } from "./network-commands"
+import { HostCredentials } from "@/credentials/host"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Filesystem } from "@/util/filesystem"
 import { Provenance } from "@/science/provenance/store"
@@ -230,6 +232,7 @@ export const BashTool = Tool.define("bash", async () => {
       }
       const patterns = new Set<string>()
       const always = new Set<string>()
+      const parsed: string[][] = []
 
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
@@ -286,7 +289,42 @@ export const BashTool = Tool.define("bash", async () => {
           patterns.add(command.join(" "))
           always.add(BashArity.prefix(command).join(" ") + "*")
         }
+        if (command.length) parsed.push(command)
       }
+
+      // Commands that need the network (a push, a fetch, an upload, a package
+      // install) cannot work inside the socket-denying sandbox. Ask the user
+      // for the destination once; an approved command then runs with sockets,
+      // the same file confinement, and the machine's own publishing
+      // credentials. A named git remote resolves to its host from the repo.
+      const network = NetworkCommands.detect(parsed)
+      const networkHosts = new Set(network?.hosts ?? [])
+      // The repository may be the cwd, a `cd` target earlier in the script, or
+      // a `git -C` directory; try each until one names the remote.
+      const repositories = [
+        cwd,
+        ...folders,
+        ...parsed.flatMap((command) => {
+          const index = command.indexOf("-C")
+          return command[0] === "git" && index > 0 && command[index + 1] ? [path.resolve(cwd, command[index + 1]!)] : []
+        }),
+      ]
+      for (const remote of network?.remotes ?? []) {
+        for (const repository of repositories) {
+          const url = await $`git remote get-url ${remote}`
+            .cwd(repository)
+            .quiet()
+            .nothrow()
+            .text()
+            .then((value) => value.trim())
+            .catch(() => "")
+          const host = NetworkCommands.hostOf(url)
+          if (!host) continue
+          networkHosts.add(host)
+          break
+        }
+      }
+      if (network && networkHosts.size === 0) networkHosts.add("remote")
 
       for (const [directory, access] of directories) {
         const granted =
@@ -353,6 +391,18 @@ export const BashTool = Tool.define("bash", async () => {
           },
         },
       })
+      if (network && authority.sandbox.enforced) {
+        const hosts = Array.from(networkHosts)
+        await ctx.ask({
+          permission: "network",
+          patterns: hosts,
+          always: hosts,
+          metadata: {
+            network: { host: hosts[0], hosts, commands: network.commands },
+            shell: { command: params.command },
+          },
+        })
+      }
 
       // Seed the BYOK secret cache so redact() below masks the user's own
       // provider keys (auth.json + shell env), not just synced managed ones.
@@ -484,9 +534,15 @@ export const BashTool = Tool.define("bash", async () => {
             path: runtime.env?.PATH,
           },
           options: current.sandbox,
+          escalateNetwork: !!network,
         })
+        // Publishing credentials travel only with an approved network command,
+        // added after the generic sanitizer so nothing else can smuggle them.
+        const credentialEnv = network
+          ? await HostCredentials.publishEnv(sandbox.temporary, await HostCredentials.discover()).catch(() => ({}))
+          : {}
         return OpenScience.withSubprocessEnv(process.env, async (env, overlay) => {
-          const cache = sandbox.sandboxed ? Sandbox.cacheEnvironment(current.workspace) : {}
+          const cache = sandbox.sandboxed ? Sandbox.cacheEnvironment(current.scratch) : {}
           let child: ReturnType<typeof spawn>
           const wrapped = await CommandRuntime.wrap({
             file: sandbox.file,
@@ -500,7 +556,7 @@ export const BashTool = Tool.define("bash", async () => {
               // Re-sanitize at the final process boundary too: runtime/cache
               // overlays must never restore a managed token or re-pair a
               // user's key with the Ace managed proxy after subprocessEnv ran.
-              env: KernelEnvironmentMutation.subprocessEnv(runtime, { ...env, ...cache }),
+              env: { ...KernelEnvironmentMutation.subprocessEnv(runtime, { ...env, ...cache }), ...credentialEnv },
               stdio: ["ignore", "pipe", "pipe"],
               detached: process.platform !== "win32",
             })

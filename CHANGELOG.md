@@ -8,8 +8,45 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Added
+
+- A conversation works in the project's connected read/write folder: relative
+  paths the agent writes land there and stay, while caches and throwaway
+  intermediates keep going to session scratch. The composer shows the working
+  folder as a chip beside Tools, where a conversation can be pointed at another
+  connected folder or at scratch. `session.create` accepts `workingRoot`, and
+  `PUT /session/:id/filesystem/working-root` changes it later.
+- Shell commands that need the network (`git push`, `gh`, `hf`, package
+  installs, `curl`) ask once for their destination host and then run with the
+  network and the same file confinement, using the GitHub login `gh` holds or a
+  saved credential and the Hugging Face token. The Repository tab's push uses the
+  same path. **Customize → Credentials** imports logins this computer already
+  holds in one click, and a request card that asks for a login opens Credentials
+  instead of inviting a paste into the chat.
+- Short follow-ups such as "give me the abstract as LaTeX" run as quick tasks:
+  no delegation posture, the model's low reasoning variant unless one was
+  chosen, and a reminder to answer in one pass.
+
 ### Changed
 
+- The activity trace reads like a log of work: one "Worked for 2m 3s" line
+  folds the whole trace after a turn, and expanding it shows rows for each
+  thought ("Thought 57s"), each burst of exploration ("Explored 4 files, ran 2
+  commands"), each batch of edits, and each delegated agent, with narration in
+  place. Rows stay mounted while folded, so a pending request or a draft answer
+  survives the fold. Delegated agent rows lead with the task, name the agent
+  quietly at the right, and show their state on a second line.
+- Session outputs is one folded line ("3 files written this turn") that opens on
+  demand.
+- Worker sessions no longer offer a composer: the lead writes their brief and
+  reads their handoff, and the page points back to the lead.
+- Publishing stays with the lead: the task tool refuses a brief whose deliverable
+  is a push, release, or upload, and workers are told so.
+- A conversation that fails to load says so with a retry instead of posing as a
+  new, empty session.
+- The workspace speaks one colour vocabulary (`--color-*`), checked by a design
+  contract; the migration also fixed hairlines that referenced an undefined
+  alias and never rendered.
 - The first-run setup is one quiet card: a small mark and step count, a title,
   one sentence, one action. No icon tiles, benefit cards, dots, or eyebrows;
   connection rows are plain logos with one control each. Three text styles from

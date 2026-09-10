@@ -26,6 +26,7 @@ import PROMPT_WRITE from "../agent/prompt/write.txt"
 import PROMPT_ML from "../agent/prompt/ml.txt"
 import PROMPT_RESEARCH from "../agent/prompt/research.txt"
 import PROMPT_DIRECT from "../session/prompt/direct.txt"
+import PROMPT_QUICK from "../session/prompt/quick.txt"
 import PROMPT_INSPECTION from "../session/prompt/inspection.txt"
 import PROMPT_BIOLOGY from "../agent/prompt/biology.txt"
 import PROMPT_PHYSICS from "../agent/prompt/physics.txt"
@@ -1659,6 +1660,7 @@ export namespace SessionPrompt {
         agent,
         direct: route.direct,
         inspection: route.inspection,
+        quick: route.quick,
         abort,
         sessionID,
         system,
@@ -1854,6 +1856,7 @@ export namespace SessionPrompt {
         attachments,
         tools,
       }),
+      quick: ToolSelection.quick({ agent, message: text, fresh, attachments }),
     }
   }
 
@@ -2884,7 +2887,9 @@ export namespace SessionPrompt {
       ? PROMPT_DIRECT
       : route.inspection
         ? PROMPT_INSPECTION
-        : [PROMPT_RESEARCH, researchEffortReminder(effort, delegationSettings, delegationEnabled, lead)].join("\n\n")
+        : route.quick
+          ? [PROMPT_RESEARCH, PROMPT_QUICK].join("\n\n")
+          : [PROMPT_RESEARCH, researchEffortReminder(effort, delegationSettings, delegationEnabled, lead)].join("\n\n")
     const prompts = {
       plan: PROMPT_PLAN,
       write: PROMPT_WRITE,
@@ -2896,7 +2901,9 @@ export namespace SessionPrompt {
     const selected = ToolSelection.minimalResearchAgent(input.agent.name)
       ? route.direct || route.inspection
         ? undefined
-        : researchEffortReminder(effort, delegationSettings, delegationEnabled, lead)
+        : route.quick
+          ? PROMPT_QUICK
+          : researchEffortReminder(effort, delegationSettings, delegationEnabled, lead)
       : prompts[input.agent.name as keyof typeof prompts]
     const system = [...legacy, ...(selected ? [systemReminder(selected)] : [])]
 
@@ -2963,7 +2970,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
   export type ShellInput = z.infer<typeof ShellInput>
   export async function shell(input: ShellInput) {
     const session = await Session.get(input.sessionID)
-    const cwd = await SessionFilesystem.workspace(input.sessionID)
+    const cwd = await SessionFilesystem.toolDirectory(input.sessionID)
     const authority = await ExecutionAuthority.require({
       projectID: Instance.project.id,
       sessionID: input.sessionID,
@@ -3304,7 +3311,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     const prior = await newestUser(input.sessionID)
     const model = await commandModel(input, prior)
     const agent = input.agent ?? (await Agent.defaultAgent())
-    const cwd = await SessionFilesystem.workspace(input.sessionID)
+    const cwd = await SessionFilesystem.toolDirectory(input.sessionID)
     const user: MessageV2.User = {
       id: input.messageID ?? Identifier.ascending("message"),
       sessionID: input.sessionID,

@@ -31,6 +31,10 @@ and plots in results/, and explain every exclusion in results/methods.md.
 
 **Project files** hold durable project documents. **Session scratch** is a working area for one conversation. A file named `report.md` can exist in both.
 
+### Working folder
+
+When the project has a connected read/write folder, a conversation works in it: relative paths the agent writes land in your folder and stay when the conversation ends, while downloads, caches, and throwaway intermediates keep going to scratch. With several connected folders the newest one is used. The composer shows the current choice as a folder chip beside **Tools**; open it to pick another connected folder or **Scratch** for a one-off task that should leave your folders alone. The choice is per conversation, and a folder you disconnect falls back to scratch, never to another folder.
+
 Check the location shown in the preview. To open a known final copy, use **Files → Project files**. Ask OpenScience to save final deliverables there and confirm the exact path in its response.
 
 An older chat link may not identify the intended copy clearly. Use the file browser when the filename is ambiguous.

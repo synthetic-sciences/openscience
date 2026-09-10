@@ -379,6 +379,14 @@ export function classifyTaskOutcome(input: {
   return { outcome: "completed", stopReason: "completed" }
 }
 
+/** Briefs whose deliverable is a push, release or upload. Workers cannot
+ * reach the user's approvals or publishing credentials; the lead does that. */
+export function publishingBrief(text: string) {
+  return /\b(?:git\s+push|push(?:\s+\S+){0,3}\s+to\s+(?:github|origin|the\s+remote|remote)|hf\s+upload|huggingface-cli\s+upload|upload(?:\s+\S+){0,4}\s+to\s+(?:hugging\s*face|hf|github)|gh\s+(?:release|pr)\s+create|npm\s+publish|twine\s+upload|(?:open|create|cut)\s+(?:a\s+|the\s+)?(?:pr|pull\s+request|release))\b/i.test(
+    text,
+  )
+}
+
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Promise.all(DELEGATION_PROFILES.map((name) => Agent.get(name))).then((items) =>
     items.filter((agent): agent is Agent.Info => agent !== undefined),
@@ -400,6 +408,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
+      if (publishingBrief(`${params.description}\n${params.prompt}`)) {
+        throw new Error(
+          "Publishing stays with the lead: pushes, releases and uploads use this session's approvals and credentials. Delegate preparation or verification if useful, then push or upload from here.",
+        )
+      }
       const leadSession = assertLeadDelegationSession(await Session.get(ctx.sessionID))
       const config = await Config.get()
       const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
@@ -675,6 +688,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 const childGuidance = [
                   `You own one ${params.subagent_type} phase${params.specialist ? ` with the ${params.specialist} specialist` : ""} for the lead Research agent. The assignment in the user message is authoritative.`,
                   "Work independently on that phase and load a domain skill only when useful. You cannot dispatch workers; recommend any worthwhile follow-up to the lead in your handoff.",
+                  "Publishing is the lead's: never push, release, or upload. Prepare and verify, then report what is ready.",
                   "Do not return a diary of searches, reads, or commands. Your final response is a decision-ready handoff to the lead, not a second user-facing report.",
                   "Use only the Markdown sections that carry substance: Outcome; Findings; Evidence; Changes / outputs; Limitations; Next action.",
                   "Preserve exact paths, identifiers, numeric results, commands, and error strings when they matter. Distinguish observed evidence from inference. If blocked or partial, say exactly what remains.",

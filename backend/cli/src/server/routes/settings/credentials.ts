@@ -37,10 +37,12 @@ import { OpenScience } from "@/openscience"
 import { CredentialLifecycle } from "@/credentials/lifecycle"
 import { CredentialOverlay } from "@/credentials/overlay"
 import { lazy } from "@synsci/util/lazy"
+import { errors } from "../../error"
 import { JsonStore } from "@/util/jsonstore"
 import { SecretFile } from "@/util/secret-file"
 import { SecretBox } from "@/util/secret-box"
 import { WorkspaceCredentials } from "@/openscience/workspace-credentials"
+import { HostCredentials } from "@/credentials/host"
 
 type FieldType = "password" | "text" | "textarea"
 
@@ -697,6 +699,59 @@ export const CredentialsRoutes = lazy(() =>
         },
       }),
       async (c) => c.json({ services: await view(await readStore()) }),
+    )
+    .get(
+      "/host",
+      describeRoute({
+        summary: "Credentials this machine already holds",
+        description:
+          "Whether GitHub (gh login) and Hugging Face (hf token) credentials exist on this computer, and where they come from. Never returns values.",
+        operationId: "settings.credentials.host",
+        responses: {
+          200: {
+            description: "Host credential status",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z
+                    .object({
+                      service: z.enum(["github", "huggingface"]),
+                      available: z.boolean(),
+                      source: z.enum(["environment", "gh", "huggingface-cli", "token-file"]).optional(),
+                    })
+                    .array(),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      validator("query", z.object({ fresh: z.enum(["true", "false"]).optional() })),
+      async (c) => c.json(await HostCredentials.status({ fresh: c.req.valid("query").fresh === "true" })),
+    )
+    .post(
+      "/host/import",
+      describeRoute({
+        summary: "Import a credential this machine already holds",
+        description: "Copy the machine's GitHub or Hugging Face token into OpenScience's encrypted credential store.",
+        operationId: "settings.credentials.importHost",
+        responses: {
+          200: {
+            description: "Services",
+            content: { "application/json": { schema: resolver(z.object({ services: ServiceView.array() })) } },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", z.object({ service: z.enum(["github", "huggingface"]) })),
+      async (c) => {
+        const service = c.req.valid("json").service
+        const found = (await HostCredentials.discover({ fresh: true })).find((item) => item.service === service)
+        if (!found) return c.json({ error: `No ${service} credential was found on this computer.` }, 400)
+        await saveCredential(service, service === "github" ? { token: found.token } : { api_key: found.token })
+        await applyCredentialEnv()
+        return c.json({ services: await view(await readStore()) })
+      },
     )
     .put(
       "/:id",

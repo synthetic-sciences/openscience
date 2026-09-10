@@ -8943,6 +8943,9 @@
                           "workspace": {
                             "type": "string"
                           },
+                          "scratch": {
+                            "type": "string"
+                          },
                           "readable": {
                             "type": "array",
                             "items": {
@@ -9065,6 +9068,7 @@
                           "grantRevision",
                           "generation",
                           "workspace",
+                          "scratch",
                           "readable",
                           "writable",
                           "sandbox"
@@ -11583,6 +11587,9 @@
                         "workspace": {
                           "type": "string"
                         },
+                        "scratch": {
+                          "type": "string"
+                        },
                         "readable": {
                           "type": "array",
                           "items": {
@@ -11705,6 +11712,7 @@
                         "grantRevision",
                         "generation",
                         "workspace",
+                        "scratch",
                         "readable",
                         "writable",
                         "sandbox"
@@ -15375,6 +15383,9 @@
                         "workspace": {
                           "type": "string"
                         },
+                        "scratch": {
+                          "type": "string"
+                        },
                         "readable": {
                           "type": "array",
                           "items": {
@@ -15497,6 +15508,7 @@
                         "grantRevision",
                         "generation",
                         "workspace",
+                        "scratch",
                         "readable",
                         "writable",
                         "sandbox"
@@ -18044,6 +18056,9 @@
                         "workspace": {
                           "type": "string"
                         },
+                        "scratch": {
+                          "type": "string"
+                        },
                         "readable": {
                           "type": "array",
                           "items": {
@@ -18166,6 +18181,7 @@
                         "grantRevision",
                         "generation",
                         "workspace",
+                        "scratch",
                         "readable",
                         "writable",
                         "sandbox"
@@ -20713,6 +20729,9 @@
                         "workspace": {
                           "type": "string"
                         },
+                        "scratch": {
+                          "type": "string"
+                        },
                         "readable": {
                           "type": "array",
                           "items": {
@@ -20835,6 +20854,7 @@
                         "grantRevision",
                         "generation",
                         "workspace",
+                        "scratch",
                         "readable",
                         "writable",
                         "sandbox"
@@ -24023,6 +24043,105 @@
         ]
       }
     },
+    "/project/current/working-roots": {
+      "get": {
+        "operationId": "project.workingRoots",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List the project's connected read/write folders",
+        "description": "The folders a new session can use as its working directory, newest first. Empty when the project has no connected folder, in which case sessions work in scratch.",
+        "responses": {
+          "200": {
+            "description": "Connected read/write folder grants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^fsg_.*"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "access": {
+                        "type": "string",
+                        "enum": [
+                          "read",
+                          "write"
+                        ]
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "once",
+                          "session",
+                          "project",
+                          "installation"
+                        ]
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "workspace",
+                          "project",
+                          "skill",
+                          "permission",
+                          "api",
+                          "tool",
+                          "handoff"
+                        ]
+                      },
+                      "time": {
+                        "type": "object",
+                        "properties": {
+                          "created": {
+                            "type": "number"
+                          },
+                          "consumed": {
+                            "type": "number"
+                          },
+                          "revoked": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "created"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "path",
+                      "access",
+                      "scope",
+                      "source",
+                      "time"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.project.workingRoots({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project/{projectID}/trust": {
       "get": {
         "operationId": "project.trust.get",
@@ -24893,6 +25012,9 @@
                     "workspace": {
                       "type": "string"
                     },
+                    "scratch": {
+                      "type": "string"
+                    },
                     "readable": {
                       "type": "array",
                       "items": {
@@ -25015,6 +25137,7 @@
                     "grantRevision",
                     "generation",
                     "workspace",
+                    "scratch",
                     "readable",
                     "writable",
                     "sandbox"
@@ -26082,6 +26205,19 @@
                     "enum": [
                       "isolated",
                       "project"
+                    ]
+                  },
+                  "workingRoot": {
+                    "description": "Pin relative tool paths to a connected read/write folder, or to scratch. Omit for automatic.",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": "scratch"
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      }
                     ]
                   }
                 }
@@ -28869,6 +29005,18 @@
                         ]
                       }
                     },
+                    "workingRoot": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "scratch"
+                        },
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      ]
+                    },
                     "workspace": {
                       "type": "object",
                       "properties": {
@@ -28941,6 +29089,9 @@
                         "size"
                       ]
                     },
+                    "toolDirectory": {
+                      "type": "string"
+                    },
                     "enforcement": {
                       "type": "object",
                       "properties": {
@@ -28975,6 +29126,7 @@
                     "directory",
                     "grants",
                     "workspace",
+                    "toolDirectory",
                     "enforcement"
                   ]
                 }
@@ -29165,6 +29317,313 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.session.filesystem.grant({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/filesystem/working-root": {
+      "put": {
+        "operationId": "session.filesystem.workingRoot",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Choose the session's working directory",
+        "description": "Pin relative tool paths to a connected read/write folder, to session scratch, or return to automatic (the single connected folder when there is one).",
+        "responses": {
+          "200": {
+            "description": "Versioned filesystem grant state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "sessionID": {
+                      "type": "string"
+                    },
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "directory": {
+                      "type": "string"
+                    },
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^fsg_.*"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "access": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "write"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "once",
+                              "session",
+                              "project",
+                              "installation"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "workspace",
+                              "project",
+                              "skill",
+                              "permission",
+                              "api",
+                              "tool",
+                              "handoff"
+                            ]
+                          },
+                          "time": {
+                            "type": "object",
+                            "properties": {
+                              "created": {
+                                "type": "number"
+                              },
+                              "consumed": {
+                                "type": "number"
+                              },
+                              "revoked": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "created"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "path",
+                          "access",
+                          "scope",
+                          "source",
+                          "time"
+                        ]
+                      }
+                    },
+                    "workingRoot": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "scratch"
+                        },
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      ]
+                    },
+                    "workspace": {
+                      "type": "object",
+                      "properties": {
+                        "schemaVersion": {
+                          "type": "number",
+                          "const": 1
+                        },
+                        "workspaceID": {
+                          "type": "string",
+                          "pattern": "^wsp_.*"
+                        },
+                        "projectID": {
+                          "type": "string"
+                        },
+                        "sessionID": {
+                          "type": "string"
+                        },
+                        "scratchRoot": {
+                          "type": "string"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "isolated",
+                            "legacy"
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "stopped",
+                            "trash"
+                          ]
+                        },
+                        "grantRevision": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "createdAt": {
+                          "type": "number"
+                        },
+                        "lastUsedAt": {
+                          "type": "number"
+                        },
+                        "trashedAt": {
+                          "type": "number"
+                        },
+                        "trashRoot": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "schemaVersion",
+                        "workspaceID",
+                        "projectID",
+                        "sessionID",
+                        "scratchRoot",
+                        "mode",
+                        "state",
+                        "grantRevision",
+                        "createdAt",
+                        "lastUsedAt",
+                        "size"
+                      ]
+                    },
+                    "toolDirectory": {
+                      "type": "string"
+                    },
+                    "enforcement": {
+                      "type": "object",
+                      "properties": {
+                        "broker": {
+                          "type": "string",
+                          "const": "enforced"
+                        },
+                        "processWrite": {
+                          "type": "string",
+                          "const": "grant_only"
+                        },
+                        "processRead": {
+                          "type": "string",
+                          "enum": [
+                            "grant_only",
+                            "policy_only"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "broker",
+                        "processWrite",
+                        "processRead"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "revision",
+                    "sessionID",
+                    "projectID",
+                    "directory",
+                    "grants",
+                    "workspace",
+                    "toolDirectory",
+                    "enforcement"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "workingRoot": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "scratch"
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "workingRoot"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.session.filesystem.workingRoot({\n  ...\n})"
           }
         ]
       }
@@ -40190,6 +40649,9 @@
                                   "workspace": {
                                     "type": "string"
                                   },
+                                  "scratch": {
+                                    "type": "string"
+                                  },
                                   "readable": {
                                     "type": "array",
                                     "items": {
@@ -40312,6 +40774,7 @@
                                   "grantRevision",
                                   "generation",
                                   "workspace",
+                                  "scratch",
                                   "readable",
                                   "writable",
                                   "sandbox"
@@ -40811,6 +41274,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -40933,6 +41399,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -41444,6 +41911,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -41566,6 +42036,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -42077,6 +42548,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -42199,6 +42673,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -42854,6 +43329,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -42976,6 +43454,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -43460,6 +43939,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -43582,6 +44064,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -44099,6 +44582,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -44221,6 +44707,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -44739,6 +45226,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -44861,6 +45351,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -45589,6 +46080,9 @@
                                   "workspace": {
                                     "type": "string"
                                   },
+                                  "scratch": {
+                                    "type": "string"
+                                  },
                                   "readable": {
                                     "type": "array",
                                     "items": {
@@ -45711,6 +46205,7 @@
                                   "grantRevision",
                                   "generation",
                                   "workspace",
+                                  "scratch",
                                   "readable",
                                   "writable",
                                   "sandbox"
@@ -46210,6 +46705,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -46332,6 +46830,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -46843,6 +47342,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -46965,6 +47467,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -47476,6 +47979,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -47598,6 +48104,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -48264,6 +48771,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -48386,6 +48896,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -48870,6 +49381,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -48992,6 +49506,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -49515,6 +50030,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -49637,6 +50155,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -50161,6 +50680,9 @@
                             "workspace": {
                               "type": "string"
                             },
+                            "scratch": {
+                              "type": "string"
+                            },
                             "readable": {
                               "type": "array",
                               "items": {
@@ -50283,6 +50805,7 @@
                             "grantRevision",
                             "generation",
                             "workspace",
+                            "scratch",
                             "readable",
                             "writable",
                             "sandbox"
@@ -56549,6 +57072,9 @@
               "workspace": {
                 "type": "string"
               },
+              "scratch": {
+                "type": "string"
+              },
               "readable": {
                 "type": "array",
                 "items": {
@@ -56671,6 +57197,7 @@
               "grantRevision",
               "generation",
               "workspace",
+              "scratch",
               "readable",
               "writable",
               "sandbox"

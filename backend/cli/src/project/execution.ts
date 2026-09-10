@@ -51,6 +51,8 @@ export namespace ExecutionAuthority {
      * omitted this and recover through their historical workspace value. */
     directory: z.string().optional(),
     workspace: z.string(),
+    /** The session's owned scratch directory; caches and staged files go here, never into a working folder. */
+    scratch: z.string(),
     readable: z.array(z.string()),
     writable: z.array(z.string()),
     sandbox: z.object({
@@ -151,9 +153,10 @@ export namespace ExecutionAuthority {
               ? `Trust this project to ${action(input.capability)}. This operation is not eligible for trust-free sandboxed execution.`
               : `Trust this project to ${action(input.capability)} without an enforced OS sandbox, or enable a working sandbox backend first.`
           : undefined
-    const [readable, writable, workspace] = await Promise.all([
+    const [readable, writable, workspace, scratch] = await Promise.all([
       SessionFilesystem.processReadRoots(input.sessionID),
       SessionFilesystem.processWriteRoots(input.sessionID),
+      SessionFilesystem.toolDirectory(input.sessionID),
       SessionFilesystem.workspace(input.sessionID),
     ])
     // Project files are the durable, first-party workspace advertised to the
@@ -195,6 +198,7 @@ export namespace ExecutionAuthority {
       generation,
       directory: Instance.directory,
       workspace,
+      scratch,
       readable: processReadable,
       writable: processWritable,
       sandbox,

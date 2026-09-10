@@ -27,6 +27,7 @@ import { Project } from "@/project/project"
 import { ProjectTrust } from "@/project/trust"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { Config } from "@/config/config"
+import { HostCredentials } from "@/credentials/host"
 import { Sandbox } from "@/sandbox/sandbox"
 import { OpenScience } from "@/openscience"
 import { CommandRuntime } from "@/science/command/registry"
@@ -66,7 +67,13 @@ export function assertSafeBranch(branch: unknown): string {
   return value
 }
 
-async function run(command: string, args: string[], cwd: string, ok: number[] = [0]): Promise<RunResult> {
+async function run(
+  command: string,
+  args: string[],
+  cwd: string,
+  ok: number[] = [0],
+  network: { publish: boolean } = { publish: false },
+): Promise<RunResult> {
   const launched = await AuthoritySignal.exclusive(async () => {
     await ProjectTrust.require(Instance.project, "repository")
     const options = await Config.trustedSandbox()
@@ -77,7 +84,13 @@ async function run(command: string, args: string[], cwd: string, ok: number[] = 
       readable: [cwd],
       unreadable: OpenScience.kernelSensitivePaths(),
       options,
+      escalateNetwork: network.publish,
     })
+    // A push the user clicked runs with the network and the machine's own
+    // GitHub login (gh, or a saved credential), so it never prompts or hangs.
+    const credentials: Record<string, string> = network.publish
+      ? await HostCredentials.publishEnv(sandbox.temporary, await HostCredentials.discover()).catch(() => ({}))
+      : {}
     const wrapped = await CommandRuntime.wrap({
       file: sandbox.file,
       args: sandbox.args,
@@ -89,11 +102,8 @@ async function run(command: string, args: string[], cwd: string, ok: number[] = 
           cwd,
           env: {
             ...OpenScience.kernelEnv(process.env),
-            GIT_CONFIG_COUNT: "2",
-            GIT_CONFIG_KEY_0: "protocol.ext.allow",
-            GIT_CONFIG_VALUE_0: "never",
-            GIT_CONFIG_KEY_1: "protocol.fake.allow",
-            GIT_CONFIG_VALUE_1: "never",
+            ...credentials,
+            ...protocolGuards(Number(credentials.GIT_CONFIG_COUNT ?? 0)),
           },
           detached: process.platform !== "win32",
         })
@@ -155,6 +165,19 @@ async function run(command: string, args: string[], cwd: string, ok: number[] = 
 }
 
 const git = (args: string[], directory: string, ok?: number[]) => run("git", args, directory, ok)
+const gitPublish = (args: string[], directory: string) => run("git", args, directory, [0], { publish: true })
+
+/** Refuse ext:: and fake transports; numbered after any credential entries so
+ * both sets of GIT_CONFIG_* variables apply. */
+function protocolGuards(offset: number) {
+  return {
+    GIT_CONFIG_COUNT: String(offset + 2),
+    [`GIT_CONFIG_KEY_${offset}`]: "protocol.ext.allow",
+    [`GIT_CONFIG_VALUE_${offset}`]: "never",
+    [`GIT_CONFIG_KEY_${offset + 1}`]: "protocol.fake.allow",
+    [`GIT_CONFIG_VALUE_${offset + 1}`]: "never",
+  }
+}
 
 interface RemoteInfo {
   owner: string
@@ -267,7 +290,7 @@ async function push(directory: string, branch: unknown) {
     .catch(() => "")
   // An explicit refspec after `--` leaves git nothing to read as an option.
   const args = upstream ? ["push"] : ["push", "-u", "origin", "--", `refs/heads/${current}:refs/heads/${current}`]
-  const result = await git(args, directory)
+  const result = await gitPublish(args, directory)
   return { pushed: true, output: result.out || result.err }
 }
 

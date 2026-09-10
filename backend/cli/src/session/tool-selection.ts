@@ -114,6 +114,32 @@ export namespace ToolSelection {
     return !PermissionNext.disabled([tool], input.permission).has(tool)
   }
 
+  const quickAsk =
+    /^(?:(?:ok(?:ay)?|now|also|and|then|great|thanks?|please|just|quickly|can you|could you|would you|pls)[\s,]+)*(?:please\s+|just\s+|quickly\s+)?(?:give|get|show|print|paste|copy|list|tell|write out|output|return|send|share|extract|pull out|summari[sz]e|convert|format|reformat|turn|put|make|export|translate|rename|shorten|expand|explain|what|what's|which|where|how many|how long|is|are|does|do|did|can)\b/i
+  const heavy =
+    /\b(?:analy[sz]e|benchmark|experiments?|investigate|implement|train|reproduce|survey|literature|pipeline|debug|refactor|deploy|design|research|evaluate|optimi[sz]e|thorough(?:ly)?|comprehensive|end[- ]to[- ]end|full(?:y)?|entire|whole|all (?:the )?(?:files|papers|datasets|results)|every|across|systematic|rigorous|from scratch|step[- ]by[- ]step|deep(?:ly)?)\b/i
+  const deliverable =
+    /\b(?:abstract|answer|bullet|caption|citation|code block|command|equation|figure|formula|latex|list|markdown|number|one[- ]liner|paragraph|sentence|snippet|summary|table|title|value|version)s?\b/i
+
+  /**
+   * A small ask inside a research conversation: an extraction, a reformat,
+   * a short factual follow-up. It keeps every tool but drops the delegation
+   * posture and asks the model to answer in one pass with default-low effort,
+   * so a "give me the abstract as LaTeX" request takes seconds, not minutes.
+   */
+  export function quick(input: { agent?: string; message?: string; fresh?: boolean; attachments?: boolean }) {
+    if (!minimalResearchAgent(input.agent) || slashInvocation(input.message)) return false
+    const message = input.message?.trim().replace(/\s+/g, " ")
+    if (!message || message.length > 400) return false
+    const sentences = message.split(/(?<=[.!?])\s+/).filter(Boolean).length
+    if (sentences > 2 || heavy.test(message)) return false
+    if (!quickAsk.test(message)) return false
+    // A fresh conversation has nothing to extract from; only a plainly small
+    // deliverable qualifies there. Follow-ups qualify on shape alone.
+    if (input.fresh && !input.attachments) return deliverable.test(message)
+    return true
+  }
+
   // The development profile keeps a smaller system prompt, but tool
   // availability follows the same relevance and permission rules as Research.
   // Capability selection belongs to the model, not a keyword shortlist.

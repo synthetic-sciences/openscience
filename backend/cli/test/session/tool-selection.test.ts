@@ -260,6 +260,29 @@ describe("tool selection", () => {
     ).toBe(false)
   })
 
+  test("treats short extractions and follow-ups as quick tasks, never heavy research", () => {
+    const quick = (message: string, fresh = false, attachments = false) =>
+      ToolSelection.quick({ agent: "research", message, fresh, attachments })
+    // The complaint that motivated this: a copyable abstract took ten minutes.
+    expect(quick("can you give me a copyable LaTeX abstract for this paper")).toBe(true)
+    expect(quick("Can you give me a copyable LaTeX abstract for this paper?", true)).toBe(true)
+    expect(quick("ok now put those numbers in a markdown table")).toBe(true)
+    expect(quick("what was the p-value for the second cohort again?")).toBe(true)
+    expect(quick("summarize that in two sentences")).toBe(true)
+    expect(quick("show me the command you used")).toBe(true)
+    expect(quick("give me the title as a one-liner", true, true)).toBe(true)
+    // Real work keeps the full posture.
+    expect(quick("Analyze the attached dataset and build a full pipeline with plots.")).toBe(false)
+    expect(quick("give me a thorough analysis of all the results across every experiment")).toBe(false)
+    expect(quick("Investigate why the model underperforms on the held-out set.")).toBe(false)
+    expect(quick("Reproduce table 2 of the paper.")).toBe(false)
+    expect(quick("show me the abstract /fixture-skill")).toBe(false)
+    // A fresh conversation only qualifies for a plainly small deliverable.
+    expect(quick("give me an overview of protein folding", true)).toBe(false)
+    expect(quick("tell me about the project", true)).toBe(false)
+    expect(ToolSelection.quick({ agent: "biology", message: "give me the abstract as LaTeX" })).toBe(false)
+  })
+
   test("direct answers advertise no implicit tools while explicit enables still win", () => {
     const input = { agent: "research", message: "What is a p-value?", direct: true }
     expect(ToolSelection.relevant("bash", input)).toBe(false)

@@ -1,0 +1,3 @@
+<system-reminder>
+Quick task. The user asked for something small: deliver it directly in this turn. Do not plan, delegate, launch workers, create files, or verify beyond what the answer itself needs; reuse what the conversation already established. Use a tool only when the answer depends on it, and at most a few calls. Return the result itself (the text, code block, or table), not a description of how you would produce it.
+</system-reminder>

@@ -36,7 +36,10 @@ describe("session environment prompt", () => {
         expect(prompt).toContain("Results: immutable project-wide deliverables")
         expect(prompt).toContain("may aggregate multiple connected folders and files")
         expect(prompt).toContain("a normal workspace file is not a Result")
-        expect(prompt).toContain("Use Session scratch by default for one-off downloads")
+        // With one connected read/write folder the session works in it, and
+        // scratch is described as the place for side outputs.
+        expect(prompt).toContain(`Working folder: ${source.path}`)
+        expect(prompt).toContain("The Working folder is the user's own directory and the default for relative paths")
         expect(prompt).toContain("Do not create a new project subfolder for an ordinary answer")
         expect(prompt).toContain("Use the human project name in conversation, not UUID directory components")
         expect(prompt).toContain(

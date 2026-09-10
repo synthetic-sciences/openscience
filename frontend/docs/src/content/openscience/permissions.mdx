@@ -21,6 +21,12 @@ The mode belongs to the project you set it in. Switching to a wider mode also se
 
 Each request card offers **Allow once**, or **Allow** with a scope: **This conversation**, **This project**, and for network hosts and searches **Allow always** across the installation. Folder access has no installation-wide scope: a folder approved while working in one project is never reachable from another project, and the request card names the exact folder being granted.
 
+## Network commands and publishing
+
+The sandbox denies network access to shell commands. A command that needs it, such as `git push`, `gh`, `hf upload`, a package install, or `curl`, asks once for its destination host; approving it runs that command with the network and the same file confinement. Approve for **This project** or **Allow always** to stop asking for a host you publish to regularly, and Full access approves automatically.
+
+Approved commands use the credentials this computer already holds: a GitHub login from the `gh` CLI or a saved credential, and the Hugging Face token from its CLI. **Customize → Credentials** offers a one-click import when it finds them, so nothing is pasted into a conversation. When a login is missing, the agent asks for it through a request card that opens Credentials rather than through the chat. Publishing stays with the lead conversation; delegated workers prepare and verify but never push, release, or upload.
+
 ## Read an action request
 
 Before approving, check the affected files, external service, requested resources, and expected outcome. If the scope is unclear, ask OpenScience to narrow the action or explain it.

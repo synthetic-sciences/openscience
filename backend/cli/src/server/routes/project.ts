@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
 import { Instance } from "../../project/instance"
+import { SessionFilesystem } from "../../session/filesystem"
 import { Project } from "../../project/project"
 import { ManagedProject } from "../../project/managed"
 import z from "zod"
@@ -70,6 +71,22 @@ export const ProjectRoutes = lazy(() =>
       async (c) => {
         return c.json(await Project.get(Instance.project.id))
       },
+    )
+    .get(
+      "/current/working-roots",
+      describeRoute({
+        summary: "List the project's connected read/write folders",
+        description:
+          "The folders a new session can use as its working directory, newest first. Empty when the project has no connected folder, in which case sessions work in scratch.",
+        operationId: "project.workingRoots",
+        responses: {
+          200: {
+            description: "Connected read/write folder grants",
+            content: { "application/json": { schema: resolver(SessionFilesystem.Grant.array()) } },
+          },
+        },
+      }),
+      async (c) => c.json(await SessionFilesystem.projectWorkingRoots()),
     )
     .get(
       "/:projectID/trust",

@@ -48,6 +48,8 @@ export namespace LLM {
     retries?: number
     direct?: boolean
     inspection?: boolean
+    /** A small ask: prefer the model's low reasoning variant unless the user chose one. */
+    quick?: boolean
     trace?: { messageID: string; attempt: number }
     route?: string
     onReasoningEffortResolved?: (effort: string | undefined) => void | Promise<void>
@@ -165,8 +167,8 @@ export namespace LLM {
       system.push(header, rest.join("\n"))
     }
 
-    const variant =
-      !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
+    const chosen = input.user.variant ?? (input.quick ? quickVariant(input.model.variants) : undefined)
+    const variant = !input.small && input.model.variants && chosen ? input.model.variants[chosen] : {}
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
       : ProviderTransform.options({
@@ -385,6 +387,13 @@ export namespace LLM {
     })
     await harness
     return result
+  }
+
+  /** The cheapest real reasoning variant a model offers; "none"/"minimal"
+   * stay opt-in because they change answer quality, not just latency. */
+  export function quickVariant(variants: Record<string, unknown> | undefined) {
+    if (!variants) return undefined
+    return ["low"].find((name) => name in variants)
   }
 
   export async function modelTools(input: Pick<StreamInput, "tools" | "agent" | "model" | "user">) {

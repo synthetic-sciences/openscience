@@ -175,6 +175,9 @@ Keep only one item in_progress at a time.
     const filesystem = context[0]
     const workspace = filesystem.workspace.scratchRoot
     const isolated = filesystem.workspace.mode === "isolated"
+    // A connected read/write folder that is the working directory: relative
+    // paths land in the user's own folder, and scratch stays for side outputs.
+    const folder = filesystem.toolDirectory !== workspace ? filesystem.toolDirectory : undefined
     const projectAccess = context[1]
     const sources = filesystem.grants.filter(
       (grant) =>
@@ -196,9 +199,14 @@ Keep only one item in_progress at a time.
         `  Project ID: ${project.id}`,
         `  Session ID: ${sessionID}`,
         `  Project files: ${Instance.directory} (durable and shared across this project)`,
-        isolated
-          ? `  Session scratch: ${workspace} (temporary and isolated to this conversation)`
-          : `  Tool working directory: ${workspace} (project directory; durable and shared across this project)`,
+        ...(folder
+          ? [
+              `  Working folder: ${folder} (connected read and write folder; relative paths resolve here, and files stay when the session ends)`,
+              `  Session scratch: ${workspace} (temporary and isolated to this conversation; for caches and side outputs)`,
+            ]
+          : isolated
+            ? [`  Session scratch: ${workspace} (temporary and isolated to this conversation)`]
+            : [`  Tool working directory: ${workspace} (project directory; durable and shared across this project)`]),
         `  Results: immutable project-wide deliverables saved with the artifact tool`,
         `  Access mode: ${access}`,
         `  Connected project folders:`,
@@ -213,7 +221,13 @@ Keep only one item in_progress at a time.
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `An OpenScience project is a durable research context that may aggregate multiple connected folders and files. ${isolated ? "Session scratch belongs only to this conversation." : "This session uses the project directory as its default tool working directory; its files are shared and remain when the session is deleted."} Results are immutable deliverables shared project-wide; a normal workspace file is not a Result until artifact save_file returns its Result ID and version.`,
-        `${isolated ? "Use Session scratch by default for one-off downloads, analyses, scripts, tables, and plots. Work in Project files only when the user points to existing durable material or asks to keep reusable outputs." : "Use the project directory by default for local work. Preserve existing files and treat changes as durable project changes."} Do not create a new project subfolder for an ordinary answer. Promote a file to Results only when the user requests a durable deliverable or a Result-only contract requires it.`,
+        `${
+          folder
+            ? "The Working folder is the user's own directory and the default for relative paths: create and edit the user's files there, preserve what exists, and treat changes as durable. Use Session scratch for downloads, caches, and throwaway intermediates the user did not ask to keep."
+            : isolated
+              ? "Use Session scratch by default for one-off downloads, analyses, scripts, tables, and plots. Work in Project files only when the user points to existing durable material or asks to keep reusable outputs."
+              : "Use the project directory by default for local work. Preserve existing files and treat changes as durable project changes."
+        } Do not create a new project subfolder for an ordinary answer. Promote a file to Results only when the user requests a durable deliverable or a Result-only contract requires it.`,
         `The physical paths above are routing information. Use the human project name in conversation, not UUID directory components. Do not expose scratch, managed-project, or connected-folder paths in a generic greeting. Mention a path only when the user asks about location or when it is needed to complete their request.`,
         `<files>`,
         `  ${

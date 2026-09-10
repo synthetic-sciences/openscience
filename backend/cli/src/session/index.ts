@@ -236,6 +236,9 @@ export namespace Session {
         title: z.string().optional(),
         permission: Info.shape.permission,
         workspace: Workspace.optional(),
+        workingRoot: SessionFilesystem.WorkingRoot.optional().describe(
+          "Pin relative tool paths to a connected read/write folder, or to scratch. Omit for automatic.",
+        ),
       })
       .optional(),
     async (input) => {
@@ -246,6 +249,7 @@ export namespace Session {
         title: input?.title,
         permission: input?.permission,
         workspace: input?.workspace,
+        workingRoot: input?.workingRoot,
       })
     },
   )
@@ -369,6 +373,7 @@ export namespace Session {
     directory: string
     permission?: PermissionNext.Ruleset
     workspace?: Workspace
+    workingRoot?: SessionFilesystem.WorkingRoot
   }) {
     const id = Identifier.descending("session", input.id)
     const directory = Project.canonicalize(input.directory)
@@ -427,6 +432,7 @@ export namespace Session {
     await SessionFilesystem.initialize(result.id, directory, {
       revokeExisting: false,
       workspace: result.workspace,
+      workingRoot: input.workingRoot,
     }).catch(async (error) => {
       await SessionFilesystem.remove(result.id).catch(() => undefined)
       await Storage.remove(["session", Instance.project.id, result.id])

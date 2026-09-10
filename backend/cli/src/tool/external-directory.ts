@@ -72,10 +72,11 @@ function scope(input: {
   return result
 }
 
-/** The agent-facing cwd is the isolated workspace owned by this session. */
+/** The agent-facing cwd: the session's working folder when one is connected,
+ * otherwise the isolated scratch workspace it owns. */
 export async function sessionToolDirectory(ctx: Pick<Tool.Context, "sessionID">) {
   if (!ctx.sessionID.startsWith("ses_")) return Instance.directory
-  return SessionFilesystem.workspace(ctx.sessionID)
+  return SessionFilesystem.toolDirectory(ctx.sessionID)
 }
 
 export async function assertExternalDirectory(
