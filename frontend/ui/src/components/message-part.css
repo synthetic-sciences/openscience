@@ -697,11 +697,13 @@
     --delegation-status: var(--text-critical-base);
   }
 
+  /* A partial or cancelled worker is an outcome, not an alarm: it reads in
+     words. Only a failed worker and a worker waiting on the user get colour. */
   &[data-outcome="partial"],
   &[data-outcome="timed_out"],
   &[data-outcome="cancelled"] {
-    --delegation-rail: var(--border-warning-base);
-    --delegation-status: var(--text-warning-base);
+    --delegation-rail: var(--border-weak-base);
+    --delegation-status: var(--text-weak);
   }
 
   &[data-attention] {
@@ -714,8 +716,8 @@
     grid-template-columns: 16px minmax(0, 1fr) auto;
     align-items: center;
     gap: 8px;
-    min-height: 26px;
-    padding: 2px 6px 2px 0;
+    min-height: 28px;
+    padding: 4px 8px 4px 0;
     border-radius: var(--radius-xs);
     list-style: none;
     cursor: pointer;
@@ -897,10 +899,6 @@
     font-size: var(--font-size-small);
     line-height: 18px;
 
-    > li::before {
-      content: "— ";
-    }
-
     &[data-outcome="error"] {
       color: var(--text-critical-base);
     }
@@ -1017,14 +1015,10 @@
 
   [data-slot="delegation-activity-row"] {
     display: grid;
-    grid-template-columns: 16px auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 8px;
     min-height: 20px;
-
-    > [data-component="icon"] {
-      color: var(--icon-weak);
-    }
 
     > strong {
       color: var(--text-weak);
@@ -1044,7 +1038,7 @@
   }
 
   [data-slot="delegation-activity-failed"] {
-    color: var(--text-critical-base);
+    color: var(--text-weaker);
     font-size: var(--font-size-small);
     font-style: normal;
     white-space: nowrap;
@@ -1071,10 +1065,6 @@
       content: "·";
       margin: 0 6px;
     }
-
-    > span[data-failed] {
-      color: var(--text-critical-base);
-    }
   }
 
   [data-slot="delegation-actions"] {
@@ -1085,40 +1075,7 @@
   }
 
   [data-slot="delegation-link"] {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--text-weaker);
-    cursor: pointer;
-    font: inherit;
-    font-size: var(--font-size-small);
-    white-space: nowrap;
-
-    &[data-primary] {
-      color: var(--text-weak);
-      font-weight: var(--font-weight-regular);
-    }
-
-    &:hover {
-      color: var(--text-base);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--color-focus);
-      outline-offset: 2px;
-      border-radius: var(--radius-xs);
-    }
-
-    [data-component="icon"] {
-      transition: transform 140ms ease;
-    }
-
-    &[data-primary]:hover [data-component="icon"] {
-      transform: translateX(2px);
-    }
+    flex-shrink: 0;
   }
 
   [data-component="task-tools"] {
@@ -1200,10 +1157,10 @@
     }
 
     [data-slot="delegation-activity-row"] {
-      grid-template-columns: 16px minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) auto;
 
       > span {
-        grid-column: 2 / -1;
+        grid-column: 1 / -1;
       }
     }
   }

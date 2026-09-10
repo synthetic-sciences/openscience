@@ -37,8 +37,6 @@ import {
   artifactActions,
   generatedArtifacts,
   sessionErrorDisplay,
-  pendingOperations,
-  type PendingOperation,
   reasoningDisplayText,
   privateReasoningOnly,
   stripRedactedReasoning,
@@ -303,22 +301,14 @@ function AssistantTrace(props: {
   )
 }
 
-function SessionErrorNotice(props: {
-  error: unknown
-  outputs: readonly string[]
-  pending: readonly PendingOperation[]
-}) {
-  const data = useData()
-  const i18n = useI18n()
+/** A fault or a pause the reader must act on. A plain stop is not one: it
+ * reads on the header line ("Stopped after 2m 3s") and, when a provider or a
+ * credential change ended the turn, as one quiet line under the trace. */
+function SessionErrorNotice(props: { error: unknown }) {
   const display = () => sessionErrorDisplay(props.error)
-  const filename = (path: string) => path.split("/").pop() || path
-  // A stop always answers what survived; a failure lists it when there is something to list.
-  const receipt = () =>
-    display().state === "stopped" ||
-    (display().state === "error" && (props.outputs.length > 0 || props.pending.length > 0))
   return (
     <Card
-      variant={display().state === "paused" ? "warning" : display().state === "error" ? "error" : "normal"}
+      variant={display().state === "paused" ? "warning" : "error"}
       class="session-state-card"
       classList={{ "error-card": display().state === "error" }}
       data-state={display().state}
@@ -331,52 +321,13 @@ function SessionErrorNotice(props: {
           when={display().state !== "error"}
           fallback={<span data-slot="session-state-message">{display().message}</span>}
         >
-          <Icon name={display().state === "paused" ? "alert-circle" : "circle-ban-sign"} size="small" />
+          <Icon name="alert-circle" size="small" />
           <div data-slot="session-state-copy">
             <strong>{display().title}</strong>
             <span data-slot="session-state-message">{display().message}</span>
           </div>
         </Show>
       </div>
-      {/* What survived the end of the turn, so nothing reads as rolled back or resumed. */}
-      <Show when={receipt()}>
-        <dl data-slot="session-stop-receipt">
-          <div data-slot="session-stop-row" data-kind="outputs">
-            <dt>{i18n.t("ui.sessionTurn.stop.outputs")}</dt>
-            <dd>
-              <Show when={props.outputs.length > 0} fallback={<span>{i18n.t("ui.sessionTurn.stop.noOutputs")}</span>}>
-                <For each={props.outputs}>
-                  {(path) => (
-                    <button
-                      type="button"
-                      data-slot="session-stop-output"
-                      title={path}
-                      onClick={() => data.openFile?.(path)}
-                    >
-                      {filename(path)}
-                    </button>
-                  )}
-                </For>
-              </Show>
-            </dd>
-          </div>
-          <Show when={props.pending.length > 0}>
-            <div data-slot="session-stop-row" data-kind="pending">
-              <dt>{i18n.t("ui.sessionTurn.stop.pending")}</dt>
-              <dd>
-                <For each={props.pending}>
-                  {(operation) => (
-                    <span data-slot="session-stop-operation" data-started={operation.started ? "true" : "false"}>
-                      {operation.title} ·{" "}
-                      {i18n.t(operation.started ? "ui.sessionTurn.stop.interrupted" : "ui.sessionTurn.stop.notStarted")}
-                    </span>
-                  )}
-                </For>
-              </dd>
-            </div>
-          </Show>
-        </dl>
-      </Show>
     </Card>
   )
 }
@@ -671,7 +622,19 @@ export function SessionTurn(
     data.resolveFileReceipts ? candidates().filter((path) => existing.latest.paths.includes(path)) : candidates(),
   )
   const linkedFiles = written
-  const pending = createMemo(() => pendingOperations(turnParts()))
+  // A stop the user asked for needs no explanation beyond the header line; a
+  // stop the provider or a credential change caused keeps its reason.
+  const stopped = createMemo(() => {
+    const value = error()
+    return !!value && sessionErrorDisplay(value).state === "stopped"
+  })
+  const stopNote = createMemo(() => {
+    const value = error()
+    if (!value) return undefined
+    const display = sessionErrorDisplay(value)
+    if (display.state !== "stopped" || display.reason === "user") return undefined
+    return display.message
+  })
 
   const response = createMemo(() =>
     responseText(assistantMessages().flatMap((message) => data.store.part[message.id] ?? emptyParts)),
@@ -928,6 +891,9 @@ export function SessionTurn(
                                 <Match when={working()}>
                                   <span data-slot="session-turn-status-text">{statusText()}</span>
                                 </Match>
+                                <Match when={stopped()}>
+                                  {i18n.t("ui.sessionTurn.stoppedAfter", { duration: store.duration })}
+                                </Match>
                                 <Match when={true}>
                                   {i18n.t("ui.sessionTurn.workedFor", { duration: store.duration })}
                                 </Match>
@@ -991,7 +957,18 @@ export function SessionTurn(
                           </div>
                         </Show>
                         <Show when={error()}>
-                          {(value) => <SessionErrorNotice error={value()} outputs={written()} pending={pending()} />}
+                          {(value) => (
+                            <Switch>
+                              <Match when={stopped() && stopNote()}>
+                                <p data-slot="session-turn-stop-note" role="status">
+                                  {stopNote()}
+                                </p>
+                              </Match>
+                              <Match when={!stopped()}>
+                                <SessionErrorNotice error={value()} />
+                              </Match>
+                            </Switch>
+                          )}
                         </Show>
                       </div>
                     </Show>

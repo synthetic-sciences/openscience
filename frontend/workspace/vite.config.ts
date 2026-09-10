@@ -24,8 +24,14 @@ export function workspaceManualChunks(id: string): string | undefined {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [desktopPlugin] as any,
+  // A production bundle is embedded into the CLI and served by whichever
+  // OpenScience server the user runs, so it must never bake a server address
+  // from a local `.env.local` (the e2e harness writes one with its throwaway
+  // port and credentials). Real environment variables still apply for a
+  // deliberately separately hosted build; the dev server keeps reading env files.
+  envDir: command === "build" ? false : undefined,
   // @pierre/diffs and @synsci/ui both depend on Shiki. Resolve them to one
   // runtime so Vite emits each language/theme chunk once instead of twice.
   // dedupe resolves from this package, so the workspace must keep declaring
@@ -72,4 +78,4 @@ export default defineConfig({
       return undefined
     },
   },
-})
+}))

@@ -1479,21 +1479,6 @@ ToolRegistry.register({
       )
     }
 
-    const familyIcon = (family: string) =>
-      family === "context"
-        ? "glasses"
-        : family === "sources"
-          ? "window-cursor"
-          : family === "commands"
-            ? "console"
-            : family === "changes"
-              ? "code-lines"
-              : family === "images"
-                ? "photo"
-                : family === "skills"
-                  ? "sparkles"
-                  : "activity"
-
     const [operations, setOperations] = createSignal(false)
 
     return (
@@ -1618,11 +1603,10 @@ ToolRegistry.register({
                 <For each={activity()}>
                   {(group) => (
                     <li data-slot="delegation-activity-row" data-family={group.family}>
-                      <Icon name={familyIcon(group.family)} size="small" />
                       <strong>{group.label}</strong>
                       <span>{group.detail === group.family ? "" : group.detail}</span>
                       <Show when={group.failed > 0}>
-                        <em data-slot="delegation-activity-failed">{pluralize(group.failed, "failure")}</em>
+                        <em data-slot="delegation-activity-failed">{group.failed} failed</em>
                       </Show>
                     </li>
                   )}
@@ -1657,6 +1641,8 @@ ToolRegistry.register({
                 </For>
               </div>
             </Show>
+            {/* One quiet line of provenance and two things that look like what
+                they are: buttons. Failures already read in the activity rows. */}
             <div data-slot="delegation-footer">
               <span data-slot="delegation-metrics" aria-label="Delegated research details">
                 <Show when={model()}>{(value) => <span>{value()}</span>}</Show>
@@ -1670,29 +1656,30 @@ ToolRegistry.register({
                     </span>
                   )}
                 </Show>
-                <Show when={props.metadata.effort}>
-                  <span>{sentenceCaseLabel(String(props.metadata.effort))} effort</span>
-                </Show>
-                <Show when={Number(props.metadata.failedToolCalls) > 0}>
-                  <span data-failed>{pluralize(Number(props.metadata.failedToolCalls), "failed call")}</span>
-                </Show>
               </span>
               <span data-slot="delegation-actions">
                 <Show when={summary().length > 0}>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="small"
                     data-slot="delegation-link"
                     aria-expanded={operations()}
                     onClick={() => setOperations(!operations())}
                   >
-                    {operations() ? "Hide operations" : `${pluralize(summary().length, "operation")}`}
-                  </button>
+                    {operations() ? "Hide operations" : pluralize(summary().length, "operation")}
+                  </Button>
                 </Show>
                 <Show when={childSessionId() && data.navigateToSession}>
-                  <button type="button" data-slot="delegation-link" data-primary onClick={openAgent}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="small"
+                    data-slot="delegation-link"
+                    onClick={openAgent}
+                  >
                     Open agent
-                    <Icon name="arrow-right" size="small" />
-                  </button>
+                  </Button>
                 </Show>
               </span>
             </div>

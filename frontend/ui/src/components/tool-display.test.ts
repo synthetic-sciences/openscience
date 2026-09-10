@@ -7,7 +7,6 @@ import {
   humanizeToolName,
   lineCount,
   loadedSkillName,
-  pendingOperations,
   reasoningDisplayText,
   runningLabel,
   sentenceCaseLabel,
@@ -781,39 +780,6 @@ describe("sessionErrorDisplay", () => {
         data: { message: "Provider is overloaded", metadata: { code: "provider_overloaded" } },
       }),
     ).toEqual({ state: "error", message: "Provider is overloaded" })
-  })
-})
-
-describe("pendingOperations", () => {
-  const part = (id: string, tool: string, state: Record<string, unknown>) => ({ id, type: "tool", tool, state })
-
-  test("lists live and cancelled calls with whether each had started", () => {
-    expect(
-      pendingOperations([
-        part("prt_done", "write", { status: "completed", input: { filePath: "a.md" }, metadata: {} }),
-        part("prt_running", "bash", { status: "running", title: "Inspect results", input: { command: "ls" } }),
-        part("prt_pending", "read", { status: "pending", input: {} }),
-        part("prt_cancelled", "bash", {
-          status: "error",
-          error: "Tool execution aborted",
-          input: { command: "make", description: "Build the report" },
-          metadata: { cancelled: true, started: true },
-        }),
-        part("prt_never", "glob", {
-          status: "error",
-          error: "Tool execution aborted. The glob call had not started; no action was taken.",
-          input: {},
-          metadata: { cancelled: true, started: false },
-        }),
-        part("prt_failed", "bash", { status: "error", error: "Command failed", input: {} }),
-        { id: "prt_text", type: "text" },
-      ]),
-    ).toEqual([
-      { id: "prt_running", tool: "bash", title: "Inspect results", started: true },
-      { id: "prt_pending", tool: "read", title: "Read", started: false },
-      { id: "prt_cancelled", tool: "bash", title: "Build the report", started: true },
-      { id: "prt_never", tool: "glob", title: "Glob", started: false },
-    ])
   })
 })
 

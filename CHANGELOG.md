@@ -38,6 +38,17 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   quietly at the right, and show their state on a second line.
 - Session outputs is one folded line ("3 files written this turn") that opens on
   demand.
+- A stopped turn says so on its header line ("Stopped after 2m 3s") and nothing
+  more; a stop the provider or a credential change caused keeps its reason as one
+  quiet line. The "Stopped / Outputs kept / Left pending" card is gone; the error
+  card keeps only its message.
+- The trace sits on a 4px rhythm: 28px rows everywhere (nested tool rows
+  included), narration with even margins, a clear breath before the answer, and
+  chevrons that appear on hover. Finished tool rows are text-first; the glyph
+  returns only while a call runs, waits, fails, or is cancelled.
+- Delegated agent rows use one accent: only a failed worker or one waiting on the
+  user is coloured; partial and cancelled outcomes read in words. The footer keeps
+  the model and Fusion handoff, and its actions are real buttons.
 - Worker sessions no longer offer a composer: the lead writes their brief and
   reads their handoff, and the page points back to the lead.
 - Publishing stays with the lead: the task tool refuses a brief whose deliverable
@@ -72,6 +83,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - A page served by a local OpenScience server no longer defers to a stored
   default server on another loopback port (a desktop sidecar or dev server that
   has since exited), which showed as "Failed to fetch" against a dead server.
+- Production bundles no longer read `.env.local`, so a leftover file from the
+  e2e harness cannot bake its throwaway server port into the embedded UI.
 
 ### Removed
 

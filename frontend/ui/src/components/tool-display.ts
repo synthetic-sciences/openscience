@@ -235,45 +235,6 @@ export function taskOutcome(
   return phase
 }
 
-export type PendingOperation = { id: string; tool: string; title: string; started: boolean }
-
-/**
- * Calls a stop left unfinished: still live, or closed by the runtime as
- * cancelled. `started` says whether the call had begun executing; a call that
- * never started took no action.
- */
-export function pendingOperations(
-  parts: ReadonlyArray<{
-    id: string
-    type: string
-    tool?: string
-    state?: { status?: string; title?: string; input?: unknown; error?: string; metadata?: unknown }
-  }>,
-): PendingOperation[] {
-  const result: PendingOperation[] = []
-  for (const part of parts) {
-    if (part.type !== "tool" || !part.state) continue
-    const state = part.state
-    const metadata = (state.metadata ?? {}) as Record<string, unknown>
-    const live = state.status === "running" || state.status === "pending"
-    const cancelled =
-      state.status === "error" && (metadata.cancelled === true || toolOutcome("error", state.error) === "cancelled")
-    if (!live && !cancelled) continue
-    const input = (state.input ?? {}) as Record<string, unknown>
-    const description = typeof input.description === "string" ? input.description : ""
-    const started = live
-      ? state.status === "running"
-      : metadata.started !== false && !/had not started/i.test(state.error ?? "")
-    result.push({
-      id: part.id,
-      tool: part.tool ?? "",
-      title: state.title || description || humanizeToolName(part.tool ?? ""),
-      started,
-    })
-  }
-  return result
-}
-
 export function toolErrorDisplay(tool: string, value: string) {
   const cleaned = value.replace(/^Error:\s*/, "")
   if (toolOutcome("error", cleaned) === "cancelled") {

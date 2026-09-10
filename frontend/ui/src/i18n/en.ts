@@ -2,6 +2,7 @@ export const dict = {
   "ui.sessionTurn.steps.show": "Show reasoning and activity",
   "ui.sessionTurn.steps.hide": "Hide reasoning and activity",
   "ui.sessionTurn.workedFor": "Worked for {{duration}}",
+  "ui.sessionTurn.stoppedAfter": "Stopped after {{duration}}",
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Commenting on ",
@@ -38,11 +39,6 @@ export const dict = {
   "ui.sessionTurn.progress.stalled": "No new output from {{model}} for {{seconds}}s",
   "ui.sessionTurn.progress.stalledHint":
     "The response is still open. You can wait or stop it; stopping does not undo completed work.",
-  "ui.sessionTurn.stop.outputs": "Outputs kept",
-  "ui.sessionTurn.stop.noOutputs": "No file outputs were confirmed for this turn.",
-  "ui.sessionTurn.stop.pending": "Left pending",
-  "ui.sessionTurn.stop.interrupted": "interrupted",
-  "ui.sessionTurn.stop.notStarted": "not started",
 
   "ui.messagePart.diagnostic.error": "Error",
   "ui.messagePart.title.edit": "Edited",

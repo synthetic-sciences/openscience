@@ -1014,7 +1014,8 @@ describe("execution inspection", () => {
     await settle()
     expect(card.getAttribute("data-outcome")).toBe("completed")
     expect(card.querySelector('[data-slot="delegation-status"]')?.textContent).toBe("Completed with tool errors")
-    expect(card.querySelector('[data-slot="delegation-metrics"]')?.textContent).toContain("1 failed")
+    // The status line carries the failure once; the provenance line does not repeat it.
+    expect(card.querySelector('[data-slot="delegation-metrics"]')?.textContent ?? "").not.toContain("failed")
   })
 
   test("a new model request replaces the preceding command status with its own wait", async () => {
@@ -1197,17 +1198,13 @@ describe("timeout recovery", () => {
           ? { type: "busy" }
           : { type: "retry", attempt: 2, next: Date.now() + 10_000, message: "Reconnecting to the provider" },
       )
-      await ready(() => host.querySelector('[data-slot="session-state-message"]') !== null)
-      expect(host.querySelectorAll('[data-slot="session-state-message"]')).toHaveLength(1)
-      expect(host.querySelector('[data-slot="session-state-message"]')?.textContent).toBe(timeout.data.message)
-      // A wait the runtime gave up on is a stop with a recorded reason, not a generic failure.
-      const card = host.querySelector('[data-component="card"][data-state]')!
-      expect(card.getAttribute("data-state")).toBe("stopped")
-      expect(card.getAttribute("data-reason")).toBe("timeout")
-      expect(card.getAttribute("role")).toBe("status")
-      expect(card.querySelector('[data-slot="session-stop-receipt"]')?.textContent).toContain(
-        "No file outputs were confirmed",
-      )
+      await ready(() => host.querySelector('[data-slot="session-turn-stop-note"]') !== null)
+      // A wait the runtime gave up on is a stop with a recorded reason: one
+      // quiet line, not a failure card and not a receipt.
+      expect(host.querySelectorAll('[data-slot="session-turn-stop-note"]')).toHaveLength(1)
+      expect(host.querySelector('[data-slot="session-turn-stop-note"]')?.textContent).toBe(timeout.data.message)
+      expect(host.querySelector('[data-component="card"][data-state]')).toBeNull()
+      expect(host.querySelector('[data-slot="session-turn-trigger-label"]')?.textContent).toContain("Stopped after")
       expect(host.querySelector('[data-slot="reasoning-part-body"]')?.textContent).toContain(reason.text)
       expect(host.textContent).toContain(partial.text)
       expect(host.querySelector('[data-component="reasoning-part"]')?.getAttribute("data-live")).toBeNull()
@@ -1765,7 +1762,7 @@ describe("turns that ended early", () => {
     files: ["/research/results.csv", "/research/notes.md"],
   }
 
-  test("a Stop press ends as a stopped turn with the outputs kept and the operations left pending", async () => {
+  test("a Stop press ends the turn on the header line, with no card or receipt", async () => {
     const message: AssistantMessage = {
       ...assistant(Date.now()),
       error: { name: "MessageAbortedError", data: { message: "The operation was aborted." } },
@@ -1792,31 +1789,27 @@ describe("turns that ended early", () => {
       store,
       { openFile: (path) => opened.push(path) },
     )
-    await ready(() => host.querySelector('[data-state="stopped"]') !== null)
-    const card = host.querySelector('[data-state="stopped"]')!
-    expect(card.getAttribute("data-reason")).toBe("user")
-    expect(card.getAttribute("role")).toBe("status")
-    expect(card.querySelector("strong")?.textContent).toBe("Stopped")
-    expect(card.querySelector('[data-slot="session-state-message"]')?.textContent).toContain("Stopped at your request")
-    expect(card.textContent).toContain("written files are kept")
-    expect(card.textContent).not.toContain("The operation was aborted")
+    // A stop the user asked for needs no card, no receipt, no explanation:
+    // the header line says it, and the transcript stays exactly as it was.
+    await ready(
+      () =>
+        host.querySelector('[data-slot="session-turn-trigger-label"]')?.textContent?.includes("Stopped after") === true,
+    )
+    expect(host.querySelector('[data-component="card"][data-state]')).toBeNull()
+    expect(host.querySelector('[data-slot="session-turn-stop-note"]')).toBeNull()
+    expect(host.textContent).not.toContain("Stopped at your request")
+    expect(host.textContent).not.toContain("Outputs kept")
+    expect(host.textContent).not.toContain("The operation was aborted")
     expect(host.querySelector('[data-component="spinner"]')).toBeNull()
     expect(host.querySelector('[data-slot="session-turn-live-status"]')).toBeNull()
     expect(host.querySelector('[data-slot="session-turn-retry-message"]')).toBeNull()
-
-    const outputs = [...card.querySelectorAll<HTMLButtonElement>('[data-slot="session-stop-output"]')]
-    expect(outputs.map((item) => item.textContent)).toEqual(["notes.md", "results.csv"])
-    outputs[1].click()
-    expect(opened).toEqual(["/research/results.csv"])
-    const pending = [...card.querySelectorAll('[data-slot="session-stop-operation"]')]
-    expect(pending.map((item) => item.textContent)).toEqual(["Build the report · interrupted", "Read · not started"])
-    expect(pending.map((item) => item.getAttribute("data-started"))).toEqual(["true", "false"])
+    expect(opened).toEqual([])
 
     // The recorded activity stays disclosable and untouched.
     const toggle = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-collapsible-trigger-content"]')!
     expect(toggle.getAttribute("aria-expanded")).toBe("false")
     expect(toggle.getAttribute("aria-label")).toBe("Show reasoning and activity")
-    expect(toggle.textContent).toContain("Worked for")
+    expect(toggle.textContent).toMatch(/^Stopped after \d/)
     expect(store.part[message.id][1]).toBe(interrupted)
   })
 
@@ -1833,12 +1826,11 @@ describe("turns that ended early", () => {
       part: { [user.id]: [], [message.id]: [write] },
     }
     const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
-    await ready(() => host.querySelector('[data-state="stopped"]') !== null)
-    const card = host.querySelector('[data-state="stopped"]')!
-    expect(card.getAttribute("data-reason")).toBe("interrupted")
-    expect(card.querySelector('[data-slot="session-state-message"]')?.textContent).toBe(cause)
-    expect(card.querySelector('[data-slot="session-stop-output"]')?.textContent).toBe("notes.md")
-    expect(card.querySelector('[data-kind="pending"]')).toBeNull()
+    // A stop with a cause the user did not choose keeps that cause: one line.
+    await ready(() => host.querySelector('[data-slot="session-turn-stop-note"]') !== null)
+    expect(host.querySelector('[data-slot="session-turn-stop-note"]')?.textContent).toBe(cause)
+    expect(host.querySelector('[data-component="card"][data-state]')).toBeNull()
+    expect(host.querySelector('[data-slot="session-turn-trigger-label"]')?.textContent).toContain("Stopped after")
   })
 
   test("a stopped parent lists files confirmed by a delegated child's mutation evidence", async () => {
@@ -1883,16 +1875,25 @@ describe("turns that ended early", () => {
           resolveFile: (path) => assets.workspaceAssetPath(path, "/research"),
           resolveFileReceipt: assets.workspaceReceiptPath,
           get children() {
-            return web.createComponent(turn.SessionTurn, { sessionID, messageID: user.id })
+            return web.createComponent(turn.SessionTurn, { sessionID, messageID: user.id, lastUserMessageID: user.id })
           },
         }),
       store,
+      { saveArtifact: async () => {} },
     )
-    await ready(() => host.querySelector('[data-state="stopped"]') !== null)
+    await ready(() => host.querySelector('[data-slot="session-turn-session-outputs"]') !== null)
 
-    const outputs = [...host.querySelectorAll('[data-slot="session-stop-output"]')].map((item) => item.textContent)
-    expect(outputs).toEqual(["application.py", "backend.py", "campaign.py", "matrix.py"])
-    expect(host.textContent).not.toContain("No file outputs were confirmed")
+    // What the worker wrote survives the stop and is offered as this turn's outputs.
+    const outputs = [...host.querySelectorAll('[data-slot="session-turn-output-file"]')].map((item) =>
+      item.getAttribute("title"),
+    )
+    expect(outputs).toEqual([
+      "/research/application.py",
+      "/research/backend.py",
+      "/research/campaign.py",
+      "/research/matrix.py",
+    ])
+    expect(host.querySelector('[data-component="card"][data-state]')).toBeNull()
   })
 })
 

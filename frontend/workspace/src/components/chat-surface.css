@@ -390,8 +390,49 @@
 }
 
 .session-scroller [data-component="collapsible"] > [data-slot="collapsible-trigger"] {
-  height: 32px;
-  padding: 4px 6px;
+  height: 28px;
+  padding: 4px 8px 4px 0;
+}
+
+/* Disclosure chevrons on tool rows appear on hover, like every other row. */
+.session-scroller [data-component="tool-trigger"] > [data-slot="collapsible-arrow"] {
+  opacity: 0;
+  transition: opacity 150ms var(--ease-standard);
+}
+
+.session-scroller
+  [data-slot="collapsible-trigger"]:hover
+  [data-component="tool-trigger"]
+  > [data-slot="collapsible-arrow"],
+.session-scroller
+  [data-slot="collapsible-trigger"]:focus-visible
+  [data-component="tool-trigger"]
+  > [data-slot="collapsible-arrow"],
+.session-scroller
+  [data-slot="collapsible-trigger"][aria-expanded="true"]
+  [data-component="tool-trigger"]
+  > [data-slot="collapsible-arrow"] {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .session-scroller [data-component="tool-trigger"] > [data-slot="collapsible-arrow"] {
+    opacity: 1;
+  }
+}
+
+/* A finished call reads text-first like the thought and burst rows around it;
+   the glyph returns only while it runs, waits, fails, or is cancelled. */
+.session-scroller
+  [data-component="tool-trigger"]:not(
+    [data-outcome="running"],
+    [data-outcome="pending"],
+    [data-outcome="error"],
+    [data-outcome="cancelled"]
+  )
+  > [data-slot="basic-tool-tool-trigger-content"]
+  > [data-slot="basic-tool-tool-status"] {
+  display: none;
 }
 
 .session-scroller [data-component="tool-trigger"],

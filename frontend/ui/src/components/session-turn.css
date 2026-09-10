@@ -526,6 +526,8 @@
     }
   }
 
+  /* The trace is a list on a 4px rhythm: 28px rows, 4px between them, and a
+     clear breath before the answer so it never reads as another row. */
   [data-slot="session-turn-response-section"] {
     width: calc(100% + 9px);
     min-width: 0;
@@ -534,18 +536,27 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
 
-    > [data-component="reasoning-part"] {
-      margin: 0;
+    > [data-slot="trace-entry"]:not([data-narration]) [data-slot="text-part-body"] {
+      margin-top: 16px;
     }
 
-    > [data-component="text-part"] [data-slot="text-part-body"] {
-      margin-top: 14px;
+    > [data-slot="trace-entry"]:first-child:not([data-narration]) [data-slot="text-part-body"] {
+      margin-top: 8px;
     }
 
-    > [data-component="text-part"] + [data-component="text-part"] [data-slot="text-part-body"] {
+    > [data-slot="trace-entry"]:not([data-narration])
+      + [data-slot="trace-entry"]:not([data-narration])
+      [data-slot="text-part-body"] {
       margin-top: 2px;
+    }
+
+    > [data-slot="session-turn-stop-note"] {
+      margin: 8px 0 0;
+      color: var(--text-weaker);
+      font-size: var(--font-size-medium);
+      line-height: 20px;
     }
 
     > [data-slot="session-turn-response-copy-wrapper"] {
@@ -554,7 +565,7 @@
       align-items: center;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 8px;
+      margin-top: 4px;
       color: var(--text-weak);
       opacity: 1;
     }
@@ -660,8 +671,8 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
-      margin: 2px 0 6px 7px;
-      padding-left: 12px;
+      margin: 0 0 4px 7px;
+      padding-left: 13px;
       border-left: 1px solid var(--border-weak-base);
     }
 
@@ -670,15 +681,6 @@
       margin: 0;
       padding-left: 0;
       border-left: 0;
-    }
-
-    /* The body already draws the rail; nested rows sit right against it. */
-    [data-slot="trace-group-body"]
-      [data-component="tool-part-wrapper"]
-      > [data-component="collapsible"]
-      > [data-slot="collapsible-trigger"] {
-      height: 32px;
-      padding: 4px 8px 4px 2px;
     }
 
     &[data-kind="thought"] [data-component="reasoning-part"] {
@@ -743,8 +745,7 @@
   /* Narration between tool bursts reads as part of the trace, quieter than
      the final answer. */
   [data-slot="trace-entry"][data-narration="true"] [data-slot="text-part-body"] {
-    margin-top: 6px;
-    margin-bottom: 4px;
+    margin: 8px 0;
   }
 
   [data-slot="trace-entry"][data-narration="true"] [data-component="markdown"],
@@ -844,21 +845,6 @@
       }
     }
 
-    /* A stop is an outcome, not a fault: quiet chrome, the reason in words. */
-    &[data-state="stopped"] {
-      border-color: var(--border-weak-base);
-      background: var(--surface-raised-base);
-      color: var(--text-weak);
-
-      [data-slot="session-state-head"] > [data-component="icon"] {
-        color: var(--icon-weak);
-      }
-
-      [data-slot="session-state-copy"] strong {
-        color: var(--text-base);
-      }
-    }
-
     [data-slot="session-state-copy"] {
       min-width: 0;
       display: grid;
@@ -871,63 +857,6 @@
 
     [data-slot="session-state-message"] {
       overflow-wrap: anywhere;
-    }
-
-    [data-slot="session-stop-receipt"] {
-      margin: 0;
-      display: grid;
-      grid-template-columns: max-content minmax(0, 1fr);
-      gap: 4px 12px;
-      align-items: baseline;
-    }
-
-    [data-slot="session-stop-row"] {
-      display: contents;
-
-      dt {
-        white-space: nowrap;
-        color: var(--text-weaker);
-      }
-
-      dd {
-        min-width: 0;
-        margin: 0;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px 8px;
-      }
-    }
-
-    &.error-card [data-slot="session-stop-row"] dt {
-      color: inherit;
-    }
-
-    [data-slot="session-stop-output"] {
-      max-width: 100%;
-      padding: 1px 6px;
-      border: 1px solid var(--border-weak-base);
-      border-radius: var(--radius-xs);
-      background: var(--background-base);
-      color: var(--text-base);
-      font: inherit;
-      line-height: var(--line-height-normal);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      cursor: pointer;
-
-      &:hover {
-        background: var(--surface-raised-base-hover);
-      }
-
-      &:focus-visible {
-        outline: 2px solid var(--border-focus, var(--border-base));
-        outline-offset: 1px;
-      }
-    }
-
-    [data-slot="session-stop-operation"] {
-      color: var(--text-weak);
     }
   }
 

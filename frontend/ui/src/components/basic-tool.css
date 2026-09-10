@@ -36,8 +36,9 @@
     color: var(--icon-critical-base);
   }
 
+  /* A cancelled call is an outcome, not an alarm; its label already says so. */
   [data-slot="basic-tool-tool-status"][data-outcome="cancelled"] {
-    color: var(--icon-warning-base);
+    color: var(--icon-weak);
   }
 
   [data-slot="basic-tool-tool-failure-label"] {
