@@ -659,7 +659,8 @@ describe("chronological activity in a turn", () => {
 
     const live = host.querySelector('[data-component="tool-part-wrapper"][data-tool-status="running"]')!
     expect(live.closest('[data-component="trace-run-group"]')).toBeNull()
-    expect(live.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Grep")
+    // A live call reads as what is happening; it becomes "Searched" once done.
+    expect(live.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Searching")
     expect(live.querySelector('[data-slot="basic-tool-tool-status"]')?.getAttribute("data-outcome")).toBe("running")
     expect(live.querySelector('[data-slot="basic-tool-tool-time"]')).toBeNull()
   })

@@ -22,33 +22,33 @@ const fallback = {
 }
 
 const darkPalette = {
-  "background-base": "#17191c",
-  "background-weak": "#1d2024",
-  "background-strong": "#1a1c20",
-  "background-stronger": "#202328",
-  "surface-inset-base": "#141619",
-  "surface-inset-strong": "#111316",
-  "surface-float-base": "#25292e",
-  "surface-raised-strong": "#23262b",
-  "surface-raised-strong-hover": "#292d32",
-  "surface-raised-stronger": "#272b30",
-  "surface-raised-stronger-hover": "#2f343a",
-  "surface-strong": "#2c3137",
-  "surface-raised-stronger-non-alpha": "#23262b",
-  "input-base": "#202328",
-  "input-hover": "#272b30",
-  "button-secondary-base": "#23262b",
-  "button-secondary-hover": "#2c3137",
-  "border-weaker-base": "#edf1f50a",
-  "border-weak-base": "#edf1f514",
-  "border-weak-hover": "#edf1f522",
-  "border-base": "#edf1f52e",
-  "border-hover": "#edf1f53d",
-  "border-strong-base": "#edf1f54d",
-  "text-base": "#d8dde2",
-  "text-weak": "#aeb5bd",
-  "text-weaker": "#8d959e",
-  "text-strong": "#f3f5f7",
+  "background-base": "#191919",
+  "background-weak": "#1f1f1f",
+  "background-strong": "#1c1c1c",
+  "background-stronger": "#232323",
+  "surface-inset-base": "#161616",
+  "surface-inset-strong": "#141414",
+  "surface-float-base": "#272727",
+  "surface-raised-strong": "#242424",
+  "surface-raised-strong-hover": "#2b2b2b",
+  "surface-raised-stronger": "#292929",
+  "surface-raised-stronger-hover": "#313131",
+  "surface-strong": "#2e2e2e",
+  "surface-raised-stronger-non-alpha": "#242424",
+  "input-base": "#232323",
+  "input-hover": "#292929",
+  "button-secondary-base": "#242424",
+  "button-secondary-hover": "#2e2e2e",
+  "border-weaker-base": "#ffffff0a",
+  "border-weak-base": "#ffffff14",
+  "border-weak-hover": "#ffffff22",
+  "border-base": "#ffffff2e",
+  "border-hover": "#ffffff3d",
+  "border-strong-base": "#ffffff4d",
+  "text-base": "#d6d6d6",
+  "text-weak": "#a8a8a8",
+  "text-weaker": "#8c8c8c",
+  "text-strong": "#f2f2f2",
 } as const
 
 const luminance = (color: string) => {
@@ -155,12 +155,26 @@ const darkStructuralTokens = [
 ] as const
 
 describe("OpenScience default theme", () => {
-  test("uses canonical paper-gray, slate dark, and teal anchors", () => {
-    expect(openscience.light.overrides["background-base"]).toBe("#f5f6f7")
-    expect(openscience.light.overrides["text-strong"]).toBe("#20252b")
-    expect(openscience.light.overrides["surface-brand-base"]).toBe("#376d70")
-    expect(openscience.dark.seeds.neutral).toBe("#626a73")
-    expect(openscience.dark.overrides["surface-brand-base"]).toBe("#75a8aa")
+  test("uses neutral grey anchors with no colour cast in either scheme", () => {
+    expect(openscience.light.overrides["background-base"]).toBe("#f7f7f7")
+    expect(openscience.light.overrides["text-strong"]).toBe("#1f1f1f")
+    expect(openscience.light.overrides["surface-brand-base"]).toBe("#1f1f1f")
+    expect(openscience.dark.seeds.neutral).toBe("#6b6b6b")
+    expect(openscience.dark.overrides["surface-brand-base"]).toBe("#d9d9d9")
+    // Greys are greys: equal channels, so nothing reads blue or warm.
+    for (const mode of ["light", "dark"] as const) {
+      for (const token of [
+        "background-base",
+        "background-weak",
+        "background-stronger",
+        "text-base",
+        "text-weak",
+        "text-strong",
+      ] as const) {
+        const value = openscience[mode].overrides[token]
+        expect(value, `${mode} ${token}`).toMatch(/^#([0-9a-f]{2})\1\1$/i)
+      }
+    }
 
     for (const entry of Object.entries(darkPalette)) {
       expect(darkOverrides[entry[0]]).toBe(entry[1])

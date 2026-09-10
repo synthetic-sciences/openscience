@@ -554,22 +554,23 @@
     min-width: 0;
   }
 
+  /* Same voice as every other trace row: the verb regular, the file quiet. */
   [data-slot="message-part-title"] {
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-medium);
     font-style: normal;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    font-weight: var(--font-weight-regular);
+    line-height: 20px;
     letter-spacing: var(--letter-spacing-normal);
     color: var(--text-base);
   }
 
   [data-slot="message-part-title-filename"] {
-    /* No text-transform - preserve original filename casing */
+    color: var(--text-weak);
   }
 
   [data-slot="message-part-path"] {
@@ -775,8 +776,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: var(--font-size-small);
-    line-height: var(--line-height-large);
+    font-size: var(--font-size-medium);
+    line-height: 20px;
     color: var(--text-base);
   }
 
@@ -787,8 +788,8 @@
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
-    font-size: var(--font-size-x-small);
-    line-height: var(--line-height-normal);
+    font-size: var(--font-size-small);
+    line-height: 18px;
     color: var(--text-weaker);
     font-variant-numeric: tabular-nums;
   }
@@ -799,7 +800,7 @@
     justify-content: flex-end;
     gap: 8px;
     color: var(--text-weaker);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-medium);
     white-space: nowrap;
 
     [data-component="icon"] {
@@ -868,7 +869,8 @@
     gap: 8px;
     min-height: 20px;
     color: var(--text-weak);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-medium);
+    line-height: 20px;
 
     [data-component="spinner"] {
       width: 12px;
@@ -892,8 +894,8 @@
     flex-direction: column;
     gap: 2px;
     color: var(--text-weaker);
-    font-size: var(--font-size-x-small);
-    line-height: 16px;
+    font-size: var(--font-size-small);
+    line-height: 18px;
 
     > li::before {
       content: "— ";
@@ -908,9 +910,9 @@
     display: block;
     margin-bottom: 4px;
     color: var(--text-weaker);
-    font-size: var(--font-size-x-small);
-    font-weight: var(--font-weight-medium);
-    line-height: 16px;
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-regular);
+    line-height: 18px;
   }
 
   [data-slot="delegation-findings"][data-error="true"] [data-slot="delegation-section-label"] {
@@ -921,8 +923,8 @@
   [data-slot="delegation-findings"] [data-component="markdown"] {
     margin-top: 0;
     color: var(--text-weak);
-    font-size: var(--font-size-small);
-    line-height: 18px;
+    font-size: var(--font-size-medium);
+    line-height: 20px;
 
     > :first-child {
       margin-top: 0;
@@ -979,7 +981,7 @@
     color: var(--text-weak);
     cursor: pointer;
     font: inherit;
-    font-size: var(--font-size-x-small);
+    font-size: var(--font-size-small);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1026,8 +1028,8 @@
 
     > strong {
       color: var(--text-weak);
-      font-size: var(--font-size-small);
-      font-weight: var(--font-weight-medium);
+      font-size: var(--font-size-medium);
+      font-weight: var(--font-weight-regular);
       white-space: nowrap;
     }
 
@@ -1037,13 +1039,13 @@
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--text-weaker);
-      font-size: var(--font-size-small);
+      font-size: var(--font-size-medium);
     }
   }
 
   [data-slot="delegation-activity-failed"] {
     color: var(--text-critical-base);
-    font-size: var(--font-size-x-small);
+    font-size: var(--font-size-small);
     font-style: normal;
     white-space: nowrap;
   }
@@ -1063,7 +1065,7 @@
     flex-wrap: wrap;
     gap: 4px 0;
     color: var(--text-weaker);
-    font-size: var(--font-size-x-small);
+    font-size: var(--font-size-small);
 
     > span + span::before {
       content: "·";
@@ -1092,12 +1094,12 @@
     color: var(--text-weaker);
     cursor: pointer;
     font: inherit;
-    font-size: var(--font-size-x-small);
+    font-size: var(--font-size-small);
     white-space: nowrap;
 
     &[data-primary] {
       color: var(--text-weak);
-      font-weight: var(--font-weight-medium);
+      font-weight: var(--font-weight-regular);
     }
 
     &:hover {

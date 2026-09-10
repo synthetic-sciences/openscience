@@ -47,6 +47,14 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - The workspace speaks one colour vocabulary (`--color-*`), checked by a design
   contract; the migration also fixed hairlines that referenced an undefined
   alias and never rendered.
+- The default theme is neutral grey in both schemes: dark backgrounds from
+  `#191919` up, light from `#f7f7f7`, white-alpha hairlines, a light-grey brand
+  surface instead of teal, and a muted slate only for links. Inline code is a
+  quiet chip in the text colour rather than a green accent.
+- Every trace row shares one type level (13/20, regular weight): the "Worked
+  for" line, thought and burst rows, nested tool rows, agent rows and their
+  details. Tool rows read as what happened ("Ran", "Read", "Searched", "Edited",
+  "Wrote", "Fetched") and as what is happening while a call runs.
 - The first-run setup is one quiet card: a small mark and step count, a title,
   one sentence, one action. No icon tiles, benefit cards, dots, or eyebrows;
   connection rows are plain logos with one control each. Three text styles from

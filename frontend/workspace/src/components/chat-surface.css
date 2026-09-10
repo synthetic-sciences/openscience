@@ -351,8 +351,9 @@
 
 .session-scroller [data-slot="session-turn-collapsible-trigger-content"] {
   color: var(--color-text-muted);
-  font-size: var(--font-size-small);
+  font-size: var(--chat-operation-font-size);
   font-weight: var(--font-weight-regular);
+  line-height: var(--chat-operation-line-height);
 }
 
 .session-scroller [data-slot="session-turn-collapsible-content-inner"] {
@@ -398,12 +399,15 @@
   gap: 7px;
 }
 
-.session-scroller [data-slot="basic-tool-tool-title"] {
+/* A tool row reads like every other trace row: the verb and its object at
+   the operation level in regular weight, with only arguments as metadata. */
+.session-scroller [data-slot="basic-tool-tool-title"],
+.session-scroller [data-slot="basic-tool-tool-subtitle"] {
   font-size: var(--chat-operation-font-size);
+  font-weight: var(--font-weight-regular);
   line-height: var(--chat-operation-line-height);
 }
 
-.session-scroller [data-slot="basic-tool-tool-subtitle"],
 .session-scroller [data-slot="basic-tool-tool-arg"] {
   font-size: var(--chat-meta-font-size);
   line-height: var(--chat-meta-line-height);

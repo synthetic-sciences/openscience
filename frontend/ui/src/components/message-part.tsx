@@ -32,7 +32,7 @@ import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
 import { useDialog } from "../context/dialog"
-import { useI18n } from "../context/i18n"
+import { type UiI18nKey, useI18n } from "../context/i18n"
 import { ComputeJobDetails } from "./compute-job-details"
 import { BasicTool } from "./basic-tool"
 import { ResearchSearchTool } from "./research-search-tool"
@@ -57,6 +57,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import {
   reasoningDisplayText,
   privateReasoningOnly,
+  runningLabel,
   savedArtifact,
   scienceTaskLabel,
   sentenceCaseLabel,
@@ -197,6 +198,14 @@ export type ToolInfo = {
   icon: IconProps["name"]
   title: string
   subtitle?: string
+}
+
+/** A row reads as what happened: "Ran", "Read", "Searched". While the call is
+ * still in flight it reads as what is happening. */
+function toolVerb(i18n: ReturnType<typeof useI18n>, tool: string, status: string | undefined, done: UiI18nKey) {
+  const live = status === "running" || status === "pending"
+  const key = live ? runningLabel(tool) : undefined
+  return i18n.t(key ?? done)
 }
 
 export function getToolInfo(tool: string, input: any = {}): ToolInfo {
@@ -1027,7 +1036,7 @@ ToolRegistry.register({
           {...props}
           icon="glasses"
           trigger={{
-            title: i18n.t("ui.tool.read"),
+            title: toolVerb(i18n, "read", props.status, "ui.tool.read"),
             subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
             args,
           }}
@@ -1114,7 +1123,10 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         icon="bullet-list"
-        trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
+        trigger={{
+          title: toolVerb(i18n, "list", props.status, "ui.tool.list"),
+          subtitle: getDirectory(props.input.path || "/"),
+        }}
       >
         <Show when={props.output}>
           {(output) => (
@@ -1137,7 +1149,7 @@ ToolRegistry.register({
         {...props}
         icon="magnifying-glass-menu"
         trigger={{
-          title: i18n.t("ui.tool.glob"),
+          title: toolVerb(i18n, "glob", props.status, "ui.tool.glob"),
           subtitle: getDirectory(props.input.path || "/"),
           args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
         }}
@@ -1166,7 +1178,7 @@ ToolRegistry.register({
         {...props}
         icon="magnifying-glass-menu"
         trigger={{
-          title: i18n.t("ui.tool.grep"),
+          title: toolVerb(i18n, "grep", props.status, "ui.tool.grep"),
           subtitle: getDirectory(props.input.path || "/"),
           args,
         }}
@@ -1210,7 +1222,7 @@ ToolRegistry.register({
         {...props}
         icon="window-cursor"
         trigger={{
-          title: downloaded() ? "Downloaded file" : i18n.t("ui.tool.webfetch"),
+          title: downloaded() ? "Downloaded file" : toolVerb(i18n, "webfetch", props.status, "ui.tool.webfetch"),
           subtitle: typeof downloaded()?.path === "string" ? (downloaded()!.path as string) : props.input.url || "",
           args: props.input.format ? ["format=" + props.input.format] : [],
           action: (
@@ -1725,7 +1737,7 @@ ToolRegistry.register({
         {...props}
         icon="console"
         trigger={{
-          title: i18n.t("ui.tool.shell"),
+          title: toolVerb(i18n, "bash", props.status, "ui.tool.shell"),
           subtitle: subtitle(),
         }}
       >
@@ -1928,7 +1940,7 @@ ToolRegistry.register({
           {...props}
           icon="code-lines"
           trigger={{
-            title: i18n.t("ui.tool.patch"),
+            title: toolVerb(i18n, "apply_patch", props.status, "ui.tool.patch"),
             subtitle: subtitle(),
           }}
         >

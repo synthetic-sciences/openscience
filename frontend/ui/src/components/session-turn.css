@@ -581,7 +581,9 @@
     margin: -6px 0 -6px -8px;
     border-radius: var(--radius-xs);
     color: var(--text-weak);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-medium);
+    font-weight: var(--font-weight-regular);
+    line-height: 20px;
     cursor: pointer;
 
     /* The chevron follows the label, the way a disclosure reads in Cursor. */
@@ -689,8 +691,17 @@
       border-left: 0;
       color: var(--text-weak);
     }
+
+    &[data-kind="thought"] [data-slot="reasoning-part-body"] [data-component="markdown"],
+    &[data-kind="thought"] [data-slot="reasoning-part-body"] [data-component="markdown"] :is(p, li, blockquote) {
+      font-size: var(--font-size-medium);
+      font-weight: var(--font-weight-regular);
+      line-height: 20px;
+    }
   }
 
+  /* One level for every row of the trace: 13/20, regular weight, verb in the
+     body colour and detail in the muted one. */
   [data-component="trace-row"] {
     min-height: 28px;
     display: flex;
@@ -698,8 +709,9 @@
     gap: 6px;
     padding: 4px 8px 4px 0;
     color: var(--text-base);
-    font-size: var(--font-size-small);
-    line-height: var(--line-height-large);
+    font-size: var(--font-size-medium);
+    font-weight: var(--font-weight-regular);
+    line-height: 20px;
     cursor: pointer;
 
     [data-component="spinner"] {
@@ -963,8 +975,9 @@
       padding: 4px 8px 4px 0;
       border-radius: var(--radius-xs);
       color: var(--text-weak);
-      font-size: var(--font-size-small);
-      line-height: var(--line-height-large);
+      font-size: var(--font-size-medium);
+      font-weight: var(--font-weight-regular);
+      line-height: 20px;
       list-style: none;
       cursor: pointer;
 
@@ -995,7 +1008,7 @@
 
       small {
         color: var(--text-weaker);
-        font-size: var(--font-size-small);
+        font-size: var(--font-size-medium);
       }
     }
 
