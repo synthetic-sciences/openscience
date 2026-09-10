@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { AuthoritySignal } from "../../src/project/authority-signal"
+import { Storage } from "../../src/storage/storage"
 import { tmpdir } from "../fixture/fixture"
 
 const trust = (projectID: string) => ({ kind: "trust" as const, projectID, denied: true })
 
 describe("AuthoritySignal.watch", () => {
-  test("a watcher that polled past a settled burst replays the events it missed instead of resyncing", async () => {
+  test("a watcher that polled past its own process's settled burst does not resync", async () => {
     await using tmp = await tmpdir({ git: true })
     void tmp
     const seen: AuthoritySignal.Change[] = []
@@ -13,8 +14,8 @@ describe("AuthoritySignal.watch", () => {
       seen.push(change)
     }, 1_000_000)
     try {
-      // Two other-process style mutations land and are settled by their
-      // publishers before this watcher polls once.
+      // Two mutations from this process land and settle before the watcher
+      // polls once; the in-process bus already carried them to every instance.
       const first = await AuthoritySignal.publish(trust("prj_first"))
       await AuthoritySignal.settle(first.revision)
       const second = await AuthoritySignal.publish(trust("prj_second"))
@@ -25,23 +26,14 @@ describe("AuthoritySignal.watch", () => {
         sessionID: "ses_third",
         scope: "project",
       })
-      // Same-process settled events are skipped in the tail; leave the last
-      // one pending so the watcher must reach it through the gap.
       await watcher.poll()
-      expect(seen.map((change) => change.type)).toEqual(["event", "event", "event"])
-      expect(seen.map((change) => change.revision)).toEqual([first.revision, second.revision, third.revision])
-      expect(seen.some((change) => change.type === "resync")).toBe(false)
-      expect(seen.filter((change) => change.type === "event").map((change) => change.event.kind)).toEqual([
-        "trust",
-        "trust",
-        "filesystem",
-      ])
+      expect(seen).toEqual([{ type: "event", revision: third.revision, event: third.event }])
     } finally {
       await watcher[Symbol.asyncDispose]()
     }
   })
 
-  test("a gap older than the retained history still resyncs conservatively", async () => {
+  test("a gap holding another process's settled work still resyncs conservatively", async () => {
     await using tmp = await tmpdir({ git: true })
     void tmp
     const seen: AuthoritySignal.Change[] = []
@@ -49,15 +41,19 @@ describe("AuthoritySignal.watch", () => {
       seen.push(change)
     }, 1_000_000)
     try {
-      let last = 0
-      for (let index = 0; index < 70; index++) {
-        const published = await AuthoritySignal.publish(trust(`prj_${index}`))
-        last = published.revision
-        if (index < 69) await AuthoritySignal.settle(published.revision)
-      }
+      const foreign = await AuthoritySignal.publish(trust("prj_foreign"))
+      await AuthoritySignal.settle(foreign.revision)
+      // Rewrite the record's memory of that revision as another process's.
+      await Storage.update<{ history: Array<{ revision: number; origin: number }> }>(
+        ["authority", "revision"],
+        (draft) => {
+          for (const item of draft.history) if (item.revision === foreign.revision) item.origin = process.pid + 1
+        },
+      )
+      const next = await AuthoritySignal.publish(trust("prj_next"))
       await watcher.poll()
-      expect(seen[0]).toEqual({ type: "resync", revision: last - 1 })
-      expect(seen.at(-1)).toMatchObject({ type: "event", revision: last })
+      expect(seen[0]).toEqual({ type: "resync", revision: next.revision - 1 })
+      expect(seen[1]).toMatchObject({ type: "event", revision: next.revision })
     } finally {
       await watcher[Symbol.asyncDispose]()
     }

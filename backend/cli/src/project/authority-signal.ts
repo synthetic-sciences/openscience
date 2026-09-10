@@ -41,6 +41,7 @@ export namespace AuthoritySignal {
     revision: z.number().int().positive(),
     event: Event,
   })
+  const HistoryEvent = PendingEvent.extend({ origin: z.number().int().positive() })
 
   const State = z.object({
     version: z.literal(1),
@@ -50,13 +51,14 @@ export namespace AuthoritySignal {
     origin: z.number().int().positive(),
     event: Event,
     backlog: PendingEvent.array().default([]),
-    // The most recent events, settled or not, so a watcher that polled past
-    // a burst can apply exactly what it missed instead of stopping every
-    // process it owns. A gap the history no longer covers still resyncs.
-    history: PendingEvent.array().default([]),
+    // The most recent events with the process that published each, so a
+    // watcher that polled past a burst can tell whether what it missed was
+    // its own process's settled work (already applied through the in-process
+    // bus) or another process's, which still earns the conservative resync.
+    history: HistoryEvent.array().default([]),
   })
   type State = z.infer<typeof State>
-  const HISTORY = 64
+  const HISTORY = 16
 
   const key = ["authority", "revision"]
   const lock = () => path.join(Global.Path.data, "authority", "spawn.lock")
@@ -105,7 +107,7 @@ export namespace AuthoritySignal {
         origin: process.pid,
         event: parsed,
         backlog,
-        history: [...(previous?.history ?? []), { revision, event: parsed }].slice(-HISTORY),
+        history: [...(previous?.history ?? []), { revision, event: parsed, origin: process.pid }].slice(-HISTORY),
       }
     })
   }
@@ -134,23 +136,23 @@ export namespace AuthoritySignal {
 
   export type Change = { type: "event"; revision: number; event: Event } | { type: "resync"; revision: number }
 
-  /** The events strictly between two revisions, when the record still holds
-   * every one of them; otherwise undefined and the caller resyncs. */
-  function between(state: State, from: number, to: number) {
-    const missed: z.infer<typeof PendingEvent>[] = []
+  /** Whether every revision strictly between two others was published by this
+   * process: those events reached every live instance here through the bus
+   * and the filesystem broadcast when they happened, so a watcher that only
+   * polled past them has nothing left to apply. Unknown or foreign revisions
+   * leave the caller to resync. */
+  function ownSettledGap(state: State, from: number, to: number) {
     for (let revision = from + 1; revision < to; revision++) {
       const item = state.history.find((entry) => entry.revision === revision)
-      if (!item) return
-      missed.push(item)
+      if (!item || item.origin !== process.pid) return false
     }
-    return missed
+    return true
   }
 
-  /** Poll a tiny revision record. A skipped revision is replayed from the
-   * record's recent history when it still covers the gap; only a gap it no
-   * longer describes causes the conservative resync, since the last event
-   * alone cannot name every affected process. The timer is unref'd and
-   * disposed with its project instance. */
+  /** Poll a tiny revision record. A skipped revision causes a conservative
+   * resync signal because the last event alone cannot describe every affected
+   * process, unless the record shows the gap to be this process's own settled
+   * work. The timer is unref'd and disposed with its project instance. */
   export async function watch(handler: (change: Change) => Promise<boolean | void>, pollMs = 200) {
     const initial = await current()
     const firstPending = initial
@@ -159,17 +161,12 @@ export namespace AuthoritySignal {
     let revision = Number.isFinite(firstPending) ? Math.max(0, firstPending - 1) : (initial?.revision ?? 0)
     let active = true
     let polling = false
-    // Events settled by their publishers before this watcher looked: apply
-    // each in order, or resync when the history no longer reaches back far
-    // enough to say what they were.
+    // Revisions settled before this watcher looked: our own process's work
+    // was applied when it happened; anything else, or anything the history
+    // no longer names, earns the resync.
     const catchUp = async (state: State, upTo: number) => {
-      if (upTo <= revision + 1) return
-      const missed = between(state, revision, upTo)
-      if (!missed) {
-        await handler({ type: "resync", revision: upTo - 1 })
-        return
-      }
-      for (const past of missed) await handler({ type: "event", revision: past.revision, event: past.event })
+      if (upTo <= revision + 1 || ownSettledGap(state, revision, upTo)) return
+      await handler({ type: "resync", revision: upTo - 1 })
     }
     const poll = async () => {
       if (!active || polling) return
