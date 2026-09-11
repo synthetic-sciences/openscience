@@ -6,7 +6,7 @@ import type { Agent as ACPAgent } from "@agentclientprotocol/sdk"
  * Type-level test: This line will fail to compile if ACP.Agent
  * doesn't properly implement the ACPAgent interface.
  *
- * The SDK checks for methods like `agent.unstable_setSessionModel` at runtime
+ * The SDK checks for methods like `agent.setSessionConfigOption` at runtime
  * and throws "Method not found" if they're missing. TypeScript allows optional
  * interface methods to be omitted, but the SDK still expects them.
  *
@@ -34,11 +34,10 @@ describe("acp.agent interface compliance", () => {
     "loadSession",
     "setSessionMode",
     "authenticate",
-    // Unstable - SDK checks these with unstable_ prefix
-    "unstable_listSessions",
+    "listSessions",
     "unstable_forkSession",
-    "unstable_resumeSession",
-    "unstable_setSessionModel",
+    "resumeSession",
+    "setSessionConfigOption",
   ]
 
   test("Agent implements all SDK-checked methods", () => {
