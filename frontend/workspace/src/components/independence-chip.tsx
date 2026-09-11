@@ -25,7 +25,6 @@ export const IndependenceChip: Component<{
         <Kobalte.Trigger
           ref={trigger}
           type="button"
-          data-model-effort-chip
           data-independence-chip
           aria-label={`Independence: ${current().label}. Independence options`}
         >

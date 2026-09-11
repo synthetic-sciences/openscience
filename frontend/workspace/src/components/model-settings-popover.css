@@ -6,6 +6,7 @@
   [data-model-control-group],
   [data-model-settings-trigger],
   [data-model-effort-chip],
+  [data-independence-chip],
   [data-model-settings-popover]
 ) {
   --model-control-surface: var(--color-surface-solid);
@@ -78,7 +79,8 @@
   outline-offset: -2px;
 }
 
-[data-model-effort-chip] {
+[data-model-effort-chip],
+[data-independence-chip] {
   position: relative;
   min-height: 34px;
   display: inline-flex;
@@ -109,7 +111,8 @@
   content: "";
 }
 
-[data-model-effort-chip] strong {
+[data-model-effort-chip] strong,
+[data-independence-chip] strong {
   display: block;
   overflow: hidden;
   max-width: 116px;
@@ -136,18 +139,23 @@
 
 [data-model-effort-chip]:hover,
 [data-model-effort-chip]:focus-visible,
-[data-model-effort-chip][aria-expanded="true"] {
+[data-model-effort-chip][aria-expanded="true"],
+[data-independence-chip]:hover,
+[data-independence-chip]:focus-visible,
+[data-independence-chip][aria-expanded="true"] {
   background: var(--model-control-hover);
   color: var(--model-control-text);
 }
 
-[data-model-effort-chip]:focus-visible {
+[data-model-effort-chip]:focus-visible,
+[data-independence-chip]:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
 }
 
 [data-component="button"][data-variant="ghost"][data-model-settings-trigger-style="label"]:active:not(:disabled),
-[data-model-effort-chip]:active:not(:disabled) {
+[data-model-effort-chip]:active:not(:disabled),
+[data-independence-chip]:active:not(:disabled) {
   transform: scale(0.98);
 }
 
@@ -160,7 +168,8 @@
     min-height: 44px;
   }
 
-  [data-model-effort-chip] {
+  [data-model-effort-chip],
+  [data-independence-chip] {
     min-height: 44px;
   }
 }
@@ -826,9 +835,6 @@
 
 /* The Independence chip stands alone in its own group: no left divider, and
    its three descriptions may wrap, since each is a full sentence. */
-[data-independence-control] [data-model-effort-chip]::before {
-  display: none;
-}
 
 [data-independence-menu] .model-settings-setting small {
   white-space: normal;
