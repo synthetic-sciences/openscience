@@ -94,6 +94,7 @@ type Callbacks = {
   openFile?: (path: string) => void
   loadComputeJob?: Parameters<typeof data.DataProvider>[0]["onLoadComputeJob"]
   resolveFileReceipts?: Parameters<typeof data.DataProvider>[0]["onResolveFileReceipts"]
+  resendTurn?: Parameters<typeof data.DataProvider>[0]["onResendTurn"]
 }
 const mount = (view: () => JSX.Element, store: Store, callbacks: Callbacks = {}) => {
   const host = document.createElement("div")
@@ -109,6 +110,7 @@ const mount = (view: () => JSX.Element, store: Store, callbacks: Callbacks = {})
           onOpenFile: callbacks.openFile,
           onLoadComputeJob: callbacks.loadComputeJob,
           onResolveFileReceipts: callbacks.resolveFileReceipts,
+          onResendTurn: callbacks.resendTurn,
           get children() {
             return dialog.DialogProvider({
               get children() {
@@ -1205,6 +1207,49 @@ describe("timeout recovery", () => {
       },
     },
   }
+
+  test("offers to send the message again after a terminal timeout, through the host", async () => {
+    const message = assistant()
+    const sent: Array<{ sessionID: string; messageID: string }> = []
+    const [store] = reactive.createStore<Store>({
+      ...empty(),
+      message: { [sessionID]: [user, { ...message, error: timeout, time: { created: 2, completed: 3 } }] },
+      part: { [user.id]: [], [message.id]: [] },
+    })
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store, {
+      resendTurn: (input) => sent.push(input),
+    })
+    await ready(() => host.querySelector('[data-slot="session-turn-stop"] button') !== null)
+    const button = host.querySelector<HTMLButtonElement>('[data-slot="session-turn-stop"] button')!
+    expect(button.textContent).toBe("Send again")
+    button.click()
+    expect(sent).toEqual([{ sessionID, messageID: user.id }])
+  })
+
+  test("a stop the user asked for offers no resend", async () => {
+    const message = assistant()
+    const [store] = reactive.createStore<Store>({
+      ...empty(),
+      message: {
+        [sessionID]: [
+          user,
+          {
+            ...message,
+            error: { name: "MessageAbortedError", data: { message: "The operation was aborted." } },
+            time: { created: 2, completed: 3 },
+          },
+        ],
+      },
+      part: { [user.id]: [], [message.id]: [] },
+    })
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store, {
+      resendTurn: () => undefined,
+    })
+    await ready(() => host.querySelector('[data-component="session-turn"]') !== null)
+    await settle()
+    expect(host.querySelector('[data-slot="session-turn-stop"]')).toBeNull()
+    expect(host.querySelector('[data-slot="session-turn-stop-note"]')).toBeNull()
+  })
 
   test.each(["busy", "retry"] as const)(
     "keeps partial output and stops live indicators after a terminal timeout despite stale %s state",

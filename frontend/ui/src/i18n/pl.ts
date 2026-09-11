@@ -1,4 +1,5 @@
 export const dict = {
+  "ui.sessionTurn.sendAgain": "Wyślij ponownie",
   "ui.sessionTurn.steps.show": "Pokaż ślad wykonania",
   "ui.sessionTurn.steps.hide": "Ukryj ślad wykonania",
   "ui.lineComment.label.prefix": "Komentarz do ",
@@ -60,6 +61,7 @@ export const dict = {
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Zadania",
   "ui.tool.todos.read": "Czytaj zadania",
+  "ui.tool.question": "Pytanie",
   "ui.tool.questions": "Pytania",
   "ui.tool.agent": "Agent {{type}}",
   "ui.tool.websearch": "Wyszukiwanie w sieci",
@@ -134,6 +136,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} odpowiedzi",
   "ui.question.answer.none": "(brak odpowiedzi)",
   "ui.question.review.notAnswered": "(bez odpowiedzi)",
+  "ui.question.recommended": "Zalecane",
   "ui.question.multiHint": "(zaznacz wszystkie pasujące)",
   "ui.question.custom.placeholder": "Wpisz swoją odpowiedź...",
 }

@@ -1,4 +1,5 @@
 export const dict = {
+  "ui.sessionTurn.sendAgain": "再送信",
   "ui.sessionTurn.steps.show": "実行トレースを表示",
   "ui.sessionTurn.steps.hide": "実行トレースを非表示",
   "ui.lineComment.label.prefix": "",
@@ -60,6 +61,7 @@ export const dict = {
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Todo",
   "ui.tool.todos.read": "Todo読み込み",
+  "ui.tool.question": "質問",
   "ui.tool.questions": "質問",
   "ui.tool.agent": "{{type}}エージェント",
   "ui.tool.websearch": "Web検索",
@@ -134,6 +136,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}}件回答済み",
   "ui.question.answer.none": "(回答なし)",
   "ui.question.review.notAnswered": "(未回答)",
+  "ui.question.recommended": "推奨",
   "ui.question.multiHint": "(該当するものをすべて選択)",
   "ui.question.custom.placeholder": "回答を入力...",
 }

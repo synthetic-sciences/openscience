@@ -142,7 +142,7 @@ describe("provider activity watchdog", () => {
           providerID: "openrouter",
           baseURL: `${managedApiBase()}/api/llm/proxy/openrouter/v1`,
         }),
-      ).toBe(300_000)
+      ).toBe(600_000)
     } finally {
       process.env["OPENSCIENCE_API_BASE"] = base
     }

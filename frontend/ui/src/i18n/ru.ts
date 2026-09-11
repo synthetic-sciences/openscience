@@ -1,4 +1,5 @@
 export const dict = {
+  "ui.sessionTurn.sendAgain": "Отправить снова",
   "ui.sessionTurn.steps.show": "Показать трассировку выполнения",
   "ui.sessionTurn.steps.hide": "Скрыть трассировку выполнения",
   "ui.lineComment.label.prefix": "Комментарий к ",
@@ -60,6 +61,7 @@ export const dict = {
   "ui.tool.patch": "Патч",
   "ui.tool.todos": "Задачи",
   "ui.tool.todos.read": "Читать задачи",
+  "ui.tool.question": "Вопрос",
   "ui.tool.questions": "Вопросы",
   "ui.tool.agent": "Агент {{type}}",
   "ui.tool.websearch": "Веб-поиск",
@@ -134,6 +136,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} отвечено",
   "ui.question.answer.none": "(нет ответа)",
   "ui.question.review.notAnswered": "(не отвечено)",
+  "ui.question.recommended": "Рекомендуется",
   "ui.question.multiHint": "(выберите все подходящие)",
   "ui.question.custom.placeholder": "Введите ваш ответ...",
 }

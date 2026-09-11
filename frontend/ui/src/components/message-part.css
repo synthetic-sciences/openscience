@@ -1724,13 +1724,16 @@
   }
 }
 
+/* A question is a short form on the card's own surface: the question at the
+   prose level, choices as rows with a radio mark, the free-text choice as one
+   more row, and one real button to dismiss. Three type levels, no boxes in
+   boxes, and the same 4px rhythm as the rest of the trace. */
 [data-component="question-prompt"] {
   display: flex;
   flex-direction: column;
-  padding: 12px;
-  background-color: var(--surface-inset-base);
-  border-radius: 0 0 var(--radius-xs) var(--radius-xs);
-  gap: 12px;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border-weaker-base);
 
   [data-slot="question-tabs"] {
     display: flex;
@@ -1738,12 +1741,15 @@
     flex-wrap: wrap;
 
     [data-slot="question-tab"] {
-      padding: 4px 12px;
-      font-size: var(--font-size-medium);
-      border-radius: var(--radius-xs);
-      background-color: var(--surface-base);
-      color: var(--text-base);
-      border: none;
+      height: 24px;
+      padding: 0 10px;
+      font: inherit;
+      font-size: var(--font-size-small);
+      line-height: 18px;
+      border-radius: var(--radius-sm);
+      background-color: transparent;
+      color: var(--text-weak);
+      border: 0;
       cursor: pointer;
       transition:
         color 0.15s,
@@ -1753,12 +1759,18 @@
         background-color: var(--surface-base-hover);
       }
 
+      &[data-answered="true"] {
+        color: var(--text-strong);
+      }
+
       &[data-active="true"] {
+        color: var(--text-strong);
         background-color: var(--surface-raised-base);
       }
 
-      &[data-answered="true"] {
-        color: var(--text-strong);
+      &:focus-visible {
+        outline: 2px solid var(--border-selected);
+        outline-offset: -2px;
       }
     }
   }
@@ -1770,8 +1782,8 @@
 
     [data-slot="question-text"] {
       font-size: var(--font-size-base);
-      color: var(--text-base);
-      line-height: 1.5;
+      line-height: 21px;
+      color: var(--text-strong);
     }
 
     /* Credential requests: one hairline row that sends the user to the
@@ -1781,11 +1793,12 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 8px 12px;
+      padding: 6px 10px;
       border: 1px solid var(--border-weaker-base);
-      border-radius: var(--radius-xs);
+      border-radius: var(--radius-sm);
       color: var(--text-weak);
       font-size: var(--font-size-small);
+      line-height: 18px;
 
       button {
         flex: 0 0 auto;
@@ -1807,76 +1820,107 @@
   [data-slot="question-options"] {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
+    margin: 0 -8px;
 
     [data-slot="question-option"] {
       display: flex;
-      flex-direction: column;
       align-items: flex-start;
-      gap: 2px;
-      padding: 8px 12px;
-      background-color: var(--surface-base);
-      border: 1px solid var(--border-weaker-base);
-      border-radius: var(--radius-xs);
-      cursor: pointer;
-      text-align: left;
+      gap: 10px;
       width: 100%;
-      transition:
-        background-color 0.15s,
-        border-color 0.15s;
-      position: relative;
+      padding: 6px 8px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background-color: transparent;
+      color: var(--text-strong);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: background-color 0.15s;
 
       &:hover {
         background-color: var(--surface-base-hover);
-        border-color: var(--border-default);
       }
 
-      &[data-picked="true"] {
-        [data-component="icon"] {
-          position: absolute;
-          right: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: var(--text-strong);
-        }
+      &:focus-visible {
+        outline: 2px solid var(--border-selected);
+        outline-offset: -2px;
+      }
+
+      [data-slot="option-mark"] {
+        flex: 0 0 auto;
+        box-sizing: border-box;
+        width: 14px;
+        height: 14px;
+        margin-top: 3px;
+        border: 1.5px solid var(--border-default);
+        border-radius: 50%;
+        transition:
+          border-color 0.15s,
+          border-width 0.15s;
+      }
+
+      &[data-picked="true"] [data-slot="option-mark"] {
+        border-width: 4.5px;
+        border-color: var(--text-strong);
+      }
+
+      &[data-custom="true"] [data-slot="option-mark"] {
+        border-style: dashed;
+      }
+
+      [data-slot="option-copy"] {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
       }
 
       [data-slot="option-label"] {
-        font-size: var(--font-size-base);
-        color: var(--text-base);
-        font-weight: var(--font-weight-medium);
+        font-size: var(--font-size-medium);
+        line-height: 20px;
+        color: var(--text-strong);
+      }
+
+      [data-slot="option-tag"] {
+        margin-left: 8px;
+        font-size: var(--font-size-small);
+        line-height: 18px;
+        color: var(--text-weak);
       }
 
       [data-slot="option-description"] {
         font-size: var(--font-size-small);
+        line-height: 18px;
         color: var(--text-weak);
       }
+    }
+
+    &[data-multiple="true"] [data-slot="option-mark"] {
+      border-radius: var(--radius-xs);
     }
 
     [data-slot="custom-input-form"] {
       display: flex;
       gap: 8px;
-      padding: 8px 0;
-      align-items: stretch;
+      align-items: center;
+      padding: 4px 8px 2px 32px;
 
       [data-slot="custom-input"] {
         flex: 1;
-        padding: 8px 12px;
-        font-size: var(--font-size-base);
+        height: 28px;
+        padding: 0 10px;
+        font: inherit;
+        font-size: var(--font-size-medium);
+        line-height: 20px;
         border: 1px solid var(--border-default);
-        border-radius: var(--radius-xs);
+        border-radius: var(--radius-sm);
         background-color: var(--surface-base);
-        color: var(--text-base);
+        color: var(--text-strong);
         outline: none;
 
-        /* This field frames itself — the border and radius above ARE the frame
-           — so it takes the lit frame, not the halo the app-wide rule hands
-           fields whose border box is just the glyphs (atlas.css). That rule is
-           !important, so out-specifying it is not enough; matching its weight
-           is the only way the treatment declared here reaches the screen at
-           all. Outline included: text inputs match :focus-visible on mouse
-           focus too, and without this the halo's offset ring survives on top
-           of the frame, at a different radius. */
+        /* This field frames itself, so it takes the lit frame rather than the
+           app-wide halo, which is declared !important and must be matched. */
         &:focus {
           border-color: var(--focus-lit-ring);
           outline: none !important;
@@ -1887,17 +1931,13 @@
           color: var(--text-weak);
         }
       }
-
-      [data-component="button"] {
-        height: auto;
-      }
     }
   }
 
   [data-slot="question-review"] {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
 
     [data-slot="review-title"] {
       display: none;
@@ -1906,8 +1946,9 @@
     [data-slot="review-item"] {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 1px;
       font-size: var(--font-size-medium);
+      line-height: 20px;
 
       [data-slot="review-label"] {
         color: var(--text-weak);
@@ -1926,8 +1967,8 @@
   [data-slot="question-actions"] {
     display: flex;
     align-items: center;
-    gap: 8px;
     justify-content: flex-end;
+    gap: 8px;
   }
 }
 

@@ -549,13 +549,12 @@ export function createContextState(options: { storage?: ContextStorage } = {}) {
       update({ ...current(), artifactPaneTab: tab })
     },
     prefill: () => transient().prefill,
-    setPrefill(prefill: string | undefined) {
-      updateTransient({ ...transient(), prefill })
+    /** One write for text and send flag: the composer's prefill effect runs on
+     * the first, so two writes would send with the stale flag. */
+    setPrefill(prefill: string | undefined, send = false) {
+      updateTransient({ ...transient(), prefill, send })
     },
     prefillSend: () => transient().send,
-    setPrefillSend(send: boolean) {
-      updateTransient({ ...transient(), send })
-    },
   }
 }
 
@@ -610,5 +609,4 @@ export const uiStore = {
   prefill: state.prefill,
   setPrefill: state.setPrefill,
   prefillSend: state.prefillSend,
-  setPrefillSend: state.setPrefillSend,
 }

@@ -552,8 +552,16 @@
       margin-top: 2px;
     }
 
-    > [data-slot="session-turn-stop-note"] {
-      margin: 8px 0 0;
+    > [data-slot="session-turn-stop"] {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    > [data-slot="session-turn-stop"] [data-slot="session-turn-stop-note"] {
+      margin: 0;
       color: var(--text-weaker);
       font-size: var(--font-size-medium);
       line-height: 20px;
@@ -857,6 +865,11 @@
 
     [data-slot="session-state-message"] {
       overflow-wrap: anywhere;
+    }
+
+    [data-slot="session-state-actions"] {
+      display: flex;
+      justify-content: flex-end;
     }
   }
 
