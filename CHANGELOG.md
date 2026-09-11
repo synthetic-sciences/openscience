@@ -18,6 +18,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   address has no working network route, without replaying writes or certificate failures.
 - Consecutive reasoning fragments share one expandable trace row, completed tool
   groups stay compact during long runs, and patch summaries count actual files.
+  Image tools no longer claim a connected account when no provider was selected,
+  or a generated file while the request is still running.
 - Desktop updates allow time for multiple project runtimes to stop, preserve
   disposal errors, and prevent polling from recreating disposed projects. Completed
   onboarding survives updates, including older setup revisions.

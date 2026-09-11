@@ -49,8 +49,8 @@ export namespace PermissionNext {
     "research_contract",
     "task",
     "todowrite",
-    // Public retrieval is brokered separately: Network still authorizes every
-    // destination and redirect, including the connected science databases.
+    // Retrieval uses the network broker or connected search providers;
+    // the network permission still governs new fetch destinations and redirects.
     "webfetch",
     "websearch",
   ])

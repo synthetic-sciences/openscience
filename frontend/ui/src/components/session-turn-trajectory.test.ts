@@ -144,6 +144,44 @@ afterEach(() => {
 })
 afterAll(() => vite.close())
 
+describe("image generation receipts", () => {
+  test("an unavailable image provider never claims a connected OpenRouter account", () => {
+    const part: ToolPart = {
+      ...read("prt_image_unavailable", "figure.png", 1000),
+      tool: "generate_image",
+      state: {
+        status: "error",
+        input: { prompt: "Scientific diagram", output_path: "figure.png" },
+        error: "Connect a Gemini or OpenRouter account to generate images.",
+        time: { start: 1000, end: 1100 },
+      },
+    }
+    const host = mount(() => parts.Part({ part, message: assistant(1200) }), empty())
+    expect(host.textContent).toContain("Image generation failed")
+    expect(host.textContent).not.toContain("Connected OpenRouter account")
+    expect(host.textContent).not.toContain("Generated image")
+  })
+
+  test("an image in progress does not claim to have generated a file", () => {
+    const part: ToolPart = {
+      ...read("prt_image_running", "figure.png", 1000),
+      tool: "generate_image",
+      state: {
+        status: "running",
+        input: { prompt: "Scientific diagram", output_path: "figure.png" },
+        title: "Scientific diagram",
+        metadata: { route: "gemini" },
+        time: { start: 1000 },
+      },
+    }
+    const host = mount(() => parts.Part({ part, message: assistant() }), empty())
+    expect(host.textContent).toContain("Generating image")
+    expect(host.textContent).toContain("Connected Gemini account")
+    expect(host.textContent).not.toContain("Generated image")
+    expect(host.querySelector('[data-component="generated-image-preview"]')).toBeNull()
+  })
+})
+
 describe("reasoning rows", () => {
   const reasoning = (id: string, time: ReasoningPart["time"]): ReasoningPart => ({
     id,

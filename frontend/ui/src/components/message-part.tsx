@@ -1260,7 +1260,11 @@ ToolRegistry.register({
     const data = useData()
     const dialog = useDialog()
     const route = () =>
-      props.metadata.route === "gemini" ? "Connected Gemini account" : "Connected OpenRouter account"
+      props.metadata.route === "gemini"
+        ? "Connected Gemini account"
+        : props.metadata.route === "openrouter"
+          ? "Connected OpenRouter account"
+          : undefined
     const filepath = () =>
       typeof props.metadata.filepath === "string"
         ? props.metadata.filepath
@@ -1289,7 +1293,12 @@ ToolRegistry.register({
         icon="photo"
         defaultOpen={true}
         trigger={{
-          title: props.status === "error" ? "Image generation failed" : "Generated image",
+          title:
+            props.status === "error"
+              ? "Image generation failed"
+              : props.status === "completed"
+                ? "Generated image"
+                : "Generating image",
           subtitle: props.title || props.input.output_path || "generated-image.png",
           args: [props.metadata.model || props.input.model, route()].filter((value): value is string => !!value),
         }}
