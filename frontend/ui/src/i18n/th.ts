@@ -1,4 +1,5 @@
 export const dict = {
+  "ui.sessionTurn.sendAgain": "ส่งอีกครั้ง",
   "ui.sessionTurn.steps.show": "แสดงร่องรอยการทำงาน",
   "ui.sessionTurn.steps.hide": "ซ่อนร่องรอยการทำงาน",
   "ui.lineComment.label.prefix": "แสดงความคิดเห็นบน ",
@@ -61,6 +62,7 @@ export const dict = {
   "ui.tool.patch": "แพตช์",
   "ui.tool.todos": "รายการงาน",
   "ui.tool.todos.read": "อ่านรายการงาน",
+  "ui.tool.question": "คำถาม",
   "ui.tool.questions": "คำถาม",
   "ui.tool.agent": "เอเจนต์ {{type}}",
   "ui.tool.websearch": "ค้นหาเว็บ",
@@ -135,6 +137,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} ตอบแล้ว",
   "ui.question.answer.none": "(ไม่มีคำตอบ)",
   "ui.question.review.notAnswered": "(ไม่ได้ตอบ)",
+  "ui.question.recommended": "แนะนำ",
   "ui.question.multiHint": "(เลือกทั้งหมดที่ใช้)",
   "ui.question.custom.placeholder": "พิมพ์คำตอบของคุณ...",
 }

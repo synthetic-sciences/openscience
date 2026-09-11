@@ -390,6 +390,98 @@ const loadDiffs = retryable(() =>
   }),
 )
 
+type Highlighter = Awaited<ReturnType<DiffsModule["getSharedHighlighter"]>>
+
+/**
+ * A streaming response is reparsed about thirty times a second, and every
+ * parse used to re-highlight every code block. Highlighting is the expensive
+ * step (a 30 KB Python block costs ~25 ms), so finished blocks are served from
+ * this bounded cache and only the block still being written pays each tick.
+ */
+const highlighted = new Map<string, string>()
+// Highlighted HTML runs to roughly ten times its source, so the bound is on
+// characters held, not entries: a few megabytes covers a long session's
+// finished blocks without growing with the transcript.
+const HIGHLIGHT_CACHE_CHARS = 4_000_000
+const cacheSize = { chars: 0 }
+
+async function highlightBlock(highlighter: Highlighter, code: string, lang: string): Promise<string> {
+  const key = `${lang}\u0000${code}`
+  const hit = highlighted.get(key)
+  if (hit !== undefined) {
+    highlighted.delete(key)
+    highlighted.set(key, hit)
+    return hit
+  }
+  if (!highlighter.getLoadedLanguages().includes(lang)) {
+    await highlighter.loadLanguage(lang as BundledLanguage)
+  }
+  const html = highlighter.codeToHtml(code, { lang, theme: "OpenScience", tabindex: false })
+  highlighted.set(key, html)
+  cacheSize.chars += key.length + html.length
+  for (const [oldest, value] of highlighted) {
+    if (cacheSize.chars <= HIGHLIGHT_CACHE_CHARS || oldest === key) break
+    highlighted.delete(oldest)
+    cacheSize.chars -= oldest.length + value.length
+  }
+  return html
+}
+
+/**
+ * The unterminated fenced block a streaming response currently ends inside:
+ * where its info string sits and the code written so far. Follows the
+ * CommonMark fence rules (three or more backticks or tildes, up to three
+ * spaces of indent, closed only by the same character at the same or greater
+ * length, and a backtick fence's info string may not contain a backtick).
+ */
+export function openFence(markdown: string): { info: { start: number; end: number }; code: string } | undefined {
+  let open: { char: string; length: number; infoStart: number; infoEnd: number; codeStart: number } | undefined
+  let offset = 0
+  for (const line of markdown.split("\n")) {
+    const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line)
+    if (match) {
+      const fence = match[1]
+      const char = fence[0]
+      if (!open) {
+        if (!(char === "`" && match[2].includes("`"))) {
+          const infoStart = offset + line.indexOf(fence) + fence.length
+          open = {
+            char,
+            length: fence.length,
+            infoStart,
+            infoEnd: offset + line.length,
+            codeStart: offset + line.length + 1,
+          }
+        }
+      } else if (char === open.char && fence.length >= open.length && match[2].trim() === "") {
+        open = undefined
+      }
+    }
+    offset += line.length + 1
+  }
+  if (!open) return
+  return {
+    info: { start: open.infoStart, end: open.infoEnd },
+    code: markdown.slice(Math.min(open.codeStart, markdown.length)),
+  }
+}
+
+/** Above this size, the block still being streamed is rendered as plain text
+ * until its fence closes; grammar highlighting then lands once. Plain-text
+ * tokenization of a 30 KB block costs ~2 ms against ~25 ms for Python. */
+export const LIVE_HIGHLIGHT_LIMIT = 2_000
+
+/**
+ * Rewrite the info string of a long, still-open fenced block to `text`, so the
+ * thirty-per-second reparse of a streaming response does not re-tokenize a
+ * growing script with a full grammar on every tick.
+ */
+export function plainStreamingFence(markdown: string): string {
+  const fence = openFence(markdown)
+  if (!fence || fence.code.length <= LIVE_HIGHLIGHT_LIMIT) return markdown
+  return `${markdown.slice(0, fence.info.start)}text${markdown.slice(fence.info.end)}`
+}
+
 async function highlightCodeBlocks(html: string): Promise<string> {
   const codeBlockRegex = /<pre><code(?:\s+class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g
   const matches = [...html.matchAll(codeBlockRegex)]
@@ -402,21 +494,9 @@ async function highlightCodeBlocks(html: string): Promise<string> {
   for (const match of matches) {
     const [fullMatch, lang, escapedCode] = match
     const code = decodeCodeBlockEntities(escapedCode)
-
-    let language = lang || "text"
-    if (!(language in bundledLanguages)) {
-      language = "text"
-    }
-    if (!highlighter.getLoadedLanguages().includes(language)) {
-      await highlighter.loadLanguage(language as BundledLanguage)
-    }
-
-    const highlighted = highlighter.codeToHtml(code, {
-      lang: language,
-      theme: "OpenScience",
-      tabindex: false,
-    })
-    result = result.replace(fullMatch, () => highlighted)
+    const language = lang && lang in bundledLanguages ? lang : "text"
+    const block = await highlightBlock(highlighter, code, language)
+    result = result.replace(fullMatch, () => block)
   }
 
   return result
@@ -492,19 +572,14 @@ const loadJsParser = retryable(async () => {
       async highlight(code, lang) {
         const diffs = await loadDiffs()
         const highlighter = await diffs.getSharedHighlighter({ themes: ["OpenScience"], langs: [] })
-        if (!(lang in bundledLanguages)) {
-          lang = "text"
-        }
-        if (!highlighter.getLoadedLanguages().includes(lang)) {
-          await highlighter.loadLanguage(lang as BundledLanguage)
-        }
-        return highlighter.codeToHtml(code, { lang: lang || "text", theme: "OpenScience", tabindex: false })
+        return highlightBlock(highlighter, code, lang && lang in bundledLanguages ? lang : "text")
       },
     }),
   )
 })
 
-export async function parseMarkdown(markdown: string, nativeParser?: NativeMarkdownParser): Promise<string> {
+export async function parseMarkdown(input: string, nativeParser?: NativeMarkdownParser): Promise<string> {
+  const markdown = plainStreamingFence(input)
   // Native parsers may consume TeX backslashes as Markdown escapes. Parse math
   // from the original source; never substitute equations into arbitrary HTML.
   if (nativeParser && !/\$|\\[([]/.test(markdown)) return highlightCodeBlocks(await nativeParser(markdown))

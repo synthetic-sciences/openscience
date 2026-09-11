@@ -20,6 +20,25 @@ const base = {
   metadata: () => {},
 }
 
+test("write receipts count actual added and removed lines for new files and overwrites", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const target = path.join(tmp.path, "paper.txt")
+      const tool = await WriteTool.init()
+      const ctx = { ...base, ask: async () => {} }
+      const created = await tool.execute({ filePath: target, content: "Title\nFirst claim\nSecond claim\n" }, ctx)
+      expect(created.metadata.filediff).toEqual({ file: target, additions: 3, deletions: 0 })
+      const revised = await tool.execute({ filePath: target, content: "Title\nVerified claim\n" }, ctx)
+      expect(revised.metadata.filediff).toEqual({ file: target, additions: 1, deletions: 2 })
+      const unchanged = await tool.execute({ filePath: target, content: "Title\nVerified claim\n" }, ctx)
+      expect(unchanged.metadata.filediff).toEqual({ file: target, additions: 0, deletions: 0 })
+      expect(await Bun.file(target).text()).toBe("Title\nVerified claim\n")
+    },
+  })
+})
+
 test("write refuses a target swapped to a symlink during approval", async () => {
   if (process.platform === "win32") return
   await using outside = await tmpdir({ init: (dir) => Bun.write(path.join(dir, "secret.txt"), "secret\n") })

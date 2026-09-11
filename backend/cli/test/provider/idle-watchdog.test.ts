@@ -142,6 +142,17 @@ describe("provider activity watchdog", () => {
           providerID: "openrouter",
           baseURL: `${managedApiBase()}/api/llm/proxy/openrouter/v1`,
         }),
+      ).toBe(600_000)
+      // The gateway holds headers until the upstream body starts, so a silent
+      // think lands in the header wait; it gets the same allowance.
+      expect(
+        Provider.defaultConnectTimeout({
+          providerID: "openrouter",
+          baseURL: `${managedApiBase()}/api/llm/proxy/openrouter/v1`,
+        }),
+      ).toBe(600_000)
+      expect(
+        Provider.defaultConnectTimeout({ providerID: "openrouter", baseURL: "https://openrouter.ai/api/v1" }),
       ).toBe(300_000)
     } finally {
       process.env["OPENSCIENCE_API_BASE"] = base

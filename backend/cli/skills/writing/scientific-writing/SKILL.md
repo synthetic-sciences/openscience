@@ -36,13 +36,14 @@ count. Preserve an existing manuscript's figures during formatting or citation-o
 replace a figure only when the user requests it, the target venue requires it, or a specific concept
 is materially clearer as a visual.
 
-When creating or replacing a technical figure, first load the `scientific-schematics` skill and call
-the native `generate_image` tool for its Nano Banana Pro generation. Do not claim AI figure generation
-after drawing a substitute with a generic plotting or shell tool. Use the `generate-image` skill for
-non-technical illustrations; it uses the same native user-owned provider route.
+When creating or replacing a technical figure, load the `scientific-schematics` skill. Use editable
+vector drawings for precise technical structure and plotting tools for measured data. Use native
+`generate_image` when illustration or the user's request calls for generated imagery. Describe the
+method actually used; a local drawing is not an AI-generated image. An unavailable optional image
+provider must not stall an otherwise authorized paper or figure task.
 
 **Use scientific-schematics for technical diagrams:**
-Call `generate_image` with a technical prompt and `output_path: "figures/output.png"`.
+Choose the medium that keeps the following structures accurate and legible at publication size.
 
 - Study design and methodology flowcharts (CONSORT, PRISMA, STROBE)
 - Conceptual framework diagrams
@@ -67,11 +68,10 @@ Call `generate_image` with an illustrative prompt and `output_path: "figures/out
 - Product mockups, prototype visualizations
 - Any requested illustration that enhances understanding or engagement
 
-The AI will automatically:
-- Create publication-quality images with proper formatting
-- Review and refine through multiple iterations
-- Ensure accessibility (colorblind-friendly, high contrast)
-- Save outputs in the figures/ directory
+Inspect every final figure and the rendered manuscript pages that contain it. Check exact labels,
+relationships, legends, overlap, clipping, grayscale readability, and text size. Re-render after
+fixes. Successful compilation, automated bounding-box checks, and a provider's output alone do not
+establish publication quality. Save editable sources alongside the accepted figures.
 
 For detailed guidance, refer to the scientific-schematics and generate-image skill documentation.
 

@@ -67,6 +67,7 @@ import {
   taskOutcome,
   taskPhase,
   toolOutcome,
+  toolChanges,
   toolSummary,
 } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
@@ -200,11 +201,12 @@ export type ToolInfo = {
   subtitle?: string
 }
 
-/** A row reads as what happened: "Ran", "Read", "Searched". While the call is
- * still in flight it reads as what is happening. */
+/** A row reads as what happened: "Ran", "Read", "Searched". While the call
+ * executes it reads as what is happening. A pending call is still being
+ * written by the model, so it keeps the noun: nothing is being read or run
+ * yet, and the row's state glyph says "Preparing". */
 function toolVerb(i18n: ReturnType<typeof useI18n>, tool: string, status: string | undefined, done: UiI18nKey) {
-  const live = status === "running" || status === "pending"
-  const key = live ? runningLabel(tool) : undefined
+  const key = status === "running" ? runningLabel(tool) : undefined
   return i18n.t(key ?? done)
 }
 
@@ -1061,7 +1063,13 @@ ToolRegistry.register({
   name: "skill",
   render(props) {
     const activity = () =>
-      skillActivity({ metadata: props.metadata, input: props.input, title: props.title, status: props.status })
+      skillActivity({
+        metadata: props.metadata,
+        input: props.input,
+        title: props.title,
+        status: props.status,
+        error: props.error,
+      })
     return (
       <BasicTool {...props} icon="mcp" trigger={{ title: activity().title, subtitle: activity().subtitle }}>
         <Show when={loadedSkillName(props)}>
@@ -1253,7 +1261,11 @@ ToolRegistry.register({
     const data = useData()
     const dialog = useDialog()
     const route = () =>
-      props.metadata.route === "gemini" ? "Connected Gemini account" : "Connected OpenRouter account"
+      props.metadata.route === "gemini"
+        ? "Connected Gemini account"
+        : props.metadata.route === "openrouter"
+          ? "Connected OpenRouter account"
+          : undefined
     const filepath = () =>
       typeof props.metadata.filepath === "string"
         ? props.metadata.filepath
@@ -1282,7 +1294,12 @@ ToolRegistry.register({
         icon="photo"
         defaultOpen={true}
         trigger={{
-          title: props.status === "error" ? "Image generation failed" : "Generated image",
+          title:
+            props.status === "error"
+              ? "Image generation failed"
+              : props.status === "completed"
+                ? "Generated image"
+                : "Generating image",
           subtitle: props.title || props.input.output_path || "generated-image.png",
           args: [props.metadata.model || props.input.model, route()].filter((value): value is string => !!value),
         }}
@@ -1798,9 +1815,7 @@ ToolRegistry.register({
                 </Show>
               </div>
               <div data-slot="message-part-actions">
-                <Show when={props.metadata.filediff}>
-                  <DiffChanges changes={props.metadata.filediff} />
-                </Show>
+                <Show when={toolChanges(props)}>{(changes) => <DiffChanges changes={changes()} />}</Show>
               </div>
             </div>
           }
@@ -1869,7 +1884,9 @@ ToolRegistry.register({
                   </div>
                 </Show>
               </div>
-              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
+              <div data-slot="message-part-actions">
+                <Show when={toolChanges(props)}>{(changes) => <DiffChanges changes={changes()} />}</Show>
+              </div>
             </div>
           }
         >
@@ -1929,6 +1946,7 @@ ToolRegistry.register({
           trigger={{
             title: toolVerb(i18n, "apply_patch", props.status, "ui.tool.patch"),
             subtitle: subtitle(),
+            action: <Show when={toolChanges(props)}>{(changes) => <DiffChanges changes={changes()} />}</Show>,
           }}
         >
           <Show when={files().length > 0}>
@@ -2069,11 +2087,17 @@ ToolRegistry.register({
     const answers = createMemo(() => (props.metadata.answers ?? []) as QuestionAnswer[])
     const completed = createMemo(() => answers().length > 0)
 
+    // One question reads as "Question · <its header>"; several read as
+    // "Questions · 3 questions". Answered, the count of answers follows.
+    const title = createMemo(() =>
+      questions().length === 1 ? i18n.t("ui.tool.question") : i18n.t("ui.tool.questions"),
+    )
     const subtitle = createMemo(() => {
       const count = questions().length
       if (count === 0) return ""
       if (completed()) return i18n.t("ui.question.subtitle.answered", { count })
-      return `${count} ${i18n.t(count > 1 ? "ui.common.question.other" : "ui.common.question.one")}`
+      if (count === 1) return questions()[0]?.header ?? ""
+      return `${count} ${i18n.t("ui.common.question.other")}`
     })
 
     return (
@@ -2082,7 +2106,7 @@ ToolRegistry.register({
         defaultOpen={completed()}
         icon="bubble-5"
         trigger={{
-          title: i18n.t("ui.tool.questions"),
+          title: title(),
           subtitle: subtitle(),
         }}
       >
@@ -2405,35 +2429,59 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               </button>
             </div>
           </Show>
-          <div data-slot="question-options">
+          <div
+            data-slot="question-options"
+            role={multi() ? "group" : "radiogroup"}
+            data-multiple={multi() ? "true" : undefined}
+          >
             <For each={options()}>
               {(opt, i) => {
                 const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+                // The model marks its recommendation in the label itself; show
+                // it as a quiet tag and keep the full label as the answer.
+                const recommended = () => /\s*\(recommended\)\s*$/i.test(opt.label)
+                const shown = () => opt.label.replace(/\s*\(recommended\)\s*$/i, "")
                 return (
-                  <button data-slot="question-option" data-picked={picked()} onClick={() => selectOption(i())}>
-                    <span data-slot="option-label">{opt.label}</span>
-                    <Show when={opt.description}>
-                      <span data-slot="option-description">{opt.description}</span>
-                    </Show>
-                    <Show when={picked()}>
-                      <Icon name="check-small" size="normal" />
-                    </Show>
+                  <button
+                    type="button"
+                    data-slot="question-option"
+                    data-picked={picked()}
+                    role={multi() ? "checkbox" : "radio"}
+                    aria-checked={picked()}
+                    onClick={() => selectOption(i())}
+                  >
+                    <span data-slot="option-mark" aria-hidden="true" />
+                    <span data-slot="option-copy">
+                      <span data-slot="option-label">
+                        {shown()}
+                        <Show when={recommended()}>
+                          <span data-slot="option-tag">{i18n.t("ui.question.recommended")}</span>
+                        </Show>
+                      </span>
+                      <Show when={opt.description}>
+                        <span data-slot="option-description">{opt.description}</span>
+                      </Show>
+                    </span>
                   </button>
                 )
               }}
             </For>
             <button
+              type="button"
               data-slot="question-option"
+              data-custom="true"
               data-picked={customPicked()}
+              role={multi() ? "checkbox" : "radio"}
+              aria-checked={customPicked()}
               onClick={() => selectOption(options().length)}
             >
-              <span data-slot="option-label">{i18n.t("ui.messagePart.option.typeOwnAnswer")}</span>
-              <Show when={!store.editing && input()}>
-                <span data-slot="option-description">{input()}</span>
-              </Show>
-              <Show when={customPicked()}>
-                <Icon name="check-small" size="normal" />
-              </Show>
+              <span data-slot="option-mark" aria-hidden="true" />
+              <span data-slot="option-copy">
+                <span data-slot="option-label">{i18n.t("ui.messagePart.option.typeOwnAnswer")}</span>
+                <Show when={!store.editing && input()}>
+                  <span data-slot="option-description">{input()}</span>
+                </Show>
+              </span>
             </button>
             <Show when={store.editing}>
               <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
@@ -2482,7 +2530,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       </Show>
 
       <div data-slot="question-actions">
-        <Button variant="ghost" size="small" onClick={reject}>
+        <Button variant="secondary" size="small" onClick={reject}>
           {i18n.t("ui.common.dismiss")}
         </Button>
         <Show when={!single()}>

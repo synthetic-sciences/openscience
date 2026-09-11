@@ -90,6 +90,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     onResolveFileReceipts?: (sessionID: string, paths: readonly string[]) => Promise<string[]>
     /** Open the host's credential settings; question cards that ask for a login offer it. */
     onOpenCredentials?: () => void
+    /** Send a turn's user message again as a new request, after a provider stopped answering. */
+    onResendTurn?: (input: { sessionID: string; messageID: string }) => void
   }) => {
     return {
       get store() {
@@ -108,6 +110,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       loadComputeJob: props.onLoadComputeJob,
       resolveFileReceipts: props.onResolveFileReceipts,
       openCredentials: props.onOpenCredentials,
+      resendTurn: props.onResendTurn,
     }
   },
 })

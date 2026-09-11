@@ -1,4 +1,5 @@
 export const dict = {
+  "ui.sessionTurn.sendAgain": "إعادة الإرسال",
   "ui.sessionTurn.steps.show": "إظهار سجل التنفيذ",
   "ui.sessionTurn.steps.hide": "إخفاء سجل التنفيذ",
   "ui.lineComment.label.prefix": "تعليق على ",
@@ -60,6 +61,7 @@ export const dict = {
   "ui.tool.patch": "تصحيح",
   "ui.tool.todos": "المهام",
   "ui.tool.todos.read": "قراءة المهام",
+  "ui.tool.question": "سؤال",
   "ui.tool.questions": "أسئلة",
   "ui.tool.agent": "وكيل {{type}}",
   "ui.tool.websearch": "بحث الويب",
@@ -134,6 +136,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} أجيب",
   "ui.question.answer.none": "(لا توجد إجابة)",
   "ui.question.review.notAnswered": "(لم يتم الرد)",
+  "ui.question.recommended": "موصى به",
   "ui.question.multiHint": "(حدد كل ما ينطبق)",
   "ui.question.custom.placeholder": "اكتب إجابتك...",
 }

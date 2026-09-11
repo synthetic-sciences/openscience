@@ -554,6 +554,10 @@ function isTextualMime(mime: string) {
     mime === "application/xml" ||
     mime.endsWith("+xml") ||
     mime === "application/xhtml+xml" ||
+    mime === "application/x-bibtex" ||
+    mime === "application/bibtex" ||
+    mime === "application/x-research-info-systems" ||
+    mime === "application/ris" ||
     mime === "application/javascript" ||
     mime === "application/x-javascript"
   )

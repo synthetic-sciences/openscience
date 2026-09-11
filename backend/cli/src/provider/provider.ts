@@ -71,10 +71,19 @@ export namespace Provider {
   // from a remote endpoint is a dead connection, not a thinking model; the
   // earlier half-hour turned one hung stream into a 45-minute worker failure.
   export const DEFAULT_REMOTE_IDLE_TIMEOUT_MS = 600_000
-  // The managed gateway and OpenRouter keep a live stream ticking with
-  // keepalive comments and streamed private reasoning, so five silent minutes
-  // there is a connection that died without closing.
-  export const DEFAULT_MANAGED_IDLE_TIMEOUT_MS = 300_000
+  // The managed gateway does not send keepalives while an upstream model
+  // thinks: healthy requests have gone 133 s from response headers to the
+  // first body byte. A dead connection and a long think are indistinguishable
+  // at the byte level, so this deadline trades the two: ten minutes bounds a
+  // hang without cutting off deep reasoning. (Gateway keepalives would let it
+  // drop to a couple of minutes.)
+  export const DEFAULT_MANAGED_IDLE_TIMEOUT_MS = 600_000
+  // The managed gateway also holds its response headers until the upstream
+  // body begins: one healthy request reported upstream headers at 3.1 s in
+  // its Server-Timing while the client saw them at 133 s, with the first body
+  // byte 420 ms later. A silent think therefore lands in the header wait, so
+  // that wait needs the same allowance as the body deadline.
+  export const DEFAULT_MANAGED_CONNECT_TIMEOUT_MS = 600_000
   export const DEFAULT_OUTPUT_IDLE_TIMEOUT_MS = false
 
   export type RequestContext = {
@@ -1216,7 +1225,8 @@ export namespace Provider {
   }
 
   export function defaultConnectTimeout(input: { providerID: string; baseURL?: unknown }): number | false {
-    return localEndpoint(input) ? false : DEFAULT_CONNECT_TIMEOUT_MS
+    if (localEndpoint(input)) return false
+    return isAtlasProxyBaseURL(input.baseURL) ? DEFAULT_MANAGED_CONNECT_TIMEOUT_MS : DEFAULT_CONNECT_TIMEOUT_MS
   }
 
   export function defaultIdleTimeout(input: { providerID: string; baseURL?: unknown }): number | false {

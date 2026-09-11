@@ -19,6 +19,54 @@ import z from "zod"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { tmpdir } from "../fixture/fixture"
+import { Agent } from "../../src/agent/agent"
+import { PermissionNext } from "../../src/permission/next"
+import { ProjectAccess } from "../../src/project/access"
+
+test.each(["approve", "full"] as const)(
+  "%s retrieves an allowed source without any user reply, including Explore workers",
+  async (mode) => {
+    await Network.set({ allowlistEnabled: true, enabled: [], custom: ["example.com"] })
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response("<h1>Verified source</h1>", { headers: { "content-type": "text/html" } }),
+    })
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) =>
+      realFetch(server.url, init)) as typeof fetch
+    try {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await ProjectAccess.update(Instance.project, { mode, root: Instance.project.worktree })
+          const session = await Session.create({})
+          for (const name of ["research", "explore"]) {
+            const agent = await Agent.get(name)
+            const signal = AbortSignal.timeout(2_000)
+            const ctx = {
+              ...context(async (request) => {
+                await PermissionNext.ask(
+                  { ...request, sessionID: session.id, mode, ruleset: agent!.permission },
+                  signal,
+                )
+              }),
+              sessionID: session.id,
+              abort: signal,
+            }
+            const result = await (
+              await WebFetchTool.init()
+            ).execute({ url: "https://example.com/paper", format: "markdown" }, ctx)
+            expect(result.output).toContain("Verified source")
+            expect(await PermissionNext.list()).toEqual([])
+          }
+        },
+      })
+    } finally {
+      await server.stop(true)
+    }
+  },
+)
 
 const realFetch = globalThis.fetch
 
@@ -93,6 +141,45 @@ test("webfetch schema teaches the root-download then sandboxed-move sequence", a
   expect(schema.properties?.declared_size_bytes).toBeUndefined()
   expect(schema.properties?.declared_size_evidence_call_id).toBeUndefined()
 })
+
+test.each(["application/x-bibtex", "application/bibtex", "application/x-research-info-systems", "application/ris"])(
+  "webfetch reads %s citation exports inline instead of creating an unrequested file",
+  async (mime) => {
+    await Network.set({ allowlistEnabled: true, enabled: [], custom: ["example.com"] })
+    const citation = mime.includes("bibtex")
+      ? "@article{example, title={Verified source}, year={2026}}\n"
+      : "TY  - JOUR\nTI  - Verified source\nPY  - 2026\nER  -\n"
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () =>
+        new Response(citation, {
+          headers: {
+            "content-type": `${mime}; charset=utf-8`,
+            "content-disposition": "attachment; filename=reference.bib",
+          },
+        }),
+    })
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) =>
+      realFetch(server.url, init)) as typeof fetch
+    try {
+      const requests: string[] = []
+      const result = await (
+        await WebFetchTool.init()
+      ).execute(
+        { url: "https://example.com/export", format: "text" },
+        context(async (request) => {
+          requests.push(request.permission)
+        }),
+      )
+      expect(result.output).toBe(citation)
+      expect(result.metadata).not.toHaveProperty("download")
+      expect(requests).toEqual(["webfetch"])
+    } finally {
+      await server.stop(true)
+    }
+  },
+)
 
 test("webfetch reads HTML inline over HTTP and distinguishes raw page downloads from disguised PDFs", async () => {
   await Network.set({ allowlistEnabled: false, enabled: [], custom: [] })

@@ -198,7 +198,7 @@ type ModelPopoverSurfaceProps = {
   children: JSX.Element
 }
 
-const ModelPopoverSurface: Component<ModelPopoverSurfaceProps> = (props) => {
+export const ModelPopoverSurface: Component<ModelPopoverSurfaceProps> = (props) => {
   let content: HTMLElement | undefined
 
   return (

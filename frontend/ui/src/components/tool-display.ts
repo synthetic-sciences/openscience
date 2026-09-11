@@ -597,6 +597,34 @@ export function writtenFiles(
   return files
 }
 
+/** Counts come from completed mutation receipts, never from proposed input. */
+export function toolChanges(state: {
+  status?: string
+  metadata?: unknown
+}): { additions: number; deletions: number } | undefined {
+  if (state.status !== "completed" || !state.metadata || typeof state.metadata !== "object") return
+  const metadata = state.metadata as Record<string, unknown>
+  const records = metadata.filediff ? [metadata.filediff] : metadata.files
+  if (!Array.isArray(records) || !records.length) return
+  const total = { additions: 0, deletions: 0 }
+  for (const record of records) {
+    if (!record || typeof record !== "object") return
+    const value = record as Record<string, unknown>
+    if (
+      typeof value.additions !== "number" ||
+      !Number.isSafeInteger(value.additions) ||
+      value.additions < 0 ||
+      typeof value.deletions !== "number" ||
+      !Number.isSafeInteger(value.deletions) ||
+      value.deletions < 0
+    )
+      return
+    total.additions += value.additions
+    total.deletions += value.deletions
+  }
+  return total
+}
+
 /**
  * End-of-turn "Save as artifact" affordance: a single written file gets the
  * bare action, several written files get one labeled action per path.
@@ -647,17 +675,29 @@ export function loadedSkillName(source: {
   return name || title
 }
 
+/**
+ * The label follows the recorded execution state. A pending part is a call
+ * the model has not finished writing: nothing is being searched or loaded, so
+ * it reads as the plain noun and the row's state glyph says "Preparing". Only
+ * a running call claims an activity; a cancelled call that never started is
+ * not a failed lookup.
+ */
 export function skillActivity(source: {
   metadata?: Record<string, unknown>
   input?: Record<string, unknown>
   title?: string
   status?: string
+  error?: string
 }): { title: string; subtitle?: string } {
+  const requested = typeof source.input?.name === "string" && source.input.name ? source.input.name : undefined
+  if (source.status === "pending") return { title: "Skill", ...(requested ? { subtitle: requested } : {}) }
   if (source.status === "error" || source.metadata?.ok === false) {
-    const name = source.input?.name
-    return typeof name === "string" && name
-      ? { title: "Skill load failed", subtitle: name }
-      : { title: "Skill lookup failed" }
+    const cancelled =
+      source.metadata?.cancelled === true ||
+      source.metadata?.started === false ||
+      toolOutcome("error", source.error) === "cancelled"
+    if (cancelled) return { title: "Skill", ...(requested ? { subtitle: requested } : {}) }
+    return requested ? { title: "Skill load failed", subtitle: requested } : { title: "Skill lookup failed" }
   }
   // Models may send discovery fields with an exact load. The completed result
   // identifies what actually happened, rather than the optional input fields.

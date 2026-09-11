@@ -355,11 +355,12 @@ test("a signed-in install resumes at the stored step; the account step is never 
   await until(() => heading(other.host) === "Welcome to OpenScience")
 })
 
-test("an install that finished the previous setup revision sees the new flow once", async () => {
+test("an install that finished an older revision opens its workspace after an update", async () => {
   const app = fixture({ version: 1, connected: true })
   const view = app.mount()
-  await until(() => heading(view.host) === "Turn on Ace")
-  expect(view.host.textContent).not.toContain("Research workspace loaded")
+  await until(() => view.host.textContent!.includes("Research workspace loaded"))
+  expect(view.host.textContent).not.toContain("Turn on Ace")
+  expect(app.requests).not.toContain("GET /account/session")
 })
 
 test("server reset overrides a cached onboarding completion", async () => {

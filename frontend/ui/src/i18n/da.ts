@@ -1,4 +1,5 @@
 export const dict = {
+  "ui.sessionTurn.sendAgain": "Send igen",
   "ui.sessionTurn.steps.show": "Vis udførelsesspor",
   "ui.sessionTurn.steps.hide": "Skjul udførelsesspor",
   "ui.lineComment.label.prefix": "Kommenter på ",
@@ -60,6 +61,7 @@ export const dict = {
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "To-dos",
   "ui.tool.todos.read": "Læs to-dos",
+  "ui.tool.question": "Spørgsmål",
   "ui.tool.questions": "Spørgsmål",
   "ui.tool.agent": "{{type}} Agent",
   "ui.tool.websearch": "Websøgning",
@@ -134,6 +136,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} besvaret",
   "ui.question.answer.none": "(intet svar)",
   "ui.question.review.notAnswered": "(ikke besvaret)",
+  "ui.question.recommended": "Anbefalet",
   "ui.question.multiHint": "(vælg alle der gælder)",
   "ui.question.custom.placeholder": "Skriv dit svar...",
 }

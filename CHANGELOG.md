@@ -8,6 +8,88 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Fixed
+
+- Research search and WebFetch no longer ask for redundant approval in Ask risky
+  when the source is already allowed, including delegated literature work. New
+  network hosts still require approval; explicit rules and Full access are respected.
+  The literature group now includes ACL, OpenReview, and conference archives.
+- Public retrieval can use another validated address when a host's first DNS
+  address has no working network route, without replaying writes or certificate failures.
+- Consecutive reasoning fragments share one expandable trace row, completed tool
+  groups stay compact during long runs, and patch summaries count actual files.
+  Image tools no longer claim a connected account when no provider was selected,
+  or a generated file while the request is still running.
+- File activity shows colored added/removed line counts for completed edits,
+  writes, and patches, plus a net file-change summary for the turn.
+- Citation exports in BibTeX and RIS formats open as text through WebFetch.
+  Paper-writing guidance grounds drafts in literature, audits scope reductions,
+  and verifies rendered pages; diagram work can proceed with editable local
+  figures when an optional image provider is unavailable.
+- Isolated runs use their configured home for global compatibility instructions
+  and tilde-prefixed instruction paths.
+- Desktop updates allow time for multiple project runtimes to stop, preserve
+  disposal errors, and prevent polling from recreating disposed projects. Completed
+  onboarding survives updates, including older setup revisions.
+- Failed working-folder selections remain visible and can be retried. Research
+  instructions now explicitly reuse the selected folder and require literature,
+  evidence, and rendered-figure checks before delivering a manuscript.
+
+## v2.0.93 — 2026-09-11
+
+### Changed
+
+- One body size across the conversation: the answer, the reasoning, the
+  user's message, the composer and every trace row read at 14/21, with
+  hierarchy carried by colour and weight. 12/18 is reserved for metadata such
+  as durations, counts, paths and state marks. The reasoning previously sat a
+  size below the answer and the composer's leading was a pixel short.
+- Tool rows follow the recorded execution state. A call the model has not
+  finished writing reads as the plain tool noun with a "Preparing" mark, not as
+  "Reading" or "Finding relevant skills"; only a running call claims an
+  activity. A call cancelled before it started is "Cancelled", not a failed
+  lookup.
+- Streaming Markdown no longer re-highlights every finished code block on each
+  update. Highlights are cached per block, and a block still being written is
+  rendered as plain code once it passes 2 KB until its fence closes. A response
+  with two finished scripts and a third streaming cost 63 ms per update before
+  and 2.6 ms after, which is the difference between a frozen and a responsive
+  workspace while a long script streams.
+- The managed Ace gateway's header wait is ten minutes, matching its body
+  deadline. The gateway sends its response headers only once the upstream body
+  begins (one request reported upstream headers at 3.1 s while the client saw
+  them at 133 s), so a long silent think lands in the header wait.
+
+## v2.0.92 — 2026-09-11
+
+### Added
+
+- Independence sits beside the model and effort chips in the composer, with a
+  one-click menu (Interactive, Balanced, Independent) and one-line descriptions
+  that match what each level does. It stays visible with delegation off, since
+  it governs the lead's own questions.
+- A turn that stopped because the provider stopped answering, or because the
+  request timed out, offers "Send again": the same message goes out as a new
+  request through the composer. Turns with attachments are put back for the
+  user to re-attach and send.
+
+### Changed
+
+- Question cards are one form on the card's own surface: the question at the
+  prose level, choices as rows with a radio mark, the model's "(Recommended)"
+  suffix shown as a quiet tag, the free-text choice as one more row, and a real
+  Dismiss button. A single question reads "Question · <its header>".
+- The managed Ace gateway's idle deadline is ten minutes, the same as other
+  remote endpoints. The gateway sends no keepalives while an upstream model
+  thinks (healthy requests have gone 133 s from response headers to the first
+  body byte), so five minutes could cut off deep reasoning.
+
+### Fixed
+
+- When pyright is not installed and cannot be downloaded, Python diagnostics
+  stand down with one warning instead of starting a language server that exits
+  at once and is reported as a crash on every new project.
+
 ## v2.0.90–v2.0.91 — 2026-09-10
 
 v2.0.91 republishes the v2.0.90 source unchanged; two publish dispatches

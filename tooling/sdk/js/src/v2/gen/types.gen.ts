@@ -1851,11 +1851,11 @@ export type ProviderConfig = {
      */
     timeout?: number | false
     /**
-     * Maximum provider response-body inactivity in milliseconds. Remote endpoints default to 600000 (10 minutes) and the managed Ace gateway to 300000 (5 minutes); local endpoints (loopback or .local base URLs and bundled local providers) default to disabled. Set false to disable.
+     * Maximum provider response-body inactivity in milliseconds. Remote endpoints, including the managed Ace gateway, default to 600000 (10 minutes); local endpoints (loopback or .local base URLs and bundled local providers) default to disabled. Set false to disable.
      */
     idleTimeout?: number | false
     /**
-     * Maximum wait for provider response headers in milliseconds, including connection setup and upstream admission. Defaults to 300000 (5 minutes), and to disabled for local endpoints (loopback or .local base URLs and the ollama, lmstudio, llamacpp, vllm and jan providers), which send headers only after prompt processing. Set false to disable.
+     * Maximum wait for provider response headers in milliseconds, including connection setup and upstream admission. Defaults to 300000 (5 minutes), to 600000 (10 minutes) for the managed Ace gateway, which sends headers only once the upstream body begins, and to disabled for local endpoints (loopback or .local base URLs and the ollama, lmstudio, llamacpp, vllm and jan providers), which send headers only after prompt processing. Set false to disable.
      */
     connectTimeout?: number | false
     /**

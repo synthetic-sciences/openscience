@@ -15,7 +15,8 @@ export const RESEARCH_ACCESS_OPTIONS = [
   {
     value: "approve",
     label: "Ask risky",
-    description: "Run contained, reversible work and ask before external, costly, or hard-to-reverse actions",
+    description:
+      "Read approved public sources and run reversible work; ask before new network hosts, spending, or risky actions",
   },
   {
     value: "full",

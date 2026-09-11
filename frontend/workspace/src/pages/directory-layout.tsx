@@ -277,6 +277,30 @@ export default function Layout(props: ParentProps) {
                       ),
                   })
                 const file = (href: string) => chatFilePath(href, directory(), globalThis.location?.origin)
+                // The turn's own words go back through the composer, which owns
+                // model, effort and delegation choices, so the resend is an
+                // ordinary new request. Attachments do not travel: those turns
+                // are put back for the user to re-attach and send.
+                const resendTurn = (input: { sessionID: string; messageID: string }) => {
+                  const parts = sync.data.part[input.messageID] ?? []
+                  const text = parts
+                    .filter((part) => part.type === "text" && !part.synthetic)
+                    .map((part) => (part.type === "text" ? part.text : ""))
+                    .join("\n")
+                    .trim()
+                  if (!text) {
+                    showToast({
+                      title: "Nothing to send again",
+                      description: "This turn has no message text to resend.",
+                    })
+                    return
+                  }
+                  const attachments = parts.some((part) => part.type === "file")
+                  uiStore.setPrefill(text, !attachments)
+                  if (attachments) {
+                    showToast({ title: "Message restored", description: "Re-attach the files, then send." })
+                  }
+                }
 
                 return (
                   <DataProvider
@@ -292,6 +316,7 @@ export default function Layout(props: ParentProps) {
                     onResolveFileReceipts={receipts.files}
                     onSaveArtifact={saveArtifact}
                     onOpenCredentials={() => dialog.show(() => <DialogSettings initial="credentials" />)}
+                    onResendTurn={resendTurn}
                   >
                     <MarkdownImages
                       resolve={image}

@@ -56,7 +56,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
 import { headerProgress, progressStatus } from "./session-turn-progress"
 import { collapsibleTracePart, elapsedLabel, visibleResearchTrace, type ResearchTraceEntry } from "./research-trace"
-import { buildTraceRows, editedLabel, exploredLabel, thoughtLabel, type TraceRow } from "./trace-rows"
+import { buildTraceRows, editedChanges, editedLabel, exploredLabel, thoughtLabel, type TraceRow } from "./trace-rows"
 import { Collapsible } from "./collapsible"
 import { MarkdownFileScope, useMarkdownFileResolvers } from "./markdown"
 
@@ -152,13 +152,13 @@ function TraceGroupRow(props: {
   live?: boolean
   working?: boolean
   header?: boolean
+  changes?: { additions: number; deletions: number }
   children: JSX.Element
 }) {
   const [manual, setManual] = createSignal<boolean>()
-  // Bursts stay open while the turn works so progress reads live, then fold
-  // to their one-line summary; a thought streams open and folds when it ends.
-  // The reader's own choice always wins.
-  const open = () => manual() ?? (props.kind === "thought" ? !!props.live : !!props.working)
+  // Finished calls remain a readable summary during long runs. Only live
+  // reasoning expands automatically; the reader's own choice always wins.
+  const open = () => manual() ?? !!props.live
   // A burst of one call is that call's own row: nothing to fold, so it never
   // sits inside a collapsible that a finished turn would close over it.
   if (props.header === false) {
@@ -186,6 +186,7 @@ function TraceGroupRow(props: {
             <Spinner />
           </Show>
           <span data-slot="trace-row-label">{props.label}</span>
+          <Show when={props.changes}>{(changes) => <DiffChanges changes={changes()} />}</Show>
           <Icon name="chevron-down" size="small" data-slot="trace-row-chevron" />
         </div>
       </Collapsible.Trigger>
@@ -232,8 +233,7 @@ function AssistantTrace(props: {
   })
   // A burst keeps the key of its first call, so a call that joins it later
   // never remounts what the reader already opened.
-  const keyOf = (row: TraceRow) =>
-    row.kind === "explored" || row.kind === "edited" ? `burst:${row.entries[0]!.part.id}` : row.entry.part.id
+  const keyOf = (row: TraceRow) => ("entries" in row ? `burst:${row.entries[0]!.part.id}` : row.entry.part.id)
   const rowByKey = createMemo(() => new Map(rows().map((row) => [keyOf(row), row])))
   const keys = createMemo(() => rows().map(keyOf), [], { equals: same })
   const live = (entry: ResearchTraceEntry) =>
@@ -252,14 +252,23 @@ function AssistantTrace(props: {
             {(current) => {
               if (kind === "thought") {
                 const value = () => current() as Extract<TraceRow, { kind: "thought" }>
+                const ids = createMemo(() => value().entries.map((entry) => entry.part.id), [], { equals: same })
+                const byID = createMemo(() => new Map(value().entries.map((entry) => [entry.part.id, entry])))
+                const running = () => props.working && value().entries.some(live)
                 return (
                   <TraceGroupRow
                     kind="thought"
-                    live={live(value().entry)}
+                    live={running()}
                     working={props.working}
-                    label={thoughtLabel(value().seconds, live(value().entry))}
+                    label={thoughtLabel(value().seconds, running())}
                   >
-                    <Part part={value().entry.part} message={value().entry.message} hideCopy />
+                    <For each={ids()}>
+                      {(id) => (
+                        <Show when={byID().get(id)}>
+                          {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
+                        </Show>
+                      )}
+                    </For>
                   </TraceGroupRow>
                 )
               }
@@ -272,6 +281,9 @@ function AssistantTrace(props: {
                     kind={kind}
                     working={props.working}
                     header={value().entries.length > 1}
+                    changes={
+                      kind === "edited" ? editedChanges(value() as Extract<TraceRow, { kind: "edited" }>) : undefined
+                    }
                     label={
                       kind === "explored"
                         ? exploredLabel(value() as Extract<TraceRow, { kind: "explored" }>)
@@ -311,8 +323,16 @@ function AssistantTrace(props: {
 /** A fault or a pause the reader must act on. A plain stop is not one: it
  * reads on the header line ("Stopped after 2m 3s") and, when a provider or a
  * credential change ended the turn, as one quiet line under the trace. */
-function SessionErrorNotice(props: { error: unknown }) {
+function SessionErrorNotice(props: { error: unknown; sessionID: string; messageID: string }) {
+  const data = useData()
+  const i18n = useI18n()
   const display = () => sessionErrorDisplay(props.error)
+  // A provider that stopped answering, a wait the runtime gave up on, or a
+  // plain failure: one click sends the same message as a new request. Stops
+  // the user asked for, and pauses that resume on their own, do not need it.
+  const resend = () =>
+    !!data.resendTurn &&
+    (display().state === "error" || display().reason === "timeout" || display().reason === "provider")
   return (
     <Card
       variant={display().state === "paused" ? "warning" : "error"}
@@ -335,6 +355,17 @@ function SessionErrorNotice(props: { error: unknown }) {
           </div>
         </Show>
       </div>
+      <Show when={resend()}>
+        <div data-slot="session-state-actions">
+          <Button
+            variant="secondary"
+            size="small"
+            onClick={() => data.resendTurn?.({ sessionID: props.sessionID, messageID: props.messageID })}
+          >
+            {i18n.t("ui.sessionTurn.sendAgain")}
+          </Button>
+        </div>
+      </Show>
     </Card>
   )
 }
@@ -641,6 +672,14 @@ export function SessionTurn(
     const display = sessionErrorDisplay(value)
     if (display.state !== "stopped" || display.reason === "user") return undefined
     return display.message
+  })
+  // A provider that stopped answering or a wait the runtime gave up on: the
+  // same message can go again as a new request in one click.
+  const resendable = createMemo(() => {
+    const value = error()
+    if (!value || !data.resendTurn) return false
+    const reason = sessionErrorDisplay(value).reason
+    return reason === "timeout" || reason === "provider"
   })
 
   const response = createMemo(() =>
@@ -963,12 +1002,29 @@ export function SessionTurn(
                           {(value) => (
                             <Switch>
                               <Match when={stopped() && stopNote()}>
-                                <p data-slot="session-turn-stop-note" role="status">
-                                  {stopNote()}
-                                </p>
+                                <div data-slot="session-turn-stop">
+                                  <p data-slot="session-turn-stop-note" role="status">
+                                    {stopNote()}
+                                  </p>
+                                  <Show when={resendable()}>
+                                    <Button
+                                      variant="secondary"
+                                      size="small"
+                                      onClick={() =>
+                                        data.resendTurn?.({ sessionID: props.sessionID, messageID: props.messageID })
+                                      }
+                                    >
+                                      {i18n.t("ui.sessionTurn.sendAgain")}
+                                    </Button>
+                                  </Show>
+                                </div>
                               </Match>
                               <Match when={!stopped()}>
-                                <SessionErrorNotice error={value()} />
+                                <SessionErrorNotice
+                                  error={value()}
+                                  sessionID={props.sessionID}
+                                  messageID={props.messageID}
+                                />
                               </Match>
                             </Switch>
                           )}
@@ -988,6 +1044,12 @@ export function SessionTurn(
                     </Show>
                     <Show when={hasDiffs()}>
                       <div data-slot="session-turn-summary-section">
+                        <div data-slot="session-turn-changes-summary">
+                          <span>
+                            {messageDiffs().length} {messageDiffs().length === 1 ? "file changed" : "files changed"}
+                          </span>
+                          <DiffChanges changes={messageDiffs()} />
+                        </div>
                         <Accordion
                           data-slot="session-turn-accordion"
                           multiple

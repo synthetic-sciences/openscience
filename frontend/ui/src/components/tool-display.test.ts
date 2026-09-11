@@ -23,8 +23,42 @@ import {
   toolErrorDisplay,
   toolOutcome,
   toolSummary,
+  toolChanges,
   writtenFiles,
 } from "./tool-display"
+
+describe("recorded line changes", () => {
+  test("counts edit, write and atomic patch receipts including deletions", () => {
+    expect(toolChanges({ status: "completed", metadata: { filediff: { additions: 12, deletions: 3 } } })).toEqual({
+      additions: 12,
+      deletions: 3,
+    })
+    expect(
+      toolChanges({
+        status: "completed",
+        metadata: {
+          files: [
+            { additions: 3, deletions: 1 },
+            { additions: 0, deletions: 8 },
+          ],
+        },
+      }),
+    ).toEqual({ additions: 3, deletions: 9 })
+  })
+
+  test("does not invent counts for running, failed, legacy or incomplete receipts", () => {
+    const metadata = { filediff: { additions: 12, deletions: 3 } }
+    for (const status of ["pending", "running", "error"]) expect(toolChanges({ status, metadata })).toBeUndefined()
+    for (const metadata of [
+      {},
+      { filediff: { additions: -1, deletions: 0 } },
+      { filediff: { additions: "4", deletions: 0 } },
+      { files: [{ additions: 4, deletions: 0 }, { filePath: "missing.txt" }] },
+    ]) {
+      expect(toolChanges({ status: "completed", metadata })).toBeUndefined()
+    }
+  })
+})
 
 describe("humanizeToolName", () => {
   test("titlecases a simple id", () => {
@@ -134,6 +168,32 @@ describe("skillName", () => {
   test("does not invent a literal skill name while streaming", () => {
     expect(skillName({})).toBeUndefined()
     expect(skillActivity({ status: "running" })).toEqual({ title: "Finding relevant skills" })
+  })
+  test("a pending call the model has not finished writing claims no activity", () => {
+    expect(skillActivity({ status: "pending", input: {} })).toEqual({ title: "Skill" })
+    expect(skillActivity({ status: "pending", input: { name: "matplotlib" } })).toEqual({
+      title: "Skill",
+      subtitle: "matplotlib",
+    })
+    expect(skillActivity({ status: "pending", input: { query: "plots" } })).toEqual({ title: "Skill" })
+  })
+  test("a cancelled call that never started is not a failed lookup", () => {
+    expect(
+      skillActivity({
+        status: "error",
+        input: {},
+        metadata: { cancelled: true, started: false },
+        error: "Tool execution aborted. The skill call had not started; no action was taken.",
+      }),
+    ).toEqual({ title: "Skill" })
+    expect(
+      skillActivity({
+        status: "error",
+        input: { name: "matplotlib" },
+        metadata: { cancelled: true, started: true },
+        error: "The operation was aborted",
+      }),
+    ).toEqual({ title: "Skill", subtitle: "matplotlib" })
   })
   test("distinguishes a requested load, recorded load and discovered candidates", () => {
     expect(skillActivity({ input: { name: "scientific-schematics" }, status: "running" })).toEqual({

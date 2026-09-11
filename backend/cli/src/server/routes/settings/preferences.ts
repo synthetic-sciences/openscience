@@ -124,7 +124,7 @@ async function mutate(fn: (current: Stored) => Stored): Promise<Stored> {
   return result
 }
 
-/** The setup revision every install sees once; bump when the flow changes enough to show again. */
+/** Revision recorded by new installs. Completed older revisions stay complete. */
 export const ONBOARDING_VERSION = 2
 
 /** Read the shared local preferences (used by the CLI setup as well as the routes). */
