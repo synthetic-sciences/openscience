@@ -71,7 +71,7 @@ test("a failed folder save remains visible and retry updates the actual working 
   details.open = true
   const scratch = Array.from(host.querySelectorAll("button")).find((button) => button.textContent?.includes("Scratch"))!
   scratch.click()
-  await until(() => host.querySelector('[role="alert"]') !== null)
+  await until(() => host.querySelector('[role="alert"]') !== null && !scratch.disabled)
   expect(details.open).toBe(true)
   expect(host.querySelector("summary")?.textContent).toContain("RINR")
   expect(state.current).toBe("/research/RINR")
