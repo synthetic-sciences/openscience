@@ -473,7 +473,8 @@ form.workspace-composer {
      Mobile still steps up to 16px below to prevent browser zoom. */
   --composer-editor-font-size: var(--font-size-base);
   --composer-editor-font-weight: var(--font-weight-regular);
-  --composer-editor-line-height: 20px;
+  /* The same 14/21 as the answer and the user's own message above it. */
+  --composer-editor-line-height: 21px;
   --composer-editor-padding-block-start: 12px;
   --composer-editor-padding-block-end: 5px;
   --composer-editor-padding-inline: 14px;

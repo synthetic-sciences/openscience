@@ -15,20 +15,38 @@
   container-type: inline-size;
 }
 
-/* Chat typography has three jobs, and therefore three stable levels:
-   - 14/21 for model-authored prose
-   - 13/20 for operational labels (tools, todos, errors)
-   - 12/18 for supporting metadata (paths, arguments, counts, status)
+/* One body size across the conversation. The answer, the reasoning, the
+   user's message, the composer and every trace row share 14/21; hierarchy
+   comes from colour and weight, not size. 12/18 is reserved for metadata:
+   durations, counts, paths, arguments and state marks.
 
    Keep these local to the transcript. Shared UI components intentionally use
    their own compact defaults in settings, menus, and other dense surfaces. */
 .session-scroller {
   --chat-prose-font-size: var(--font-size-base);
   --chat-prose-line-height: var(--line-height-large);
-  --chat-operation-font-size: var(--font-size-medium);
-  --chat-operation-line-height: 20px;
+  --chat-operation-font-size: var(--font-size-base);
+  --chat-operation-line-height: 21px;
   --chat-meta-font-size: var(--font-size-small);
   --chat-meta-line-height: var(--line-height-large);
+}
+
+/* Rows and labels the shared components size at 13/20 on their own; in the
+   transcript they sit at the body size with everything else. */
+.session-scroller [data-component="trace-row"],
+.session-scroller [data-slot="session-turn-stop"] [data-slot="session-turn-stop-note"],
+.session-scroller [data-slot="session-turn-summary-title"],
+.session-scroller [data-slot="session-turn-details-text"],
+.session-scroller [data-slot="message-part-title"],
+.session-scroller [data-slot="task-tool-subtitle"],
+.session-scroller [data-slot="delegation-title"],
+.session-scroller [data-slot="delegation-current"],
+.session-scroller [data-component="question-prompt"] [data-slot="option-label"],
+.session-scroller [data-component="question-prompt"] [data-slot="custom-input"],
+.session-scroller [data-component="question-prompt"] [data-slot="review-item"],
+.session-scroller [data-component="question-answers"] [data-slot="question-answer-item"] {
+  font-size: var(--chat-operation-font-size);
+  line-height: var(--chat-operation-line-height);
 }
 
 .session-prompt-dock {

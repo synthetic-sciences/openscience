@@ -10,6 +10,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- One body size across the conversation: the answer, the reasoning, the
+  user's message, the composer and every trace row read at 14/21, with
+  hierarchy carried by colour and weight. 12/18 is reserved for metadata such
+  as durations, counts, paths and state marks. The reasoning previously sat a
+  size below the answer and the composer's leading was a pixel short.
 - Tool rows follow the recorded execution state. A call the model has not
   finished writing reads as the plain tool noun with a "Preparing" mark, not as
   "Reading" or "Finding relevant skills"; only a running call claims an
