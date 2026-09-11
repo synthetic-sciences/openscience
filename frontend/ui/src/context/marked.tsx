@@ -399,7 +399,11 @@ type Highlighter = Awaited<ReturnType<DiffsModule["getSharedHighlighter"]>>
  * this bounded cache and only the block still being written pays each tick.
  */
 const highlighted = new Map<string, string>()
-const HIGHLIGHT_CACHE_MAX = 128
+// Highlighted HTML runs to roughly ten times its source, so the bound is on
+// characters held, not entries: a few megabytes covers a long session's
+// finished blocks without growing with the transcript.
+const HIGHLIGHT_CACHE_CHARS = 4_000_000
+const cacheSize = { chars: 0 }
 
 async function highlightBlock(highlighter: Highlighter, code: string, lang: string): Promise<string> {
   const key = `${lang}\u0000${code}`
@@ -414,9 +418,11 @@ async function highlightBlock(highlighter: Highlighter, code: string, lang: stri
   }
   const html = highlighter.codeToHtml(code, { lang, theme: "OpenScience", tabindex: false })
   highlighted.set(key, html)
-  if (highlighted.size > HIGHLIGHT_CACHE_MAX) {
-    const oldest = highlighted.keys().next().value
-    if (oldest !== undefined) highlighted.delete(oldest)
+  cacheSize.chars += key.length + html.length
+  for (const [oldest, value] of highlighted) {
+    if (cacheSize.chars <= HIGHLIGHT_CACHE_CHARS || oldest === key) break
+    highlighted.delete(oldest)
+    cacheSize.chars -= oldest.length + value.length
   }
   return html
 }
