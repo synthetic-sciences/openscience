@@ -823,3 +823,14 @@
     min-height: 44px;
   }
 }
+
+/* The Independence chip stands alone in its own group: no left divider, and
+   its three descriptions may wrap, since each is a full sentence. */
+[data-independence-control] [data-model-effort-chip]::before {
+  display: none;
+}
+
+[data-independence-menu] .model-settings-setting small {
+  white-space: normal;
+  line-height: 16px;
+}

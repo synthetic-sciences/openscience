@@ -48,17 +48,17 @@ export const DELEGATION_AUTONOMY: Array<{
   {
     value: "interactive",
     label: "Interactive",
-    description: "Plan together and ask at consequential choices, with one recommended option",
+    description: "Asks every question, with one recommended option",
   },
   {
     value: "balanced",
     label: "Balanced",
-    description: "Decide routine reversible details and ask only when the outcome could materially change",
+    description: "Takes the recommended plan; asks before consequential decisions",
   },
   {
     value: "autonomous",
     label: "Independent",
-    description: "Take the recommended path, record assumptions, and ask only when blocked or missing authority",
+    description: "Takes the recommended option; asks only when input or authority is missing",
   },
 ]
 

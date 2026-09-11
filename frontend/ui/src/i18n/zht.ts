@@ -3,6 +3,7 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  "ui.sessionTurn.sendAgain": "重新傳送",
   "ui.sessionTurn.steps.show": "顯示執行軌跡",
   "ui.sessionTurn.steps.hide": "隱藏執行軌跡",
   "ui.lineComment.label.prefix": "評論 ",
@@ -64,6 +65,7 @@ export const dict = {
   "ui.tool.patch": "修補",
   "ui.tool.todos": "待辦",
   "ui.tool.todos.read": "讀取待辦",
+  "ui.tool.question": "個問題",
   "ui.tool.questions": "問題",
   "ui.tool.agent": "{{type}} 代理程式",
   "ui.tool.websearch": "網路搜尋",
@@ -137,6 +139,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} 已回答",
   "ui.question.answer.none": "(無答案)",
   "ui.question.review.notAnswered": "(未回答)",
+  "ui.question.recommended": "推薦",
   "ui.question.multiHint": "(可多選)",
   "ui.question.custom.placeholder": "輸入你的答案...",
 } satisfies Partial<Record<Keys, string>>

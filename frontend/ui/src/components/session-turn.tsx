@@ -311,8 +311,16 @@ function AssistantTrace(props: {
 /** A fault or a pause the reader must act on. A plain stop is not one: it
  * reads on the header line ("Stopped after 2m 3s") and, when a provider or a
  * credential change ended the turn, as one quiet line under the trace. */
-function SessionErrorNotice(props: { error: unknown }) {
+function SessionErrorNotice(props: { error: unknown; sessionID: string; messageID: string }) {
+  const data = useData()
+  const i18n = useI18n()
   const display = () => sessionErrorDisplay(props.error)
+  // A provider that stopped answering, a wait the runtime gave up on, or a
+  // plain failure: one click sends the same message as a new request. Stops
+  // the user asked for, and pauses that resume on their own, do not need it.
+  const resend = () =>
+    !!data.resendTurn &&
+    (display().state === "error" || display().reason === "timeout" || display().reason === "provider")
   return (
     <Card
       variant={display().state === "paused" ? "warning" : "error"}
@@ -335,6 +343,17 @@ function SessionErrorNotice(props: { error: unknown }) {
           </div>
         </Show>
       </div>
+      <Show when={resend()}>
+        <div data-slot="session-state-actions">
+          <Button
+            variant="secondary"
+            size="small"
+            onClick={() => data.resendTurn?.({ sessionID: props.sessionID, messageID: props.messageID })}
+          >
+            {i18n.t("ui.sessionTurn.sendAgain")}
+          </Button>
+        </div>
+      </Show>
     </Card>
   )
 }
@@ -641,6 +660,14 @@ export function SessionTurn(
     const display = sessionErrorDisplay(value)
     if (display.state !== "stopped" || display.reason === "user") return undefined
     return display.message
+  })
+  // A provider that stopped answering or a wait the runtime gave up on: the
+  // same message can go again as a new request in one click.
+  const resendable = createMemo(() => {
+    const value = error()
+    if (!value || !data.resendTurn) return false
+    const reason = sessionErrorDisplay(value).reason
+    return reason === "timeout" || reason === "provider"
   })
 
   const response = createMemo(() =>
@@ -963,12 +990,29 @@ export function SessionTurn(
                           {(value) => (
                             <Switch>
                               <Match when={stopped() && stopNote()}>
-                                <p data-slot="session-turn-stop-note" role="status">
-                                  {stopNote()}
-                                </p>
+                                <div data-slot="session-turn-stop">
+                                  <p data-slot="session-turn-stop-note" role="status">
+                                    {stopNote()}
+                                  </p>
+                                  <Show when={resendable()}>
+                                    <Button
+                                      variant="secondary"
+                                      size="small"
+                                      onClick={() =>
+                                        data.resendTurn?.({ sessionID: props.sessionID, messageID: props.messageID })
+                                      }
+                                    >
+                                      {i18n.t("ui.sessionTurn.sendAgain")}
+                                    </Button>
+                                  </Show>
+                                </div>
                               </Match>
                               <Match when={!stopped()}>
-                                <SessionErrorNotice error={value()} />
+                                <SessionErrorNotice
+                                  error={value()}
+                                  sessionID={props.sessionID}
+                                  messageID={props.messageID}
+                                />
                               </Match>
                             </Switch>
                           )}

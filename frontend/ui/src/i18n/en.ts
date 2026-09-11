@@ -1,4 +1,5 @@
 export const dict = {
+  "ui.sessionTurn.sendAgain": "Send again",
   "ui.sessionTurn.steps.show": "Show reasoning and activity",
   "ui.sessionTurn.steps.hide": "Hide reasoning and activity",
   "ui.sessionTurn.workedFor": "Worked for {{duration}}",
@@ -69,6 +70,7 @@ export const dict = {
   "ui.tool.patch": "Edited",
   "ui.tool.todos": "To-dos",
   "ui.tool.todos.read": "Read to-dos",
+  "ui.tool.question": "Question",
   "ui.tool.questions": "Questions",
   "ui.tool.agent": "{{type}} agent",
   "ui.tool.websearch": "Searched the web",
@@ -161,6 +163,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} answered",
   "ui.question.answer.none": "(no answer)",
   "ui.question.review.notAnswered": "(not answered)",
+  "ui.question.recommended": "Recommended",
   "ui.question.multiHint": "(select all that apply)",
   "ui.question.custom.placeholder": "Type your answer...",
 }

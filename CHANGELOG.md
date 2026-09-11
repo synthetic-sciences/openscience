@@ -8,6 +8,28 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Added
+
+- Independence sits beside the model and effort chips in the composer, with a
+  one-click menu (Interactive, Balanced, Independent) and one-line descriptions
+  that match what each level does. It stays visible with delegation off, since
+  it governs the lead's own questions.
+- A turn that stopped because the provider stopped answering, or because the
+  request timed out, offers "Send again": the same message goes out as a new
+  request through the composer. Turns with attachments are put back for the
+  user to re-attach and send.
+
+### Changed
+
+- Question cards are one form on the card's own surface: the question at the
+  prose level, choices as rows with a radio mark, the model's "(Recommended)"
+  suffix shown as a quiet tag, the free-text choice as one more row, and a real
+  Dismiss button. A single question reads "Question · <its header>".
+- The managed Ace gateway's idle deadline is ten minutes, the same as other
+  remote endpoints. The gateway sends no keepalives while an upstream model
+  thinks (healthy requests have gone 133 s from response headers to the first
+  body byte), so five minutes could cut off deep reasoning.
+
 ### Fixed
 
 - When pyright is not installed and cannot be downloaded, Python diagnostics

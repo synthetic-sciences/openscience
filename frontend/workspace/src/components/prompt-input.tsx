@@ -54,7 +54,9 @@ import { showToast } from "@synsci/ui/toast"
 import { uiStore } from "@/atlas/store/ui"
 import { confirmDialog } from "@/atlas/dialogs"
 import { projectHref, projectPathname } from "@/utils/project-route"
+import { createMediaQuery } from "@solid-primitives/media"
 import { ModelSettingsPopover } from "./model-settings-popover"
+import { IndependenceChip } from "./independence-chip"
 import {
   loadedSkillNamesThisTurn,
   recordRecentSkill,
@@ -262,6 +264,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
   }
   const delegation = createMemo(() => delegationSettings(capabilities()))
+  const narrow = createMediaQuery("(max-width: 719px)")
   // The pair Fusion will run: the selected model leads; the configured worker
   // model executes. Without a worker model the worker is the lead itself,
   // which keeps a persistent context but saves nothing on price.
@@ -2502,7 +2505,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     editorRef.textContent = text
     prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
     uiStore.setPrefill(undefined)
-    uiStore.setPrefillSend(false)
     requestAnimationFrame(() => {
       editorRef.focus()
       setCursorPosition(editorRef, text.length)
@@ -2911,13 +2913,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         disabled={!capabilities()}
                         onSelect={(value) => saveDelegation({ level: value as DelegationLevel })}
                       />
+                      {/* Independence governs the lead's own questions, not only
+                          delegated work, so it stays visible with delegation off. */}
+                      <ResearchSlider
+                        label="Independence"
+                        value={delegation().autonomy}
+                        options={DELEGATION_AUTONOMY}
+                        onSelect={(value) => saveDelegation({ autonomy: value as DelegationAutonomy })}
+                      />
                       <Show when={delegation().level !== "off"}>
-                        <ResearchSlider
-                          label="Independence"
-                          value={delegation().autonomy}
-                          options={DELEGATION_AUTONOMY}
-                          onSelect={(value) => saveDelegation({ autonomy: value as DelegationAutonomy })}
-                        />
                         <ResearchSlider
                           label="Workers"
                           value={delegation().strategy}
@@ -3047,6 +3051,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             aria-label="Model, effort, and send"
           >
             <ModelSettingsPopover />
+            <Show when={capabilities() && !narrow()}>
+              <IndependenceChip
+                value={delegation().autonomy}
+                onSelect={(value) => saveDelegation({ autonomy: value })}
+              />
+            </Show>
             <Tooltip
               placement="top"
               inactive={!prompt.dirty() && !working()}

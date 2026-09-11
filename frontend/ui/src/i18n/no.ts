@@ -2,6 +2,7 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  "ui.sessionTurn.sendAgain": "Send igjen",
   "ui.sessionTurn.steps.show": "Vis utføringsspor",
   "ui.sessionTurn.steps.hide": "Skjul utføringsspor",
   "ui.lineComment.label.prefix": "Kommenter på ",
@@ -63,6 +64,7 @@ export const dict = {
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Gjøremål",
   "ui.tool.todos.read": "Les gjøremål",
+  "ui.tool.question": "Spørsmål",
   "ui.tool.questions": "Spørsmål",
   "ui.tool.agent": "{{type}}-agent",
   "ui.tool.websearch": "Websøk",
@@ -139,6 +141,7 @@ export const dict = {
   "ui.question.subtitle.answered": "{{count}} besvart",
   "ui.question.answer.none": "(ingen svar)",
   "ui.question.review.notAnswered": "(ikke besvart)",
+  "ui.question.recommended": "Anbefalt",
   "ui.question.multiHint": "(velg alle som gjelder)",
   "ui.question.custom.placeholder": "Skriv svaret ditt...",
 } satisfies Partial<Record<Keys, string>>
