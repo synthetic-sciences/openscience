@@ -67,6 +67,7 @@ import {
   taskOutcome,
   taskPhase,
   toolOutcome,
+  toolChanges,
   toolSummary,
 } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
@@ -1260,7 +1261,11 @@ ToolRegistry.register({
     const data = useData()
     const dialog = useDialog()
     const route = () =>
-      props.metadata.route === "gemini" ? "Connected Gemini account" : "Connected OpenRouter account"
+      props.metadata.route === "gemini"
+        ? "Connected Gemini account"
+        : props.metadata.route === "openrouter"
+          ? "Connected OpenRouter account"
+          : undefined
     const filepath = () =>
       typeof props.metadata.filepath === "string"
         ? props.metadata.filepath
@@ -1289,7 +1294,12 @@ ToolRegistry.register({
         icon="photo"
         defaultOpen={true}
         trigger={{
-          title: props.status === "error" ? "Image generation failed" : "Generated image",
+          title:
+            props.status === "error"
+              ? "Image generation failed"
+              : props.status === "completed"
+                ? "Generated image"
+                : "Generating image",
           subtitle: props.title || props.input.output_path || "generated-image.png",
           args: [props.metadata.model || props.input.model, route()].filter((value): value is string => !!value),
         }}
@@ -1805,9 +1815,7 @@ ToolRegistry.register({
                 </Show>
               </div>
               <div data-slot="message-part-actions">
-                <Show when={props.metadata.filediff}>
-                  <DiffChanges changes={props.metadata.filediff} />
-                </Show>
+                <Show when={toolChanges(props)}>{(changes) => <DiffChanges changes={changes()} />}</Show>
               </div>
             </div>
           }
@@ -1876,7 +1884,9 @@ ToolRegistry.register({
                   </div>
                 </Show>
               </div>
-              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
+              <div data-slot="message-part-actions">
+                <Show when={toolChanges(props)}>{(changes) => <DiffChanges changes={changes()} />}</Show>
+              </div>
             </div>
           }
         >
@@ -1936,6 +1946,7 @@ ToolRegistry.register({
           trigger={{
             title: toolVerb(i18n, "apply_patch", props.status, "ui.tool.patch"),
             subtitle: subtitle(),
+            action: <Show when={toolChanges(props)}>{(changes) => <DiffChanges changes={changes()} />}</Show>,
           }}
         >
           <Show when={files().length > 0}>

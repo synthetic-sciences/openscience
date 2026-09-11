@@ -56,7 +56,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
 import { headerProgress, progressStatus } from "./session-turn-progress"
 import { collapsibleTracePart, elapsedLabel, visibleResearchTrace, type ResearchTraceEntry } from "./research-trace"
-import { buildTraceRows, editedLabel, exploredLabel, thoughtLabel, type TraceRow } from "./trace-rows"
+import { buildTraceRows, editedChanges, editedLabel, exploredLabel, thoughtLabel, type TraceRow } from "./trace-rows"
 import { Collapsible } from "./collapsible"
 import { MarkdownFileScope, useMarkdownFileResolvers } from "./markdown"
 
@@ -152,13 +152,13 @@ function TraceGroupRow(props: {
   live?: boolean
   working?: boolean
   header?: boolean
+  changes?: { additions: number; deletions: number }
   children: JSX.Element
 }) {
   const [manual, setManual] = createSignal<boolean>()
-  // Bursts stay open while the turn works so progress reads live, then fold
-  // to their one-line summary; a thought streams open and folds when it ends.
-  // The reader's own choice always wins.
-  const open = () => manual() ?? (props.kind === "thought" ? !!props.live : !!props.working)
+  // Finished calls remain a readable summary during long runs. Only live
+  // reasoning expands automatically; the reader's own choice always wins.
+  const open = () => manual() ?? !!props.live
   // A burst of one call is that call's own row: nothing to fold, so it never
   // sits inside a collapsible that a finished turn would close over it.
   if (props.header === false) {
@@ -186,6 +186,7 @@ function TraceGroupRow(props: {
             <Spinner />
           </Show>
           <span data-slot="trace-row-label">{props.label}</span>
+          <Show when={props.changes}>{(changes) => <DiffChanges changes={changes()} />}</Show>
           <Icon name="chevron-down" size="small" data-slot="trace-row-chevron" />
         </div>
       </Collapsible.Trigger>
@@ -232,8 +233,7 @@ function AssistantTrace(props: {
   })
   // A burst keeps the key of its first call, so a call that joins it later
   // never remounts what the reader already opened.
-  const keyOf = (row: TraceRow) =>
-    row.kind === "explored" || row.kind === "edited" ? `burst:${row.entries[0]!.part.id}` : row.entry.part.id
+  const keyOf = (row: TraceRow) => ("entries" in row ? `burst:${row.entries[0]!.part.id}` : row.entry.part.id)
   const rowByKey = createMemo(() => new Map(rows().map((row) => [keyOf(row), row])))
   const keys = createMemo(() => rows().map(keyOf), [], { equals: same })
   const live = (entry: ResearchTraceEntry) =>
@@ -252,14 +252,23 @@ function AssistantTrace(props: {
             {(current) => {
               if (kind === "thought") {
                 const value = () => current() as Extract<TraceRow, { kind: "thought" }>
+                const ids = createMemo(() => value().entries.map((entry) => entry.part.id), [], { equals: same })
+                const byID = createMemo(() => new Map(value().entries.map((entry) => [entry.part.id, entry])))
+                const running = () => props.working && value().entries.some(live)
                 return (
                   <TraceGroupRow
                     kind="thought"
-                    live={live(value().entry)}
+                    live={running()}
                     working={props.working}
-                    label={thoughtLabel(value().seconds, live(value().entry))}
+                    label={thoughtLabel(value().seconds, running())}
                   >
-                    <Part part={value().entry.part} message={value().entry.message} hideCopy />
+                    <For each={ids()}>
+                      {(id) => (
+                        <Show when={byID().get(id)}>
+                          {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
+                        </Show>
+                      )}
+                    </For>
                   </TraceGroupRow>
                 )
               }
@@ -272,6 +281,9 @@ function AssistantTrace(props: {
                     kind={kind}
                     working={props.working}
                     header={value().entries.length > 1}
+                    changes={
+                      kind === "edited" ? editedChanges(value() as Extract<TraceRow, { kind: "edited" }>) : undefined
+                    }
                     label={
                       kind === "explored"
                         ? exploredLabel(value() as Extract<TraceRow, { kind: "explored" }>)
@@ -1032,6 +1044,12 @@ export function SessionTurn(
                     </Show>
                     <Show when={hasDiffs()}>
                       <div data-slot="session-turn-summary-section">
+                        <div data-slot="session-turn-changes-summary">
+                          <span>
+                            {messageDiffs().length} {messageDiffs().length === 1 ? "file changed" : "files changed"}
+                          </span>
+                          <DiffChanges changes={messageDiffs()} />
+                        </div>
                         <Accordion
                           data-slot="session-turn-accordion"
                           multiple

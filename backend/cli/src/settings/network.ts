@@ -137,6 +137,13 @@ export namespace Network {
         "doi.org",
         "europepmc.org",
         "openalex.org",
+        "aclanthology.org",
+        "aclweb.org",
+        "eacl.org",
+        "openreview.net",
+        "proceedings.mlr.press",
+        "proceedings.neurips.cc",
+        "proceedings.iclr.cc",
       ],
     },
     {
@@ -693,7 +700,26 @@ export namespace Network {
           ? (url: URL, options: RequestInit) => globalThis.fetch(url, options)
           : (url: URL, options: RequestInit, address: string) =>
               pinnedFetch(url, options, address, policy.maxResponseBytes, policy.streamResponse))
-      const response = await transport(target, requestInit, addresses[0]!)
+      const response = await (async () => {
+        for (const [index, address] of addresses.entries()) {
+          init.signal?.throwIfAborted()
+          try {
+            return await transport(target, requestInit, address)
+          } catch (error) {
+            const code = error && typeof error === "object" && "code" in error ? error.code : undefined
+            // A host can resolve to an unreachable IPv6 address before a
+            // reachable IPv4 address. Retry only connection failures on reads;
+            // never replay a write or retry certificate/policy failures.
+            if (
+              !["GET", "HEAD"].includes(method) ||
+              !["ENETUNREACH", "EHOSTUNREACH", "ECONNREFUSED", "ETIMEDOUT"].includes(String(code)) ||
+              index === addresses.length - 1
+            )
+              throw error
+          }
+        }
+        throw new Error(`No reachable public address for ${target.hostname}`)
+      })()
       if (policy.maxResponseBytes !== undefined) {
         const declared = Number.parseInt(response.headers.get("content-length") ?? "", 10)
         if (Number.isFinite(declared) && declared > policy.maxResponseBytes) {

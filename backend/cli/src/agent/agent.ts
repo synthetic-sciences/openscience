@@ -127,8 +127,8 @@ export namespace Agent {
               network: "ask",
               provider_compute: "ask",
               remote_compute: "ask",
-              webfetch: "ask",
-              websearch: "ask",
+              webfetch: "allow",
+              websearch: "allow",
             }
           : {
               atlas: "allow",
@@ -343,8 +343,8 @@ export namespace Agent {
             // explicit rule the profile's wildcard deny blocks the broker's
             // per-host authorization before the webfetch allow can apply.
             network: externalAction,
-            webfetch: externalAction,
-            websearch: externalAction,
+            webfetch: safeAction,
+            websearch: safeAction,
             codesearch: externalAction,
             read: "allow",
           }),
@@ -370,8 +370,8 @@ export namespace Agent {
             read: "allow",
             glob: "allow",
             grep: "allow",
-            webfetch: externalAction,
-            websearch: externalAction,
+            webfetch: safeAction,
+            websearch: safeAction,
             codesearch: externalAction,
             skill: "allow",
           }),

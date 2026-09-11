@@ -49,6 +49,10 @@ export namespace PermissionNext {
     "research_contract",
     "task",
     "todowrite",
+    // Retrieval uses the network broker or connected search providers;
+    // the network permission still governs new fetch destinations and redirects.
+    "webfetch",
+    "websearch",
   ])
   const RISKY = new Set([
     "atlas",
@@ -64,8 +68,6 @@ export namespace PermissionNext {
     "network",
     "provider_compute",
     "remote_compute",
-    "webfetch",
-    "websearch",
   ])
 
   const ShellMetadata = z.object({

@@ -18,6 +18,8 @@ export function DiffChanges(props: {
       : props.changes.deletions,
   )
   const total = createMemo(() => (additions() ?? 0) + (deletions() ?? 0))
+  const label = () =>
+    `${additions() ?? 0} ${additions() === 1 ? "line" : "lines"} added, ${deletions() ?? 0} ${deletions() === 1 ? "line" : "lines"} removed`
 
   const blockCounts = createMemo(() => {
     const TOTAL_BLOCKS = 5
@@ -93,7 +95,14 @@ export function DiffChanges(props: {
 
   return (
     <Show when={variant() === "default" ? total() > 0 : true}>
-      <div data-component="diff-changes" data-variant={variant()} classList={{ [props.class ?? ""]: true }}>
+      <div
+        data-component="diff-changes"
+        data-variant={variant()}
+        classList={{ [props.class ?? ""]: true }}
+        role="img"
+        aria-label={label()}
+        title={label()}
+      >
         <Switch>
           <Match when={variant() === "bars"}>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 12" fill="none">

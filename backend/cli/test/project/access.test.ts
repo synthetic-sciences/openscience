@@ -129,6 +129,7 @@ test("widening preserves work while a later narrowing refreshes same-turn tool p
           if (!agent) throw new Error("Missing Research agent")
           const advertised = PermissionNext.merge(agent.permission, session.permission ?? [])
           expect(PermissionNext.evaluate("websearch", "*", advertised).action).toBe("allow")
+          expect(PermissionNext.evaluate("network", "*", advertised).action).toBe("allow")
 
           const approve = await ProjectAccess.update(Instance.project, { mode: "approve", root: full.root })
           const refreshed = await SessionPrompt.permissionAtExecution({
@@ -138,7 +139,8 @@ test("widening preserves work while a later narrowing refreshes same-turn tool p
             permission: advertised,
           })
           expect(refreshed.authority.revision).toBe(approve.revision)
-          expect(PermissionNext.evaluate("websearch", "*", refreshed.permission).action).toBe("ask")
+          expect(PermissionNext.evaluate("websearch", "*", refreshed.permission).action).toBe("allow")
+          expect(PermissionNext.evaluate("network", "*", refreshed.permission).action).toBe("ask")
           expect(changes).toEqual([false, true])
         } finally {
           unsubscribe()

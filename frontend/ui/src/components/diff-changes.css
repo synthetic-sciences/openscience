@@ -3,6 +3,8 @@
   gap: 8px;
   justify-content: flex-end;
   align-items: center;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 
   [data-slot="diff-changes-additions"] {
     font-family: var(--font-family-mono);
@@ -13,7 +15,7 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     text-align: right;
-    color: var(--text-weak);
+    color: var(--text-diff-add-base);
   }
 
   [data-slot="diff-changes-deletions"] {
@@ -25,7 +27,7 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     text-align: right;
-    color: var(--text-weak);
+    color: var(--text-diff-delete-base);
   }
 }
 

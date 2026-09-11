@@ -17,6 +17,10 @@ An organization's policy may restrict the modes available. Use the more interact
 
 The mode belongs to the project you set it in. Switching to a wider mode also settles prompts that are already waiting, so cards raised under **Ask risky** disappear once **Full access** covers them.
 
+In **Ask risky**, research searches and WebFetch reads from enabled Network groups or custom allowed domains proceed without another tool approval, including in delegated workers. The literature group includes arXiv, ACL Anthology, OpenReview, and major conference archives. A new destination or redirect outside that list still asks for network approval. **Ask always** still asks, and explicit tool rules remain effective in every mode. Local and private network addresses remain blocked by the retrieval broker.
+
+**Independence** controls how the agent handles decisions and questions. **Tools → Action approval** controls execution permissions; choosing Independent does not change that permission mode.
+
 ## Approval scopes
 
 Each request card offers **Allow once**, or **Allow** with a scope: **This conversation**, **This project**, and for network hosts and searches **Allow always** across the installation. Folder access has no installation-wide scope: a folder approved while working in one project is never reachable from another project, and the request card names the exact folder being granted.

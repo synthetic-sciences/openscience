@@ -129,7 +129,7 @@ export function DesktopOnboardingController(
   // A completed setup is remembered on this device so the shell paints before
   // the preferences round trip; the fetch still verifies it below and brings
   // setup back if the server says it is incomplete.
-  const seen = desktop && cachedVersion() >= ONBOARDING_VERSION
+  const seen = desktop && cachedVersion() > 0
   const [complete, setComplete] = createSignal(!desktop || seen)
   const [ready, setReady] = createSignal(!desktop || seen)
   const [step, setStep] = createSignal<OnboardingStep>("account")
@@ -176,7 +176,7 @@ export function DesktopOnboardingController(
       const value = await api<Preferences>("/settings/preferences", { signal })
       if (signal.aborted) return
       rememberVersion(value.desktop_onboarding_version)
-      if (value.desktop_onboarding_version >= ONBOARDING_VERSION) {
+      if (value.desktop_onboarding_version > 0) {
         setComplete(true)
         return
       }

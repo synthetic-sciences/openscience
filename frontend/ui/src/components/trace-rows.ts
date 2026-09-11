@@ -1,6 +1,7 @@
 import type { Part, ToolPart } from "@synsci/sdk/v2/client"
 import type { ResearchTraceEntry } from "./research-trace"
 import { collapsibleTracePart, traceFamily } from "./research-trace"
+import { toolChanges, writtenFiles } from "./tool-display"
 
 /**
  * The activity trace as a list of rows, the way Cursor presents work: one
@@ -10,7 +11,7 @@ import { collapsibleTracePart, traceFamily } from "./research-trace"
  * live progress and problems are never folded into a count.
  */
 export type TraceRow =
-  | { kind: "thought"; entry: ResearchTraceEntry; seconds?: number }
+  | { kind: "thought"; entries: ResearchTraceEntry[]; seconds?: number }
   | { kind: "text"; entry: ResearchTraceEntry; narration: boolean }
   | { kind: "agent"; entry: ResearchTraceEntry }
   | { kind: "tool"; entry: ResearchTraceEntry }
@@ -24,18 +25,35 @@ function settled(part: ToolPart) {
   return part.state.status === "completed" && collapsibleTracePart(part)
 }
 
-function editedFile(part: ToolPart) {
-  const input = part.state.input as Record<string, unknown> | undefined
-  const path = typeof input?.filePath === "string" ? input.filePath : undefined
-  if (path) return path.split("/").pop() || path
-  const files = Array.isArray(input?.files) ? input.files : []
-  return files.length ? `${files.length} files` : "files"
+function editedFiles(part: ToolPart) {
+  if (part.tool === "apply_patch" && part.state.status === "completed" && Array.isArray(part.state.metadata.files)) {
+    return part.state.metadata.files.flatMap((file: unknown) => {
+      if (!file || typeof file !== "object") return []
+      const record = file as Record<string, unknown>
+      const path = record.movePath ?? record.filePath
+      return typeof path === "string" ? [path] : []
+    })
+  }
+  return writtenFiles([part])
+}
+
+export function editedChanges(row: Extract<TraceRow, { kind: "edited" }>) {
+  const total = { additions: 0, deletions: 0 }
+  for (const entry of row.entries) {
+    if (entry.part.type !== "tool") return
+    const changes = toolChanges(entry.part.state)
+    // Older receipts may lack counts. An incomplete sum would understate the work.
+    if (!changes) return
+    total.additions += changes.additions
+    total.deletions += changes.deletions
+  }
+  return total
 }
 
 function thoughtSeconds(part: Part) {
   if (part.type !== "reasoning") return undefined
   const time = part.time
-  if (!time?.start || !time.end) return undefined
+  if (time?.start === undefined || time.end === undefined) return undefined
   return Math.max(0, Math.round((time.end - time.start) / 1000))
 }
 
@@ -49,7 +67,16 @@ export function buildTraceRows(entries: ResearchTraceEntry[]): TraceRow[] {
   entries.forEach((entry, index) => {
     const part = entry.part
     if (part.type === "reasoning") {
-      rows.push({ kind: "thought", entry, seconds: thoughtSeconds(part) })
+      const previous = rows.at(-1)
+      const seconds = thoughtSeconds(part)
+      // Providers can split one reasoning phase into a readable summary and
+      // several private continuation parts. Keep their detail in one row.
+      if (previous?.kind === "thought") {
+        previous.entries.push(entry)
+        previous.seconds = seconds === undefined ? previous.seconds : (previous.seconds ?? 0) + seconds
+        return
+      }
+      rows.push({ kind: "thought", entries: [entry], seconds })
       return
     }
     if (part.type === "text") {
@@ -69,10 +96,10 @@ export function buildTraceRows(entries: ResearchTraceEntry[]): TraceRow[] {
     if (family === "changes" && settled(part)) {
       if (previous?.kind === "edited") {
         previous.entries.push(entry)
-        previous.files.push(editedFile(part))
+        previous.files.push(...editedFiles(part))
         return
       }
-      rows.push({ kind: "edited", entries: [entry], files: [editedFile(part)] })
+      rows.push({ kind: "edited", entries: [entry], files: editedFiles(part) })
       return
     }
     if (groupable.has(family) && settled(part)) {
@@ -114,7 +141,8 @@ export function exploredLabel(row: Extract<TraceRow, { kind: "explored" }>) {
 /** "Edited 3 files" or "Edited notes.md, plot.py". */
 export function editedLabel(row: Extract<TraceRow, { kind: "edited" }>) {
   const unique = [...new Set(row.files)]
-  if (unique.length <= 2) return `Edited ${unique.join(", ")}`
+  if (!unique.length) return `Applied ${plural(row.entries.length, "edit", "edits")}`
+  if (unique.length <= 2) return `Edited ${unique.map((file) => file.split(/[\\/]/).at(-1) || file).join(", ")}`
   return `Edited ${unique.length} files`
 }
 

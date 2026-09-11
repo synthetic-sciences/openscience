@@ -308,7 +308,9 @@ export const UpdatesSettingsRoutes = lazy(() =>
           c.header("WWW-Authenticate", 'Bearer realm="openscience-desktop-update"')
           return c.json(Failure.parse({ error: "The desktop update capability is invalid." }), 401)
         }
-        const result = await GracefulShutdown.run({ timeoutMs: 4_000 }).then(
+        // Several project instances can each need seconds to reap their tools.
+        // Keep this below the desktop's request deadline, not below one reaper.
+        const result = await GracefulShutdown.run({ timeoutMs: 30_000 }).then(
           () => ({ ok: true as const }),
           (error) => ({ error: error instanceof Error ? error.message : String(error) }),
         )

@@ -144,6 +144,161 @@ afterEach(() => {
 })
 afterAll(() => vite.close())
 
+describe("image generation receipts", () => {
+  test("an unavailable image provider never claims a connected OpenRouter account", () => {
+    const part: ToolPart = {
+      ...read("prt_image_unavailable", "figure.png", 1000),
+      tool: "generate_image",
+      state: {
+        status: "error",
+        input: { prompt: "Scientific diagram", output_path: "figure.png" },
+        error: "Connect a Gemini or OpenRouter account to generate images.",
+        time: { start: 1000, end: 1100 },
+      },
+    }
+    const host = mount(() => parts.Part({ part, message: assistant(1200) }), empty())
+    expect(host.textContent).toContain("Image generation failed")
+    expect(host.textContent).not.toContain("Connected OpenRouter account")
+    expect(host.textContent).not.toContain("Generated image")
+  })
+
+  test("an image in progress does not claim to have generated a file", () => {
+    const part: ToolPart = {
+      ...read("prt_image_running", "figure.png", 1000),
+      tool: "generate_image",
+      state: {
+        status: "running",
+        input: { prompt: "Scientific diagram", output_path: "figure.png" },
+        title: "Scientific diagram",
+        metadata: { route: "gemini" },
+        time: { start: 1000 },
+      },
+    }
+    const host = mount(() => parts.Part({ part, message: assistant() }), empty())
+    expect(host.textContent).toContain("Generating image")
+    expect(host.textContent).toContain("Connected Gemini account")
+    expect(host.textContent).not.toContain("Generated image")
+    expect(host.querySelector('[data-component="generated-image-preview"]')).toBeNull()
+  })
+})
+
+describe("file change counters", () => {
+  test("completed edit groups show totals before expansion and preserve them as new calls arrive", async () => {
+    const message = assistant()
+    const edit = (id: string, additions: number, deletions: number): ToolPart => ({
+      ...read(id, "/research/paper.tex", 1000),
+      tool: "edit",
+      state: {
+        status: "completed",
+        input: { filePath: "/research/paper.tex" },
+        output: "Edited successfully.",
+        title: "paper.tex",
+        metadata: { filediff: { file: "/research/paper.tex", additions, deletions } },
+        time: { start: 1000, end: 1200 },
+      },
+    })
+    const [store, setStore] = reactive.createStore<Store>({
+      ...empty(),
+      session_status: { [sessionID]: { type: "busy" } },
+      message: { [sessionID]: [user, message] },
+      part: { [user.id]: [], [message.id]: [edit("edit1", 5, 2), edit("edit2", 3, 1)] },
+    })
+    const host = mount(
+      () => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id, stepsExpanded: true }),
+      store,
+    )
+    const group = host.querySelector('[data-component="trace-group"][data-kind="edited"]')!
+    const trigger = group.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')!
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
+    expect(trigger.querySelector('[data-component="diff-changes"]')?.getAttribute("aria-label")).toBe(
+      "8 lines added, 3 lines removed",
+    )
+    trigger.click()
+    await settle()
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
+    setStore("part", message.id, (previous) => [...previous, edit("edit3", 2, 4)])
+    await settle()
+    expect(host.querySelector('[data-component="trace-group"][data-kind="edited"]')).toBe(group)
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
+    expect(trigger.querySelector('[data-component="diff-changes"]')?.getAttribute("aria-label")).toBe(
+      "10 lines added, 7 lines removed",
+    )
+  })
+
+  test("file writes and atomic patches expose their completed line counts in the collapsed tool header", () => {
+    for (const tool of ["write", "apply_patch"]) {
+      const part: ToolPart = {
+        ...read(`prt_${tool}`, "/research/paper.tex", 1000),
+        tool,
+        state: {
+          status: "completed",
+          input: { filePath: "/research/paper.tex" },
+          title: "paper.tex",
+          output: "Saved.",
+          metadata:
+            tool === "write"
+              ? { filediff: { additions: 8, deletions: 2 } }
+              : {
+                  files: [
+                    {
+                      filePath: "/research/old.tex",
+                      relativePath: "old.tex",
+                      type: "delete",
+                      additions: 0,
+                      deletions: 2,
+                    },
+                    { filePath: "/research/new.tex", relativePath: "new.tex", type: "add", additions: 8, deletions: 0 },
+                  ],
+                },
+          time: { start: 1000, end: 1200 },
+        },
+      }
+      const host = mount(
+        () =>
+          codeContext.CodeComponentProvider({
+            component: () => null,
+            get children() {
+              return parts.Part({ part, message: assistant(1200) })
+            },
+          }),
+        empty(),
+      )
+      const trigger = host.querySelector('[data-component="tool-trigger"]')!
+      expect(trigger.querySelector('[data-component="diff-changes"]')?.getAttribute("aria-label")).toBe(
+        "8 lines added, 2 lines removed",
+      )
+    }
+  })
+
+  test("the file summary shows net turn changes even when activity is collapsed", () => {
+    const message = assistant(2000)
+    const store: Store = {
+      ...empty(),
+      message: {
+        [sessionID]: [
+          {
+            ...user,
+            summary: {
+              diffs: [
+                { file: "paper.tex", before: "old\n", after: "new\n", additions: 1, deletions: 1 },
+                { file: "figure.py", before: "", after: "plot()\n", additions: 1, deletions: 0 },
+              ],
+            },
+          },
+          message,
+        ],
+      },
+      part: { [user.id]: [], [message.id]: [] },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, stepsExpanded: false }), store)
+    const summary = host.querySelector('[data-slot="session-turn-changes-summary"]')!
+    expect(summary.textContent).toContain("2 files changed")
+    expect(summary.querySelector('[data-component="diff-changes"]')?.getAttribute("aria-label")).toBe(
+      "2 lines added, 1 line removed",
+    )
+  })
+})
+
 describe("reasoning rows", () => {
   const reasoning = (id: string, time: ReasoningPart["time"]): ReasoningPart => ({
     id,

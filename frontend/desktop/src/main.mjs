@@ -22,6 +22,7 @@ import {
   verify as verifyUpdate,
 } from "./updater.mjs"
 import { startupUpdateState } from "./update-state.mjs"
+import { disposeRuntime } from "./runtime-disposal.mjs"
 
 const execute = promisify(execFile)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -755,21 +756,10 @@ async function drainService() {
     throw new Error("OpenScience could not prove that the local runtime was safely disposed before updating")
   }
   if (state.address && state.updateToken) {
-    const disposed = await fetch(`${state.address}/settings/updates/dispose`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${state.updateToken}` },
-      signal: AbortSignal.timeout(5_000),
+    await disposeRuntime(state.address, state.updateToken).catch((error) => {
+      if (updateRestart) throw error
+      console.warn(error instanceof Error ? error.message : String(error))
     })
-      .then((response) => response.status === 204)
-      .catch((error) => {
-        console.warn(error instanceof Error ? error.message : String(error))
-        return false
-      })
-    if (!disposed && updateRestart) {
-      throw new Error(
-        "OpenScience could not safely finish the active runtime before updating. Try again after it settles.",
-      )
-    }
   }
   service.kill("SIGTERM")
   if (await waitForExit(service, 5_000)) {

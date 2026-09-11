@@ -6,6 +6,36 @@ import { tmpdir } from "../fixture/fixture"
 import { Network } from "../../src/settings/network"
 
 describe("InstructionPrompt.resolve", () => {
+  test("global compatibility and tilde instruction paths honor the isolated home", async () => {
+    await using isolated = await tmpdir({
+      init: async (directory) => {
+        await Bun.write(path.join(directory, ".claude", "CLAUDE.md"), "Isolated compatibility instructions")
+        await Bun.write(path.join(directory, "extra.md"), "Isolated extra instructions")
+      },
+    })
+    await using project = await tmpdir({ config: { instructions: ["~/extra.md"] } })
+    const previous = process.env.OPENSCIENCE_TEST_HOME
+    process.env.OPENSCIENCE_TEST_HOME = isolated.path
+    try {
+      await Instance.provide({
+        directory: project.path,
+        fn: async () => {
+          const result = await InstructionPrompt.system()
+          expect(result).toHaveLength(2)
+          expect(result).toContain(
+            `Instructions from: ${path.join(isolated.path, ".claude", "CLAUDE.md")}\nIsolated compatibility instructions`,
+          )
+          expect(result).toContain(
+            `Instructions from: ${path.join(isolated.path, "extra.md")}\nIsolated extra instructions`,
+          )
+        },
+      })
+    } finally {
+      if (previous === undefined) delete process.env.OPENSCIENCE_TEST_HOME
+      else process.env.OPENSCIENCE_TEST_HOME = previous
+    }
+  })
+
   test("returns empty when AGENTS.md is at project root (already in systemPaths)", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

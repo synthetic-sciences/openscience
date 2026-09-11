@@ -1,4 +1,5 @@
-import { For, Show, createMemo, createResource, createSignal, type Component } from "solid-js"
+import { For, Show, createMemo, createResource, type Component } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Icon } from "@synsci/ui/icon"
 import type { OpenScienceClient } from "@synsci/sdk/v2/client"
 import "./working-folder.css"
@@ -27,11 +28,11 @@ export const WorkingFolderChip: Component<{
   onPending: (choice: WorkingRootChoice) => void
   disabled?: boolean
 }> = (props) => {
-  const [open, setOpen] = createSignal(false)
+  const [choice, setChoice] = createStore({ open: false, busy: false, error: "" })
   let details: HTMLDetailsElement | undefined
 
   const [state, actions] = createResource(
-    () => ({ sessionID: props.sessionID, open: open() }),
+    () => ({ sessionID: props.sessionID, open: choice.open }),
     async (input) => {
       if (input.sessionID) {
         const snapshot = await props.client.session.filesystem.list({ sessionID: input.sessionID }).then((x) => x.data)
@@ -72,16 +73,27 @@ export const WorkingFolderChip: Component<{
   })
   const label = () => (inScratch() ? "Scratch" : basename(current() ?? "") || "Folder")
 
-  const choose = async (choice: WorkingRootChoice) => {
-    if (props.sessionID) {
-      await props.client.session.filesystem
-        .workingRoot({ sessionID: props.sessionID, workingRoot: choice ?? null })
-        .catch(() => undefined)
-    } else {
-      props.onPending(choice)
-    }
+  const choose = async (value: WorkingRootChoice) => {
+    if (props.disabled || choice.busy) return
+    setChoice({ busy: true, error: "" })
+    const saved = await (async () => {
+      if (!props.sessionID) return props.onPending(value)
+      const result = await props.client.session.filesystem.workingRoot({
+        sessionID: props.sessionID,
+        workingRoot: value ?? null,
+      })
+      if (result.error || !result.data) throw new Error("Could not change the working folder. Try again.")
+    })().then(
+      () => true,
+      (error) => {
+        setChoice("error", error instanceof Error ? error.message : String(error))
+        return false
+      },
+    )
+    setChoice("busy", false)
+    if (!saved) return
     details?.removeAttribute("open")
-    setOpen(false)
+    setChoice("open", false)
     actions.refetch()
   }
 
@@ -90,7 +102,7 @@ export const WorkingFolderChip: Component<{
       <details
         ref={(element) => (details = element)}
         class="working-folder"
-        onToggle={(event) => setOpen(event.currentTarget.open)}
+        onToggle={(event) => setChoice("open", event.currentTarget.open)}
         onKeyDown={(event) => {
           if (event.key !== "Escape") return
           event.preventDefault()
@@ -105,6 +117,11 @@ export const WorkingFolderChip: Component<{
         </summary>
         <div class="working-folder__menu" role="group" aria-label="Working folder">
           <p class="working-folder__hint">Where this conversation's files go.</p>
+          <Show when={choice.error}>
+            <p role="alert" class="working-folder__error">
+              {choice.error}
+            </p>
+          </Show>
           <For each={roots()}>
             {(root) => {
               const active = () => !inScratch() && current() === root.path
@@ -112,9 +129,8 @@ export const WorkingFolderChip: Component<{
                 <button
                   type="button"
                   class="working-folder__option"
-                  role="menuitemradio"
-                  aria-checked={active()}
-                  disabled={props.disabled}
+                  aria-pressed={active()}
+                  disabled={props.disabled || choice.busy}
                   onClick={() => void choose(root.path)}
                 >
                   <span class="working-folder__option-copy">
@@ -131,9 +147,8 @@ export const WorkingFolderChip: Component<{
           <button
             type="button"
             class="working-folder__option"
-            role="menuitemradio"
-            aria-checked={inScratch()}
-            disabled={props.disabled}
+            aria-pressed={inScratch()}
+            disabled={props.disabled || choice.busy}
             onClick={() => void choose("scratch")}
           >
             <span class="working-folder__option-copy">

@@ -8,6 +8,33 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Fixed
+
+- Research search and WebFetch no longer ask for redundant approval in Ask risky
+  when the source is already allowed, including delegated literature work. New
+  network hosts still require approval; explicit rules and Full access are respected.
+  The literature group now includes ACL, OpenReview, and conference archives.
+- Public retrieval can use another validated address when a host's first DNS
+  address has no working network route, without replaying writes or certificate failures.
+- Consecutive reasoning fragments share one expandable trace row, completed tool
+  groups stay compact during long runs, and patch summaries count actual files.
+  Image tools no longer claim a connected account when no provider was selected,
+  or a generated file while the request is still running.
+- File activity shows colored added/removed line counts for completed edits,
+  writes, and patches, plus a net file-change summary for the turn.
+- Citation exports in BibTeX and RIS formats open as text through WebFetch.
+  Paper-writing guidance grounds drafts in literature, audits scope reductions,
+  and verifies rendered pages; diagram work can proceed with editable local
+  figures when an optional image provider is unavailable.
+- Isolated runs use their configured home for global compatibility instructions
+  and tilde-prefixed instruction paths.
+- Desktop updates allow time for multiple project runtimes to stop, preserve
+  disposal errors, and prevent polling from recreating disposed projects. Completed
+  onboarding survives updates, including older setup revisions.
+- Failed working-folder selections remain visible and can be retried. Research
+  instructions now explicitly reuse the selected folder and require literature,
+  evidence, and rendered-figure checks before delivering a manuscript.
+
 ## v2.0.93 — 2026-09-11
 
 ### Changed

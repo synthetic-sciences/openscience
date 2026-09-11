@@ -99,8 +99,14 @@
   outline: none;
 }
 
-.working-folder__option[aria-checked="true"] {
+.working-folder__option[aria-pressed="true"] {
   color: var(--color-text);
+}
+
+.working-folder__error {
+  color: var(--color-text-danger);
+  font-size: 12px;
+  margin: 8px 12px;
 }
 
 .working-folder__option-copy {

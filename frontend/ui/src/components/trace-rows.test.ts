@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AssistantMessage, Part, ToolPart } from "@synsci/sdk/v2/client"
-import { buildTraceRows, editedLabel, exploredLabel, thoughtLabel } from "./trace-rows"
+import { buildTraceRows, editedChanges, editedLabel, exploredLabel, thoughtLabel } from "./trace-rows"
 
 const message = {
   id: "msg_a",
@@ -32,6 +32,55 @@ function reasoning(id: string, start: number, end?: number): Part {
 const entries = (parts: Part[]) => parts.map((part) => ({ message, part }))
 
 describe("trace rows", () => {
+  test("edit groups include deleted files and sum completed changes without treating missing counts as zero", () => {
+    const parts = [
+      tool("patch", "apply_patch", {
+        metadata: { files: [{ filePath: "/project/old.md", type: "delete", additions: 0, deletions: 6 }] },
+      }),
+      tool("edit", "edit", { metadata: { filediff: { file: "/project/paper.md", additions: 4, deletions: 1 } } }),
+    ]
+    const row = buildTraceRows(entries(parts))[0] as Extract<
+      ReturnType<typeof buildTraceRows>[number],
+      { kind: "edited" }
+    >
+    expect(editedLabel(row)).toBe("Edited old.md, paper.md")
+    expect(editedChanges(row)).toEqual({ additions: 4, deletions: 7 })
+    const legacy = buildTraceRows(
+      entries([...parts, tool("old", "write", {}, { filePath: "/project/legacy.md" })]),
+    )[0] as typeof row
+    expect(editedChanges(legacy)).toBeUndefined()
+  })
+  test("folds consecutive provider summaries and private continuations without losing their records", () => {
+    const fragments = [
+      reasoning("r1", 0, 20_000),
+      { ...reasoning("r2", 20_000, 20_200), text: "[REDACTED]" } as Part,
+      reasoning("r3", 20_200, 40_200),
+    ]
+    const rows = buildTraceRows(entries([...fragments, tool("read", "read"), reasoning("r4", 45_000)]))
+    expect(rows.map((row) => row.kind)).toEqual(["thought", "explored", "thought"])
+    const thought = rows[0] as Extract<(typeof rows)[number], { kind: "thought" }>
+    expect(thought.entries.map((entry) => entry.part.id)).toEqual(["r1", "r2", "r3"])
+    expect(thought.seconds).toBe(40)
+    expect(thoughtLabel(thought.seconds, false)).toBe("Thought 40s")
+  })
+
+  test("patch edit counts use actual file receipts and keep distinct same-name files", () => {
+    const rows = buildTraceRows(
+      entries([
+        tool("patch", "apply_patch", {
+          metadata: {
+            files: [
+              { filePath: "/project/paper/README.md", type: "update" },
+              { filePath: "/project/code/README.md", type: "update" },
+              { filePath: "/project/figure.py", type: "add" },
+            ],
+          },
+        }),
+      ]),
+    )
+    expect(editedLabel(rows[0] as Extract<(typeof rows)[number], { kind: "edited" }>)).toBe("Edited 3 files")
+  })
+
   test("folds a burst of quiet exploration into one row and counts what it did", () => {
     const rows = buildTraceRows(
       entries([
