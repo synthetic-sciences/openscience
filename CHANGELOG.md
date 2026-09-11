@@ -8,6 +8,24 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Changed
+
+- Tool rows follow the recorded execution state. A call the model has not
+  finished writing reads as the plain tool noun with a "Preparing" mark, not as
+  "Reading" or "Finding relevant skills"; only a running call claims an
+  activity. A call cancelled before it started is "Cancelled", not a failed
+  lookup.
+- Streaming Markdown no longer re-highlights every finished code block on each
+  update. Highlights are cached per block, and a block still being written is
+  rendered as plain code once it passes 2 KB until its fence closes. A response
+  with two finished scripts and a third streaming cost 63 ms per update before
+  and 2.6 ms after, which is the difference between a frozen and a responsive
+  workspace while a long script streams.
+- The managed Ace gateway's header wait is ten minutes, matching its body
+  deadline. The gateway sends its response headers only once the upstream body
+  begins (one request reported upstream headers at 3.1 s while the client saw
+  them at 133 s), so a long silent think lands in the header wait.
+
 ## v2.0.92 — 2026-09-11
 
 ### Added

@@ -79,7 +79,8 @@ export function ResearchSearchTool(props: ToolProps) {
   const title = () => {
     if (toolOutcome(props.status, props.error) === "cancelled") return "Research search cancelled"
     if (failed()) return "Research search unavailable"
-    if (props.status !== "completed") return "Searching sources"
+    if (props.status === "running") return "Searching sources"
+    if (props.status !== "completed") return "Research search"
     const count = result().results?.length
     if (count === undefined) return "Research search"
     return count === 0 ? "No results returned" : `Found ${count} ${count === 1 ? "source" : "sources"}`

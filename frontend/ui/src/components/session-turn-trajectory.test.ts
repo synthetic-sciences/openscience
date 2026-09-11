@@ -560,6 +560,37 @@ describe("research search receipts", () => {
     expect(JSON.stringify(failed)).toBe(original)
   })
 
+  test("a skill call the model has not finished writing reads as preparing, and one that never started as cancelled", () => {
+    const pending: ToolPart = {
+      ...read("prt_pending_skill", "", 1_000),
+      tool: "skill",
+      state: { status: "pending", input: {}, raw: "" },
+    }
+    const host = mount(() => parts.Part({ part: pending, message: assistant(2_000) }), empty())
+    expect(host.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Skill")
+    expect(host.querySelector('[data-slot="basic-tool-tool-failure-label"]')?.textContent).toBe("Preparing")
+    expect(host.textContent).not.toContain("Finding relevant skills")
+    expect(host.querySelector('[data-component="tool-trigger"]')?.getAttribute("data-outcome")).toBe("pending")
+
+    const aborted: ToolPart = {
+      ...pending,
+      id: "prt_aborted_skill",
+      state: {
+        status: "error",
+        input: {},
+        raw: "",
+        metadata: { cancelled: true, started: false },
+        error: "Tool execution aborted. The skill call had not started; no action was taken.",
+        time: { start: 1_000, end: 1_001 },
+      },
+    }
+    const stopped = mount(() => parts.Part({ part: aborted, message: assistant(2_000) }), empty())
+    expect(stopped.querySelector('[data-slot="basic-tool-tool-title"]')?.textContent).toBe("Skill")
+    expect(stopped.querySelector('[data-slot="basic-tool-tool-failure-label"]')?.textContent).toBe("Cancelled")
+    expect(stopped.textContent).not.toContain("Skill lookup failed")
+    expect(stopped.querySelector('[data-component="tool-trigger"]')?.getAttribute("data-outcome")).toBe("cancelled")
+  })
+
   test("labels cancellation without implying a search-provider outage", () => {
     const part: ToolPart = {
       ...read("prt_cancelled_search", "", 1_000),

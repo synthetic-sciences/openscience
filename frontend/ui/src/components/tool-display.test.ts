@@ -135,6 +135,32 @@ describe("skillName", () => {
     expect(skillName({})).toBeUndefined()
     expect(skillActivity({ status: "running" })).toEqual({ title: "Finding relevant skills" })
   })
+  test("a pending call the model has not finished writing claims no activity", () => {
+    expect(skillActivity({ status: "pending", input: {} })).toEqual({ title: "Skill" })
+    expect(skillActivity({ status: "pending", input: { name: "matplotlib" } })).toEqual({
+      title: "Skill",
+      subtitle: "matplotlib",
+    })
+    expect(skillActivity({ status: "pending", input: { query: "plots" } })).toEqual({ title: "Skill" })
+  })
+  test("a cancelled call that never started is not a failed lookup", () => {
+    expect(
+      skillActivity({
+        status: "error",
+        input: {},
+        metadata: { cancelled: true, started: false },
+        error: "Tool execution aborted. The skill call had not started; no action was taken.",
+      }),
+    ).toEqual({ title: "Skill" })
+    expect(
+      skillActivity({
+        status: "error",
+        input: { name: "matplotlib" },
+        metadata: { cancelled: true, started: true },
+        error: "The operation was aborted",
+      }),
+    ).toEqual({ title: "Skill", subtitle: "matplotlib" })
+  })
   test("distinguishes a requested load, recorded load and discovered candidates", () => {
     expect(skillActivity({ input: { name: "scientific-schematics" }, status: "running" })).toEqual({
       title: "Loading scientific-schematics",

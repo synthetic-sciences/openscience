@@ -200,11 +200,12 @@ export type ToolInfo = {
   subtitle?: string
 }
 
-/** A row reads as what happened: "Ran", "Read", "Searched". While the call is
- * still in flight it reads as what is happening. */
+/** A row reads as what happened: "Ran", "Read", "Searched". While the call
+ * executes it reads as what is happening. A pending call is still being
+ * written by the model, so it keeps the noun: nothing is being read or run
+ * yet, and the row's state glyph says "Preparing". */
 function toolVerb(i18n: ReturnType<typeof useI18n>, tool: string, status: string | undefined, done: UiI18nKey) {
-  const live = status === "running" || status === "pending"
-  const key = live ? runningLabel(tool) : undefined
+  const key = status === "running" ? runningLabel(tool) : undefined
   return i18n.t(key ?? done)
 }
 
@@ -1061,7 +1062,13 @@ ToolRegistry.register({
   name: "skill",
   render(props) {
     const activity = () =>
-      skillActivity({ metadata: props.metadata, input: props.input, title: props.title, status: props.status })
+      skillActivity({
+        metadata: props.metadata,
+        input: props.input,
+        title: props.title,
+        status: props.status,
+        error: props.error,
+      })
     return (
       <BasicTool {...props} icon="mcp" trigger={{ title: activity().title, subtitle: activity().subtitle }}>
         <Show when={loadedSkillName(props)}>
