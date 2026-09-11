@@ -36,7 +36,7 @@ print(adata_combined.shape)  # (100, 150)
 ## Join Types
 
 ### Inner join (intersection)
-Keep only variables/observations present in all objects.
+Keep only variables/observations present in all objects. Use this when all objects measured the same features or when downstream analysis should include shared features only.
 
 ```python
 import pandas as pd
@@ -57,7 +57,7 @@ print(adata_inner.n_vars)  # 40 genes (overlap)
 ```
 
 ### Outer join (union)
-Keep all variables/observations, filling missing values.
+Keep all variables/observations, filling missing values. Use this when preserving all `var` entries, genes, or features across an AnnData list matters.
 
 ```python
 # Outer join: all genes are kept
@@ -71,9 +71,11 @@ print(adata_outer.n_vars)  # 70 genes (union)
 
 ### Fill values for outer joins
 ```python
-# Specify fill value for missing data
+# Specify fill value for missing data only when zero is appropriate
 adata_filled = ad.concat([adata1, adata2], join='outer', fill_value=0)
 ```
+
+For sparse count matrices, missing genes are generally filled with zeros. For dense matrices, missing entries may be `NaN`; choose `fill_value=0` deliberately only when zero-fill matches the data and analysis.
 
 ## Tracking Data Sources
 
@@ -333,7 +335,7 @@ adata_combined = ad.concat(
     batches,
     label='batch',
     keys=['batch1', 'batch2', 'batch3'],
-    join='outer'  # Keep all genes
+    join='outer'  # Preserve the union of genes/features across batches
 )
 
 # Later: apply batch correction
@@ -364,8 +366,8 @@ print([set(adata.var_names) for adata in [adata1, adata2, adata3]])
 ```
 
 2. **Use appropriate join type**
-- `inner`: When you need the same features across all samples (most stringent)
-- `outer`: When you want to preserve all features (most inclusive)
+- `inner`: Intersection of features across all samples; use when analysis should include only shared features
+- `outer`: Union of features across all samples; use when preserving all genes/features matters
 
 3. **Track data sources**
 Always use `label` and `keys` to track which observations came from which dataset.
