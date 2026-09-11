@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+## v2.0.93 — 2026-09-11
+
 ### Changed
 
 - One body size across the conversation: the answer, the reasoning, the
