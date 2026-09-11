@@ -8,6 +8,12 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Fixed
+
+- When pyright is not installed and cannot be downloaded, Python diagnostics
+  stand down with one warning instead of starting a language server that exits
+  at once and is reported as a crash on every new project.
+
 ## v2.0.90–v2.0.91 — 2026-09-10
 
 v2.0.91 republishes the v2.0.90 source unchanged; two publish dispatches
