@@ -8,6 +8,23 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Fixed
+
+- Research search and WebFetch no longer ask for redundant approval in Ask risky
+  when the source is already allowed, including delegated literature work. New
+  network hosts still require approval; explicit rules and Full access are respected.
+  The literature group now includes ACL, OpenReview, and conference archives.
+- Public retrieval can use another validated address when a host's first DNS
+  address has no working network route, without replaying writes or certificate failures.
+- Consecutive reasoning fragments share one expandable trace row, completed tool
+  groups stay compact during long runs, and patch summaries count actual files.
+- Desktop updates allow time for multiple project runtimes to stop, preserve
+  disposal errors, and prevent polling from recreating disposed projects. Completed
+  onboarding survives updates, including older setup revisions.
+- Failed working-folder selections remain visible and can be retried. Research
+  instructions now explicitly reuse the selected folder and require literature,
+  evidence, and rendered-figure checks before delivering a manuscript.
+
 ## v2.0.93 — 2026-09-11
 
 ### Changed

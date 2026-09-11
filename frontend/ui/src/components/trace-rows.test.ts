@@ -32,6 +32,37 @@ function reasoning(id: string, start: number, end?: number): Part {
 const entries = (parts: Part[]) => parts.map((part) => ({ message, part }))
 
 describe("trace rows", () => {
+  test("folds consecutive provider summaries and private continuations without losing their records", () => {
+    const fragments = [
+      reasoning("r1", 0, 20_000),
+      { ...reasoning("r2", 20_000, 20_200), text: "[REDACTED]" } as Part,
+      reasoning("r3", 20_200, 40_200),
+    ]
+    const rows = buildTraceRows(entries([...fragments, tool("read", "read"), reasoning("r4", 45_000)]))
+    expect(rows.map((row) => row.kind)).toEqual(["thought", "explored", "thought"])
+    const thought = rows[0] as Extract<(typeof rows)[number], { kind: "thought" }>
+    expect(thought.entries.map((entry) => entry.part.id)).toEqual(["r1", "r2", "r3"])
+    expect(thought.seconds).toBe(40)
+    expect(thoughtLabel(thought.seconds, false)).toBe("Thought 40s")
+  })
+
+  test("patch edit counts use actual file receipts and keep distinct same-name files", () => {
+    const rows = buildTraceRows(
+      entries([
+        tool("patch", "apply_patch", {
+          metadata: {
+            files: [
+              { filePath: "/project/paper/README.md", type: "update" },
+              { filePath: "/project/code/README.md", type: "update" },
+              { filePath: "/project/figure.py", type: "add" },
+            ],
+          },
+        }),
+      ]),
+    )
+    expect(editedLabel(rows[0] as Extract<(typeof rows)[number], { kind: "edited" }>)).toBe("Edited 3 files")
+  })
+
   test("folds a burst of quiet exploration into one row and counts what it did", () => {
     const rows = buildTraceRows(
       entries([

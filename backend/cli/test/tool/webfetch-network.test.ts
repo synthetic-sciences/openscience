@@ -19,6 +19,54 @@ import z from "zod"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { tmpdir } from "../fixture/fixture"
+import { Agent } from "../../src/agent/agent"
+import { PermissionNext } from "../../src/permission/next"
+import { ProjectAccess } from "../../src/project/access"
+
+test.each(["approve", "full"] as const)(
+  "%s retrieves an allowed source without any user reply, including Explore workers",
+  async (mode) => {
+    await Network.set({ allowlistEnabled: true, enabled: [], custom: ["example.com"] })
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response("<h1>Verified source</h1>", { headers: { "content-type": "text/html" } }),
+    })
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) =>
+      realFetch(server.url, init)) as typeof fetch
+    try {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await ProjectAccess.update(Instance.project, { mode, root: Instance.project.worktree })
+          const session = await Session.create({})
+          for (const name of ["research", "explore"]) {
+            const agent = await Agent.get(name)
+            const signal = AbortSignal.timeout(2_000)
+            const ctx = {
+              ...context(async (request) => {
+                await PermissionNext.ask(
+                  { ...request, sessionID: session.id, mode, ruleset: agent!.permission },
+                  signal,
+                )
+              }),
+              sessionID: session.id,
+              abort: signal,
+            }
+            const result = await (
+              await WebFetchTool.init()
+            ).execute({ url: "https://example.com/paper", format: "markdown" }, ctx)
+            expect(result.output).toContain("Verified source")
+            expect(await PermissionNext.list()).toEqual([])
+          }
+        },
+      })
+    } finally {
+      await server.stop(true)
+    }
+  },
+)
 
 const realFetch = globalThis.fetch
 

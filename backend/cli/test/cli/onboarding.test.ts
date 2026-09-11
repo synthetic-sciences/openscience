@@ -10,13 +10,16 @@ test("the terminal setup only runs for a person at an interactive, non-restarted
   expect(Onboarding.interactive({ isTTY: true, env: { OPENSCIENCE_SKIP_ONBOARDING: "1" } })).toBe(false)
 })
 
-test("every install sees the current setup revision once, including ones that finished the previous revision", async () => {
+test("completed setup survives a revision change while an explicit reset requires setup", async () => {
   await patchPreferences({ desktop_onboarding_version: 0 })
   expect(await Onboarding.pending()).toBe(true)
 
   await patchPreferences({ desktop_onboarding_version: ONBOARDING_VERSION - 1 })
-  expect(await Onboarding.pending()).toBe(true)
+  expect(await Onboarding.pending()).toBe(false)
 
   await patchPreferences({ desktop_onboarding_version: ONBOARDING_VERSION, desktop_onboarding_step: "done" })
   expect(await Onboarding.pending()).toBe(false)
+
+  await patchPreferences({ desktop_onboarding_version: 0, desktop_onboarding_step: "account" })
+  expect(await Onboarding.pending()).toBe(true)
 })

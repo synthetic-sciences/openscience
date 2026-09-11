@@ -6,6 +6,7 @@ import { iife } from "@synsci/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
 import { Startup } from "@/util/startup"
+import { UpdateQuiescence } from "@/process/update-quiescence"
 
 interface Context {
   directory: string
@@ -35,6 +36,9 @@ async function register(
   const selected = input.projectID ? await Project.resolve(input.projectID, directory) : undefined
   const raced = cache.get(directory)
   if (raced) return raced
+  // Polling clients must not recreate a project after shutdown has disposed
+  // it. Existing contexts remain available to the disposers themselves.
+  UpdateQuiescence.assertOpen()
   Log.Default.info("creating instance", { directory })
   Startup.instance(directory === Project.canonicalize(process.cwd()) ? "cwd" : "project")
   const boot = { ctx: undefined as Context | undefined }

@@ -49,6 +49,10 @@ export namespace PermissionNext {
     "research_contract",
     "task",
     "todowrite",
+    // Public retrieval is brokered separately: Network still authorizes every
+    // destination and redirect, including the connected science databases.
+    "webfetch",
+    "websearch",
   ])
   const RISKY = new Set([
     "atlas",
@@ -64,8 +68,6 @@ export namespace PermissionNext {
     "network",
     "provider_compute",
     "remote_compute",
-    "webfetch",
-    "websearch",
   ])
 
   const ShellMetadata = z.object({

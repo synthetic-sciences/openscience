@@ -56,10 +56,10 @@ type Outcome = "completed" | "cancelled"
  * flow: account (required), Ace, own connections, done.
  */
 export namespace Onboarding {
-  /** Whether this install still has to see the current setup revision. */
+  /** Setup is a one-time install flow; revisions do not reset completion. */
   export async function pending(): Promise<boolean> {
     const preferences = await readPreferences().catch(() => undefined)
-    return (preferences?.desktop_onboarding_version ?? 0) < ONBOARDING_VERSION
+    return (preferences?.desktop_onboarding_version ?? 0) === 0
   }
 
   /** A wizard needs a person at a terminal; scripted, restarted, and CI runs skip it. */

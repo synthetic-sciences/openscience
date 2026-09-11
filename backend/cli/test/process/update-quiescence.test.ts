@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { UpdateQuiescence } from "../../src/process/update-quiescence"
 import { createGracefulDisposer } from "../../src/process/graceful-shutdown"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
 
 describe("desktop update quiescence", () => {
   let cleanup: (() => void) | undefined
@@ -32,6 +34,18 @@ describe("desktop update quiescence", () => {
     const release = UpdateQuiescence.enter()
     release()
     release()
+  })
+
+  test("polling cannot recreate a disposed project while the desktop drains", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({ directory: tmp.path, fn: async () => Instance.dispose() })
+    cleanup = UpdateQuiescence.begin()
+    await expect(Instance.provide({ directory: tmp.path, fn: () => undefined })).rejects.toThrow(
+      "restarting to install",
+    )
+    expect(Instance.has(tmp.path)).toBe(false)
+    cleanup()
+    await Instance.provide({ directory: tmp.path, fn: () => expect(Instance.has(tmp.path)).toBe(true) })
   })
 
   test("interactive terminals, kernel executions, and MCP requests are visible blockers", () => {
@@ -88,5 +102,23 @@ describe("desktop update quiescence", () => {
     await expect(dispose()).rejects.toThrow("could not release")
     await dispose()
     expect(attempts).toBe(2)
+  })
+
+  test("a timed-out caller can rejoin cleanup without starting a competing disposal", async () => {
+    const finished = Promise.withResolvers<void>()
+    const state = { calls: 0 }
+    const dispose = createGracefulDisposer({
+      seal() {},
+      stopCommands: async () => undefined,
+      disposeInstances: async () => {
+        state.calls++
+        await finished.promise
+      },
+    })
+    await expect(dispose({ timeoutMs: 10 })).rejects.toThrow("did not finish")
+    const retry = dispose({ timeoutMs: 1_000 })
+    finished.resolve()
+    await retry
+    expect(state.calls).toBe(1)
   })
 })

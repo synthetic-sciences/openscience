@@ -75,6 +75,10 @@ For Ollama, start `ollama serve` if needed. For LM Studio, start its local serve
 
 If a `--bare` request works but research tasks fail, verify tool calling and reduce the input or context size. See [Local models](/openscience/local-models).
 
+## Updating reports that OpenScience could not quit safely
+
+Finish active sessions and compute jobs, then retry the verified update. The desktop waits for all project runtimes to release their processes before it exits; the reported error identifies a failed disposal. It does not force an update over active work. A completed setup stays complete after an update, even if the onboarding flow has changed. An explicit setup reset still opens onboarding.
+
 ## Files are missing or the wrong copy opens
 
 Confirm that you opened the intended project. In Files, check **Project files** and **Session scratch** separately. Read the location shown in the preview.
