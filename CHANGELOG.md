@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+## v2.0.92 — 2026-09-11
+
 ### Added
 
 - Independence sits beside the model and effort chips in the composer, with a
