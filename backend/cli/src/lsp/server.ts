@@ -730,6 +730,18 @@ export namespace LSPServer {
             },
           }).exited
         }
+        // An install that could not reach the registry leaves nothing to run.
+        // Say so once and stand down, instead of starting a process that exits
+        // before it owns anything and is reported as a crashed language server.
+        if (!(await Bun.file(js).exists())) {
+          log.warn(
+            "pyright is not installed and could not be downloaded; Python diagnostics are off for this session",
+            {
+              expected: js,
+            },
+          )
+          return
+        }
         binary = BunProc.which()
         args.push(...["run", js])
       }
