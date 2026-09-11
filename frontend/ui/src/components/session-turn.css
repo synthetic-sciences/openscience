@@ -217,7 +217,7 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 8px;
     align-items: flex-start;
     align-self: stretch;
   }
@@ -733,7 +733,7 @@
     [data-slot="trace-row-chevron"] {
       flex-shrink: 0;
       color: var(--icon-weak);
-      opacity: 0;
+      opacity: 0.5;
       transform: rotate(-90deg);
       transition:
         opacity 150ms var(--ease-standard, ease),
@@ -748,6 +748,18 @@
     &[data-open="true"] [data-slot="trace-row-chevron"] {
       opacity: 1;
     }
+  }
+
+  [data-slot="session-turn-changes-summary"] {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 12px;
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-base);
   }
 
   /* Narration between tool bursts reads as part of the trace, quieter than

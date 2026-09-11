@@ -1,5 +1,4 @@
 import path from "path"
-import os from "os"
 import { constants as FS } from "node:fs"
 import fs from "node:fs/promises"
 import { Global } from "../global"
@@ -26,7 +25,7 @@ const SOURCE_COUNT = 64
 function globalFiles() {
   const files = [path.join(Global.Path.config, "AGENTS.md")]
   if (!Flag.OPENSCIENCE_DISABLE_CLAUDE_CODE_PROMPT) {
-    files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
+    files.push(path.join(Global.Path.home, ".claude", "CLAUDE.md"))
   }
   if (Flag.OPENSCIENCE_CONFIG_DIR) {
     files.push(path.join(Flag.OPENSCIENCE_CONFIG_DIR, "AGENTS.md"))
@@ -212,7 +211,7 @@ export namespace InstructionPrompt {
         if (paths.size >= SOURCE_COUNT) break
         if (instruction.startsWith("https://") || instruction.startsWith("http://")) continue
         if (instruction.startsWith("~/")) {
-          instruction = path.join(os.homedir(), instruction.slice(2))
+          instruction = path.join(Global.Path.home, instruction.slice(2))
         }
         const matches = path.isAbsolute(instruction)
           ? await globUp(

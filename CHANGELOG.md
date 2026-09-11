@@ -20,6 +20,14 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   groups stay compact during long runs, and patch summaries count actual files.
   Image tools no longer claim a connected account when no provider was selected,
   or a generated file while the request is still running.
+- File activity shows colored added/removed line counts for completed edits,
+  writes, and patches, plus a net file-change summary for the turn.
+- Citation exports in BibTeX and RIS formats open as text through WebFetch.
+  Paper-writing guidance grounds drafts in literature, audits scope reductions,
+  and verifies rendered pages; diagram work can proceed with editable local
+  figures when an optional image provider is unavailable.
+- Isolated runs use their configured home for global compatibility instructions
+  and tilde-prefixed instruction paths.
 - Desktop updates allow time for multiple project runtimes to stop, preserve
   disposal errors, and prevent polling from recreating disposed projects. Completed
   onboarding survives updates, including older setup revisions.

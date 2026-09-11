@@ -1,7 +1,7 @@
 import type { Part, ToolPart } from "@synsci/sdk/v2/client"
 import type { ResearchTraceEntry } from "./research-trace"
 import { collapsibleTracePart, traceFamily } from "./research-trace"
-import { writtenFiles } from "./tool-display"
+import { toolChanges, writtenFiles } from "./tool-display"
 
 /**
  * The activity trace as a list of rows, the way Cursor presents work: one
@@ -26,7 +26,28 @@ function settled(part: ToolPart) {
 }
 
 function editedFiles(part: ToolPart) {
+  if (part.tool === "apply_patch" && part.state.status === "completed" && Array.isArray(part.state.metadata.files)) {
+    return part.state.metadata.files.flatMap((file: unknown) => {
+      if (!file || typeof file !== "object") return []
+      const record = file as Record<string, unknown>
+      const path = record.movePath ?? record.filePath
+      return typeof path === "string" ? [path] : []
+    })
+  }
   return writtenFiles([part])
+}
+
+export function editedChanges(row: Extract<TraceRow, { kind: "edited" }>) {
+  const total = { additions: 0, deletions: 0 }
+  for (const entry of row.entries) {
+    if (entry.part.type !== "tool") return
+    const changes = toolChanges(entry.part.state)
+    // Older receipts may lack counts. An incomplete sum would understate the work.
+    if (!changes) return
+    total.additions += changes.additions
+    total.deletions += changes.deletions
+  }
+  return total
 }
 
 function thoughtSeconds(part: Part) {

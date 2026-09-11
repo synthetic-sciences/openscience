@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AssistantMessage, Part, ToolPart } from "@synsci/sdk/v2/client"
-import { buildTraceRows, editedLabel, exploredLabel, thoughtLabel } from "./trace-rows"
+import { buildTraceRows, editedChanges, editedLabel, exploredLabel, thoughtLabel } from "./trace-rows"
 
 const message = {
   id: "msg_a",
@@ -32,6 +32,24 @@ function reasoning(id: string, start: number, end?: number): Part {
 const entries = (parts: Part[]) => parts.map((part) => ({ message, part }))
 
 describe("trace rows", () => {
+  test("edit groups include deleted files and sum completed changes without treating missing counts as zero", () => {
+    const parts = [
+      tool("patch", "apply_patch", {
+        metadata: { files: [{ filePath: "/project/old.md", type: "delete", additions: 0, deletions: 6 }] },
+      }),
+      tool("edit", "edit", { metadata: { filediff: { file: "/project/paper.md", additions: 4, deletions: 1 } } }),
+    ]
+    const row = buildTraceRows(entries(parts))[0] as Extract<
+      ReturnType<typeof buildTraceRows>[number],
+      { kind: "edited" }
+    >
+    expect(editedLabel(row)).toBe("Edited old.md, paper.md")
+    expect(editedChanges(row)).toEqual({ additions: 4, deletions: 7 })
+    const legacy = buildTraceRows(
+      entries([...parts, tool("old", "write", {}, { filePath: "/project/legacy.md" })]),
+    )[0] as typeof row
+    expect(editedChanges(legacy)).toBeUndefined()
+  })
   test("folds consecutive provider summaries and private continuations without losing their records", () => {
     const fragments = [
       reasoning("r1", 0, 20_000),

@@ -42,12 +42,20 @@ words with the request.
 The typical workflow starts with a research repository containing code, results, and experimental artifacts. Claude's role is to:
 
 1. **Understand the project** by exploring the repo, results, and existing documentation
-2. **Deliver a complete first draft** when confident about the contribution
-3. **Search literature** using web search and APIs to find relevant citations
+2. **Ground the contribution in literature** using primary sources and verified citation exports before writing a complete manuscript
+3. **Deliver a complete first draft** when the argument, evidence, and nearest competing work are understood
 4. **Refine through feedback cycles** when the scientist provides input
 5. **Ask for clarification** only when genuinely uncertain about key decisions
 
 **Key Principle**: Be proactive. If the repo and results are clear, deliver a full draft. Don't block waiting for feedback on every section—scientists are busy. Produce something concrete they can react to, then iterate based on their response.
+
+Before calling a requested paper complete, compare it with the supplied plan and acceptance gates.
+Report the achieved experiment scope, missing controls or comparisons, literature coverage, and
+unresolved claims. Use enough relevant primary sources to support the argument; neither a fixed
+citation quota nor a compiled PDF establishes completeness. Incorporate completed literature-worker
+findings before finalizing related work, and state explicitly when a worker's retrieval failed.
+Inspect the rendered final pages and figures. Label a reduced exploratory study as such instead of
+equating a smaller executed campaign with the original research goal.
 
 ---
 

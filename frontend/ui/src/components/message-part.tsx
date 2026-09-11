@@ -67,6 +67,7 @@ import {
   taskOutcome,
   taskPhase,
   toolOutcome,
+  toolChanges,
   toolSummary,
 } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
@@ -1814,9 +1815,7 @@ ToolRegistry.register({
                 </Show>
               </div>
               <div data-slot="message-part-actions">
-                <Show when={props.metadata.filediff}>
-                  <DiffChanges changes={props.metadata.filediff} />
-                </Show>
+                <Show when={toolChanges(props)}>{(changes) => <DiffChanges changes={changes()} />}</Show>
               </div>
             </div>
           }
@@ -1885,7 +1884,9 @@ ToolRegistry.register({
                   </div>
                 </Show>
               </div>
-              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
+              <div data-slot="message-part-actions">
+                <Show when={toolChanges(props)}>{(changes) => <DiffChanges changes={changes()} />}</Show>
+              </div>
             </div>
           }
         >
@@ -1945,6 +1946,7 @@ ToolRegistry.register({
           trigger={{
             title: toolVerb(i18n, "apply_patch", props.status, "ui.tool.patch"),
             subtitle: subtitle(),
+            action: <Show when={toolChanges(props)}>{(changes) => <DiffChanges changes={changes()} />}</Show>,
           }}
         >
           <Show when={files().length > 0}>

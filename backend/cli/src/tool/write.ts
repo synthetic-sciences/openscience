@@ -2,7 +2,7 @@ import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
 import { File } from "../file"
@@ -38,6 +38,11 @@ export const WriteTool = Tool.define("write", {
     PayloadIntegrity.assert({ content: params.content, before: contentOld, messages: ctx.messages })
 
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
+    const filediff = { file: filepath, additions: 0, deletions: 0 }
+    for (const change of diffLines(contentOld, params.content)) {
+      if (change.added) filediff.additions += change.count ?? 0
+      if (change.removed) filediff.deletions += change.count ?? 0
+    }
     await ctx.ask({
       permission: "edit",
       patterns: [path.relative(Instance.worktree, filepath)],
@@ -88,6 +93,7 @@ export const WriteTool = Tool.define("write", {
         diagnostics,
         filepath,
         exists: exists,
+        filediff,
       },
       output,
     }

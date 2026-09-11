@@ -56,7 +56,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
 import { headerProgress, progressStatus } from "./session-turn-progress"
 import { collapsibleTracePart, elapsedLabel, visibleResearchTrace, type ResearchTraceEntry } from "./research-trace"
-import { buildTraceRows, editedLabel, exploredLabel, thoughtLabel, type TraceRow } from "./trace-rows"
+import { buildTraceRows, editedChanges, editedLabel, exploredLabel, thoughtLabel, type TraceRow } from "./trace-rows"
 import { Collapsible } from "./collapsible"
 import { MarkdownFileScope, useMarkdownFileResolvers } from "./markdown"
 
@@ -152,6 +152,7 @@ function TraceGroupRow(props: {
   live?: boolean
   working?: boolean
   header?: boolean
+  changes?: { additions: number; deletions: number }
   children: JSX.Element
 }) {
   const [manual, setManual] = createSignal<boolean>()
@@ -185,6 +186,7 @@ function TraceGroupRow(props: {
             <Spinner />
           </Show>
           <span data-slot="trace-row-label">{props.label}</span>
+          <Show when={props.changes}>{(changes) => <DiffChanges changes={changes()} />}</Show>
           <Icon name="chevron-down" size="small" data-slot="trace-row-chevron" />
         </div>
       </Collapsible.Trigger>
@@ -279,6 +281,9 @@ function AssistantTrace(props: {
                     kind={kind}
                     working={props.working}
                     header={value().entries.length > 1}
+                    changes={
+                      kind === "edited" ? editedChanges(value() as Extract<TraceRow, { kind: "edited" }>) : undefined
+                    }
                     label={
                       kind === "explored"
                         ? exploredLabel(value() as Extract<TraceRow, { kind: "explored" }>)
@@ -1039,6 +1044,12 @@ export function SessionTurn(
                     </Show>
                     <Show when={hasDiffs()}>
                       <div data-slot="session-turn-summary-section">
+                        <div data-slot="session-turn-changes-summary">
+                          <span>
+                            {messageDiffs().length} {messageDiffs().length === 1 ? "file changed" : "files changed"}
+                          </span>
+                          <DiffChanges changes={messageDiffs()} />
+                        </div>
                         <Accordion
                           data-slot="session-turn-accordion"
                           multiple

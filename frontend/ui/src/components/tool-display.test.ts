@@ -23,8 +23,42 @@ import {
   toolErrorDisplay,
   toolOutcome,
   toolSummary,
+  toolChanges,
   writtenFiles,
 } from "./tool-display"
+
+describe("recorded line changes", () => {
+  test("counts edit, write and atomic patch receipts including deletions", () => {
+    expect(toolChanges({ status: "completed", metadata: { filediff: { additions: 12, deletions: 3 } } })).toEqual({
+      additions: 12,
+      deletions: 3,
+    })
+    expect(
+      toolChanges({
+        status: "completed",
+        metadata: {
+          files: [
+            { additions: 3, deletions: 1 },
+            { additions: 0, deletions: 8 },
+          ],
+        },
+      }),
+    ).toEqual({ additions: 3, deletions: 9 })
+  })
+
+  test("does not invent counts for running, failed, legacy or incomplete receipts", () => {
+    const metadata = { filediff: { additions: 12, deletions: 3 } }
+    for (const status of ["pending", "running", "error"]) expect(toolChanges({ status, metadata })).toBeUndefined()
+    for (const metadata of [
+      {},
+      { filediff: { additions: -1, deletions: 0 } },
+      { filediff: { additions: "4", deletions: 0 } },
+      { files: [{ additions: 4, deletions: 0 }, { filePath: "missing.txt" }] },
+    ]) {
+      expect(toolChanges({ status: "completed", metadata })).toBeUndefined()
+    }
+  })
+})
 
 describe("humanizeToolName", () => {
   test("titlecases a simple id", () => {

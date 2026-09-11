@@ -1,8 +1,8 @@
 ---
 name: scientific-schematics
-description: Create or refine publication-quality technical diagrams, scientific workflows, architectures, and biological schematics with the native image-generation capability.
+description: Create or refine publication-quality technical diagrams, scientific workflows, architectures, and biological schematics using editable drawing tools or native image generation.
 category: visualization
-allowed-tools: [Read, Write, Edit, generate_image]
+allowed-tools: [Read, Write, Edit, Bash, generate_image]
 ---
 
 # Scientific schematics
@@ -21,22 +21,29 @@ mechanistic illustrations, and conceptual schematics.
 - For plots derived from numeric data, use the local analysis/plotting tool that
   produced the data. Do not use an image model to invent measurements.
 
-## Native workflow
+## Figure workflow
 
 1. Read the target manuscript, caption, or source figure when one exists.
 2. Identify the figure's scientific claim, required components, labels, reading
    order, and output dimensions.
-3. Call `generate_image` directly. It resolves connected OpenRouter BYOK or a
-   funded OpenScience managed route without exposing credentials to shell code.
-4. Inspect the generated file. If a concrete defect remains, make one focused
-   edit with `generate_image` using the existing image as the reference.
+3. Choose the medium for the figure. Prefer editable vector drawings for exact
+   labels, arrows, timelines, matrices, and system diagrams. Use native
+   `generate_image` for illustrative figures or when the user requests image
+   generation; it uses a connected Gemini or OpenRouter account.
+4. Render and visually inspect the figure at its actual manuscript size, then
+   inspect the page containing it. Fix collisions between labels, arrows, and
+   panel boundaries, clipped legends, tiny type, and low contrast. A successful
+   export or a text bounding-box check alone is not visual verification.
 5. Save the accepted figure in the active session or project workspace and
    update the manuscript only when requested.
 
 Do not invoke bundled Python or CLI image wrappers inside OpenScience. Do not
 ask the user to paste a key into chat. If `generate_image` reports that no route
-is connected, explain the connection requirement once and offer a deterministic
-local diagram only with the user's agreement.
+is connected, explain the limitation once and continue with a deterministic
+local diagram when the user's request authorizes making the figure. Do not ask
+again for an ordinary drawing-method choice or repeatedly call the unavailable
+provider. If AI-generated imagery is an explicit requirement, report that
+requirement as unresolved instead of claiming the substitute satisfies it.
 
 ## Prompt contract
 
