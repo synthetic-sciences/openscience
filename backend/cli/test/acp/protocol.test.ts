@@ -138,6 +138,7 @@ test("ACP SDK routes stable session and model configuration requests over JSON-R
         role: "user",
         time: { created: Date.now() },
         agent: "research",
+        effort: "normal",
         model: { providerID: "fixture", modelID: "second" },
         variant: "high",
       })
