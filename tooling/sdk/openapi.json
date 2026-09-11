@@ -27400,6 +27400,7 @@
                               "pending",
                               "running",
                               "completed",
+                              "partial",
                               "error"
                             ]
                           },
@@ -27469,6 +27470,7 @@
                               "pending",
                               "running",
                               "completed",
+                              "partial",
                               "error"
                             ]
                           },
