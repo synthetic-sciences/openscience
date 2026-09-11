@@ -23,7 +23,7 @@
         "openscience": "./bin/openscience",
       },
       "dependencies": {
-        "@agentclientprotocol/sdk": "0.13.0",
+        "@agentclientprotocol/sdk": "0.29.0",
         "@ai-sdk/amazon-bedrock": "3.0.73",
         "@ai-sdk/anthropic": "2.0.57",
         "@ai-sdk/azure": "2.0.91",
@@ -328,7 +328,7 @@
     "zod": "4.1.8",
   },
   "packages": {
-    "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@0.13.0", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-Z6/Fp4cXLbYdMXr5AK752JM5qG2VKb6ShM0Ql6FimBSckMmLyK54OA20UhPYoH4C37FSFwUTARuwQOwQUToYrw=="],
+    "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@0.29.0", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-Sb8xJ/cIhqlvxeJiB0+1scBk0LAkVAwJ9WAFG9XCe3LEI5JWAyOxbqaCa8O1HmNnrk4+qHN11eaKH6zL2iHIYA=="],
 
     "@ai-sdk/amazon-bedrock": ["@ai-sdk/amazon-bedrock@3.0.73", "", { "dependencies": { "@ai-sdk/anthropic": "2.0.57", "@ai-sdk/provider": "2.0.1", "@ai-sdk/provider-utils": "3.0.20", "@smithy/eventstream-codec": "^4.0.1", "@smithy/util-utf8": "^4.0.0", "aws4fetch": "^1.0.20" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-EAAGJ/dfbAZaqIhK3w52hq6cftSLZwXdC6uHKh8Cls1T0N4MxS6ykDf54UyFO3bZWkQxR+Mdw1B3qireGOxtJQ=="],
 
