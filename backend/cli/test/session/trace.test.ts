@@ -12,6 +12,61 @@ import { tmpdir } from "../fixture/fixture"
 import { TokenUsage } from "@synsci/util/token-usage"
 import { TaskAttempt } from "../../src/tool/task-attempt"
 import { ArtifactStore } from "../../src/artifact/store"
+import { SessionRoutes } from "../../src/server/routes/session"
+
+test.each(["research_search", "python", "r"])("trace endpoint preserves partial %s results", async (tool) => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({ title: "Partial research output" })
+      const started = Date.now()
+      const assistant: MessageV2.Assistant = {
+        id: "msg_partial_assistant",
+        sessionID: session.id,
+        role: "assistant",
+        time: { created: started, completed: started + 100 },
+        parentID: "msg_partial_user",
+        modelID: "gpt-5",
+        providerID: "openai",
+        mode: "research",
+        agent: "research",
+        path: { cwd: tmp.path, root: tmp.path },
+        cost: 0,
+        tokens: { input: 10, output: 10, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: "stop",
+      }
+      await Session.updateMessage(assistant)
+      await Session.updatePart({
+        id: "part_partial_result",
+        sessionID: session.id,
+        messageID: assistant.id,
+        type: "tool",
+        callID: "call_partial_result",
+        tool,
+        state: {
+          status: "completed",
+          input: tool === "research_search" ? { query: "forecast reliability" } : { code: "1 + 1" },
+          output: "Partial output that the trace must not copy",
+          title: "Partial research output",
+          metadata: { outcome: "partial" },
+          time: { start: started + 10, end: started + 90 },
+        },
+      })
+
+      const response = await SessionRoutes().request(`/${session.id}/trace`)
+      expect(response.status).toBe(200)
+      const trace = SessionTrace.Info.parse(await response.json())
+      expect(trace.tools).toMatchObject([{ id: "part_partial_result", status: "partial" }])
+      expect(tool === "research_search" ? trace.searches : trace.kernels).toMatchObject([
+        { toolID: "part_partial_result", status: "partial" },
+      ])
+      expect(trace.summary).toMatchObject({ toolCalls: 1, failureCount: 0 })
+      expect(JSON.stringify(trace)).not.toContain("Partial output that the trace must not copy")
+      await Session.remove(session.id)
+    },
+  })
+})
 
 test("builds one local observable harness trace without reasoning or copied outputs", async () => {
   await using tmp = await tmpdir({ git: true })

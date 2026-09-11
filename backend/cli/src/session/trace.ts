@@ -74,7 +74,7 @@ export namespace SessionTrace {
         modelID: z.string(),
       })
       .optional(),
-    status: z.enum(["pending", "running", "completed", "partial", "error"]),
+    status: Tool.shape.status,
     startedAt: z.number().optional(),
     completedAt: z.number().optional(),
     durationMs: z.number().optional(),
@@ -89,7 +89,7 @@ export namespace SessionTrace {
     tool: z.string(),
     query: z.string().optional(),
     signature: z.string(),
-    status: z.enum(["pending", "running", "completed", "error"]),
+    status: Tool.shape.status,
     dedupeHit: z.boolean(),
     dedupeOf: z
       .object({
@@ -107,7 +107,7 @@ export namespace SessionTrace {
     toolID: z.string(),
     messageID: z.string(),
     language: z.enum(["python", "r"]),
-    status: z.enum(["pending", "running", "completed", "error"]),
+    status: Tool.shape.status,
     startedAt: z.number().optional(),
     completedAt: z.number().optional(),
     durationMs: z.number().optional(),

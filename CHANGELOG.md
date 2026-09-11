@@ -10,6 +10,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Session traces remain available when a search or scientific kernel returns a
+  partial result, preserving that outcome instead of failing the entire trace.
 - ACP editor integrations use stable session listing and resumption, and expose
   models and reasoning variants through session configuration with the updated SDK.
   Unsupported MCP-over-ACP connections return a clear error before creating a session.

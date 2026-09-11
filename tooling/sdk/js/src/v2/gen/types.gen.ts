@@ -11001,7 +11001,7 @@ export type SessionTraceResponses = {
       tool: string
       query?: string
       signature: string
-      status: "pending" | "running" | "completed" | "error"
+      status: "pending" | "running" | "completed" | "partial" | "error"
       dedupeHit: boolean
       dedupeOf?: {
         messageID: string
@@ -11016,7 +11016,7 @@ export type SessionTraceResponses = {
       toolID: string
       messageID: string
       language: "python" | "r"
-      status: "pending" | "running" | "completed" | "error"
+      status: "pending" | "running" | "completed" | "partial" | "error"
       startedAt?: number
       completedAt?: number
       durationMs?: number
