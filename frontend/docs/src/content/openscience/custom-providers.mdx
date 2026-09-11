@@ -98,7 +98,7 @@ Provider options support request deadlines in milliseconds:
 
 | Option | Default |
 | --- | --- |
-| `connectTimeout` | 300000 (5 minutes): waiting for response headers; disabled by default for local endpoints. |
+| `connectTimeout` | 300000 (5 minutes) waiting for response headers; 600000 (10 minutes) for the managed Ace gateway, which sends headers only once the upstream body begins; disabled by default for local endpoints. |
 | `idleTimeout` | 600000 (10 minutes) for remote endpoints, including the managed Ace gateway; reset by every response-body chunk and disabled by default for local endpoints. |
 | `outputIdleTimeout` | Disabled; optionally bound the wait for readable output or tool-call activity. |
 | `timeout` | No total-duration limit by default. |

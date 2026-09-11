@@ -164,7 +164,7 @@ export function BasicTool(props: BasicToolProps) {
                         >
                           {trigger().title}
                         </span>
-                        <Show when={props.status && failed()}>
+                        <Show when={props.status && (failed() || outcome() === "pending")}>
                           <span data-slot="basic-tool-tool-failure-label" title={detail()}>
                             {i18n.t(glyphLabel[outcome()])}
                           </span>

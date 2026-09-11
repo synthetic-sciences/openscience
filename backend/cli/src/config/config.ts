@@ -1210,7 +1210,7 @@ export namespace Config {
             .union([z.number().int().positive().max(2_147_483_647), z.literal(false)])
             .optional()
             .describe(
-              "Maximum wait for provider response headers in milliseconds, including connection setup and upstream admission. Defaults to 300000 (5 minutes), and to disabled for local endpoints (loopback or .local base URLs and the ollama, lmstudio, llamacpp, vllm and jan providers), which send headers only after prompt processing. Set false to disable.",
+              "Maximum wait for provider response headers in milliseconds, including connection setup and upstream admission. Defaults to 300000 (5 minutes), to 600000 (10 minutes) for the managed Ace gateway, which sends headers only once the upstream body begins, and to disabled for local endpoints (loopback or .local base URLs and the ollama, lmstudio, llamacpp, vllm and jan providers), which send headers only after prompt processing. Set false to disable.",
             ),
           outputIdleTimeout: z
             .union([z.number().int().positive().max(2_147_483_647), z.literal(false)])

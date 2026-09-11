@@ -48,7 +48,8 @@
     font-weight: var(--font-weight-regular);
   }
 
-  &[data-outcome="cancelled"] [data-slot="basic-tool-tool-failure-label"] {
+  &[data-outcome="cancelled"] [data-slot="basic-tool-tool-failure-label"],
+  &[data-outcome="pending"] [data-slot="basic-tool-tool-failure-label"] {
     color: var(--text-weak);
   }
 
