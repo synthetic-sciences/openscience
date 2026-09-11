@@ -19,7 +19,10 @@ import {
   type ResumeSessionResponse,
   type Role,
   type SessionInfo,
-  type SetSessionModelRequest,
+  type SessionConfigOption,
+  type McpServer,
+  type SetSessionConfigOptionRequest,
+  type SetSessionConfigOptionResponse,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
   type ToolCallContent,
@@ -51,6 +54,12 @@ export namespace ACP {
   export const MAX_EDIT_PREVIEW_BYTES = 8 * 1024 * 1024
 
   const log = Log.create({ service: "acp-agent" })
+
+  function validateMcpServers(servers: McpServer[]) {
+    if (servers.some((server) => "type" in server && server.type === "acp")) {
+      throw RequestError.invalidParams("MCP over ACP is not supported; use HTTP, SSE, or stdio")
+    }
+  }
 
   async function editPreview(filepath: string, diff: string) {
     if (!filepath || !diff) return undefined
@@ -109,6 +118,8 @@ export namespace ACP {
       this.config = config
       this.sdk = config.sdk
       this.sessionManager = new ACPSessionManager(this.sdk)
+      // The compatibility wrapper assigns its connection after this factory returns.
+      queueMicrotask(() => this.connection.closed?.then(() => this.eventAbort.abort()))
       this.startEventSubscription()
     }
 
@@ -477,6 +488,7 @@ export namespace ACP {
     }
 
     async newSession(params: NewSessionRequest) {
+      validateMcpServers(params.mcpServers)
       const directory = params.cwd
       try {
         const model = await defaultModel(this.config, directory)
@@ -495,6 +507,7 @@ export namespace ACP {
 
         return {
           sessionId,
+          configOptions: load.configOptions,
           models: load.models,
           modes: load.modes,
           _meta: load._meta,
@@ -511,6 +524,7 @@ export namespace ACP {
     }
 
     async loadSession(params: LoadSessionRequest) {
+      validateMcpServers(params.mcpServers)
       const directory = params.cwd
       const sessionId = params.sessionId
 
@@ -545,11 +559,12 @@ export namespace ACP {
 
         const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
         if (lastUser?.role === "user") {
-          result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
           this.sessionManager.setModel(sessionId, {
             providerID: lastUser.model.providerID,
             modelID: lastUser.model.modelID,
           })
+          this.sessionManager.setVariant(sessionId, lastUser.variant)
+          Object.assign(result, await this.modelState(sessionId))
           if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
             result.modes.currentModeId = lastUser.agent
             this.sessionManager.setMode(sessionId, lastUser.agent)
@@ -573,7 +588,7 @@ export namespace ACP {
       }
     }
 
-    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+    async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
       try {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
@@ -619,6 +634,7 @@ export namespace ACP {
     }
 
     async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
+      validateMcpServers(params.mcpServers ?? [])
       const directory = params.cwd
       const mcpServers = params.mcpServers ?? []
 
@@ -681,7 +697,8 @@ export namespace ACP {
       }
     }
 
-    async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+    async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+      validateMcpServers(params.mcpServers ?? [])
       const directory = params.cwd
       const sessionId = params.sessionId
       const mcpServers = params.mcpServers ?? []
@@ -1017,17 +1034,8 @@ export namespace ACP {
 
     private async loadSessionMode(params: LoadSessionRequest) {
       const directory = params.cwd
-      const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
-
-      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
-      const entries = sortProvidersByName(providers)
-      const availableVariants = modelVariantsFromProviders(entries, model)
-      const currentVariant = this.sessionManager.getVariant(sessionId)
-      if (currentVariant && !availableVariants.includes(currentVariant)) {
-        this.sessionManager.setVariant(sessionId, undefined)
-      }
-      const availableModels = buildAvailableModels(entries, { includeVariants: true })
+      const state = await this.modelState(sessionId)
       const modeState = await this.resolveModeState(directory, sessionId)
       const currentModeId = modeState.currentModeId
       const modes = currentModeId
@@ -1059,6 +1067,9 @@ export namespace ACP {
 
       const mcpServers: Record<string, Config.Mcp> = {}
       for (const server of params.mcpServers) {
+        if ("type" in server && server.type === "acp") {
+          throw RequestError.invalidParams("MCP over ACP is not supported; use HTTP, SSE, or stdio")
+        }
         if ("type" in server) {
           mcpServers[server.name] = {
             url: server.url,
@@ -1098,50 +1109,86 @@ export namespace ACP {
       )
 
       setTimeout(() => {
-        this.connection.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: "available_commands_update",
-            availableCommands,
-          },
-        })
+        this.connection
+          .sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: "available_commands_update",
+              availableCommands,
+            },
+          })
+          .catch((error) => log.error("failed to send available commands", { error, sessionId }))
       }, 0)
 
       return {
         sessionId,
-        models: {
-          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
-          availableModels,
-        },
+        ...state,
         modes,
-        _meta: buildVariantMeta({
-          model,
-          variant: this.sessionManager.getVariant(sessionId),
-          availableVariants,
-        }),
       }
     }
 
-    async unstable_setSessionModel(params: SetSessionModelRequest) {
+    private async modelState(sessionId: string) {
+      const session = this.sessionManager.get(sessionId)
+      const model = session.model ?? (await defaultModel(this.config, session.cwd))
+      const providers = await this.sdk.config
+        .providers({ directory: session.cwd }, { throwOnError: true })
+        .then((x) => x.data!.providers)
+      const entries = sortProvidersByName(providers)
+      const availableVariants = modelVariantsFromProviders(entries, model)
+      if (session.variant && !availableVariants.includes(session.variant)) {
+        this.sessionManager.setVariant(sessionId, undefined)
+      }
+      const currentModelId = formatModelIdWithVariant(model, session.variant, availableVariants, true)
+      const availableModels = buildAvailableModels(entries, { includeVariants: true })
+      return {
+        // Editors using the previous protocol still read this model selector.
+        models: { currentModelId, availableModels },
+        configOptions: [
+          {
+            id: "model",
+            name: "Model",
+            category: "model",
+            type: "select",
+            currentValue: currentModelId,
+            options: availableModels.map((option) => ({
+              value: option.modelId,
+              name: option.name,
+            })),
+          },
+        ] satisfies SessionConfigOption[],
+        _meta: buildVariantMeta({ model, variant: session.variant, availableVariants }),
+      }
+    }
+
+    async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
+      if (params.configId !== "model" || typeof params.value !== "string") {
+        throw RequestError.invalidParams("Expected a model configuration option with a string value")
+      }
       const session = this.sessionManager.get(params.sessionId)
       const providers = await this.sdk.config
         .providers({ directory: session.cwd }, { throwOnError: true })
         .then((x) => x.data!.providers)
 
-      const selection = parseModelSelection(params.modelId, providers)
+      const available = buildAvailableModels(sortProvidersByName(providers), { includeVariants: true })
+      if (!available.some((option) => option.modelId === params.value)) {
+        throw RequestError.invalidParams(`Unknown model: ${params.value}`)
+      }
+      const selection = parseModelSelection(params.value, providers)
       this.sessionManager.setModel(session.id, selection.model)
       this.sessionManager.setVariant(session.id, selection.variant)
 
-      const entries = sortProvidersByName(providers)
-      const availableVariants = modelVariantsFromProviders(entries, selection.model)
+      return this.modelState(session.id)
+    }
 
-      return {
-        _meta: buildVariantMeta({
-          model: selection.model,
-          variant: selection.variant,
-          availableVariants,
-        }),
-      }
+    async extMethod(method: string, params: Record<string, unknown>) {
+      if (method !== "session/set_model") throw RequestError.methodNotFound(method)
+      const parsed = z.object({ sessionId: z.string(), modelId: z.string() }).safeParse(params)
+      if (!parsed.success) throw RequestError.invalidParams("Expected sessionId and modelId strings")
+      return this.setSessionConfigOption({
+        sessionId: parsed.data.sessionId,
+        configId: "model",
+        value: parsed.data.modelId,
+      })
     }
 
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {

@@ -42,7 +42,7 @@
     "vscode-languageserver-types": "3.17.5"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "0.13.0",
+    "@agentclientprotocol/sdk": "0.29.0",
     "@ai-sdk/amazon-bedrock": "3.0.73",
     "@ai-sdk/anthropic": "2.0.57",
     "@ai-sdk/azure": "2.0.91",

@@ -10,6 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- ACP editor integrations use stable session listing and resumption, and expose
+  models and reasoning variants through session configuration with the updated SDK.
+  Unsupported MCP-over-ACP connections return a clear error before creating a session.
 - Research search and WebFetch no longer ask for redundant approval in Ask risky
   when the source is already allowed, including delegated literature work. New
   network hosts still require approval; explicit rules and Full access are respected.

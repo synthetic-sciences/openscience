@@ -100,6 +100,11 @@ openscience acp --cwd /absolute/path/to/research-project
 
 Configure that executable and its arguments in your editor's agent settings. The editor supplies the interactive interface; your model connections and project configuration still apply.
 
+Editors can list and resume sessions and select a connected model, including its
+reasoning variants, through ACP session configuration. Older editors using
+`session/set_model` remain supported. Supplied MCP servers can use HTTP,
+SSE, or stdio; forwarding MCP messages over the ACP connection is not supported.
+
 Refer to the editor's documentation for its exact configuration format.
 
 ## Contribute to OpenScience
