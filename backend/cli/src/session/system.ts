@@ -116,6 +116,10 @@ export namespace SystemPrompt {
         when: "Illustrations, artwork, photos, or other non-technical images",
         skills: ["generate-image"],
       },
+      {
+        when: "An autoresearch study, hill-climbing one metric over many runs, or a hyperparameter or ablation sweep left to run",
+        skills: ["autoresearch"],
+      },
     ]
       .map((item) => ({
         ...item,

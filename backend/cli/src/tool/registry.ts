@@ -36,6 +36,8 @@ import { NotebookTool, PythonTool } from "./notebook"
 import { RKernelTool, RTool } from "./rkernel"
 import { ModalTool } from "./modal"
 import { ComputeJobTool } from "./compute-job"
+import { ExperimentsTool } from "./experiments"
+import { StudyTool } from "./study"
 import { ScientificCapabilityTool } from "./scientific-capability"
 import { ResearchContractTool } from "./research-contract"
 import { State } from "@/project/state"
@@ -214,6 +216,8 @@ export namespace ToolRegistry {
       ScientificCapabilityTool,
       ComputeJobTool,
       ProviderComputeTool,
+      ExperimentsTool,
+      StudyTool,
       ...custom.filter((tool) => !compatibility.has(tool.id) && tool.id !== PythonTool.id && tool.id !== RTool.id),
     ]
   }
@@ -286,7 +290,13 @@ export namespace ToolRegistry {
             return !!agent?.name && ARTIFACT_AGENTS.includes(agent.name)
           }
 
-          if (t.id === "compute_job" || t.id === "scientific_capability" || t.id === "provider_compute") {
+          if (
+            t.id === "compute_job" ||
+            t.id === "scientific_capability" ||
+            t.id === "provider_compute" ||
+            t.id === "study" ||
+            t.id === "experiments"
+          ) {
             return !!agent?.name && (COMPUTE_AGENTS.includes(agent.name) || agent.name === "researchagent-test")
           }
 

@@ -553,7 +553,7 @@ export default function Page(): JSX.Element {
   onMount(() => {
     const onOpenContext = (event: Event) => {
       const context = (event as CustomEvent).detail?.context
-      if (!(["files", "terminal", "kernels", "trace"] as SessionContext[]).includes(context)) return
+      if (!(["files", "terminal", "kernels", "experiments", "trace"] as SessionContext[]).includes(context)) return
       openContext(context)
     }
     document.addEventListener("openscience:open-context", onOpenContext)
@@ -752,6 +752,13 @@ export default function Page(): JSX.Element {
         description: "View local executions, live runtimes, and remote jobs",
         category: "Project",
         onSelect: () => openContext("kernels"),
+      },
+      {
+        id: "project.experiments",
+        title: "Open project experiments",
+        description: "Tracked runs, metric charts, and research studies",
+        category: "Project",
+        onSelect: () => openContext("experiments"),
       },
       {
         id: "settings.open",

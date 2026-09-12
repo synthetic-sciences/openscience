@@ -41,6 +41,26 @@ import type {
   EventSubscribeResponse,
   EventSubscribeResponses,
   ExperimentalResourceListResponses,
+  ExperimentsGpusResponses,
+  ExperimentsIdeaErrors,
+  ExperimentsIdeaResponses,
+  ExperimentsIngestFinishErrors,
+  ExperimentsIngestFinishResponses,
+  ExperimentsIngestPointsErrors,
+  ExperimentsIngestPointsResponses,
+  ExperimentsIngestRunResponses,
+  ExperimentsIngestSummaryErrors,
+  ExperimentsIngestSummaryResponses,
+  ExperimentsKeysResponses,
+  ExperimentsRunErrors,
+  ExperimentsRunResponses,
+  ExperimentsRunsResponses,
+  ExperimentsSeriesResponses,
+  ExperimentsStudiesResponses,
+  ExperimentsStudyControlErrors,
+  ExperimentsStudyControlResponses,
+  ExperimentsStudyErrors,
+  ExperimentsStudyResponses,
   FileAnnotationsCreateResponses,
   FileAnnotationsDeleteResponses,
   FileAnnotationsHistoryResponses,
@@ -4820,6 +4840,432 @@ export class Question extends HeyApiClient {
   }
 }
 
+export class Experiments extends HeyApiClient {
+  /**
+   * List tracked runs
+   */
+  public runs<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      study_id?: string
+      status?: "running" | "finished" | "failed" | "killed" | "cancelled"
+      limit?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "study_id" },
+            { in: "query", key: "status" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentsRunsResponses, unknown, ThrowOnError>({
+      url: "/experiments/runs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get one tracked run
+   */
+  public run<ThrowOnError extends boolean = false>(
+    parameters: {
+      runID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentsRunResponses, ExperimentsRunErrors, ThrowOnError>({
+      url: "/experiments/runs/{runID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Downsampled metric series for runs
+   */
+  public series<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      run_ids: string
+      keys?: string
+      max?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "run_ids" },
+            { in: "query", key: "keys" },
+            { in: "query", key: "max" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentsSeriesResponses, unknown, ThrowOnError>({
+      url: "/experiments/series",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Metric names logged by runs
+   */
+  public keys<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      run_ids?: string
+      study_id?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "run_ids" },
+            { in: "query", key: "study_id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentsKeysResponses, unknown, ThrowOnError>({
+      url: "/experiments/keys",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Local GPU inventory
+   */
+  public gpus<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<ExperimentsGpusResponses, unknown, ThrowOnError>({
+      url: "/experiments/gpus",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List studies
+   */
+  public studies<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<ExperimentsStudiesResponses, unknown, ThrowOnError>({
+      url: "/experiments/studies",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Study overview: ideas, runs, events, baseline and best
+   */
+  public study<ThrowOnError extends boolean = false>(
+    parameters: {
+      studyID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "studyID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ExperimentsStudyResponses, ExperimentsStudyErrors, ThrowOnError>({
+      url: "/experiments/studies/{studyID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Pause, resume, halt or re-render a study
+   */
+  public studyControl<ThrowOnError extends boolean = false>(
+    parameters: {
+      studyID: string
+      action: "pause" | "resume" | "halt" | "render"
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "studyID" },
+            { in: "path", key: "action" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentsStudyControlResponses,
+      ExperimentsStudyControlErrors,
+      ThrowOnError
+    >({
+      url: "/experiments/studies/{studyID}/{action}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reprioritize or drop an idea
+   */
+  public idea<ThrowOnError extends boolean = false>(
+    parameters: {
+      studyID: string
+      ideaID: string
+      directory?: string
+      priority?: number
+      status?: "queued" | "dropped"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "studyID" },
+            { in: "path", key: "ideaID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "priority" },
+            { in: "body", key: "status" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<ExperimentsIdeaResponses, ExperimentsIdeaErrors, ThrowOnError>({
+      url: "/experiments/studies/{studyID}/ideas/{ideaID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Register a run reported over HTTP
+   */
+  public ingestRun<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      name: string
+      project?: string
+      config?: {
+        [key: string]: unknown
+      }
+      study_id?: string
+      session_id?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "name" },
+            { in: "body", key: "project" },
+            { in: "body", key: "config" },
+            { in: "body", key: "study_id" },
+            { in: "body", key: "session_id" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ExperimentsIngestRunResponses, unknown, ThrowOnError>({
+      url: "/experiments/ingest/runs",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Append metric points to a run
+   */
+  public ingestPoints<ThrowOnError extends boolean = false>(
+    parameters: {
+      runID: string
+      directory?: string
+      points: Array<{
+        key: string
+        step: number
+        value: number
+        ts?: number
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "points" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentsIngestPointsResponses,
+      ExperimentsIngestPointsErrors,
+      ThrowOnError
+    >({
+      url: "/experiments/ingest/runs/{runID}/points",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Merge summary values into a run
+   */
+  public ingestSummary<ThrowOnError extends boolean = false>(
+    parameters: {
+      runID: string
+      directory?: string
+      summary: {
+        [key: string]: unknown
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "summary" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentsIngestSummaryResponses,
+      ExperimentsIngestSummaryErrors,
+      ThrowOnError
+    >({
+      url: "/experiments/ingest/runs/{runID}/summary",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Finish a run reported over HTTP
+   */
+  public ingestFinish<ThrowOnError extends boolean = false>(
+    parameters: {
+      runID: string
+      directory?: string
+      status?: "finished" | "failed"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "status" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentsIngestFinishResponses,
+      ExperimentsIngestFinishErrors,
+      ThrowOnError
+    >({
+      url: "/experiments/ingest/runs/{runID}/finish",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Oauth extends HeyApiClient {
   /**
    * OAuth authorize
@@ -8458,6 +8904,11 @@ export class OpenScienceClient extends HeyApiClient {
   private _question?: Question
   get question(): Question {
     return (this._question ??= new Question({ client: this.client }))
+  }
+
+  private _experiments?: Experiments
+  get experiments(): Experiments {
+    return (this._experiments ??= new Experiments({ client: this.client }))
   }
 
   private _provider?: Provider2

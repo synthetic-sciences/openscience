@@ -37,6 +37,7 @@ export const weights: Record<string, number> = {
   provider: 28,
   installation: 24,
   mcp: 11,
+  experiments: 2,
   file: 10,
   process: 9,
   openscience: 9,

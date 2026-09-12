@@ -285,6 +285,11 @@ export namespace ToolSelection {
           /\b(?:align|batch|download|index|pipeline|process|quantif|run|train|workflow)\w*\b/i.test(text))
       )
     if (tool === "modal") return remote
+    if (tool === "study" || tool === "experiments") {
+      return /\b(?:autoresearch|study|studies|hill[- ]?climb\w*|sweep|ablation\w*|baseline|experiment[- ]tracking|track(?:ed|ing)? (?:runs?|metrics?)|training runs?)\b/i.test(
+        text,
+      )
+    }
     if (tool === "research_contract") return /\bresearch contract\b/i.test(text)
     if (todo.has(tool)) {
       // A long research prompt is not consent to add controller ceremony. A

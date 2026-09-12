@@ -350,10 +350,15 @@ const summary = (job: JobBroker.Job) => ({
 
 const json = (value: unknown) => JSON.stringify(value, null, 2)
 
-type ResolvedOptions = JobBroker.Options & {
+export type ResolvedOptions = JobBroker.Options & {
   projectDirectory: string
   workspace: string
   capabilities?: ComputeCapabilities.Target[]
+}
+
+/** Broker options for a session's compute, shared with the study driver. */
+export async function computeOptions(sessionID: string, base?: JobBroker.Options): Promise<ResolvedOptions> {
+  return options(sessionID, base)
 }
 
 async function options(sessionID: string, base?: JobBroker.Options): Promise<ResolvedOptions> {

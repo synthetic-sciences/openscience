@@ -1,0 +1,676 @@
+/* Experiments: the instrument pane beside Files, Terminal and Compute. It
+   follows the Compute pane's density (12/11px), one surface, hairline rows,
+   colour for status and for the chart's series. */
+.experiments-pane {
+  container: experiments / inline-size;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  line-height: 1.45;
+}
+
+.experiments-pane__header {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--color-border-weak);
+}
+
+.experiments-pane__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+}
+
+.experiments-pane__title strong {
+  color: var(--color-text);
+  font-size: var(--font-size-medium);
+  font-weight: var(--font-weight-medium);
+}
+
+.experiments-pane__title span {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+.experiments-gpus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.experiments-gpus li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-x-small);
+  color: var(--color-text-faint);
+}
+
+.experiments-gpus__bar {
+  display: inline-block;
+  width: 56px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  overflow: hidden;
+}
+
+.experiments-gpus__bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-text-interactive);
+  transition: width 400ms ease;
+}
+
+.experiments-gpus__value {
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.experiments-pane__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  padding: 10px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.experiments-pane__body:hover {
+  scrollbar-color: color-mix(in srgb, var(--color-text) 20%, transparent) transparent;
+}
+
+/* Status vocabulary shared by studies, ideas and runs. */
+.experiments-status {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2x-small);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+}
+
+.experiments-status[data-status="running"] {
+  background: color-mix(in srgb, var(--color-text-interactive) 16%, transparent);
+  color: var(--color-text-interactive);
+}
+
+.experiments-status[data-status="finished"],
+.experiments-status[data-status="kept"],
+.experiments-status[data-status="concluded"] {
+  background: color-mix(in srgb, var(--color-success, #4cb782) 16%, transparent);
+  color: var(--color-success, #4cb782);
+}
+
+.experiments-status[data-status="failed"],
+.experiments-status[data-status="killed"],
+.experiments-status[data-status="halted"] {
+  background: color-mix(in srgb, var(--color-text-error) 14%, transparent);
+  color: var(--color-text-error);
+}
+
+.experiments-status[data-status="paused"],
+.experiments-status[data-status="queued"] {
+  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+  color: var(--color-warning);
+}
+
+/* Study tabs, when a project has more than one. */
+.experiments-studies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.experiments-studies button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-x-small);
+  cursor: pointer;
+}
+
+.experiments-studies button[aria-selected="true"] {
+  border-color: var(--color-border);
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+/* The study card. */
+.study-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.study-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.study-card__identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.study-card__identity strong {
+  overflow: hidden;
+  font-size: var(--font-size-medium);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.study-card__controls {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+}
+
+.study-card__controls button {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--radius-xs);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-x-small);
+  cursor: pointer;
+}
+
+.study-card__controls button:hover {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.study-card__controls button[data-danger]:hover {
+  border-color: var(--color-text-error);
+  color: var(--color-text-error);
+}
+
+.study-card__purpose {
+  margin: 0;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.study-card__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px 14px;
+  margin: 0;
+}
+
+.study-card__facts div {
+  min-width: 0;
+}
+
+.study-card__facts dt {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2x-small);
+  letter-spacing: 0.04em;
+}
+
+.study-card__facts dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.study-card__facts code {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-x-small);
+}
+
+.study-card__rule {
+  margin: 0;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+.study-card details summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-x-small);
+  user-select: none;
+}
+
+.study-card details ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.study-card__ideas li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border-top: 1px solid var(--color-border-weak);
+}
+
+.study-idea__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.study-idea__meta {
+  flex: 0 0 auto;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.study-card__events li {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-x-small);
+}
+
+.study-card__events time {
+  flex: 0 0 auto;
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Chart section. */
+.experiments-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.experiments-chart__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+.experiments-chart__head label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.experiments-chart__head select {
+  max-width: 180px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--radius-xs);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-x-small);
+}
+
+.experiments-chart__head input[type="range"] {
+  width: 90px;
+  accent-color: var(--color-text-interactive);
+}
+
+.experiments-chart__toggle input {
+  accent-color: var(--color-text-interactive);
+}
+
+.metric-chart {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.metric-chart__svg {
+  display: block;
+  width: 100%;
+}
+
+.metric-chart__grid line {
+  stroke: var(--color-border-weak);
+  stroke-width: 1;
+}
+
+.metric-chart__grid text {
+  fill: var(--color-text-faint);
+  font-family: var(--font-family-sans);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-chart__line {
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: opacity 120ms ease;
+}
+
+.metric-chart__line[data-emphasis="off"] {
+  opacity: 0.25;
+}
+
+.metric-chart__line[data-emphasis="on"] {
+  stroke-width: 2.25;
+}
+
+.metric-chart__cursor line {
+  stroke: var(--color-text-faint);
+  stroke-dasharray: 3 3;
+}
+
+.metric-chart__tooltip {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 60%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-bg) 92%, transparent);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-x-small);
+  pointer-events: none;
+}
+
+.metric-chart__tooltip-step {
+  color: var(--color-text-faint);
+}
+
+.metric-chart__tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.metric-chart__tooltip-row i {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.metric-chart__tooltip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-chart__tooltip-row b {
+  margin-left: auto;
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-chart__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+/* Runs table. */
+.experiments-runs table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.experiments-runs th {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-border-weak);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2x-small);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  text-align: left;
+}
+
+.experiments-runs td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--color-border-weak);
+  color: var(--color-text-muted);
+  vertical-align: middle;
+}
+
+.experiments-runs .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.experiments-runs tbody tr {
+  cursor: pointer;
+}
+
+.experiments-runs tbody tr:hover td {
+  background: var(--color-bg-subtle);
+}
+
+.experiments-runs tbody tr[data-selected="true"] td {
+  background: color-mix(in srgb, var(--color-text-interactive) 10%, transparent);
+}
+
+.experiments-runs__name {
+  min-width: 0;
+  color: var(--color-text);
+}
+
+.experiments-runs__name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.experiments-runs__name em {
+  margin-left: 6px;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2x-small);
+  font-style: normal;
+  letter-spacing: 0.04em;
+}
+
+.experiments-runs td[data-sign="up"] {
+  color: var(--color-success, #4cb782);
+}
+
+.experiments-runs td[data-sign="down"] {
+  color: var(--color-text-error);
+}
+
+.experiments-eye {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 2px solid var(--run-color);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.experiments-eye[aria-pressed="true"] {
+  background: var(--run-color);
+}
+
+.experiments-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 12px;
+  border: 1px dashed var(--color-border-weak);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+  line-height: 1.45;
+}
+
+.experiments-empty strong {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+}
+
+.experiments-empty code {
+  font-family: var(--font-family-mono);
+}
+
+/* Run details. */
+.experiments-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.experiments-detail header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.experiments-detail header strong {
+  font-weight: var(--font-weight-medium);
+}
+
+.experiments-detail__id {
+  margin-left: auto;
+  color: var(--color-text-faint);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-2x-small);
+}
+
+.experiments-detail header button {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text-faint);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.experiments-detail header button:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+.experiments-detail__reason {
+  margin: 0;
+  color: var(--color-text-error);
+  font-size: var(--font-size-x-small);
+}
+
+.experiments-detail__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 16px;
+}
+
+.experiments-detail h4 {
+  margin: 0 0 4px;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-2x-small);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+}
+
+.experiments-detail dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.experiments-detail dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--font-size-x-small);
+}
+
+.experiments-detail dt {
+  color: var(--color-text-faint);
+  font-family: var(--font-family-mono);
+}
+
+.experiments-detail dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.experiments-detail__charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}

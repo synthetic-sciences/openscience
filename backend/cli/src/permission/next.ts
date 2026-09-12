@@ -36,7 +36,7 @@ export namespace PermissionNext {
   export const Risk = z.enum(["passive", "contained", "risky", "unknown"])
   export type Risk = z.infer<typeof Risk>
 
-  const PASSIVE = new Set(["glob", "grep", "list", "question", "read", "skill", "todoread"])
+  const PASSIVE = new Set(["experiments", "glob", "grep", "list", "question", "read", "skill", "todoread"])
   const CONTAINED = new Set([
     "artifact",
     "batch",
@@ -47,6 +47,9 @@ export namespace PermissionNext {
     "planwrite",
     "provenance_record",
     "research_contract",
+    // The study record is the agent's own ledger; runs it starts still pass
+    // through the compute permissions.
+    "study",
     "task",
     "todowrite",
     // Retrieval uses the network broker or connected search providers;

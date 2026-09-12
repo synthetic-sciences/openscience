@@ -12,6 +12,9 @@ export namespace Identifier {
     pty: "pty",
     tool: "tool",
     runtime: "run",
+    study: "stu",
+    experiment: "exp",
+    idea: "idea",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {

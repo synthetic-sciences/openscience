@@ -4,6 +4,7 @@ import { LSP } from "../lsp"
 import { FileWatcher } from "../file/watcher"
 import { File } from "../file"
 import { Skill } from "../skill/skill"
+import { StudyDriver } from "../experiments/driver"
 import { Project } from "./project"
 import { Bus } from "../bus"
 import { Command } from "../command"
@@ -285,6 +286,9 @@ function warm(state: Warmup) {
     if (state.cancelled) return
     // Scratch workspaces: remove orphans whose session record is gone.
     SessionFilesystem.sweep().catch(() => {})
+    // Studies that were running when the server last stopped resume their
+    // clock: followers reattach to job logs and wake-ups continue.
+    await StudyDriver.resumeAll().catch((error) => Log.Default.warn("study driver resume failed", { error }))
   })()
   return state.run
 }

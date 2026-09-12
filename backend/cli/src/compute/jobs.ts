@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import crypto from "node:crypto"
+import { Tracker } from "../experiments/tracker"
 import { createReadStream, createWriteStream, watch as watchFile } from "node:fs"
 import fs from "node:fs/promises"
 import { finished } from "node:stream/promises"
@@ -3994,7 +3995,18 @@ export namespace ComputeJobs {
     const scope = await scoped(options)
     const job = await get(id, options)
     if (!job) throw new Error(`Compute job ${id} was not found`)
-    return tail(path.join(logsOf(scope.root), `${job.id}.log`), Math.max(1, options.bytes ?? 256_000))
+    // Experiment-tracking records ride the log as marked lines; they are data
+    // for the Experiments store, not output for a reader or the model.
+    return Tracker.strip(
+      await tail(path.join(logsOf(scope.root), `${job.id}.log`), Math.max(1, options.bytes ?? 256_000)),
+    )
+  }
+
+  /** Where a job's combined output lands on this host, for incremental
+   * readers such as experiment tracking that need offsets, not a tail. */
+  export async function logPath(id: string, options: Options = {}): Promise<string> {
+    const scope = await scoped(options)
+    return path.join(logsOf(scope.root), `${id}.log`)
   }
 
   export async function events(id: string, options: Options & { bytes?: number } = {}): Promise<string> {

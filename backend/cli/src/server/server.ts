@@ -45,6 +45,7 @@ import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { QuestionRoutes } from "./routes/question"
+import { ExperimentsRoutes } from "./routes/experiments"
 import { PermissionRoutes } from "./routes/permission"
 import { SearchRoutes } from "./routes/search"
 import { GlobalRoutes } from "./routes/global"
@@ -417,6 +418,7 @@ export namespace Server {
         .route("/search", SearchRoutes())
         .route("/permission", PermissionRoutes())
         .route("/question", QuestionRoutes())
+        .route("/experiments", ExperimentsRoutes())
         .route("/provider", ProviderRoutes())
         .route("/", FileRoutes())
         .route("/kernels", KernelRoutes())

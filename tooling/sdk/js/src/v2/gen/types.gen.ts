@@ -955,6 +955,144 @@ export type EventTodoUpdated = {
   }
 }
 
+export type ExperimentRun = {
+  id: string
+  projectID: string
+  studyID?: string
+  ideaID?: string
+  jobID?: string
+  sessionID?: string
+  name: string
+  status: "running" | "finished" | "failed" | "killed" | "cancelled"
+  source: "job" | "kernel" | "external"
+  config: {
+    [key: string]: unknown
+  }
+  summary: {
+    [key: string]: unknown
+  }
+  headline: number | null
+  baselineDelta: number | null
+  points: number
+  lastStep: number | null
+  slot: number | null
+  killReason?: string
+  createdAt: number
+  startedAt: number | null
+  endedAt: number | null
+}
+
+export type EventExperimentRunUpdated = {
+  type: "experiment.run.updated"
+  properties: {
+    run: ExperimentRun
+  }
+}
+
+export type EventExperimentRunPoints = {
+  type: "experiment.run.points"
+  properties: {
+    runID: string
+    keys: Array<string>
+    lastStep: number | null
+  }
+}
+
+export type StudyBudget = {
+  maxRuns?: number
+  maxHours?: number
+  maxCostUSD?: number
+  target?: number
+  runMinutes?: number
+}
+
+export type Study = {
+  id: string
+  projectID: string
+  sessionID: string
+  name: string
+  purpose: string
+  metric: string
+  direction: "minimize" | "maximize"
+  status: "running" | "paused" | "halted" | "concluded"
+  root: string
+  target:
+    | {
+        kind: "local"
+      }
+    | {
+        kind: "ssh"
+        host_id: string
+      }
+    | {
+        kind: "modal"
+        gpu?: string
+      }
+  concurrency: number
+  killCriteria: string
+  budget: StudyBudget
+  review: boolean
+  baselineRunID?: string
+  bestRunID?: string
+  turns: number
+  costUSD: number
+  lessons: string
+  conclusion?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type EventExperimentStudyUpdated = {
+  type: "experiment.study.updated"
+  properties: {
+    study: Study
+  }
+}
+
+export type StudyIdea = {
+  id: string
+  studyID: string
+  title: string
+  description: string
+  why: string
+  ev: number
+  priority: number
+  status: "queued" | "running" | "kept" | "reverted" | "failed" | "dropped"
+  source: "seed" | "agent" | "human" | "lesson"
+  config: {
+    [key: string]: unknown
+  }
+  runID?: string
+  analysis?: string
+  conclusion?: string
+  createdAt: number
+  startedAt: number | null
+  endedAt: number | null
+}
+
+export type EventExperimentIdeaUpdated = {
+  type: "experiment.idea.updated"
+  properties: {
+    idea: StudyIdea
+  }
+}
+
+export type StudyEvent = {
+  id: string
+  studyID: string
+  runID?: string
+  kind: string
+  message: string
+  createdAt: number
+}
+
+export type EventExperimentStudyEvent = {
+  type: "experiment.study.event"
+  properties: {
+    event: StudyEvent
+  }
+}
+
 export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
@@ -1218,6 +1356,11 @@ export type Event =
   | EventQuestionRejected
   | EventSessionCompacted
   | EventTodoUpdated
+  | EventExperimentRunUpdated
+  | EventExperimentRunPoints
+  | EventExperimentStudyUpdated
+  | EventExperimentIdeaUpdated
+  | EventExperimentStudyEvent
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -2532,6 +2675,33 @@ export type PermissionStanding = {
   pattern: string
   scope: PermissionStandingScope
   created: number
+}
+
+export type ExperimentSeries = Array<{
+  runID: string
+  key: string
+  points: Array<{
+    step: number
+    value: number
+  }>
+}>
+
+export type LocalGpu = {
+  index: number
+  name: string
+  memoryTotalMB: number
+  memoryUsedMB: number
+  utilization: number
+  temperatureC: number | null
+}
+
+export type StudyOverview = {
+  study: Study
+  ideas: Array<StudyIdea>
+  runs: Array<ExperimentRun>
+  events: Array<StudyEvent>
+  baseline?: ExperimentRun
+  best?: ExperimentRun
 }
 
 export type ProviderAuthMethod = {
@@ -12776,6 +12946,361 @@ export type QuestionRejectResponses = {
 }
 
 export type QuestionRejectResponse = QuestionRejectResponses[keyof QuestionRejectResponses]
+
+export type ExperimentsRunsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    study_id?: string
+    status?: "running" | "finished" | "failed" | "killed" | "cancelled"
+    limit?: number
+  }
+  url: "/experiments/runs"
+}
+
+export type ExperimentsRunsResponses = {
+  /**
+   * Runs
+   */
+  200: Array<ExperimentRun>
+}
+
+export type ExperimentsRunsResponse = ExperimentsRunsResponses[keyof ExperimentsRunsResponses]
+
+export type ExperimentsRunData = {
+  body?: never
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/runs/{runID}"
+}
+
+export type ExperimentsRunErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ExperimentsRunError = ExperimentsRunErrors[keyof ExperimentsRunErrors]
+
+export type ExperimentsRunResponses = {
+  /**
+   * Run
+   */
+  200: ExperimentRun
+}
+
+export type ExperimentsRunResponse = ExperimentsRunResponses[keyof ExperimentsRunResponses]
+
+export type ExperimentsSeriesData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    run_ids: string
+    keys?: string
+    max?: number
+  }
+  url: "/experiments/series"
+}
+
+export type ExperimentsSeriesResponses = {
+  /**
+   * Series
+   */
+  200: ExperimentSeries
+}
+
+export type ExperimentsSeriesResponse = ExperimentsSeriesResponses[keyof ExperimentsSeriesResponses]
+
+export type ExperimentsKeysData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    run_ids?: string
+    study_id?: string
+  }
+  url: "/experiments/keys"
+}
+
+export type ExperimentsKeysResponses = {
+  /**
+   * Keys
+   */
+  200: Array<string>
+}
+
+export type ExperimentsKeysResponse = ExperimentsKeysResponses[keyof ExperimentsKeysResponses]
+
+export type ExperimentsGpusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/gpus"
+}
+
+export type ExperimentsGpusResponses = {
+  /**
+   * GPUs
+   */
+  200: Array<LocalGpu>
+}
+
+export type ExperimentsGpusResponse = ExperimentsGpusResponses[keyof ExperimentsGpusResponses]
+
+export type ExperimentsStudiesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/studies"
+}
+
+export type ExperimentsStudiesResponses = {
+  /**
+   * Studies
+   */
+  200: Array<Study>
+}
+
+export type ExperimentsStudiesResponse = ExperimentsStudiesResponses[keyof ExperimentsStudiesResponses]
+
+export type ExperimentsStudyData = {
+  body?: never
+  path: {
+    studyID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/studies/{studyID}"
+}
+
+export type ExperimentsStudyErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ExperimentsStudyError = ExperimentsStudyErrors[keyof ExperimentsStudyErrors]
+
+export type ExperimentsStudyResponses = {
+  /**
+   * Overview
+   */
+  200: StudyOverview
+}
+
+export type ExperimentsStudyResponse = ExperimentsStudyResponses[keyof ExperimentsStudyResponses]
+
+export type ExperimentsStudyControlData = {
+  body?: never
+  path: {
+    studyID: string
+    action: "pause" | "resume" | "halt" | "render"
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/studies/{studyID}/{action}"
+}
+
+export type ExperimentsStudyControlErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ExperimentsStudyControlError = ExperimentsStudyControlErrors[keyof ExperimentsStudyControlErrors]
+
+export type ExperimentsStudyControlResponses = {
+  /**
+   * Study
+   */
+  200: Study
+}
+
+export type ExperimentsStudyControlResponse = ExperimentsStudyControlResponses[keyof ExperimentsStudyControlResponses]
+
+export type ExperimentsIdeaData = {
+  body?: {
+    priority?: number
+    status?: "queued" | "dropped"
+  }
+  path: {
+    studyID: string
+    ideaID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/studies/{studyID}/ideas/{ideaID}"
+}
+
+export type ExperimentsIdeaErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ExperimentsIdeaError = ExperimentsIdeaErrors[keyof ExperimentsIdeaErrors]
+
+export type ExperimentsIdeaResponses = {
+  /**
+   * Idea
+   */
+  200: StudyIdea
+}
+
+export type ExperimentsIdeaResponse = ExperimentsIdeaResponses[keyof ExperimentsIdeaResponses]
+
+export type ExperimentsIngestRunData = {
+  body?: {
+    name: string
+    project?: string
+    config?: {
+      [key: string]: unknown
+    }
+    study_id?: string
+    session_id?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/ingest/runs"
+}
+
+export type ExperimentsIngestRunResponses = {
+  /**
+   * Run identity
+   */
+  200: {
+    id: string
+    token: string
+  }
+}
+
+export type ExperimentsIngestRunResponse = ExperimentsIngestRunResponses[keyof ExperimentsIngestRunResponses]
+
+export type ExperimentsIngestPointsData = {
+  body?: {
+    points: Array<{
+      key: string
+      step: number
+      value: number
+      ts?: number
+    }>
+  }
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/ingest/runs/{runID}/points"
+}
+
+export type ExperimentsIngestPointsErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ExperimentsIngestPointsError = ExperimentsIngestPointsErrors[keyof ExperimentsIngestPointsErrors]
+
+export type ExperimentsIngestPointsResponses = {
+  /**
+   * Accepted count
+   */
+  200: {
+    accepted: number
+  }
+}
+
+export type ExperimentsIngestPointsResponse = ExperimentsIngestPointsResponses[keyof ExperimentsIngestPointsResponses]
+
+export type ExperimentsIngestSummaryData = {
+  body?: {
+    summary: {
+      [key: string]: unknown
+    }
+  }
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/ingest/runs/{runID}/summary"
+}
+
+export type ExperimentsIngestSummaryErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ExperimentsIngestSummaryError = ExperimentsIngestSummaryErrors[keyof ExperimentsIngestSummaryErrors]
+
+export type ExperimentsIngestSummaryResponses = {
+  /**
+   * Run
+   */
+  200: ExperimentRun
+}
+
+export type ExperimentsIngestSummaryResponse =
+  ExperimentsIngestSummaryResponses[keyof ExperimentsIngestSummaryResponses]
+
+export type ExperimentsIngestFinishData = {
+  body?: {
+    status?: "finished" | "failed"
+  }
+  path: {
+    runID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/ingest/runs/{runID}/finish"
+}
+
+export type ExperimentsIngestFinishErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ExperimentsIngestFinishError = ExperimentsIngestFinishErrors[keyof ExperimentsIngestFinishErrors]
+
+export type ExperimentsIngestFinishResponses = {
+  /**
+   * Run
+   */
+  200: ExperimentRun
+}
+
+export type ExperimentsIngestFinishResponse = ExperimentsIngestFinishResponses[keyof ExperimentsIngestFinishResponses]
 
 export type ProviderListData = {
   body?: never

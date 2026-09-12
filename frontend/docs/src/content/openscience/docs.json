@@ -54,7 +54,7 @@
           },
           {
             "group": "Run substantial work",
-            "pages": ["compute", "jobs", "remote-compute"]
+            "pages": ["compute", "jobs", "remote-compute", "experiments"]
           }
         ]
       },

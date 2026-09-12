@@ -32867,6 +32867,831 @@
         ]
       }
     },
+    "/experiments/runs": {
+      "get": {
+        "operationId": "experiments.runs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "study_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "running",
+                "finished",
+                "failed",
+                "killed",
+                "cancelled"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            }
+          }
+        ],
+        "summary": "List tracked runs",
+        "responses": {
+          "200": {
+            "description": "Runs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExperimentRun"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.runs({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/runs/{runID}": {
+      "get": {
+        "operationId": "experiments.run",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get one tracked run",
+        "responses": {
+          "200": {
+            "description": "Run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentRun"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.run({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/series": {
+      "get": {
+        "operationId": "experiments.series",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_ids",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "keys",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max",
+            "schema": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 5000
+            }
+          }
+        ],
+        "summary": "Downsampled metric series for runs",
+        "responses": {
+          "200": {
+            "description": "Series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentSeries"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.series({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/keys": {
+      "get": {
+        "operationId": "experiments.keys",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_ids",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "study_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Metric names logged by runs",
+        "responses": {
+          "200": {
+            "description": "Keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.keys({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/gpus": {
+      "get": {
+        "operationId": "experiments.gpus",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Local GPU inventory",
+        "responses": {
+          "200": {
+            "description": "GPUs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocalGpu"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.gpus({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/studies": {
+      "get": {
+        "operationId": "experiments.studies",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List studies",
+        "responses": {
+          "200": {
+            "description": "Studies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Study"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.studies({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/studies/{studyID}": {
+      "get": {
+        "operationId": "experiments.study",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "studyID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Study overview: ideas, runs, events, baseline and best",
+        "responses": {
+          "200": {
+            "description": "Overview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyOverview"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.study({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/studies/{studyID}/{action}": {
+      "post": {
+        "operationId": "experiments.studyControl",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "studyID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "action",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pause",
+                "resume",
+                "halt",
+                "render"
+              ]
+            },
+            "required": true
+          }
+        ],
+        "summary": "Pause, resume, halt or re-render a study",
+        "responses": {
+          "200": {
+            "description": "Study",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Study"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.studyControl({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/studies/{studyID}/ideas/{ideaID}": {
+      "patch": {
+        "operationId": "experiments.idea",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "studyID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "ideaID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Reprioritize or drop an idea",
+        "responses": {
+          "200": {
+            "description": "Idea",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyIdea"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "priority": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "dropped"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.idea({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/ingest/runs": {
+      "post": {
+        "operationId": "experiments.ingestRun",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Register a run reported over HTTP",
+        "responses": {
+          "200": {
+            "description": "Run identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "token"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "project": {
+                    "type": "string"
+                  },
+                  "config": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "study_id": {
+                    "type": "string"
+                  },
+                  "session_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.ingestRun({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/ingest/runs/{runID}/points": {
+      "post": {
+        "operationId": "experiments.ingestPoints",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Append metric points to a run",
+        "responses": {
+          "200": {
+            "description": "Accepted count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "accepted"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "points": {
+                    "maxItems": 10000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "step": {
+                          "type": "number"
+                        },
+                        "value": {
+                          "type": "number"
+                        },
+                        "ts": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "step",
+                        "value"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "points"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.ingestPoints({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/ingest/runs/{runID}/summary": {
+      "post": {
+        "operationId": "experiments.ingestSummary",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Merge summary values into a run",
+        "responses": {
+          "200": {
+            "description": "Run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentRun"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "summary": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "summary"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.ingestSummary({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/ingest/runs/{runID}/finish": {
+      "post": {
+        "operationId": "experiments.ingestFinish",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "runID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Finish a run reported over HTTP",
+        "responses": {
+          "200": {
+            "description": "Run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentRun"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "finished",
+                      "failed"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.ingestFinish({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/provider": {
       "get": {
         "operationId": "provider.list",
@@ -56765,6 +57590,600 @@
           "properties"
         ]
       },
+      "ExperimentRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "studyID": {
+            "type": "string"
+          },
+          "ideaID": {
+            "type": "string"
+          },
+          "jobID": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "finished",
+              "failed",
+              "killed",
+              "cancelled"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "job",
+              "kernel",
+              "external"
+            ]
+          },
+          "config": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "summary": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "headline": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baselineDelta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "points": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "lastStep": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slot": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "killReason": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "projectID",
+          "name",
+          "status",
+          "source",
+          "config",
+          "summary",
+          "headline",
+          "baselineDelta",
+          "points",
+          "lastStep",
+          "slot",
+          "createdAt",
+          "startedAt",
+          "endedAt"
+        ]
+      },
+      "Event.experiment.run.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "experiment.run.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "run": {
+                "$ref": "#/components/schemas/ExperimentRun"
+              }
+            },
+            "required": [
+              "run"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "Event.experiment.run.points": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "experiment.run.points"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "runID": {
+                "type": "string"
+              },
+              "keys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "lastStep": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "runID",
+              "keys",
+              "lastStep"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "StudyBudget": {
+        "type": "object",
+        "properties": {
+          "maxRuns": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "maxHours": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "maxCostUSD": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "target": {
+            "type": "number"
+          },
+          "runMinutes": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      },
+      "Study": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "minimize",
+              "maximize"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "paused",
+              "halted",
+              "concluded"
+            ]
+          },
+          "root": {
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "local"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "ssh"
+                  },
+                  "host_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "host_id"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "modal"
+                  },
+                  "gpu": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            ]
+          },
+          "concurrency": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "killCriteria": {
+            "type": "string"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/StudyBudget"
+          },
+          "review": {
+            "type": "boolean"
+          },
+          "baselineRunID": {
+            "type": "string"
+          },
+          "bestRunID": {
+            "type": "string"
+          },
+          "turns": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "costUSD": {
+            "type": "number",
+            "minimum": 0
+          },
+          "lessons": {
+            "type": "string"
+          },
+          "conclusion": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "projectID",
+          "sessionID",
+          "name",
+          "purpose",
+          "metric",
+          "direction",
+          "status",
+          "root",
+          "target",
+          "concurrency",
+          "killCriteria",
+          "budget",
+          "review",
+          "turns",
+          "costUSD",
+          "lessons",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "Event.experiment.study.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "experiment.study.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "study": {
+                "$ref": "#/components/schemas/Study"
+              }
+            },
+            "required": [
+              "study"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "StudyIdea": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "studyID": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          },
+          "ev": {
+            "type": "number"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "kept",
+              "reverted",
+              "failed",
+              "dropped"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "seed",
+              "agent",
+              "human",
+              "lesson"
+            ]
+          },
+          "config": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "runID": {
+            "type": "string"
+          },
+          "analysis": {
+            "type": "string"
+          },
+          "conclusion": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "studyID",
+          "title",
+          "description",
+          "why",
+          "ev",
+          "priority",
+          "status",
+          "source",
+          "config",
+          "createdAt",
+          "startedAt",
+          "endedAt"
+        ]
+      },
+      "Event.experiment.idea.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "experiment.idea.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "idea": {
+                "$ref": "#/components/schemas/StudyIdea"
+              }
+            },
+            "required": [
+              "idea"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "StudyEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "studyID": {
+            "type": "string"
+          },
+          "runID": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "studyID",
+          "kind",
+          "message",
+          "createdAt"
+        ]
+      },
+      "Event.experiment.study.event": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "experiment.study.event"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "event": {
+                "$ref": "#/components/schemas/StudyEvent"
+              }
+            },
+            "required": [
+              "event"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "Event.mcp.tools.changed": {
         "type": "object",
         "properties": {
@@ -57707,6 +59126,21 @@
           },
           {
             "$ref": "#/components/schemas/Event.todo.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.experiment.run.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.experiment.run.points"
+          },
+          {
+            "$ref": "#/components/schemas/Event.experiment.study.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.experiment.idea.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.experiment.study.event"
           },
           {
             "$ref": "#/components/schemas/Event.mcp.tools.changed"
@@ -60883,6 +62317,125 @@
           "pattern",
           "scope",
           "created"
+        ]
+      },
+      "ExperimentSeries": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "runID": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "step": {
+                    "type": "number"
+                  },
+                  "value": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "step",
+                  "value"
+                ]
+              }
+            }
+          },
+          "required": [
+            "runID",
+            "key",
+            "points"
+          ]
+        }
+      },
+      "LocalGpu": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "name": {
+            "type": "string"
+          },
+          "memoryTotalMB": {
+            "type": "number",
+            "minimum": 0
+          },
+          "memoryUsedMB": {
+            "type": "number",
+            "minimum": 0
+          },
+          "utilization": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "temperatureC": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "index",
+          "name",
+          "memoryTotalMB",
+          "memoryUsedMB",
+          "utilization",
+          "temperatureC"
+        ]
+      },
+      "StudyOverview": {
+        "type": "object",
+        "properties": {
+          "study": {
+            "$ref": "#/components/schemas/Study"
+          },
+          "ideas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StudyIdea"
+            }
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExperimentRun"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StudyEvent"
+            }
+          },
+          "baseline": {
+            "$ref": "#/components/schemas/ExperimentRun"
+          },
+          "best": {
+            "$ref": "#/components/schemas/ExperimentRun"
+          }
+        },
+        "required": [
+          "study",
+          "ideas",
+          "runs",
+          "events"
         ]
       },
       "ProviderAuthMethod": {

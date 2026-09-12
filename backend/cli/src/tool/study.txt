@@ -1,0 +1,12 @@
+Run a research study: an autoresearch loop that hill-climbs one metric over many runs. You own the science (ideas, code, verdicts); OpenScience owns the clock (metrics, run endings, kill criteria, budget) and wakes this session with a "Study update" when there is news.
+
+Actions (one per call, discriminated by "action"):
+- create: {"action":"create","name":"...","purpose":"...","metric":"val_loss","direction":"minimize","concurrency":1,"kill_criteria":"1 hour OR val_loss plateaus for 500 steps","budget":{"maxRuns":20,"maxHours":8},"target":{"kind":"local"}} Start a study in this session's working folder. Do this once, after the plan is agreed.
+- status: {"action":"status"} Current state: baseline, best, queue, live runs, budget, lessons.
+- propose: {"action":"propose","ideas":[{"title":"...","description":"...","why":"...","ev":0.3,"config":{"lr":0.001}}]} Queue ideas with an expected value in metric units times confidence. Put the baseline first with priority 1000.
+- start: {"action":"start","idea_id":"idea_...","command":"python train.py --lr 0.001","artifacts":["results/*.png"]} Start one run for one idea through compute_job with tracking attached. The script must import openscience_track (or wandb, which is shimmed) and log the study metric. Never run two runs for one idea.
+- record: {"action":"record","run_id":"exp_...","kept":true,"analysis":"...","lessons":"...","baseline":false} Close a finished run: verdict, what the numbers mean, and any lesson worth keeping. Mark the first reference run with "baseline": true.
+- drop: {"action":"drop","idea_id":"idea_...","reason":"..."} Remove a queued idea.
+- conclude: {"action":"conclude","conclusion":"..."} End the study with what was learned, the best configuration, and what remains open.
+
+Rules: exactly one run per idea; record every ended run before starting another for the same slot; keep up to concurrency runs live; read metrics with the experiments tool, not by parsing logs; never ask whether to continue while budget remains.

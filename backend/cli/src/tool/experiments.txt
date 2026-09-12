@@ -1,0 +1,9 @@
+Read tracked experiment runs and their metrics. Runs come from training scripts that import openscience_track (or the wandb shim) inside compute jobs and kernels; the Experiments pane shows the same data.
+
+Actions:
+- runs: {"action":"runs","study_id":"stu_...","limit":20} Runs with status, headline metric, delta versus the study baseline, points logged and duration.
+- keys: {"action":"keys","run_ids":["exp_..."]} Metric names a set of runs logged.
+- series: {"action":"series","run_ids":["exp_..."],"keys":["val_loss"],"max":50} Downsampled step/value series for plotting or inspection.
+- compare: {"action":"compare","run_ids":["exp_a","exp_b"]} Final values of every metric side by side; defaults to the study baseline, best and latest runs.
+
+Prefer compare and runs over series; ask for series only when the curve itself matters (divergence, plateau, instability).

@@ -79,6 +79,7 @@ import { ComputeJobs } from "@/compute/jobs"
 import { KernelRuntime } from "@/science/kernel/registry"
 import { SessionCheckpoint } from "./checkpoint"
 import { ToolSelection } from "./tool-selection"
+import { Experiments } from "@/experiments"
 import { SessionLoopState } from "./loop-state"
 import { Fusion } from "./fusion"
 import { ContractProgress } from "./contract-progress"
@@ -1961,7 +1962,12 @@ export namespace SessionPrompt {
       SessionLoopState.externalPrompts(input.messages) || SessionLoopState.routing(input.messages)
     const activation = ToolSelection.activation(SessionLoopState.epochMessages(input.messages))
     const loadedCapabilities = activation.capabilities
-    const activatedTools = activation.tools
+    // A session driving a study keeps the study, experiments and compute
+    // tools on offer regardless of how the latest wake-up is worded.
+    const study = input.direct ? undefined : await Experiments.studyForSession(input.session.id).catch(() => undefined)
+    const activatedTools = study
+      ? new Set([...activation.tools, "study", "experiments", "compute_job", "python", "edit", "write", "apply_patch"])
+      : activation.tools
 
     const extensions = await ToolRegistry.customIDs()
     const native = await ToolRegistry.tools(
@@ -2853,6 +2859,43 @@ export namespace SessionPrompt {
     system: string[]
   }
 
+  /** A session driving a study carries the study's rules and its current
+   * state on every request, so a wake-up turn starts grounded without
+   * re-reading files. */
+  async function studyReminder(sessionID: string): Promise<string | undefined> {
+    const study = await Experiments.studyForSession(sessionID).catch(() => undefined)
+    if (!study) return
+    const overview = await Experiments.overview(study.id).catch(() => undefined)
+    if (!overview) return
+    const queued = overview.ideas.filter((idea) => idea.status === "queued")
+    const running = overview.runs.filter((run) => run.status === "running")
+    const done = overview.runs.filter((run) => run.status !== "running")
+    const value = (run: Experiments.Run | undefined) =>
+      run ? `${run.name} (${study.metric} ${run.headline === null ? "n/a" : Experiments.format(run.headline)})` : "none"
+    const budget = Object.entries(study.budget)
+      .filter(([, item]) => item !== undefined)
+      .map(([key, item]) => `${key} ${item}`)
+      .join(", ")
+    return [
+      `Study mode: "${study.name}" (${study.id}) is ${study.status}. Objective: ${study.direction} ${study.metric}.`,
+      `Baseline: ${value(overview.baseline)}. Best: ${value(overview.best)}. Runs completed: ${done.length}. Live: ${running.length}/${study.concurrency}${running.length ? ` (${running.map((run) => run.name).join(", ")})` : ""}. Queued ideas: ${queued.length}${
+        queued.length
+          ? ` (next: ${queued
+              .slice(0, 3)
+              .map((idea) => `${idea.title} [ev ${idea.ev}]`)
+              .join("; ")})`
+          : ""
+      }. Budget: ${budget || "none"}${study.killCriteria ? `. Kill criteria: ${study.killCriteria}` : ""}.`,
+      ...(study.review && !overview.baseline
+        ? [
+            `Review gate: before the baseline runs, delegate a read-only critique of the training and evaluation code (Task tool, agent "critique") and fix anything it marks blocking; only then start the baseline.`,
+          ]
+        : []),
+      `Loop: pick the top queued idea, implement it in the training script, start exactly one run for it with study start, and when a study update reports the run ended, read its numbers with the experiments tool, record the verdict with study record (analysis, lessons), then queue or start the next idea. Keep ${study.concurrency} run${study.concurrency === 1 ? "" : "s"} live while ideas remain. Never re-run an idea that already has a run; propose a new idea instead. Do not ask whether to continue while budget remains; ask only when input or authority is missing. Study updates arrive as user messages that begin "Study update".`,
+      ...(study.lessons ? [`Lessons so far:\n${study.lessons.split("\n").slice(-6).join("\n")}`] : []),
+    ].join("\n")
+  }
+
   export function systemReminder(value: string) {
     return value.replace(/<\/?system-reminder>/gu, "").trim()
   }
@@ -2907,7 +2950,8 @@ export namespace SessionPrompt {
           ? PROMPT_QUICK
           : researchEffortReminder(effort, delegationSettings, delegationEnabled, lead)
       : prompts[input.agent.name as keyof typeof prompts]
-    const system = [...legacy, ...(selected ? [systemReminder(selected)] : [])]
+    const study = await studyReminder(input.session.id)
+    const system = [...legacy, ...(selected ? [systemReminder(selected)] : []), ...(study ? [study] : [])]
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENSCIENCE_EXPERIMENTAL_PLAN_MODE) {

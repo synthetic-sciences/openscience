@@ -1,0 +1,56 @@
+---
+title: "Experiments and studies"
+description: "Track metrics from any training or analysis run, and let a study hill-climb a metric over many runs while you watch."
+---
+
+The Experiments pane sits beside Files, Terminal and Compute. It shows every tracked run in the project with its metrics, and the studies that run experiments in a loop: one metric, a baseline, a queue of ideas, and a ledger of what was kept or reverted.
+
+## Track a run
+
+Any script that OpenScience runs can report metrics. Import the tracker and log the numbers you want to see:
+
+```python
+import openscience_track as track
+
+run = track.init(project="lora-vs-full", name="lora-r16", config={"lr": 1e-4, "rank": 16})
+for step, batch in enumerate(loader):
+    loss = train_step(batch)
+    if step % 50 == 0:
+        track.log({"train_loss": loss, "lr": lr}, step=step)
+track.summary["val_loss"] = evaluate()
+track.finish()
+```
+
+Scripts written for `wandb` work unchanged inside a study: `import wandb` resolves to a shim that forwards to the tracker. No account, no network, no dependency: inside a compute job each record is one marked line on the job's output, which OpenScience reads back and stores in a per-project SQLite file under the data root. The Compute pane's log view and the model's `compute_job logs` never show those lines.
+
+Runs appear in the pane as they log. Click a run for its configuration, summary values and one chart per metric; toggle runs on the comparison chart with the coloured squares, pick the metric, smooth or switch to a log scale.
+
+## Start a study
+
+Ask for one in plain words:
+
+```text
+Start an autoresearch study on train.py: minimize val_loss, baseline first,
+at most 2 runs at a time on this machine, kill a run after 1 hour or if
+val_loss plateaus for 500 steps, stop after 20 runs or 8 hours.
+```
+
+The agent agrees the objective, creates the study, proposes the baseline and the first ideas ranked by expected value, and starts the baseline through the compute permissions you already use. From then on:
+
+- OpenScience follows each run's metrics, ends runs that break the kill criteria, and when a run finishes wakes the session with a **Study update** that reports the metric against the baseline. You can read every wake-up in the transcript.
+- The agent records a verdict for each run (kept or reverted, with its analysis and any lesson), queues the ideas the result suggests, and starts the next one. Exactly one run per idea.
+- Pause, Resume and Halt live on the study card. Halt cancels live runs. The budget you set pauses the study and asks for a conclusion when it is reached.
+- `study.md`, `ideas.md`, `results.tsv` and `lessons.md` are rendered into the working folder as the study advances, in the shape of Karpathy's autoresearch loop, so the record is readable without the app and travels with the project.
+
+Studies run on the local machine (one run per GPU when `nvidia-smi` is present), on a saved SSH or scheduler host, or on Modal. Local and SSH runs chart live; a Modal run's metrics arrive when its log is delivered at the end. The compute permissions are unchanged: a study starts runs the way you would, with the same approvals, under your Independence setting. With the review gate on (the default), the agent has the `critique` agent read the training and evaluation code before the baseline runs and fixes anything marked blocking.
+
+## Write it up
+
+**Write up** on the study card starts a turn that reads the ledger and the tracked runs and drafts the results: baseline, best configuration, the ablations that mattered, and the figures the data supports. Kept runs are the claims; reverted runs are the ablations that keep them honest.
+
+## Tools the agent uses
+
+- `study`: create, status, propose, start, record, drop, conclude.
+- `experiments`: runs, keys, series, compare.
+
+Both are ordinary tools with their own permission entries (`study` is contained, `experiments` is read-only). Runs still go through `compute_job`.
