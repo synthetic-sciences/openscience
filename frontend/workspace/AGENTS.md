@@ -8,6 +8,7 @@
 - Backend (repo root): `bun dev serve` (listens on 4096, falls back to 4097; set `VITE_OPENSCIENCE_SERVER_PORT` if it did).
 - App (repo root): `bun run dev:ui`, then open `http://localhost:3000`.
 - Unit tests: `bun run test:workspace` from the repo root (happy-dom). Playwright specs: `bun run --cwd frontend/workspace test`.
+- Component tests that load modules through Vite use `createTestServer` from `test/vite.ts`. It preserves the workspace alias without loading the app config or starting dependency optimization. Rendered Markdown tests belong in `frontend/ui`'s jsdom suite because happy-dom cannot run the sanitizer faithfully.
 
 ## SolidJS
 

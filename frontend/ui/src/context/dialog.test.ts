@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test"
 import { fileURLToPath } from "node:url"
 import type { JSX } from "solid-js"
 import type { DialogHandle } from "./dialog.fixture"
-import { createServer } from "vite"
+import { createTestServer as createServer } from "../../../workspace/test/vite"
 import solid from "vite-plugin-solid"
 
 class Observer {

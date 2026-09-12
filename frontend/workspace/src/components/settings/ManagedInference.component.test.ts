@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test"
 import { once } from "node:events"
 import { createServer as createHTTPServer } from "node:http"
 import { fileURLToPath } from "node:url"
-import { createServer } from "vite"
+import { createTestServer as createServer } from "../../../test/vite"
 import solid from "vite-plugin-solid"
 import type { ManagedInference } from "./ManagedInference"
 

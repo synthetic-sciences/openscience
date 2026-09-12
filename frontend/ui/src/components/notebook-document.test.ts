@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, test } from "bun:test"
 import { fileURLToPath } from "node:url"
-import { createServer } from "vite"
+import { createTestServer as createServer } from "../../../workspace/test/vite"
 import solid from "vite-plugin-solid"
 
 // Use jsdom here: the real Markdown sanitizer needs live NodeIterator semantics.

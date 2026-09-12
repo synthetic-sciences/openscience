@@ -1,6 +1,6 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
 import { fileURLToPath } from "node:url"
-import { createServer } from "vite"
+import { createTestServer as createServer } from "../../../workspace/test/vite"
 import solid from "vite-plugin-solid"
 import { documentPreferencesKey } from "../../../workspace/src/atlas/document-preferences"
 
