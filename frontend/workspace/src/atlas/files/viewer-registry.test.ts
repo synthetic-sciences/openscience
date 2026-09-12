@@ -5,6 +5,11 @@ describe("viewer registry", () => {
   test("resolves common formats consistently", () => {
     expect(resolveViewer({ name: "report.md" }).kind).toBe("markdown")
     expect(resolveViewer({ name: "analysis.ipynb" }).kind).toBe("notebook")
+    expect(resolveViewer({ name: "analysis.Rmd", mimeType: "text/markdown" })).toMatchObject({
+      kind: "notebook",
+      language: "markdown",
+    })
+    expect(resolveViewer({ name: "analysis.qmd" }).kind).toBe("notebook")
     expect(resolveViewer({ name: "results.csv" })).toMatchObject({ kind: "table", table: "csv" })
     expect(resolveViewer({ name: "records.json", content: "[{}]" })).toMatchObject({ kind: "table", table: "json" })
     expect(resolveViewer({ name: "paper.pdf" }).kind).toBe("pdf")

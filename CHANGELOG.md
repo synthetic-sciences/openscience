@@ -10,6 +10,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Local Jupyter notebooks, R Markdown, and Quarto files open as rendered documents
+  with separate cells, saved outputs, and explicit Python/R execution in the session's
+  local kernel. Source editing remains available; opening a file never runs its code.
 - Session traces remain available when a search or scientific kernel returns a
   partial result, preserving that outcome instead of failing the entire trace.
 - ACP editor integrations use stable session listing and resumption, and expose

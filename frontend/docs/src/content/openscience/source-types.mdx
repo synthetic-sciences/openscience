@@ -38,11 +38,25 @@ Use [Reading and extracting documents](/openscience/documents) for extraction, a
 | CSV, TSV | Explore rows, columns, missing values, and numeric distributions. |
 | JSON arrays, JSONL, NDJSON | Inspect record-oriented data in the table explorer. Other JSON opens as source. |
 | Python, R, Julia, and other source files | Read, edit, and run with the relevant available language tools. |
-| Jupyter notebooks | Inspect notebook content and saved outputs; ask to reproduce execution and dependencies separately. |
+| Jupyter notebooks (`.ipynb`) | Preview Markdown and code cells with saved text, images, tables, and errors; use Edit for JSON source. |
+| R Markdown and Quarto (`.Rmd`, `.qmd`) | Preview prose and fenced code chunks, including referenced figures; use Edit for source. |
 | YAML, TOML, XML, and text configuration | Inspect and edit source with the schema or application requirements in mind. |
 | Excel or another application-specific format | Keep the original and use available analysis software to read or convert it. Native spreadsheet editing is not the table preview's role. |
 
 Specify delimiters, encoding, sheet names, dates, and missing-value markers when known. See [Tables and datasets](/openscience/tables).
+
+In a research session, use **Run** on a Python or R cell to execute it in that
+session's local kernel. Cells share the corresponding runtime's variables; install
+the required interpreter and dependencies first. Project execution permissions still
+apply. Opening a document never executes code. New outputs are labelled **Run output ·
+not saved** and remain in that preview; editing and saving the source is separate.
+Use **Compute** to inspect or interrupt the runtime.
+
+The document preview shows Jupyter v4 saved outputs and renders Markdown with code
+chunks. It does not run a full Quarto/knitr build, evaluate inline expressions, or
+invent outputs that are absent from an R Markdown or Quarto source file. For those
+formats, existing figures referenced in Markdown render in place. Other chunk
+languages remain visible with execution marked unavailable.
 
 ## Scientific formats
 

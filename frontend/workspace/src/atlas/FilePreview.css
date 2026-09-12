@@ -733,7 +733,11 @@
 }
 
 .atlas-file-notebook-label {
-  padding: 8px 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
   color: var(--color-text-faint);
   font-family: var(--font-family-mono);
   font-size: var(--font-size-small);
@@ -754,6 +758,43 @@
 .atlas-file-notebook-output {
   border-top: 1px solid var(--color-border);
   background: var(--color-surface-solid);
+}
+
+.atlas-notebook-hint,
+.atlas-notebook-output-label {
+  margin: 0;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-small);
+  line-height: 1.6;
+}
+
+.atlas-notebook-output-label {
+  padding: 10px 16px 0;
+}
+
+.atlas-notebook-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 12px auto;
+}
+
+.atlas-notebook-html {
+  display: block;
+  width: 100%;
+  min-height: 240px;
+  border: 0;
+  background: white;
+}
+
+.atlas-file-notebook-cell > details > summary {
+  cursor: pointer;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-small);
+}
+
+.atlas-file-notebook-output > .atlas-notebook-hint {
+  padding: 12px 16px;
 }
 
 .atlas-file-pdf,

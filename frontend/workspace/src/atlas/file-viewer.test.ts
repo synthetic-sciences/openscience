@@ -39,7 +39,12 @@ describe("file viewer capabilities", () => {
       copy: false,
       download: true,
     })
-    expect(describeFile({ kind: "code", format: "ipynb" }).label).toBe("IPYNB source")
+    expect(describeFile({ kind: "notebook", format: "ipynb" }).label).toBe("Jupyter notebook")
+    expect(describeFile({ kind: "notebook", format: "Rmd" })).toMatchObject({
+      label: "R Markdown document",
+      source: true,
+    })
+    expect(describeFile({ kind: "notebook", format: "qmd" }).label).toBe("Quarto document")
     expect(describeFile({ kind: "table", format: "csv" }).label).toBe("CSV data")
     expect(describeFile({ kind: "scientific-data", format: "fastq" }).label).toBe("FASTQ data")
   })
