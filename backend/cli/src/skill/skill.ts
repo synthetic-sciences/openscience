@@ -501,9 +501,11 @@ export namespace Skill {
       }
     }
 
-    // Scan additional skill paths from config
+    // Scan additional skill paths from config, plus any roots registered at
+    // runtime through Skill.addPath() (which do not need a restart).
     const config = await Config.getExecution()
-    for (const skillPath of config.skills?.paths ?? []) {
+    const extraRoots = [...(config.skills?.paths ?? []), ...Skill.runtimeRoots]
+    for (const skillPath of extraRoots) {
       const expanded = skillPath.startsWith("~/") ? path.join(os.homedir(), skillPath.slice(2)) : skillPath
       const resolved = path.isAbsolute(expanded) ? expanded : path.join(Instance.directory, expanded)
       if (!(await Filesystem.isDir(resolved))) {
@@ -656,6 +658,104 @@ export namespace Skill {
     return value
   }
 
+  // ---------------------------------------------------------------------
+  // Custom skill roots
+  //
+  // `skills.paths` in openscience.json has always been able to load extra
+  // directories, but only at boot and with no way to see what is active. These
+  // helpers make skill roots first-class: they can be listed, added and removed
+  // while the server is running, and every root reports where it came from so a
+  // shadowed skill is visible instead of silently losing to a same-named one.
+  // ---------------------------------------------------------------------
+
+  export const RootInfo = z.object({
+    path: z.string(),
+    kind: z.enum(["builtin", "user", "custom"]),
+    skills: z.number(),
+  })
+  export type RootInfo = z.infer<typeof RootInfo>
+
+  /** Roots registered for this process only (never written to disk). */
+  export const runtimeRoots = new Set<string>()
+
+  function expandRoot(raw: string) {
+    const expanded = raw.startsWith("~/") ? path.join(os.homedir(), raw.slice(2)) : raw
+    return path.isAbsolute(expanded) ? path.normalize(expanded) : path.join(Instance.directory, expanded)
+  }
+
+  /** Distinct skill roots currently contributing to the catalog. */
+  export async function roots(): Promise<RootInfo[]> {
+    const config = await Config.getExecution()
+    const configured = (config.skills?.paths ?? []).map(expandRoot)
+    const entries = await all()
+    const buckets = new Map<string, { kind: RootInfo["kind"]; skills: number }>()
+    for (const root of configured) buckets.set(root, { kind: "custom", skills: 0 })
+    const runtime = [...runtimeRoots]
+    for (const info of entries) {
+      const dir = path.dirname(path.dirname(info.location)) // …/<skill>/SKILL.md -> …
+      // a root is "custom" when it came from config or from Skill.addPath();
+      // everything else is a built-in or user root
+      const hit = configured.find((r) => info.location.startsWith(r + path.sep))
+                    ?? runtime.find((r) => info.location.startsWith(r + path.sep))
+      const key = hit ?? dir
+      const kind: RootInfo["kind"] = hit
+        ? "custom"
+        : info.origin === "user"
+          ? "user"
+          : "builtin"
+      const prev = buckets.get(key)
+      buckets.set(key, { kind: prev?.kind ?? kind, skills: (prev?.skills ?? 0) + 1 })
+    }
+    return [...buckets.entries()]
+      .filter(([dir]) => dir)
+      .map(([dir, v]) => ({ path: dir, kind: v.kind, skills: v.skills }))
+      .sort((a, b) => a.path.localeCompare(b.path))
+  }
+
+  /**
+   * Register a directory as a skill root. Validation is strict on purpose: a
+   * missing directory is an error rather than a silent no-op, because the
+   * failure mode people hit today is a typo'd path that simply does nothing.
+   * With `persist` the path is appended to `skills.paths` so it survives a
+   * restart; without it the root lives only in this process.
+   */
+  export async function addPath(raw: string, persist = false): Promise<RootInfo> {
+    const resolved = expandRoot(raw)
+    if (!(await Filesystem.isDir(resolved))) throw new InvalidRootError({ path: resolved, reason: "not a directory" })
+    if (persist) {
+      const global = await Config.getGlobal()
+      const current = global.skills?.paths ?? []
+      if (!current.includes(raw)) {
+        await Config.updateGlobal({ ...global, skills: { ...global.skills, paths: [...current, raw] } })
+      }
+    }
+    runtimeRoots.add(resolved)
+    await invalidate()
+    log.info("skill root added", { path: resolved, persist })
+    const found = (await roots()).find((r) => r.path === resolved)
+    return found ?? { path: resolved, kind: "custom", skills: 0 }
+  }
+
+  /** Drop a runtime-registered root (or remove it from the config list). */
+  export async function removePath(raw: string, persist = false) {
+    const resolved = expandRoot(raw)
+    runtimeRoots.delete(resolved)
+    if (persist) {
+      const global = await Config.getGlobal()
+      const current = global.skills?.paths ?? []
+      const next = current.filter((x) => expandRoot(x) !== resolved)
+      if (next.length !== current.length) {
+        await Config.updateGlobal({ ...global, skills: { ...global.skills, paths: next } })
+      }
+    }
+    await invalidate()
+    log.info("skill root removed", { path: resolved, persist })
+  }
+
+  export const InvalidRootError = NamedError.create(
+    "SkillInvalidRootError",
+    z.object({ path: z.string(), reason: z.string() }),
+  )
   /** Build the single permission-annotated catalog consumed by every skill
    * discovery surface. Skill contents stay lazy; this snapshot contains only
    * the already-indexed frontmatter metadata. */
@@ -684,3 +784,4 @@ export namespace Skill {
     return snapshot
   }
 }
+
