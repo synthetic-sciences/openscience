@@ -50,6 +50,13 @@ for (const argv of [
     ]).finally(() => clearTimeout(timer))
     expect(exit).toBe(1)
     expect(stdout + stderr).toContain("Unknown scientific capability: missing-startup-canary")
+    expect(JSON.parse(stdout)).toMatchObject({
+      schema_version: 1,
+      target: "local",
+      results: [],
+      failed_capability: "missing-startup-canary",
+      error: expect.stringContaining("Unknown scientific capability: missing-startup-canary"),
+    })
     expect(stderr).not.toContain("starter environment setup failed")
     expect(await Bun.file(blocker).text()).toBe("no unrelated environment setup")
   })
