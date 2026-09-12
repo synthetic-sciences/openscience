@@ -8,6 +8,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Fixed
+
+- A packaged build no longer fails requests in its first seconds when several
+  project runtimes start together. Every runtime asked to install the bundled
+  skills, and the losers of that race renamed onto a directory the winner had
+  just filled (`ENOTEMPTY`). One extraction is now shared per bundle within a
+  process, and a rename that loses to another process accepts the winner's
+  verified bundle.
+
 ### Changed
 
 - The default Research prompt now follows the shape of OpenCode's harness
