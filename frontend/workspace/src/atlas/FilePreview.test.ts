@@ -78,6 +78,153 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
+describe("local notebook documents", () => {
+  test("runs only the selected chunk with session ownership, shows failures, and ignores late results after navigation", async () => {
+    const response = pending<Response>()
+    const calls: unknown[] = []
+    const [path, setPath] = solidjs.createSignal("first.qmd")
+    const sdk = services(
+      () => file("```{python}\nvalue + 1\n```", "rev-1"),
+      async (route, init) => {
+        calls.push({ route, body: JSON.parse(String(init?.body)) })
+        return calls.length === 1 ? json({ message: "Project must be trusted" }, 403) : response.promise
+      },
+    )
+    const { host } = mount(() =>
+      subject.FileView({
+        get path() {
+          return path()
+        },
+        directory: "/project",
+        sessionID: "session-a",
+        services: sdk,
+      }),
+    )
+    await settle()
+    button(host, "Run cell 1 in Python")!.click()
+    await settle()
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("Project must be trusted")
+    expect(calls).toEqual([
+      {
+        route: "/kernels/execute",
+        body: {
+          sessionID: "session-a",
+          language: "python",
+          code: "value + 1",
+          source: "/project/first.qmd#cell-1",
+          timeout: 60000,
+        },
+      },
+    ])
+    button(host, "Run cell 1 in Python")!.click()
+    expect(button(host, "Run cell 1 in Python")?.disabled).toBe(true)
+    setPath("second.qmd")
+    await settle()
+    response.resolve(json({ ok: true, execution_count: 2, outputs: [{ output_type: "stream", text: "OLD RESULT" }] }))
+    await settle()
+    expect(host.textContent).not.toContain("OLD RESULT")
+    expect(host.textContent).not.toContain("Project must be trusted")
+    expect(button(host, "Run cell 1 in Python")?.disabled).toBe(false)
+  })
+
+  test("renders a completed R chunk result without writing the source file", async () => {
+    const calls: string[] = []
+    const { host } = mount(() =>
+      subject.FileView({
+        path: "report.Rmd",
+        directory: "/project",
+        sessionID: "session-a",
+        services: services(
+          () => file("```{r}\nmean(c(1, 2, 3))\n```", "rev-1"),
+          async (route, init) => {
+            calls.push(route)
+            expect(JSON.parse(String(init?.body)).language).toBe("r")
+            if (calls.length === 1) return json({ message: "Interpreter unavailable" }, 400)
+            return json({ ok: true, execution_count: 1, outputs: [{ output_type: "stream", text: "[1] 2" }] })
+          },
+        ),
+      }),
+    )
+    await settle()
+    button(host, "Run cell 1 in R")!.click()
+    await settle()
+    expect(host.textContent).toContain("Interpreter unavailable")
+    button(host, "Run cell 1 in R")!.click()
+    await settle()
+    expect(host.textContent).not.toContain("Interpreter unavailable")
+    expect(host.textContent).toContain("[1] 2")
+    expect(host.textContent).toContain("Run output · not saved")
+    expect(calls).toEqual(["/kernels/execute", "/kernels/execute"])
+    expect(button(host, "Save changes")).toBeNull()
+  })
+
+  test("keeps invalid JSON editable and disables execution without a session", async () => {
+    const { host } = mount(() =>
+      subject.FileView({ path: "broken.ipynb", directory: "/project", services: services(() => file("{", "rev-1")) }),
+    )
+    await settle()
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("could not be previewed")
+    expect((await editor(host)).state.doc.toString()).toBe("{")
+    await edit(host, JSON.stringify({ nbformat: 4, cells: [{ cell_type: "code", source: "1 + 1" }] }))
+    button(host, "Preview")!.click()
+    await settle()
+    expect(button(host, "Run cell 1 in Python")?.disabled).toBe(true)
+  })
+
+  test("opens Jupyter cells and saved outputs as a document without executing them", async () => {
+    const calls: string[] = []
+    const content = JSON.stringify({
+      nbformat: 4,
+      metadata: { kernelspec: { language: "python" } },
+      cells: [
+        { cell_type: "markdown", source: ["# Experiment\n", "A **rendered** notebook."] },
+        {
+          cell_type: "code",
+          source: ["print(42)"],
+          execution_count: 7,
+          outputs: [{ output_type: "stream", name: "stdout", text: ["42\n"] }],
+        },
+      ],
+    })
+    const { host } = mount(() =>
+      subject.FileView({
+        path: "analysis.ipynb",
+        directory: "/project",
+        sessionID: "session-a",
+        services: services(
+          () => file(content, "rev-1"),
+          async (path) => {
+            calls.push(path)
+            return json({})
+          },
+        ),
+      }),
+    )
+    await settle()
+    expect(host.querySelector('[data-cell-type="markdown"] [data-component="markdown"]')).not.toBeNull()
+    expect(host.querySelector('[data-cell-type="code"]')?.textContent).toContain("print(42)")
+    expect(host.querySelector('[data-cell-type="code"]')?.textContent).toContain("42")
+    expect(button(host, "Run cell 2 in Python")?.disabled).toBe(false)
+    expect(calls).toEqual([])
+  })
+
+  test.each(["Rmd", "qmd"])("opens %s prose and R chunks as a document", async (extension) => {
+    const content = "# Report\n\nA **rendered** document.\n\n```{r summary}\nmean(c(1, 2, 3))\n```\n"
+    const { host } = mount(() =>
+      subject.FileView({
+        path: `analysis.${extension}`,
+        directory: "/project",
+        sessionID: "session-a",
+        services: services(() => file(content, "rev-1")),
+      }),
+    )
+    await settle()
+    expect(host.querySelector('[data-cell-type="markdown"] [data-component="markdown"]')).not.toBeNull()
+    expect(host.querySelector('[data-cell-type="code"]')?.textContent).toContain("mean(c(1, 2, 3))")
+    expect(button(host, "Run cell 2 in R")?.disabled).toBe(false)
+  })
+})
+
 describe("file preview save ownership", () => {
   test("sends the read revision and preserves typing during the save", async () => {
     const save = pending<Response>()

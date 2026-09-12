@@ -32,9 +32,10 @@ export function resolveViewer(input: {
   if (mime.startsWith("image/") || images.has(ext)) return { kind: "image", extension: ext, language }
   if (mime === "application/pdf" || ext === "pdf") return { kind: "pdf", extension: ext, language }
   if (binary) return { kind: "binary", extension: ext, language }
+  if (ext === "ipynb" || ext === "rmd" || ext === "qmd")
+    return { kind: "notebook", extension: ext, language: ext === "ipynb" ? "json" : "markdown" }
   if (markdown.has(ext) || mime.includes("markdown")) return { kind: "markdown", extension: ext, language: "markdown" }
   if (ext === "html" || ext === "htm") return { kind: "html", extension: ext, language: "html" }
-  if (ext === "ipynb") return { kind: "notebook", extension: ext, language: "json" }
   if (ext === "csv" || ext === "tsv" || ext === "jsonl" || ext === "ndjson") {
     return {
       kind: "table",

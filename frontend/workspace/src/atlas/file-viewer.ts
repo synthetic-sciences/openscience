@@ -3,6 +3,7 @@ import { resolveArtifactPath } from "@/artifacts/context"
 
 export type FileKind =
   | "markdown"
+  | "notebook"
   | "html"
   | "table"
   | "scientific-data"
@@ -184,7 +185,7 @@ export function createFileRequestOwner() {
   }
 }
 
-const sources = new Set<FileKind>(["markdown", "html", "table", "scientific-data", "science", "code"])
+const sources = new Set<FileKind>(["markdown", "notebook", "html", "table", "scientific-data", "science", "code"])
 
 /** Raw PDF previews remain bounded even though the download endpoint itself supports larger files. */
 export const PDF_PREVIEW_LIMIT = 64 * 1024 * 1024
@@ -202,6 +203,8 @@ function format(value?: string) {
 function label(kind: FileKind, value?: string) {
   const type = format(value)
   if (kind === "markdown") return "Markdown"
+  if (kind === "notebook")
+    return type === "rmd" ? "R Markdown document" : type === "qmd" ? "Quarto document" : "Jupyter notebook"
   if (kind === "html") return "HTML document"
   if (kind === "pdf") return "PDF document"
   if (kind === "image") return type ? `${type.toUpperCase()} image` : "Image"

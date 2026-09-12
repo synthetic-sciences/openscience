@@ -59,6 +59,7 @@ import {
 } from "@/atlas/file-viewer"
 import { LANG, extension as ext } from "@/atlas/files/artifact-thumb"
 import { resolveViewer } from "@/atlas/files/viewer-registry"
+import { NotebookDocument, type NotebookExecution } from "@/atlas/files/NotebookDocument"
 import { assetUrl, localAssetPath } from "@/utils/markdown-assets"
 import { discardFileDraft, recoverFileDraftState, rememberFileDraft } from "@/atlas/file-drafts"
 import { MarkdownDocument } from "@/atlas/MarkdownDocument"
@@ -432,6 +433,7 @@ export function FileView(props: {
     if (biological()) return "scientific-data"
     if (scientific()) return "science"
     if (common().kind === "markdown") return "markdown"
+    if (common().kind === "notebook") return "notebook"
     if (common().kind === "html") return "html"
     if (common().kind === "table") return "table"
     if (common().kind === "pdf") return "pdf"
@@ -992,6 +994,45 @@ export function FileView(props: {
                   />
                 </Match>
 
+                <Match when={kind() === "notebook" && !view.source}>
+                  <NotebookDocument
+                    name={name()}
+                    text={view.draft}
+                    format={e()}
+                    sessionID={activeSessionID()}
+                    resolveImage={image}
+                    resolveFile={file}
+                    onOpenFile={openFile}
+                    run={
+                      activeSessionID() && writable() !== false
+                        ? async (cell, index) => {
+                            const response = await sdk.request("/kernels/execute", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                sessionID: activeSessionID(),
+                                language: cell.language,
+                                code: cell.source,
+                                source: `${requestPath()}#cell-${index + 1}`,
+                                timeout: 60000,
+                              }),
+                              signal: AbortSignal.timeout(65000),
+                            })
+                            if (!response.ok)
+                              throw new Error(
+                                fileErrorMessage(
+                                  await response
+                                    .json()
+                                    .catch(() => ({ message: `Kernel request failed (${response.status})` })),
+                                ),
+                              )
+                            return (await response.json()) as NotebookExecution
+                          }
+                        : undefined
+                    }
+                  />
+                </Match>
+
                 {/* HTML documents render fully sandboxed — no scripts, no same-origin access */}
                 <Match when={kind() === "html" && !view.source}>
                   <div class="atlas-file-html">
@@ -1100,6 +1141,7 @@ export function FileView(props: {
                 <Match
                   when={
                     (kind() === "code" ||
+                      kind() === "notebook" ||
                       kind() === "markdown" ||
                       kind() === "html" ||
                       kind() === "science" ||
