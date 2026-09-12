@@ -63,20 +63,32 @@ export const CapabilityCanaryCommand = cmd({
       const agent = await Agent.get("research")
       if (!agent) throw new Error("The research agent is unavailable")
       const tool = await createScientificCapabilityCanaryTool({ agent })
-      const results = []
+      const results: Awaited<ReturnType<typeof runScientificCapabilityCanary>>[] = []
+      const report = (failure?: { failed_capability: string; error: string }) =>
+        new Promise<void>((resolve, reject) => {
+          process.stdout.write(
+            JSON.stringify({ schema_version: 1, target, results, ...failure }, null, 2) + EOL,
+            (error) => (error ? reject(error) : resolve()),
+          )
+        })
       for (const id of selected) {
-        const ctx = await createScientificCapabilityCanaryContext(agent)
-        results.push(
-          await runScientificCapabilityCanary({
-            tool,
-            ctx,
-            id,
-            target,
-            timeoutSeconds: Number(args.timeout),
-          }),
-        )
+        try {
+          const ctx = await createScientificCapabilityCanaryContext(agent)
+          results.push(
+            await runScientificCapabilityCanary({
+              tool,
+              ctx,
+              id,
+              target,
+              timeoutSeconds: Number(args.timeout),
+            }),
+          )
+        } catch (error) {
+          await report({ failed_capability: id, error: error instanceof Error ? error.message : String(error) })
+          throw error
+        }
       }
-      process.stdout.write(JSON.stringify({ schema_version: 1, target, results }, null, 2) + EOL)
+      await report()
     })
   },
 })

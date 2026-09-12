@@ -395,6 +395,12 @@ test.skipIf(!capabilityPlatform())("rejects an unowned .pth planted before the f
     const result = await invoke("task", current.env)
     expect(result.exit).not.toBe(0)
     expect(result.stderr).toContain("failed Conda-only archive attestation before Python startup")
+    const state = await Bun.file(path.join(current.conda, "state.json")).json()
+    expect(state).toMatchObject({ status: "failed", phase: `failed:task:${CORE_SCIENCE_RUNTIME.pack_id}` })
+    expect(state.error).toContain("failed Conda-only archive attestation")
+    const diagnostic = await Bun.file(path.join(current.data, "log", "dev.log")).text()
+    expect(diagnostic).toContain("reason=unowned file")
+    expect(diagnostic).toContain("relative=lib/python3.12/site-packages/inject.pth")
     expect(await Bun.file(current.pythonLog).exists()).toBe(false)
     expect(await Bun.file(current.startupMarker).exists()).toBe(false)
   } finally {

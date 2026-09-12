@@ -1,12 +1,64 @@
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { spawn } from "node:child_process"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { CredentialProcessLedger } from "../../src/credentials/process-ledger"
 import { WindowsJobLauncher } from "../../src/process/windows-job-launcher"
+import { DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX } from "../../src/process/darwin-responsibility-launcher"
 
 const linuxTest = process.platform === "linux" ? test : test.skip
+
+test.skipIf(process.platform !== "darwin" && process.platform !== "win32")(
+  "gated commands can finish immediately after durable registration",
+  async () => {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const wrapped = WindowsJobLauncher.wrap({
+        file: process.platform === "darwin" ? "/usr/bin/true" : process.execPath,
+        args: process.platform === "darwin" ? [] : ["-e", ""],
+      })
+      const id = `provider-fast-${crypto.randomUUID()}`
+      const child = spawn(wrapped.file, wrapped.args, { detached: process.platform !== "win32", stdio: "ignore" })
+      const completion = new Promise<number | null>((resolve, reject) => {
+        child.once("close", resolve)
+        child.once("error", reject)
+      })
+      void completion.catch(() => undefined)
+      const write = fs.writeFile
+      // Let the real child finish as soon as its activation file is written.
+      // This controls scheduling without replacing process or filesystem work.
+      const activation =
+        process.platform === "darwin"
+          ? spyOn(fs, "writeFile").mockImplementation(async (...args) => {
+              await write(...args)
+              if (args[0] === `${wrapped.release}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`) await completion
+            })
+          : undefined
+      try {
+        expect(
+          await CredentialProcessLedger.register({
+            id,
+            kind: "provider",
+            pid: child.pid!,
+            detached: process.platform !== "win32",
+            windowsRelease: wrapped.release,
+          }),
+        ).toBe(true)
+        expect(await completion).toBe(0)
+        expect(await CredentialProcessLedger.complete(id)).toBe(true)
+      } finally {
+        activation?.mockRestore()
+        await CredentialProcessLedger.revoke({ id })
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL")
+        await completion.catch(() => undefined)
+        if (wrapped.release) {
+          await fs.rm(wrapped.release, { force: true })
+          await fs.rm(`${wrapped.release}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, { force: true })
+        }
+      }
+    }
+  },
+)
 
 async function waitText(file: string, attempt = 0): Promise<string> {
   const value = await fs.readFile(file, "utf8").catch(() => undefined)

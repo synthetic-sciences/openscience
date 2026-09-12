@@ -620,6 +620,7 @@ jobs:
           mkdir -p "$HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$OPENSCIENCE_DATA_DIR" "$project"
           cd "$project"
           openscience --print-logs debug capability-canary "$CANARY_CAPABILITY" --target local --timeout 900 \
+            2> >(tee "$RUNNER_TEMP/scientific-capability-canary.log" >&2) \
             | tee "$RUNNER_TEMP/scientific-capability-canary.json"
           CANARY_RESULT="$RUNNER_TEMP/scientific-capability-canary.json" \
           EXPECTED_CAPABILITY="$CANARY_CAPABILITY" \
@@ -659,6 +660,7 @@ jobs:
           retention-days: 30
           path: |
             ${{ runner.temp }}/scientific-capability-canary.json
+            ${{ runner.temp }}/scientific-capability-canary.log
             ${{ runner.temp }}/openscience-capability/data/scientific-capability-evidence.json
             ${{ runner.temp }}/openscience-capability/data/log
             ${{ runner.temp }}/openscience-capability/data/compute/projects

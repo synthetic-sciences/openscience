@@ -1011,7 +1011,10 @@ async function lockedFileSha256(file: string) {
 }
 
 async function verifyOwnership(prefix: string, ownership: Ownership, options: { allowCondaMetadata?: boolean } = {}) {
-  const reject = (_reason: string, _relative?: string) => false
+  const reject = (reason: string, relative?: string) => {
+    log.warn("managed environment archive attestation failed", { reason, relative })
+    return false
+  }
   const root = await fs.realpath(prefix).catch(() => undefined)
   if (!root) return reject("missing root")
   const base = `${root}${path.sep}`
@@ -1572,8 +1575,14 @@ export namespace ManagedEnvironments {
     }
     await ensureMicromamba()
     await using lease = await FileLease.acquire(path.join(root(), `task-${parsed}.lock`), 45 * 60 * 1000)
-    await ensureTaskEnvironment(parsed, input, selected)
-    await state({ status: "ready", phase: "ready", error: undefined })
+    try {
+      await ensureTaskEnvironment(parsed, input, selected)
+      await state({ status: "ready", phase: "ready", error: undefined })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await state({ status: "failed", phase: `failed:task:${parsed}`, error: message }).catch(() => undefined)
+      throw error
+    }
   }
 
   export async function inspect(
