@@ -1,7 +1,7 @@
 import { afterAll, afterEach, expect, test } from "bun:test"
 import { fileURLToPath } from "node:url"
 import { createOpenScienceClient } from "@synsci/sdk/v2/client"
-import { createServer } from "vite"
+import { createTestServer as createServer } from "../../test/vite"
 import solid from "vite-plugin-solid"
 
 const Response = (await Bun.fetch("data:text/plain,")).constructor as typeof globalThis.Response

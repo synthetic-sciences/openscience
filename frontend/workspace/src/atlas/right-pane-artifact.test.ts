@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, expect, test } from "bun:test"
 import type { JSX } from "solid-js"
-import { createServer } from "vite"
+import { createTestServer as createServer } from "../../test/vite"
 import solid from "vite-plugin-solid"
 
 const server = await createServer({

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
 import { fileURLToPath } from "node:url"
 import type { JSX } from "solid-js"
-import { createServer } from "vite"
+import { createTestServer as createServer } from "../../test/vite"
 import solid from "vite-plugin-solid"
 import type { FileData } from "./file-viewer"
 import type { FileView } from "./FilePreview"

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test"
 import { fileURLToPath } from "node:url"
 import type { AssistantMessage, TextPart } from "@synsci/sdk/v2"
-import { createServer } from "vite"
+import { createTestServer as createServer } from "../../../workspace/test/vite"
 import solid from "vite-plugin-solid"
 
 // Render the real TextPart -> Markdown path in jsdom. Source-string checks
