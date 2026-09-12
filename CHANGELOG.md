@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+## v2.0.94 — 2026-09-12
+
 ### Changed
 
 - The default Research prompt now follows the shape of OpenCode's harness
