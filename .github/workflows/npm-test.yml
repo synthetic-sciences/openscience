@@ -619,7 +619,7 @@ jobs:
           project="$RUNNER_TEMP/openscience-capability/project"
           mkdir -p "$HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$OPENSCIENCE_DATA_DIR" "$project"
           cd "$project"
-          openscience debug capability-canary "$CANARY_CAPABILITY" --target local --timeout 900 \
+          openscience --print-logs debug capability-canary "$CANARY_CAPABILITY" --target local --timeout 900 \
             | tee "$RUNNER_TEMP/scientific-capability-canary.json"
           CANARY_RESULT="$RUNNER_TEMP/scientific-capability-canary.json" \
           EXPECTED_CAPABILITY="$CANARY_CAPABILITY" \
@@ -660,6 +660,9 @@ jobs:
           path: |
             ${{ runner.temp }}/scientific-capability-canary.json
             ${{ runner.temp }}/openscience-capability/data/scientific-capability-evidence.json
+            ${{ runner.temp }}/openscience-capability/data/log
+            ${{ runner.temp }}/openscience-capability/data/compute/projects
+            ${{ runner.temp }}/openscience-capability/data/conda/state.json
 
   promote-test:
     needs:

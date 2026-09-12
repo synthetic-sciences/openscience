@@ -13,6 +13,7 @@ import { constants } from "node:fs"
 import fs from "node:fs/promises"
 import path from "node:path"
 import z from "zod"
+import { download } from "./download"
 import type { KernelStartOptions } from "./types"
 
 const log = Log.create({ service: "science.environment" })
@@ -369,9 +370,7 @@ async function ensureCondaArchives(digest: string, selected: CoreScienceCondaPla
         if ((await lockedFileSha256(cached)) === artifact.digest) {
           await fs.copyFile(cached, temporary)
         } else {
-          const response = await fetch(artifact.url, { redirect: "follow", signal: AbortSignal.timeout(120_000) })
-          if (!response.ok) throw new Error(`Locked Conda archive download failed with HTTP ${response.status}`)
-          await Bun.write(temporary, await response.arrayBuffer(), { mode: 0o600 })
+          await Bun.write(temporary, await download(artifact.url, 120_000), { mode: 0o600 })
         }
         if ((await lockedFileSha256(temporary)) !== artifact.digest) {
           throw new Error(`Locked Conda archive ${artifact.name} failed its sha256 checksum`)
@@ -474,12 +473,11 @@ async function installMicromamba() {
   let preservePrevious = false
   try {
     await fs.mkdir(extracted, { recursive: true })
-    const response = await fetch(`https://micro.mamba.pm/api/micromamba/${selectedPlatform}/${MICROMAMBA_VERSION}`, {
-      redirect: "follow",
-      signal: AbortSignal.timeout(60_000),
-    })
-    if (!response.ok) throw new Error(`Micromamba download failed with HTTP ${response.status}`)
-    await Bun.write(archive, await response.arrayBuffer(), { mode: 0o600 })
+    await Bun.write(
+      archive,
+      await download(`https://micro.mamba.pm/api/micromamba/${selectedPlatform}/${MICROMAMBA_VERSION}`, 60_000),
+      { mode: 0o600 },
+    )
     if ((await sha256(archive)) !== locked.archive) {
       throw new Error(`Micromamba ${MICROMAMBA_VERSION} archive failed its ${selectedPlatform} checksum`)
     }
