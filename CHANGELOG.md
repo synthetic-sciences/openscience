@@ -22,6 +22,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Scientific environment setup retries interrupted archive downloads and temporary
+  upstream failures within its existing timeout, while retaining checksum verification.
 - Local Jupyter notebooks, R Markdown, and Quarto files open as rendered documents
   with separate cells, saved outputs, and explicit Python/R execution in the session's
   local kernel. Source editing remains available; opening a file never runs its code.
