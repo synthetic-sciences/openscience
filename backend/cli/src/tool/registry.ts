@@ -270,6 +270,10 @@ export namespace ToolRegistry {
     agent?: Agent.Info,
     enabled: (id: string) => boolean = () => true,
     request?: string,
+    /** Tools a loaded skill or an explicit prompt setting unlocked for this
+     * request. A biology database skill loaded by the lead Research agent
+     * makes its query tools callable without switching agents. */
+    unlocked: ReadonlySet<string> = new Set(),
   ) {
     const tools = await all()
     const result = await Promise.all(
@@ -280,9 +284,10 @@ export namespace ToolRegistry {
           // work nor a model-facing contract.
           if (!enabled(t.id)) return false
 
-          // Biology-only tools: only available for the biology agent.
+          // Biology database tools: the biology agent's by default, and any
+          // agent's once a skill that declares them has been loaded.
           if (BIOLOGY_TOOL_IDS.has(t.id)) {
-            return agent?.name === "biology"
+            return agent?.name === "biology" || unlocked.has(t.id)
           }
 
           // Artifact tool: only for artifact-oriented scientific agents.

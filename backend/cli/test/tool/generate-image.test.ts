@@ -236,9 +236,54 @@ describe("generate_image response parsing", () => {
           expect(requests[1]?.body).toMatchObject({
             generationConfig: {
               responseModalities: ["IMAGE"],
-              responseFormat: { image: { aspectRatio: "ASPECT_RATIO_SIXTEEN_BY_NINE" } },
+              imageConfig: { aspectRatio: "16:9" },
             },
           })
+
+          // Reference figures ride along as extra image parts, and the print
+          // resolution is a first-class request field.
+          const workspace = await SessionFilesystem.workspace(session.id)
+          await Bun.write(path.join(workspace, "reference-a.png"), image)
+          await Bun.write(path.join(workspace, "reference-b.png"), image)
+          await tool.execute(
+            {
+              prompt: "A method overview in the style of the references",
+              output_path: "gemini-styled.png",
+              image_size: "2K",
+              reference_paths: ["reference-a.png", "reference-b.png"],
+            },
+            {
+              sessionID: session.id,
+              messageID: "msg_gemini_styled_image",
+              callID: "call_gemini_styled_image",
+              agent: "research",
+              abort: new AbortController().signal,
+              messages: [],
+              metadata() {},
+              async ask() {},
+            },
+          )
+          const styled = requests[2]?.body as {
+            contents: Array<{ parts: unknown[] }>
+            generationConfig: { imageConfig?: { imageSize?: string } }
+          }
+          expect(styled.contents[0]?.parts).toHaveLength(3)
+          expect(styled.generationConfig.imageConfig).toEqual({ imageSize: "2K" })
+          await expect(
+            tool.execute(
+              { prompt: "x", output_path: "gemini-bad.png", reference_paths: ["notes.txt"] },
+              {
+                sessionID: session.id,
+                messageID: "msg_gemini_bad_reference",
+                callID: "call_gemini_bad_reference",
+                agent: "research",
+                abort: new AbortController().signal,
+                messages: [],
+                metadata() {},
+                async ask() {},
+              },
+            ),
+          ).rejects.toThrow("reference_paths must name existing image files")
         },
       })
     } finally {

@@ -9,6 +9,7 @@ import PROMPT_INSPECTION from "./prompt/inspection.txt"
 import PROMPT_RESPONSE from "./prompt/response.txt"
 import type { Provider } from "@/provider/provider"
 import { Config } from "../config/config"
+import { SkillCatalog } from "../skill/catalog"
 import { Skill } from "../skill"
 import { searchSkills } from "../skill/search"
 import { PermissionNext } from "../permission/next"
@@ -92,50 +93,9 @@ export namespace SystemPrompt {
     const names = new Map(skills.map((skill) => [skill.name.toLowerCase(), skill.name]))
     const invoked = [...(message ?? "").matchAll(/(?:^|[\s([{'\"])\/([a-z0-9][a-z0-9_-]*)(?=$|[^a-z0-9_/-])/gi)]
       .map((match) => match[1].toLowerCase())
-      .map((name) => names.get(name))
+      .map((name) => names.get(name) ?? names.get(SkillCatalog.resolve(name).toLowerCase()))
       .filter((name): name is string => !!name)
       .filter((name, index, all) => all.indexOf(name) === index)
-    const route = [
-      {
-        when: "Venue-specific paper formatting, submission checks, or page limits",
-        skills: ["venue-templates", "ml-paper-writing"],
-      },
-      {
-        when: "General manuscript drafting or revision",
-        skills: ["scientific-writing"],
-      },
-      {
-        when: "Citation verification or bibliography repair",
-        skills: ["citation-management", "research-lookup"],
-      },
-      {
-        when: "Technical figures, architectures, workflows, or scientific diagrams",
-        skills: ["scientific-schematics"],
-      },
-      {
-        when: "Illustrations, artwork, photos, or other non-technical images",
-        skills: ["generate-image"],
-      },
-      {
-        when: "An autoresearch study, hill-climbing one metric over many runs, or a hyperparameter or ablation sweep left to run",
-        skills: ["autoresearch"],
-      },
-    ]
-      .map((item) => ({
-        ...item,
-        skills: item.skills.map((skill) => names.get(skill)).filter((skill): skill is string => !!skill),
-      }))
-      .filter((item) => item.skills.length > 0)
-    const routing =
-      route.length && invoked.length === 0
-        ? [
-            "<skill-routing>",
-            "When a request clearly matches one of these routes, load the listed skill or skills before the first substantive edit, build, search, or generation step. Do not merely mention the skill in prose.",
-            ...route.map((item) => `- ${item.when}: ${item.skills.join(", ")}`),
-            "For an existing manuscript, preserve its scientific content and existing figures unless the user asks for content or figure changes. When creating or replacing a technical figure, use scientific-schematics and the native generate_image tool with the user's connected Gemini or OpenRouter account; never expose credentials to shell scripts.",
-            "</skill-routing>",
-          ]
-        : []
     const invoke = invoked.length
       ? [
           "<slash-skill-invocation>",
@@ -148,7 +108,6 @@ export namespace SystemPrompt {
       [
         "<available-skills>",
         `${total} callable across: ${list}.`,
-        ...routing,
         ...(invoked.length ? [] : likely),
         invoked.length
           ? "Use only the explicitly invoked skills for this request unless one of their loaded instructions names a required dependency."
@@ -157,6 +116,78 @@ export namespace SystemPrompt {
         ...invoke,
       ].join("\n"),
     )
+  }
+
+  /** The curated core in the order a research task tends to need it. Every
+   * other core skill follows alphabetically, so a new core skill shows up
+   * without a code change. */
+  const CORE_ORDER = [
+    "research-lookup",
+    "literature-review",
+    "brainstorming",
+    "hypotheses",
+    "reproduce",
+    "autoresearch",
+    "compute",
+    "delegation",
+    "figures",
+    "schematics",
+    "paper-writing",
+    "ml-paper-writing",
+    "citations",
+    "peer-review",
+    "sources",
+  ]
+
+  /** Library categories worth naming in the index so a provider or database
+   * skill is one exact-name load away, without a search. */
+  const CORE_POINTERS: Array<{ category: string; when: string; limit: number }> = [
+    { category: "cloud-compute", when: "GPU or cloud provider setup; check compute_job targets first", limit: 12 },
+    { category: "databases", when: "a biological, chemical, clinical or scholarly database", limit: 12 },
+  ]
+
+  /**
+   * The always-present skill index for Research: one line per core skill,
+   * then the two library categories that a task may need by exact name.
+   * Bodies are never preloaded; the model loads a skill when it applies.
+   */
+  export async function coreSkills(permission: PermissionNext.Ruleset) {
+    const catalog = (await Skill.catalog(permission)).allowed
+    const core = catalog
+      .filter((skill) => skill.category === "core")
+      .sort((a, b) => {
+        const left = CORE_ORDER.indexOf(a.name)
+        const right = CORE_ORDER.indexOf(b.name)
+        if (left >= 0 && right >= 0) return left - right
+        if (left >= 0) return -1
+        if (right >= 0) return 1
+        return a.name.localeCompare(b.name)
+      })
+    if (!core.length) return
+    const sentence = (text: string) => {
+      const first = text.split(/(?<=[.!?])\s+/)[0] ?? text
+      return first.length > 200 ? `${first.slice(0, 197)}...` : first
+    }
+    const pointers = CORE_POINTERS.flatMap((pointer) => {
+      const names = catalog
+        .filter((skill) => skill.category === pointer.category)
+        .map((skill) => skill.name)
+        .sort()
+      if (!names.length) return []
+      const shown = names.slice(0, pointer.limit)
+      const rest = names.length - shown.length
+      return [
+        `- ${pointer.when}: ${shown.join(", ")}${rest > 0 ? ` (+${rest} more via skill({category:"${pointer.category}"}))` : ""}`,
+      ]
+    })
+    return [
+      "<core-skills>",
+      "Core skills, loaded with skill({name}) before the first substantive step when the request matches. Load one skill for the task at hand; do not stack skills or narrate the load.",
+      ...core.map((skill) => `- ${skill.name}: ${skill.summary ?? sentence(skill.description)}`),
+      ...(pointers.length ? ["Library skills by exact name for provider and database work:", ...pointers] : []),
+      `Anything else in the ${catalog.length}-skill library: skill({query:"<focused task>"}) and load an exact returned name.`,
+      "</core-skills>",
+    ].join("\n")
   }
 
   export async function planModeInstructions(): Promise<string[]> {

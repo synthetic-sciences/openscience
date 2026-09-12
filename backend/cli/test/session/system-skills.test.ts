@@ -258,13 +258,16 @@ test("availableSkills cache follows real skill catalog invalidation", async () =
   })
 })
 
-test("availableSkills gives explicit routes for venue and figure work", async () => {
+test("coreSkills indexes the core category in task order and points at provider and database skills by name", async () => {
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {
-      await writeSkill(dir, "venue-templates", "writing")
-      await writeSkill(dir, "ml-paper-writing", "writing")
-      await writeSkill(dir, "scientific-schematics", "visualization")
+      await writeSkill(dir, "peer-review", "core", "Referee a manuscript. Long second sentence that must not appear.")
+      await writeSkill(dir, "research-lookup", "core", "One focused question answered from a fetched source.")
+      await writeSkill(dir, "zeta-core", "core", "A core skill outside the fixed order sorts last.")
+      await writeSkill(dir, "runpod-gpu-cloud", "cloud-compute", "RunPod GPU pods.")
+      await writeSkill(dir, "uniprot-database", "databases", "UniProt REST API.")
+      await writeSkill(dir, "scanpy", "biology", "Single-cell analysis.")
     },
   })
 
@@ -272,15 +275,54 @@ test("availableSkills gives explicit routes for venue and figure work", async ()
     directory: tmp.path,
     fn: async () => {
       await trust()
-      const section = await SystemPrompt.availableSkills([])
-      expect(section).toContain("<skill-routing>")
-      expect(section).toContain(
-        "Venue-specific paper formatting, submission checks, or page limits: venue-templates, ml-paper-writing",
+      const index = (await SystemPrompt.coreSkills([]))!
+      const lines = index.split("\n")
+      expect(lines[0]).toBe("<core-skills>")
+      const research = lines.findIndex((line) => line.startsWith("- research-lookup:"))
+      const review = lines.findIndex((line) => line.startsWith("- peer-review:"))
+      const zeta = lines.findIndex((line) => line.startsWith("- zeta-core:"))
+      expect(research).toBeGreaterThan(0)
+      expect(research).toBeLessThan(review)
+      expect(review).toBeLessThan(zeta)
+      // First sentence only, and library skills never appear as core lines.
+      expect(index).toContain("- peer-review: Referee a manuscript.")
+      expect(index).not.toContain("Long second sentence")
+      expect(index).not.toContain("- scanpy:")
+      expect(index).toContain("check compute_job targets first: runpod-gpu-cloud")
+      expect(index).toContain("database: uniprot-database")
+      expect(index).toContain("6-skill library")
+    },
+  })
+})
+
+test("coreSkills is absent without a core category, and a summary replaces the description line", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await writeSkill(dir, "scanpy", "biology")
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trust()
+      expect(await SystemPrompt.coreSkills([])).toBeUndefined()
+      await Bun.write(
+        path.join(tmp.path, ".openscience", "skill", "figures", "SKILL.md"),
+        `---
+name: figures
+description: Makes publication-quality plots. Use whenever results are plotted.
+summary: "Publication plots from real data: sized for the page."
+category: core
+---
+
+# figures
+`,
       )
-      expect(section).toContain(
-        "Technical figures, architectures, workflows, or scientific diagrams: scientific-schematics",
+      await Skill.invalidate()
+      expect(await SystemPrompt.coreSkills([])).toContain(
+        "- figures: Publication plots from real data: sized for the page.",
       )
-      expect(section).toContain("load the listed skill or skills before the first substantive edit")
     },
   })
 })

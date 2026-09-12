@@ -1,0 +1,65 @@
+{
+  "_notice": "DRAFT EXAMPLE ONLY. Evidence presence is not evidence adequacy and cannot establish readiness, conformity, compliance, or certification.",
+  "metadata": {
+    "manifest_id": "<controlled manifest ID>",
+    "review_date": "<YYYY-MM-DD>",
+    "owner": "<manifest owner>",
+    "status": "draft",
+    "evidence": [],
+    "approval": {"status": "pending", "by": "", "date": ""},
+    "source_refs": []
+  },
+  "audit_context": {
+    "purpose": "internal-audit",
+    "scope": "<sites, products, processes, and dates sampled>",
+    "sampling_plan": "<risk-based sampling plan and rationale>",
+    "limitations": "<known limitations and exclusions; not a legal applicability decision>",
+    "owner": "<audit/readiness owner>",
+    "evidence": [],
+    "approval": {"status": "pending", "by": "", "date": ""},
+    "source_refs": []
+  },
+  "expected_domains": [
+    "scope-and-roles",
+    "document-and-record-control",
+    "risk-management",
+    "design-and-development",
+    "supplier-controls",
+    "production-and-service",
+    "process-and-software-validation",
+    "identification-and-traceability",
+    "complaints-and-feedback",
+    "postmarket-and-vigilance",
+    "nonconformity-and-capa",
+    "internal-audit",
+    "management-review",
+    "training-and-competence",
+    "change-control"
+  ],
+  "entries": [
+    {
+      "id": "<evidence entry ID>",
+      "domain": "document-and-record-control",
+      "title": "<controlled evidence title>",
+      "owner": "<evidence owner>",
+      "status": "draft",
+      "revision_or_date": "<revision/date>",
+      "classification": "internal",
+      "local_path": "",
+      "sha256": "",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    }
+  ],
+  "open_gaps": [
+    {
+      "id": "<gap ID>",
+      "description": "<unresolved evidence or process gap>",
+      "owner": "<gap owner>",
+      "status": "open",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""}
+    }
+  ]
+}

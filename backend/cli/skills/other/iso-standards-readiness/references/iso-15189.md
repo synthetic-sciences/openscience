@@ -1,0 +1,219 @@
+# ISO 15189 Process Framework (No Standard Text)
+
+Research basis: **2026-07-26**. This reference summarizes a preparation process and
+evidence architecture for medical laboratory quality and competence work. It does not
+reproduce requirements and is not a substitute for the standard.
+
+## Copyright and authorized access
+
+ISO publications are copyrighted. Obtain ISO 15189 from
+[ISO](https://www.iso.org/standard/76677.html), an ISO national member, or another
+authorized source; see [ISO copyright](https://www.iso.org/copyright.html). Do not ask
+an agent to retrieve, transcribe, summarize clause-by-clause, or store proprietary
+text. Accreditation-body and CAP checklists that quote requirements are separately
+licensed material — do not paste them into shared repositories or prompts.
+
+## Current edition and the closed transition
+
+- [ISO 15189:2022](https://www.iso.org/standard/76677.html) is Edition 4, published
+  December 2022, cancelling and replacing ISO 15189:2012. Confirm on the ISO catalogue
+  page, which refused automated access during this research.
+- The 2022 edition aligns structurally with ISO/IEC 17025:2017 and **incorporates
+  point-of-care testing requirements previously held in ISO 22870**. Do not cite
+  ISO 22870 as a separate current POCT basis without confirming its status.
+- The ILAC-agreed transition for accredited medical laboratories ran to **December
+  2025**. A 2012-based quality system is out of date, not "in transition" — do not
+  build a gap baseline that assumes a future deadline.
+- Record publisher, title, edition, amendments, authorized location, access date,
+  source owner, currency-review date, impact decision, and approval in the controlled
+  source ledger.
+
+## Keep four lanes separate
+
+### 1. ISO 15189 accreditation
+
+An accreditation body grants accreditation for a defined scope of examinations, per
+laboratory and per location, under ISO/IEC 17011. A medical laboratory is
+**accredited**, not "ISO 15189 certified." Since 2026-01-01 the recognition arrangement
+sits with Global Accreditation Cooperation Incorporated; verify current claim and logo
+wording with the accreditation body.
+
+### 2. United States CLIA certification
+
+CLIA certification by CMS is **mandatory** before a US laboratory may accept human
+specimens for testing. It is federal law, not a voluntary quality scheme.
+
+**ISO 15189 accreditation does not satisfy CLIA and cannot replace a CLIA-based
+accreditation.** Deemed status flows only from a CMS-approved accreditation
+organization's program. CMS approves a limited set of accreditation organizations whose
+standards must meet or exceed CLIA requirements, with reapproval every six years or
+more often; read the
+[current AO list](https://www.cms.gov/Regulations-and-Guidance/Legislation/CLIA/Downloads/AOList.pdf)
+rather than relying on a remembered count. The CAP 15189 program is layered on top of
+CAP Laboratory Accreditation Program accreditation rather than offered as a standalone
+substitute — confirm current prerequisites with CAP.
+
+Never let an ISO 15189 readiness output be read as CLIA compliance, deemed status,
+licensure, or an inspection result.
+
+### 3. Other national licensure and inspection regimes
+
+State licensure, national health-authority requirements, and payer conditions of
+participation are separate again, with their own inspection processes and their own
+records. Non-US jurisdictions may make ISO 15189 accreditation mandatory, voluntary, or
+irrelevant. This is an applicability decision for authorized humans.
+
+### 4. IVD device regulation
+
+The performance of an in vitro diagnostic device, and any laboratory-developed test
+regime that applies to it, is regulated separately from laboratory accreditation. EU
+IVDR conformity assessment, notified-body involvement, and performance-study
+requirements are not laboratory accreditation questions. See `references/iso-13485.md`
+and the EU entries in `references/source-ledger.md`.
+
+## Hard boundary
+
+This skill and its files cannot:
+
+- accredit a laboratory, issue or validate an accreditation certificate or schedule,
+  or predict an assessment or inspection outcome;
+- establish CLIA certification, deemed status, licensure, or personnel qualification;
+- decide which scheme, jurisdiction requirement, or payer condition applies;
+- replace the laboratory director, quality manager, authorized signatory,
+  accreditation body, assessor, EQA provider, or competent authority;
+- verify or validate an examination procedure, set biological reference intervals,
+  establish traceability of assigned values, or judge clinical suitability; or
+- infer competence or patient safety from a document title, keyword, template,
+  checklist, or script result.
+
+Use outputs as a list of evidence questions for accountable human review.
+
+## Scope of accreditation is per examination
+
+Each scope item is defined by discipline, the examination or measurand reported, the
+controlled procedure and its issue, and the primary sample type with its acceptance
+requirements. Point-of-care testing performed under the laboratory's responsibility
+belongs in the scope discussion explicitly, including devices operated by clinical
+staff outside the laboratory.
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/validate_scope_intake.py \
+  /path/to/medical-laboratory-scope-intake.json --standard iso-15189
+```
+
+Copy `assets/templates/medical-laboratory-scope-intake-template.json` outside the skill
+first. The distributed template fails closed by design.
+
+## Process and evidence domains
+
+The `iso-15189` profile carries these domain labels for manifests and gap reports.
+They are workflow topics, not clause references:
+
+`scope-and-impartiality`, `organizational-structure-and-governance`,
+`personnel-competence`, `facilities-and-safety`, `equipment-and-calibration`,
+`metrological-traceability`, `reagents-and-consumables`,
+`externally-provided-products-and-services`, `pre-examination-processes`,
+`examination-methods-verification-and-validation`, `measurement-uncertainty`,
+`validity-of-results-and-external-quality-assessment`, `point-of-care-testing`,
+`post-examination-and-reporting`, `laboratory-information-management`, `complaints`,
+`nonconformity-and-corrective-action`, `risk-management-and-improvement`,
+`internal-audit`, `management-review`, `continuity-and-emergency-preparedness`.
+
+Each domain needs an owner, status, evidence IDs, source/version reference, recorded
+approval, and links to open gaps. Sample **records**, not only procedures.
+
+## Where medical laboratory evidence differs from ISO/IEC 17025
+
+### Pre-examination processes carry disproportionate risk
+
+Most avoidable patient harm originates before the analyser: request content and
+patient identification, collection and identification of the primary sample, transport
+and stability conditions, acceptance and rejection criteria, and handling of
+compromised samples. Sample: rejection records, identification-error events, transport
+excursions, and the resulting investigations — not only the collection manual.
+
+### Post-examination and reporting is clinical communication
+
+Assemble evidence for result review and authorization, reference intervals and
+clinical decision limits with their basis, interpretive comments and who is authorized
+to make them, report content and amendment or retraction handling, and — the item most
+often thin — **critical-result notification with documented read-back and
+timeliness**. Turnaround-time monitoring belongs here too.
+
+### Point-of-care testing is inside the scope
+
+POCT requirements now sit within ISO 15189. Record governance of devices outside the
+laboratory, operator training and authorization, connectivity and result capture into
+the patient record, quality-control regimes, and reconciliation with central
+laboratory methods.
+
+### Verification is the normal case, validation the exception
+
+Most medical laboratories verify commercial IVD examinations for their own setting
+rather than validating a new method. Record which performance characteristics were
+verified against the manufacturer's claims, the acceptance criteria, the data, and the
+authorized approval to report patient results. Laboratory-developed and modified
+procedures need the fuller validation evidence and the applicable regulatory analysis.
+
+### External quality assessment, not just proficiency testing
+
+Record EQA enrolment per scope item, results, evaluation against criteria, and
+investigation of unsatisfactory performance. Where no EQA scheme exists for an
+examination, record the alternative comparison approach and its authorization. An
+unacceptable EQA outcome with no documented investigation is a blocker.
+
+### Metrological traceability of assigned values
+
+For measurands where higher-order reference materials and reference measurement
+procedures exist, record the traceability of assigned values and the resulting
+commutability and comparability limitations. Where no reference system exists, record
+that fact and what the laboratory does about result comparability.
+
+### Risk and continuity are explicit
+
+The 2022 edition treats risk to patients as a running requirement rather than an annex.
+Record identified risks, controls, residual acceptance with authority, and improvement
+actions. Continuity and emergency preparedness — instrument failure, LIS outage,
+reagent supply interruption, facility loss — needs tested arrangements, not a plan
+nobody has exercised.
+
+## Shared checks that apply here
+
+- `scripts/audit_document_records.py` — controlled documents, records, retention basis,
+  and external-source currency. Standard-agnostic.
+- `scripts/check_capa.py` — nonconformity and corrective action with effectiveness
+  evidence before closure.
+- `scripts/check_supplier_controls.py` — reagents, consumables, calibration providers,
+  and referral laboratories, including the referral laboratory's own accreditation or
+  licensure status.
+- `scripts/validate_evidence_manifest.py` and `scripts/gap_analyzer.py` with
+  `--standard iso-15189`.
+
+`scripts/check_traceability.py` and `scripts/check_qmsr_transition.py` are
+device-lifecycle checks and do not apply here.
+
+## Common preparation failures
+
+- Presenting ISO 15189 readiness as CLIA compliance or deemed status.
+- Saying "certified" when the laboratory is accredited.
+- Citing ISO 22870 as the current separate POCT basis, or ISO 15189:2012 as current.
+- POCT devices operating outside the laboratory with no governance, training, or QC
+  evidence in the accreditation scope discussion.
+- Critical-result notification procedures with no notification records or timeliness
+  evidence.
+- Reference intervals adopted from a package insert with no documented basis for the
+  served population.
+- EQA scores filed without investigation of unsatisfactory results.
+- Continuity plans that have never been exercised.
+
+## Sources
+
+- [ISO 15189:2022](https://www.iso.org/standard/76677.html) — catalogue entry
+- [ILAC: ISO 15189:2022 published](https://ilac.org/latest_ilac_news/iso-151892022-for-medical-labs-published/)
+- [CMS CLIA program](https://www.cms.gov/medicare/quality/clinical-laboratory-improvement-amendments)
+- [CLIA accreditation and exemptions](https://www.cms.gov/medicare/quality/clinical-laboratory-improvement-amendments/accreditation-exemptions)
+- [CMS approved accreditation organizations](https://www.cms.gov/Regulations-and-Guidance/Legislation/CLIA/Downloads/AOList.pdf)
+- [CAP 15189 program](https://www.cap.org/laboratory-improvement/accreditation/cap-15189-accreditation-program)
+- `references/source-ledger.md` — dated baseline and provenance limitations
+- `references/assurance-lanes.md` — how accreditation, certification, and regulatory
+  inspection differ

@@ -1,0 +1,154 @@
+{
+  "_notice": "DRAFT EXAMPLE ONLY. Trace links require substantive human review; this matrix cannot establish product safety, conformity, compliance, or certification.",
+  "metadata": {
+    "matrix_id": "<controlled matrix ID>",
+    "review_date": "<YYYY-MM-DD>",
+    "owner": "<traceability owner>",
+    "status": "draft",
+    "evidence": [],
+    "approval": {
+      "status": "pending",
+      "by": "",
+      "date": ""
+    },
+    "source_refs": []
+  },
+  "artifacts": [
+    {
+      "id": "INTENDED-USE-<ID>",
+      "type": "intended-use",
+      "title": "<controlled intended use>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    },
+    {
+      "id": "HAZARD-<ID>",
+      "type": "hazard",
+      "title": "<hazard or postmarket signal>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    },
+    {
+      "id": "RISK-EVAL-<ID>",
+      "type": "risk-evaluation",
+      "title": "<risk evaluation>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    },
+    {
+      "id": "RISK-CONTROL-<ID>",
+      "type": "risk-control",
+      "title": "<risk control>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    },
+    {
+      "id": "DESIGN-IN-<ID>",
+      "type": "design-input",
+      "title": "<design input>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    },
+    {
+      "id": "DESIGN-OUT-<ID>",
+      "type": "design-output",
+      "title": "<design output>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    },
+    {
+      "id": "VERIFY-<ID>",
+      "type": "verification",
+      "title": "<verification evidence>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    },
+    {
+      "id": "VALIDATE-<ID>",
+      "type": "validation",
+      "title": "<validation evidence>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    },
+    {
+      "id": "PROD-CTRL-<ID>",
+      "type": "production-control",
+      "title": "<production/process control>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    },
+    {
+      "id": "PMS-<ID>",
+      "type": "postmarket-signal",
+      "title": "<postmarket source or approved monitoring plan>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    },
+    {
+      "id": "CHANGE-<ID>",
+      "type": "change-control",
+      "title": "<change control or approved not-applicable decision>",
+      "owner": "<role>",
+      "status": "draft",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    }
+  ],
+  "rows": [
+    {
+      "id": "<trace row ID>",
+      "product_id": "<product/family ID>",
+      "owner": "<traceability owner>",
+      "status": "draft",
+      "linkage_rationale": "<explain why the evidence links are adequate>",
+      "links": {
+        "intended_use": ["INTENDED-USE-<ID>"],
+        "hazard_or_signal": ["HAZARD-<ID>"],
+        "risk_evaluation": ["RISK-EVAL-<ID>"],
+        "risk_control": ["RISK-CONTROL-<ID>"],
+        "design_input": ["DESIGN-IN-<ID>"],
+        "design_output": ["DESIGN-OUT-<ID>"],
+        "verification": ["VERIFY-<ID>"],
+        "validation": ["VALIDATE-<ID>"],
+        "production_control": ["PROD-CTRL-<ID>"],
+        "postmarket_source": ["PMS-<ID>"]
+      },
+      "change_control_refs": ["CHANGE-<ID>"],
+      "open_gaps": ["<unresolved gap>"],
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": []
+    }
+  ]
+}

@@ -1,0 +1,172 @@
+# ISO 14971 Process Framework (No Standard Text)
+
+Research basis: **2026-07-26**, building on the 2026-07-23 device-lane baseline. This
+reference summarizes a preparation process and evidence architecture for medical device
+risk management. It does not reproduce requirements and is not a substitute for the
+standard.
+
+## Copyright and authorized access
+
+ISO publications are copyrighted. Obtain ISO 14971 and ISO/TR 24971 from
+[ISO](https://www.iso.org/standard/72704.html), an ISO national member, or another
+authorized source; see [ISO copyright](https://www.iso.org/copyright.html). Do not ask
+an agent to retrieve, transcribe, summarize clause-by-clause, or store proprietary
+text.
+
+## Current edition, the guidance companion, and the European amendment
+
+- [ISO 14971:2019](https://www.iso.org/standard/72704.html) is Edition 3, published
+  December 2019, reviewed and confirmed in 2025.
+- [ISO/TR 24971:2020](https://www.iso.org/standard/74437.html) is Edition 2 and is the
+  guidance companion, following the same clause structure. It is a **Technical
+  Report**: informative, not normative. Conformity is claimed to ISO 14971, never to
+  ISO/TR 24971, and a TR cannot relax or reinterpret a normative requirement. Record
+  which guidance the organization adopted and why.
+- **EN ISO 14971:2019/A11:2021** is a European amendment to the EN adoption, cited for
+  MDR and, through the corresponding decision, IVDR support. It does not change the
+  international normative part. Track it only where the European source basis applies.
+
+## No certification lane exists for this standard
+
+There is no ISO 14971 certificate. A body cannot certify a risk-management system to
+ISO 14971 the way it certifies a QMS to ISO 13485. Risk management is instead assessed
+*inside* other lanes:
+
+- an ISO 13485 certification audit examines the risk-management process as part of the
+  QMS;
+- an FDA inspection examines risk-based decisions against applicable FDA requirements;
+- an MDSAP audit treats risk management as a foundation across its process areas; and
+- EU conformity assessment examines the risk-management file as part of technical
+  documentation against the applicable general safety and performance requirements.
+
+Any claim of "ISO 14971 certification" is a category error. Report risk-management
+readiness as evidence supporting a named lane, never as its own assurance result.
+
+## Hard boundary
+
+This skill and its files cannot:
+
+- certify, approve, or validate a risk-management file or process;
+- determine device classification, intended use, reportability, conformity route,
+  market access, or product authorization;
+- decide whether a risk is acceptable, whether benefit outweighs residual risk, or
+  whether a risk-control measure is adequate or safe;
+- set or approve risk-acceptability criteria, severity or probability scales, or a
+  risk matrix;
+- replace top management, the risk-management owner, qualified clinical and engineering
+  reviewers, RA/QA, a notified body, or a regulator; or
+- infer that a hazard set is complete, or that residual risk is acceptable, from a
+  template, a matrix, a document count, or a script result.
+
+Use outputs as a list of evidence questions for accountable human review. **Completeness
+of hazard identification cannot be established by any check in this skill** — a
+zero-finding structural result says the declared links are present, not that the
+analysis found everything.
+
+## Process and evidence domains
+
+The `iso-14971` profile carries these domain labels for manifests and gap reports.
+They are workflow topics, not clause references:
+
+`risk-management-plan`, `risk-management-file`, `competence-and-authority`,
+`intended-use-and-characteristics`, `hazard-identification`,
+`risk-estimation-and-evaluation`, `risk-control-option-analysis`,
+`risk-control-implementation-and-verification`, `risk-control-side-effects-review`,
+`residual-risk-evaluation`, `benefit-risk-analysis`,
+`overall-residual-risk-evaluation`, `risk-management-review-and-report`,
+`production-and-postproduction-information`, `change-control`.
+
+Each domain needs an owner, status, evidence IDs, source/version reference, recorded
+approval, and links to open gaps.
+
+## The chain that has to hold together
+
+Risk-management evidence is judged as a connected chain, not as a set of documents. For
+each analysed item, the following must be traceable in both directions:
+
+intended use and reasonably foreseeable misuse → characteristics related to safety →
+hazard → foreseeable sequence of events → hazardous situation → harm with severity →
+probability basis → risk evaluation against declared criteria → risk-control option
+analysis and decision → implemented control → verification that the control was
+implemented → verification of its effectiveness → review for new or increased risks
+introduced by the control → residual risk evaluation → benefit-risk analysis where
+residual risk is not acceptable → contribution to overall residual risk → disclosure of
+residual risk → production and post-production information feeding back.
+
+Break any one link and the file stops being evidence. The two links most often missing
+are **verification of control effectiveness** (distinct from verifying the control
+exists) and **review of risks introduced by the control itself**.
+
+Build the traceability register with:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/check_traceability.py \
+  /path/to/traceability-matrix.json
+```
+
+That check links intended use, hazard or signal, risk evaluation, risk control, design
+input and output, verification, validation, production control, and post-market source.
+It verifies declared linkage, not analytical adequacy.
+
+## Where risk management meets the QMS
+
+ISO 14971 work is not separable from the device QMS. Keep these joins explicit and
+evidenced:
+
+- **Design and development** — risk controls that are design outputs must appear as
+  design inputs with verification, not only as risk-file rows.
+- **Production** — controls realized as process parameters, in-process checks, or
+  acceptance criteria need production evidence, and process validation where the
+  control cannot be fully verified on the finished device.
+- **Purchasing** — controls that depend on a supplier's process or component need
+  supplier controls and change notification. See
+  `scripts/check_supplier_controls.py`.
+- **Post-market** — complaints, service records, vigilance signals, and production
+  nonconformities must actually re-enter risk estimation, with evidence that the file
+  was reassessed and that changed estimates were acted on.
+- **CAPA** — where a risk estimate changes, the resulting action needs effectiveness
+  evidence before closure. See `scripts/check_capa.py`.
+- **Change control** — any change to intended use, design, process, supplier, or
+  materials triggers a documented risk reassessment.
+
+The production and post-production feedback loop is the single most common structural
+gap: files that were complete at design transfer and never updated by field
+experience.
+
+## Risk-acceptability criteria and the matrix problem
+
+Acceptability criteria belong in the risk-management plan, are set by authorized humans
+with a documented rationale, and must be applied consistently. Recurring failure modes
+to look for, none of which this skill can adjudicate:
+
+- criteria written after the analysis so that every risk lands acceptable;
+- probability values asserted with no stated basis and no data;
+- a matrix whose cells were adjusted per project to move results across the boundary;
+- risk reduction claimed from labelling or an instruction alone, where a design or
+  protective measure was available;
+- residual risk described as acceptable with no benefit-risk analysis where the
+  declared criteria were not met;
+- overall residual risk never evaluated as a whole — only item by item; and
+- no disclosure of residual risk to users where the analysis assumed it.
+
+Flag these as blockers for authorized review. Do not resolve them.
+
+## Shared checks that apply here
+
+- `scripts/validate_scope_intake.py --standard iso-14971` — declared scope, product
+  families, intended use references, and applicability owners.
+- `scripts/check_traceability.py` — the risk/design/production/post-market chain.
+- `scripts/check_capa.py` — corrective action with effectiveness evidence.
+- `scripts/check_supplier_controls.py` — controls that depend on external providers.
+- `scripts/validate_evidence_manifest.py` and `scripts/gap_analyzer.py` with
+  `--standard iso-14971`.
+
+## Sources
+
+- [ISO 14971:2019](https://www.iso.org/standard/72704.html) — catalogue entry
+- [ISO/TR 24971:2020](https://www.iso.org/standard/74437.html) — guidance companion
+- [Decision (EU) 2022/757](https://eur-lex.europa.eu/eli/dec_impl/2022/757/oj/eng) —
+  EN ISO 14971:2019/A11:2021 citation basis
+- `references/iso-13485.md` — the QMS lane this evidence usually supports
+- `references/source-ledger.md` — dated baseline and provenance limitations
+- `references/assurance-lanes.md` — why this standard has no certification lane

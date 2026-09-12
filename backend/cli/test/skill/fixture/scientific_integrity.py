@@ -30,7 +30,7 @@ class Integrity(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.rescore = load("rescore", "chemistry/binding-affinity/scripts/rescore.py")
         self.consensus = load("consensus", "chemistry/binding-affinity/scripts/consensus.py")
-        self.venue = load("venue", "writing/venue-templates/scripts/validate_format.py")
+        self.venue = load("venue", "core/paper-writing/scripts/validate_format.py")
         self.rip = load("self_instruct", "other/hugging-face-jobs/scripts/cot-self-instruct.py")
 
     def cli(self, relative, *args):
@@ -85,16 +85,16 @@ class Integrity(unittest.TestCase):
         pdf = self.root / "paper.pdf"
         pdf.write_bytes(b"%PDF-1.4\n% Offline margin-only fixture\n")
         report = self.root / "report.txt"
-        result = self.cli("writing/venue-templates/scripts/validate_format.py", "--file", str(pdf), "--venue", "Nature", "--check", "margins", "--report", str(report))
+        result = self.cli("core/paper-writing/scripts/validate_format.py", "--file", str(pdf), "--venue", "Nature", "--check", "margins", "--report", str(report))
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("VALIDATION INCOMPLETE", result.stdout)
         self.assertNotIn("PASSED", report.read_text())
         self.assertIn("Summary: INCOMPLETE", report.read_text())
         for args in [("--venue", "unknown"), ("--venue", "Nature", "--check", "unknown")]:
-            result = self.cli("writing/venue-templates/scripts/validate_format.py", "--file", str(pdf), *args)
+            result = self.cli("core/paper-writing/scripts/validate_format.py", "--file", str(pdf), *args)
             self.assertEqual(result.returncode, 2)
         pdf.write_text("not a PDF")
-        result = self.cli("writing/venue-templates/scripts/validate_format.py", "--file", str(pdf), "--venue", "Nature", "--check", "margins")
+        result = self.cli("core/paper-writing/scripts/validate_format.py", "--file", str(pdf), "--venue", "Nature", "--check", "margins")
         self.assertEqual(result.returncode, 2)
         self.assertIn("not a PDF", result.stderr)
 

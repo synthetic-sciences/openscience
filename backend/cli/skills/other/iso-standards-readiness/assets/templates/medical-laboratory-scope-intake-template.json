@@ -1,0 +1,111 @@
+{
+  "_notice": "DRAFT EXAMPLE ONLY. Authorized humans must determine and approve the scope of examinations. This file cannot establish competence, conformity, accreditation, licensure, or CLIA certification, and it cannot substitute for any national requirement.",
+  "_standard": "Validate with: validate_scope_intake.py <file> --standard iso-15189",
+  "metadata": {
+    "intake_id": "<controlled intake ID>",
+    "review_date": "<YYYY-MM-DD>",
+    "owner": "<assigned role>",
+    "status": "draft",
+    "evidence": [],
+    "approval": {
+      "status": "pending",
+      "by": "",
+      "date": ""
+    },
+    "source_refs": [
+      {
+        "id": "SOURCE-LEDGER",
+        "title": "Organization-controlled source ledger",
+        "version_or_date": "<revision/date>",
+        "url": "https://example.invalid/replace-with-controlled-official-source",
+        "accessed": "<YYYY-MM-DD>"
+      }
+    ]
+  },
+  "organization": {
+    "legal_name": "<legal entity>",
+    "declared_lifecycle_role": "<declared medical laboratory role; not a legal determination>",
+    "authorized_management_representative": "<named laboratory director or equivalent>",
+    "raqa_owner": "<named quality manager or equivalent role>",
+    "applicability_decision_owner": "<authorized role owning licensure/scheme decisions>"
+  },
+  "scope": {
+    "laboratory_activities": [
+      "examination"
+    ],
+    "sites": [
+      {
+        "id": "<site/location ID>",
+        "name": "<site name>",
+        "address": "<site address>",
+        "activities": [
+          "examination"
+        ],
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ],
+    "scope_items": [
+      {
+        "id": "<examination scope item ID>",
+        "discipline": "<discipline or specialty>",
+        "examination_or_measurand": "<examination, measurand, or analyte reported>",
+        "method_or_procedure": "<controlled examination procedure reference and issue>",
+        "primary_sample_type": "<primary sample type and acceptance requirements reference>",
+        "market_ids": [
+          "<jurisdiction ID>"
+        ],
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ],
+    "markets": [
+      {
+        "id": "<jurisdiction ID>",
+        "jurisdiction": "<jurisdiction, licensure regime, or scheme territory>",
+        "applicability": "undetermined",
+        "decision_rationale": "<authorized human decision and rationale>",
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ],
+    "outsourced_processes": [
+      {
+        "id": "<process ID>",
+        "process": "<referral laboratory or externally provided activity>",
+        "provider": "<referral laboratory and its own accreditation/licensure status>",
+        "control_strategy": "<selection, monitoring, and result-communication strategy>",
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 ---
 name: research-workflows
-description: Execute rigorous planning, review, verification, reproduction, comparison, source-audit, and export workflows using OpenScience session state, artifacts, provenance, and compute. This internal skill backs the corresponding built-in slash commands.
+description: Execute the planning, code-review, comparison and export workflows behind the /plan, /review, /compare and /export commands as state machines over OpenScience session state, artifacts and compute. Internal support skill; reproduction, source audits and peer review are the reproduce, sources and peer-review core skills.
 category: research
 entry: false
 ---

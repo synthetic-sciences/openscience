@@ -1,0 +1,75 @@
+{
+  "_notice": "DRAFT EXAMPLE ONLY. Passing a structural check does not establish document adequacy, regulatory compliance, or certification.",
+  "metadata": {
+    "register_id": "<controlled register ID>",
+    "review_date": "<YYYY-MM-DD>",
+    "owner": "<document control owner>",
+    "status": "draft",
+    "evidence": [],
+    "approval": {
+      "status": "pending",
+      "by": "",
+      "date": ""
+    },
+    "source_refs": []
+  },
+  "documents": [
+    {
+      "id": "<document ID>",
+      "title": "<controlled title>",
+      "document_type": "<manual/procedure/work instruction/form/specification>",
+      "revision": "<revision>",
+      "status": "draft",
+      "effective_date": "",
+      "supersedes": "",
+      "change_summary": "<reason and scope of change>",
+      "training_impact": "<training decision and evidence reference>",
+      "owner": "<document owner>",
+      "evidence": [],
+      "approval": {
+        "status": "pending",
+        "by": "",
+        "date": ""
+      },
+      "source_refs": []
+    }
+  ],
+  "records": [
+    {
+      "id": "<record-series ID>",
+      "record_type": "<record type>",
+      "status": "active",
+      "retention_period": "<approved period>",
+      "retention_basis": "<official/contractual/business source and rationale>",
+      "storage_and_integrity_controls": "<access, integrity, backup, audit-trail controls>",
+      "retrieval_method": "<retrieval method>",
+      "disposition_method": "<authorized disposition method>",
+      "owner": "<record owner>",
+      "evidence": [],
+      "approval": {
+        "status": "pending",
+        "by": "",
+        "date": ""
+      },
+      "source_refs": []
+    }
+  ],
+  "external_sources": [
+    {
+      "id": "<source ID>",
+      "title": "<official source title>",
+      "publisher": "<official publisher>",
+      "version_or_date": "<edition/version/date>",
+      "status": "review-due",
+      "last_currency_review": "<YYYY-MM-DD>",
+      "owner": "<source owner>",
+      "evidence": [],
+      "approval": {
+        "status": "pending",
+        "by": "",
+        "date": ""
+      },
+      "source_refs": []
+    }
+  ]
+}

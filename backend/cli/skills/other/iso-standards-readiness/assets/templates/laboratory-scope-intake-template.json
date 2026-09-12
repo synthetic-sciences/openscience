@@ -1,0 +1,111 @@
+{
+  "_notice": "DRAFT EXAMPLE ONLY. Authorized humans must determine and approve the scope of laboratory activities. This file cannot establish competence, conformity, accreditation, or the validity of any result.",
+  "_standard": "Validate with: validate_scope_intake.py <file> --standard iso-17025",
+  "metadata": {
+    "intake_id": "<controlled intake ID>",
+    "review_date": "<YYYY-MM-DD>",
+    "owner": "<assigned role>",
+    "status": "draft",
+    "evidence": [],
+    "approval": {
+      "status": "pending",
+      "by": "",
+      "date": ""
+    },
+    "source_refs": [
+      {
+        "id": "SOURCE-LEDGER",
+        "title": "Organization-controlled source ledger",
+        "version_or_date": "<revision/date>",
+        "url": "https://example.invalid/replace-with-controlled-official-source",
+        "accessed": "<YYYY-MM-DD>"
+      }
+    ]
+  },
+  "organization": {
+    "legal_name": "<legal entity>",
+    "declared_lifecycle_role": "<declared laboratory role; not a legal determination>",
+    "authorized_management_representative": "<named role with management authority>",
+    "raqa_owner": "<named quality manager or equivalent role>",
+    "applicability_decision_owner": "<authorized role owning scheme/scope decisions>"
+  },
+  "scope": {
+    "laboratory_activities": [
+      "testing"
+    ],
+    "sites": [
+      {
+        "id": "<site/location ID>",
+        "name": "<site name>",
+        "address": "<site address>",
+        "activities": [
+          "testing"
+        ],
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ],
+    "scope_items": [
+      {
+        "id": "<scope item ID>",
+        "discipline": "<field of testing or calibration>",
+        "method_or_procedure": "<controlled method/procedure reference and issue>",
+        "measurand_or_property": "<measurand, property, or characteristic determined>",
+        "range_and_uncertainty": "<range and reported uncertainty basis reference>",
+        "market_ids": [
+          "<jurisdiction ID>"
+        ],
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ],
+    "markets": [
+      {
+        "id": "<jurisdiction ID>",
+        "jurisdiction": "<jurisdiction or accreditation scheme territory>",
+        "applicability": "undetermined",
+        "decision_rationale": "<authorized human decision and rationale>",
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ],
+    "outsourced_processes": [
+      {
+        "id": "<process ID>",
+        "process": "<subcontracted or externally provided activity>",
+        "provider": "<provider and its own accreditation status, if any>",
+        "control_strategy": "<risk-based control and customer-notification strategy>",
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ]
+  }
+}

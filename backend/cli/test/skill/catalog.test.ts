@@ -168,7 +168,13 @@ test("catalog metadata describes capabilities without imposing a loading budget"
   expect(SkillCatalog.entries.filter((entry) => entry.role === "workflow").map((entry) => entry.name)).toEqual([
     "protein-binder-design",
     "literature-review",
+    "paper-writing",
+    "ml-paper-writing",
   ])
+  // Retired names keep resolving to the core skill that replaced them.
+  expect(SkillCatalog.resolve("scientific-writing")).toBe("paper-writing")
+  expect(SkillCatalog.resolve("citation-management")).toBe("citations")
+  expect(SkillCatalog.resolve("hypothesis-generation")).toBe("hypotheses")
   expect(SkillCatalog.entries.filter((entry) => entry.role === "support").length).toBeGreaterThan(2)
   expect(SkillCatalog.get("protein-binder-design")?.requirements).toEqual({ all: [], any: [] })
   expect(SkillCatalog.get("modal")?.status).toBe("blocked")

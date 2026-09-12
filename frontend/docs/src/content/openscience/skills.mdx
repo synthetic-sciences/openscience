@@ -5,7 +5,9 @@ description: "Use reusable research procedures and add your own."
 
 A skill is a set of instructions and supporting files for a particular workflow. OpenScience loads relevant skills while working, or you can select one explicitly.
 
-The bundled library covers biology, chemistry, physics, machine learning, data engineering, scientific writing, and visualization. Browse the [skill directory](/openscience/skill-library) or your installed version:
+The library has two tiers. The **core** skills are the research procedures the agent always has on its index: research lookup, literature review, brainstorming, hypotheses, reproduce, autoresearch, compute, delegation, figures, schematics, paper writing (general and ML), citations, peer review, and sources. Their names and one-line summaries are in every Research request, and the agent loads one when the task matches. Everything else, roughly 340 skills covering biology, chemistry, physics, machine learning, data engineering, cloud GPU providers, scientific databases and documents, is the **library**: found by search, by category, or by exact name when the core index points at it (cloud providers and databases are listed there by name).
+
+Browse the [skill directory](/openscience/skill-library) or your installed version:
 
 ```bash
 openscience skill list --all

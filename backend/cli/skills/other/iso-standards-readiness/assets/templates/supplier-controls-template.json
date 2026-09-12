@@ -1,0 +1,119 @@
+{
+  "_notice": "DRAFT EXAMPLE ONLY. This checklist cannot approve a supplier, determine legal applicability, or establish product/QMS compliance.",
+  "metadata": {
+    "register_id": "<controlled supplier register ID>",
+    "review_date": "<YYYY-MM-DD>",
+    "owner": "<supplier-control owner>",
+    "status": "draft",
+    "evidence": [],
+    "approval": {"status": "pending", "by": "", "date": ""},
+    "source_refs": []
+  },
+  "control_methodology": {
+    "risk_method": "<approved method for supplier/product/process criticality>",
+    "approval_authority": "<authorized role>",
+    "monitoring_and_escalation": "<performance, change, nonconformity, CAPA, and re-evaluation method>",
+    "owner": "<method owner>",
+    "evidence": [],
+    "approval": {"status": "pending", "by": "", "date": ""},
+    "source_refs": []
+  },
+  "suppliers": [
+    {
+      "id": "<supplier ID>",
+      "name": "<supplier legal name>",
+      "owner": "<supplier owner>",
+      "status": "candidate",
+      "criticality": "critical",
+      "product_service_or_process": "<supplied item/service/outsourced process>",
+      "risk_rationale": "<product/process risk and control rationale>",
+      "next_review_date": "<YYYY-MM-DD>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [],
+      "selection_and_initial_evaluation": {
+        "status": "planned",
+        "owner": "<role>",
+        "method": "<qualification method and acceptance criteria>",
+        "evidence": [],
+        "approval": {"status": "pending", "by": "", "date": ""},
+        "source_refs": []
+      },
+      "purchasing_requirements": {
+        "status": "planned",
+        "owner": "<role>",
+        "method": "<specifications, acceptance, records, and communication controls>",
+        "evidence": [],
+        "approval": {"status": "pending", "by": "", "date": ""},
+        "source_refs": []
+      },
+      "change_notification": {
+        "status": "planned",
+        "owner": "<role>",
+        "method": "<notification, review, approval, and validation controls>",
+        "evidence": [],
+        "approval": {"status": "pending", "by": "", "date": ""},
+        "source_refs": []
+      },
+      "incoming_or_acceptance_verification": {
+        "status": "planned",
+        "owner": "<role>",
+        "method": "<risk-based acceptance/verification method>",
+        "evidence": [],
+        "approval": {"status": "pending", "by": "", "date": ""},
+        "source_refs": []
+      },
+      "performance_monitoring": {
+        "status": "planned",
+        "owner": "<role>",
+        "method": "<metrics, data, review, and escalation>",
+        "evidence": [],
+        "approval": {"status": "pending", "by": "", "date": ""},
+        "source_refs": []
+      },
+      "reevaluation": {
+        "status": "planned",
+        "owner": "<role>",
+        "method": "<frequency/triggers and decision criteria>",
+        "evidence": [],
+        "approval": {"status": "pending", "by": "", "date": ""},
+        "source_refs": []
+      },
+      "nonconformity_and_capa": {
+        "status": "planned",
+        "owner": "<role>",
+        "method": "<containment, notification, SCAR/CAPA, effectiveness, escalation>",
+        "evidence": [],
+        "approval": {"status": "pending", "by": "", "date": ""},
+        "source_refs": []
+      },
+      "quality_agreement": {
+        "status": "planned",
+        "owner": "<role>",
+        "method": "<responsibilities, records, audit, change, sub-tier, and notification terms>",
+        "evidence": [],
+        "approval": {"status": "pending", "by": "", "date": ""},
+        "source_refs": []
+      },
+      "subtier_controls": {
+        "status": "planned",
+        "owner": "<role>",
+        "method": "<sub-tier approval, flow-down, monitoring, and change controls>",
+        "evidence": [],
+        "approval": {"status": "pending", "by": "", "date": ""},
+        "source_refs": []
+      },
+      "business_continuity": {
+        "status": "planned",
+        "owner": "<role>",
+        "method": "<continuity, shortage, transfer, and change-risk controls>",
+        "evidence": [],
+        "approval": {"status": "pending", "by": "", "date": ""},
+        "source_refs": []
+      },
+      "conditions": "",
+      "condition_due_date": "",
+      "disposition": ""
+    }
+  ]
+}

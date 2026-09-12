@@ -29,6 +29,7 @@ import PROMPT_DIRECT from "../session/prompt/direct.txt"
 import PROMPT_QUICK from "../session/prompt/quick.txt"
 import PROMPT_INSPECTION from "../session/prompt/inspection.txt"
 import PROMPT_BIOLOGY from "../agent/prompt/biology.txt"
+import PROMPT_CHEMISTRY from "../agent/prompt/chemistry.txt"
 import PROMPT_PHYSICS from "../agent/prompt/physics.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
@@ -111,7 +112,7 @@ export namespace SessionPrompt {
     "</metadata>",
   ].join("\n")
   // Scientific agents can still consume session-scoped artifact references.
-  const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml"])
+  const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml", "chemistry"])
 
   type TestHooks = {
     afterAttachmentAuthorization?: (input: { sessionID: string; path: string }) => void | Promise<void>
@@ -1511,6 +1512,11 @@ export namespace SessionPrompt {
         ...(SKILL_ROUTING_AGENTS.has(agent.name) && !narrow && (!minimal || ToolSelection.slashInvocation(route.text))
           ? [await SystemPrompt.availableSkills(agent.permission, route.text)]
           : []),
+        // Research always carries the curated core index; the full catalog
+        // above appears only for an explicit /skill invocation.
+        ...(minimal && !narrow && !ToolSelection.slashInvocation(route.text)
+          ? [await SystemPrompt.coreSkills(agent.permission)].filter((value): value is string => !!value)
+          : []),
         ...(contract ? [contract] : []),
         ...reminders.system,
         ...(displaced
@@ -1970,6 +1976,12 @@ export namespace SessionPrompt {
       : activation.tools
 
     const extensions = await ToolRegistry.customIDs()
+    const unlocked = new Set([
+      ...activatedTools,
+      ...Object.entries(input.tools ?? {})
+        .filter(([, value]) => value === true)
+        .map(([id]) => id),
+    ])
     const native = await ToolRegistry.tools(
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
@@ -1990,6 +2002,7 @@ export namespace SessionPrompt {
           extensions,
         }),
       input.request,
+      unlocked,
     )
     // One execution envelope for direct and batched calls: the Plan mode gate
     // and both plugin hooks wrap every tool the model was offered.
@@ -2888,7 +2901,7 @@ export namespace SessionPrompt {
       }. Budget: ${budget || "none"}${study.killCriteria ? `. Kill criteria: ${study.killCriteria}` : ""}.`,
       ...(study.review && !overview.baseline
         ? [
-            `Review gate: before the baseline runs, delegate a read-only critique of the training and evaluation code (Task tool, agent "critique") and fix anything it marks blocking; only then start the baseline.`,
+            `Review gate: before the baseline runs, delegate a read-only critique of the training and evaluation code (Task tool, specialist "critique") and fix anything it marks blocking; only then start the baseline.`,
           ]
         : []),
       `Loop: pick the top queued idea, implement it in the training script, start exactly one run for it with study start, and when a study update reports the run ended, read its numbers with the experiments tool, record the verdict with study record (analysis, lessons), then queue or start the next idea. Keep ${study.concurrency} run${study.concurrency === 1 ? "" : "s"} live while ideas remain. Never re-run an idea that already has a run; propose a new idea instead. Do not ask whether to continue while budget remains; ask only when input or authority is missing. Study updates arrive as user messages that begin "Study update".`,
@@ -2942,6 +2955,7 @@ export namespace SessionPrompt {
       research,
       biology: PROMPT_BIOLOGY,
       physics: PROMPT_PHYSICS,
+      chemistry: PROMPT_CHEMISTRY,
     } as const
     const selected = ToolSelection.minimalResearchAgent(input.agent.name)
       ? route.direct || route.inspection

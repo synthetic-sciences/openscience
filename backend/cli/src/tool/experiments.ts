@@ -38,7 +38,7 @@ export const ExperimentsTool = Tool.define("experiments", {
     run_ids: z.array(z.string()).max(50).optional(),
     keys: z.array(z.string()).max(20).optional(),
     limit: z.number().int().min(1).max(200).optional(),
-    max: z.number().int().min(10).max(400).optional().describe("Points per series after downsampling."),
+    max: z.number().int().min(10).max(400).optional().describe("Points per series."),
   }),
   async execute(params, ctx) {
     await ctx.ask({ permission: "experiments", patterns: ["*"], always: ["*"], metadata: {} })

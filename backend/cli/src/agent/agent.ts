@@ -248,6 +248,24 @@ export namespace Agent {
         native: true,
         hidden: true,
       },
+      // --- Chemistry ---
+      chemistry: {
+        name: "chemistry",
+        description:
+          "Chemistry specialist for cheminformatics, molecular modeling, property prediction, and chemical databases.",
+        options: {},
+        color: "#f59e0b",
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+          }),
+          user,
+        ),
+        mode: "subagent",
+        native: true,
+        hidden: true,
+      },
       // --- Utilities ---
       write: {
         name: "write",

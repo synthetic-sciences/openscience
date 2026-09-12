@@ -1,0 +1,236 @@
+# ISO 13485 Process Framework (No Standard Text)
+
+Research basis: **2026-07-23**. This reference summarizes a preparation process and
+evidence architecture. It does not reproduce ISO requirements and is not a substitute
+for the standard.
+
+## Copyright and authorized access
+
+ISO publications are copyrighted. Obtain ISO 13485 and related standards from
+[ISO](https://www.iso.org/standard/59752.html), an ISO national member, or another
+authorized source. ISO states that unauthorized copying, scanning, or distribution is
+prohibited; see [ISO copyright](https://www.iso.org/copyright.html). Do not ask an
+agent to retrieve, transcribe, summarize clause-by-clause, or store proprietary text.
+
+For the U.S. QMSR incorporation by reference, FDA identifies read-only access through
+the ANSI IBR portal in its
+[QMSR FAQ](https://www.fda.gov/medical-devices/quality-management-system-regulation-qmsr/quality-management-system-regulation-frequently-asked-questions).
+That access does not remove copyright or permit copying.
+
+## Current edition and the 2021 European amendment
+
+- [ISO 13485:2016](https://www.iso.org/standard/59752.html) is Edition 3,
+  published March 2016. ISO completed its 2025 systematic review and confirmed the
+  edition on 2025-10-31; it remains current as of this research date.
+- Do not call **EN ISO 13485:2016/A11:2021** an ISO international Amendment 1.
+  It is a European amendment to the EN adoption. The current EU harmonised-standards
+  lists include EN ISO 13485:2016, AC:2018, and A11:2021. Verify the current OJEU
+  citation on the Commission's
+  [harmonised standards page](https://health.ec.europa.eu/medical-devices-topics-interest/harmonised-standards_en).
+- FDA incorporated ISO 13485:2016(E), Third edition, March 1, 2016. A later ISO or
+  EN publication does not silently change the edition incorporated in Part 820.
+
+Record exact publisher, title, edition, amendment/corrigendum, authorized location,
+access date, source owner, currency-review date, impact decision, and approval.
+
+## Hard boundary
+
+This skill and its files cannot:
+
+- certify a QMS or issue/validate a certificate;
+- determine legal or regulatory applicability, device classification, reportability,
+  conformity route, market access, or product authorization;
+- replace the authorized management representative, top management, RA/QA, legal
+  counsel, competent/regulatory authority, notified body, MDSAP Auditing
+  Organization, accreditation body, or certification body;
+- infer effective implementation from a document title, keyword, template, checklist,
+  or script result; or
+- claim compliance, conformity, certification, or inspection readiness.
+
+Use outputs as a list of evidence questions for accountable human review.
+
+## Keep the assurance regimes separate
+
+`references/assurance-lanes.md` holds the full lane table across every standard in this
+skill, including how certification differs from laboratory accreditation. The
+device-specific detail follows here.
+
+### ISO 13485 management-system certification
+
+A certification body audits the defined QMS scope against the authorized standard and
+its certification scheme. The certificate is limited to its stated organization, sites,
+activities, products/technical areas, standard edition, and validity. Certification is
+not FDA approval, an FDA inspection exemption, an MDSAP audit, an EU device
+certificate, or a legal-applicability decision.
+
+For accredited ISO 13485 certification, verify the certification body's accreditation
+scope. As of 2026, Global Accreditation Cooperation Incorporated has replaced IAF
+and ILAC operationally. Its document library carries IAF MD 8:2023 and IAF MD
+9:2023 while successor documents are developed. These documents concern
+accreditation and certification-body practice, not product authorization.
+
+### FDA QMSR inspection and compliance
+
+The [QMSR](https://www.fda.gov/medical-devices/postmarket-requirements-devices/quality-management-system-regulation-qmsr)
+became effective **2026-02-02** and FDA began enforcement on that date. The current
+[21 CFR Part 820](https://www.ecfr.gov/current/title-21/chapter-I/subchapter-H/part-820)
+is titled *Quality Management System Regulation*. It incorporates ISO 13485:2016
+and contains FDA scope, definitions, incorporation, QMS, record, and
+labeling/packaging provisions. Other applicable FDA requirements still matter.
+
+On 2026-02-02 FDA stopped using QSIT and began the inspection process in
+[Compliance Program 7382.850](https://www.fda.gov/media/80195/download?attachment).
+This is now a post-effective-date implementation state, not a future transition.
+FDA may inspect QMS records created before the effective date and records that had
+previously been exempt from routine review under the old regulation, as explained in
+the QMSR FAQ.
+
+Do not use the former 21 CFR 820 section structure as a current requirements map.
+Inventory legacy QSR/QSIT references, disposition them under change control, and use
+the current eCFR, incorporated edition, and linked current FDA regulations.
+
+### MDSAP regulatory audit
+
+MDSAP is a regulatory audit conducted by an MDSAP-recognized Auditing
+Organization for participating jurisdictions. The current official
+[MDSAP Audit Approach](https://www.mdsap.global/documents/library/audit-approach)
+is **MDSAP AU P0002.010**, version date **2026-02-02**. It uses a process-based
+approach and includes jurisdiction-specific requirements.
+
+An ISO certificate alone is not an MDSAP audit. FDA inspections under QMSR do not
+follow the MDSAP audit plan, and FDA does not issue ISO 13485 certificates. MDSAP
+participation does not eliminate every possible regulatory inspection or
+product-specific obligation.
+
+### EU MDR/IVDR conformity assessment
+
+The MDR and IVDR impose legal obligations beyond a generic QMS. Use the current
+consolidated regulation and current, product-specific conformity route:
+
+- [Regulation (EU) 2017/745 (MDR)](https://eur-lex.europa.eu/eli/reg/2017/745/2026-01-01/eng)
+  — consolidated version dated 2026-01-01 as of this research.
+- [Regulation (EU) 2017/746 (IVDR)](https://eur-lex.europa.eu/eli/reg/2017/746/2025-01-10/eng)
+  — current consolidated version dated 2025-01-10 as of this research.
+- [MDCG guidance index](https://health.ec.europa.eu/medical-devices-sector/new-regulations/guidance-mdcg-endorsed-documents-and-other-guidance_en)
+  — guidance is not legally binding and is versioned/revised.
+
+Notified bodies are designated by Member States for specified legislation,
+conformity-assessment tasks, and designation codes. Verify current scope in
+[NANDO](https://webgate.ec.europa.eu/single-market-compliance-space/notified-bodies).
+Accreditation or ISO certification does not by itself confer notified-body designation
+or establish EU product conformity.
+
+### Product- and market-specific requirements
+
+Product classification, intended purpose, claims, software, cybersecurity, clinical or
+performance evidence, biocompatibility, electrical safety, sterilization, UDI,
+registration, reporting, and other controls depend on the device and jurisdiction.
+Manage these in a separately approved applicability matrix. Never assume this
+framework is complete for a product.
+
+## QMS evidence domains
+
+The domains below are workflow topics, not clause text. An authorized standard copy
+and jurisdiction-specific sources remain the audit criteria.
+
+### Scope, governance, and roles
+
+Evidence should identify legal entities, sites, products/families, lifecycle activities,
+outsourced processes, markets considered, interfaces, top-management authority,
+management representative, RA/QA ownership, delegates, independence, and
+escalation. Every applicability or not-applicable decision needs a named owner,
+rationale, source/version, evidence, date, and approval.
+
+### Document and record control
+
+Control authoring, review, approval, effective use, distribution, revision,
+obsolescence, external sources, retention, integrity, security, retrieval, correction,
+audit trails, backup/recovery, and disposition. Preserve source/version evidence and
+license restrictions. Link changes to training and validation before effective use.
+
+### Risk management
+
+Integrate product and process risk with intended use, design, suppliers, production,
+software, validation, complaints, postmarket data, CAPA, and change control.
+[ISO 14971:2019](https://www.iso.org/standard/72704.html), Edition 3, was confirmed
+in 2025. For EU work, distinguish EN ISO 14971:2019/A11:2021; the A11 amendment is
+European and does not replace a product-specific legal analysis.
+
+### Design and development
+
+Maintain approved planning, responsibilities, inputs, outputs, review, verification,
+validation, transfer, changes, and traceability. Evidence should show that risk
+controls and postmarket learning feed the design/change system. A claimed
+not-applicable design process requires authorized scope and regulatory review.
+
+### Suppliers and outsourced processes
+
+Use risk-based selection, evaluation, controls, purchasing information, acceptance,
+change notification, sub-tier flow-down, monitoring, re-evaluation,
+nonconformity/CAPA, and business-continuity evidence. Outsourcing does not transfer
+the organization's accountability for its controlled process.
+
+### Production, service, and validation
+
+Define infrastructure, work environment, contamination/cleanliness where relevant,
+controlled instructions, acceptance/release, labeling/packaging, preservation,
+installation, servicing, process validation, monitoring/measurement equipment, and
+change/revalidation triggers. Evidence must be product/process-specific.
+
+### Software used in the QMS or production
+
+Record intended use, risk, requirements, configuration, access, data integrity,
+verification/validation, acceptance, release, incident handling, backup/recovery,
+supplier controls, and change/revalidation. A software inventory or vendor
+certificate alone is not validation.
+
+### Identification and traceability
+
+Define the required extent using approved product and jurisdictional decisions. Link
+materials/components, process records, acceptance/release, distribution, servicing,
+complaints, corrections/removals, and postmarket records as applicable.
+
+### Complaints, vigilance, and postmarket
+
+Control intake, evaluation, investigation, product/risk impact, trend analysis,
+reportability decisions, communications, advisory/field actions, and feedback to
+risk, design, production, suppliers, CAPA, and management review. Authorized roles
+must make jurisdiction-specific reporting decisions.
+
+### Nonconformity and CAPA
+
+Separate correction/containment from cause-directed action. Preserve scope, risk and
+reportability review, investigation, supported cause or conclusion, action ownership,
+change links, implementation evidence, pre-defined effectiveness criteria,
+independent review, and closure approval. Pending or ineffective checks cannot
+support closure.
+
+### Internal audit and management review
+
+Use a risk-based audit program, objective criteria/scope/sampling, competent and
+independent auditors, findings, corrections/CAPA, and effectiveness follow-up.
+Management review should use controlled inputs and record decisions, resources,
+actions, owners, dates, and follow-up. Neither activity can be replaced by a
+checklist-generated score.
+
+### Training, competence, and change control
+
+Define role competence, training need, completion, effectiveness, authorization, and
+records. Changes should assess source/version, product/risk, validation, software,
+supplier, document, record, training, postmarket, regulatory, and certification/audit
+impacts before implementation.
+
+## Evidence quality rule
+
+For each domain, require:
+
+1. defined scope and accountable owner;
+2. approved process/document status;
+3. actual implementation records, not only a procedure;
+4. traceable evidence IDs and controlled locations;
+5. source/edition/version and currency-review evidence;
+6. approval and effective dates;
+7. open gaps, decisions, and change/CAPA links; and
+8. sampling across products, sites, time periods, and risk where justified.
+
+Use `references/source-ledger.md` for the dated official-source baseline.

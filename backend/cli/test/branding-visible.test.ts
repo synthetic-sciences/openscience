@@ -14,8 +14,8 @@ const publicSources = [
   "skills/writing/scientific-slides/scripts/generate_slide_image.py",
   "skills/writing/scientific-slides/scripts/generate_slide_image_ai.py",
   "skills/visualization/infographics/scripts/generate_infographic_ai.py",
-  "skills/visualization/scientific-schematics/scripts/generate_schematic.py",
-  "skills/visualization/scientific-schematics/scripts/generate_schematic_ai.py",
+  "skills/core/schematics/scripts/generate_schematic.py",
+  "skills/core/schematics/scripts/generate_schematic_ai.py",
   "skills/other/goal/SKILL.md",
   "README.md",
 ] as const

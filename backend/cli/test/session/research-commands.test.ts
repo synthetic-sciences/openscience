@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
+import { SkillCatalog } from "../../src/skill/catalog"
 import { Command } from "../../src/command"
 import { Identifier } from "../../src/id/id"
 import { Instance } from "../../src/project/instance"
@@ -11,7 +12,9 @@ import { Todo } from "../../src/session/todo"
 import { tmpdir, trustProject } from "../fixture/fixture"
 
 const names = ["init", "plan", "goal", "status", "context", "stop", "resume", "compact", "handoff", "checkpoint"]
-const workflows = ["review", "verify", "reproduce", "compare", "sources", "export"]
+const workflows = ["review", "compare", "export"]
+// /verify, /reproduce and /sources became the sources and reproduce core skills.
+const coreWorkflows = { verify: "sources", reproduce: "reproduce", sources: "sources" }
 const actions = ["init", "stop", "handoff", "checkpoint"]
 const primary = ["compact", "context", "plan", "goal", "resume", "status"]
 const retiredGraphSkills = ["initialize-atlas-graph", "initialize-research-graph"]
@@ -67,7 +70,14 @@ describe("research slash commands", () => {
 
         expect(commands.has("goals")).toBe(false)
         for (const name of workflows) expect(commands.has(name), name).toBe(false)
+        for (const name of Object.keys(coreWorkflows)) expect(commands.has(name), name).toBe(false)
         for (const name of retiredGraphSkills) expect(commands.has(name), name).toBe(false)
+        for (const [retired, core] of Object.entries(coreWorkflows)) {
+          expect(SkillCatalog.resolve(retired), retired).toBe(core)
+          const content = await Bun.file(path.join(import.meta.dir, `../../skills/core/${core}/SKILL.md`)).text()
+          expect(content, core).toContain(`name: ${core}`)
+          expect(content, core).toContain("category: core")
+        }
 
         for (const name of workflows) {
           const content = await Bun.file(path.join(import.meta.dir, `../../skills/research/${name}/SKILL.md`)).text()

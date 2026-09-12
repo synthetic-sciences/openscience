@@ -30,8 +30,34 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   hour; `study.md`, `ideas.md`, `results.tsv` and `lessons.md` are rendered
   into the working folder. An `autoresearch` skill carries the method.
 
+- Core skills: fifteen research procedures authored for the Research agent and
+  always on its index: `research-lookup`, `literature-review`, `brainstorming`,
+  `hypotheses`, `reproduce`, `autoresearch`, `compute`, `delegation`, `figures`,
+  `schematics`, `paper-writing`, `ml-paper-writing`, `citations`, `peer-review`
+  and `sources`. Each is under 250 lines with a workflow, its checks and one
+  level of references. `schematics` plans, styles from reference figures,
+  renders with Nano Banana Pro and checks the image against the plan;
+  `figures` ships a matplotlib style module and one reference per figure type;
+  `citations` resolves every reference against Crossref, OpenAlex, arXiv or
+  PubMed and ships a `.bib` validator. The retired K-Dense versions
+  (`scientific-writing`, `citation-management`, `hypothesis-generation`,
+  `scientific-schematics`, `venue-templates`, ...) resolve to their replacements.
+- Specialists the agent can call: the Task tool's `specialist` takes `ml`,
+  `biology`, `physics`, `chemistry` or the read-only `critique` reviewer. A
+  specialist worker keeps the Research contract and gains its domain contract,
+  the full index of its skill categories and its domain tools.
+- Library sync: 46 more K-Dense scientific skills (`paper-lookup`,
+  `database-lookup`, `experimental-design`, `statistical-power`, `nextflow`,
+  `bulk-rnaseq`, `phylogenetics`, `molecular-dynamics`, `pkpd-modeling`,
+  `pdf`, `docx`, `pptx`, `xlsx`, ...), 357 skills in total.
+- `generate_image` takes `image_size` (1K, 2K, 4K) and up to 14
+  `reference_paths`, and sends Gemini the documented `imageConfig` request.
+
 ### Changed
 
+- Skills that declare `allowed-tools` unlock those tools for whichever agent
+  loaded them; the biology database tools are no longer reserved for the
+  biology agent.
 - The composer no longer shows a separate Independence chip; Independence
   stays in Tools next to Delegation, where it was already set.
 

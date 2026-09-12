@@ -19,6 +19,8 @@ backend/cli/skills/<category>/<name>/
   assets/, templates/
 ```
 
+- `core` is the curated set the Research agent always indexes; see
+  `docs/notes/skills.md` before adding to it, and add a `summary`.
 - `<category>` is one of the existing directories (`biology`, `chemistry`,
   `cloud-compute`, `coding`, `data-engineering`, `databases`,
   `document-parsing`, `llm-tools`, `ml-inference`, `ml-training`, `other`,
@@ -55,6 +57,7 @@ dependencies: ["anndata>=0.10.0", "numpy>=1.25.0"]
 | ---------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`                                                     | yes      | Skill id; must match the directory name.                                                                                              |
 | `description`                                              | yes      | One paragraph the model reads to decide when to load the skill. Say what it is for and when _not_ to use it.                          |
+| `summary`                                                  | no       | One line under 120 characters for always-visible indexes (the core index, a specialist's domain index). Quote it if it has a colon.   |
 | `category`                                                 | no       | Catalog grouping; use the directory name.                                                                                             |
 | `tags`                                                     | no       | Free-form list used for search.                                                                                                       |
 | `role`                                                     | no       | `workflow` (user-facing task) or `support` (helper loaded by other skills).                                                           |

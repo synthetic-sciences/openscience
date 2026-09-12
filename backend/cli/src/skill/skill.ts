@@ -47,6 +47,9 @@ export namespace Skill {
   export const Info = z.object({
     name: z.string(),
     description: z.string(),
+    /** One line (under 120 characters) for always-visible indexes such as the
+     *  core skill list; the description stays the full selection text. */
+    summary: z.string().optional(),
     location: z.string(),
     category: z.string().optional(),
     tags: z.array(z.string()).optional(),
@@ -85,6 +88,7 @@ export namespace Skill {
   const Frontmatter = Info.pick({
     name: true,
     description: true,
+    summary: true,
     category: true,
     tags: true,
     role: true,
@@ -128,12 +132,13 @@ export namespace Skill {
   const priority = { default: 0, installed: 1, user: 2, project: 3 } as const
   const duplicates = new Set<string>()
   const recommended = new Set([
-    "conducting-scientific-research",
+    "research-lookup",
     "literature-review",
-    "scientific-writing",
+    "paper-writing",
+    "citations",
+    "figures",
+    "schematics",
     "exploratory-data-analysis",
-    "citation-management",
-    "scientific-schematics",
   ])
 
   async function parse(match: string, origin: Info["origin"]) {
@@ -185,6 +190,7 @@ export namespace Skill {
     const info: Info = {
       name: parsed.data.name,
       description: parsed.data.description,
+      summary: parsed.data.summary,
       location: match,
       category: parsed.data.category,
       tags: parsed.data.tags,

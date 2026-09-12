@@ -25,9 +25,9 @@ const IdeaInput = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(4_000),
   why: z.string().trim().min(1).max(2_000),
-  ev: z.number().describe("Expected improvement in metric units times your confidence (0-1)."),
+  ev: z.number().describe("Expected improvement in metric units × confidence."),
   config: z.record(z.string(), z.unknown()).optional(),
-  priority: z.number().int().optional().describe("Higher runs sooner regardless of EV; 1000 for the baseline."),
+  priority: z.number().int().optional().describe("Higher runs sooner; 1000 for the baseline."),
 })
 
 export const StudyTool = Tool.define("study", {
@@ -47,10 +47,10 @@ export const StudyTool = Tool.define("study", {
       .max(1_000)
       .optional()
       .describe(
-        'Plain-word rules joined by OR, any one ends a run: "2 minutes", "5000 steps", "val_loss plateaus for 500 steps", "val_loss > 5 for 100 steps".',
+        'Rules joined by OR: "2 minutes", "5000 steps", "val_loss plateaus for 500 steps", "val_loss > 5 for 100 steps".',
       ),
     budget: Experiments.Budget.optional(),
-    review: z.boolean().optional().describe("Ask the critique agent to review the training code before the baseline."),
+    review: z.boolean().optional().describe("Critique review of the training code before the baseline (default true)."),
     root: z
       .string()
       .max(400)

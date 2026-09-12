@@ -1,0 +1,59 @@
+% Shared TikZ scaffold for OpenScience figures.
+%
+% Compile on its own (`\documentclass{standalone}` writes a tightly cropped PDF
+% next to the source), or copy the \definecolor and \tikzset blocks into a
+% paper's preamble and \input the tikzpicture directly.
+%
+% The colors are the same Okabe-Ito values as figstyle.PALETTE, so a
+% diagram and a plot in the same paper agree on what "ours" is colored.
+
+\documentclass[border=2pt]{standalone}
+\usepackage{tikz}
+\usepackage{amsmath}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc, shapes.geometric}
+
+% Diagram text is sans, matching the matplotlib figures next to it — figure
+% text is its own typographic register and should be consistent across the
+% paper's figures, not with the body text. The face is set per style below,
+% never with \familydefault, which would follow this preamble into a paper and
+% turn its body text sans too. For a serif diagram to match plots built with
+% use_style(family="serif"), drop the \sffamily from the three font= styles.
+
+\definecolor{osblue}{HTML}{0072B2}
+\definecolor{osorange}{HTML}{E69F00}
+\definecolor{osgreen}{HTML}{009E73}
+\definecolor{osred}{HTML}{D55E00}
+\definecolor{ospurple}{HTML}{CC79A7}
+
+\tikzset{
+  % Every picture starts from this: one arrow tip, one line weight, one font.
+  os/.style={
+    font=\sffamily\footnotesize,
+    >={Stealth[round, length=4pt, width=3pt]},
+    line width=0.5pt,
+    node distance=6mm and 14mm,  % wide enough for a shape label on the edge
+  },
+  % A computation: something with parameters or a transform.
+  block/.style={
+    draw=black!55, fill=white, rounded corners=1pt,
+    minimum height=6.5mm, minimum width=15mm, inner sep=3pt, align=center,
+  },
+  % The contribution. Exactly one kind of thing in a figure should be accented.
+  ours/.style={block, draw=osblue, fill=osblue!7, line width=0.7pt},
+  % Context that must be present but is not the point.
+  muted/.style={block, draw=black!30, fill=black!3, text=black!65},
+  % A tensor, dataset, or artifact rather than an operation.
+  data/.style={
+    draw=black!45, fill=black!4, trapezium, trapezium left angle=72,
+    trapezium right angle=108, trapezium stretches body,
+    minimum height=6mm, inner sep=3pt, align=center,
+  },
+  flow/.style={->, draw=black!65},
+  % A gradient, stop-gradient, or otherwise non-forward path.
+  backflow/.style={->, draw=osorange, dashed},
+  % Shapes, losses, and other annotations that ride on an edge.
+  edgelbl/.style={font=\sffamily\scriptsize, text=black!60, inner sep=1.5pt, fill=white},
+  % A named stage grouping several blocks.
+  stage/.style={draw=black!25, dashed, rounded corners=2pt, inner sep=4pt},
+  stagelbl/.style={font=\sffamily\scriptsize\itshape, text=black!55},
+}

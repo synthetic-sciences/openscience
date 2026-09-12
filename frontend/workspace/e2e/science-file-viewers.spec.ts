@@ -33,7 +33,7 @@ test("image files render their decoded dimensions", async ({ page, openSession }
 
 test("PDF files rasterize their pages without an error", async ({ page, openSession }) => {
   await openSession()
-  await openWorkspaceFile(page, "backend/cli/skills/writing/ml-paper-writing/templates/icml2026/icml_numpapers.pdf")
+  await openWorkspaceFile(page, "backend/cli/skills/core/ml-paper-writing/assets/templates/icml2026/icml_numpapers.pdf")
 
   const viewer = page.locator('[data-component="science-pdf"]')
   await expect(viewer).toBeVisible()

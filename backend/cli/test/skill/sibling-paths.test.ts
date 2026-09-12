@@ -13,9 +13,9 @@ const body = [
   "Generate the figure first:",
   "",
   "```bash",
-  "python skills/visualization/scientific-schematics/scripts/generate_schematic.py --out figure.png",
+  "python skills/core/schematics/scripts/generate_schematic.py --out figure.png",
   "python skills/generate-image/scripts/generate_image.py --prompt 'poster'",
-  "cp skills/venue-templates/assets/template.tex .",
+  "cp skills/venue-kit/assets/template.tex .",
   "```",
   "",
   "Unknown skills stay put: skills/not-a-skill/scripts/run.py and ~/.claude/skills/generate-image/scripts/x.py.",
@@ -40,11 +40,8 @@ const context: Tool.Context = {
 test("loaded instructions point source-tree skill paths at the sibling's real directory", async () => {
   await using library = await tmpdir({
     init: async (dir) => {
-      await Bun.write(path.join(dir, "writing/venue-templates/SKILL.md"), skill("venue-templates", body))
-      await Bun.write(
-        path.join(dir, "visualization/scientific-schematics/SKILL.md"),
-        skill("scientific-schematics", "Draw schematics."),
-      )
+      await Bun.write(path.join(dir, "writing/venue-kit/SKILL.md"), skill("venue-kit", body))
+      await Bun.write(path.join(dir, "core/schematics/SKILL.md"), skill("schematics", "Draw schematics."))
       await Bun.write(path.join(dir, "llm-tools/generate-image/SKILL.md"), skill("generate-image", "Render images."))
     },
   })
@@ -59,15 +56,15 @@ test("loaded instructions point source-tree skill paths at the sibling's real di
     fn: async () => {
       await trust()
       const tool = await SkillTool.init()
-      const result = await tool.execute({ name: "venue-templates" }, context)
+      const result = await tool.execute({ name: "venue-kit" }, context)
       const output = result.output
       expect(output).toContain(
-        `python ${path.join(library.path, "visualization/scientific-schematics/scripts/generate_schematic.py")} --out`,
+        `python ${path.join(library.path, "core/schematics/scripts/generate_schematic.py")} --out`,
       )
       expect(output).toContain(
         `python ${path.join(library.path, "llm-tools/generate-image/scripts/generate_image.py")}`,
       )
-      expect(output).toContain(`cp ${path.join(library.path, "writing/venue-templates/assets/template.tex")} .`)
+      expect(output).toContain(`cp ${path.join(library.path, "writing/venue-kit/assets/template.tex")} .`)
       expect(output).not.toContain("skills/visualization/")
       expect(output).not.toContain("python skills/")
       expect(output).toContain("skills/not-a-skill/scripts/run.py")
@@ -90,10 +87,7 @@ test("a skill from another origin cannot capture a reference", async () => {
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {
-      await Bun.write(
-        path.join(dir, ".openscience/skills/venue-templates/SKILL.md"),
-        skill("venue-templates", reference),
-      )
+      await Bun.write(path.join(dir, ".openscience/skills/venue-kit/SKILL.md"), skill("venue-kit", reference))
     },
   })
   const originalHome = process.env.OPENSCIENCE_TEST_HOME
@@ -105,7 +99,7 @@ test("a skill from another origin cannot capture a reference", async () => {
         await trust()
         expect((await Skill.get("generate-image"))?.origin).toBe("installed")
         const tool = await SkillTool.init()
-        const result = await tool.execute({ name: "venue-templates" }, context)
+        const result = await tool.execute({ name: "venue-kit" }, context)
         expect(result.output).toContain(reference)
         expect(result.output).not.toContain(home.path)
       },

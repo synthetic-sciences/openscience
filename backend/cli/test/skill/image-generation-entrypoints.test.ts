@@ -4,7 +4,7 @@ import { tmpdir } from "../fixture/fixture"
 
 const python = Bun.which("python3") ?? Bun.which("python")
 const root = path.resolve(import.meta.dir, "../..")
-const schematic = path.join(root, "skills/visualization/scientific-schematics/scripts")
+const schematic = path.join(root, "skills/core/schematics/scripts")
 const slides = path.join(root, "skills/writing/scientific-slides/scripts")
 const image = path.join(root, "skills/llm-tools/generate-image/scripts/generate_image.py")
 

@@ -20,15 +20,16 @@ const MAX_IMAGE_ERROR_BYTES = 1024 * 1024
 const MAX_IMAGE_ATTACHMENT_BYTES = 8 * 1024 * 1024
 const DEFAULT_MODEL = "google/gemini-3-pro-image"
 const GEMINI_MODEL = "gemini-3-pro-image"
-const GEMINI_ASPECT_RATIO = {
-  "1:1": "ASPECT_RATIO_ONE_BY_ONE",
-  "2:3": "ASPECT_RATIO_TWO_BY_THREE",
-  "3:2": "ASPECT_RATIO_THREE_BY_TWO",
-  "3:4": "ASPECT_RATIO_THREE_BY_FOUR",
-  "4:3": "ASPECT_RATIO_FOUR_BY_THREE",
-  "9:16": "ASPECT_RATIO_NINE_BY_SIXTEEN",
-  "16:9": "ASPECT_RATIO_SIXTEEN_BY_NINE",
-} as const
+const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif"]
+/** Nano Banana Pro accepts up to 14 reference images per request. */
+const MAX_REFERENCES = 14
+
+function mimeOf(extension: string | undefined) {
+  if (extension === ".webp") return "image/webp"
+  if (extension === ".gif") return "image/gif"
+  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg"
+  return "image/png"
+}
 
 function normalizedInputPath(value: string | undefined) {
   if (!value) return
@@ -307,9 +308,20 @@ export const GenerateImageTool = Tool.define("generate_image", {
         "Existing regular image file to edit. Omit this field entirely when generating a new image; never use a directory, '.', /dev/null, or a blank placeholder.",
       ),
     aspect_ratio: z
-      .enum(["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"])
+      .enum(["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"])
       .optional()
       .describe("Requested output aspect ratio"),
+    image_size: z
+      .enum(["1K", "2K", "4K"])
+      .optional()
+      .describe("Output resolution. 2K for figures that will be printed; 1K (default) while iterating."),
+    reference_paths: z
+      .array(z.string().trim().min(1).max(10_000))
+      .max(MAX_REFERENCES)
+      .optional()
+      .describe(
+        "Existing image files whose style or components the result should follow (published figures, earlier drafts). Up to 14. Distinct from input_path, which is the image being edited.",
+      ),
   }),
   normalizeInput,
   async execute(params, ctx) {
@@ -369,15 +381,28 @@ export const GenerateImageTool = Tool.define("generate_image", {
           },
         )
       : undefined
-    const inputMime = source
-      ? sourceExtension === ".webp"
-        ? "image/webp"
-        : sourceExtension === ".gif"
-          ? "image/gif"
-          : sourceExtension && [".jpg", ".jpeg"].includes(sourceExtension)
-            ? "image/jpeg"
-            : "image/png"
-      : undefined
+    const inputMime = source ? mimeOf(sourceExtension) : undefined
+    const references: Array<{ mime: string; data: string }> = []
+    for (const reference of params.reference_paths ?? []) {
+      const requestedReference = path.isAbsolute(reference) ? reference : path.join(directory, reference)
+      const referenceExtension = path.extname(requestedReference).toLowerCase()
+      if (!IMAGE_EXTENSIONS.includes(referenceExtension)) {
+        throw new Error(`reference_paths must name existing image files; ${reference} is not one.`)
+      }
+      using referenceAccess = await assertExternalDirectory(ctx, requestedReference, { access: "read" })
+      const resolved = referenceAccess?.path ?? requestedReference
+      const bytes = await SafeFileIO.read((await referenceAccess?.revalidate()) ?? resolved, {
+        maxBytes: MAX_IMAGE_BYTES,
+      }).catch((error) => {
+        if (error instanceof SafeFileIO.LimitError)
+          throw new Error(`Reference image ${reference} exceeds the 30 MB safety limit.`)
+        if (error instanceof Error && error.message.startsWith("Only regular files can be accessed:")) {
+          throw new Error(`reference_paths must name existing image files; ${reference} is not one.`)
+        }
+        throw error
+      })
+      references.push({ mime: mimeOf(referenceExtension), data: bytes.bytes.toString("base64") })
+    }
 
     const google = await Provider.getProvider("google").catch(() => undefined)
     const openrouter = await Provider.getProvider("openrouter").catch(() => undefined)
@@ -484,13 +509,21 @@ export const GenerateImageTool = Tool.define("generate_image", {
                 parts: [
                   { text: params.prompt },
                   ...(input ? [{ inlineData: { mimeType: inputMime, data: input.bytes.toString("base64") } }] : []),
+                  ...references.map((reference) => ({
+                    inlineData: { mimeType: reference.mime, data: reference.data },
+                  })),
                 ],
               },
             ],
             generationConfig: {
               responseModalities: ["IMAGE"],
-              ...(params.aspect_ratio
-                ? { responseFormat: { image: { aspectRatio: GEMINI_ASPECT_RATIO[params.aspect_ratio] } } }
+              ...(params.aspect_ratio || params.image_size
+                ? {
+                    imageConfig: {
+                      ...(params.aspect_ratio ? { aspectRatio: params.aspect_ratio } : {}),
+                      ...(params.image_size ? { imageSize: params.image_size } : {}),
+                    },
+                  }
                 : {}),
             },
           })
@@ -500,13 +533,22 @@ export const GenerateImageTool = Tool.define("generate_image", {
             n: 1,
             output_format: format,
             ...(params.aspect_ratio ? { aspect_ratio: params.aspect_ratio } : {}),
-            ...(input
+            ...(params.image_size ? { image_size: params.image_size } : {}),
+            ...(input || references.length
               ? {
                   input_references: [
-                    {
+                    ...(input
+                      ? [
+                          {
+                            type: "image_url",
+                            image_url: { url: `data:${inputMime};base64,${input.bytes.toString("base64")}` },
+                          },
+                        ]
+                      : []),
+                    ...references.map((reference) => ({
                       type: "image_url",
-                      image_url: { url: `data:${inputMime};base64,${input.bytes.toString("base64")}` },
-                    },
+                      image_url: { url: `data:${reference.mime};base64,${reference.data}` },
+                    })),
                   ],
                 }
               : {}),

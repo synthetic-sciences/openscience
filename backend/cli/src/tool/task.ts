@@ -27,9 +27,10 @@ import { TaskEvidence } from "./task-evidence"
 import { PayloadIntegrity } from "./payload-integrity"
 import { CredentialRevocation } from "@/credentials/revocation"
 import { Fusion } from "@/session/fusion"
+import { Specialist } from "@/agent/specialist"
 
 export const DELEGATION_PROFILES = ["explore", "execute"] as const
-export const DELEGATION_SPECIALISTS = ["biology", "physics", "ml"] as const
+export const DELEGATION_SPECIALISTS = Specialist.NAMES
 export function isComputeDelegationProfile(name: string) {
   return name === "execute"
 }
@@ -127,7 +128,7 @@ const parameters = z.object({
   specialist: z
     .enum(DELEGATION_SPECIALISTS)
     .optional()
-    .describe("Optional user-selected biology, physics, or ML specialist for an execute phase"),
+    .describe("Specialist for a one-domain phase; critique is read-only."),
   session_id: z
     .string()
     .trim()
@@ -685,8 +686,13 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 const exists = messages.some(
                   (message) => message.info.role === "user" && message.info.id === reserved.childMessageID,
                 )
+                const specialist =
+                  params.specialist && Specialist.is(params.specialist)
+                    ? await Specialist.guidance(params.specialist, agent.permission)
+                    : undefined
                 const childGuidance = [
-                  `You own one ${params.subagent_type} phase${params.specialist ? ` with the ${params.specialist} specialist` : ""} for the lead Research agent. The assignment in the user message is authoritative.`,
+                  `You own one ${params.subagent_type} phase${params.specialist ? ` as the ${Specialist.is(params.specialist) ? Specialist.profiles[params.specialist].label : params.specialist}` : ""} for the lead Research agent. The assignment in the user message is authoritative.`,
+                  ...(specialist ? [specialist] : []),
                   "Work independently on that phase and load a domain skill only when useful. You cannot dispatch workers; recommend any worthwhile follow-up to the lead in your handoff.",
                   "Publishing is the lead's: never push, release, or upload. Prepare and verify, then report what is ready.",
                   "Do not return a diary of searches, reads, or commands. Your final response is a decision-ready handoff to the lead, not a second user-facing report.",
@@ -720,6 +726,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     delegationSettings: { ...settings, level: "off" },
                     system: childGuidance,
                     tools: {
+                      ...(params.specialist && Specialist.is(params.specialist)
+                        ? Specialist.tools(params.specialist)
+                        : {}),
                       todowrite: false,
                       todoread: false,
                       question: false,

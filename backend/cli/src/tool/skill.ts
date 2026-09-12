@@ -136,7 +136,11 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
             (skill) => (skill.category ?? "other").toLowerCase() === params.category!.toLowerCase(),
           )
         : accessibleSkills
-      const selected = params.name ? accessibleByName.get(SkillCatalog.resolve(params.name)) : undefined
+      // An installed skill that happens to carry a retired name wins over the
+      // alias; the alias only rescues names that no longer exist.
+      const selected = params.name
+        ? (accessibleByName.get(params.name) ?? accessibleByName.get(SkillCatalog.resolve(params.name)))
+        : undefined
       if (params.query && !selected) {
         const matched = searchSkills(params.query, candidates)
         if (matched.length === 0) {

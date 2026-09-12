@@ -1,0 +1,99 @@
+{
+  "_notice": "DRAFT EXAMPLE ONLY. A script cannot approve, close, or determine the effectiveness or regulatory adequacy of a CAPA.",
+  "metadata": {
+    "register_id": "<controlled CAPA register ID>",
+    "review_date": "<YYYY-MM-DD>",
+    "owner": "<CAPA system owner>",
+    "status": "draft",
+    "evidence": [],
+    "approval": {
+      "status": "pending",
+      "by": "",
+      "date": ""
+    },
+    "source_refs": []
+  },
+  "capas": [
+    {
+      "id": "<CAPA ID>",
+      "owner": "<CAPA owner>",
+      "status": "open",
+      "source_event": "<complaint/audit/nonconformity/supplier/risk signal ID>",
+      "problem_statement": "<factual problem statement>",
+      "scope": "<known and potential systemic extent>",
+      "correction_or_containment": "<immediate action and evidence>",
+      "evidence": [],
+      "source_refs": [],
+      "approval": {
+        "status": "pending",
+        "by": "",
+        "date": ""
+      },
+      "risk_assessment": {
+        "patient_and_user_impact": "<assessment>",
+        "product_and_process_impact": "<assessment>",
+        "reportability_review": "<authorized reportability/vigilance decision reference>",
+        "decision": "escalate",
+        "decision_rationale": "<rationale>",
+        "owner": "<risk/RAQA owner>",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        }
+      },
+      "investigation": {
+        "method": "<selected method and rationale>",
+        "root_cause_or_justified_conclusion": "<supported conclusion>",
+        "systemic_extent_review": "<similar products/processes/sites review>",
+        "owner": "<investigation owner>",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        }
+      },
+      "actions": [
+        {
+          "id": "<action ID>",
+          "description": "<action tied to supported cause/risk>",
+          "owner": "<action owner>",
+          "due_date": "<YYYY-MM-DD>",
+          "implemented_date": "",
+          "evidence": [],
+          "approval": {
+            "status": "pending",
+            "by": "",
+            "date": ""
+          }
+        }
+      ],
+      "change_control_refs": [
+        "<change record ID>"
+      ],
+      "effectiveness": {
+        "plan": "<planned check>",
+        "objective_acceptance_criteria": "<measurable criteria>",
+        "baseline": "<baseline/comparator>",
+        "sample_or_observation_window": "<risk-based sample/window>",
+        "due_date": "<YYYY-MM-DD>",
+        "owner": "<effectiveness owner>",
+        "independent_reviewer": "<independent reviewer>",
+        "result": "pending",
+        "conclusion": "",
+        "review_date": "",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        }
+      },
+      "closure_date": "",
+      "closure_summary": "",
+      "cancellation_rationale": ""
+    }
+  ]
+}

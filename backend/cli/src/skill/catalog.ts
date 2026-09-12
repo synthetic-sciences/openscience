@@ -62,19 +62,19 @@ export namespace SkillCatalog {
         path: "workflows/generative-protein-binder-design/protein-binder-design",
       },
     },
+    // Core skills are authored here; the K-Dense originals they replaced are
+    // reachable through the aliases below.
     {
       name: "literature-review",
       capability: "literature-review",
       role: "workflow",
-      status: "review_required",
-      upstream: { ...KDENSE, path: "scientific-agent-skills/literature-review" },
+      status: "verified",
     },
     {
-      name: "scientific-writing",
+      name: "paper-writing",
       capability: "scientific-writing",
-      role: "support",
-      status: "review_required",
-      upstream: { ...KDENSE, path: "scientific-agent-skills/scientific-writing" },
+      role: "workflow",
+      status: "verified",
     },
     ...["transformer-lens", "saelens", "nnsight", "pyvene"].map((name) => ({
       name,
@@ -86,9 +86,8 @@ export namespace SkillCatalog {
     {
       name: "ml-paper-writing",
       capability: "ml-paper-writing",
-      role: "support",
-      status: "review_required",
-      upstream: { ...ORCHESTRA, path: "skills/research/ml-paper-writing" },
+      role: "workflow",
+      status: "verified",
     },
     {
       name: "modal",
@@ -100,7 +99,22 @@ export namespace SkillCatalog {
   ])
 
   const indexed = new Map(entries.map((entry) => [entry.name, entry]))
-  const aliases = new Map([["bionemo-agent-toolkit", "protein-binder-design"]])
+  /** Retired names resolve to the skill that replaced them, so saved
+   * invocations, `/name` slashes and installer entries keep working. */
+  const aliases = new Map([
+    ["bionemo-agent-toolkit", "protein-binder-design"],
+    ["scientific-writing", "paper-writing"],
+    ["venue-templates", "paper-writing"],
+    ["citation-management", "citations"],
+    ["scientific-schematics", "schematics"],
+    ["perplexity-search", "research-lookup"],
+    ["conducting-scientific-research", "research-lookup"],
+    ["scientific-critical-thinking", "peer-review"],
+    ["verify", "sources"],
+    ["scientific-brainstorming", "brainstorming"],
+    ["scientific-problem-selection", "brainstorming"],
+    ["hypothesis-generation", "hypotheses"],
+  ])
 
   export function resolve(name: string) {
     return aliases.get(name) ?? name

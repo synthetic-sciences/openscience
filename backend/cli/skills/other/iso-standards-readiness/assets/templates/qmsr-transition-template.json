@@ -1,0 +1,181 @@
+{
+  "_notice": "DRAFT EXAMPLE ONLY. QMSR has been effective and enforceable since 2026-02-02. This checklist cannot determine FDA applicability or compliance.",
+  "metadata": {
+    "checklist_id": "<controlled checklist ID>",
+    "review_date": "<YYYY-MM-DD>",
+    "owner": "<QMSR transition owner>",
+    "status": "draft",
+    "evidence": [],
+    "approval": {"status": "pending", "by": "", "date": ""},
+    "source_refs": []
+  },
+  "qmsr_basis": {
+    "as_of": "2026-07-23",
+    "effective_date": "2026-02-02",
+    "current_part_820_title": "Quality Management System Regulation",
+    "inspection_compliance_program": "7382.850",
+    "owner": "<authorized RA/QA role>",
+    "evidence": [],
+    "approval": {"status": "pending", "by": "", "date": ""},
+    "source_refs": [
+      {
+        "id": "FDA-QMSR",
+        "title": "Quality Management System Regulation (QMSR)",
+        "version_or_date": "Updated 2026-02-02",
+        "url": "https://www.fda.gov/medical-devices/postmarket-requirements-devices/quality-management-system-regulation-qmsr",
+        "accessed": "2026-07-23"
+      },
+      {
+        "id": "ECFR-820",
+        "title": "21 CFR Part 820 — Quality Management System Regulation",
+        "version_or_date": "Current eCFR reviewed 2026-07-23",
+        "url": "https://www.ecfr.gov/current/title-21/chapter-I/subchapter-H/part-820",
+        "accessed": "2026-07-23"
+      },
+      {
+        "id": "FDA-CP-7382.850",
+        "title": "Inspection of Medical Device Manufacturers Compliance Program 7382.850",
+        "version_or_date": "Effective 2026-02-02",
+        "url": "https://www.fda.gov/media/80195/download?attachment",
+        "accessed": "2026-07-23"
+      }
+    ]
+  },
+  "items": [
+    {
+      "id": "qmsr-source-basis",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<record exact current sources and versions>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "FDA-QMSR", "title": "FDA QMSR page", "version_or_date": "2026-02-02", "url": "https://www.fda.gov/medical-devices/postmarket-requirements-devices/quality-management-system-regulation-qmsr", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "applicability-owner",
+      "owner": "<authorized role>",
+      "status": "not-started",
+      "assessment": "<identify authorized applicability decision and rationale>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "ECFR-820", "title": "21 CFR Part 820", "version_or_date": "current", "url": "https://www.ecfr.gov/current/title-21/chapter-I/subchapter-H/part-820", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "fda-supplemental-provisions",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<review current FDA-specific provisions and linked regulations>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "ECFR-820", "title": "21 CFR Part 820", "version_or_date": "current", "url": "https://www.ecfr.gov/current/title-21/chapter-I/subchapter-H/part-820", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "legacy-qsr-reference-disposition",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<inventory and disposition obsolete QSR/QSIT references without treating a legacy clause map as current law>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "FDA-QMSR-FAQ", "title": "QMSR Frequently Asked Questions", "version_or_date": "2026-02-02", "url": "https://www.fda.gov/medical-devices/quality-management-system-regulation-qmsr/quality-management-system-regulation-frequently-asked-questions", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "pre-effective-date-record-review",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<review evidence supporting records created before 2026-02-02>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "FDA-QMSR-FAQ", "title": "QMSR Frequently Asked Questions", "version_or_date": "2026-02-02", "url": "https://www.fda.gov/medical-devices/quality-management-system-regulation-qmsr/quality-management-system-regulation-frequently-asked-questions", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "inspection-accessible-records",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<prepare controlled access to management review, internal/supplier audit, and other QMS records>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "FDA-QMSR-FAQ", "title": "QMSR Frequently Asked Questions", "version_or_date": "2026-02-02", "url": "https://www.fda.gov/medical-devices/quality-management-system-regulation-qmsr/quality-management-system-regulation-frequently-asked-questions", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "inspection-process-training",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<approve training for current FDA inspection process>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "FDA-CP-7382.850", "title": "Compliance Program 7382.850", "version_or_date": "2026-02-02", "url": "https://www.fda.gov/media/80195/download?attachment", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "qsit-retirement",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<remove or archive QSIT-based current-state materials>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "FDA-QMSR", "title": "FDA QMSR page", "version_or_date": "2026-02-02", "url": "https://www.fda.gov/medical-devices/postmarket-requirements-devices/quality-management-system-regulation-qmsr", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "complaint-and-servicing-records",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<review current Part 820 record requirements and evidence>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "ECFR-820", "title": "21 CFR Part 820", "version_or_date": "current", "url": "https://www.ecfr.gov/current/title-21/chapter-I/subchapter-H/part-820", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "labeling-and-packaging-controls",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<review current FDA labeling and packaging control evidence>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "ECFR-820", "title": "21 CFR Part 820", "version_or_date": "current", "url": "https://www.ecfr.gov/current/title-21/chapter-I/subchapter-H/part-820", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "software-validation-impact",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<review risk-based QMS and production software validation/change evidence>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "FDA-QMSR", "title": "FDA QMSR page", "version_or_date": "2026-02-02", "url": "https://www.fda.gov/medical-devices/postmarket-requirements-devices/quality-management-system-regulation-qmsr", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "supplier-and-outsourced-process-controls",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<review supplier, contractor, and outsourced-process controls>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "FDA-CP-7382.850", "title": "Compliance Program 7382.850", "version_or_date": "2026-02-02", "url": "https://www.fda.gov/media/80195/download?attachment", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "certificate-claims-review",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<remove claims that ISO certification establishes FDA compliance or inspection exemption>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "FDA-QMSR-FAQ", "title": "QMSR Frequently Asked Questions", "version_or_date": "2026-02-02", "url": "https://www.fda.gov/medical-devices/quality-management-system-regulation-qmsr/quality-management-system-regulation-frequently-asked-questions", "accessed": "2026-07-23"}]
+    },
+    {
+      "id": "change-control-approval",
+      "owner": "<role>",
+      "status": "not-started",
+      "assessment": "<approve linked document, training, validation, supplier, product, and postmarket changes>",
+      "evidence": [],
+      "approval": {"status": "pending", "by": "", "date": ""},
+      "source_refs": [{"id": "FDA-QMSR", "title": "FDA QMSR page", "version_or_date": "2026-02-02", "url": "https://www.fda.gov/medical-devices/postmarket-requirements-devices/quality-management-system-regulation-qmsr", "accessed": "2026-07-23"}]
+    }
+  ],
+  "attestations": {
+    "iso_certificate_not_treated_as_fda_compliance": false,
+    "checklist_not_treated_as_compliance_determination": false,
+    "legacy_qsr_clause_map_not_used_as_current_requirements": false,
+    "applicability_decisions_owned_by_authorized_humans": false,
+    "owner": "<authorized role>",
+    "evidence": [],
+    "approval": {"status": "pending", "by": "", "date": ""}
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "_notice": "DRAFT EXAMPLE ONLY. Authorized humans must determine and approve applicability. This file cannot establish compliance, conformity, certification, or market access.",
+  "metadata": {
+    "intake_id": "<controlled intake ID>",
+    "review_date": "<YYYY-MM-DD>",
+    "owner": "<assigned role>",
+    "status": "draft",
+    "evidence": [],
+    "approval": {
+      "status": "pending",
+      "by": "",
+      "date": ""
+    },
+    "source_refs": [
+      {
+        "id": "SOURCE-LEDGER",
+        "title": "Organization-controlled source ledger",
+        "version_or_date": "<revision/date>",
+        "url": "https://example.invalid/replace-with-controlled-official-source",
+        "accessed": "<YYYY-MM-DD>"
+      }
+    ]
+  },
+  "organization": {
+    "legal_name": "<legal entity>",
+    "declared_lifecycle_role": "<declared role; not a legal determination>",
+    "authorized_management_representative": "<named role>",
+    "raqa_owner": "<named role>",
+    "applicability_decision_owner": "<authorized RA/QA or legal role>"
+  },
+  "scope": {
+    "lifecycle_activities": [
+      "design-and-development"
+    ],
+    "sites": [
+      {
+        "id": "<site ID>",
+        "name": "<site name>",
+        "address": "<site address>",
+        "activities": [
+          "design-and-development"
+        ],
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ],
+    "products": [
+      {
+        "id": "<product/family ID>",
+        "family": "<product family>",
+        "intended_use": "<controlled intended-use reference>",
+        "classification_or_rationale": "<authorized classification decision reference>",
+        "market_ids": [
+          "<market ID>"
+        ],
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ],
+    "markets": [
+      {
+        "id": "<market ID>",
+        "jurisdiction": "<jurisdiction>",
+        "applicability": "undetermined",
+        "decision_rationale": "<authorized human decision and rationale>",
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ],
+    "outsourced_processes": [
+      {
+        "id": "<process ID>",
+        "process": "<outsourced process>",
+        "provider": "<provider>",
+        "control_strategy": "<risk-based control strategy>",
+        "owner": "<assigned role>",
+        "status": "draft",
+        "evidence": [],
+        "approval": {
+          "status": "pending",
+          "by": "",
+          "date": ""
+        },
+        "source_refs": []
+      }
+    ]
+  }
+}

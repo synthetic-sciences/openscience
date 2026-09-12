@@ -17,7 +17,7 @@ const ONE_PIXEL_PNG =
 
 const ONE_PAGE_PDF = readFileSync(
   new URL(
-    "../../../backend/cli/skills/writing/ml-paper-writing/templates/icml2026/icml_numpapers.pdf",
+    "../../../backend/cli/skills/core/ml-paper-writing/assets/templates/icml2026/icml_numpapers.pdf",
     import.meta.url,
   ),
 ).toString("base64")
