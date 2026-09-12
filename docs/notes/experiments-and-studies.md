@@ -2,7 +2,7 @@
 
 How metric tracking and the autoresearch loop are built, and where to change
 them. User-facing behaviour is documented in
-`frontend/docs/src/content/openscience/experiments.mdx`.
+`frontend/docs/src/content/openscience/autoresearch.mdx`.
 
 ## Shape
 
@@ -16,7 +16,7 @@ training script ──openscience_track──▶ marked stdout lines ──▶ j
         StudyDriver tick (3 s) ──┤                      │ study / experiments tools
    follow, settle, kill, budget, │                      │ (agent)
    wake the session              ▼                      │
-                        Bus events ──▶ /experiments routes ──▶ Experiments pane
+                        Bus events ──▶ /experiments routes ──▶ Autoresearch pane
 ```
 
 - `backend/cli/src/experiments/index.ts`: the `Experiments` namespace. One
@@ -87,12 +87,16 @@ notebooks, or a user's own process on the same machine.
 
 ## Pane
 
-`frontend/workspace/src/atlas/ExperimentsPane.tsx` is a right-pane tab
-(`experiments`) beside Files, Terminal and Compute. It reads
-`/experiments/*` and refetches on the `experiment.*` events (debounced;
-points at 1 s). `experiments/MetricChart.tsx` is a dependency-free SVG line
-chart with shared hover, smoothing and log scale. Pause, Resume and Halt
-call `/experiments/studies/:id/:action`; Write up prefills the composer.
+`frontend/workspace/src/atlas/AutoresearchPane.tsx` is a right-pane tab
+(`autoresearch`) beside Files, Terminal and Compute, with one tab per study.
+It reads `/experiments/*` and refetches on the `experiment.*` events
+(debounced; points at 1 s). `experiments/MetricChart.tsx` holds two
+dependency-free SVG charts: `HillClimbChart` (every run in order, the
+best-so-far step line through kept runs, the baseline as a reference) and
+`MetricChart` (training curves with shared hover, smoothing and log scale).
+Pause, Resume and Halt call `/experiments/studies/:id/:action`; Write up
+prefills the composer. Runs outside any study are listed only in the empty
+state; the pane is about studies.
 
 ## Tests
 

@@ -59,6 +59,169 @@ function ticks(min: number, max: number, count: number) {
   return out
 }
 
+export type ClimbPoint = {
+  id: string
+  label: string
+  value: number | null
+  verdict: "baseline" | "kept" | "reverted" | "running" | "killed" | "failed" | "pending"
+}
+
+/**
+ * The shape of a study: every run in order, the best-so-far line stepping
+ * through the ones that were kept, and the baseline as a reference. Filled
+ * marks were kept, hollow ones reverted, a ring is still running.
+ */
+export function HillClimbChart(props: {
+  points: ClimbPoint[]
+  direction: "minimize" | "maximize"
+  metric: string
+  height?: number
+}): JSX.Element {
+  const [width, setWidth] = createSignal(480)
+  const [hover, setHover] = createSignal<number>()
+  const height = () => props.height ?? 120
+  const margin = { top: 10, right: 14, bottom: 18, left: 44 }
+  const valued = createMemo(() => props.points.filter((point) => point.value !== null))
+  const range = createMemo(() => {
+    const values = valued().map((point) => point.value as number)
+    if (!values.length) return undefined
+    let min = Math.min(...values)
+    let max = Math.max(...values)
+    if (min === max) {
+      min -= Math.abs(min) * 0.1 || 1
+      max += Math.abs(max) * 0.1 || 1
+    }
+    const pad = (max - min) * 0.12
+    return { min: min - pad, max: max + pad }
+  })
+  const x = (index: number) => {
+    const count = Math.max(1, props.points.length - 1)
+    return margin.left + (index / count) * (width() - margin.left - margin.right)
+  }
+  const y = (value: number) => {
+    const current = range()
+    if (!current) return 0
+    const inner = height() - margin.top - margin.bottom
+    return margin.top + inner - ((value - current.min) / (current.max - current.min || 1)) * inner
+  }
+  const better = (a: number, b: number) => (props.direction === "maximize" ? a > b : a < b)
+  const best = createMemo(() => {
+    let current: number | undefined
+    return props.points.map((point) => {
+      if (point.value !== null && (point.verdict === "kept" || point.verdict === "baseline")) {
+        current = current === undefined || better(point.value, current) ? point.value : current
+      }
+      return current
+    })
+  })
+  const bestPath = createMemo(() => {
+    const parts: string[] = []
+    best().forEach((value, index) => {
+      if (value === undefined) return
+      const previous = index > 0 ? best()[index - 1] : undefined
+      if (!parts.length) {
+        parts.push(`M${x(index).toFixed(1)} ${y(value).toFixed(1)}`)
+        return
+      }
+      parts.push(`H${x(index).toFixed(1)}`)
+      if (previous !== value) parts.push(`V${y(value).toFixed(1)}`)
+    })
+    return parts.join(" ")
+  })
+  const baseline = createMemo(() => props.points.find((point) => point.verdict === "baseline")?.value ?? null)
+  const hovered = createMemo(() => {
+    const index = hover()
+    return index === undefined ? undefined : props.points[index]
+  })
+  const track = (event: MouseEvent) => {
+    const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect()
+    const inner = width() - margin.left - margin.right
+    const ratio = (event.clientX - rect.left - margin.left) / (inner || 1)
+    const index = Math.round(ratio * Math.max(0, props.points.length - 1))
+    setHover(Math.min(props.points.length - 1, Math.max(0, index)))
+  }
+  return (
+    <div
+      class="climb-chart"
+      ref={(element) => {
+        const observer = new ResizeObserver((entries) => {
+          const entry = entries[0]
+          if (entry) setWidth(Math.max(200, Math.floor(entry.contentRect.width)))
+        })
+        observer.observe(element)
+      }}
+    >
+      <svg
+        width={width()}
+        height={height()}
+        viewBox={`0 0 ${width()} ${height()}`}
+        role="img"
+        aria-label={`${props.metric} across ${props.points.length} runs`}
+        onMouseMove={track}
+        onMouseLeave={() => setHover(undefined)}
+      >
+        <Show when={range()}>
+          <g class="climb-chart__grid">
+            <For each={ticks(range()!.min, range()!.max, 4)}>
+              {(tick) => (
+                <g>
+                  <line x1={margin.left} x2={width() - margin.right} y1={y(tick)} y2={y(tick)} />
+                  <text x={margin.left - 6} y={y(tick) + 3} text-anchor="end">
+                    {formatValue(tick)}
+                  </text>
+                </g>
+              )}
+            </For>
+          </g>
+          <Show when={baseline() !== null}>
+            <line
+              class="climb-chart__baseline"
+              x1={margin.left}
+              x2={width() - margin.right}
+              y1={y(baseline()!)}
+              y2={y(baseline()!)}
+            />
+          </Show>
+          <path class="climb-chart__best" d={bestPath()} fill="none" />
+          <For each={props.points}>
+            {(point, index) => (
+              <Show when={point.value !== null}>
+                <circle
+                  class="climb-chart__mark"
+                  data-verdict={point.verdict}
+                  data-hover={hover() === index() ? "true" : undefined}
+                  cx={x(index())}
+                  cy={y(point.value as number)}
+                  r={hover() === index() ? 5 : 3.5}
+                />
+              </Show>
+            )}
+          </For>
+          <For each={props.points}>
+            {(_, index) => (
+              <text class="climb-chart__index" x={x(index())} y={height() - 5} text-anchor="middle">
+                {index() + 1}
+              </text>
+            )}
+          </For>
+        </Show>
+      </svg>
+      <Show when={hovered()}>
+        {(point) => (
+          <div class="climb-chart__tooltip" role="status">
+            <span class="climb-chart__tooltip-label">{point().label}</span>
+            <span class="climb-chart__tooltip-verdict">{point().verdict}</span>
+            <b>{point().value === null ? "n/a" : formatValue(point().value as number)}</b>
+          </div>
+        )}
+      </Show>
+      <Show when={!range()}>
+        <div class="metric-chart__empty">No finished runs yet</div>
+      </Show>
+    </div>
+  )
+}
+
 /**
  * A multi-run line chart without a charting dependency: SVG paths, a shared
  * hover cursor with the nearest value per series, optional log scale and

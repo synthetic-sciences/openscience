@@ -1,0 +1,859 @@
+/* Autoresearch: one tab per study. The design is typographic: a score, a
+   climb, then lists separated by hairlines. Colour is reserved for the
+   series on the charts and for verdicts. Sizes follow the Compute pane. */
+.autoresearch {
+  container: autoresearch / inline-size;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  line-height: 1.45;
+}
+
+.autoresearch__bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--color-border-weak);
+}
+
+.autoresearch__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  padding: 0 14px 24px;
+}
+
+.autoresearch__body:hover {
+  scrollbar-color: color-mix(in srgb, var(--color-text) 20%, transparent) transparent;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────────────── */
+.ar-tabs {
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ar-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.ar-tabs button {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  max-width: 240px;
+  height: 36px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-faint);
+  font: inherit;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.ar-tabs button::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 1.5px;
+  background: transparent;
+}
+
+.ar-tabs button:hover {
+  color: var(--color-text-muted);
+}
+
+.ar-tabs button[aria-selected="true"] {
+  color: var(--color-text);
+}
+
+.ar-tabs button[aria-selected="true"]::after {
+  background: var(--color-text);
+}
+
+.ar-tabs button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+  border-radius: var(--radius-xs);
+}
+
+.ar-tabs button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ar-tabs button i {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-text-faint);
+}
+
+.ar-tabs button[data-status="running"] i {
+  background: var(--color-text-interactive);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-text-interactive) 22%, transparent);
+}
+
+.ar-tabs button[data-status="paused"] i {
+  background: var(--color-warning);
+}
+
+.ar-tabs button[data-status="halted"] i {
+  background: var(--color-text-error);
+}
+
+.ar-tabs button[data-status="concluded"] i {
+  background: var(--color-success, #4cb782);
+}
+
+.ar-gpus {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ar-gpus li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-gpus i {
+  display: inline-block;
+  width: 44px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  overflow: hidden;
+}
+
+.ar-gpus b {
+  display: block;
+  height: 100%;
+  background: var(--color-text-interactive);
+  transition: width 400ms ease;
+}
+
+/* ── Score ────────────────────────────────────────────────────────────── */
+.ar-score {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 0 14px;
+  border-bottom: 1px solid var(--color-border-weak);
+}
+
+.ar-score__main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ar-score__value {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ar-score__metric {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+.ar-score__value strong {
+  color: var(--color-text);
+  font-size: 26px;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-score__gain {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-x-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-score__gain[data-sign="up"] {
+  color: var(--color-success, #4cb782);
+}
+
+.ar-score__gain[data-sign="down"] {
+  color: var(--color-text-error);
+}
+
+.ar-score__controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ar-score__controls button {
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.ar-score__controls button:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+.ar-score__controls button[data-danger]:hover {
+  color: var(--color-text-error);
+}
+
+.ar-status {
+  margin-right: 6px;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+.ar-status[data-status="running"] {
+  color: var(--color-text-interactive);
+}
+
+.ar-status[data-status="paused"] {
+  color: var(--color-warning);
+}
+
+.ar-status[data-status="halted"] {
+  color: var(--color-text-error);
+}
+
+.ar-status[data-status="concluded"] {
+  color: var(--color-success, #4cb782);
+}
+
+.ar-score__purpose {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.ar-score__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: 0;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-score__meta span + span::before {
+  content: "·";
+  margin: 0 7px;
+  color: var(--color-border);
+}
+
+/* ── Climb chart ──────────────────────────────────────────────────────── */
+.climb-chart {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.climb-chart svg {
+  display: block;
+  width: 100%;
+}
+
+.climb-chart__grid line {
+  stroke: var(--color-border-weak);
+}
+
+.climb-chart__grid text,
+.climb-chart__index {
+  fill: var(--color-text-faint);
+  font-family: var(--font-family-sans);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.climb-chart__baseline {
+  stroke: var(--color-text-faint);
+  stroke-dasharray: 2 4;
+}
+
+.climb-chart__best {
+  stroke: var(--color-text);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.climb-chart__mark {
+  fill: var(--color-bg);
+  stroke: var(--color-text-muted);
+  stroke-width: 1.5;
+  transition: r 120ms ease;
+}
+
+.climb-chart__mark[data-verdict="kept"],
+.climb-chart__mark[data-verdict="baseline"] {
+  fill: var(--color-text);
+  stroke: var(--color-text);
+}
+
+.climb-chart__mark[data-verdict="running"] {
+  stroke: var(--color-text-interactive);
+  stroke-dasharray: 2 2;
+}
+
+.climb-chart__mark[data-verdict="killed"],
+.climb-chart__mark[data-verdict="failed"] {
+  stroke: var(--color-text-error);
+}
+
+.climb-chart__tooltip {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 70%;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-bg) 94%, transparent);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-x-small);
+  pointer-events: none;
+}
+
+.climb-chart__tooltip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.climb-chart__tooltip-verdict {
+  color: var(--color-text-faint);
+}
+
+.climb-chart__tooltip b {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────── */
+.ar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border-weak);
+}
+
+.ar-section:last-child {
+  border-bottom: 0;
+}
+
+.ar-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 22px;
+}
+
+.ar-section__head h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+}
+
+.ar-section__head h3 span {
+  margin-left: 6px;
+  color: var(--color-text-faint);
+  font-weight: var(--font-weight-regular);
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+.ar-chart-controls select {
+  max-width: 160px;
+  height: 22px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-x-small);
+  cursor: pointer;
+}
+
+.ar-chart-controls select:hover {
+  background: var(--color-bg-subtle);
+}
+
+.ar-chart-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ar-chart-controls input[type="range"] {
+  width: 72px;
+  height: 14px;
+  accent-color: var(--color-text-muted);
+}
+
+.ar-chart-controls button {
+  height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text-faint);
+  font: inherit;
+  font-size: var(--font-size-x-small);
+  cursor: pointer;
+}
+
+.ar-chart-controls button[aria-pressed="true"] {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+/* ── Metric chart ─────────────────────────────────────────────────────── */
+.metric-chart {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.metric-chart__svg {
+  display: block;
+  width: 100%;
+}
+
+.metric-chart__grid line {
+  stroke: var(--color-border-weak);
+  stroke-width: 1;
+}
+
+.metric-chart__grid text {
+  fill: var(--color-text-faint);
+  font-family: var(--font-family-sans);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-chart__line {
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: opacity 120ms ease;
+}
+
+.metric-chart__line[data-emphasis="off"] {
+  opacity: 0.22;
+}
+
+.metric-chart__line[data-emphasis="on"] {
+  stroke-width: 2.25;
+}
+
+.metric-chart__cursor line {
+  stroke: var(--color-text-faint);
+  stroke-dasharray: 3 3;
+}
+
+.metric-chart__tooltip {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 60%;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--color-bg) 94%, transparent);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-x-small);
+  pointer-events: none;
+}
+
+.metric-chart__tooltip-step {
+  color: var(--color-text-faint);
+}
+
+.metric-chart__tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.metric-chart__tooltip-row i {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.metric-chart__tooltip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-chart__tooltip-row b {
+  margin-left: auto;
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-chart__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+/* ── Runs ─────────────────────────────────────────────────────────────── */
+.ar-runs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ar-run {
+  border-top: 1px solid var(--color-border-weak);
+}
+
+.ar-run__row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto 64px 64px 40px;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  padding: 3px 2px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-run__row:hover {
+  background: var(--color-bg-subtle);
+}
+
+.ar-run[data-open="true"] .ar-run__row {
+  background: var(--color-bg-subtle);
+}
+
+.ar-run__swatch {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 1.5px solid var(--run-color);
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ar-run__swatch[aria-pressed="true"] {
+  background: var(--run-color);
+}
+
+.ar-run__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ar-run__verdict {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+.ar-run[data-verdict="kept"] .ar-run__verdict,
+.ar-run[data-verdict="baseline"] .ar-run__verdict {
+  color: var(--color-text-muted);
+}
+
+.ar-run[data-verdict="running"] .ar-run__verdict {
+  color: var(--color-text-interactive);
+}
+
+.ar-run[data-verdict="killed"] .ar-run__verdict,
+.ar-run[data-verdict="failed"] .ar-run__verdict {
+  color: var(--color-text-error);
+}
+
+.ar-run__value,
+.ar-run__delta,
+.ar-run__time {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ar-run__value {
+  color: var(--color-text);
+}
+
+.ar-run__delta {
+  color: var(--color-text-faint);
+}
+
+.ar-run__delta[data-sign="up"] {
+  color: var(--color-success, #4cb782);
+}
+
+.ar-run__delta[data-sign="down"] {
+  color: var(--color-text-error);
+}
+
+.ar-run__time {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+@container autoresearch (max-width: 380px) {
+  .ar-run__row {
+    grid-template-columns: 10px minmax(0, 1fr) auto 64px 56px;
+  }
+
+  .ar-run__time {
+    display: none;
+  }
+}
+
+.ar-run__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 2px 14px 22px;
+}
+
+.ar-run__reason {
+  margin: 0;
+  color: var(--color-text-error);
+  font-size: var(--font-size-x-small);
+}
+
+.ar-run__facts dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 2px 18px;
+  margin: 0;
+}
+
+.ar-run__facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--font-size-x-small);
+}
+
+.ar-run__facts dt {
+  color: var(--color-text-faint);
+  font-family: var(--font-family-mono);
+}
+
+.ar-run__facts dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-run__curves {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 14px;
+}
+
+.ar-run__curve span {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--color-text-faint);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-x-small);
+}
+
+/* ── Queue, lessons, activity ─────────────────────────────────────────── */
+.ar-queue,
+.ar-activity,
+.ar-lessons {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ar-queue li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 12px;
+  padding: 5px 2px;
+  border-top: 1px solid var(--color-border-weak);
+}
+
+.ar-queue__title {
+  color: var(--color-text);
+}
+
+.ar-queue__why {
+  grid-column: 1;
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ar-queue__ev {
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-lessons li {
+  position: relative;
+  padding: 3px 0 3px 12px;
+  color: var(--color-text-muted);
+}
+
+.ar-lessons li::before {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-text-faint);
+}
+
+.ar-prose {
+  margin: 0;
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+}
+
+.ar-activity li {
+  display: flex;
+  gap: 10px;
+  padding: 2px 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-x-small);
+}
+
+.ar-activity time {
+  flex: 0 0 auto;
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-activity li[data-kind="killed"] span,
+.ar-activity li[data-kind="failed"] span,
+.ar-activity li[data-kind="halted"] span {
+  color: var(--color-text-error);
+}
+
+.ar-none {
+  margin: 0;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small);
+}
+
+/* ── Empty ────────────────────────────────────────────────────────────── */
+.ar-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 44ch;
+  padding: 28px 0;
+  color: var(--color-text-faint);
+}
+
+.ar-empty strong {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.ar-empty p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ar-empty em {
+  color: var(--color-text-muted);
+  font-style: normal;
+}
+
+.ar-empty__loose {
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border-weak);
+  font-size: var(--font-size-x-small);
+}

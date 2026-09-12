@@ -3,7 +3,7 @@ import { IconCpu, IconFolder, IconTerminal, IconActivity } from "@/atlas/shared/
 import { preloadTerminal } from "@/components/terminal"
 import "./session-sidebar.css"
 
-export type SessionContext = "files" | "terminal" | "canvas" | "kernels" | "experiments" | "trace" | "artifact"
+export type SessionContext = "files" | "terminal" | "canvas" | "kernels" | "autoresearch" | "trace" | "artifact"
 
 export function CompactContextActions(props: {
   context: SessionContext
@@ -44,11 +44,11 @@ export function CompactContextActions(props: {
       <button
         type="button"
         role="menuitem"
-        aria-pressed={props.context === "experiments" && props.contextOpen}
-        onClick={() => props.onContext("experiments")}
+        aria-pressed={props.context === "autoresearch" && props.contextOpen}
+        onClick={() => props.onContext("autoresearch")}
       >
         <IconActivity size={16} strokeWidth={1.5} />
-        Experiments
+        Autoresearch
       </button>
     </div>
   )
@@ -134,11 +134,11 @@ export function SessionSidebarActions(props: {
           <IconCpu size={16} strokeWidth={1.5} />
         </SidebarAction>
         <SidebarAction
-          label="Experiments"
-          detail="Runs and studies"
-          ariaLabel="Open project experiments"
-          active={props.context === "experiments" && props.contextOpen}
-          onClick={(_event?: Event) => props.onContext("experiments")}
+          label="Autoresearch"
+          detail="Studies and tracked runs"
+          ariaLabel="Open project autoresearch"
+          active={props.context === "autoresearch" && props.contextOpen}
+          onClick={(_event?: Event) => props.onContext("autoresearch")}
         >
           <IconActivity size={16} strokeWidth={1.5} />
         </SidebarAction>

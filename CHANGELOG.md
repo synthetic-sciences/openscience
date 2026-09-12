@@ -10,20 +10,22 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Added
 
-- Experiments: a pane beside Files, Terminal and Compute that tracks metrics
-  from any run and hosts research studies. A script imports
+- Autoresearch: a pane beside Files, Terminal and Compute with one tab per
+  study, tracking metrics from every run. A script imports
   `openscience_track` (or `wandb`, shimmed) and logs numbers; inside a compute
   job the records ride the job log with no network or dependency, and land in a
-  per-project SQLite store. The pane shows runs with headline metric and delta
-  against the baseline, a multi-run chart with shared hover, smoothing and log
-  scale, per-run configuration, summary and curves, and the local GPU strip.
+  per-project SQLite store. A study reads as a score (best value and its move
+  from the baseline), the climb across runs, the runs with a multi-run chart
+  (shared hover, smoothing, log scale) and per-run configuration, summary and
+  curves, then the queue, the lessons and the activity; local GPUs show in
+  the bar.
 - Studies: an autoresearch loop the agent drives with the `study` and
   `experiments` tools. One metric and direction, a baseline, a queue of ideas
   ranked by expected value, exactly one run per idea through the existing
   compute permissions, verdicts with analysis and lessons, kill criteria in
   plain words ("1 hour OR val_loss plateaus for 500 steps"), budgets by runs,
-  hours, spend or target, and Pause, Resume, Halt and Write up on the study
-  card. The driver follows each run, ends runs that break the criteria, and
+  hours, spend or target, and Pause, Resume, Halt and Write up beside the
+  score. The driver follows each run, ends runs that break the criteria, and
   wakes the session with one "Study update" per batch of news, capped per
   hour; `study.md`, `ideas.md`, `results.tsv` and `lessons.md` are rendered
   into the working folder. An `autoresearch` skill carries the method.

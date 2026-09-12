@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { normalizeStoredArtifact, type StoredArtifact } from "@/artifacts/store"
 import { defaultWorkspaceScope, projectScope, workspaceScope } from "./scope"
 
-export type RightPaneTab = "files" | "terminal" | "canvas" | "kernels" | "experiments" | "trace"
+export type RightPaneTab = "files" | "terminal" | "canvas" | "kernels" | "autoresearch" | "trace"
 export type RightPaneMode = "artifact" | "tools"
 export type ContextTab = RightPaneTab | "artifact"
 export type ArtifactPaneTab = "details" | "code" | "run" | "messages" | "environment" | "review" | "history"
@@ -72,7 +72,7 @@ interface TransientState {
 // User-selectable agents. A previously-persisted agent that no longer exists (e.g. a
 // removed mode) falls back to the default rather than sending an invalid agent.
 const VALID_AGENTS = new Set(["research", "biology", "physics", "ml", "plan"])
-const TABS = new Set<RightPaneTab>(["files", "terminal", "kernels", "experiments", "trace"])
+const TABS = new Set<RightPaneTab>(["files", "terminal", "kernels", "autoresearch", "trace"])
 const ARTIFACT_TABS = new Set<ArtifactPaneTab>([
   "details",
   "code",
