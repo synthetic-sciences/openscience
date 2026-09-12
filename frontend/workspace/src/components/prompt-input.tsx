@@ -2111,7 +2111,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
       const commandName = cmdName.slice(1)
-      const customCommand = sync.data.command.find((c) => c.name === commandName)
+      // Catalogs load after first paint; an early slash command must not become
+      // ordinary prompt text just because that background request is pending.
+      const commands =
+        sessionDirectory === projectDirectory && sync.data.command.some((command) => command.name === commandName)
+          ? sync.data.command
+          : await client.command
+              .list()
+              .then((response) => response.data)
+              .catch((error) => {
+                const failure = requestFailure(error, "Load commands")
+                showToast({ title: failure.title, description: failure.description })
+                return undefined
+              })
+      if (!commands) {
+        setSubmitting(false)
+        restoreInputAfterFailure()
+        return
+      }
+      const customCommand = commands.find((command) => command.name === commandName)
       if (customCommand) {
         const request = {
           sessionID: session.id,

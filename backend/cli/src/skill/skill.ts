@@ -371,7 +371,12 @@ export namespace Skill {
     // Default skills are an immutable release asset. Source builds scan the
     // repository tree; compiled releases materialize their embedded archive to
     // a versioned cache directory. Neither path needs Atlas or a network.
-    for (const skill of await defaults()) add(skill)
+    for (const skill of await defaults().catch((error) => {
+      defaults.reset()
+      State.clear(Instance.directory, compute)
+      throw error
+    }))
+      add(skill)
 
     // === User Skills: authored locally via openscience/web, private by default ===
     for (const name of RETIRED_PRODUCT_SKILL_NAMES) {

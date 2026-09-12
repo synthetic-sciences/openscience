@@ -8,15 +8,6 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-### Fixed
-
-- A packaged build no longer fails requests in its first seconds when several
-  project runtimes start together. Every runtime asked to install the bundled
-  skills, and the losers of that race renamed onto a directory the winner had
-  just filled (`ENOTEMPTY`). One extraction is now shared per bundle within a
-  process, and a rename that loses to another process accepts the winner's
-  verified bundle.
-
 ### Changed
 
 - The default Research prompt now follows the shape of OpenCode's harness
@@ -31,6 +22,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Packaged startup shares one bundled-skill extraction per process and coordinates
+  installation across processes. Failed extraction leaves no staging files, and a
+  repaired cache becomes available without restarting the app.
+- Custom slash commands sent immediately after opening a session wait for their
+  catalog instead of being submitted as ordinary chat text.
 - Scientific environment setup retries interrupted archive downloads and temporary
   upstream failures within its existing timeout, while retaining checksum verification.
 - Local Jupyter notebooks, R Markdown, and Quarto files open as rendered documents

@@ -6,6 +6,35 @@ test.skip(
   "requires the deterministic model supplied by test:e2e:local (or the E2E CI harness)",
 )
 
+test("a custom slash command waits for a delayed command catalog", async ({ page, openSession }) => {
+  const gate = Promise.withResolvers<void>()
+  await page.route("**/command", async (route) => {
+    if (route.request().method() === "GET") await gate.promise
+    await route.continue()
+  })
+  try {
+    await openSession("delayed command catalog")
+    const command = page.waitForRequest((request) => {
+      const pathname = new URL(request.url()).pathname
+      return request.method() === "POST" && /\/session\/[^/]+\/command$/.test(pathname)
+    })
+    const completion = page.waitForResponse((response) => {
+      const pathname = new URL(response.url()).pathname
+      return response.request().method() === "POST" && /\/session\/[^/]+\/command$/.test(pathname)
+    })
+    const prompt = page.locator(promptSelector)
+    await prompt.fill("/e2e-tier-override ")
+    await page.getByRole("button", { name: "Send", exact: true }).click()
+    await expect(prompt).toHaveText("")
+    gate.resolve()
+    expect((await command).postDataJSON()).toMatchObject({ command: "e2e-tier-override", arguments: "" })
+    expect((await completion).ok()).toBe(true)
+  } finally {
+    gate.resolve()
+    await page.unroute("**/command")
+  }
+})
+
 test("model speed toggles through model options and reaches the prompt request", async ({ page, sdk, gotoSession }) => {
   await gotoSession()
 

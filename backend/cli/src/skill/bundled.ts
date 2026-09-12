@@ -3,6 +3,7 @@ import path from "node:path"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { Filesystem } from "@/util/filesystem"
+import { FileLease } from "@/util/file-lease"
 import { Log } from "@/util/log"
 import { directoryDigest } from "./bundle-format"
 
@@ -23,9 +24,7 @@ export namespace BundledSkills {
 
   type Materialize = { archive: string; digest: string; files: number; skills: number; cache?: string }
 
-  // Every project instance asks for the bundle root as it starts. Sharing one
-  // in-flight extraction per target keeps a burst of instances from racing
-  // each other's rename; other processes are handled at the rename itself.
+  // Project instances share one extraction; the lease also coordinates processes.
   const inflight = new Map<string, Promise<string>>()
 
   export function materialize(input: Materialize): Promise<string> {
@@ -51,53 +50,44 @@ export namespace BundledSkills {
     const marker = path.join(root, ".openscience-bundle.json")
     if (await verified(marker, input)) return root
 
-    const tmp = path.join(base, `.${input.digest}.${process.pid}.${Date.now()}`)
-    await fs.mkdir(base, { recursive: true })
-    await fs.rm(tmp, { recursive: true, force: true })
-    const bytes = await Bun.file(input.archive).bytes()
-    const count = await new Bun.Archive(bytes).extract(tmp)
-    if (count < input.files) {
-      await fs.rm(tmp, { recursive: true, force: true })
-      throw new Error(`Bundled skill archive is incomplete: expected ${input.files} files, extracted ${count}`)
-    }
-    const digest = await directoryDigest(tmp)
-    if (digest !== input.digest) {
-      await fs.rm(tmp, { recursive: true, force: true })
-      throw new Error(`Bundled skill archive failed verification: expected ${input.digest}, got ${digest}`)
-    }
+    // Multiple project instances and processes share this content-addressed cache.
+    await using lease = await FileLease.acquire(path.join(base, `${input.digest}.lock`), 60_000)
+    if (await verified(marker, input)) return root
+    const tmp = await fs.mkdtemp(path.join(base, `.${input.digest}.`))
+    try {
+      const bytes = await Bun.file(input.archive).bytes()
+      const count = await new Bun.Archive(bytes).extract(tmp)
+      if (count < input.files) {
+        throw new Error(`Bundled skill archive is incomplete: expected ${input.files} files, extracted ${count}`)
+      }
+      const digest = await directoryDigest(tmp)
+      if (digest !== input.digest) {
+        throw new Error(`Bundled skill archive failed verification: expected ${input.digest}, got ${digest}`)
+      }
 
-    for await (const script of new Bun.Glob("**/*.{py,sh,js,ts}").scan({ cwd: tmp, absolute: true, onlyFiles: true })) {
-      await fs.chmod(script, 0o755).catch(() => {})
-    }
-    await Bun.write(
-      path.join(tmp, ".openscience-bundle.json"),
-      JSON.stringify({ digest: input.digest, files: input.files, skills: input.skills }),
-    )
+      for await (const script of new Bun.Glob("**/*.{py,sh,js,ts}").scan({
+        cwd: tmp,
+        absolute: true,
+        onlyFiles: true,
+      })) {
+        await fs.chmod(script, 0o755).catch(() => {})
+      }
+      await Bun.write(
+        path.join(tmp, ".openscience-bundle.json"),
+        JSON.stringify({ digest: input.digest, files: input.files, skills: input.skills }),
+      )
 
-    if (await verified(marker, input)) {
-      await fs.rm(tmp, { recursive: true, force: true })
+      // An older app may still publish the same bundle without taking the lease.
+      if (await verified(marker, input)) return root
+      await fs.rm(root, { recursive: true, force: true })
+      await fs.rename(tmp, root).catch(async (error) => {
+        if (await verified(marker, input)) return
+        throw error
+      })
       return root
-    }
-
-    await fs.rm(root, { recursive: true, force: true })
-    // Another process can complete the same rename between the checks above
-    // and this one; a non-empty target then fails with ENOTEMPTY or EEXIST.
-    // Its verified bundle is as good as ours.
-    const renamed = await fs.rename(tmp, root).then(
-      () => true,
-      (error: unknown) => {
-        const code = error && typeof error === "object" && "code" in error ? error.code : undefined
-        if (code !== "ENOTEMPTY" && code !== "EEXIST" && code !== "EPERM") throw error
-        return false
-      },
-    )
-    if (renamed) return root
-    if (await verified(marker, input)) {
+    } finally {
       await fs.rm(tmp, { recursive: true, force: true })
-      return root
     }
-    await fs.rm(tmp, { recursive: true, force: true })
-    throw new Error("Bundled skill archive could not be installed: another installation left an incomplete bundle")
   }
 
   export async function root(): Promise<string | undefined> {
