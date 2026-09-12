@@ -210,9 +210,16 @@ output. Source:
 
 ## OpenScience implementation boundary
 
-Default Research retains its explicit scientific header. Session assembly adds
-workspace, project, skill and user context, while provider transforms handle API
-shape, reasoning, tools, media, cache and errors. Custom-agent prompt replacement
+Default Research retains its explicit scientific header. Since v2.0.94 that
+header (`agent/prompt/researchagent-test.txt`) follows the shape of OpenCode's
+`gpt-astra.txt`: a Harness section that tells the model how its output renders
+(narration between tool calls, the last message as the answer), then
+Communication with Autonomy, Progress, Questions and Final answer, then the
+scientific specifics (evidence and files, manuscripts and figures). Working-folder
+routing stays in the environment block rather than the header, and the effort,
+delegation and independence postures stay in the per-request reminder. Session
+assembly adds workspace, project, skill and user context, while provider
+transforms handle API shape, reasoning, tools, media, cache and errors. Custom-agent prompt replacement
 and internal title/compaction contracts remain separate. The allowed tool set and
 permission system are authoritative; domain procedures live in skills.
 

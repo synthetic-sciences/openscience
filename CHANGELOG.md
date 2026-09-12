@@ -8,6 +8,18 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Changed
+
+- The default Research prompt now follows the shape of OpenCode's harness
+  prompts: it tells the model how its output renders (narration between tool
+  calls, the final message as the answer), then sets communication defaults,
+  a bias to action, when progress updates are worth sending, when a question is
+  worth asking, and what a final answer contains, before the scientific
+  specifics. Skills load only when they change the work, workers only for
+  independent work within the Delegation setting, and questions come one at a
+  time with the recommended option first. Working-folder routing lives in the
+  environment block, so the header no longer repeats it.
+
 ### Fixed
 
 - Local Jupyter notebooks, R Markdown, and Quarto files open as rendered documents
