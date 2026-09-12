@@ -21,22 +21,35 @@ export namespace BundledSkills {
     return import("./bundled.generated").catch(() => undefined)
   }
 
-  export async function materialize(input: {
-    archive: string
-    digest: string
-    files: number
-    skills: number
-    cache?: string
-  }): Promise<string> {
-    if (!/^[a-f0-9]{64}$/.test(input.digest)) throw new Error("Invalid bundled skill digest")
+  type Materialize = { archive: string; digest: string; files: number; skills: number; cache?: string }
+
+  // Every project instance asks for the bundle root as it starts. Sharing one
+  // in-flight extraction per target keeps a burst of instances from racing
+  // each other's rename; other processes are handled at the rename itself.
+  const inflight = new Map<string, Promise<string>>()
+
+  export function materialize(input: Materialize): Promise<string> {
+    if (!/^[a-f0-9]{64}$/.test(input.digest)) return Promise.reject(new Error("Invalid bundled skill digest"))
     const base = input.cache ?? path.join(Global.Path.cache, "bundled-skills")
-    const root = path.join(base, input.digest)
-    const marker = path.join(root, ".openscience-bundle.json")
-    const ready = await Bun.file(marker)
+    const key = path.join(base, input.digest)
+    const pending = inflight.get(key)
+    if (pending) return pending
+    const task = extract(input, base).finally(() => inflight.delete(key))
+    inflight.set(key, task)
+    return task
+  }
+
+  async function verified(marker: string, input: Materialize) {
+    return Bun.file(marker)
       .json()
       .then((value) => value?.digest === input.digest && value?.files === input.files && value?.skills === input.skills)
       .catch(() => false)
-    if (ready) return root
+  }
+
+  async function extract(input: Materialize, base: string): Promise<string> {
+    const root = path.join(base, input.digest)
+    const marker = path.join(root, ".openscience-bundle.json")
+    if (await verified(marker, input)) return root
 
     const tmp = path.join(base, `.${input.digest}.${process.pid}.${Date.now()}`)
     await fs.mkdir(base, { recursive: true })
@@ -61,18 +74,30 @@ export namespace BundledSkills {
       JSON.stringify({ digest: input.digest, files: input.files, skills: input.skills }),
     )
 
-    const raced = await Bun.file(marker)
-      .json()
-      .then((value) => value?.digest === input.digest && value?.files === input.files && value?.skills === input.skills)
-      .catch(() => false)
-    if (raced) {
+    if (await verified(marker, input)) {
       await fs.rm(tmp, { recursive: true, force: true })
       return root
     }
 
     await fs.rm(root, { recursive: true, force: true })
-    await fs.rename(tmp, root)
-    return root
+    // Another process can complete the same rename between the checks above
+    // and this one; a non-empty target then fails with ENOTEMPTY or EEXIST.
+    // Its verified bundle is as good as ours.
+    const renamed = await fs.rename(tmp, root).then(
+      () => true,
+      (error: unknown) => {
+        const code = error && typeof error === "object" && "code" in error ? error.code : undefined
+        if (code !== "ENOTEMPTY" && code !== "EEXIST" && code !== "EPERM") throw error
+        return false
+      },
+    )
+    if (renamed) return root
+    if (await verified(marker, input)) {
+      await fs.rm(tmp, { recursive: true, force: true })
+      return root
+    }
+    await fs.rm(tmp, { recursive: true, force: true })
+    throw new Error("Bundled skill archive could not be installed: another installation left an incomplete bundle")
   }
 
   export async function root(): Promise<string | undefined> {
