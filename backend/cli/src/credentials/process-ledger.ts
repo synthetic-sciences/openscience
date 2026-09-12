@@ -540,15 +540,6 @@ export namespace CredentialProcessLedger {
         if (windowsJob) WindowsJob.terminate(windowsJob)
         throw error
       })
-      if (windowsJob && input.windowsRelease) {
-        try {
-          WindowsJob.release(input.windowsRelease, input.pid)
-        } catch (error) {
-          await teardownGroup(next)
-          await write(entries.filter((entry) => entry.id !== input.id))
-          throw error
-        }
-      }
       if (process.platform === "darwin" && input.windowsRelease) {
         try {
           await fs.writeFile(input.windowsRelease, String(input.pid), { encoding: "utf8", flag: "wx", mode: 0o600 })
@@ -576,17 +567,6 @@ export namespace CredentialProcessLedger {
         const position = entries.findIndex((entry) => entry.id === input.id)
         if (position >= 0) entries[position] = next
         await write(entries)
-        try {
-          await fs.writeFile(`${input.windowsRelease}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, String(input.pid), {
-            encoding: "utf8",
-            flag: "wx",
-            mode: 0o600,
-          })
-        } catch (error) {
-          await teardownGroup(next)
-          await write(entries.filter((entry) => entry.id !== input.id))
-          throw error
-        }
       }
       if (darwinResponsibility && !DarwinResponsibility.uniquelyOwns(darwinResponsibility, input.pid)) {
         await teardownGroup(next)
@@ -605,6 +585,22 @@ export namespace CredentialProcessLedger {
         if (next.detached || windowsJob) await teardownGroup(next)
         await write(entries.filter((entry) => entry.id !== input.id))
         return false
+      }
+      // Verify ownership while the workload is still gated. After activation,
+      // a short successful probe may exit before another identity check runs.
+      try {
+        if (windowsJob && input.windowsRelease) WindowsJob.release(input.windowsRelease, input.pid)
+        if (darwinResponsibility) {
+          await fs.writeFile(`${input.windowsRelease}${DARWIN_RESPONSIBILITY_ACTIVATION_SUFFIX}`, String(input.pid), {
+            encoding: "utf8",
+            flag: "wx",
+            mode: 0o600,
+          })
+        }
+      } catch (error) {
+        await teardownGroup(next)
+        await write(entries.filter((entry) => entry.id !== input.id))
+        throw error
       }
       return true
     })

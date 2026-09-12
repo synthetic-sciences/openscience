@@ -6,6 +6,9 @@ import {
 } from "../../src/science/capability/pack"
 import fs from "node:fs/promises"
 import path from "node:path"
+import { Log } from "../../src/util/log"
+
+await Log.init({ print: false, dev: true })
 
 const support = {
   micromambaSha256: process.env.OPENSCIENCE_TEST_MICROMAMBA_SHA256,
@@ -185,3 +188,5 @@ if (process.argv[2] === "runtime") {
 } else {
   throw new Error("Expected a managed environment fixture mode")
 }
+
+await Log.flush()

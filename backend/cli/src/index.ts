@@ -104,10 +104,6 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-function isScientificCapabilityCanary(command: string | undefined, argv: string[]): boolean {
-  return command === "debug" && argv[1] === "capability-canary"
-}
-
 // Yargs handles --help/--version before middleware. Run the exact, fail-safe
 // retirement migration here so the first post-upgrade invocation cleans old
 // agent instructions even when it exits through those built-in paths. Internal
@@ -136,7 +132,7 @@ const cli = yargs(hideBin(process.argv))
   })
   .middleware(async (opts) => {
     const initialize = async () => {
-      const capabilityCanary = isScientificCapabilityCanary(command, process.argv.slice(2))
+      const capabilityCanary = command === "debug" && opts._[1] === "capability-canary"
       await Log.init({
         print: process.argv.includes("--print-logs"),
         dev: Installation.isLocal(),

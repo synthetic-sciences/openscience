@@ -22,6 +22,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Short provider and Modal SDK probes can finish immediately after durable process
+  registration without being mistaken for failed launches. Failed scientific setup
+  records its failed state and logs the exact archive-attestation rejection.
+- Scientific canaries stay isolated from credential sync and unrelated environment
+  installation when logging flags appear before their command.
 - Packaged startup shares one bundled-skill extraction per process and coordinates
   installation across processes. Failed extraction leaves no staging files, and a
   repaired cache becomes available without restarting the app.
