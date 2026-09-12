@@ -42,7 +42,13 @@ export const StudyTool = Tool.define("study", {
     direction: Experiments.Direction.optional(),
     target: Experiments.Target.optional(),
     concurrency: z.number().int().min(1).max(64).optional(),
-    kill_criteria: z.string().max(1_000).optional(),
+    kill_criteria: z
+      .string()
+      .max(1_000)
+      .optional()
+      .describe(
+        'Plain-word rules joined by OR, any one ends a run: "2 minutes", "5000 steps", "val_loss plateaus for 500 steps", "val_loss > 5 for 100 steps".',
+      ),
     budget: Experiments.Budget.optional(),
     review: z.boolean().optional().describe("Ask the critique agent to review the training code before the baseline."),
     root: z
@@ -93,7 +99,7 @@ export const StudyTool = Tool.define("study", {
       const criteria = KillCriteria.parse(params.kill_criteria ?? "")
       if (criteria.unparsed.length) {
         throw new Error(
-          `Could not read kill criteria: ${criteria.unparsed.join("; ")}. Use forms like "1 hour", "5000 steps", "val_loss plateaus for 500 steps", "val_loss > 5 for 100 steps", joined by OR.`,
+          `Could not read kill criteria: ${criteria.unparsed.map((clause) => `"${clause.replace(/[.!]+$/, "")}"`).join(", ")}. Use forms like "1 hour", "5000 steps", "val_loss plateaus for 500 steps", "val_loss > 5 for 100 steps", joined by OR.`,
         )
       }
       const slots = params.target?.kind === "local" || !params.target ? await GpuInventory.slots() : []

@@ -2,7 +2,6 @@ import { createEffect, createMemo, createResource, createSignal, For, onCleanup,
 import type { ExperimentRun, ExperimentSeries, LocalGpu, Study, StudyOverview } from "@synsci/sdk/v2/client"
 import { useSDK } from "@/context/sdk"
 import { uiStore } from "@/atlas/store/ui"
-import { IconActivity } from "@/atlas/shared/Icon"
 import { colorFor, formatValue, MetricChart } from "./experiments/MetricChart"
 import "./ExperimentsPane.css"
 
@@ -81,12 +80,21 @@ export function ExperimentsPane(): JSX.Element {
     () => read<LocalGpu[]>("/experiments/gpus"),
   )
 
-  const [studyID, setStudyID] = createSignal<string>()
+  // Tabs: one per study, plus every run in the project. Nothing selected
+  // means the live study, else the newest, else all runs.
+  const [tab, setTab] = createSignal<string>()
   const activeStudy = createMemo(() => {
     const list = studies.latest ?? []
-    const chosen = studyID() ? list.find((study) => study.id === studyID()) : undefined
-    return chosen ?? list.find((study) => study.status === "running" || study.status === "paused") ?? list[0]
+    const chosen = tab()
+    if (chosen === "all") return undefined
+    const picked = chosen ? list.find((study) => study.id === chosen) : undefined
+    return picked ?? list.find((study) => study.status === "running" || study.status === "paused") ?? list[0]
   })
+  const select = (value: string) => {
+    setTab(value)
+    setTouched(false)
+    setDetail(undefined)
+  }
   const [overview] = createResource(
     () => (activeStudy() ? `${activeStudy()!.id}:${version()}` : undefined),
     (key) => read<StudyOverview>(`/experiments/studies/${key.split(":")[0]}`),
@@ -195,15 +203,26 @@ export function ExperimentsPane(): JSX.Element {
   return (
     <section class="experiments-pane" aria-label="Experiments">
       <header class="experiments-pane__header">
-        <div class="experiments-pane__title">
-          <IconActivity size={14} strokeWidth={1.5} />
-          <strong>Experiments</strong>
-          <span>
-            {(runs.latest ?? []).length} run{(runs.latest ?? []).length === 1 ? "" : "s"}
-            {(studies.latest ?? []).length
-              ? ` · ${(studies.latest ?? []).length} stud${(studies.latest ?? []).length === 1 ? "y" : "ies"}`
-              : ""}
-          </span>
+        <div class="experiments-tabs" role="tablist" aria-label="Studies and runs">
+          <For each={studies.latest ?? []}>
+            {(study) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeStudy()?.id === study.id}
+                data-status={study.status}
+                title={`${study.name}: ${study.status}`}
+                onClick={() => select(study.id)}
+              >
+                <i aria-hidden="true" />
+                <span>{study.name}</span>
+              </button>
+            )}
+          </For>
+          <button type="button" role="tab" aria-selected={!activeStudy()} onClick={() => select("all")}>
+            <span>All runs</span>
+            <em>{(runs.latest ?? []).length}</em>
+          </button>
         </div>
         <Show when={(gpus.latest ?? []).length}>
           <ul class="experiments-gpus" aria-label="Local GPUs">
@@ -225,28 +244,6 @@ export function ExperimentsPane(): JSX.Element {
       </header>
 
       <div class="experiments-pane__body">
-        <Show when={(studies.latest ?? []).length > 1}>
-          <div class="experiments-studies" role="tablist" aria-label="Studies">
-            <For each={studies.latest ?? []}>
-              {(study) => (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeStudy()?.id === study.id}
-                  onClick={() => {
-                    setStudyID(study.id)
-                    setTouched(false)
-                    setDetail(undefined)
-                  }}
-                >
-                  {study.name}
-                  {status(study.status)}
-                </button>
-              )}
-            </For>
-          </div>
-        </Show>
-
         <Show when={activeStudy()}>
           {(study) => (
             <article class="study-card" data-status={study().status}>
@@ -412,14 +409,22 @@ export function ExperimentsPane(): JSX.Element {
             }
           >
             <table>
+              <colgroup>
+                <col class="eye" />
+                <col />
+                <col class="status" />
+                <col class="value" />
+                <col class="delta" />
+                <col class="time" />
+              </colgroup>
               <thead>
                 <tr>
                   <th aria-label="Show on chart" />
                   <th>Run</th>
                   <th>Status</th>
                   <th class="num">{activeStudy()?.metric ?? "headline"}</th>
-                  <th class="num">Δ</th>
-                  <th class="num">Time</th>
+                  <th class="num delta">Δ</th>
+                  <th class="num time">Time</th>
                 </tr>
               </thead>
               <tbody>
@@ -461,12 +466,12 @@ export function ExperimentsPane(): JSX.Element {
                       <td>{status(run.status)}</td>
                       <td class="num">{run.headline === null ? "" : formatValue(run.headline)}</td>
                       <td
-                        class="num"
+                        class="num delta"
                         data-sign={run.baselineDelta === null ? undefined : run.baselineDelta >= 0 ? "up" : "down"}
                       >
                         {delta(run)}
                       </td>
-                      <td class="num">{duration(run, now())}</td>
+                      <td class="num time">{duration(run, now())}</td>
                     </tr>
                   )}
                 </For>

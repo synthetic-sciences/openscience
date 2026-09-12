@@ -28,6 +28,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   hour; `study.md`, `ideas.md`, `results.tsv` and `lessons.md` are rendered
   into the working folder. An `autoresearch` skill carries the method.
 
+### Changed
+
+- The composer no longer shows a separate Independence chip; Independence
+  stays in Tools next to Delegation, where it was already set.
+
 ## v2.0.94 — 2026-09-12
 
 ### Changed

@@ -20,28 +20,112 @@
 .experiments-pane__header {
   flex: 0 0 auto;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--color-border-weak);
 }
 
-.experiments-pane__title {
+/* Tabs: studies first, then every run in the project. */
+.experiments-tabs {
+  min-width: 0;
   display: flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.experiments-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.experiments-tabs button {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  max-width: 220px;
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-faint);
+  font: inherit;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.experiments-tabs button::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+}
+
+.experiments-tabs button:hover {
   color: var(--color-text-muted);
 }
 
-.experiments-pane__title strong {
+.experiments-tabs button[aria-selected="true"] {
   color: var(--color-text);
-  font-size: var(--font-size-medium);
-  font-weight: var(--font-weight-medium);
 }
 
-.experiments-pane__title span {
+.experiments-tabs button[aria-selected="true"]::after {
+  background: var(--color-text);
+}
+
+.experiments-tabs button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+  border-radius: var(--radius-xs);
+}
+
+.experiments-tabs button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.experiments-tabs button em {
   color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status dot: live studies glow, paused hold, ended studies go quiet. */
+.experiments-tabs button i {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-text-faint);
+}
+
+.experiments-tabs button[data-status="running"] i {
+  background: var(--color-text-interactive);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-text-interactive) 22%, transparent);
+}
+
+.experiments-tabs button[data-status="paused"] i {
+  background: var(--color-warning);
+}
+
+.experiments-tabs button[data-status="halted"] i {
+  background: var(--color-text-error);
+}
+
+.experiments-tabs button[data-status="concluded"] i {
+  background: var(--color-success, #4cb782);
 }
 
 .experiments-gpus {
@@ -138,33 +222,6 @@
 .experiments-status[data-status="queued"] {
   background: color-mix(in srgb, var(--color-warning) 16%, transparent);
   color: var(--color-warning);
-}
-
-/* Study tabs, when a project has more than one. */
-.experiments-studies {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.experiments-studies button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  border: 1px solid var(--color-border-weak);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: var(--font-size-x-small);
-  cursor: pointer;
-}
-
-.experiments-studies button[aria-selected="true"] {
-  border-color: var(--color-border);
-  background: var(--color-bg-subtle);
-  color: var(--color-text);
 }
 
 /* The study card. */
@@ -475,8 +532,46 @@
 /* Runs table. */
 .experiments-runs table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
+}
+
+/* Fixed columns keep their width; the run name takes the rest and truncates. */
+.experiments-runs col.eye {
+  width: 26px;
+}
+
+.experiments-runs col.status {
+  width: 74px;
+}
+
+.experiments-runs col.value {
+  width: 64px;
+}
+
+.experiments-runs col.delta {
+  width: 60px;
+}
+
+.experiments-runs col.time {
+  width: 56px;
+}
+
+@container experiments (max-width: 380px) {
+  .experiments-runs col.time,
+  .experiments-runs th.time,
+  .experiments-runs td.time {
+    display: none;
+  }
+}
+
+@container experiments (max-width: 300px) {
+  .experiments-runs col.delta,
+  .experiments-runs th.delta,
+  .experiments-runs td.delta {
+    display: none;
+  }
 }
 
 .experiments-runs th {
@@ -515,11 +610,8 @@
 
 .experiments-runs__name {
   min-width: 0;
-  color: var(--color-text);
-}
-
-.experiments-runs__name span {
   overflow: hidden;
+  color: var(--color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -56,7 +56,6 @@ import { confirmDialog } from "@/atlas/dialogs"
 import { projectHref, projectPathname } from "@/utils/project-route"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ModelSettingsPopover } from "./model-settings-popover"
-import { IndependenceChip } from "./independence-chip"
 import {
   loadedSkillNamesThisTurn,
   recordRecentSkill,
@@ -3069,12 +3068,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             aria-label="Model, effort, and send"
           >
             <ModelSettingsPopover />
-            <Show when={capabilities() && !narrow()}>
-              <IndependenceChip
-                value={delegation().autonomy}
-                onSelect={(value) => saveDelegation({ autonomy: value })}
-              />
-            </Show>
             <Tooltip
               placement="top"
               inactive={!prompt.dirty() && !working()}
