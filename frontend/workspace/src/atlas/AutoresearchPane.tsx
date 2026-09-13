@@ -133,6 +133,7 @@ export function AutoresearchPane(): JSX.Element {
     setChosen(id)
     setTouched(false)
     setOpen(undefined)
+    setPanel(undefined)
   }
 
   const [keys] = createResource(
@@ -164,7 +165,7 @@ export function AutoresearchPane(): JSX.Element {
       return read<ExperimentSeries>("/experiments/series", { run_ids: ids!, keys: name!, max: "400" })
     },
   )
-  const curves = createMemo(() =>
+  const curveSeries = createMemo(() =>
     (series.latest ?? [])
       .map((item) => {
         const run = runs().find((candidate) => candidate.id === item.runID)
@@ -179,6 +180,23 @@ export function AutoresearchPane(): JSX.Element {
   )
 
   const [open, setOpen] = createSignal<string>()
+  const [curves, setCurves] = createSignal(false)
+  const [panel, setPanel] = createSignal<"about" | "queue" | "lessons" | "activity">()
+  const flip = (value: NonNullable<ReturnType<typeof panel>>) => setPanel(panel() === value ? undefined : value)
+  const queued = createMemo(() => (overview.latest?.ideas ?? []).filter((idea) => idea.status === "queued"))
+  const dropped = createMemo(() => (overview.latest?.ideas ?? []).filter((idea) => idea.status === "dropped"))
+  const gainSign = () => {
+    const gain = improvement()
+    return gain ? (gain.percent >= 0 ? "up" : "down") : undefined
+  }
+  const statusTitle = (current: Study) =>
+    [
+      targetLabel(current.target),
+      `${current.concurrency} at a time`,
+      current.killCriteria ? `kill: ${current.killCriteria}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ")
   const [openSeries] = createResource(
     () => (open() ? `${open()}|${pointsVersion()}|${version()}` : undefined),
     (spec) => read<ExperimentSeries>("/experiments/series", { run_ids: spec.split("|")[0]!, max: "200" }),
@@ -248,7 +266,6 @@ export function AutoresearchPane(): JSX.Element {
           >
             {delta() === null ? "" : signed(delta() as number)}
           </span>
-          <span class="ar-run__time">{elapsed(run(), now())}</span>
         </div>
         <Show when={open() === run().id}>
           <div class="ar-run__detail">
@@ -274,6 +291,10 @@ export function AutoresearchPane(): JSX.Element {
                 <div>
                   <dt>points</dt>
                   <dd>{run().points}</dd>
+                </div>
+                <div>
+                  <dt>time</dt>
+                  <dd>{elapsed(run(), now()) || "—"}</dd>
                 </div>
                 <Show when={run().jobID}>
                   <div>
@@ -377,7 +398,7 @@ export function AutoresearchPane(): JSX.Element {
           {(current) => (
             <>
               <section class="ar-score" aria-label="Score">
-                <div class="ar-score__main">
+                <div class="ar-score__row">
                   <div class="ar-score__value">
                     <span class="ar-score__metric">
                       {current().direction} {current().metric}
@@ -390,21 +411,20 @@ export function AutoresearchPane(): JSX.Element {
                           ? formatValue(overview.latest.baseline.headline)
                           : "—"}
                     </strong>
-                    <Show when={improvement()}>
-                      {(gain) => (
-                        <span class="ar-score__gain" data-sign={gain().percent >= 0 ? "up" : "down"}>
-                          {gain().percent >= 0 ? "▲" : "▼"}{" "}
-                          {Math.abs(gain().percent).toFixed(gain().percent >= 100 ? 0 : 1)}% vs baseline{" "}
-                          {formatValue(gain().base.headline as number)}
-                        </span>
-                      )}
-                    </Show>
-                    <Show when={!improvement() && overview.latest?.baseline}>
-                      <span class="ar-score__gain">baseline</span>
-                    </Show>
+                    <span class="ar-score__gain" data-sign={gainSign()}>
+                      <Show when={improvement()} fallback={overview.latest?.baseline ? "baseline" : "no runs yet"}>
+                        {(gain) => (
+                          <>
+                            {gain().percent >= 0 ? "▲" : "▼"}{" "}
+                            {Math.abs(gain().percent).toFixed(Math.abs(gain().percent) >= 100 ? 0 : 1)}% from{" "}
+                            {formatValue(gain().base.headline as number)}
+                          </>
+                        )}
+                      </Show>
+                    </span>
                   </div>
                   <div class="ar-score__controls">
-                    <span class="ar-status" data-status={current().status}>
+                    <span class="ar-status" data-status={current().status} title={statusTitle(current())}>
                       {current().status}
                     </span>
                     <Show when={current().status === "running"}>
@@ -427,107 +447,171 @@ export function AutoresearchPane(): JSX.Element {
                     </button>
                   </div>
                 </div>
-                <p class="ar-score__purpose">{current().purpose}</p>
-                <p class="ar-score__meta">
-                  <span>
-                    {runs().filter((run) => run.status !== "running").length}
-                    {current().budget.maxRuns ? ` of ${current().budget.maxRuns}` : ""} runs
-                  </span>
-                  <span>
-                    {runs().filter((run) => run.status === "running").length} of {current().concurrency} live
-                  </span>
-                  <span>
-                    {hours(current().createdAt, now())}
-                    {current().budget.maxHours ? ` of ${current().budget.maxHours} h` : ""}
-                  </span>
-                  <Show when={current().killCriteria}>
-                    <span>kill: {current().killCriteria}</span>
-                  </Show>
-                  <span>{targetLabel(current().target)}</span>
-                  <Show when={current().turns}>
-                    <span>
-                      {current().turns} wake-up{current().turns === 1 ? "" : "s"}
-                    </span>
-                  </Show>
-                </p>
                 <HillClimbChart
                   points={climb()}
                   direction={current().direction}
                   metric={current().metric}
-                  height={124}
+                  height={132}
                 />
+                <p class="ar-score__meta">
+                  <span>
+                    {runs().filter((run) => run.status !== "running").length}
+                    {current().budget.maxRuns ? `/${current().budget.maxRuns}` : ""} runs
+                  </span>
+                  <Show when={runs().some((run) => run.status === "running")}>
+                    <span>{runs().filter((run) => run.status === "running").length} live</span>
+                  </Show>
+                  <span>{hours(current().createdAt, now())}</span>
+                  <button
+                    type="button"
+                    class="ar-link"
+                    aria-expanded={panel() === "about"}
+                    onClick={() => flip("about")}
+                  >
+                    about
+                  </button>
+                </p>
+                <Show when={panel() === "about"}>
+                  <div class="ar-about">
+                    <p>{current().purpose}</p>
+                    <dl>
+                      <div>
+                        <dt>target</dt>
+                        <dd>{targetLabel(current().target)}</dd>
+                      </div>
+                      <div>
+                        <dt>concurrency</dt>
+                        <dd>{current().concurrency}</dd>
+                      </div>
+                      <Show when={current().killCriteria}>
+                        <div>
+                          <dt>kill</dt>
+                          <dd>{current().killCriteria}</dd>
+                        </div>
+                      </Show>
+                      <Show when={Object.keys(current().budget).length}>
+                        <div>
+                          <dt>budget</dt>
+                          <dd>
+                            {Object.entries(current().budget)
+                              .filter(([, value]) => value !== undefined)
+                              .map(([key, value]) => `${key} ${value}`)
+                              .join(", ")}
+                          </dd>
+                        </div>
+                      </Show>
+                      <div>
+                        <dt>wake-ups</dt>
+                        <dd>{current().turns}</dd>
+                      </div>
+                      <div>
+                        <dt>folder</dt>
+                        <dd title={current().root}>{current().root.split("/").slice(-2).join("/")}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </Show>
               </section>
 
-              <section class="ar-section" aria-label="Runs">
+              <section class="ar-runs-section" aria-label="Runs">
                 <header class="ar-section__head">
                   <h3>
                     Runs <span>{runs().length}</span>
                   </h3>
-                  <div class="ar-chart-controls">
-                    <select
-                      aria-label="Metric"
-                      value={metric() ?? ""}
-                      onChange={(event) => setKey(event.currentTarget.value)}
-                    >
-                      <For each={keys.latest ?? []}>{(name) => <option value={name}>{name}</option>}</For>
-                    </select>
-                    <label>
-                      <span>smooth</span>
-                      <input
-                        type="range"
-                        min="0"
-                        max="0.95"
-                        step="0.05"
-                        value={smoothing()}
-                        onInput={(event) => setSmoothing(Number(event.currentTarget.value))}
-                      />
-                    </label>
-                    <button type="button" aria-pressed={log()} onClick={() => setLog(!log())}>
-                      log
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    class="ar-link"
+                    aria-expanded={curves()}
+                    onClick={() => setCurves(!curves())}
+                    disabled={!runs().length}
+                  >
+                    {curves() ? "hide curves" : "curves"}
+                  </button>
                 </header>
-                <MetricChart series={curves()} height={170} log={log()} smoothing={smoothing()} emphasize={open()} />
-                <Show
-                  when={runs().length}
-                  fallback={<p class="ar-none">No runs yet. The first run is the baseline.</p>}
-                >
+                <Show when={curves()}>
+                  <div class="ar-curves">
+                    <div class="ar-chart-controls">
+                      <select
+                        aria-label="Metric"
+                        value={metric() ?? ""}
+                        onChange={(event) => setKey(event.currentTarget.value)}
+                      >
+                        <For each={keys.latest ?? []}>{(name) => <option value={name}>{name}</option>}</For>
+                      </select>
+                      <label>
+                        <span>smooth</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="0.95"
+                          step="0.05"
+                          value={smoothing()}
+                          onInput={(event) => setSmoothing(Number(event.currentTarget.value))}
+                        />
+                      </label>
+                      <button type="button" aria-pressed={log()} onClick={() => setLog(!log())}>
+                        log
+                      </button>
+                    </div>
+                    <MetricChart
+                      series={curveSeries()}
+                      height={170}
+                      log={log()}
+                      smoothing={smoothing()}
+                      emphasize={open()}
+                    />
+                  </div>
+                </Show>
+                <Show when={runs().length} fallback={<p class="ar-none">The first run is the baseline.</p>}>
                   <ul class="ar-runs">
                     <For each={runs()}>{(run) => <RunRow run={run} />}</For>
                   </ul>
                 </Show>
               </section>
 
-              <Show
-                when={(overview.latest?.ideas ?? []).some(
-                  (idea) => idea.status === "queued" || idea.status === "dropped",
-                )}
-              >
-                <section class="ar-section" aria-label="Queue">
-                  <header class="ar-section__head">
-                    <h3>
-                      Queue{" "}
-                      <span>{(overview.latest?.ideas ?? []).filter((idea) => idea.status === "queued").length}</span>
-                    </h3>
-                  </header>
-                  <ol class="ar-queue">
-                    <For each={(overview.latest?.ideas ?? []).filter((idea) => idea.status === "queued")}>
-                      {(idea) => (
-                        <li>
-                          <span class="ar-queue__title" title={idea.description}>
-                            {idea.title}
-                          </span>
-                          <span class="ar-queue__why">{idea.why}</span>
-                          <span class="ar-queue__ev">ev {idea.ev}</span>
-                        </li>
-                      )}
-                    </For>
-                  </ol>
-                  <Show when={(overview.latest?.ideas ?? []).some((idea) => idea.status === "dropped")}>
+              <nav class="ar-more" aria-label="More">
+                <button type="button" aria-expanded={panel() === "queue"} onClick={() => flip("queue")}>
+                  Queue <span>{queued().length}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-expanded={panel() === "lessons"}
+                  onClick={() => flip("lessons")}
+                  disabled={!current().lessons && !current().conclusion}
+                >
+                  {current().conclusion ? "Conclusion" : "Lessons"}
+                </button>
+                <button
+                  type="button"
+                  aria-expanded={panel() === "activity"}
+                  onClick={() => flip("activity")}
+                  disabled={!(overview.latest?.events ?? []).length}
+                >
+                  Activity
+                </button>
+              </nav>
+
+              <Show when={panel() === "queue"}>
+                <section class="ar-panel" aria-label="Queue">
+                  <Show when={queued().length} fallback={<p class="ar-none">Nothing queued.</p>}>
+                    <ol class="ar-queue">
+                      <For each={queued()}>
+                        {(idea) => (
+                          <li>
+                            <span class="ar-queue__title" title={idea.description}>
+                              {idea.title}
+                            </span>
+                            <span class="ar-queue__why">{idea.why}</span>
+                            <span class="ar-queue__ev">ev {idea.ev}</span>
+                          </li>
+                        )}
+                      </For>
+                    </ol>
+                  </Show>
+                  <Show when={dropped().length}>
                     <p class="ar-none">
-                      {(overview.latest?.ideas ?? []).filter((idea) => idea.status === "dropped").length} dropped:{" "}
-                      {(overview.latest?.ideas ?? [])
-                        .filter((idea) => idea.status === "dropped")
+                      Dropped:{" "}
+                      {dropped()
                         .map((idea) => idea.title)
                         .join(", ")}
                     </p>
@@ -535,11 +619,8 @@ export function AutoresearchPane(): JSX.Element {
                 </section>
               </Show>
 
-              <Show when={current().lessons || current().conclusion}>
-                <section class="ar-section" aria-label="Lessons">
-                  <header class="ar-section__head">
-                    <h3>{current().conclusion ? "Conclusion" : "Lessons"}</h3>
-                  </header>
+              <Show when={panel() === "lessons"}>
+                <section class="ar-panel" aria-label="Lessons">
                   <Show when={current().conclusion}>
                     <p class="ar-prose">{current().conclusion}</p>
                   </Show>
@@ -553,11 +634,8 @@ export function AutoresearchPane(): JSX.Element {
                 </section>
               </Show>
 
-              <Show when={(overview.latest?.events ?? []).length}>
-                <section class="ar-section" aria-label="Activity">
-                  <header class="ar-section__head">
-                    <h3>Activity</h3>
-                  </header>
+              <Show when={panel() === "activity"}>
+                <section class="ar-panel" aria-label="Activity">
                   <ol class="ar-activity">
                     <For each={(overview.latest?.events ?? []).slice(0, 12)}>
                       {(event) => (

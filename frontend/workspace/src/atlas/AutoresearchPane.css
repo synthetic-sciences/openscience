@@ -35,7 +35,7 @@
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
-  padding: 0 14px 24px;
+  padding: 0 16px 28px;
 }
 
 .autoresearch__body:hover {
@@ -171,12 +171,11 @@
 .ar-score {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px 0 14px;
-  border-bottom: 1px solid var(--color-border-weak);
+  gap: 6px;
+  padding: 18px 0 8px;
 }
 
-.ar-score__main {
+.ar-score__row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -187,7 +186,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .ar-score__metric {
@@ -197,15 +196,15 @@
 
 .ar-score__value strong {
   color: var(--color-text);
-  font-size: 26px;
+  font-size: 30px;
   font-weight: var(--font-weight-medium);
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
 .ar-score__gain {
-  color: var(--color-text-muted);
+  color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
 }
@@ -226,14 +225,14 @@
 }
 
 .ar-score__controls button {
-  height: 26px;
-  padding: 0 8px;
+  height: 24px;
+  padding: 0 7px;
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-faint);
   font: inherit;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-x-small);
   cursor: pointer;
 }
 
@@ -268,27 +267,83 @@
   color: var(--color-success, #4cb782);
 }
 
-.ar-score__purpose {
-  margin: 0;
-  max-width: 68ch;
-  color: var(--color-text-muted);
-  overflow-wrap: anywhere;
-}
-
 .ar-score__meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 4px 0;
-  margin: 0;
+  margin: 2px 0 0;
   color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
 }
 
-.ar-score__meta span + span::before {
+.ar-score__meta > * + *::before {
   content: "·";
   margin: 0 7px;
   color: var(--color-border);
+}
+
+/* Text-only buttons that open a disclosure. */
+.ar-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-faint);
+  font: inherit;
+  font-size: var(--font-size-x-small);
+  cursor: pointer;
+}
+
+.ar-link:hover,
+.ar-link[aria-expanded="true"] {
+  color: var(--color-text);
+}
+
+.ar-link:disabled {
+  color: var(--color-border);
+  cursor: default;
+}
+
+.ar-about {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 4px;
+}
+
+.ar-about p {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.ar-about dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 2px 18px;
+  margin: 0;
+}
+
+.ar-about dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--font-size-x-small);
+}
+
+.ar-about dt {
+  color: var(--color-text-faint);
+}
+
+.ar-about dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Climb chart ──────────────────────────────────────────────────────── */
@@ -384,17 +439,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Sections ─────────────────────────────────────────────────────────── */
-.ar-section {
+/* ── Runs ─────────────────────────────────────────────────────────────── */
+.ar-runs-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--color-border-weak);
-}
-
-.ar-section:last-child {
-  border-bottom: 0;
+  gap: 6px;
+  padding: 18px 0 6px;
+  border-top: 1px solid var(--color-border-weak);
 }
 
 .ar-section__head {
@@ -402,21 +453,28 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 22px;
+  min-height: 20px;
 }
 
 .ar-section__head h3 {
   margin: 0;
-  color: var(--color-text);
-  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
 }
 
 .ar-section__head h3 span {
-  margin-left: 6px;
+  margin-left: 5px;
   color: var(--color-text-faint);
   font-weight: var(--font-weight-regular);
   font-variant-numeric: tabular-nums;
+}
+
+.ar-curves {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0 10px;
 }
 
 .ar-chart-controls {
@@ -471,6 +529,43 @@
 .ar-chart-controls button[aria-pressed="true"] {
   background: var(--color-bg-subtle);
   color: var(--color-text);
+}
+
+/* Disclosures for everything that is not the score or the runs. */
+.ar-more {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0 6px;
+  border-top: 1px solid var(--color-border-weak);
+}
+
+.ar-more button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-faint);
+  font: inherit;
+  font-size: var(--font-size-x-small);
+  cursor: pointer;
+}
+
+.ar-more button span {
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ar-more button:hover,
+.ar-more button[aria-expanded="true"] {
+  color: var(--color-text);
+}
+
+.ar-more button:disabled {
+  color: var(--color-border);
+  cursor: default;
+}
+
+.ar-panel {
+  padding: 2px 0 10px;
 }
 
 /* ── Metric chart ─────────────────────────────────────────────────────── */
@@ -582,13 +677,13 @@
   list-style: none;
 }
 
-.ar-run {
+.ar-run + .ar-run {
   border-top: 1px solid var(--color-border-weak);
 }
 
 .ar-run__row {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto 64px 64px 40px;
+  grid-template-columns: 10px minmax(0, 1fr) auto 64px 64px;
   align-items: center;
   gap: 10px;
   min-height: 30px;
@@ -648,11 +743,6 @@
 
 .ar-run__value,
 .ar-run__delta,
-.ar-run__time {
-  text-align: right;
-  white-space: nowrap;
-}
-
 .ar-run__value {
   color: var(--color-text);
 }
@@ -667,21 +757,6 @@
 
 .ar-run__delta[data-sign="down"] {
   color: var(--color-text-error);
-}
-
-.ar-run__time {
-  color: var(--color-text-faint);
-  font-size: var(--font-size-x-small);
-}
-
-@container autoresearch (max-width: 380px) {
-  .ar-run__row {
-    grid-template-columns: 10px minmax(0, 1fr) auto 64px 56px;
-  }
-
-  .ar-run__time {
-    display: none;
-  }
 }
 
 .ar-run__detail {
@@ -780,6 +855,7 @@
 
 .ar-lessons li {
   position: relative;
+  max-width: 88ch;
   padding: 3px 0 3px 12px;
   color: var(--color-text-muted);
 }
@@ -797,6 +873,7 @@
 
 .ar-prose {
   margin: 0;
+  max-width: 88ch;
   color: var(--color-text-muted);
   white-space: pre-wrap;
 }
