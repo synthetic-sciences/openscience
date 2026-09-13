@@ -1,6 +1,7 @@
 /* Replica of the OpenScience workspace (dark theme, 1440 × 810 design frame).
-   Tokens come from frontend/ui/src/theme/themes/openscience.json; geometry
-   from screenshots of the real app. The frame is laid out at fixed pixel
+   Tokens are the dark overrides of frontend/ui/src/theme/themes/openscience.json
+   (a neutral grey: #191919 base, white-alpha borders, #d6d6d6 text, the blue
+   #9fb7d0 only for interactive accents); geometry from screenshots of the app. The frame is laid out at fixed pixel
    sizes and scaled to the container, so proportions never drift. Product
    font, not the site's serif. */
 
@@ -30,30 +31,30 @@
   width: 100%;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: #17191c;
+  background: #191919;
 }
 
 .os {
-  --bg: #17191c;
-  --bg-sidebar: #1c1f23;
-  --bg-bar: #1d2024;
-  --bg-tab: #303337;
-  --bg-row: #24272b;
-  --bg-row-active: #2c2f32;
-  --bg-bubble: #202224;
-  --bg-input: #23262b;
-  --bg-inset: #1d2024;
-  --bg-hover: rgba(245, 247, 250, 0.06);
-  --border: rgba(237, 241, 245, 0.08);
-  --border-strong: rgba(237, 241, 245, 0.14);
-  --text: #d8dde2;
-  --text-weak: #aeb5bd;
-  --text-weaker: #8d959e;
-  --text-strong: #f3f5f7;
-  --brand: #75a8aa;
-  --link: #8ab8ba;
-  --success: #77ae8a;
-  --stop: #e1837d;
+  --bg: #191919;
+  --bg-sidebar: #1f1f1f;
+  --bg-bar: #1c1c1c;
+  --bg-tab: #2e2e2e;
+  --bg-row: #242424;
+  --bg-row-active: #2b2b2b;
+  --bg-bubble: #232323;
+  --bg-input: #232323;
+  --bg-inset: #161616;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --text: #d6d6d6;
+  --text-weak: #a8a8a8;
+  --text-weaker: #8c8c8c;
+  --text-strong: #f2f2f2;
+  --brand: #9fb7d0;
+  --link: #9fb7d0;
+  --success: #7cb187;
+  --stop: #d97b76;
 
   position: absolute;
   top: 0;
@@ -543,7 +544,7 @@
   font-family: "Söhne Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12.5px;
   color: var(--text);
-  background: rgba(245, 247, 250, 0.06);
+  background: rgba(255, 255, 255, 0.06);
   padding: 1px 5px;
   border-radius: 4px;
 }
@@ -650,7 +651,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #33383e;
+  background: #2e2e2e;
   color: var(--text-weak);
   display: inline-flex;
   align-items: center;
@@ -663,7 +664,7 @@
 }
 .os-send[data-streaming="true"] {
   background: var(--stop);
-  color: #17191c;
+  color: #111111;
 }
 .os-send[data-streaming="true"] .ic {
   fill: currentColor;
@@ -840,10 +841,10 @@ button.os-subtab:hover {
   color: var(--success);
 }
 .os-file[data-kind="folder"][data-tint="blue"] .ic {
-  color: #86a7c8;
+  color: #9fb7d0;
 }
 .os-file[data-kind="py"] .ic {
-  color: #c69a52;
+  color: #c9a25b;
 }
 .os-file[data-dim="true"] {
   color: var(--text-weaker);

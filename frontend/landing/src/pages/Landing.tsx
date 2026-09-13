@@ -83,7 +83,7 @@ function InstallTabs() {
 const WHAT = [
   ["Model agnostic", "Free models included, or your own keys for any provider"],
   ["Scientific databases", "UniProt, PDB, ChEMBL, PubChem, arXiv, and 37 more, as tools"],
-  ["Bundled skills", "312 skills across biology, chemistry, physics, ML, and writing"],
+  ["Bundled skills", "355 skills across biology, chemistry, physics, ML, and writing, with a curated research core"],
   ["ChatGPT Plus/Pro", "Sign in with OpenAI to use the subscription you already have"],
   ["Manages compute", "Builds environments and scales on demand: your laptop, cluster, or GPUs"],
   ["Multi-session", "Run several agents in parallel on the same project"],
