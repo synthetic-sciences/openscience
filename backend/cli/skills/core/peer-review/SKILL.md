@@ -4,7 +4,7 @@ description: Reviews a manuscript, proposal, analysis or result the way a carefu
 summary: "Referee a manuscript, proposal or result: BLOCKING vs observations, calibrated verdict."
 category: core
 role: workflow
-allowed-tools: [Read, glob, grep, Bash, python, webfetch, task]
+allowed-tools: [Read, glob, grep, Bash, python, literature, webfetch, task]
 license: MIT
 version: 1.0.0
 author: Synthetic Sciences

@@ -8,6 +8,31 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Added
+
+- `literature`, one tool for papers. `search` runs a query against OpenAlex and
+  arXiv together (or any named connectors), merges records of the same paper by
+  DOI, arXiv id or title, ranks agreement first, and returns citable candidates
+  with venue, citations, abstract, landing page and whether open full text
+  exists, plus a per-source report. `read` takes a DOI, arXiv id, URL, local PDF
+  or exact title, resolves the open full text, downloads it once into the
+  session's paper cache, extracts page-addressed text with `pdftotext` or
+  PyMuPDF, and returns the opening pages, a page range, or the passages matching
+  a phrase; abstract-only and partial (scanned) texts are reported as such.
+
+### Changed
+
+- arXiv rate limits no longer stall a literature review. The API is tried once
+  with a short deadline; after a `429` it is held for a cooldown and arXiv
+  records come from OpenAlex (`10.48550/arXiv.<id>`) or the paper's abs page,
+  marked `via`. A batch of parallel lookups now costs one failed API call.
+- `science_search` and `science_fetch` failures carry structured diagnostics
+  (`http_status`, `endpoint`, `attempts`, `retry_after_seconds`) and name the
+  alternatives available right now instead of "retry shortly".
+- The literature-review and research-lookup skills route through `literature`
+  and size a review to the request: a quick review is two or three searches,
+  three to five papers read, and the missing comparison named.
+
 ## v2.0.95 — 2026-09-13
 
 ### Added

@@ -54,6 +54,7 @@ export namespace PermissionNext {
     "todowrite",
     // Retrieval uses the network broker or connected search providers;
     // the network permission still governs new fetch destinations and redirects.
+    "literature",
     "webfetch",
     "websearch",
   ])

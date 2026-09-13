@@ -4,7 +4,7 @@ description: Resolves, verifies and formats references, every citation confirmed
 summary: "Resolve every reference against Crossref/OpenAlex/arXiv/PubMed before it enters the .bib."
 category: core
 role: support
-allowed-tools: [Read, Write, Edit, Bash, webfetch, research_search]
+allowed-tools: [Read, Write, Edit, Bash, literature, webfetch, research_search]
 license: MIT
 version: 1.0.0
 author: Synthetic Sciences

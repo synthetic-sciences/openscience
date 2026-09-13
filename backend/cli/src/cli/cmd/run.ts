@@ -33,6 +33,7 @@ const TOOL: Record<string, [string, string]> = {
   write: ["Write", UI.Style.TEXT_SUCCESS_BOLD],
   websearch: ["Search", UI.Style.TEXT_DIM_BOLD],
   research_search: ["Search", UI.Style.TEXT_DIM_BOLD],
+  literature: ["Literature", UI.Style.TEXT_DIM_BOLD],
 }
 
 /** `run` has no question UI, so every session it creates denies the question tool. */

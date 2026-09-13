@@ -353,6 +353,7 @@ export namespace SessionTrace {
     if (
       part.tool === "webfetch" ||
       part.tool === "science_fetch" ||
+      part.tool === "literature" ||
       part.tool === "atlas" ||
       part.tool.startsWith("query_")
     ) {

@@ -92,7 +92,12 @@ describe("science_search degradation (arxiv)", () => {
     expect(result.metadata.error).toBe("rate_limited")
     expect(result.metadata.count).toBe(0)
     expect(result.title).toContain("rate limited")
-    expect(result.output).toContain("3s")
+    // Structured diagnostics: which endpoint, what status, how many attempts.
+    expect(result.metadata.http_status).toBe(429)
+    expect(result.metadata.endpoint).toBe("export.arxiv.org/api/query")
+    expect(result.metadata.attempts).toBe(1)
+    // Names a way forward instead of "retry".
+    expect(result.output).toContain('science_search db "openalex"')
     // Not the raw thrown string.
     expect(result.output).not.toMatch(/^HTTP 429/)
   })

@@ -27,7 +27,15 @@ export type TaskActivityGroup = {
 export type TraceFamily = "context" | "sources" | "commands" | "changes" | "images" | "skills" | "other"
 
 const context = new Set(["read", "list", "glob", "grep", "codesearch"])
-const sources = new Set(["webfetch", "websearch", "research_search", "science_fetch", "science_search", "atlas"])
+const sources = new Set([
+  "webfetch",
+  "websearch",
+  "research_search",
+  "science_fetch",
+  "science_search",
+  "literature",
+  "atlas",
+])
 const commands = new Set(["bash", "python", "r", "notebook", "rkernel", "modal", "compute_job"])
 const changes = new Set(["edit", "write", "multiedit", "apply_patch"])
 const images = new Set(["generate_image"])

@@ -30,6 +30,8 @@ export interface HttpOptions extends Omit<RequestInit, "signal"> {
   signal?: AbortSignal
   /** For getText endpoints documenting an empty 2xx JSON body as a missing record. */
   allowEmptyBody?: boolean
+  /** Accept an HTML body as the payload (abstract-page fallbacks); by default HTML is a source error. */
+  allowHTML?: boolean
   /** Cache TTL in ms for this request. 0 disables caching (default: GET=5min, else 0). */
   cacheTtl?: number
   /** Optional per-host politeness throttle (min interval between + max concurrency). */
@@ -53,14 +55,26 @@ interface CacheEntry {
 }
 
 /** A non-ok HTTP response. Terminal by construction: retryable statuses are
- * handled before this is thrown, so reaching it means "do not retry". */
+ * handled before this is thrown, so reaching it means "do not retry". The
+ * diagnostics let a tool report which endpoint limited it, how many attempts
+ * were made and how long the source asked us to wait. */
 export class HttpStatusError extends Error {
+  readonly url?: string
+  readonly attempts?: number
+  readonly retryAfterMs?: number
   constructor(
     readonly status: number,
     message: string,
+    diagnostics?: { url?: string; attempts?: number; retryAfterMs?: number },
   ) {
     super(message)
     this.name = "HttpStatusError"
+    this.url = diagnostics?.url
+    this.attempts = diagnostics?.attempts
+    this.retryAfterMs = diagnostics?.retryAfterMs
+  }
+  get rateLimited(): boolean {
+    return this.status === 429
   }
 }
 
@@ -326,6 +340,7 @@ export async function request(url: string, opts: HttpOptions = {}) {
             throw new HttpStatusError(
               res.status,
               `HTTP ${res.status} for ${url}: source requests a ${Math.ceil(backoff / 1000)} second cooldown; no automatic retry`,
+              { url, attempts: attempt + 1, retryAfterMs: backoff },
             )
           }
           clearTimeout(timer)
@@ -333,12 +348,18 @@ export async function request(url: string, opts: HttpOptions = {}) {
           continue
         }
         if (!res.ok) {
+          const retryAfter = res.headers.get("retry-after") ? backoffMs(res, attempt) : undefined
           throw new HttpStatusError(
             res.status,
             `HTTP ${res.status} for ${url}: ${body.slice(0, 500) || res.statusText}`,
+            {
+              url,
+              attempts: attempt + 1,
+              retryAfterMs: retryAfter,
+            },
           )
         }
-        if (/^\s*(?:<!doctype\s+html\b|<html\b)/i.test(body)) {
+        if (!opts.allowHTML && /^\s*(?:<!doctype\s+html\b|<html\b)/i.test(body)) {
           throw new SourceResponseError(
             "Scientific source returned an HTML page instead of scientific data (possibly a verification or service-error page)",
           )
@@ -433,10 +454,19 @@ export function clearCache(): void {
   cache.clear()
 }
 
+const resets = new Set<() => void>()
+
+/** Connectors that keep their own cooldown state register it here so
+ * `resetRateLimits()` clears every rate-limit memory in one call. */
+export function onResetRateLimits(reset: () => void): void {
+  resets.add(reset)
+}
+
 /** Reset per-host rate-limit pacing + concurrency state (test/debug helper). */
 export function resetRateLimits(): void {
   const state = throttleState()
   state.pace.clear()
   state.active.clear()
   state.waiters.clear()
+  for (const reset of resets) reset()
 }

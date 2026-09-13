@@ -31,6 +31,7 @@ import { ApplyPatchTool } from "./apply_patch"
 import { BiologyTools, BIOLOGY_TOOL_IDS } from "./biology"
 import { ArtifactTool } from "./artifact"
 import { ScienceTools } from "./science"
+import { LiteratureTool } from "./literature"
 import { ProvenanceTools } from "./provenance"
 import { NotebookTool, PythonTool } from "./notebook"
 import { RKernelTool, RTool } from "./rkernel"
@@ -207,6 +208,7 @@ export namespace ToolRegistry {
         : []),
       ...BiologyTools,
       ...ScienceTools,
+      LiteratureTool,
       ...ProvenanceTools,
       PythonTool,
       RTool,

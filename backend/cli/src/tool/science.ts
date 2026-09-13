@@ -32,6 +32,71 @@ async function existingFile(target: string, body: string, size: number) {
 }
 
 /**
+ * A source failure rendered for the model: what failed, the HTTP evidence
+ * (status, endpoint, attempts, requested wait) and where the same record can
+ * be obtained right now. arXiv gets concrete alternatives because every
+ * arXiv record is also reachable through OpenAlex and its own abs/pdf pages.
+ */
+function degraded(input: {
+  connector: { id: string; name: string; domain: string }
+  registry: Awaited<ReturnType<typeof connectorRegistry>>
+  attempted: string
+  err: unknown
+  id?: string
+}) {
+  const failure = classifyError(input.err)
+  const kind = failure.retryable ? "rate_limited" : "source_error"
+  const evidence = [
+    failure.http_status !== undefined ? `HTTP ${failure.http_status}` : undefined,
+    failure.endpoint ? `from ${failure.endpoint}` : undefined,
+    failure.attempts ? `after ${failure.attempts} attempt${failure.attempts === 1 ? "" : "s"}` : undefined,
+    failure.retry_after_seconds ? `source asks for a ${failure.retry_after_seconds} s wait` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" ")
+  const arxivId =
+    input.connector.id === "arxiv" && input.id ? input.id.replace(/^arxiv:/i, "").replace(/v\d+$/, "") : undefined
+  const alternatives = arxivId
+    ? [
+        `science_fetch db "openalex" id "10.48550/arXiv.${arxivId}"`,
+        `webfetch https://arxiv.org/abs/${arxivId} (metadata) or https://arxiv.org/pdf/${arxivId} (full text)`,
+        `literature read "${arxivId}" (cached full text)`,
+      ]
+    : input.connector.id === "arxiv"
+      ? [`science_search db "openalex"`, `literature search (routes across sources)`]
+      : input.registry
+          .byDomain(input.connector.domain as never)
+          .filter((c) => c.id !== input.connector.id)
+          .slice(0, 4)
+          .map((c) => `science_search db "${c.id}"`)
+  const lines = [
+    `Could not ${input.attempted} from ${input.connector.name}.`,
+    failure.retryable
+      ? `Rate limited${evidence ? `: ${evidence}` : ""}. ${failure.message}`
+      : `${input.connector.name} returned an error${evidence ? ` (${evidence})` : ""}: ${failure.message}`,
+    alternatives.length ? `Alternatives now: ${alternatives.join(" · ")}.` : undefined,
+    failure.retryable
+      ? "Do not retry this exact call in a loop; use an alternative or wait out the cooldown."
+      : undefined,
+  ].filter((line): line is string => !!line)
+  return {
+    title: `${input.connector.name} temporarily unavailable — ${failure.retryable ? "rate limited" : "source error"}`,
+    output: lines.join("\n"),
+    metadata: {
+      db: input.connector.id,
+      count: 0,
+      error: kind,
+      message: failure.message,
+      http_status: failure.http_status,
+      endpoint: failure.endpoint,
+      attempts: failure.attempts,
+      retry_after_seconds: failure.retry_after_seconds,
+      truncated: false,
+    } as Record<string, unknown>,
+  }
+}
+
+/**
  * Small, database-agnostic surface over the scientific connector registry.
  *
  * There are intentionally only TWO tools regardless of how many databases are
@@ -41,9 +106,8 @@ async function existingFile(target: string, body: string, size: number) {
 
 export const ScienceListDbsTool = Tool.define("science_list_dbs", {
   description: [
-    "List the scientific databases available to search via `science_search`.",
-    "Returns each database's id, name, domain, and description.",
-    "Call this first to discover which `db` id to pass to `science_search`.",
+    "List the scientific databases available to `science_search` and `science_fetch`: id, name, domain, description.",
+    "Well-known ids (arxiv, openalex, pubmed, uniprot, rcsb-pdb) can be used directly without listing.",
   ].join("\n"),
   parameters: z.object({
     domain: z
@@ -89,9 +153,8 @@ export const ScienceListDbsTool = Tool.define("science_list_dbs", {
 
 export const ScienceSearchTool = Tool.define("science_search", {
   description: [
-    "Search a scientific database registered in the connector registry.",
-    "Pass a `db` id (from `science_list_dbs`) and a `query`.",
-    "Returns normalized hits: id, title, summary, and URL.",
+    "Search one scientific database by `db` id (see science_list_dbs) with a `query` in its native syntax.",
+    "Returns normalized hits: id, title, summary, URL.",
   ].join("\n"),
   parameters: z.object({
     db: z.string().describe("Database id to search (from science_list_dbs, e.g. 'uniprot', 'arxiv')"),
@@ -126,23 +189,7 @@ export const ScienceSearchTool = Tool.define("science_search", {
       // A source error is NOT the same as "no results" — surface it as an
       // actionable, degraded result instead of throwing a raw `HTTP 429` string.
       if (ctx.abort.aborted) throw err
-      const message = err instanceof Error ? err.message : String(err)
-      const rateLimited = /\b(429|503|408)\b/.test(message) || /rate.?limit/i.test(message)
-      const guidance = rateLimited
-        ? `${connector.name} is rate limiting requests. Wait a few seconds, then retry${
-            connector.id === "arxiv" ? " (arXiv allows ~1 request every 3s)" : ""
-          }.`
-        : `${connector.name} returned an error: ${message}`
-      return {
-        title: `${connector.name} temporarily unavailable — ${rateLimited ? "rate limited, retry shortly" : "source error"}`,
-        output: [`Could not complete the search for "${params.query}".`, guidance].join("\n"),
-        metadata: {
-          db: connector.id,
-          count: 0,
-          error: rateLimited ? "rate_limited" : "source_error",
-          message,
-        } as Record<string, unknown>,
-      }
+      return degraded({ connector, registry, attempted: `complete the search for "${params.query}"`, err })
     }
 
     ctx.abort.throwIfAborted()
@@ -165,11 +212,16 @@ export const ScienceSearchTool = Tool.define("science_search", {
       if (h.summary) lines.push(h.summary)
       return lines.join("\n")
     })
+    // A connector that answered through a fallback says so once, not per hit.
+    const via = hits.map((h) => h.extra?.via).find((v): v is string => typeof v === "string")
+    const note = via ? `_${connector.name}'s API was unavailable; results come from ${via}._` : undefined
 
     return {
       title: `${connector.name}: ${params.query}`,
-      output: [`**${connector.name}** — ${hits.length} result(s):`, "", rows.join("\n\n---\n\n")].join("\n"),
-      metadata: { db: connector.id, count: hits.length } as Record<string, unknown>,
+      output: [`**${connector.name}** — ${hits.length} result(s):`, note, "", rows.join("\n\n---\n\n")]
+        .filter((line): line is string => line !== undefined)
+        .join("\n"),
+      metadata: { db: connector.id, count: hits.length, via } as Record<string, unknown>,
     }
   },
 })
@@ -178,8 +230,7 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
   description: [
     "Retrieve one record from a scientific database by id.",
     "Pass a `db` id (from `science_list_dbs`) and the record `id` returned by `science_search`.",
-    "For literature databases, a record contains bibliographic metadata and available abstracts, not the full paper.",
-    "A PDF or full-text URL in a record is only a link. Retrieve and inspect that source separately with webfetch before making claims that require the full text.",
+    "Literature records hold metadata and abstracts, not the full paper; `literature` read gets the text.",
     "Small records are returned inline; large ones are written to a file whose path is reported.",
     "Pass `format` to retrieve a file (e.g. 'cif', 'fasta', 'sdf') instead of a record —",
     "`science_list_dbs` reports which formats each database supports.",
@@ -227,21 +278,7 @@ export const ScienceFetchTool = Tool.define("science_fetch", {
           : await connector.fetch(params.id, { signal: ctx.abort })
     } catch (err) {
       if (ctx.abort.aborted) throw err
-      const { retryable: rateLimited, message } = classifyError(err)
-      const guidance = rateLimited
-        ? `${connector.name} is rate limiting requests. Wait a few seconds, then retry.`
-        : `${connector.name} returned an error: ${message}`
-      return {
-        title: `${connector.name} temporarily unavailable — ${rateLimited ? "rate limited, retry shortly" : "source error"}`,
-        output: [`Could not retrieve "${params.id}".`, guidance].join("\n"),
-        metadata: {
-          db: connector.id,
-          count: 0,
-          error: rateLimited ? "rate_limited" : "source_error",
-          message,
-          truncated: false,
-        } as Record<string, unknown>,
-      }
+      return degraded({ connector, registry, attempted: `retrieve "${params.id}"`, err, id: params.id })
     }
 
     ctx.abort.throwIfAborted()

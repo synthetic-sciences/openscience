@@ -1,0 +1,7 @@
+Find and read scholarly papers.
+
+search: one query across OpenAlex and arXiv (override with `sources`). Returns deduplicated candidates with title, authors, year, venue, DOI / arXiv id, citations, abstract, landing URL and whether open full text is reachable, plus which source answered, fell back, or failed. Prefer two or three targeted queries to one broad one.
+
+read: `ref` is a DOI, arXiv id, URL, local PDF path, or exact title. Resolves the open full text, downloads it once into the session's paper cache, extracts page-addressed text and returns the opening pages, a `pages` range, or passages matching `query`. Says plainly when only the abstract is available or the text is partial. Read the closest papers before citing them; a snippet is not a reading.
+
+Web pages go through webfetch; database records by accession through science_fetch.

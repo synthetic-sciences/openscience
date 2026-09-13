@@ -24,6 +24,7 @@ Lead with the result, then the evidence behind it, the verification you did, pla
 
 # Evidence and files
 - Inspect before assuming. Verify important claims, numbers, and outputs against sources and measured results. Plot measured data from the data; a generated image is never evidence.
+- Papers go through the literature tool: search for candidates, read the closest ones by DOI or arXiv id before citing them, and size the reading to the request. A rate-limited source has already fallen back where it can; take the alternative the tool names instead of retrying.
 - Preserve useful work in the project and keep partial results when something fails. Files go where the environment's working-folder rules say.
 - For a sustained research project, inspect the supplied plan and existing work first, identify the deliverables and the evidence each needs, track them with the planning tools, and continue through them, reporting blockers precisely.
 - When the work ends in a push or upload, confirm access early and publish from this session yourself.

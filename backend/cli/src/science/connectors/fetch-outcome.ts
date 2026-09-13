@@ -9,6 +9,7 @@
  */
 
 import { Truncate } from "../../tool/truncation"
+import { HttpStatusError } from "./http"
 
 export type Disposition = "inline" | "spill"
 
@@ -37,9 +38,31 @@ export function sentinelOf(payload: unknown): { kind: "miss" | "error"; note: st
   return null
 }
 
+export interface SourceFailure {
+  retryable: boolean
+  message: string
+  /** Set when the connector surfaced an HTTP status; the tool reports these verbatim. */
+  http_status?: number
+  endpoint?: string
+  attempts?: number
+  retry_after_seconds?: number
+}
+
 /** Mirrors the degradation logic science_search already uses, so both tools agree. */
-export function classifyError(err: unknown): { retryable: boolean; message: string } {
+export function classifyError(err: unknown): SourceFailure {
   const message = err instanceof Error ? err.message : String(err)
+  if (err instanceof HttpStatusError) {
+    const retryable = err.status === 429 || err.status === 408 || err.status >= 500
+    const endpoint = err.url ? err.url.replace(/^https?:\/\//, "").replace(/\?.*$/, "") : undefined
+    return {
+      retryable,
+      message,
+      http_status: err.status,
+      endpoint,
+      attempts: err.attempts,
+      retry_after_seconds: err.retryAfterMs === undefined ? undefined : Math.ceil(err.retryAfterMs / 1000),
+    }
+  }
   const retryable = /\b(429|503|408)\b/.test(message) || /rate.?limit/i.test(message)
   return { retryable, message }
 }

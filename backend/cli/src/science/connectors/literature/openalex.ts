@@ -15,7 +15,7 @@ import { fromInverted, raw, snippet } from "./shared"
 const BASE = "https://api.openalex.org/works"
 
 // Read at call time so credentials saved mid-session apply without a restart.
-function politeParams(): string {
+export function politeParams(): string {
   const email = process.env.OPENALEX_MAILTO?.trim()
   const parts = email ? [`mailto=${encodeURIComponent(email)}`] : []
   const key = process.env.OPENALEX_API_KEY?.trim()

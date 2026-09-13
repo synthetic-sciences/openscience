@@ -17,6 +17,7 @@ export namespace ToolSelection {
     "grep",
     "webfetch",
     "research_search",
+    "literature",
     "skill",
     "task",
   ])

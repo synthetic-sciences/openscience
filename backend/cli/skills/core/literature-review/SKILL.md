@@ -4,7 +4,7 @@ description: Finds, ranks and reads the literature on a question, the retrieval 
 summary: "Find, rank and read the literature on a question; related work, prior art, surveys."
 category: core
 role: workflow
-allowed-tools: [Read, Write, webfetch, research_search, query_pubmed]
+allowed-tools: [Read, Write, literature, webfetch, research_search, query_pubmed]
 license: MIT
 version: 1.0.0
 author: Synthetic Sciences
@@ -38,26 +38,39 @@ question.
    Put the source link right after the sentence it supports.
 6. **Stop when coverage is sufficient.** Five to fifteen strong candidates beat forty
    padded ones. The budget is a cap, not a target.
+7. **Size the review to the request.** "A bit of a review", "a quick look", "what is the
+   closest work" is discovery mode: two or three searches, three to five papers read, the
+   concrete missing comparison named, one follow-up search only if that gap matters. The
+   citation ledger, corpus downloads and exhaustive screening are for requests that ask
+   for them. Report substantive findings and blockers, not each retrieval step.
 
 ## Workflow
 
 - [ ] Frame: the question in the user's terms, the window, the priority, the difficulty.
-- [ ] Initial round across the sources that fit the field.
+- [ ] Initial round: two or three targeted `literature search` calls, concurrently.
 - [ ] Deduplicate, rank, and decide whether a follow-up round is warranted.
-- [ ] Read the 3–5 load-bearing papers (more only if asked).
+- [ ] `literature read` the 3–5 load-bearing papers (more only if asked).
 - [ ] Write the synthesis with claim-level links; list what was excluded and why.
 
-**Sources.** Exact requests are in `skills/core/citations/references/apis.md`.
+**Tools.** `literature search` queries OpenAlex and arXiv together, merges records of the
+same paper, and returns citable candidates (DOI / arXiv id, venue, citations, abstract,
+whether open full text exists) with a per-source report. `literature read` takes a DOI,
+arXiv id, URL, local PDF or exact title, caches the open full text once, and returns
+page-addressed text: the opening pages, a `pages` range, or passages matching `query`.
+When a source is rate limited the tool has already fallen back where it can (arXiv
+records also come from OpenAlex and arxiv.org/abs); do not fan out retries, use the
+alternative it names. Exact API requests, for cases the tool does not cover, are in
+`skills/core/citations/references/apis.md`.
 
-| Field | Start with | Add |
+| Field | Default (`literature search`) | Add via `sources` or other tools |
 | --- | --- | --- |
-| ML, CS, math, physics | arXiv API (title and abstract terms), OpenAlex search | Semantic Scholar for abstracts and citation chasing |
-| Biology, medicine | PubMed E-utilities (`query_pubmed` when available), OpenAlex | bioRxiv/medRxiv through OpenAlex source filters |
-| Any journal-heavy field | OpenAlex, Crossref | research_search for grey literature and reports |
+| ML, CS, math, physics | OpenAlex + arXiv | `semantic-scholar` for citation chasing |
+| Biology, medicine | OpenAlex + arXiv | `pubmed`, `europepmc`, `biorxiv`; `query_pubmed` when available |
+| Any journal-heavy field | OpenAlex + arXiv | `crossref`; research_search for grey literature and reports |
 
-Run the initial calls concurrently. Keyword terms are the user's words and terms observed in
-results; never invent an acronym expansion. If the query mixes prose with an acronym, run
-one extra call on the acronym alone in the same round.
+Keyword terms are the user's words and terms observed in results; never invent an acronym
+expansion. If the query mixes prose with an acronym, run one extra call on the acronym
+alone in the same round.
 
 **Ranking.** Inspect title, abstract, venue and date for every candidate. Keep what answers
 the question; drop what shares only vocabulary. Within a source the order already carries
@@ -69,10 +82,11 @@ that fits the gap (arXiv keyword for exact terms, OpenAlex for cross-disciplinar
 `referenced_works` and `cited_by` on OpenAlex for citation chasing). Re-evaluate after
 each round and stop as soon as coverage holds.
 
-**Reading.** Fetch the open-access text (OpenAlex `oa_url`, Unpaywall, arXiv) for the
-3–5 papers that carry the synthesis. Extract: the claim, the setup that produced it, the
-number with its uncertainty and conditions, the stated limitations. Do not summarize from
-snippets.
+**Reading.** `literature read` the 3–5 papers that carry the synthesis; `query` finds the
+passage, `pages` reads a section. The tool says when only the abstract is open: cite
+only what the abstract supports, or ask for the PDF. Extract: the claim, the setup that
+produced it, the number with its uncertainty and conditions, the stated limitations. Do
+not summarize from snippets.
 
 **Synthesis.** Organize by idea, not by paper: what is established, what is contested, what
 is missing. Each substantive sentence ends with its source link (`https://doi.org/<doi>`

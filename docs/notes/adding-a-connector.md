@@ -38,6 +38,15 @@ works without a key. Optional keys (Semantic Scholar, OpenAlex) are read from
 `process.env` as injected by the credential store and only raise rate limits;
 never make a key required or return empty results without one.
 
+A non-2xx answer surfaces as `HttpStatusError` carrying `status`, `url`,
+`attempts` and `retryAfterMs`; `classifyError` in `fetch-outcome.ts` turns that
+into the structured diagnostics the science tools report. A source that
+tarpits limited clients (arXiv holds the connection ~15 s before its 429) should
+try its API once with a short `timeout`, remember the failure in a module
+cooldown registered through `onResetRateLimits`, and answer from another door
+while the cooldown runs; `literature/arxiv.ts` is the template, with OpenAlex
+and the abs page as fallbacks and `via` on everything they produce.
+
 ## Where it goes
 
 1. Create `backend/cli/src/science/connectors/<group>/<id>.ts` exporting a

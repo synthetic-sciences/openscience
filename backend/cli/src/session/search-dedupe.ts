@@ -53,6 +53,7 @@ export namespace SearchDedupe {
 
   export function applies(tool: string, input: Record<string, unknown>) {
     if (RESEARCH_SEARCH_IDS.has(tool) || tool === "codesearch" || tool === "science_search") return true
+    if (tool === "literature") return input.action === "search"
     if (tool.startsWith("query_")) return true
     if (tool !== "atlas") return false
     return input.operation === "search" || input.operation === "ask"
@@ -78,6 +79,9 @@ export namespace SearchDedupe {
   }
 
   function dynamicTerminal(part: MessageV2.ToolPart & { state: MessageV2.ToolStateCompleted }) {
+    // A rate-limited or failed source answer is transient; the same query
+    // after the cooldown deserves a fresh attempt rather than the old failure.
+    if (part.tool === "literature" || part.tool === "science_search") return part.state.metadata.error !== undefined
     if (!RESEARCH_SEARCH_IDS.has(part.tool)) return false
     try {
       const output = JSON.parse(part.state.output) as Record<string, unknown>
