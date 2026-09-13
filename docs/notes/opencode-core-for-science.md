@@ -85,6 +85,26 @@ about science, deliverables or budgets; the units do, through two hook points.
 Each step is one local commit on `harness-core`; nothing is pushed until the
 owner has tested the branch.
 
+## Status (14 September 2026)
+
+Implemented on the `harness-core` branch, every package above, with these
+deviations from the work order recorded deliberately:
+
+- The Research default set has sixteen tools, not fourteen: `literature`
+  (shipped in v2.0.96 after the work order was written) and `recall` (which
+  §4.5 asks for as a default) join the fourteen.
+- Children keep their own scratch for staged inputs and side outputs but work
+  in the parent's directory through a shared working-root grant; that is the
+  same working directory without letting a worker's attachments land in the
+  project.
+- The `summary` agent exists with its lab-notebook prompt and is not yet wired
+  to a workspace surface; the workspace still shows the diff summary.
+- `experimental.batch_tool` and `experimental.plan_mode` remain accepted
+  configuration keys with no effect, so older configuration files still load.
+- Live runs during review: a delegated run, a deliverables-check run, a
+  background-worker run and a Codex-route run, each converted to ATIF with
+  child documents and roll-up totals validated by Harbor's model.
+
 ## Guardrails
 
 No benchmark names, task ids, output paths, rubric words or verifier
