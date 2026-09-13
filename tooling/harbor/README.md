@@ -3,8 +3,8 @@
 An installed-agent adapter for **Harbor 0.22.0**. Harbor owns the task image,
 instruction, working directory, agent user, phase network policy, resource and
 time limits, verifier, and scoring. This package installs and invokes OpenScience
-and converts its root-session event log to ATIF. It does not replace the native
-benchmark runner or supply an evaluator.
+and converts its event log (the root session and any delegated child sessions)
+to ATIF. It does not replace the native benchmark runner or supply an evaluator.
 
 The dependency is pinned to the version tested here. Moving Harbor `main`, older
 0.13 task integrations, and future versions need their own conformance checks;
@@ -79,8 +79,16 @@ isolation remains essential.
 | `cwd`                | Optional absolute directory inside the task environment. Omit to preserve the task image's native working directory.                                                                                                                                                 |
 | `variant`            | Provider-specific reasoning effort (`high`, `max`, `minimal`; model-dependent).                                                                                                                                                                                      |
 | `effort`             | Research effort, `normal` or `ultra`.                                                                                                                                                                                                                                |
+| `skills`             | Bundled skill catalog, `bundled` (default) or `none`. `none` sets `OPENSCIENCE_DISABLE_BUNDLED_SKILLS` and is an ablation. Task-provided Harbor skills still copy in.                                                                                                |
 | `agent`              | Primary agent; OpenScience defaults to `research`.                                                                                                                                                                                                                   |
+| `delegation`         | How freely the lead dispatches workers: `off`, `light`, `standard`, or `high` (`--delegation`). Omit to use the CLI's saved preference.                                                                                                                              |
+| `worker_model`       | `provider/model` the workers run on (`--worker-model`). Defaults to the worker agent's or the lead's model.                                                                                                                                                          |
+| `autonomy`           | How the lead treats decision points: `interactive`, `balanced`, or `autonomous` (`--autonomy`). `--auto-approve` defaults to `autonomous`.                                                                                                                           |
+| `deadline`           | Wall-clock budget in whole seconds, shown to the agent as its time budget (`--deadline`). Harbor 0.22.0 does not hand the agent its trial timeout, so pass the task's agent timeout here explicitly; the adapter never infers one.                                   |
 | `openscience_config` | JSON overlay deep-merged over the adapter's headless defaults. Can override those defaults; use only an approved configuration.                                                                                                                                      |
+
+The four delegation options are recorded in `openscience-identity.json` and under
+`extra.binary` of every generated trajectory, so a trajectory says which flags ran.
 
 ## Installation and run contract
 
@@ -117,23 +125,30 @@ Defaults disable auto-update, LSP downloads, project config discovery, environme
 bootstrap, and OpenScience's nested sandbox. The task container supplies isolation.
 The existing `agent.title.disable` configuration is set to `true` to avoid model
 calls for session and message UI labels. Research execution, compaction, skills,
-and file-diff summaries are unchanged. An approved `openscience_config` overlay
+and file-diff summaries are unchanged. Pass `--ak skills=none` to omit the
+bundled skill catalog for an ablation lane. An approved `openscience_config` overlay
 can re-enable titles; interactive OpenScience keeps its existing defaults.
 Default permissions deny account-dependent and remote-compute tools
 (`research_search`, `atlas`, `atlas_write`, `remote_compute`, `modal`,
-`provider_compute`, `compute_job`). These defaults are not a general egress policy.
+`provider_compute`). `compute_job` is allowed: a local target runs inside the task
+container without approval, while a remote target such as `{"kind": "modal"}`
+still fails closed because its backend stays denied. The defaults also set
+`experimental.continue_loop_on_deny`, so a denied call returns an error result to
+the model and the run continues, matching `run --auto-approve` on a local server.
+These defaults are not a general egress policy.
 
 ## Logs, failure, and accounting
 
 The default environment artifact paths are:
 
-| Path                                        | Contents                                            |
-| ------------------------------------------- | --------------------------------------------------- |
-| `/logs/agent/openscience.txt`               | Raw JSONL event stream with merged stderr.          |
-| `/logs/agent/openscience-identity.json`     | Installed executable identity.                      |
-| `/logs/agent/openscience/data`              | OpenScience session state and copied task skills.   |
-| `/logs/agent/openscience/config`            | Headless configuration.                             |
-| `<Harbor trial agent logs>/trajectory.json` | Validated ATIF v1.7 generated after log collection. |
+| Path                                                  | Contents                                                 |
+| ----------------------------------------------------- | -------------------------------------------------------- |
+| `/logs/agent/openscience.txt`                         | Raw JSONL event stream with merged stderr.               |
+| `/logs/agent/openscience-identity.json`               | Installed executable identity.                           |
+| `/logs/agent/openscience/data`                        | OpenScience session state and copied task skills.        |
+| `/logs/agent/openscience/config`                      | Headless configuration.                                  |
+| `<Harbor trial agent logs>/trajectory.json`           | Validated ATIF v1.7 generated after log collection.      |
+| `<Harbor trial agent logs>/trajectory-<session>.json` | One validated ATIF document per delegated child session. |
 
 These paths follow Harbor's `environment_logs_dir` if customized. Task outputs
 remain in the task workspace; they are not automatically relocated into logs.
@@ -141,8 +156,10 @@ The logs and session state can contain prompts, tool output, and research data.
 
 A successful process is followed by an explicit remote log download **before**
 `run()` returns. Success requires exactly one final `done` event with status
-`completed`, exit code zero, a consistent root session, balanced model steps,
-and no session `error`. Missing, stale, or truncated logs cannot imply success.
+`completed`, exit code zero, a consistent root session, balanced model steps in
+every session, and no session `error`. Missing, stale, or truncated logs cannot
+imply success. Under `--auto-approve` an answered `question` event and a denied
+tool call are ordinary events, not failures.
 Nonzero process exits use Harbor's native classification; event-level failures
 raise `NonZeroAgentExitCodeError`. The adapter does not retry: Harbor's job retry
 policy governs retries. On process failure or timeout, Harbor's normal cleanup
@@ -154,22 +171,52 @@ part IDs for conversion, while duplicate events cannot pass the completion check
 Input totals include uncached input, cache reads, and cache creation; reasoning
 tokens are recorded separately without adding them again to output tokens.
 Explicit reported zero is retained; absent usage stays unknown. Interrupted or
-inconsistent runs retain observed root usage under `final_metrics.extra` and do
-not claim complete totals. Cost values are OpenScience's **catalog estimates**,
-not verified provider charges; zero may indicate unavailable model pricing.
+inconsistent runs retain the observed usage under `final_metrics.extra`
+(`observed_root_usage`, `child_usage`, and their sum `observed_usage`) and do
+not claim complete totals. Harbor's `AgentContext` (the numbers leaderboards
+sum) still receives that observed usage for such trials, so a timed-out or
+errored attempt counts what it spent instead of reporting nothing; the ATIF
+`usage_complete=false` flag marks it as a lower bound. Cost values are
+OpenScience's **catalog estimates**, not verified provider charges; zero may
+indicate unavailable model pricing.
 
-`extra.usage_complete` refers only to recorded root-agent steps, as declared by
+`extra.usage_complete` refers only to recorded agent steps, as declared by
 `usage_components` and `excluded_usage`. It does not establish whole-trial billing
 completeness: unrecorded auxiliary model calls and external tool/compute charges
 are outside this trace. Compare quality against independently reconciled total
 trial cost and elapsed time, retaining failed attempts and any retries. Do not
 use an ATIF catalog estimate alone to claim a cost-performance frontier.
 
-`--auto-approve` disables built-in delegation in the supported CLI. The event
-contract contains root-session events only. If a `task` call nevertheless
-appears, the converter flags it and withholds whole-run totals; it never invents
-child trajectories. Conversion/schema or artifact-write failures are surfaced,
-not silently counted as valid trajectories.
+### Delegated child sessions
+
+Under `--auto-approve` the CLI keeps delegation on. Child sessions created by the
+`task` tool stream into the same JSON output: each child event carries its own
+`sessionID` plus a `parentID` naming the session that dispatched it, using the
+same `step_start`/`step_finish`/`text`/`reasoning`/`tool_use` types. The final
+`done` event lists every child under `children` with its agent, model, and summed
+usage; `done.tokens`/`done.cost` remain the root session's own usage.
+
+The converter writes the root session to `trajectory.json` and each child session
+that recorded a step to `trajectory-<session>.json` beside it. The `task` call
+that dispatched a child (matched through the call's `sessionId` metadata or the
+`<task id="...">` envelope of its output) carries an ATIF
+`subagent_trajectory_ref` with the child's `session_id` and relative
+`trajectory_path`; a child's own `task` calls reference grandchildren the same
+way. The child document's user step is the dispatching prompt, its steps carry
+their own usage, and `extra` records `parent_session_id`, `dispatched_by`, and
+the roll-up's `subagent` name.
+
+Root `final_metrics.total_*` sum the root's recorded steps and every child's
+usage, preferring the `done.children` roll-up and cross-checking it against the
+child's recorded steps (`extra.child_metric_mismatches`, beside the root's
+`terminal_metric_mismatches`). A child without streamed steps still counts
+through the roll-up; a child without a roll-up entry counts through its steps.
+`usage_complete` is true only when the run completed, every step in every
+session carries usage, and no cross-check disagrees; a `task` call alone no
+longer withholds totals. `extra.usage_scope` becomes `root_and_child_sessions`,
+`extra.child_sessions` lists the children, and `extra.child_trajectories` maps
+each written child file. Conversion/schema or artifact-write failures are
+surfaced, not silently counted as valid trajectories.
 
 The source contract is `backend/cli/src/cli/run-events.ts`. A passing adapter run
 still needs the native verifier to determine whether the scientific task succeeded.

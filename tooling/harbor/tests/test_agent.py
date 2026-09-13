@@ -25,6 +25,7 @@ from openscience_harbor import agent as module
 from openscience_harbor.agent import DEFAULT_CONFIG, OpenScienceAgent
 
 FIXTURE = Path(__file__).parent / "fixtures" / "openscience.jsonl"
+DELEGATION = Path(__file__).parent / "fixtures" / "delegation.jsonl"
 
 
 def agent(tmp_path: Path, **kwargs):
@@ -128,15 +129,77 @@ def test_real_harbor_contract(tmp_path):
         agent(tmp_path, effort="bogus")
 
 
-def test_headless_config_and_env(tmp_path):
+def test_delegation_flags_are_validated_and_rendered(tmp_path):
     subject = agent(
-        tmp_path, openscience_config={"experimental": {"continue_loop_on_deny": True}}
+        tmp_path,
+        delegation="standard",
+        worker_model="openrouter/anthropic/claude-sonnet-4.5:beta",
+        autonomy="autonomous",
+        deadline=1800,
     )
+    assert subject.build_cli_flags() == (
+        "--delegation standard --worker-model openrouter/anthropic/claude-sonnet-4.5:beta "
+        "--autonomy autonomous --deadline 1800"
+    )
+    # Harbor's --ak parser yields JSON scalars; a numeric string still works
+    # and a float budget is whole seconds.
+    assert "--deadline 90" in agent(tmp_path, deadline="90").build_cli_flags()
+    assert "--deadline 90" in agent(tmp_path, deadline=90.0).build_cli_flags()
+    assert "--delegation off" in agent(tmp_path, delegation="OFF").build_cli_flags()
+    assert agent(tmp_path, delegation=None, deadline=None).build_cli_flags() == ""
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"delegation": "medium"},
+        {"delegation": True},
+        {"autonomy": "manual"},
+        {"worker_model": "claude-test"},
+        {"worker_model": "anthropic/claude test; rm -rf /"},
+        {"worker_model": 7},
+        {"deadline": 0},
+        {"deadline": -30},
+        {"deadline": "soon"},
+        {"deadline": 1.5},
+        {"deadline": True},
+    ],
+)
+def test_invalid_delegation_flags_fail_before_setup(tmp_path, kwargs):
+    with pytest.raises(ValueError):
+        agent(tmp_path, **kwargs)
+
+
+def test_headless_config_and_env(tmp_path):
+    subject = agent(tmp_path)
     config = subject.headless_config()
     assert config["sandbox"] == {"enabled": False}
     assert config["agent"]["title"]["disable"] is True
     assert config["permission"] == DEFAULT_CONFIG["permission"]
+    # Local compute_job targets run in the container; remote backends and
+    # account-dependent tools stay denied, and a denied call no longer ends
+    # the run.
+    assert "compute_job" not in config["permission"]
+    assert config["permission"]["*"] == "allow"
+    assert all(
+        config["permission"][tool] == "deny"
+        for tool in (
+            "remote_compute",
+            "modal",
+            "provider_compute",
+            "research_search",
+            "atlas",
+            "atlas_write",
+        )
+    )
     assert config["experimental"] == {"continue_loop_on_deny": True}
+    overlay = agent(
+        tmp_path, openscience_config={"experimental": {"primary_tools": ["bash"]}}
+    ).headless_config()
+    assert overlay["experimental"] == {
+        "continue_loop_on_deny": True,
+        "primary_tools": ["bash"],
+    }
     assert config["provider"]["anthropic"]["models"] == {"claude-test": {}}
     env = subject.run_env()
     assert (
@@ -144,8 +207,16 @@ def test_headless_config_and_env(tmp_path):
         == str(subject.environment_logs_dir) + "/openscience/data"
     )
     assert all(env[key] == "1" for key in module.HEADLESS_ENV)
+    assert "OPENSCIENCE_DISABLE_BUNDLED_SKILLS" not in env
     assert "OPENSCIENCE_FAKE_VCS" not in env
     assert "JUDGE_API_KEY" not in env
+
+
+def test_skills_none_disables_bundled_catalog(tmp_path):
+    subject = agent(tmp_path, skills="none")
+    assert subject.run_env()["OPENSCIENCE_DISABLE_BUNDLED_SKILLS"] == "1"
+    with pytest.raises(ValueError, match="bundled or none"):
+        agent(tmp_path, skills="core")
 
 
 def test_trusted_title_override_does_not_mutate_headless_defaults(tmp_path):
@@ -167,6 +238,7 @@ def test_trusted_title_override_does_not_mutate_headless_defaults(tmp_path):
         {"version": "../../main"},
         {"version": "2.0.70", "cwd": "relative"},
         {"version": "2.0.70", "binary_sha256": "f" * 64},
+        {"version": "2.0.70", "skills": "core"},
     ],
 )
 def test_invalid_identity_and_cwd_fail_before_setup(tmp_path, kwargs):
@@ -216,8 +288,89 @@ def test_native_workdir_remote_log_and_identity(tmp_path, monkeypatch):
     assert context.cost_usd == 0
     assert result.extra["binary"]["installed_version"] == "2.0.70"
     assert result.extra["binary"]["sha256"] == subject._binary_digest
+    assert result.extra["binary"]["skills"] == "bundled"
     assert secret.read_text() == "not an agent input"
     assert all("verifier-only" not in call["command"] for call in environment.calls)
+
+
+def test_delegated_run_writes_child_trajectories_and_counts_their_usage(
+    tmp_path, monkeypatch
+):
+    subject, environment = local_agent(
+        tmp_path,
+        monkeypatch,
+        events=DELEGATION.read_text(),
+        delegation="light",
+        worker_model="stress/worker-model",
+        autonomy="balanced",
+        deadline=600,
+    )
+    asyncio.run(subject.install(environment))
+    identity = subject._identity
+    assert identity["skills"] == "bundled"
+    assert identity["delegation"] == "light"
+    assert identity["worker_model"] == "stress/worker-model"
+    assert identity["autonomy"] == "balanced"
+    assert identity["deadline"] == 600
+    assert (
+        json.loads((Path(subject._logs) / "openscience-identity.json").read_text())
+        == identity
+    )
+    context = AgentContext()
+    asyncio.run(subject.run("delegate the fixture", environment, context))
+    invocation = json.loads((environment.cwd / "invocation.json").read_text())
+    for flag, value in (
+        ("--delegation", "light"),
+        ("--worker-model", "stress/worker-model"),
+        ("--autonomy", "balanced"),
+        ("--deadline", "600"),
+    ):
+        assert invocation[invocation.index(flag) + 1] == value
+    assert invocation.index("--deadline") < invocation.index("--")
+
+    subject.populate_context_post_run(context)
+    root = Trajectory.model_validate_json(
+        (subject.logs_dir / "trajectory.json").read_text()
+    )
+    child_path = subject.logs_dir / "trajectory-ses_child.json"
+    child = Trajectory.model_validate_json(child_path.read_text())
+    reference = root.steps[1].observation.results[0].subagent_trajectory_ref[0]
+    assert reference.session_id == "ses_child"
+    assert (subject.logs_dir / reference.trajectory_path) == child_path
+    assert child.session_id == "ses_child"
+    assert child.agent.model_name == "stress/worker-model"
+    assert child.extra["binary"] == identity
+    assert child.extra["parent_session_id"] == "ses_root"
+    assert root.extra["child_sessions"] == ["ses_child"]
+    assert root.extra["usage_complete"] is True
+    assert root.extra["binary"]["delegation"] == "light"
+    assert context.metadata["openscience"]["child_trajectories"] == {
+        "ses_child": "trajectory-ses_child.json"
+    }
+    assert context.n_input_tokens == 633
+    assert context.n_output_tokens == 72
+    assert context.n_cache_tokens == 5
+    assert context.cost_usd == pytest.approx(0.18)
+
+
+def test_incomplete_delegated_run_still_counts_child_usage(tmp_path, monkeypatch):
+    # The child's roll-up disagrees with its steps: totals are withheld, but
+    # the leaderboard numbers still count root and child spend as a floor.
+    stream = DELEGATION.read_text().replace(
+        '"tokens":{"input":120,"output":22', '"tokens":{"input":121,"output":22'
+    )
+    subject, environment = local_agent(tmp_path, monkeypatch, events=stream)
+    asyncio.run(subject.install(environment))
+    context = AgentContext()
+    asyncio.run(subject.run("delegate the fixture", environment, context))
+    subject.populate_context_post_run(context)
+    assert context.metadata["openscience"]["usage_complete"] is False
+    assert context.metadata["openscience"]["child_metric_mismatches"] == {
+        "ses_child": ["prompt_tokens"]
+    }
+    assert context.n_input_tokens == 634
+    assert context.cost_usd == pytest.approx(0.18)
+    assert (subject.logs_dir / "trajectory-ses_child.json").is_file()
 
 
 def test_unsupported_workspace_fails_before_agent_execution(tmp_path, monkeypatch):
@@ -247,6 +400,23 @@ def test_remote_incomplete_or_failed_events_cannot_use_stale_success(
     with pytest.raises(NonZeroAgentExitCodeError):
         asyncio.run(subject.run("run fixture", environment, AgentContext()))
     assert (subject.logs_dir / "openscience.txt").read_text() == stream
+
+
+def test_failed_trial_still_reports_spent_usage(tmp_path, monkeypatch):
+    stream = FIXTURE.read_text().replace(
+        '"status":"completed","exitCode":0', '"status":"error","exitCode":1'
+    )
+    subject, environment = local_agent(tmp_path, monkeypatch, events=stream)
+    asyncio.run(subject.install(environment))
+    with pytest.raises(NonZeroAgentExitCodeError):
+        asyncio.run(subject.run("run fixture", environment, AgentContext()))
+    context = AgentContext()
+    subject.populate_context_post_run(context)
+    assert context.n_input_tokens == 280
+    assert context.n_output_tokens == 27
+    assert context.cost_usd == 0
+    assert context.metadata["openscience"]["usage_complete"] is False
+    assert context.metadata["openscience"]["trace_complete"] is False
 
 
 def test_process_failure_is_not_hidden_by_tee(tmp_path, monkeypatch):

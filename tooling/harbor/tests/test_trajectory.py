@@ -11,11 +11,17 @@ import pytest
 from openscience_harbor import trajectory
 
 FIXTURE = Path(__file__).parent / "fixtures" / "openscience.jsonl"
+DELEGATION = Path(__file__).parent / "fixtures" / "delegation.jsonl"
 
 
 @pytest.fixture
 def events() -> list[dict]:
     return trajectory.parse(FIXTURE.read_text())
+
+
+@pytest.fixture
+def delegated() -> list[dict]:
+    return trajectory.parse(DELEGATION.read_text())
 
 
 def test_parse_skips_stderr_noise_and_blank_lines() -> None:
@@ -89,6 +95,12 @@ def test_convert_groups_steps_and_keeps_tool_observations(events: list[dict]) ->
     assert "tool_calls" not in last
 
     done = events[-1]
+    usage = {
+        "prompt_tokens": 280,
+        "completion_tokens": 27,
+        "cached_tokens": 0,
+        "cost_usd": 0,
+    }
     assert result["final_metrics"] == {
         "total_prompt_tokens": done["tokens"]["input"]
         + done["tokens"]["cache"]["read"],
@@ -97,18 +109,19 @@ def test_convert_groups_steps_and_keeps_tool_observations(events: list[dict]) ->
         "total_cost_usd": done["cost"],
         "total_steps": 3,
         "extra": {
-            "observed_root_usage": {
-                "prompt_tokens": 280,
-                "completion_tokens": 27,
-                "cached_tokens": 0,
-                "cost_usd": 0,
-            },
+            "observed_root_usage": usage,
+            "child_usage": {},
+            "observed_usage": usage,
             "cost_source": "openscience_catalog_estimate",
         },
     }
     # The converter's sums agree with what the CLI reported in `done`.
     assert result["final_metrics"]["total_prompt_tokens"] == 280
     assert result["final_metrics"]["total_completion_tokens"] == 27
+    assert result["extra"]["usage_scope"] == "root_session"
+    assert result["extra"]["child_sessions"] == []
+    assert result["extra"]["delegation_observed"] is False
+    assert trajectory.convert_all(events)[1:] == []
 
 
 def test_failed_tool_calls_are_observed_with_their_error() -> None:
@@ -255,7 +268,7 @@ def test_missing_usage_and_mismatched_totals_are_not_reported_as_zero(events):
     assert result["final_metrics"]["total_prompt_tokens"] is None
 
 
-def test_repeated_tool_updates_do_not_duplicate_calls_and_delegation_has_no_invented_total(
+def test_repeated_tool_updates_do_not_duplicate_calls_and_unmatched_task_keeps_totals(
     events,
 ):
     events = copy.deepcopy(events)
@@ -264,12 +277,346 @@ def test_repeated_tool_updates_do_not_duplicate_calls_and_delegation_has_no_inve
     result = trajectory.convert(events)
     assert len(result["steps"][1]["tool_calls"]) == 1
     assert trajectory.completion_failure(events) == "duplicate event part"
+    # A task call whose child never streamed and is absent from the roll-up:
+    # child usage is observable now, so delegation alone withholds nothing,
+    # and no child trajectory is invented.
     events = trajectory.parse(FIXTURE.read_text())
     events[3]["part"]["tool"] = "task"
     result = trajectory.convert(events)
     assert result["extra"]["delegation_observed"] is True
-    assert result["final_metrics"]["total_cost_usd"] is None
+    assert result["extra"]["usage_complete"] is True
+    assert result["extra"]["child_sessions"] == []
+    assert result["final_metrics"]["total_cost_usd"] == 0
+    assert result["final_metrics"]["total_prompt_tokens"] == 280
     assert "subagent_trajectories" not in result
+    assert (
+        "subagent_trajectory_ref" not in result["steps"][1]["observation"]["results"][0]
+    )
+    assert trajectory.convert_all(events)[1:] == []
+
+
+def test_child_sessions_become_referenced_trajectories_with_rolled_up_usage(
+    delegated,
+):
+    from harbor.models.trajectories import Trajectory
+    from harbor.utils.trajectory_validator import validate_trajectory
+
+    assert trajectory.completion_failure(delegated) is None
+    assert trajectory.session_id(delegated) == "ses_root"
+    documents = trajectory.convert_all(
+        delegated, agent_version="2.0.80", model_name="stress/lead-model"
+    )
+    assert [document["session_id"] for document in documents] == [
+        "ses_root",
+        "ses_child",
+    ]
+    root, child = documents
+    for document in documents:
+        parsed = Trajectory.model_validate(document)
+        assert validate_trajectory(json.loads(json.dumps(parsed.to_json_dict())))
+    assert (
+        trajectory.convert(
+            delegated, agent_version="2.0.80", model_name="stress/lead-model"
+        )
+        == root
+    )
+
+    # Root steps: prompt, the dispatching step, the final answer. Child
+    # events interleaved inside the dispatching step do not leak into it.
+    assert [step["source"] for step in root["steps"]] == ["user", "agent", "agent"]
+    dispatch = root["steps"][1]
+    assert [call["function_name"] for call in dispatch["tool_calls"]] == ["task"]
+    assert dispatch["metrics"]["prompt_tokens"] == 200
+    assert "questions" not in dispatch["extra"]
+    observation = dispatch["observation"]["results"][0]
+    assert observation["source_call_id"] == "call_task_notes"
+    assert '<task id="ses_child" state="completed">' in observation["content"]
+    assert observation["subagent_trajectory_ref"] == [
+        {
+            "session_id": "ses_child",
+            "trajectory_path": "trajectory-ses_child.json",
+            "extra": {"agent": "explore", "model": "stress/worker-model"},
+        }
+    ]
+    assert trajectory.child_filename("ses_child") == "trajectory-ses_child.json"
+
+    # Totals: root steps (500/50/0/0.15) plus the child's roll-up (133/22/5/0.03).
+    metrics = root["final_metrics"]
+    assert metrics["total_prompt_tokens"] == 633
+    assert metrics["total_completion_tokens"] == 72
+    assert metrics["total_cached_tokens"] == 5
+    assert metrics["total_cost_usd"] == pytest.approx(0.18)
+    assert metrics["total_steps"] == 3
+    assert metrics["extra"]["observed_root_usage"]["prompt_tokens"] == 500
+    assert metrics["extra"]["child_usage"] == {
+        "ses_child": {
+            "prompt_tokens": 133,
+            "completion_tokens": 22,
+            "cached_tokens": 5,
+            "cost_usd": 0.03,
+        }
+    }
+    assert metrics["extra"]["observed_usage"]["prompt_tokens"] == 633
+    assert root["extra"]["usage_complete"] is True
+    assert root["extra"]["trace_complete"] is True
+    assert root["extra"]["usage_scope"] == "root_and_child_sessions"
+    assert root["extra"]["delegation_observed"] is True
+    assert root["extra"]["child_sessions"] == ["ses_child"]
+    assert root["extra"]["child_trajectories"] == {
+        "ses_child": "trajectory-ses_child.json"
+    }
+    assert root["extra"]["terminal_metric_mismatches"] == []
+    assert root["extra"]["child_metric_mismatches"] == {}
+    assert "No child trajectories" not in root["notes"]
+    assert "child_trajectories" in root["notes"]
+
+    # The child document: the task prompt is its user step, its steps carry
+    # their own usage, the answered question is recorded, and the roll-up
+    # names the worker agent and model.
+    assert child["agent"]["model_name"] == "stress/worker-model"
+    assert [step["source"] for step in child["steps"]] == ["user", "agent", "agent"]
+    assert child["steps"][0]["message"] == (
+        "Read /app/notes.txt and report the answer it contains."
+    )
+    assert child["steps"][0]["timestamp"] is not None
+    assert child["steps"][1]["tool_calls"][0]["function_name"] == "read"
+    assert child["steps"][1]["model_name"] == "stress/worker-model"
+    assert child["steps"][1]["extra"]["questions"] == [
+        {"id": "que_child_format", "answers": [["One sentence"]]}
+    ]
+    assert child["steps"][1]["metrics"]["prompt_tokens"] == 55
+    assert child["steps"][2]["message"] == "The notes say the answer is 42."
+    assert child["final_metrics"]["total_prompt_tokens"] == 133
+    assert child["final_metrics"]["total_cost_usd"] == pytest.approx(0.03)
+    assert (
+        child["final_metrics"]["extra"]["observed_session_usage"]["completion_tokens"]
+        == 22
+    )
+    assert child["extra"]["usage_scope"] == "child_session"
+    assert child["extra"]["parent_session_id"] == "ses_root"
+    assert child["extra"]["dispatched_by"] == {
+        "session_id": "ses_root",
+        "tool_call_id": "call_task_notes",
+    }
+    assert child["extra"]["subagent"] == "explore"
+    assert child["extra"]["trajectory_file"] == "trajectory-ses_child.json"
+    assert child["extra"]["usage_complete"] is True
+
+
+def test_child_usage_is_cross_checked_against_the_roll_up(delegated):
+    changed = copy.deepcopy(delegated)
+    changed[-1]["children"][0]["tokens"]["input"] += 1
+    root = trajectory.convert(changed)
+    assert root["extra"]["child_metric_mismatches"] == {"ses_child": ["prompt_tokens"]}
+    assert root["extra"]["usage_complete"] is False
+    assert root["final_metrics"]["total_prompt_tokens"] is None
+    assert root["final_metrics"]["extra"]["observed_usage"]["prompt_tokens"] == 634
+    child = trajectory.convert_all(changed)[1]
+    assert child["extra"]["terminal_metric_mismatches"] == ["prompt_tokens"]
+    assert child["final_metrics"]["total_prompt_tokens"] is None
+
+    # Without a roll-up the child's recorded steps supply its usage.
+    changed = copy.deepcopy(delegated)
+    del changed[-1]["children"]
+    root = trajectory.convert(changed)
+    assert root["extra"]["usage_complete"] is True
+    assert root["final_metrics"]["total_prompt_tokens"] == 633
+    assert root["final_metrics"]["total_cost_usd"] == pytest.approx(0.18)
+    assert root["extra"]["child_sessions"] == ["ses_child"]
+    child = trajectory.convert_all(changed)[1]
+    assert child["agent"]["model_name"] is None
+
+    # A child step without usage withholds every total, root included.
+    changed = copy.deepcopy(delegated)
+    del changed[6]["part"]["tokens"]
+    root = trajectory.convert(changed)
+    assert root["extra"]["usage_complete"] is False
+    assert root["final_metrics"]["total_cost_usd"] is None
+
+    # A child listed only in the roll-up (no streamed steps) still counts.
+    changed = copy.deepcopy(delegated)
+    changed[-1]["children"].append(
+        {
+            "sessionID": "ses_silent",
+            "parentID": "ses_root",
+            "tokens": {
+                "input": 7,
+                "output": 1,
+                "reasoning": 0,
+                "cache": {"read": 0, "write": 0},
+            },
+            "cost": 0.001,
+        }
+    )
+    documents = trajectory.convert_all(changed)
+    assert [document["session_id"] for document in documents] == [
+        "ses_root",
+        "ses_child",
+    ]
+    assert documents[0]["extra"]["child_sessions"] == ["ses_child", "ses_silent"]
+    assert documents[0]["final_metrics"]["total_prompt_tokens"] == 640
+    assert documents[0]["final_metrics"]["total_cost_usd"] == pytest.approx(0.181)
+
+
+def test_child_matched_from_task_envelope_and_nested_dispatch(delegated):
+    from harbor.models.trajectories import Trajectory
+
+    changed = copy.deepcopy(delegated)
+    del changed[10]["part"]["state"]["metadata"]["sessionId"]
+    root = trajectory.convert(changed)
+    reference = root["steps"][1]["observation"]["results"][0]["subagent_trajectory_ref"]
+    assert reference[0]["trajectory_path"] == "trajectory-ses_child.json"
+
+    # A grandchild dispatched by the child: referenced from the child's task
+    # call, rolled into both the child's and the root's totals.
+    nested = copy.deepcopy(delegated)
+    grandchild = [
+        {
+            "type": "step_start",
+            "timestamp": 1788529680062,
+            "sessionID": "ses_grandchild",
+            "parentID": "ses_child",
+            "part": {
+                "id": "prt_gc_start",
+                "sessionID": "ses_grandchild",
+                "type": "step-start",
+            },
+        },
+        {
+            "type": "text",
+            "timestamp": 1788529680063,
+            "sessionID": "ses_grandchild",
+            "parentID": "ses_child",
+            "part": {
+                "id": "prt_gc_text",
+                "sessionID": "ses_grandchild",
+                "type": "text",
+                "text": "42",
+                "time": {"start": 1788529680062, "end": 1788529680063},
+            },
+        },
+        {
+            "type": "step_finish",
+            "timestamp": 1788529680064,
+            "sessionID": "ses_grandchild",
+            "parentID": "ses_child",
+            "part": {
+                "id": "prt_gc_finish",
+                "sessionID": "ses_grandchild",
+                "type": "step-finish",
+                "cost": 0.004,
+                "tokens": {
+                    "input": 9,
+                    "output": 2,
+                    "reasoning": 0,
+                    "cache": {"read": 0, "write": 0},
+                },
+            },
+        },
+        {
+            "type": "tool_use",
+            "timestamp": 1788529680065,
+            "sessionID": "ses_child",
+            "parentID": "ses_root",
+            "part": {
+                "id": "prt_child_2_task",
+                "sessionID": "ses_child",
+                "type": "tool",
+                "callID": "call_child_task",
+                "tool": "task",
+                "state": {
+                    "status": "completed",
+                    "input": {
+                        "description": "Double-check",
+                        "prompt": "Confirm the number.",
+                    },
+                    "output": '<task id="ses_grandchild" state="completed">\n<task_result>\n42\n</task_result>\n</task>',
+                    "time": {"start": 1788529680061, "end": 1788529680065},
+                },
+            },
+        },
+    ]
+    nested[8:8] = grandchild
+    nested[-1]["children"].append(
+        {
+            "sessionID": "ses_grandchild",
+            "parentID": "ses_child",
+            "agent": "explore",
+            "model": "stress/worker-model",
+            "tokens": {
+                "input": 9,
+                "output": 2,
+                "reasoning": 0,
+                "cache": {"read": 0, "write": 0},
+            },
+            "cost": 0.004,
+        }
+    )
+    assert trajectory.completion_failure(nested) is None
+    documents = trajectory.convert_all(nested)
+    assert [document["session_id"] for document in documents] == [
+        "ses_root",
+        "ses_child",
+        "ses_grandchild",
+    ]
+    for document in documents:
+        Trajectory.model_validate(document)
+    root, child, grandchild_document = documents
+    assert root["extra"]["child_sessions"] == ["ses_child", "ses_grandchild"]
+    assert root["final_metrics"]["total_prompt_tokens"] == 642
+    assert child["extra"]["child_sessions"] == ["ses_grandchild"]
+    assert child["final_metrics"]["total_prompt_tokens"] == 142
+    assert child["steps"][2]["observation"]["results"][0]["subagent_trajectory_ref"][
+        0
+    ] == {
+        "session_id": "ses_grandchild",
+        "trajectory_path": "trajectory-ses_grandchild.json",
+        "extra": {"agent": "explore", "model": "stress/worker-model"},
+    }
+    assert grandchild_document["extra"]["parent_session_id"] == "ses_child"
+    assert grandchild_document["steps"][0]["message"] == "Confirm the number."
+    assert grandchild_document["final_metrics"]["total_prompt_tokens"] == 9
+
+
+def test_child_streams_must_be_balanced_and_tagged(delegated):
+    assert trajectory.completion_failure(delegated) is None
+    child_finish = next(
+        i
+        for i, event in enumerate(delegated)
+        if event["type"] == "step_finish" and event["sessionID"] == "ses_child"
+    )
+    changed = copy.deepcopy(delegated)
+    del changed[child_finish]
+    assert (
+        trajectory.completion_failure(changed)
+        == "a model step is missing its finish event"
+    )
+    changed = copy.deepcopy(delegated)
+    del changed[3]  # the child's first step_start; its read follows
+    assert trajectory.completion_failure(changed) == "model output outside a model step"
+    changed = copy.deepcopy(delegated)
+    del changed[3:5]  # the child's first step_start and its read
+    assert (
+        trajectory.completion_failure(changed)
+        == "a model step is missing its start event"
+    )
+    changed = copy.deepcopy(delegated)
+    del changed[3]["parentID"]
+    assert (
+        trajectory.completion_failure(changed)
+        == "missing or inconsistent root session identity"
+    )
+    changed = copy.deepcopy(delegated)
+    changed[3]["sessionID"] = "ses_root"
+    assert (
+        trajectory.completion_failure(changed)
+        == "child event without a distinct session identity"
+    )
+    changed = copy.deepcopy(delegated)
+    changed[4]["part"]["sessionID"] = "ses_root"
+    assert (
+        trajectory.completion_failure(changed) == "part belongs to a different session"
+    )
 
 
 @pytest.mark.parametrize(

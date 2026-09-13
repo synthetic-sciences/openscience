@@ -40,7 +40,9 @@ HEADLESS_ENV = {
 }
 
 # Full host access inside the task container (no bubblewrap there) and no
-# tools that need a Synthetic Sciences account or paid remote compute.
+# tools that need a Synthetic Sciences account or paid remote compute. A local
+# `compute_job` target runs inside the container and stays allowed; the remote
+# backends it can name remain denied, so a `{"kind": "modal"}` target fails closed.
 DEFAULT_CONFIG: dict[str, Any] = {
     "sandbox": {"enabled": False},
     # Headless trials do not need model-generated UI labels. This existing
@@ -54,9 +56,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "remote_compute": "deny",
         "modal": "deny",
         "provider_compute": "deny",
-        "compute_job": "deny",
     },
+    # A denied call returns an error result to the model instead of ending the
+    # run, the same behaviour `run --auto-approve` applies on a local server.
+    "experimental": {"continue_loop_on_deny": True},
 }
+
+DELEGATION_LEVELS = ["off", "light", "standard", "high"]
+AUTONOMY_LEVELS = ["interactive", "balanced", "autonomous"]
+# Shell-safe provider/model, since Harbor renders CLI flag values unquoted.
+WORKER_MODEL = re.compile(r"[A-Za-z0-9@._:+-]+/[A-Za-z0-9@._:/+-]+")
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -87,7 +96,21 @@ class OpenScienceAgent(BaseInstalledAgent):
             kwarg="effort", cli="--effort", type="enum", choices=["normal", "ultra"]
         ),
         CliFlag(kwarg="agent", cli="--agent"),
+        CliFlag(
+            kwarg="delegation",
+            cli="--delegation",
+            type="enum",
+            choices=DELEGATION_LEVELS,
+        ),
+        CliFlag(kwarg="worker_model", cli="--worker-model"),
+        CliFlag(
+            kwarg="autonomy", cli="--autonomy", type="enum", choices=AUTONOMY_LEVELS
+        ),
+        # Whole seconds; Harbor does not hand the agent its trial timeout, so
+        # the runner passes the budget explicitly.
+        CliFlag(kwarg="deadline", cli="--deadline", type="int"),
     ]
+    RUN_FLAGS = ("delegation", "worker_model", "autonomy", "deadline")
 
     def __init__(
         self,
@@ -96,9 +119,19 @@ class OpenScienceAgent(BaseInstalledAgent):
         binary: str | None = None,
         binary_sha256: str | None = None,
         cwd: str | None = None,
+        skills: str = "bundled",
         **kwargs: Any,
     ):
         super().__init__(*args, **kwargs)
+        if skills not in ("bundled", "none"):
+            raise ValueError("skills must be bundled or none")
+        self._skills = skills
+        worker_model = self._resolved_flags.get("worker_model")
+        if worker_model is not None and not WORKER_MODEL.fullmatch(worker_model):
+            raise ValueError("worker_model must be in the format provider/model")
+        deadline = self._resolved_flags.get("deadline")
+        if deadline is not None and deadline <= 0:
+            raise ValueError("deadline must be a positive number of seconds")
         if self._version:
             self._version = self._version.removeprefix("v")
             if not re.fullmatch(r"\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?", self._version):
@@ -207,6 +240,8 @@ class OpenScienceAgent(BaseInstalledAgent):
             "sha256": sha256,
             "source": "local_binary" if self._binary else "release",
             "installer_url": None if self._binary else url,
+            "skills": self._skills,
+            **{flag: self._resolved_flags.get(flag) for flag in self.RUN_FLAGS},
         }
         self._version = installed_version
         await self.exec_as_agent(
@@ -258,6 +293,8 @@ class OpenScienceAgent(BaseInstalledAgent):
         env.update(HEADLESS_ENV)
         env["OPENSCIENCE_DATA_DIR"] = self._data_dir
         env["OPENSCIENCE_CONFIG_DIR"] = self._config_dir
+        if self._skills == "none":
+            env["OPENSCIENCE_DISABLE_BUNDLED_SKILLS"] = "1"
         return env
 
     @with_prompt_template
@@ -308,26 +345,48 @@ class OpenScienceAgent(BaseInstalledAgent):
         events = self._events()
         if not events:
             return
-        data = trajectory.convert(
+        documents = trajectory.convert_all(
             events,
             agent_name=self.name(),
             agent_version=self.version() or "unknown",
             model_name=self.model_name,
             instruction=self._instruction,
         )
-        if data and self._identity:
-            data["extra"]["binary"] = self._identity
-        result = Trajectory.model_validate(data) if data else None
-        if result is None:
+        if not documents:
             return
-
+        if self._identity:
+            for document in documents:
+                document["extra"]["binary"] = self._identity
+        # Validate every document before writing any, so a schema failure in a
+        # child never leaves a root file pointing at a missing child.
+        results = [Trajectory.model_validate(document) for document in documents]
+        root = results[0]
+        for child in results[1:]:
+            path = self.logs_dir / trajectory.child_filename(
+                child.session_id or "unknown"
+            )
+            path.write_text(
+                format_trajectory_json(child.to_json_dict()), encoding="utf-8"
+            )
         path = self.logs_dir / "trajectory.json"
-        path.write_text(format_trajectory_json(result.to_json_dict()), encoding="utf-8")
-        context.metadata = {"openscience": result.extra}
+        path.write_text(format_trajectory_json(root.to_json_dict()), encoding="utf-8")
+        context.metadata = {"openscience": root.extra}
 
-        metrics = result.final_metrics
-        if metrics:
-            context.cost_usd = metrics.total_cost_usd
-            context.n_input_tokens = metrics.total_prompt_tokens
-            context.n_output_tokens = metrics.total_completion_tokens
-            context.n_cache_tokens = metrics.total_cached_tokens
+        metrics = root.final_metrics
+        if not metrics:
+            return
+        # Totals are None whenever the trace is incomplete (timeout, error,
+        # missing usage). Leaderboard cost must still count what was spent, so
+        # fall back to the observed sums over the root and child sessions;
+        # `usage_complete` in the metadata records that this is a lower bound.
+        observed = (metrics.extra or {}).get("observed_usage") or {}
+
+        def spent(total: float | int | None, name: str) -> float | int | None:
+            return total if total is not None else observed.get(name)
+
+        context.cost_usd = spent(metrics.total_cost_usd, "cost_usd")
+        context.n_input_tokens = spent(metrics.total_prompt_tokens, "prompt_tokens")
+        context.n_output_tokens = spent(
+            metrics.total_completion_tokens, "completion_tokens"
+        )
+        context.n_cache_tokens = spent(metrics.total_cached_tokens, "cached_tokens")
