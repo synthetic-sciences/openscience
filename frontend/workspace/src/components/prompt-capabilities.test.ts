@@ -23,17 +23,17 @@ describe("prompt capabilities", () => {
   })
 })
 
-describe("delegation strategy", () => {
-  test("defaults to parallel and carries a stored fusion choice with the worker model", async () => {
+describe("delegation settings", () => {
+  test("carry the worker model and ignore retired strategy preferences", async () => {
     const { delegationSettings } = await import("./prompt-capabilities")
-    expect(delegationSettings(undefined).strategy).toBe("parallel")
-    const fusion = delegationSettings({
+    expect(delegationSettings(undefined)).toEqual({ level: "standard", autonomy: "balanced", workerModel: undefined })
+    const settings = delegationSettings({
       delegation_enabled: true,
       delegation_specialist: null,
-      delegation_strategy: "fusion",
       delegation_worker_model: { providerID: "openai", modelID: "gpt-5.6-terra" },
+      ...({ delegation_strategy: "fusion" } as object),
     })
-    expect(fusion.strategy).toBe("fusion")
-    expect(fusion.workerModel).toEqual({ providerID: "openai", modelID: "gpt-5.6-terra" })
+    expect(settings.workerModel).toEqual({ providerID: "openai", modelID: "gpt-5.6-terra" })
+    expect("strategy" in settings).toBe(false)
   })
 })

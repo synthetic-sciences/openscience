@@ -473,6 +473,15 @@ export namespace ProviderTransform {
 
   const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
 
+  /** The reasoning summary OpenAI's Responses API returns. `detailed` gives
+   * the readable trace the workspace shows; the o1/o3-mini generation and
+   * unknown models keep `auto`, the widest-compatible request. */
+  export function openaiSummary(id: string): "auto" | "detailed" {
+    const lower = id.toLowerCase()
+    if (/^(?:gpt-5|gpt-6|o3(?!-mini)|o4|codex)/.test(lower) || /gpt-[56][.-]/.test(lower)) return "detailed"
+    return "auto"
+  }
+
   function catalogEfforts(model: Provider.Model) {
     const options = model.reasoningOptions
     if (!options) return undefined
@@ -550,7 +559,7 @@ export namespace ProviderTransform {
           effort,
           {
             reasoningEffort: effort,
-            reasoningSummary: "auto",
+            reasoningSummary: openaiSummary(id),
             include: ["reasoning.encrypted_content"],
           },
         ]),
@@ -696,7 +705,7 @@ export namespace ProviderTransform {
             effort,
             {
               reasoningEffort: effort,
-              reasoningSummary: "auto",
+              reasoningSummary: openaiSummary(id),
               include: ["reasoning.encrypted_content"],
             },
           ]),
@@ -709,7 +718,7 @@ export namespace ProviderTransform {
             effort,
             {
               reasoningEffort: effort,
-              reasoningSummary: "auto",
+              reasoningSummary: openaiSummary(id),
               include: ["reasoning.encrypted_content"],
             },
           ]),
@@ -1084,7 +1093,7 @@ export namespace ProviderTransform {
       if (input.model.providerID === "openai" || input.model.providerID === "openai-codex") {
         result["promptCacheKey"] = input.sessionID
         result["include"] = ["reasoning.encrypted_content"]
-        result["reasoningSummary"] = "auto"
+        result["reasoningSummary"] = openaiSummary(input.model.api.id)
       }
     }
 

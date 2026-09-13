@@ -1929,7 +1929,6 @@ export class Preferences extends HeyApiClient {
         modelID: string
       } | null
       delegation_autonomy?: "interactive" | "balanced" | "autonomous"
-      delegation_strategy?: "parallel" | "fusion"
       delegation_diversity?: "focused" | "balanced" | "exploratory"
     },
     options?: Options<never, ThrowOnError>,
@@ -1952,7 +1951,6 @@ export class Preferences extends HeyApiClient {
             { in: "body", key: "delegation_level" },
             { in: "body", key: "delegation_worker_model" },
             { in: "body", key: "delegation_autonomy" },
-            { in: "body", key: "delegation_strategy" },
             { in: "body", key: "delegation_diversity" },
           ],
         },
@@ -3987,7 +3985,6 @@ export class Session extends HeyApiClient {
           modelID: string
         }
         autonomy?: "interactive" | "balanced" | "autonomous"
-        strategy?: "parallel" | "fusion"
       }
       system?: string
       variant?: string
@@ -4093,7 +4090,6 @@ export class Session extends HeyApiClient {
           modelID: string
         }
         autonomy?: "interactive" | "balanced" | "autonomous"
-        strategy?: "parallel" | "fusion"
       }
       system?: string
       variant?: string
@@ -4162,7 +4158,6 @@ export class Session extends HeyApiClient {
           modelID: string
         }
         autonomy?: "interactive" | "balanced" | "autonomous"
-        strategy?: "parallel" | "fusion"
       }
       variant?: string
       tier?: string
@@ -4588,7 +4583,6 @@ export class Runtime extends HeyApiClient {
           modelID: string
         }
         autonomy?: "interactive" | "balanced" | "autonomous"
-        strategy?: "parallel" | "fusion"
       }
       requestID?: string
       message?: string

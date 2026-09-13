@@ -34,9 +34,16 @@ describe("model thinking effort options", () => {
   test("honors route-specific defaults and does not invent controls for fixed models", () => {
     expect(modelVariantDefault({ id: "deepseek/deepseek-v4-pro" })).toBe("high")
     expect(modelVariantDefault({ id: "z-ai/glm-5.3" })).toBe("max")
+    // The documented default holds only when the model has no high effort.
     expect(
       modelVariantDefault({ id: "openai/gpt-5.6-sol", reasoningOptions: [{ type: "effort", default: "medium" }] }),
     ).toBe("medium")
+    expect(
+      modelVariantDefault({
+        id: "openai/gpt-6-astra",
+        reasoningOptions: [{ type: "effort", default: "medium", values: ["low", "medium", "high", "xhigh", "max"] }],
+      }),
+    ).toBe("high")
     expect(modelVariantOptions([])).toEqual([])
     expect(promptVariant("high", [])).toBeUndefined()
   })

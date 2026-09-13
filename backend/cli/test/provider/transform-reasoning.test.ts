@@ -165,7 +165,7 @@ describe("ProviderTransform.options — BYOK / direct paths stay untouched", () 
       sessionID,
       providerOptions: { baseURL: PROXY_OAI },
     })
-    expect(result.reasoningSummary).toBe("auto")
+    expect(result.reasoningSummary).toBe("detailed")
     expect(result.include).toEqual(["reasoning.encrypted_content"])
     expect(result.reasoning).toBeUndefined()
   })
@@ -201,7 +201,7 @@ describe("new model reasoning effort contracts", () => {
     expect(Object.keys(ProviderTransform.variants(managed))).toEqual(expected)
     expect(ProviderTransform.variants(direct).max).toEqual({
       reasoningEffort: "max",
-      reasoningSummary: "auto",
+      reasoningSummary: "detailed",
       include: ["reasoning.encrypted_content"],
     })
     expect(ProviderTransform.variants(managed).max).toEqual({ reasoning: { effort: "max" } })
@@ -249,7 +249,7 @@ describe("new model reasoning effort contracts", () => {
 
     expect(ProviderTransform.options({ model: codex("gpt-5.6-sol"), sessionID, providerOptions: {} })).toMatchObject({
       reasoningEffort: "low",
-      reasoningSummary: "auto",
+      reasoningSummary: "detailed",
       include: ["reasoning.encrypted_content"],
     })
     expect(

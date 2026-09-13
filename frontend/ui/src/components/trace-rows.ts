@@ -11,7 +11,7 @@ import { toolChanges, writtenFiles, reasoningDisplayText } from "./tool-display"
  * live progress and problems are never folded into a count.
  */
 export type TraceRow =
-  | { kind: "thought"; entries: ResearchTraceEntry[]; seconds?: number }
+  | { kind: "thought"; entries: ResearchTraceEntry[]; seconds?: number; readable: boolean }
   | { kind: "text"; entry: ResearchTraceEntry; narration: boolean }
   | { kind: "agent"; entry: ResearchTraceEntry }
   | { kind: "tool"; entry: ResearchTraceEntry }
@@ -57,9 +57,8 @@ function thoughtSeconds(part: Part) {
   return Math.max(0, Math.round((time.end - time.start) / 1000))
 }
 
-const readable = (row: TraceRow) =>
-  row.kind !== "thought" ||
-  row.entries.some((entry) => entry.part.type === "reasoning" && !!reasoningDisplayText(entry.part.text ?? ""))
+const readableText = (entry: ResearchTraceEntry) =>
+  entry.part.type === "reasoning" && !!reasoningDisplayText(entry.part.text ?? "")
 
 export function buildTraceRows(entries: ResearchTraceEntry[]): TraceRow[] {
   const rows: TraceRow[] = []
@@ -78,14 +77,14 @@ export function buildTraceRows(entries: ResearchTraceEntry[]): TraceRow[] {
       if (previous?.kind === "thought") {
         previous.entries.push(entry)
         previous.seconds = seconds === undefined ? previous.seconds : (previous.seconds ?? 0) + seconds
+        previous.readable = previous.readable || readableText(entry)
         return
       }
-      rows.push({ kind: "thought", entries: [entry], seconds })
+      // A phase the provider kept entirely private still took its time: the
+      // row keeps the duration and has nothing to open.
+      rows.push({ kind: "thought", entries: [entry], seconds, readable: readableText(entry) })
       return
     }
-    // A phase the provider kept entirely private has nothing to read. Drop it
-    // once the next step arrives so the work on either side groups as usual.
-    while (rows.length && !readable(rows[rows.length - 1]!)) rows.pop()
     if (part.type === "text") {
       rows.push({ kind: "text", entry, narration: index < lastWork && index < lastText })
       return
@@ -126,7 +125,7 @@ export function buildTraceRows(entries: ResearchTraceEntry[]): TraceRow[] {
     }
     rows.push({ kind: "tool", entry })
   })
-  return rows.filter(readable)
+  return rows
 }
 
 function plural(count: number, one: string, many: string) {

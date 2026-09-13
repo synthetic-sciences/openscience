@@ -21667,14 +21667,6 @@
                         "autonomous"
                       ]
                     },
-                    "delegation_strategy": {
-                      "default": "parallel",
-                      "type": "string",
-                      "enum": [
-                        "parallel",
-                        "fusion"
-                      ]
-                    },
                     "delegation_diversity": {
                       "default": "balanced",
                       "type": "string",
@@ -21817,14 +21809,6 @@
                         "autonomous"
                       ]
                     },
-                    "delegation_strategy": {
-                      "default": "parallel",
-                      "type": "string",
-                      "enum": [
-                        "parallel",
-                        "fusion"
-                      ]
-                    },
                     "delegation_diversity": {
                       "default": "balanced",
                       "type": "string",
@@ -21939,13 +21923,6 @@
                       "interactive",
                       "balanced",
                       "autonomous"
-                    ]
-                  },
-                  "delegation_strategy": {
-                    "type": "string",
-                    "enum": [
-                      "parallel",
-                      "fusion"
                     ]
                   },
                   "delegation_diversity": {
@@ -30658,14 +30635,6 @@
                           "balanced",
                           "autonomous"
                         ]
-                      },
-                      "strategy": {
-                        "default": "parallel",
-                        "type": "string",
-                        "enum": [
-                          "parallel",
-                          "fusion"
-                        ]
                       }
                     }
                   },
@@ -31106,14 +31075,6 @@
                           "balanced",
                           "autonomous"
                         ]
-                      },
-                      "strategy": {
-                        "default": "parallel",
-                        "type": "string",
-                        "enum": [
-                          "parallel",
-                          "fusion"
-                        ]
                       }
                     }
                   },
@@ -31302,14 +31263,6 @@
                           "interactive",
                           "balanced",
                           "autonomous"
-                        ]
-                      },
-                      "strategy": {
-                        "default": "parallel",
-                        "type": "string",
-                        "enum": [
-                          "parallel",
-                          "fusion"
                         ]
                       }
                     }
@@ -31914,14 +31867,6 @@
                           "interactive",
                           "balanced",
                           "autonomous"
-                        ]
-                      },
-                      "strategy": {
-                        "default": "parallel",
-                        "type": "string",
-                        "enum": [
-                          "parallel",
-                          "fusion"
                         ]
                       }
                     }
@@ -55720,14 +55665,6 @@
                   "interactive",
                   "balanced",
                   "autonomous"
-                ]
-              },
-              "strategy": {
-                "default": "parallel",
-                "type": "string",
-                "enum": [
-                  "parallel",
-                  "fusion"
                 ]
               }
             }

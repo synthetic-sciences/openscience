@@ -1382,14 +1382,8 @@ ToolRegistry.register({
       }
     }
     const [expanded, setExpanded] = createSignal<boolean>()
-    const fusion = () => {
-      const value = props.metadata.fusion as { generation?: number; handoff?: number } | undefined
-      return value && typeof value.handoff === "number" ? value : undefined
-    }
     const agentLabel = () =>
-      fusion()
-        ? i18n.t("ui.tool.task.fusionWorker")
-        : i18n.t("ui.tool.agent", { type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)) })
+      i18n.t("ui.tool.agent", { type: sentenceCaseLabel(String(props.input.subagent_type || props.tool)) })
 
     const childPermission = createMemo(() => {
       const sessionId = childSessionId()
@@ -1585,18 +1579,7 @@ ToolRegistry.register({
               <p data-slot="delegation-quiet">Working in its own session; the handoff appears here when it finishes.</p>
             </Show>
             <div data-slot="delegation-footer">
-              <span data-slot="delegation-metrics" aria-label="Delegated research details">
-                <Show when={fusion()}>
-                  {(value) => (
-                    <span>
-                      {i18n.t("ui.tool.task.fusionHandoff", {
-                        handoff: String(value().handoff),
-                        lineage: String(value().generation ?? 1),
-                      })}
-                    </span>
-                  )}
-                </Show>
-              </span>
+              <span data-slot="delegation-metrics" aria-label="Delegated research details" />
               <span data-slot="delegation-actions">
                 <Show when={childSessionId() && data.navigateToSession}>
                   <Button

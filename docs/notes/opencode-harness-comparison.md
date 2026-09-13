@@ -233,3 +233,89 @@ Deterministic contract fixtures establish API and execution behavior, while nati
 scientific scores require actual evaluation. The five-lane qualification
 requirements in [the scientific harness plan](scientific-harness-design.md) remain
 unchanged; OpenCode's prompt variety does not establish scientific benchmark gains.
+
+## Audit, 13 September 2026
+
+OpenCode checkout `95daf90670b7c039c436c85537da5fbfe2205b41` (`/tmp/opencode`),
+read against OpenScience at the commit that removed Fusion. The two harnesses
+share an ancestor and the same loop shape; the differences below are the ones
+that decide behaviour.
+
+### Header
+
+|                          | OpenCode                                                                                                                                                                                                                                                                                  | OpenScience                                                                                                                                                                                                                                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Selection                | `SystemPrompt.provider(model)` picks a model-family file by wire model id: `anthropic.txt` (8.2 kB), `gpt.txt`, `gpt-astra.txt` (46 lines, GPT-6), `codex.txt`, `beast.txt`, `gemini.txt`, `meta.txt`, `kimi.txt`, `trinity.txt`, else `default.txt`. `agent.prompt` replaces the header. | One model-agnostic header for Research, `agent/prompt/researchagent-test.txt` + `session/prompt/response.txt` (~60 lines, the shape of `gpt-astra.txt`). `agent.prompt` replaces it for custom and internal agents. `SystemPrompt.provider` is only the fallback for agents without a header. |
+| Content                  | Coding: TodoWrite discipline, proactive Task delegation, concise CLI output, code references.                                                                                                                                                                                             | Research: how output renders, autonomy sized to the request, when to report and when to ask, the final-answer shape, evidence and files, manuscripts sized to the request. No task-list ritual.                                                                                               |
+| Context after the header | `<env>` (cwd, worktree, git, platform, date), `<available_references>`, AGENTS.md / CLAUDE.md / CONTEXT.md (first match up the tree, global first), `config.instructions` paths and URLs, skills, MCP instructions, `user.system`.                                                        | `<env>` with project, project files, session scratch, Results, access mode, connected folders; the working-folder routing rules; project instructions; the `<core-skills>` index (15 core skills, one line each, plus the cloud-compute and databases pointers); then the system reminders.   |
+| Reminders                | Plan mode and the plan→build switch are synthetic **user** parts (`reminders.ts`).                                                                                                                                                                                                        | Effort, delegation, independence, quick/direct routes and study mode are **system** context (`insertReminders`); nothing is injected as a user message. Older synthetic reminders in saved sessions are moved into system context on read.                                                    |
+
+### Loop
+
+Both run the AI SDK stream through a processor with a step counter, `agent.steps`
+as the cap and a synthetic "max steps reached, text only" assistant message at the
+last step. Both treat `tool-calls`/`unknown` as non-terminal and keep going when a
+provider reports `stop` with unresolved tool calls. OpenCode's doom-loop guard is
+three identical tool calls → a `doom_loop` permission ask; OpenScience's
+`tool-retry-guard` is per-tool (repeated fetches, transfers, writes) and answers
+the model with what to change instead of asking the user. Retries: both
+exponential with jitter, five attempts, provider `retry-after` honoured; neither
+retries context overflow.
+
+Compaction: OpenCode compacts when usage reaches `limit.input − min(20k, output)`
+and writes a fixed-section summary (Objective, Important Details, Work State,
+Next Move, Relevant Files), preserving the newest ~15k tokens of turns and pruning
+old tool outputs separately. OpenScience compacts proactively, on overflow and on
+`/compact`, writes a handoff with the same kind of sections plus the child-work
+record, keeps the protected newest context, and stops proactive compaction for the
+session after ineffective rounds so a runaway session cannot spin. Both fold the
+previous summary into the next instead of re-summarising raw history.
+
+### Workers
+
+|           | OpenCode                                                                                                                                                                                                                                                                                                                                                 | OpenScience                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profiles  | `build`, `plan` (primary); `general`, `explore` (subagent); `compaction`, `title`, `summary` internal. Configured agents default to mode `all`.                                                                                                                                                                                                          | `research` (primary), `plan` (primary, hidden); `explore`, `execute` (subagent); specialists `ml`, `biology`, `physics`, `chemistry`, `critique` as a `specialist` layer on those profiles; `compaction`, `title` internal; domain compatibility agents hidden.                                                                                                                                                                                                                     |
+| Task tool | `description`, `prompt`, `subagent_type`, `task_id` (resume), `command`, experimental `background`. Depth limit 1 (`subagent_depth`), so children cannot dispatch. Foreground call waits for the child's final text, returned as `<task_result>`. No concurrency cap. Child inherits the parent's model and variant unless the agent configures a model. | `description`, `prompt`, `subagent_type`, `specialist`, `session_id` (continue). Only the lead dispatches; children get `task: false`. Concurrency `MAX_CHILD_AGENTS = max(2, cores)`, compute workers capped separately. A durable `TaskAttempt` makes a dispatch restart-safe; the child runs in an isolated workspace and hands back saved Results. Worker model from Customize → Models, else the lead's model; a worker on the lead's model now inherits its reasoning effort. |
+| Strategy  | One: fresh child per call, parallel calls in one message.                                                                                                                                                                                                                                                                                                | Now one: the same. Fusion (a bound persistent worker with handoff budgets) is removed.                                                                                                                                                                                                                                                                                                                                                                                              |
+| Posture   | The Claude header says "use the Task tool proactively"; the Task description says launch agents concurrently whenever possible.                                                                                                                                                                                                                          | Delegation is a setting (Off / Auto / High) plus Independence; the reminder says one worker per independent branch with a bound and a definition of done, and that checking the lead's own output is never delegated.                                                                                                                                                                                                                                                               |
+
+### Reasoning
+
+Option assembly is the same family of code in both: OpenAI Responses get
+`reasoningEffort` + `reasoningSummary` + `include: ["reasoning.encrypted_content"]`
+with `store: false`; Anthropic gets `thinking: { type: "adaptive" }` + `effort` (or
+`budgetTokens` on older models); Gemini gets `thinkingConfig.includeThoughts` with
+`thinkingLevel` or a budget; OpenRouter gets `reasoning: { effort }`. Reasoning
+parts persist as `{ text, metadata, time }` and replay with `providerMetadata`;
+both drop replay when the model changes.
+
+Differences after this audit:
+
+- **Depth.** OpenCode leaves the provider default (medium for GPT-5, cycled with
+  `ctrl+t`). OpenScience now defaults the composer's effort to **high** whenever a
+  model offers it; the picker keeps every level. A worker on the lead's model
+  inherits that effort.
+- **Summary detail.** OpenCode requests `reasoningSummary: "auto"`. OpenScience
+  requests `"detailed"` from the GPT-5/GPT-6/o3/o4/codex families on direct OpenAI,
+  Azure and Codex OAuth, and `"auto"` elsewhere (Copilot, o1, o3-mini). Through
+  OpenRouter the summary depth is OpenRouter's to choose; a phase it returns as
+  `[REDACTED]` has no readable text on any client.
+- **Display.** OpenCode's TUI shows a collapsed block with elapsed time. The
+  workspace shows a "Thought Ns" row with the summary as Markdown; consecutive
+  parts fold into one row; a phase the provider kept private is a label with its
+  duration and nothing to open, never a placeholder sentence.
+
+### Core skills and the research loop
+
+The skill index is the main structural difference from OpenCode, which has skills
+but no always-present index. Research carries `<core-skills>` every turn: the
+fifteen core procedures in workflow order with one line each, the cloud-compute and
+database library pointers, and the rule to load one skill by exact name when the
+request matches. Bodies never preload. A loaded skill's `allowed-tools` unlocks
+those tools for the loading agent. The `/` menu in the workspace mirrors the same
+order. Autoresearch is a core skill plus the `study`/`experiments` tools and the
+study driver: the driver watches runs, enforces kill criteria and budgets, wakes
+the session with "Study update" user messages, and the study reminder in system
+context carries the objective, baseline, best, queue, budget, directives and
+lessons every turn, so the loop survives compaction.

@@ -2,6 +2,10 @@ export type ModelVariant = string
 
 export function modelVariantDefault(model: { id: string; reasoningOptions?: Array<Record<string, unknown>> }) {
   const effort = model.reasoningOptions?.find((option) => option.type === "effort")
+  // Research work is long-horizon: when a model offers a high effort, that is
+  // the default, not the provider's medium. The picker still allows any level.
+  const values = Array.isArray(effort?.values) ? (effort.values as unknown[]) : []
+  if (values.includes("high")) return "high"
   if (typeof effort?.default === "string") return effort.default
   // Native and OpenRouter Grok share this documented default. Omitting the
   // parameter is not the same as turning reasoning off (which Grok rejects).

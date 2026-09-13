@@ -684,6 +684,12 @@
       border-left: 1px solid var(--border-weak-base);
     }
 
+    /* A private thought is a label with nothing to open. */
+    &[data-header="label"] [data-component="trace-row"] {
+      cursor: default;
+      color: var(--text-weak);
+    }
+
     /* A burst of one call is just that call's row. */
     &[data-header="false"] [data-slot="trace-group-body"] {
       margin: 0;

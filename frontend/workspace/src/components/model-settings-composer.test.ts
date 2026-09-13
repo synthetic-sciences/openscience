@@ -118,24 +118,25 @@ test("redacted provider variants retain the real composer effort and Fast contro
   })
   const host = mount()
   const chip = () => host.querySelector<HTMLButtonElement>("[data-model-effort-chip]")
-  expect(chip()?.textContent).toContain("Medium")
+  // Research defaults to the deepest ordinary effort the route offers.
+  expect(chip()?.textContent).toContain("High")
   chip()!.click()
   await settle()
   expect(document.querySelectorAll('[data-model-option="effort"]')).toHaveLength(6)
   expect(document.querySelector('[data-model-option-id="none"]')?.textContent).toContain("Off")
-  document.querySelector<HTMLButtonElement>('[data-model-option-id="high"]')!.click()
+  document.querySelector<HTMLButtonElement>('[data-model-option-id="xhigh"]')!.click()
   document.querySelector<HTMLInputElement>("[data-model-fast-toggle] input")!.click()
   await settle()
-  expect(fixture.state.effort["openrouter/openai/gpt-5.6-sol"]).toBe("high")
+  expect(fixture.state.effort["openrouter/openai/gpt-5.6-sol"]).toBe("xhigh")
   expect(fixture.state.tier["openrouter/openai/gpt-5.6-sol"]).toBe("fast")
-  expect(chip()?.textContent).toContain("High")
+  expect(chip()?.textContent).toContain("Extra high")
   expect(host.querySelector("[data-model-fast-indicator]")).not.toBeNull()
 
   fixture.setState("index", 1)
   await settle()
   expect(document.querySelectorAll('[data-model-option="effort"]')).toHaveLength(5)
   expect(document.querySelector('[data-model-option-id="none"]')).toBeNull()
-  expect(chip()?.textContent).toContain("Medium")
+  expect(chip()?.textContent).toContain("High")
   expect(host.querySelector("[data-model-fast-indicator]")).toBeNull()
 })
 
@@ -201,7 +202,7 @@ test("a provider metadata refresh restores options without replacing the chosen 
   expect(document.querySelectorAll('[data-model-option="effort"]')).toHaveLength(6)
   expect(document.querySelector("[data-model-fast-toggle]")).not.toBeNull()
   expect(host.querySelector("[data-model-settings-trigger]")?.textContent).toContain("5.6 Sol")
-  expect(host.querySelector("[data-model-effort-chip]")?.textContent).toContain("Medium")
+  expect(host.querySelector("[data-model-effort-chip]")?.textContent).toContain("High")
 })
 
 test("reviewed effort stays usable while pricing-gated Fast settings are unavailable", async () => {
@@ -209,7 +210,7 @@ test("reviewed effort stays usable while pricing-gated Fast settings are unavail
   fixture.setState({ models: [{ ...model, modes: {}, pricing: undefined }], index: 0, effort: {}, tier: {} })
   const host = mount()
   const chip = host.querySelector<HTMLButtonElement>("[data-model-effort-chip]")!
-  expect(chip.textContent).toContain("Medium")
+  expect(chip.textContent).toContain("High")
   chip.click()
   await settle()
   expect(document.querySelectorAll('[data-model-option="effort"]')).toHaveLength(6)

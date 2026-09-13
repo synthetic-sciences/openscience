@@ -26,7 +26,6 @@ import { SessionWorkspace } from "@/session/workspace"
 import { TaskEvidence } from "./task-evidence"
 import { PayloadIntegrity } from "./payload-integrity"
 import { CredentialRevocation } from "@/credentials/revocation"
-import { Fusion } from "@/session/fusion"
 import { Specialist } from "@/agent/specialist"
 
 export const DELEGATION_PROFILES = ["explore", "execute"] as const
@@ -475,44 +474,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
       const leadModel = { modelID: assistant.modelID, providerID: assistant.providerID }
       const configuredWorker = settings.workerModel ?? agent.model ?? leadModel
-      // Fusion binds the lead to one persistent execute worker. Resolution is
-      // serialized per lead and lands before the attempt is reserved, so two
-      // dispatches in one step share the worker and a restart finds the same
-      // binding. An explicit session_id naming another child is an ordinary
-      // continuation; one naming the bound worker is a Fusion handoff.
-      const fusion =
-        settings.strategy === "fusion" && params.subagent_type === "execute"
-          ? await Fusion.exclusive(
-              ctx.sessionID,
-              async () => {
-                const bound = await Fusion.get(ctx.sessionID)
-                if (continuation && continuation.id !== bound?.workerSessionID) return undefined
-                const existing = await TaskAttempt.read(identity)
-                if (existing?.childSessionID && bound && bound.workerSessionID === existing.childSessionID) {
-                  // A retried or resumed attempt keeps the worker it already had.
-                  return { binding: bound, fresh: false }
-                }
-                if (continuation && bound && !Fusion.same(bound.worker, configuredWorker)) {
-                  // The model insists on the previous worker while the preference
-                  // now names another model: honour the request as an ordinary
-                  // continuation instead of forking a new lineage under it.
-                  return undefined
-                }
-                return Fusion.resolve({
-                  parentSessionID: ctx.sessionID,
-                  userMessageID: assistant.parentID,
-                  worker: configuredWorker,
-                  mint: () => Identifier.descending("session"),
-                })
-              },
-              ctx.abort,
-            )
-          : undefined
       const reserved = await TaskAttempt.reserve({
         ...identity,
         fingerprint: TaskAttempt.fingerprint(attachments.length ? { ...attemptInput, attachments } : attemptInput),
         ...(!attachments.length && { legacyFingerprint: TaskAttempt.legacyFingerprint(attemptInput) }),
-        childSessionID: continuationID ?? fusion?.binding.workerSessionID,
+        childSessionID: continuationID,
       })
       const started = reserved.createdAt
 
@@ -539,12 +505,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               id: reserved.childSessionID,
               parentID: ctx.sessionID,
               directory: Instance.directory,
-              title: fusion
-                ? `Fusion worker (lineage ${fusion.binding.generation})`
-                : params.description +
-                  (params.specialist
-                    ? ` (@${params.specialist} specialist, ${params.subagent_type} phase)`
-                    : ` (@${params.subagent_type} subagent)`),
+              title:
+                params.description +
+                (params.specialist
+                  ? ` (@${params.specialist} specialist, ${params.subagent_type} phase)`
+                  : ` (@${params.subagent_type} subagent)`),
               permission: childPermissionRules(config.experimental?.primary_tools),
             })
         // Project-mode parents have no private scratch to hand off. Their
@@ -556,9 +521,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           })
         }
 
-        // The binding's model is the one that runs: a preference change starts a
-        // new lineage in Fusion.resolve rather than re-routing this worker.
-        const model = fusion ? fusion.binding.worker : configuredWorker
+        const model = configuredWorker
+        // A worker on the lead's own model thinks as hard as the lead; a
+        // different worker model keeps its own default depth.
+        const variant =
+          model.providerID === leadModel.providerID && model.modelID === leadModel.modelID
+            ? typeof ctx.extra?.variant === "string"
+              ? ctx.extra.variant
+              : undefined
+            : undefined
         const initial = await Session.messages({ sessionID: session.id })
         const bound = await TaskAttempt.bind({
           ...identity,
@@ -574,16 +545,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         // This is the durable parent→child binding. It must land before the
         // child provider can run so a killed process leaves a discoverable,
         // reusable child rather than an orphaned session.
-        const fusionMetadata = fusion
-          ? {
-              fusion: {
-                generation: fusion.binding.generation,
-                handoff: fusion.binding.turn?.handoffs ?? 1,
-                lineageHandoffs: fusion.binding.handoffs,
-                worker: fusion.binding.worker,
-              },
-            }
-          : {}
         await ctx.metadata({
           title: params.description,
           metadata: {
@@ -595,7 +556,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             maxConcurrentChildren: MAX_CHILD_AGENTS,
             queuedMs: timing.queuedMs,
             activeStartedAt: timing.activeStartedAt,
-            ...fusionMetadata,
           },
         })
 
@@ -705,9 +665,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     : settings.autonomy === "autonomous"
                       ? "Resolve ordinary ambiguities independently within the current permission boundary; surface only decisions that materially affect the result."
                       : "Resolve routine ambiguities independently and flag consequential assumptions in the handoff.",
-                  ...(fusion
-                    ? [Fusion.workerContract(fusion.binding.generation, fusion.binding.turn?.handoffs ?? 1)]
-                    : []),
                 ].join("\n")
                 const run = async () => {
                   if (exists) return SessionPrompt.loop(session.id)
@@ -720,6 +677,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     messageID: reserved.childMessageID,
                     sessionID: session.id,
                     model,
+                    variant,
                     agent: agent.name,
                     effort,
                     delegation: false,
@@ -841,20 +799,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             handoffTruncated: handoff.truncated,
             resultChars: raw.length,
             evidence,
-            ...fusionMetadata,
           },
           output,
         })
         await TaskAttempt.complete({ ...identity, result })
-        if (fusion) {
-          await Fusion.settle({
-            parentSessionID: ctx.sessionID,
-            callID: identity.callID,
-            outcome: taskOutcome.outcome,
-            stopReason: taskOutcome.stopReason,
-            usage,
-          })
-        }
         return result
       })
     },

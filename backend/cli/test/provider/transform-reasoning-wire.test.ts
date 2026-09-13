@@ -63,7 +63,7 @@ describe("reasoning options serialize onto provider request bodies", () => {
     expect(wire.bodies[0]).toMatchObject({
       store: false,
       include: ["reasoning.encrypted_content"],
-      reasoning: { effort: "max", summary: "auto" },
+      reasoning: { effort: "max", summary: "detailed" },
     })
   })
 

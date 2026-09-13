@@ -82,7 +82,6 @@ import { SessionCheckpoint } from "./checkpoint"
 import { ToolSelection } from "./tool-selection"
 import { Experiments } from "@/experiments"
 import { SessionLoopState } from "./loop-state"
-import { Fusion } from "./fusion"
 import { ContractProgress } from "./contract-progress"
 import { FileLease } from "@/util/file-lease"
 import { Global } from "@/global"
@@ -1197,6 +1196,7 @@ export namespace SessionPrompt {
             bypassAgentCheck: true,
             attachments: task.attachments,
             effort: MessageV2.resolveResearchEffort(lastUser.effort),
+            variant: lastUser.variant,
             delegationSettings: MessageV2.resolveDelegationSettings(lastUser.delegationSettings, {
               effort: lastUser.effort,
               enabled: lastUser.delegation,
@@ -1480,6 +1480,7 @@ export namespace SessionPrompt {
         model,
         tools: lastUser.tools,
         effort: MessageV2.resolveResearchEffort(lastUser.effort),
+        variant: lastUser.variant,
         delegationSettings,
         processor,
         bypassAgentCheck,
@@ -1899,6 +1900,7 @@ export namespace SessionPrompt {
     session: Session.Info
     tools?: Record<string, boolean>
     effort: MessageV2.ResearchEffort
+    variant?: string
     delegationSettings: MessageV2.DelegationSettings
     processor: SessionProcessor.Info
     bypassAgentCheck: boolean
@@ -1935,6 +1937,7 @@ export namespace SessionPrompt {
         model: input.model,
         bypassAgentCheck: input.bypassAgentCheck,
         effort: input.effort,
+        variant: input.variant,
         delegationSettings: input.delegationSettings,
         // Batched child calls resolve against the same gated, hook-wrapped
         // set the model was offered instead of the unfiltered registry.
@@ -2247,12 +2250,7 @@ export namespace SessionPrompt {
     } as const
   }
 
-  export function researchEffortReminder(
-    value: unknown,
-    delegation?: unknown,
-    enabled?: boolean,
-    fusion?: { lead: Fusion.Model },
-  ) {
+  export function researchEffortReminder(value: unknown, delegation?: unknown, enabled?: boolean) {
     const effort = MessageV2.resolveResearchEffort(value)
     const settings = MessageV2.resolveDelegationSettings(delegation, { effort, enabled })
     const posture =
@@ -2268,16 +2266,9 @@ export namespace SessionPrompt {
             ? "Delegation is High. Parallelize independent branches freely, one worker per branch."
             : "Delegation is Normal. Delegate a genuinely independent branch when it shortens the path to the result; otherwise do the work here."
     const interaction = decisionPolicy(settings.autonomy)
-    // Only the lead runs Fusion; a worker inherits the settings with level off
-    // and must not be told it has a worker of its own.
-    const fusionPosture =
-      fusion && settings.strategy === "fusion" && settings.level !== "off"
-        ? [Fusion.leadPosture({ lead: fusion.lead, worker: settings.workerModel ?? fusion.lead })]
-        : []
     return [
       `Research effort: ${effort.toUpperCase()}. ${posture}`,
       `${delegationPosture} A worker needs a clean boundary, a self-contained brief with a definition of done, and its findings integrated in the lead response. Verifying the lead's own output (compiling, reading a rendered file, checking a number or a reference) is never a worker's job.`,
-      ...fusionPosture,
       `Independence: ${settings.autonomy}. ${interaction.instruction} Apply this posture to the lead and workers. It never overrides the permission mode.`,
     ].join("\n")
   }
@@ -2948,15 +2939,13 @@ export namespace SessionPrompt {
     const effort = userMessage.info.role === "user" ? userMessage.info.effort : undefined
     const delegationSettings = userMessage.info.role === "user" ? userMessage.info.delegationSettings : undefined
     const delegationEnabled = userMessage.info.role === "user" ? userMessage.info.delegation : undefined
-    const lead =
-      userMessage.info.role === "user" && !input.session.parentID ? { lead: userMessage.info.model } : undefined
     const research = route.direct
       ? PROMPT_DIRECT
       : route.inspection
         ? PROMPT_INSPECTION
         : route.quick
           ? [PROMPT_RESEARCH, PROMPT_QUICK].join("\n\n")
-          : [PROMPT_RESEARCH, researchEffortReminder(effort, delegationSettings, delegationEnabled, lead)].join("\n\n")
+          : [PROMPT_RESEARCH, researchEffortReminder(effort, delegationSettings, delegationEnabled)].join("\n\n")
     const prompts = {
       plan: PROMPT_PLAN,
       write: PROMPT_WRITE,
@@ -2971,7 +2960,7 @@ export namespace SessionPrompt {
         ? undefined
         : route.quick
           ? PROMPT_QUICK
-          : researchEffortReminder(effort, delegationSettings, delegationEnabled, lead)
+          : researchEffortReminder(effort, delegationSettings, delegationEnabled)
       : prompts[input.agent.name as keyof typeof prompts]
     const study = await studyReminder(input.session.id)
     const system = [...legacy, ...(selected ? [systemReminder(selected)] : []), ...(study ? [study] : [])]

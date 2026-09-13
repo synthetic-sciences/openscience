@@ -59,7 +59,7 @@ test("Astra API and Codex options preserve their distinct defaults and valid eff
   expect(Provider.isCodexOAuthModel(api.id)).toBe(true)
   expect(options(api)).toMatchObject({
     store: false,
-    reasoningSummary: "auto",
+    reasoningSummary: "detailed",
     include: ["reasoning.encrypted_content"],
   })
   expect(options(api).reasoningEffort).toBeUndefined()
@@ -112,7 +112,7 @@ test("native Astra actually uses Responses with tools, selected max, replay and 
         expect(requests[0].body).toMatchObject({
           model: "gpt-6-astra",
           max_output_tokens: 128,
-          reasoning: { effort: "max", summary: "auto" },
+          reasoning: { effort: "max", summary: "detailed" },
           tools: [{ type: "function", name: "probe" }],
         })
         expect(requests[0].body.include).toContain("reasoning.encrypted_content")

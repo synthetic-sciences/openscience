@@ -72,8 +72,23 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   skill that shadows a same-named one now carries `shadows` with the losing
   paths, so a local edit that had no effect is explained.
 
+### Removed
+
+- Fusion, the delegation strategy that bound one persistent worker to the lead
+  with per-turn handoff budgets. Workers are parallel only: a fresh child per
+  Task call, on the Worker model from Customize → Models or the lead's model.
+  The Workers switch in Tools, the Fusion badge and handoff count on task
+  cards, the `delegation_strategy` preference and the binding store are gone;
+  a stored `fusion` preference is ignored.
+
 ### Changed
 
+- Reasoning runs deeper and shows more. The composer's effort defaults to
+  **high** whenever a model offers it (the picker keeps every level), a worker
+  running on the lead's model inherits that effort, and direct OpenAI, Azure and
+  Codex OAuth requests for the GPT-5/GPT-6/o3/o4/codex families ask for
+  `detailed` reasoning summaries instead of `auto`. A phase the provider kept
+  private shows as a "Thought" row with its duration and nothing to open.
 - The `/` menu is one list in the agent's own tiers. It opens on Core: `/plan`,
   `/goal`, the fifteen core skills in workflow order and `/compact`; pinned
   skills and the Session actions (`/stop` while a turn runs, `/init`,
@@ -109,9 +124,6 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   elapsed) and streams nothing; its handoff, outputs and **Open agent** appear
   when it finishes. The live operation list, activity groups, operation count
   and model provenance are gone from the card.
-- Reasoning the provider kept entirely private no longer produces a "Thought"
-  row that only says the text is unavailable; the time still counts toward a
-  neighbouring readable thought.
 - Skills that declare `allowed-tools` unlock those tools for whichever agent
   loaded them; the biology database tools are no longer reserved for the
   biology agent.

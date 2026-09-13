@@ -52,19 +52,11 @@ In the research controls, delegation determines how readily OpenScience divides 
 
 These settings guide collaboration. They do not replace your action-approval settings or a service's spending controls.
 
-### Workers: Parallel or Fusion
+### Workers
 
-**Workers** chooses how delegated execution is run:
+Each delegated task starts its own worker in its own session, and independent workers run at the same time. A worker runs on the **Worker model** from **Customize → Models** when one is set, otherwise on the lead's model. The lead writes a self-contained brief with a definition of done, waits for the handoff, and integrates it; checking the lead's own output (compiling, reading a rendered file, confirming a number or a reference) is never delegated.
 
-- **Parallel** (default): each execute task starts its own worker, and independent workers can run at the same time.
-- **Fusion**: the model you selected stays the lead and hands substantial, well-specified work to one persistent worker that runs on the **Worker model** from **Customize → Models**. The same worker is resumed for every execute task in the conversation, so it keeps its history instead of paying to rebuild context on each handoff. The lead keeps the scientific judgment: which claim is tested, whether the data supports it, fitting assumptions, inclusion rules and the conclusions.
-
-Fusion follows the "sidekick" pattern from Cognition's Devin Fusion: two capable agents with separate, persistent contexts, where the expensive model takes few actions and the cheaper one executes. Choose a cheaper worker model to save on execution; with no worker model set, Fusion still keeps one persistent worker but on the same model as the lead. The Tools menu shows the pair, delegated task cards show the handoff number and lineage, and the session cost readout includes what the worker spent. Each turn may make a bounded number of handoffs (six by default); the worker never publishes results or launches paid compute — those stay with the lead.
-
-Open a delegated task to inspect its tool activity and current assignment. Reused workers
-keep their earlier conversation, while the heading identifies their active assignment.
-Stopping the lead also cancels its active delegated work, including workers preparing
-to start. A stopped task's saved files and recorded tool results remain available.
+A delegated task shows as one line (what it is doing, which agent, its state and elapsed time) and streams nothing while it runs; open it for the handoff, its saved Results and **Open agent**, which shows the worker's own conversation. Continued workers keep their earlier conversation. Stopping the lead also cancels its active delegated work, including workers preparing to start. A stopped task's saved files and recorded tool results remain available.
 
 Saved worker Results carry immutable artifact and version IDs back to the lead.
 The lead can read these versions without access to the worker's private scratch.

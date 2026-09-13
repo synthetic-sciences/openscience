@@ -277,7 +277,6 @@ export type UserMessage = {
       modelID: string
     }
     autonomy?: "interactive" | "balanced" | "autonomous"
-    strategy?: "parallel" | "fusion"
   }
   variant?: string
   tier?: string
@@ -9136,7 +9135,6 @@ export type SettingsPreferencesGetResponses = {
       modelID: string
     } | null
     delegation_autonomy?: "interactive" | "balanced" | "autonomous"
-    delegation_strategy?: "parallel" | "fusion"
     delegation_diversity?: "focused" | "balanced" | "exploratory"
   }
 }
@@ -9161,7 +9159,6 @@ export type SettingsPreferencesUpdateData = {
       modelID: string
     } | null
     delegation_autonomy?: "interactive" | "balanced" | "autonomous"
-    delegation_strategy?: "parallel" | "fusion"
     delegation_diversity?: "focused" | "balanced" | "exploratory"
   }
   path?: never
@@ -9193,7 +9190,6 @@ export type SettingsPreferencesUpdateResponses = {
       modelID: string
     } | null
     delegation_autonomy?: "interactive" | "balanced" | "autonomous"
-    delegation_strategy?: "parallel" | "fusion"
     delegation_diversity?: "focused" | "balanced" | "exploratory"
   }
 }
@@ -12042,7 +12038,6 @@ export type SessionPromptData = {
         modelID: string
       }
       autonomy?: "interactive" | "balanced" | "autonomous"
-      strategy?: "parallel" | "fusion"
     }
     system?: string
     variant?: string
@@ -12242,7 +12237,6 @@ export type SessionPromptAsyncData = {
         modelID: string
       }
       autonomy?: "interactive" | "balanced" | "autonomous"
-      strategy?: "parallel" | "fusion"
     }
     system?: string
     variant?: string
@@ -12300,7 +12294,6 @@ export type SessionCommandData = {
         modelID: string
       }
       autonomy?: "interactive" | "balanced" | "autonomous"
-      strategy?: "parallel" | "fusion"
     }
     variant?: string
     tier?: string
@@ -12533,7 +12526,6 @@ export type RuntimePromptData = {
         modelID: string
       }
       autonomy?: "interactive" | "balanced" | "autonomous"
-      strategy?: "parallel" | "fusion"
     }
     requestID?: string
     message?: string

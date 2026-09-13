@@ -13,7 +13,6 @@ import { createCoalescer } from "../storage/coalescer"
 import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
 import { SessionLoopState } from "./loop-state"
-import { Fusion } from "./fusion"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@synsci/util/fn"
@@ -593,7 +592,6 @@ export namespace Session {
         }
         await SessionTraceStore.remove(sessionID)
         await SessionResearch.remove(sessionID)
-        await Fusion.remove(sessionID)
         await Storage.remove(deletionKey(project.id, sessionID))
       } catch (e) {
         log.error(e)

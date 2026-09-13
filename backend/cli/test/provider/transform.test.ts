@@ -2109,7 +2109,7 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["minimal", "low", "medium", "high"])
       expect(result.low).toEqual({
         reasoningEffort: "low",
-        reasoningSummary: "auto",
+        reasoningSummary: "detailed",
         include: ["reasoning.encrypted_content"],
       })
     })
