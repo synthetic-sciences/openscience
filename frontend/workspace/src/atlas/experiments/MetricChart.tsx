@@ -66,6 +66,16 @@ export type ClimbPoint = {
   verdict: "baseline" | "kept" | "reverted" | "running" | "killed" | "failed" | "pending"
 }
 
+const VERDICT: Record<ClimbPoint["verdict"], string> = {
+  baseline: "Baseline",
+  kept: "Kept",
+  reverted: "Reverted",
+  running: "Running",
+  killed: "Killed",
+  failed: "Failed",
+  pending: "Unrecorded",
+}
+
 /**
  * The shape of a study: every run in order, the best-so-far line stepping
  * through the ones that were kept, and the baseline as a reference. Filled
@@ -210,7 +220,7 @@ export function HillClimbChart(props: {
         {(point) => (
           <div class="climb-chart__tooltip" role="status">
             <span class="climb-chart__tooltip-label">{point().label}</span>
-            <span class="climb-chart__tooltip-verdict">{point().verdict}</span>
+            <span class="climb-chart__tooltip-verdict">{VERDICT[point().verdict]}</span>
             <b>{point().value === null ? "n/a" : formatValue(point().value as number)}</b>
           </div>
         )}

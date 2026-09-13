@@ -1,6 +1,6 @@
-/* Autoresearch: one tab per study. The design is typographic: a score, a
-   climb, then lists separated by hairlines. Colour is reserved for the
-   series on the charts and for verdicts. Sizes follow the Compute pane. */
+/* Autoresearch: one tab per study, in the Compute pane's language. The
+   score sits in a soft card like the host strip, runs are compute-style rows
+   with a status dot, and every control is the kit's button. */
 .autoresearch {
   container: autoresearch / inline-size;
   width: 100%;
@@ -24,7 +24,7 @@
   justify-content: space-between;
   gap: 12px;
   min-height: 36px;
-  padding: 0 12px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--color-border-weak);
 }
 
@@ -35,14 +35,42 @@
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
-  padding: 0 16px 28px;
+  padding: 0 10px 24px;
 }
 
 .autoresearch__body:hover {
   scrollbar-color: color-mix(in srgb, var(--color-text) 20%, transparent) transparent;
 }
 
-/* ── Tabs ─────────────────────────────────────────────────────────────── */
+/* Kit buttons inside the pane: small, quiet, no extra chrome. */
+.autoresearch [data-component="button"][data-size="small"] {
+  height: 26px;
+  padding: 0 8px;
+  font-size: var(--font-size-x-small);
+}
+
+.autoresearch [data-component="button"][data-variant="ghost"] {
+  color: var(--color-text-muted);
+}
+
+.autoresearch [data-component="button"][aria-expanded="true"],
+.autoresearch [data-component="button"][aria-pressed="true"] {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+.autoresearch [data-component="button"][data-danger]:hover:not(:disabled) {
+  color: var(--color-error);
+}
+
+.autoresearch [data-component="button"] em {
+  margin-left: 5px;
+  color: var(--color-text-faint);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Study tabs ───────────────────────────────────────────────────────── */
 .ar-tabs {
   min-width: 0;
   display: flex;
@@ -70,6 +98,8 @@
   color: var(--color-text-faint);
   font: inherit;
   font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: -0.005em;
   cursor: pointer;
 }
 
@@ -98,7 +128,7 @@
 .ar-tabs button:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--atlas-radius-xs);
 }
 
 .ar-tabs button span {
@@ -117,8 +147,7 @@
 }
 
 .ar-tabs button[data-status="running"] i {
-  background: var(--color-text-interactive);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-text-interactive) 22%, transparent);
+  background: var(--color-success);
 }
 
 .ar-tabs button[data-status="paused"] i {
@@ -126,11 +155,11 @@
 }
 
 .ar-tabs button[data-status="halted"] i {
-  background: var(--color-text-error);
+  background: var(--color-error);
 }
 
 .ar-tabs button[data-status="concluded"] i {
-  background: var(--color-success, #4cb782);
+  background: var(--color-text-muted);
 }
 
 .ar-gpus {
@@ -163,23 +192,26 @@
 .ar-gpus b {
   display: block;
   height: 100%;
-  background: var(--color-text-interactive);
+  background: var(--color-success);
   transition: width 400ms ease;
 }
 
-/* ── Score ────────────────────────────────────────────────────────────── */
+/* ── Score card ───────────────────────────────────────────────────────── */
 .ar-score {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 18px 0 8px;
+  gap: 8px;
+  margin: 8px 0 6px;
+  padding: 10px 10px 8px;
+  border-radius: var(--atlas-radius-sm);
+  background: color-mix(in srgb, var(--color-bg-subtle) 72%, transparent);
 }
 
 .ar-score__row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
 .ar-score__value {
@@ -196,10 +228,10 @@
 
 .ar-score__value strong {
   color: var(--color-text);
-  font-size: 30px;
+  font-size: 24px;
   font-weight: var(--font-weight-medium);
-  letter-spacing: -0.025em;
-  line-height: 1.1;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
 
@@ -210,49 +242,37 @@
 }
 
 .ar-score__gain[data-sign="up"] {
-  color: var(--color-success, #4cb782);
+  color: var(--color-success);
 }
 
 .ar-score__gain[data-sign="down"] {
-  color: var(--color-text-error);
+  color: var(--color-error);
 }
 
 .ar-score__controls {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
 
-.ar-score__controls button {
-  height: 24px;
-  padding: 0 7px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--color-text-faint);
-  font: inherit;
-  font-size: var(--font-size-x-small);
-  cursor: pointer;
-}
-
-.ar-score__controls button:hover {
-  background: var(--color-bg-subtle);
-  color: var(--color-text);
-}
-
-.ar-score__controls button[data-danger]:hover {
-  color: var(--color-text-error);
-}
-
+/* Status pill, the same shape the Compute pane uses for its counts. */
 .ar-status {
-  margin-right: 6px;
+  flex: 0 0 auto;
+  margin-right: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-surface-solid);
   color: var(--color-text-faint);
-  font-size: var(--font-size-x-small);
+  font-size: var(--font-size-2x-small);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  letter-spacing: 0.02em;
 }
 
 .ar-status[data-status="running"] {
-  color: var(--color-text-interactive);
+  color: var(--color-success);
 }
 
 .ar-status[data-status="paused"] {
@@ -260,98 +280,52 @@
 }
 
 .ar-status[data-status="halted"] {
-  color: var(--color-text-error);
-}
-
-.ar-status[data-status="concluded"] {
-  color: var(--color-success, #4cb782);
+  color: var(--color-error);
 }
 
 .ar-score__meta {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ar-score__facts {
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px 0;
-  margin: 2px 0 0;
   color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
   font-variant-numeric: tabular-nums;
 }
 
-.ar-score__meta > * + *::before {
+.ar-score__facts span + span::before {
   content: "·";
-  margin: 0 7px;
+  margin: 0 6px;
   color: var(--color-border);
 }
 
-/* Text-only buttons that open a disclosure. */
-.ar-link {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-faint);
-  font: inherit;
-  font-size: var(--font-size-x-small);
-  cursor: pointer;
+.ar-score__links {
+  display: flex;
+  gap: 2px;
 }
 
-.ar-link:hover,
-.ar-link[aria-expanded="true"] {
-  color: var(--color-text);
-}
-
-.ar-link:disabled {
-  color: var(--color-border);
-  cursor: default;
-}
-
-/* Steering: a directive becomes a standing rule in the agent's reminder. */
 .ar-steer {
   display: flex;
+  align-items: center;
   gap: 6px;
-  padding: 6px 0 2px;
 }
 
-.ar-steer input {
+.ar-steer [data-component="text-field"] {
   flex: 1 1 auto;
   min-width: 0;
-  height: 26px;
-  padding: 0 8px;
-  border: 1px solid var(--color-border-weak);
-  border-radius: var(--radius-xs);
-  background: var(--color-bg);
-  color: var(--color-text);
-  font: inherit;
-  font-size: var(--font-size-small);
-}
-
-.ar-steer input:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -1px;
-}
-
-.ar-steer button {
-  height: 26px;
-  padding: 0 9px;
-  border: 1px solid var(--color-border-weak);
-  border-radius: var(--radius-xs);
-  background: var(--color-bg);
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: var(--font-size-x-small);
-  cursor: pointer;
-}
-
-.ar-steer button:disabled {
-  color: var(--color-border);
-  cursor: default;
 }
 
 .ar-directives {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin: 4px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -381,7 +355,7 @@
   height: 18px;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-xs);
+  border-radius: var(--atlas-radius-xs);
   background: transparent;
   color: var(--color-text-faint);
   font-size: 14px;
@@ -398,7 +372,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 0 4px;
+  padding-top: 2px;
 }
 
 .ar-about p {
@@ -408,14 +382,15 @@
   overflow-wrap: anywhere;
 }
 
-.ar-about dl {
+/* Key/value facts, shared by About and a run's details. */
+.ar-facts {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 2px 18px;
   margin: 0;
 }
 
-.ar-about dl div {
+.ar-facts div {
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -423,16 +398,17 @@
   font-size: var(--font-size-x-small);
 }
 
-.ar-about dt {
+.ar-facts dt {
   color: var(--color-text-faint);
 }
 
-.ar-about dd {
+.ar-facts dd {
   margin: 0;
   overflow: hidden;
   color: var(--color-text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Climb chart ──────────────────────────────────────────────────────── */
@@ -440,7 +416,6 @@
   position: relative;
   width: 100%;
   min-width: 0;
-  margin-top: 4px;
 }
 
 .climb-chart svg {
@@ -485,13 +460,13 @@
 }
 
 .climb-chart__mark[data-verdict="running"] {
-  stroke: var(--color-text-interactive);
+  stroke: var(--color-success);
   stroke-dasharray: 2 2;
 }
 
 .climb-chart__mark[data-verdict="killed"],
 .climb-chart__mark[data-verdict="failed"] {
-  stroke: var(--color-text-error);
+  stroke: var(--color-error);
 }
 
 .climb-chart__tooltip {
@@ -504,8 +479,9 @@
   max-width: 70%;
   padding: 4px 8px;
   border: 1px solid var(--color-border-weak);
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--color-bg) 94%, transparent);
+  border-radius: var(--atlas-radius-xs);
+  background: var(--color-surface-solid);
+  box-shadow: var(--atlas-shadow-xs);
   color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   pointer-events: none;
@@ -528,42 +504,70 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Runs ─────────────────────────────────────────────────────────────── */
-.ar-runs-section {
+/* ── Blocks: runs, and the row of disclosures ─────────────────────────── */
+.ar-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 18px 0 6px;
+  gap: 2px;
+  padding: 8px 0 4px;
+}
+
+.ar-block + .ar-block {
   border-top: 1px solid var(--color-border-weak);
 }
 
-.ar-section__head {
+.ar-block__head {
+  min-height: 30px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  min-height: 20px;
+  gap: 10px;
+  padding: 0 8px;
 }
 
-.ar-section__head h3 {
-  margin: 0;
+.ar-block__identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ar-block__identity strong {
   color: var(--color-text-muted);
-  font-size: var(--font-size-x-small);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
+  letter-spacing: -0.005em;
 }
 
-.ar-section__head h3 span {
-  margin-left: 5px;
+.ar-block__identity em {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
   color: var(--color-text-faint);
-  font-weight: var(--font-weight-regular);
-  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-2x-small);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  letter-spacing: 0.035em;
+}
+
+.ar-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.ar-panel {
+  padding: 6px 8px 8px;
 }
 
 .ar-curves {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 4px 0 10px;
+  padding: 2px 8px 10px;
 }
 
 .ar-chart-controls {
@@ -576,19 +580,15 @@
 
 .ar-chart-controls select {
   max-width: 160px;
-  height: 22px;
-  padding: 0 4px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--atlas-radius-xs);
+  background: var(--color-bg);
   color: var(--color-text-muted);
   font: inherit;
   font-size: var(--font-size-x-small);
   cursor: pointer;
-}
-
-.ar-chart-controls select:hover {
-  background: var(--color-bg-subtle);
 }
 
 .ar-chart-controls label {
@@ -601,60 +601,6 @@
   width: 72px;
   height: 14px;
   accent-color: var(--color-text-muted);
-}
-
-.ar-chart-controls button {
-  height: 22px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--color-text-faint);
-  font: inherit;
-  font-size: var(--font-size-x-small);
-  cursor: pointer;
-}
-
-.ar-chart-controls button[aria-pressed="true"] {
-  background: var(--color-bg-subtle);
-  color: var(--color-text);
-}
-
-/* Disclosures for everything that is not the score or the runs. */
-.ar-more {
-  display: flex;
-  gap: 14px;
-  padding: 14px 0 6px;
-  border-top: 1px solid var(--color-border-weak);
-}
-
-.ar-more button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-faint);
-  font: inherit;
-  font-size: var(--font-size-x-small);
-  cursor: pointer;
-}
-
-.ar-more button span {
-  margin-left: 4px;
-  font-variant-numeric: tabular-nums;
-}
-
-.ar-more button:hover,
-.ar-more button[aria-expanded="true"] {
-  color: var(--color-text);
-}
-
-.ar-more button:disabled {
-  color: var(--color-border);
-  cursor: default;
-}
-
-.ar-panel {
-  padding: 2px 0 10px;
 }
 
 /* ── Metric chart ─────────────────────────────────────────────────────── */
@@ -711,8 +657,9 @@
   max-width: 60%;
   padding: 5px 8px;
   border: 1px solid var(--color-border-weak);
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--color-bg) 94%, transparent);
+  border-radius: var(--atlas-radius-xs);
+  background: var(--color-surface-solid);
+  box-shadow: var(--atlas-shadow-xs);
   color: var(--color-text-muted);
   font-size: var(--font-size-x-small);
   pointer-events: none;
@@ -759,42 +706,85 @@
   font-size: var(--font-size-x-small);
 }
 
-/* ── Runs ─────────────────────────────────────────────────────────────── */
+/* ── Runs: compute-style rows ─────────────────────────────────────────── */
 .ar-runs {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.ar-run + .ar-run {
-  border-top: 1px solid var(--color-border-weak);
-}
-
 .ar-run__row {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto 64px 64px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  min-height: 30px;
-  padding: 3px 2px;
+  gap: 9px;
+  margin: 1px 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--atlas-radius-xs);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  font-variant-numeric: tabular-nums;
+  transition: background-color 140ms ease;
 }
 
-.ar-run__row:hover {
-  background: var(--color-bg-subtle);
-}
-
+.ar-run__row:hover,
 .ar-run[data-open="true"] .ar-run__row {
   background: var(--color-bg-subtle);
 }
 
+.ar-run__row:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.ar-run__kind {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+}
+
+.ar-run__kind::after {
+  position: absolute;
+  right: -1px;
+  bottom: 0;
+  width: 5px;
+  height: 5px;
+  border: 1.5px solid var(--color-bg);
+  border-radius: 999px;
+  background: var(--color-text-faint);
+  content: "";
+}
+
+.ar-run__row:hover .ar-run__kind::after,
+.ar-run[data-open="true"] .ar-run__kind::after {
+  border-color: var(--color-bg-subtle);
+}
+
+.ar-run[data-verdict="kept"] .ar-run__kind::after,
+.ar-run[data-verdict="baseline"] .ar-run__kind::after,
+.ar-run[data-verdict="running"] .ar-run__kind::after {
+  background: var(--color-success);
+}
+
+.ar-run[data-verdict="killed"] .ar-run__kind::after,
+.ar-run[data-verdict="failed"] .ar-run__kind::after {
+  background: var(--color-error);
+}
+
 .ar-run__swatch {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   padding: 0;
   border: 1.5px solid var(--run-color);
-  border-radius: 2px;
+  border-radius: 3px;
   background: transparent;
   cursor: pointer;
 }
@@ -803,91 +793,54 @@
   background: var(--run-color);
 }
 
-.ar-run__name {
+.ar-run__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ar-run__copy strong {
   min-width: 0;
   overflow: hidden;
   color: var(--color-text);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+  letter-spacing: -0.006em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ar-run__verdict {
+.ar-run__copy > span {
+  min-width: 0;
+  overflow: hidden;
   color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.ar-run[data-verdict="kept"] .ar-run__verdict,
-.ar-run[data-verdict="baseline"] .ar-run__verdict {
-  color: var(--color-text-muted);
-}
-
-.ar-run[data-verdict="running"] .ar-run__verdict {
-  color: var(--color-text-interactive);
-}
-
-.ar-run[data-verdict="killed"] .ar-run__verdict,
-.ar-run[data-verdict="failed"] .ar-run__verdict {
-  color: var(--color-text-error);
-}
-
-.ar-run__value,
-.ar-run__delta,
 .ar-run__value {
   color: var(--color-text);
-}
-
-.ar-run__delta {
-  color: var(--color-text-faint);
-}
-
-.ar-run__delta[data-sign="up"] {
-  color: var(--color-success, #4cb782);
-}
-
-.ar-run__delta[data-sign="down"] {
-  color: var(--color-text-error);
+  font-size: var(--font-size-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .ar-run__detail {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 6px 2px 14px 22px;
+  padding: 4px 8px 12px 39px;
 }
 
 .ar-run__reason {
   margin: 0;
-  color: var(--color-text-error);
+  color: var(--color-error);
   font-size: var(--font-size-x-small);
-}
-
-.ar-run__facts dl {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 2px 18px;
-  margin: 0;
-}
-
-.ar-run__facts div {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-  font-size: var(--font-size-x-small);
-}
-
-.ar-run__facts dt {
-  color: var(--color-text-faint);
-  font-family: var(--font-family-mono);
-}
-
-.ar-run__facts dd {
-  margin: 0;
-  overflow: hidden;
-  color: var(--color-text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 
 .ar-run__curves {
@@ -917,8 +870,12 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0 12px;
-  padding: 5px 2px;
+  padding: 5px 0;
   border-top: 1px solid var(--color-border-weak);
+}
+
+.ar-queue li:first-child {
+  border-top: 0;
 }
 
 .ar-queue__title {
@@ -984,42 +941,55 @@
 .ar-activity li[data-kind="killed"] span,
 .ar-activity li[data-kind="failed"] span,
 .ar-activity li[data-kind="halted"] span {
-  color: var(--color-text-error);
+  color: var(--color-error);
 }
 
 .ar-none {
   margin: 0;
+  padding: 4px 8px;
   color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
 }
 
-/* ── Empty ────────────────────────────────────────────────────────────── */
+/* ── Empty state, as the Compute pane draws it ────────────────────────── */
 .ar-empty {
   display: flex;
+  gap: 12px;
+  margin: 14px 4px;
+  padding: 14px 12px;
+  border-radius: var(--atlas-radius-sm);
+  background: color-mix(in srgb, var(--color-bg-subtle) 72%, transparent);
+}
+
+.ar-empty__glyph {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: var(--atlas-radius-xs);
+  background: var(--color-surface-solid);
+  box-shadow: var(--atlas-shadow-xs);
+  color: var(--color-text-muted);
+}
+
+.ar-empty__copy {
+  min-width: 0;
+  max-width: 320px;
+  display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-width: 44ch;
-  padding: 28px 0;
-  color: var(--color-text-faint);
+  gap: 3px;
 }
 
-.ar-empty strong {
+.ar-empty__copy strong {
   color: var(--color-text-muted);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
+  line-height: 1.35;
 }
 
-.ar-empty p {
-  margin: 0;
-  line-height: 1.5;
-}
-
-.ar-empty em {
-  color: var(--color-text-muted);
-  font-style: normal;
-}
-
-.ar-empty__loose {
-  padding-top: 6px;
-  border-top: 1px solid var(--color-border-weak);
+.ar-empty__copy span {
+  color: var(--color-text-faint);
   font-size: var(--font-size-x-small);
+  line-height: 1.45;
 }

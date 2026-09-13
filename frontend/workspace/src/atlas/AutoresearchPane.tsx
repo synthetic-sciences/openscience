@@ -1,7 +1,10 @@
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, Show, type JSX } from "solid-js"
 import type { ExperimentRun, ExperimentSeries, LocalGpu, Study, StudyOverview } from "@synsci/sdk/v2/client"
+import { Button } from "@synsci/ui/button"
+import { TextField } from "@synsci/ui/text-field"
 import { useSDK } from "@/context/sdk"
 import { uiStore } from "@/atlas/store/ui"
+import { IconActivity } from "@/atlas/shared/Icon"
 import { colorFor, formatValue, HillClimbChart, MetricChart, type ClimbPoint } from "./experiments/MetricChart"
 import "./AutoresearchPane.css"
 
@@ -27,6 +30,23 @@ function targetLabel(target: Study["target"]) {
   if (target.kind === "modal") return target.gpu ? `modal ${target.gpu}` : "modal"
   if (target.kind === "ssh") return `ssh ${target.host_id}`
   return "local"
+}
+
+const VERDICT_LABEL: Record<ClimbPoint["verdict"], string> = {
+  baseline: "Baseline",
+  kept: "Kept",
+  reverted: "Reverted",
+  running: "Running",
+  killed: "Killed",
+  failed: "Failed",
+  pending: "Unrecorded",
+}
+
+const STATUS_LABEL: Record<Study["status"], string> = {
+  running: "Running",
+  paused: "Paused",
+  halted: "Halted",
+  concluded: "Concluded",
 }
 
 function clock(at: number) {
@@ -261,71 +281,79 @@ export function AutoresearchPane(): JSX.Element {
     const state = () => verdict(run())
     const headline = () => run().headline
     const delta = () => run().baselineDelta
+    const isOpen = () => open() === run().id
     return (
-      <li class="ar-run" data-open={open() === run().id ? "true" : undefined} data-verdict={state()}>
-        <div class="ar-run__row" onClick={() => setOpen(open() === run().id ? undefined : run().id)}>
-          <button
-            type="button"
-            class="ar-run__swatch"
-            aria-pressed={selected().has(run().id)}
-            aria-label={`${selected().has(run().id) ? "Hide" : "Show"} ${run().name} on the chart`}
-            style={{ "--run-color": color(run()) }}
-            onClick={(event) => {
-              event.stopPropagation()
-              toggle(run().id)
-            }}
-          />
-          <span class="ar-run__name">{run().name}</span>
-          <span class="ar-run__verdict">{state() === "pending" ? "unrecorded" : state()}</span>
-          <span class="ar-run__value">{headline() === null ? "" : formatValue(headline() as number)}</span>
-          <span
-            class="ar-run__delta"
-            data-sign={delta() === null ? undefined : (delta() as number) >= 0 ? "up" : "down"}
-          >
-            {delta() === null ? "" : signed(delta() as number)}
+      <li class="ar-run" data-open={isOpen() ? "true" : undefined} data-verdict={state()}>
+        <div
+          class="ar-run__row"
+          role="button"
+          tabIndex={0}
+          aria-expanded={isOpen()}
+          onClick={() => setOpen(isOpen() ? undefined : run().id)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return
+            event.preventDefault()
+            setOpen(isOpen() ? undefined : run().id)
+          }}
+        >
+          <span class="ar-run__kind">
+            <button
+              type="button"
+              class="ar-run__swatch"
+              aria-pressed={selected().has(run().id)}
+              aria-label={`${selected().has(run().id) ? "Hide" : "Show"} ${run().name} on the chart`}
+              style={{ "--run-color": color(run()) }}
+              onClick={(event) => {
+                event.stopPropagation()
+                toggle(run().id)
+              }}
+            />
           </span>
+          <span class="ar-run__copy">
+            <strong>{run().name}</strong>
+            <span>
+              {VERDICT_LABEL[state()]}
+              {delta() === null ? "" : ` · ${signed(delta() as number)}`}
+              {elapsed(run(), now()) ? ` · ${elapsed(run(), now())}` : ""}
+            </span>
+          </span>
+          <span class="ar-run__value">{headline() === null ? "—" : formatValue(headline() as number)}</span>
         </div>
-        <Show when={open() === run().id}>
+        <Show when={isOpen()}>
           <div class="ar-run__detail">
             <Show when={run().killReason}>
               <p class="ar-run__reason">{run().killReason}</p>
             </Show>
-            <div class="ar-run__facts">
-              <dl>
-                <For each={Object.entries({ ...(run().config ?? {}), ...(run().summary ?? {}) })}>
-                  {([name, value]) => (
-                    <div>
-                      <dt>{name}</dt>
-                      <dd>
-                        {typeof value === "number"
-                          ? formatValue(value)
-                          : typeof value === "object"
-                            ? JSON.stringify(value)
-                            : String(value)}
-                      </dd>
-                    </div>
-                  )}
-                </For>
-                <div>
-                  <dt>points</dt>
-                  <dd>{run().points}</dd>
-                </div>
-                <div>
-                  <dt>time</dt>
-                  <dd>{elapsed(run(), now()) || "—"}</dd>
-                </div>
-                <Show when={run().jobID}>
+            <dl class="ar-facts">
+              <For each={Object.entries({ ...(run().config ?? {}), ...(run().summary ?? {}) })}>
+                {([name, value]) => (
                   <div>
-                    <dt>job</dt>
-                    <dd>{run().jobID}</dd>
+                    <dt>{name}</dt>
+                    <dd>
+                      {typeof value === "number"
+                        ? formatValue(value)
+                        : typeof value === "object"
+                          ? JSON.stringify(value)
+                          : String(value)}
+                    </dd>
                   </div>
-                </Show>
+                )}
+              </For>
+              <div>
+                <dt>points</dt>
+                <dd>{run().points}</dd>
+              </div>
+              <Show when={run().jobID}>
                 <div>
-                  <dt>run</dt>
-                  <dd>{run().id}</dd>
+                  <dt>job</dt>
+                  <dd>{run().jobID}</dd>
                 </div>
-              </dl>
-            </div>
+              </Show>
+              <div>
+                <dt>run</dt>
+                <dd>{run().id}</dd>
+              </div>
+            </dl>
             <div class="ar-run__curves">
               <For each={[...new Set((openSeries.latest ?? []).map((item) => item.key))]}>
                 {(name) => (
@@ -358,7 +386,7 @@ export function AutoresearchPane(): JSX.Element {
                 role="tab"
                 aria-selected={study()?.id === item.id}
                 data-status={item.status}
-                title={`${item.name}: ${item.status}`}
+                title={`${item.name}: ${STATUS_LABEL[item.status]}`}
                 onClick={() => pick(item.id)}
               >
                 <i aria-hidden="true" />
@@ -390,26 +418,27 @@ export function AutoresearchPane(): JSX.Element {
         <Show
           when={study()}
           fallback={
-            <div class="ar-empty">
-              <strong>No studies yet</strong>
-              <p>
-                Ask for one in the session:{" "}
-                <em>
-                  "start an autoresearch study on train.py: minimize val_loss, baseline first, stop after 20 runs."
-                </em>{" "}
-                Each study gets a tab here with its score, the climb across runs, the runs' curves, the queue and the
-                lessons.
-              </p>
-              <Show when={loose().length}>
-                <p class="ar-empty__loose">
-                  {loose().length} tracked run{loose().length === 1 ? "" : "s"} outside a study:{" "}
-                  {loose()
-                    .slice(0, 5)
-                    .map((run) => run.name)
-                    .join(", ")}
-                  {loose().length > 5 ? ", …" : ""}
-                </p>
-              </Show>
+            <div class="ar-empty" data-state="idle">
+              <span class="ar-empty__glyph" aria-hidden="true">
+                <IconActivity size={18} strokeWidth={1.5} />
+              </span>
+              <div class="ar-empty__copy">
+                <strong>No studies yet</strong>
+                <span>
+                  Ask in the session for an autoresearch study: the metric to improve, the budget, and the script to
+                  run. Each study appears here with its score, its runs and its queue.
+                </span>
+                <Show when={loose().length}>
+                  <span>
+                    {loose().length} tracked run{loose().length === 1 ? "" : "s"} outside a study:{" "}
+                    {loose()
+                      .slice(0, 5)
+                      .map((run) => run.name)
+                      .join(", ")}
+                    {loose().length > 5 ? ", …" : ""}
+                  </span>
+                </Show>
+              </div>
             </div>
           }
         >
@@ -419,7 +448,7 @@ export function AutoresearchPane(): JSX.Element {
                 <div class="ar-score__row">
                   <div class="ar-score__value">
                     <span class="ar-score__metric">
-                      {current().direction} {current().metric}
+                      {current().direction === "maximize" ? "Maximize" : "Minimize"} {current().metric}
                     </span>
                     <strong>
                       {overview.latest?.best?.headline !== null && overview.latest?.best?.headline !== undefined
@@ -430,7 +459,7 @@ export function AutoresearchPane(): JSX.Element {
                           : "—"}
                     </strong>
                     <span class="ar-score__gain" data-sign={gainSign()}>
-                      <Show when={improvement()} fallback={overview.latest?.baseline ? "baseline" : "no runs yet"}>
+                      <Show when={improvement()} fallback={overview.latest?.baseline ? "Baseline" : "No runs yet"}>
                         {(gain) => (
                           <>
                             {gain().percent >= 0 ? "▲" : "▼"}{" "}
@@ -442,27 +471,43 @@ export function AutoresearchPane(): JSX.Element {
                     </span>
                   </div>
                   <div class="ar-score__controls">
-                    <span class="ar-status" data-status={current().status} title={statusTitle(current())}>
-                      {current().status}
-                    </span>
+                    <em class="ar-status" data-status={current().status} title={statusTitle(current())}>
+                      {STATUS_LABEL[current().status]}
+                    </em>
                     <Show when={current().status === "running"}>
-                      <button type="button" onClick={() => void control(current(), "pause")}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="small"
+                        onClick={() => void control(current(), "pause")}
+                      >
                         Pause
-                      </button>
+                      </Button>
                     </Show>
                     <Show when={current().status === "paused"}>
-                      <button type="button" onClick={() => void control(current(), "resume")}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="small"
+                        onClick={() => void control(current(), "resume")}
+                      >
                         Resume
-                      </button>
+                      </Button>
                     </Show>
                     <Show when={current().status === "running" || current().status === "paused"}>
-                      <button type="button" data-danger onClick={() => void control(current(), "halt")}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="small"
+                        data-danger
+                        onClick={() => void control(current(), "halt")}
+                      >
                         Halt
-                      </button>
+                      </Button>
                     </Show>
-                    <button type="button" onClick={() => writeUp(current())}>
+                    <Button type="button" variant="secondary" size="small" onClick={() => writeUp(current())}>
                       Write up
-                    </button>
+                    </Button>
                   </div>
                 </div>
                 <HillClimbChart
@@ -471,34 +516,40 @@ export function AutoresearchPane(): JSX.Element {
                   metric={current().metric}
                   height={132}
                 />
-                <p class="ar-score__meta">
-                  <span>
-                    {runs().filter((run) => run.status !== "running").length}
-                    {current().budget.maxRuns ? `/${current().budget.maxRuns}` : ""} runs
+                <div class="ar-score__meta">
+                  <span class="ar-score__facts">
+                    <span>
+                      {runs().filter((run) => run.status !== "running").length}
+                      {current().budget.maxRuns ? `/${current().budget.maxRuns}` : ""} runs
+                    </span>
+                    <Show when={runs().some((run) => run.status === "running")}>
+                      <span>{runs().filter((run) => run.status === "running").length} live</span>
+                    </Show>
+                    <span>{hours(current().createdAt, now())}</span>
                   </span>
-                  <Show when={runs().some((run) => run.status === "running")}>
-                    <span>{runs().filter((run) => run.status === "running").length} live</span>
-                  </Show>
-                  <span>{hours(current().createdAt, now())}</span>
-                  <button
-                    type="button"
-                    class="ar-link"
-                    aria-expanded={panel() === "about"}
-                    onClick={() => flip("about")}
-                  >
-                    about
-                  </button>
-                  <Show when={current().status === "running" || current().status === "paused"}>
-                    <button
+                  <span class="ar-score__links">
+                    <Button
                       type="button"
-                      class="ar-link"
-                      aria-expanded={steering()}
-                      onClick={() => setSteering(!steering())}
+                      variant="ghost"
+                      size="small"
+                      aria-expanded={panel() === "about"}
+                      onClick={() => flip("about")}
                     >
-                      steer
-                    </button>
-                  </Show>
-                </p>
+                      About
+                    </Button>
+                    <Show when={current().status === "running" || current().status === "paused"}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="small"
+                        aria-expanded={steering()}
+                        onClick={() => setSteering(!steering())}
+                      >
+                        Steer
+                      </Button>
+                    </Show>
+                  </span>
+                </div>
                 <Show when={steering()}>
                   <form
                     class="ar-steer"
@@ -507,16 +558,16 @@ export function AutoresearchPane(): JSX.Element {
                       void steer(current())
                     }}
                   >
-                    <input
-                      type="text"
+                    <TextField
+                      hideLabel
+                      label="Directive"
                       value={directive()}
                       placeholder="A standing rule for the rest of the study, e.g. only vary the optimizer"
-                      aria-label="Directive"
-                      onInput={(event) => setDirective(event.currentTarget.value)}
+                      onChange={setDirective}
                     />
-                    <button type="submit" disabled={!directive().trim()}>
+                    <Button type="submit" variant="secondary" size="small" disabled={!directive().trim()}>
                       Send
-                    </button>
+                    </Button>
                   </form>
                 </Show>
                 <Show when={current().directives.some((item) => item.active)}>
@@ -540,24 +591,24 @@ export function AutoresearchPane(): JSX.Element {
                 <Show when={panel() === "about"}>
                   <div class="ar-about">
                     <p>{current().purpose}</p>
-                    <dl>
+                    <dl class="ar-facts">
                       <div>
-                        <dt>target</dt>
+                        <dt>Target</dt>
                         <dd>{targetLabel(current().target)}</dd>
                       </div>
                       <div>
-                        <dt>concurrency</dt>
+                        <dt>Concurrency</dt>
                         <dd>{current().concurrency}</dd>
                       </div>
                       <Show when={current().killCriteria}>
                         <div>
-                          <dt>kill</dt>
+                          <dt>Kill</dt>
                           <dd>{current().killCriteria}</dd>
                         </div>
                       </Show>
                       <Show when={Object.keys(current().budget).length}>
                         <div>
-                          <dt>budget</dt>
+                          <dt>Budget</dt>
                           <dd>
                             {Object.entries(current().budget)
                               .filter(([, value]) => value !== undefined)
@@ -567,11 +618,11 @@ export function AutoresearchPane(): JSX.Element {
                         </div>
                       </Show>
                       <div>
-                        <dt>wake-ups</dt>
+                        <dt>Wake-ups</dt>
                         <dd>{current().turns}</dd>
                       </div>
                       <div>
-                        <dt>folder</dt>
+                        <dt>Folder</dt>
                         <dd title={current().root}>{current().root.split("/").slice(-2).join("/")}</dd>
                       </div>
                     </dl>
@@ -579,20 +630,22 @@ export function AutoresearchPane(): JSX.Element {
                 </Show>
               </section>
 
-              <section class="ar-runs-section" aria-label="Runs">
-                <header class="ar-section__head">
-                  <h3>
-                    Runs <span>{runs().length}</span>
-                  </h3>
-                  <button
+              <section class="ar-block" aria-label="Runs">
+                <header class="ar-block__head">
+                  <div class="ar-block__identity">
+                    <strong>Runs</strong>
+                    <em>{runs().length}</em>
+                  </div>
+                  <Button
                     type="button"
-                    class="ar-link"
+                    variant="ghost"
+                    size="small"
                     aria-expanded={curves()}
                     onClick={() => setCurves(!curves())}
                     disabled={!runs().length}
                   >
-                    {curves() ? "hide curves" : "curves"}
-                  </button>
+                    {curves() ? "Hide curves" : "Curves"}
+                  </Button>
                 </header>
                 <Show when={curves()}>
                   <div class="ar-curves">
@@ -605,7 +658,7 @@ export function AutoresearchPane(): JSX.Element {
                         <For each={keys.latest ?? []}>{(name) => <option value={name}>{name}</option>}</For>
                       </select>
                       <label>
-                        <span>smooth</span>
+                        <span>Smooth</span>
                         <input
                           type="range"
                           min="0"
@@ -615,9 +668,15 @@ export function AutoresearchPane(): JSX.Element {
                           onInput={(event) => setSmoothing(Number(event.currentTarget.value))}
                         />
                       </label>
-                      <button type="button" aria-pressed={log()} onClick={() => setLog(!log())}>
-                        log
-                      </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="small"
+                        aria-pressed={log()}
+                        onClick={() => setLog(!log())}
+                      >
+                        Log scale
+                      </Button>
                     </div>
                     <MetricChart
                       series={curveSeries()}
@@ -635,85 +694,98 @@ export function AutoresearchPane(): JSX.Element {
                 </Show>
               </section>
 
-              <nav class="ar-more" aria-label="More">
-                <button type="button" aria-expanded={panel() === "queue"} onClick={() => flip("queue")}>
-                  Queue <span>{queued().length}</span>
-                </button>
-                <button
-                  type="button"
-                  aria-expanded={panel() === "lessons"}
-                  onClick={() => flip("lessons")}
-                  disabled={!current().lessons && !current().conclusion}
-                >
-                  {current().conclusion ? "Conclusion" : "Lessons"}
-                </button>
-                <button
-                  type="button"
-                  aria-expanded={panel() === "activity"}
-                  onClick={() => flip("activity")}
-                  disabled={!(overview.latest?.events ?? []).length}
-                >
-                  Activity
-                </button>
-              </nav>
+              <section class="ar-block" aria-label="More">
+                <div class="ar-more" role="group" aria-label="More about this study">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="small"
+                    aria-expanded={panel() === "queue"}
+                    onClick={() => flip("queue")}
+                  >
+                    Queue
+                    <em>{queued().length}</em>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="small"
+                    aria-expanded={panel() === "lessons"}
+                    onClick={() => flip("lessons")}
+                    disabled={!current().lessons && !current().conclusion}
+                  >
+                    {current().conclusion ? "Conclusion" : "Lessons"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="small"
+                    aria-expanded={panel() === "activity"}
+                    onClick={() => flip("activity")}
+                    disabled={!(overview.latest?.events ?? []).length}
+                  >
+                    Activity
+                  </Button>
+                </div>
 
-              <Show when={panel() === "queue"}>
-                <section class="ar-panel" aria-label="Queue">
-                  <Show when={queued().length} fallback={<p class="ar-none">Nothing queued.</p>}>
-                    <ol class="ar-queue">
-                      <For each={queued()}>
-                        {(idea) => (
-                          <li>
-                            <span class="ar-queue__title" title={idea.description}>
-                              {idea.title}
-                            </span>
-                            <span class="ar-queue__why">{idea.why}</span>
-                            <span class="ar-queue__ev">ev {idea.ev}</span>
+                <Show when={panel() === "queue"}>
+                  <div class="ar-panel" aria-label="Queue">
+                    <Show when={queued().length} fallback={<p class="ar-none">Nothing queued.</p>}>
+                      <ol class="ar-queue">
+                        <For each={queued()}>
+                          {(idea) => (
+                            <li>
+                              <span class="ar-queue__title" title={idea.description}>
+                                {idea.title}
+                              </span>
+                              <span class="ar-queue__why">{idea.why}</span>
+                              <span class="ar-queue__ev">EV {idea.ev}</span>
+                            </li>
+                          )}
+                        </For>
+                      </ol>
+                    </Show>
+                    <Show when={dropped().length}>
+                      <p class="ar-none">
+                        Dropped:{" "}
+                        {dropped()
+                          .map((idea) => idea.title)
+                          .join(", ")}
+                      </p>
+                    </Show>
+                  </div>
+                </Show>
+
+                <Show when={panel() === "lessons"}>
+                  <div class="ar-panel" aria-label="Lessons">
+                    <Show when={current().conclusion}>
+                      <p class="ar-prose">{current().conclusion}</p>
+                    </Show>
+                    <Show when={current().lessons}>
+                      <ul class="ar-lessons">
+                        <For each={current().lessons.split("\n").filter(Boolean)}>
+                          {(line) => <li>{line.replace(/^-\s*/, "")}</li>}
+                        </For>
+                      </ul>
+                    </Show>
+                  </div>
+                </Show>
+
+                <Show when={panel() === "activity"}>
+                  <div class="ar-panel" aria-label="Activity">
+                    <ol class="ar-activity">
+                      <For each={(overview.latest?.events ?? []).slice(0, 12)}>
+                        {(event) => (
+                          <li data-kind={event.kind}>
+                            <time>{clock(event.createdAt)}</time>
+                            <span>{event.message}</span>
                           </li>
                         )}
                       </For>
                     </ol>
-                  </Show>
-                  <Show when={dropped().length}>
-                    <p class="ar-none">
-                      Dropped:{" "}
-                      {dropped()
-                        .map((idea) => idea.title)
-                        .join(", ")}
-                    </p>
-                  </Show>
-                </section>
-              </Show>
-
-              <Show when={panel() === "lessons"}>
-                <section class="ar-panel" aria-label="Lessons">
-                  <Show when={current().conclusion}>
-                    <p class="ar-prose">{current().conclusion}</p>
-                  </Show>
-                  <Show when={current().lessons}>
-                    <ul class="ar-lessons">
-                      <For each={current().lessons.split("\n").filter(Boolean)}>
-                        {(line) => <li>{line.replace(/^-\s*/, "")}</li>}
-                      </For>
-                    </ul>
-                  </Show>
-                </section>
-              </Show>
-
-              <Show when={panel() === "activity"}>
-                <section class="ar-panel" aria-label="Activity">
-                  <ol class="ar-activity">
-                    <For each={(overview.latest?.events ?? []).slice(0, 12)}>
-                      {(event) => (
-                        <li data-kind={event.kind}>
-                          <time>{clock(event.createdAt)}</time>
-                          <span>{event.message}</span>
-                        </li>
-                      )}
-                    </For>
-                  </ol>
-                </section>
-              </Show>
+                  </div>
+                </Show>
+              </section>
             </>
           )}
         </Show>
