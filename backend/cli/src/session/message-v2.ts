@@ -410,7 +410,7 @@ export namespace MessageV2 {
           // Legacy reviewer continuations still parse so 2.x session archives
           // remain readable; SessionLoopState normalizes both to ordinary task
           // continuations and no reviewer workflow is launched.
-          kind: z.enum(["output", "contract", "review", "review-summary", "compaction", "task", "context"]),
+          kind: z.enum(["output", "contract", "review", "review-summary", "compaction", "task", "context", "harness"]),
           text: z.string(),
           epoch: z.string(),
           transaction: z.string(),
@@ -455,6 +455,9 @@ export namespace MessageV2 {
     tier: z.string().optional(),
     context: z.number().int().positive().optional(),
     inference: Inference.Info.optional(),
+    /** Wall-clock deadline for the work this turn starts (epoch ms). The
+     * budget unit renders time budget and elapsed time from it. */
+    deadline: z.number().int().positive().optional(),
   }).meta({
     ref: "UserMessage",
   })

@@ -12,6 +12,7 @@ import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
+import { Harness } from "@/harness"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
@@ -732,6 +733,7 @@ export namespace SessionProcessor {
   }) {
     let snapshot: string | undefined
     let blocked = false
+    let guardTrip: { kind: "tool_errors"; tool: string } | undefined
     let shouldBreakOnDeny = true
     let attempt = 0
     let transientRetries = 0
@@ -784,6 +786,22 @@ export namespace SessionProcessor {
     const result = {
       get message() {
         return input.assistantMessage
+      },
+      /** The repetition guard this step tripped, when `process` returned "guard". */
+      get guard() {
+        return guardTrip
+      },
+      /** No unit redirected the trip: end the turn the way the guard always did. */
+      async stopOnGuard(trip: { kind: "tool_errors"; tool: string }) {
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: input.assistantMessage.id,
+          sessionID: input.sessionID,
+          type: "text",
+          synthetic: true,
+          text: toolErrorStopMessage(trip.tool),
+          time: { start: Date.now(), end: Date.now() },
+        } satisfies MessageV2.TextPart)
       },
       partFromToolCall(toolCallID: string) {
         return toolOutcomes.part(toolCallID)
@@ -852,7 +870,9 @@ export namespace SessionProcessor {
           const source = await resolveCredentialSource(input.model.providerID, input.model.id)
           // One immutable funding choice spans preflight and every retry/step.
           const funding = await fundingSnapshot(source)
-          const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
+          const config = await Config.get()
+          const shouldBreak =
+            config.experimental?.continue_loop_on_deny !== true && !Harness.continueOnDeny(config, input.sessionID)
           return { source, funding, shouldBreak }
         })().catch((error) => {
           progress("error")
@@ -1418,18 +1438,9 @@ export namespace SessionProcessor {
                   },
                 })
               }
-              if (action === "stop") {
-                blocked = true
-                await Session.updatePart({
-                  id: Identifier.ascending("part"),
-                  messageID: input.assistantMessage.id,
-                  sessionID: input.sessionID,
-                  type: "text",
-                  synthetic: true,
-                  text: toolErrorStopMessage(lastError.tool),
-                  time: { start: Date.now(), end: Date.now() },
-                } satisfies MessageV2.TextPart)
-              }
+              // The loop decides what a tripped guard means: a harness unit may
+              // redirect the model instead of ending the turn.
+              if (action === "stop") guardTrip = { kind: "tool_errors", tool: lastError.tool }
             }
           }
           input.assistantMessage.time.completed = Date.now()
@@ -1437,6 +1448,7 @@ export namespace SessionProcessor {
           progress(input.assistantMessage.error ? "error" : "done")
           if (overflow) return "overflow"
           if (needsCompaction) return "compact"
+          if (guardTrip) return "guard"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"
           return "continue"

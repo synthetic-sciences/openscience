@@ -60,9 +60,11 @@ describe("tool.bash", () => {
     for (const escape of ["`&`", "`nohup`", "`disown`", "`setsid`"]) {
       expect(bash.description).toContain(escape)
     }
-    expect(bash.description).toContain("`compute_job` action `start`")
-    expect(bash.description).toContain('target `{"kind":"local"}`')
-    expect(bash.description).toContain("`wait`, `status`, or `logs`")
+    // The description names no other tool by id: every sentence must be
+    // followable whatever set the session was offered.
+    expect(bash.description).toContain("durable job tool when it is offered")
+    expect(bash.description).not.toContain("compute_job")
+    expect(bash.description).not.toContain("research_search")
   })
 
   test("basic", async () => {

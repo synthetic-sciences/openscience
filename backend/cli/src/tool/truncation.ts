@@ -6,6 +6,8 @@ import type { Agent } from "../agent/agent"
 import { Scheduler } from "../scheduler"
 import { SessionFilesystem } from "../session/filesystem"
 import { ToolOutputPath } from "./tool-output-path"
+import { Harness } from "@/harness"
+import { Config } from "@/config/config"
 
 export namespace Truncate {
   export const MAX_LINES = 2000
@@ -56,9 +58,11 @@ export namespace Truncate {
     return path.join(DIR, Identifier.ascending("tool"))
   }
 
-  export function hint(filepath: string, agent?: Agent.Info): string {
-    return hasTaskTool(agent)
-      ? `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse the Task tool to have explore agent process this file with Grep and Read (with offset/limit). Do NOT read the full file yourself - delegate to save context.`
+  /** Offer Task only when this session can actually delegate this turn; a
+   * hint the model cannot follow costs a wasted call. */
+  export function hint(filepath: string, agent?: Agent.Info, delegation = true): string {
+    return hasTaskTool(agent) && delegation
+      ? `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse the Task tool to have the explore agent process this file with Grep and Read (with offset/limit), or use Grep and Read with offset/limit yourself for a targeted look.`
       : `The tool call succeeded but the output was truncated. Full output saved to: ${filepath}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
   }
 
@@ -67,9 +71,10 @@ export namespace Truncate {
   export function message(
     input: { preview: string; removed: number; unit: "bytes" | "lines"; filepath: string; direction?: "head" | "tail" },
     agent?: Agent.Info,
+    delegation = true,
   ): string {
     const note = `...${input.removed} ${input.unit} truncated...`
-    const guidance = hint(input.filepath, agent)
+    const guidance = hint(input.filepath, agent, delegation)
     return (input.direction ?? "head") === "head"
       ? `${input.preview}\n\n${note}\n\n${guidance}`
       : `${note}\n\n${guidance}\n\n${input.preview}`
@@ -126,8 +131,12 @@ export namespace Truncate {
     await Bun.write(Bun.file(filepath), text)
     await grant(filepath, options.sessionID)
 
+    // Tool output can be truncated outside a project instance (tests, CLI
+    // helpers); the hint then keeps its default form.
+    const config = await Config.get().catch(() => undefined)
+    const delegation = config ? Harness.delegates(config, options.sessionID) : true
     return {
-      content: message({ preview, removed, unit, filepath, direction }, agent),
+      content: message({ preview, removed, unit, filepath, direction }, agent, delegation),
       truncated: true,
       outputPath: filepath,
     }

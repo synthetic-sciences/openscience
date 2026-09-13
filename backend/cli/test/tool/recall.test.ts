@@ -114,9 +114,10 @@ describe("recall", () => {
           { sessionID: other.id },
         )
         expect(saved.truncated).toBe(true)
+        if (!saved.truncated) throw new Error("expected a saved output")
         expect(
           (await SessionFilesystem.list(other.id)).some(
-            (grant) => grant.source === "tool" && grant.path.includes(path.basename(saved.outputPath!)),
+            (grant) => grant.source === "tool" && grant.path.includes(path.basename(saved.outputPath)),
           ),
         ).toBe(true)
         const tool = await RecallTool.init()

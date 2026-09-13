@@ -241,7 +241,7 @@ export interface Hooks {
    * loop bounds how many times this can happen per turn.
    */
   "loop.before_finish"?: (
-    input: { sessionID: string; messageID: string; turn: number; injections: number },
+    input: { sessionID: string; messageID: string; turn: string; injections: number },
     output: { message?: string },
   ) => Promise<void>
   /**

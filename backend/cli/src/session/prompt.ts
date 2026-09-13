@@ -72,6 +72,7 @@ import { KernelRuntime } from "@/science/kernel/registry"
 import { SessionCheckpoint } from "./checkpoint"
 import { ToolVisibility } from "@/tool/visibility"
 import { Experiments } from "@/experiments"
+import { Harness } from "@/harness"
 import { SessionLoopState } from "./loop-state"
 import { FileLease } from "@/util/file-lease"
 import { Global } from "@/global"
@@ -90,6 +91,8 @@ export namespace SessionPrompt {
   export const OUTPUT_TOKEN_MAX = Flag.OPENSCIENCE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
   export const CONTEXT_PREFLIGHT_MARGIN = 0.9
   const LOOP_LEASE_TIMEOUT = 24 * 60 * 60 * 1_000
+  /** Continuations harness units may inject after a final answer, per turn. */
+  const HARNESS_INJECTION_LIMIT = 4
   const ATTACHMENT_LIMIT = 32 * 1024 * 1024
   // Interactive shell output retained in memory and published to the part
   // store: keep the newest tail, and coalesce part updates while streaming.
@@ -755,6 +758,15 @@ export namespace SessionPrompt {
     // summary overhead alone already exceeds the usable context capacity.
     let compactionArmed = true
     let outputContinuations = recovered.outputContinuations
+    // Harness units may continue a finished turn or redirect a tripped guard;
+    // both are bounded here so a unit cannot keep a loop alive forever.
+    let harnessInjections = 0
+    const guardTrips = { output_stall: 0, text_loop: 0, tool_errors: 0, repeated_call: 0 }
+    const guard = async (input: { sessionID: string; kind: keyof typeof guardTrips; tool?: string; trips: number }) => {
+      const output = { message: undefined as string | undefined }
+      await Plugin.trigger("loop.guard", input, output)
+      return output.message
+    }
     const workspace = await SessionFilesystem.workspace(sessionID)
     const readMessages = async () => {
       let messages = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
@@ -943,6 +955,12 @@ export namespace SessionPrompt {
         stalled: SessionProcessor.outputStall(epochTurns),
       })
       if (recovery === "fail") {
+        const redirect = await guard({ sessionID, kind: "output_stall", trips: ++guardTrips.output_stall })
+        if (redirect) {
+          outputContinuations = 0
+          await enqueue({ user: lastUser, kind: "harness", epoch: turn, text: redirect })
+          continue
+        }
         log.info("output limit reached repeatedly without progress — stopping", {
           sessionID,
           step,
@@ -969,6 +987,22 @@ export namespace SessionPrompt {
       }
       if (lastAssistant?.finish !== "length") outputContinuations = 0
       if (lastAssistant?.finish && (!continuing || bareMode) && owned) {
+        // The model returned a final answer. A harness unit may have one more
+        // thing to say before the turn ends (a missing deliverable, time
+        // left); the loop bounds how often that can happen per turn.
+        const finish = { message: undefined as string | undefined }
+        if (!bareMode && harnessInjections < HARNESS_INJECTION_LIMIT) {
+          await Plugin.trigger(
+            "loop.before_finish",
+            { sessionID, messageID: lastAssistant.id, turn, injections: harnessInjections },
+            finish,
+          )
+        }
+        if (finish.message) {
+          harnessInjections++
+          await enqueue({ user: lastUser, kind: "harness", epoch: turn, text: finish.message })
+          continue
+        }
         log.info("exiting loop", { sessionID, bareMode })
         break
       }
@@ -981,6 +1015,11 @@ export namespace SessionPrompt {
       // recorded in the epoch must not re-fire on the same three turns.
       const finishedTurns = SessionProcessor.convergenceWindow(epochTurns)
       if (SessionProcessor.isTextLoop(finishedTurns.map(SessionProcessor.turnText))) {
+        const redirect = await guard({ sessionID, kind: "text_loop", trips: ++guardTrips.text_loop })
+        if (redirect) {
+          await enqueue({ user: lastUser, kind: "harness", epoch: turn, text: redirect })
+          continue
+        }
         log.info("text doom-loop detected — stopping", { sessionID, step })
         await failTooLarge(
           "The model repeated nearly the same response several times without making progress. Stopping to avoid an endless loop. Try a stronger connected model or break the task into smaller steps.",
@@ -1399,6 +1438,7 @@ export namespace SessionPrompt {
         enabled: lastUser.delegation,
       })
       const delegation = allowsDelegation(delegationSettings, bypassAgentCheck)
+      Harness.delegation(sessionID, delegation && !session.parentID)
 
       const tools = await resolveTools({
         agent,
@@ -1616,6 +1656,18 @@ export namespace SessionPrompt {
       if (isLastStep && result === "continue" && !processor.message.error) {
         processor.message.finish = "max-steps"
         await Session.updateMessage(processor.message)
+      }
+      if (result === "guard") {
+        const trip = processor.guard
+        const redirect = trip
+          ? await guard({ sessionID, kind: "tool_errors", tool: trip.tool, trips: ++guardTrips.tool_errors })
+          : undefined
+        if (redirect) {
+          await enqueue({ user: lastUser, kind: "harness", epoch: turn, text: redirect })
+          continue
+        }
+        if (trip) await processor.stopOnGuard(trip)
+        break
       }
       if (result === "stop") break
       if (result === "overflow") {
@@ -2254,6 +2306,7 @@ export namespace SessionPrompt {
       variant: input.variant,
       tier: input.tier,
       context: input.context,
+      deadline: input.deadline,
       inference: await Inference.resolve(model.providerID, input.variant),
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))

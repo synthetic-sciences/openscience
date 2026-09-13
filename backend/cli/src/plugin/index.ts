@@ -1,6 +1,7 @@
 import type { Hooks, PluginInput, Plugin as PluginInstance } from "@synsci/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
+import { Harness } from "@/harness"
 import { Log } from "../util/log"
 import { createOpenScienceClient } from "@synsci/sdk"
 import { Server } from "../server/server"
@@ -84,6 +85,9 @@ export namespace Plugin {
         const init = await plugin(input)
         hooks.push(init)
       }
+      // Harness units are ordinary plugins registered at boot when their
+      // switch is on; order matters where two units answer the same hook.
+      for (const unit of Harness.units(config)) hooks.push(await unit(input))
 
       const plugins = [...(config.plugin ?? [])]
       if (!Flag.OPENSCIENCE_DISABLE_DEFAULT_PLUGINS) {

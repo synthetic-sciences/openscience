@@ -478,6 +478,7 @@ describe("session loop restart state", () => {
       tier: "priority",
       context: 128_000,
       inference: undefined,
+      deadline: undefined,
     })
   })
 

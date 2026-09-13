@@ -25,6 +25,8 @@ export const RuntimePromptInput = z.object({
   variant: z.string().optional(),
   tier: z.string().optional(),
   context: z.number().int().positive().optional(),
+  /** Wall-clock deadline for this work, epoch milliseconds. */
+  deadline: z.number().int().positive().optional(),
   parts: z.array(
     z.discriminatedUnion("type", [
       MessageV2.TextPart.omit({

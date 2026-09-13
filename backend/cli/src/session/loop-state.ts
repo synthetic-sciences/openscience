@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import type { MessageV2 } from "./message-v2"
 
 export namespace SessionLoopState {
-  export type Continuation = "output" | "contract" | "compaction" | "task" | "context"
+  export type Continuation = "output" | "contract" | "compaction" | "task" | "context" | "harness"
 
   export type ContractMarker = {
     progress: string
@@ -83,6 +83,7 @@ export namespace SessionLoopState {
       tier: message.tier,
       context: message.context,
       inference: message.inference,
+      deadline: message.deadline,
     }
   }
 
@@ -94,7 +95,14 @@ export namespace SessionLoopState {
    * normal task on the current research agent; no reviewer profile or writable
    * review workflow is reintroduced. */
   function compatibleContinuation(value: unknown): Continuation | undefined {
-    if (value === "output" || value === "contract" || value === "compaction" || value === "task" || value === "context")
+    if (
+      value === "output" ||
+      value === "contract" ||
+      value === "compaction" ||
+      value === "task" ||
+      value === "context" ||
+      value === "harness"
+    )
       return value
     if (value === "review" || value === "review-summary") return "task"
   }
