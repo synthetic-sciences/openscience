@@ -1339,3 +1339,184 @@ describe("compaction.recentImages", () => {
     expect(() => Config.Info.parse({ compaction: { recentImages: 1.5 } })).toThrow()
   })
 })
+
+describe("session.compaction pinned root instruction", () => {
+  test("the carrier records the root user message and compacted views present it verbatim before the summary", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const assistantBase = {
+        role: "assistant" as const,
+        sessionID: session.id,
+        modelID: "test-model",
+        providerID: "test",
+        mode: "research",
+        agent: "research",
+        path: { cwd: tmp.path, root: tmp.path },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      }
+      const root = await Session.updateMessage({
+        id: await MessageV2.nextMessageID(session.id),
+        sessionID: session.id,
+        role: "user",
+        time: { created: 1 },
+        agent: "research",
+        model: { providerID: "test", modelID: "test-model" },
+        effort: "normal",
+      })
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: root.id,
+        sessionID: session.id,
+        type: "text",
+        text: "Write results/summary.csv with columns id,score and results/report.md.",
+      })
+      // Three ordinary turns that the compaction will summarize away.
+      for (let turn = 0; turn < 3; turn++) {
+        const user = await Session.updateMessage({
+          id: await MessageV2.nextMessageID(session.id),
+          sessionID: session.id,
+          role: "user",
+          time: { created: 2 + turn * 2 },
+          agent: "research",
+          model: { providerID: "test", modelID: "test-model" },
+          effort: "normal",
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: user.id,
+          sessionID: session.id,
+          type: "text",
+          text: `follow-up ${turn}`,
+        })
+        const assistant = await Session.updateMessage({
+          ...assistantBase,
+          id: await MessageV2.nextMessageID(session.id),
+          parentID: user.id,
+          finish: "stop",
+          time: { created: 3 + turn * 2, completed: 3 + turn * 2 },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "text",
+          text: `progress ${turn}`,
+        })
+      }
+      await SessionCompaction.create({
+        sessionID: session.id,
+        agent: "research",
+        model: { providerID: "test", modelID: "test-model" },
+        auto: true,
+        trigger: "proactive",
+      })
+      const messages = await Session.messages({ sessionID: session.id })
+      const carrier = messages.find((message) => message.parts.some((part) => part.type === "compaction"))!
+      const marker = carrier.parts.find((part) => part.type === "compaction")
+      expect(marker?.type === "compaction" && marker.rootID).toBe(root.id)
+
+      // A completed summary answering the carrier.
+      const summary = await Session.updateMessage({
+        ...assistantBase,
+        id: await MessageV2.nextMessageID(session.id),
+        parentID: carrier.info.id,
+        agent: "compaction",
+        summary: true,
+        finish: "stop",
+        time: { created: 20, completed: 21 },
+      })
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: summary.id,
+        sessionID: session.id,
+        type: "text",
+        text: "## Objective\n- summarized",
+      })
+      await Session.flushPendingParts(session.id)
+      const view = await MessageV2.filterCompacted(MessageV2.stream(session.id))
+      expect(view[0].info.id).toBe(root.id)
+      expect(view[0].parts.some((part) => part.type === "text" && part.text.includes("results/summary.csv"))).toBe(true)
+      expect(view[1].info.id).toBe(carrier.info.id)
+      expect(view[2].info.id).toBe(summary.id)
+      // The summarized turns are gone; the root appears exactly once.
+      expect(view.filter((message) => message.info.id === root.id)).toHaveLength(1)
+      expect(view.some((message) => message.parts.some((p) => p.type === "text" && p.text === "follow-up 1"))).toBe(
+        false,
+      )
+    })
+  })
+
+  test("the handoff template keeps deliverables verbatim and findings with numbers, in order", () => {
+    const prompt = SessionCompaction.buildHandoffPrompt({})
+    const order = [
+      "## Objective",
+      "## Deliverables (verbatim)",
+      "## Constraints & Decisions",
+      "## Findings so far",
+      "## Work State",
+      "## Next Move",
+      "## Key Files & Artifacts",
+    ].map((heading) => prompt.indexOf(heading))
+    expect(order.every((index) => index >= 0)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+  })
+})
+
+describe("session.compaction.prune protections", () => {
+  test("todowrite results survive pruning alongside skill loads and Results", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const user = await Session.updateMessage({
+        id: await MessageV2.nextMessageID(session.id),
+        sessionID: session.id,
+        role: "user",
+        time: { created: 1 },
+        agent: "research",
+        model: { providerID: "test", modelID: "test-model" },
+        effort: "normal",
+      })
+      const assistant = await Session.updateMessage({
+        id: await MessageV2.nextMessageID(session.id),
+        sessionID: session.id,
+        role: "assistant",
+        parentID: user.id,
+        modelID: "test-model",
+        providerID: "test",
+        mode: "research",
+        agent: "research",
+        path: { cwd: tmp.path, root: tmp.path },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: "tool-calls",
+        time: { created: 2, completed: 3 },
+      })
+      const tool = (name: string, output: string, id: string): MessageV2.ToolPart => ({
+        id,
+        sessionID: session.id,
+        messageID: assistant.id,
+        type: "tool",
+        tool: name,
+        callID: `call_${id}`,
+        state: { status: "completed", input: {}, title: name, output, metadata: {}, time: { start: 1, end: 2 } },
+      })
+      // A large body of old bash output, then a small checklist newer than nothing.
+      const bulk = "x".repeat(4 * (SessionCompaction.PRUNE_PROTECT + SessionCompaction.PRUNE_MINIMUM) * 2)
+      await Session.updatePart(tool("todowrite", "[ ] results/summary.csv", "prt_todo"))
+      await Session.updatePart(tool("bash", bulk, "prt_bash_old"))
+      await Session.updatePart(tool("bash", bulk, "prt_bash_new"))
+      await Session.flushPendingParts(session.id)
+      const reclaimed = await SessionCompaction.prune({ sessionID: session.id })
+      expect(reclaimed).toBeGreaterThan(0)
+      const parts = (await Session.messages({ sessionID: session.id }))
+        .flatMap((message) => message.parts)
+        .filter((part): part is MessageV2.ToolPart => part.type === "tool")
+      const compacted = (id: string) => {
+        const part = parts.find((candidate) => candidate.id === id)
+        return part?.state.status === "completed" ? part.state.time.compacted !== undefined : undefined
+      }
+      expect(compacted("prt_bash_old")).toBe(true)
+      expect(compacted("prt_todo")).toBe(false)
+    })
+  })
+})

@@ -294,6 +294,16 @@ export namespace SessionCompaction {
     return "continue" as const
   }
 
+  /** The oldest ordinary user message: the instruction every compaction pins. */
+  export function rootUser(messages: MessageV2.WithParts[]) {
+    return messages.find(
+      (message) =>
+        message.info.role === "user" &&
+        !("internal" in message.info && message.info.internal) &&
+        message.parts.some((part) => part.type === "text" && !part.synthetic && !part.ignored && part.text.trim()),
+    )
+  }
+
   // Newest prior handoff text in the transcript, or undefined if this session has never
   // been compacted before. Walking backwards finds the most recent summary message without
   // scanning the whole (potentially long) history once one is found.
@@ -322,8 +332,14 @@ export namespace SessionCompaction {
   const HANDOFF_STRUCTURE = `## Objective
 - [the user's EXPLICIT request — what THEY actually asked for, verbatim if short. NOT tangents, hunches, anomalies you noticed, or follow-up ideas you had while working]
 
+## Deliverables (verbatim)
+- [every output the request or its specification names, copied exactly: paths, formats, columns/keys, units, rounding, naming, exclusions, method constraints; mark each done / pending / blocked. Write "(none specified)" if the request names no outputs]
+
 ## Constraints & Decisions
 - [rules/preferences that must hold, decisions made and WHY, key assumptions — the things a fresh agent would otherwise get wrong]
+
+## Findings so far
+- [each result with its number, units and uncertainty, the command or file it came from, and whether it is verified; distinguish observed from inferred]
 
 ## Work State
 ### Done (verified)
@@ -549,7 +565,9 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
 
-  const PRUNE_PROTECTED_TOOLS = ["skill", "artifact"]
+  // Skill loads, Results and the deliverables checklist are never pruned:
+  // each is small and the model steers by them.
+  const PRUNE_PROTECTED_TOOLS = ["skill", "artifact", "todowrite"]
 
   // goes backwards through parts until there are 40_000 tokens worth of tool
   // calls. then erases output of previous tool calls. idea is to throw away old
@@ -796,6 +814,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
         focus: input.focus,
         handoffFile: input.handoffFile,
         trigger: input.trigger,
+        rootID: rootUser(messages)?.info.id,
       })
     },
   )

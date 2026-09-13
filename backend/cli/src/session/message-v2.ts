@@ -220,6 +220,9 @@ export namespace MessageV2 {
     // What asked for this compaction — carried through to summary telemetry so we can
     // tell proactive (0.75 threshold) from reactive (overflow backstop) from manual.
     trigger: z.enum(["proactive", "overflow", "manual"]).optional(),
+    /** The session's root user message, pinned verbatim ahead of the summary
+     * in every compacted view so the original instruction survives. */
+    rootID: z.string().optional(),
   }).meta({
     ref: "CompactionPart",
   })
@@ -1367,6 +1370,20 @@ export namespace MessageV2 {
   }
 
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
+    const result = await filterCompactedLayout(stream)
+    const carrier = result.find(
+      (message) => message.info.role === "user" && message.parts.some((part) => part.type === "compaction"),
+    )
+    const rootID = carrier?.parts.find((part): part is CompactionPart => part.type === "compaction")?.rootID
+    if (!carrier || !rootID || result.some((message) => message.info.id === rootID)) return result
+    // The root instruction outlives every compaction: presented verbatim before
+    // the summary, so the model never works from a paraphrase of the task.
+    const root = await get({ sessionID: carrier.info.sessionID, messageID: rootID }).catch(() => undefined)
+    if (!root || root.info.role !== "user") return result
+    return [root, ...result]
+  }
+
+  async function filterCompactedLayout(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
     const completed = new Set<string>() // carrier ids (parentIDs of completed summaries)
     let tailStartId: string | undefined // from the newest completed summary
