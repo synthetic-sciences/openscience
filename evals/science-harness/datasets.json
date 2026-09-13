@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "agent": "openscience_harbor.agent:OpenScienceAgent",
+  "harbor": "0.22.0",
+  "skills_default": "bundled",
+  "benches": {
+    "terminal-bench-science": {
+      "runner": "harbor",
+      "dataset": "terminal-bench-science/terminal-bench-science@v0.1",
+      "metric": "native_binary_reward",
+      "notes": "70 Harbor tasks. Native images, limits, and verifiers stay in Harbor."
+    },
+    "terminal-bench-4-science": {
+      "runner": "harbor",
+      "dataset": "terminal-bench/terminal-bench@4.0.0",
+      "task_filter": "domain:science",
+      "tasks_file": "tb4-science-tasks.json",
+      "metric": "native_binary_reward",
+      "notes": "Science-domain slice of Terminal-Bench 4.0, not Terminal-Bench-Science and not the historical TB3 Science 15."
+    },
+    "biomni-bench-50": {
+      "runner": "harbor",
+      "huggingface": {
+        "dataset": "phylobio/BiomniBench-DA",
+        "revision": "e1c8ca5e11a620087bc48d97888eb69176a1f235"
+      },
+      "metric": "rubric_0_100",
+      "notes": "Public 50 Harbor tasks. Judge credentials stay off the agent environment."
+    },
+    "bixbench3": {
+      "runner": "inspect",
+      "github": "EdisonScientific/BixBench3",
+      "huggingface": "EdisonScientific/BixBench3",
+      "release": "v1.0.0",
+      "metric": "continuous_artifact_score",
+      "notes": "Inspect AI + GCP. OpenScience replaces the reference ReAct solver inside the native agent container; grading stays host-side."
+    },
+    "researchclawbench": {
+      "runner": "researchclaw",
+      "github": "InternScience/ResearchClawBench",
+      "metric": "rubric_hidden_paper",
+      "notes": "Host workspace + hidden-paper rubric judge. Plug in adapters/researchclaw.py through evaluation/agents.json."
+    }
+  }
+}

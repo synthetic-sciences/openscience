@@ -696,6 +696,11 @@ export namespace Experiments {
     database.query(`UPDATE run SET headline = ?, baseline_delta = ? WHERE id = ?`).run(headline, delta, runID)
   }
 
+  /** A run that never reached a job: it counts for nothing in a budget. */
+  export function dispatchFailed(run: Run) {
+    return run.status === "failed" && !run.jobID && (run.killReason?.startsWith("dispatch") ?? false)
+  }
+
   export type Series = { runID: string; key: string; points: Array<{ step: number; value: number }> }
 
   /** Downsampled series for charts: at most `max` points per run and key,

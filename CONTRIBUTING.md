@@ -176,7 +176,7 @@ Replace `<platform>` with yours, for example `darwin-arm64` or `linux-x64`. The 
 | `tooling/launcher`                                  | The `npx synsci` installer                                                                             |
 | `tooling/repo`                                      | Repository automation: `setup.ts`, `generate.ts` (SDK regeneration) and the release scripts            |
 | `tooling/script`, `tooling/util`, `tooling/patches` | The build helper, shared utilities and dependency patches applied at install time                      |
-| `evals/`                                            | Launch evals and the cadence dev lab used to evaluate the research harness                             |
+| `evals/`                                            | Launch evals, cadence lab, and Harbor science-benchmark campaigns                                      |
 | `docs/notes`, `docs/adr`                            | Engineering notes and architecture decision records                                                    |
 | `.openscience/`                                     | Repo-local agent config used when you run `bun dev "$PWD"` here: custom commands, a skill and a theme  |
 

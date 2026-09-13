@@ -1,0 +1,6 @@
+{
+  "dataset": "terminal-bench/terminal-bench@4.0.0",
+  "filter": "domain:science",
+  "tasks": null,
+  "note": "Populate with `python evals/science-harness/campaign.py freeze-tb4 --dataset-dir <downloaded TB4>`. Do not reuse Terminal-Bench 3 Science IDs."
+}

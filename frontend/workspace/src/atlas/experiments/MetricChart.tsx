@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Show, type JSX } from "solid-js"
+import { onCleanup, createMemo, createSignal, For, Show, type JSX } from "solid-js"
 
 export type ChartSeries = {
   id: string
@@ -159,6 +159,7 @@ export function HillClimbChart(props: {
           if (entry) setWidth(Math.max(200, Math.floor(entry.contentRect.width)))
         })
         observer.observe(element)
+        onCleanup(() => observer.disconnect())
       }}
     >
       <svg
@@ -353,6 +354,7 @@ export function MetricChart(props: {
           if (entry) setWidth(Math.max(200, Math.floor(entry.contentRect.width)))
         })
         observer.observe(element)
+        onCleanup(() => observer.disconnect())
       }}
     >
       <svg

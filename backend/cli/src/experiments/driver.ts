@@ -33,6 +33,9 @@ export namespace StudyDriver {
   export const STUCK_WINDOW = 4
   /** Completed runs between "step back" reviews. */
   export const STEP_BACK_EVERY = 6
+  /** How long a live run may point at a job with no record before it is
+   * marked failed. */
+  export const MISSING_JOB_GRACE_MS = 2 * 60_000
 
   type Runtime = {
     followers: Map<string, Tracker.Follower>
@@ -227,7 +230,24 @@ export namespace StudyDriver {
           continue
         }
         const info = await job(run.jobID, study.sessionID).catch(() => undefined)
-        if (!info || !terminal.has(info.status)) continue
+        if (!info) {
+          // A job record that stays missing was lost with its store; the run
+          // cannot end on its own and would hold a slot for the study's life.
+          const age = now - (fresh.startedAt ?? fresh.createdAt)
+          if (age < MISSING_JOB_GRACE_MS) continue
+          const lost = await Experiments.finishRun(fresh.id, "failed", {
+            killReason: `job ${run.jobID} has no record; the run was marked failed after ${Math.round(age / 60_000)} min`,
+          })
+          current.followers.delete(fresh.id)
+          if (lost) {
+            await Experiments.addEvent(study.id, "failed", `${lost.name} failed: its job record is missing`, {
+              runID: lost.id,
+            })
+            current.pending.push(describe(lost, study, "the compute job record is missing"))
+          }
+          continue
+        }
+        if (!terminal.has(info.status)) continue
         await follower.poll().catch(() => undefined)
         const settled = await Experiments.finishRun(fresh.id, status(info, fresh), {
           killReason: info.status === "failed" || info.status === "interrupted" ? info.error : undefined,
@@ -339,7 +359,7 @@ export namespace StudyDriver {
   async function budgetReached(study: Experiments.Study, now: number): Promise<string | undefined> {
     const budget = study.budget
     const runs = await Experiments.listRuns({ studyID: study.id, limit: 2000 })
-    const done = runs.filter((run) => run.status !== "running")
+    const done = runs.filter((run) => run.status !== "running" && !Experiments.dispatchFailed(run))
     if (budget.maxRuns !== undefined && done.length >= budget.maxRuns)
       return `${done.length} runs completed (limit ${budget.maxRuns})`
     if (budget.maxHours !== undefined && now - study.createdAt >= budget.maxHours * 3_600_000) {
@@ -381,14 +401,20 @@ export namespace StudyDriver {
     if (!urgent && current.turnsAt.length >= MAX_TURNS_PER_HOUR) return
     const lines = current.pending.splice(0)
     const text = [`Study update for "${study.name}":`, ...lines.map((line) => `- ${line}`)].join("\n")
+    const sent = await prompt(study.sessionID, text)
+      .then(() => true)
+      .catch((error) => {
+        log.warn("study wake failed", { study: study.id, error })
+        current.pending.unshift(...lines)
+        return false
+      })
+    // A turn counts only once it reached the session; a failed submit must
+    // not spend the hourly cap or the study's turn tally.
+    if (!sent) return
     current.turnsAt.push(now)
     // Any wake-up restarts the idle window: the agent needs time to act on it.
     current.lastNudgeAt = now
     await Experiments.updateStudy(study.id, { turns: study.turns + 1 })
-    await prompt(study.sessionID, text).catch(async (error) => {
-      log.warn("study wake failed", { study: study.id, error })
-      current.pending.unshift(...lines)
-    })
   }
 
   /** Called by the study tool when a run starts, so the follower begins

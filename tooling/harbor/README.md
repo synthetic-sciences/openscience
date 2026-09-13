@@ -79,6 +79,7 @@ isolation remains essential.
 | `cwd`                | Optional absolute directory inside the task environment. Omit to preserve the task image's native working directory.                                                                                                                                                 |
 | `variant`            | Provider-specific reasoning effort (`high`, `max`, `minimal`; model-dependent).                                                                                                                                                                                      |
 | `effort`             | Research effort, `normal` or `ultra`.                                                                                                                                                                                                                                |
+| `skills`             | Bundled skill catalog, `bundled` (default) or `none`. `none` sets `OPENSCIENCE_DISABLE_BUNDLED_SKILLS` and is an ablation. Task-provided Harbor skills still copy in.                                                                                                 |
 | `agent`              | Primary agent; OpenScience defaults to `research`.                                                                                                                                                                                                                   |
 | `openscience_config` | JSON overlay deep-merged over the adapter's headless defaults. Can override those defaults; use only an approved configuration.                                                                                                                                      |
 
@@ -117,7 +118,8 @@ Defaults disable auto-update, LSP downloads, project config discovery, environme
 bootstrap, and OpenScience's nested sandbox. The task container supplies isolation.
 The existing `agent.title.disable` configuration is set to `true` to avoid model
 calls for session and message UI labels. Research execution, compaction, skills,
-and file-diff summaries are unchanged. An approved `openscience_config` overlay
+and file-diff summaries are unchanged. Pass `--ak skills=none` to omit the
+bundled skill catalog for an ablation lane. An approved `openscience_config` overlay
 can re-enable titles; interactive OpenScience keeps its existing defaults.
 Default permissions deny account-dependent and remote-compute tools
 (`research_search`, `atlas`, `atlas_write`, `remote_compute`, `modal`,

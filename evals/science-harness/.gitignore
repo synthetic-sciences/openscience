@@ -1,0 +1,4 @@
+jobs/
+datasets/
+workspaces/
+*.log

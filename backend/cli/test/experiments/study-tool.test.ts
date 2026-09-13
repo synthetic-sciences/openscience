@@ -163,4 +163,50 @@ describe("study and experiments tools", () => {
       },
     })
   })
+
+  test("start refuses a run beyond the study's run budget before anything is dispatched", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({ title: "budget" })
+        const ctx = context(session.id)
+        const study = await StudyTool.init({ agent: undefined })
+        await study.execute(
+          {
+            action: "create",
+            name: "capped",
+            purpose: "p",
+            metric: "val_mse",
+            direction: "minimize",
+            concurrency: 2,
+            budget: { maxRuns: 1 },
+          },
+          ctx,
+        )
+        const active = (await Experiments.studyForSession(session.id))!
+        const [first, second] = await Experiments.proposeIdeas(active.id, [
+          { title: "first", description: "d", why: "w", ev: 0.1 },
+          { title: "second", description: "d", why: "w", ev: 0.2 },
+        ])
+        // A dispatch that never reached a job does not spend the budget.
+        const lost = await Experiments.createRun({ name: "lost", source: "job", studyID: active.id, ideaID: first!.id })
+        await Experiments.finishRun(lost.id, "failed", { killReason: "dispatch failed: no runtime" })
+        await Experiments.updateIdea(first!.id, { status: "queued", runID: undefined })
+        expect(Experiments.dispatchFailed((await Experiments.getRun(lost.id))!)).toBe(true)
+        // A live run does: with maxRuns 1 and one job running, no second start.
+        await Experiments.createRun({
+          name: "first",
+          source: "job",
+          studyID: active.id,
+          ideaID: first!.id,
+          jobID: "job_x",
+        })
+        await expect(
+          study.execute({ action: "start", idea_id: second!.id, command: "python train.py" }, ctx),
+        ).rejects.toThrow("budget of 1 runs is spent")
+      },
+    })
+  })
 })

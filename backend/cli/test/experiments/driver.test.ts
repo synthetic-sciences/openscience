@@ -325,4 +325,89 @@ describe("study driver", () => {
       },
     })
   })
+
+  test("a wake that fails to reach the session keeps its news and spends no turn", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const h = harness(tmp.path)
+        const failing = { on: true }
+        const prompts: string[] = []
+        StudyDriver.configure({
+          now: () => h.clock.now,
+          idle: () => true,
+          prompt: async ({ text }) => {
+            if (failing.on) throw new Error("session busy elsewhere")
+            prompts.push(text)
+          },
+          job: async (jobID) =>
+            h.jobs.has(jobID) ? ({ id: jobID, ...h.jobs.get(jobID)! } as JobBroker.Job) : undefined,
+          cancel: async () => undefined,
+          logPath: async (jobID) => path.join(tmp.path, `${jobID}.log`),
+        })
+        const study = await Experiments.createStudy({
+          sessionID: "ses_retry",
+          name: "retry",
+          purpose: "test",
+          metric: "val_loss",
+          direction: "minimize",
+          root: path.join(tmp.path, "study"),
+          budget: { maxRuns: 5 },
+        })
+        const [idea] = await Experiments.proposeIdeas(study.id, [{ title: "one", description: "d", why: "w", ev: 0.1 }])
+        await Experiments.createRun({ name: "one", source: "job", studyID: study.id, ideaID: idea!.id, jobID: "job_r" })
+        h.jobs.set("job_r", { status: "succeeded" })
+        await StudyDriver.tick(study.id)
+        expect(prompts).toEqual([])
+        expect((await Experiments.getStudy(study.id))?.turns).toBe(0)
+        // The next tick delivers the same news once the session accepts it.
+        failing.on = false
+        await StudyDriver.tick(study.id)
+        expect(prompts).toHaveLength(1)
+        expect(prompts[0]).toContain('Run "one"')
+        expect((await Experiments.getStudy(study.id))?.turns).toBe(1)
+      },
+    })
+  })
+
+  test("a run whose job record disappears is failed after the grace period, not held forever", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const h = harness(tmp.path)
+        const study = await Experiments.createStudy({
+          sessionID: "ses_lost",
+          name: "lost",
+          purpose: "test",
+          metric: "val_loss",
+          direction: "minimize",
+          root: path.join(tmp.path, "study"),
+          budget: { maxRuns: 5 },
+        })
+        const [idea] = await Experiments.proposeIdeas(study.id, [
+          { title: "gone", description: "d", why: "w", ev: 0.1 },
+        ])
+        const run = await Experiments.createRun({
+          name: "gone",
+          source: "job",
+          studyID: study.id,
+          ideaID: idea!.id,
+          jobID: "job_missing",
+        })
+        // No job record at all: inside the grace period the run keeps running.
+        await StudyDriver.tick(study.id)
+        expect((await Experiments.getRun(run.id))?.status).toBe("running")
+        expect(h.prompts).toEqual([])
+        h.clock.now += StudyDriver.MISSING_JOB_GRACE_MS + 1_000
+        await StudyDriver.tick(study.id)
+        const lost = await Experiments.getRun(run.id)
+        expect(lost?.status).toBe("failed")
+        expect(lost?.killReason).toContain("no record")
+        expect(h.prompts).toHaveLength(1)
+        expect(h.prompts[0]).toContain("job record is missing")
+      },
+    })
+  })
 })

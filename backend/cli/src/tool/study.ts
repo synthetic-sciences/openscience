@@ -236,16 +236,36 @@ export const StudyTool = Tool.define("study", {
           `${running.length} run${running.length === 1 ? " is" : "s are"} already live (concurrency ${current.concurrency}). Wait for a study update.`,
         )
       }
+      // The run budget counts every run that reached a job, live ones included,
+      // so parallel starts cannot overshoot it before the driver notices.
+      if (current.budget.maxRuns !== undefined) {
+        const counted = (await Experiments.listRuns({ studyID: current.id, limit: 2000 })).filter(
+          (run) => !Experiments.dispatchFailed(run),
+        ).length
+        if (counted >= current.budget.maxRuns) {
+          throw new Error(
+            `The budget of ${current.budget.maxRuns} runs is spent (${counted} started). Do not start another; record what is unrecorded and conclude the study, or ask the user for a larger budget.`,
+          )
+        }
+      }
       const base = await SessionFilesystem.toolDirectory(ctx.sessionID)
       const cwd = params.cwd ? path.resolve(base, params.cwd) : current.root
       const relative = path.relative(base, cwd)
       if (relative.startsWith("..")) throw new Error("cwd must stay inside the working folder")
       const entries = await TrackingSDK.materialize(cwd, { shim: true })
       const target = params.target ?? current.target
+      const gpus = target.kind === "local" ? await GpuInventory.list() : []
       const slot =
         target.kind === "local"
           ? (await GpuInventory.slots()).find((candidate) => !running.some((run) => run.slot === candidate))
           : undefined
+      // With GPUs on this machine, a run without a free one would share a
+      // device with a live run and corrupt both measurements.
+      if (gpus.length && slot === undefined) {
+        throw new Error(
+          `All ${gpus.length} local GPU${gpus.length === 1 ? " is" : "s are"} busy with live runs. Wait for a study update before starting another.`,
+        )
+      }
       const run = await Experiments.createRun({
         name: idea.title,
         source: "job",
@@ -259,7 +279,7 @@ export const StudyTool = Tool.define("study", {
         runID: run.id,
         name: idea.title,
         entries,
-        slot: target.kind === "local" && (await GpuInventory.list()).length ? slot : undefined,
+        slot: gpus.length ? slot : undefined,
       })
       const compute = await ComputeJobTool.init({ agent: undefined })
       const result = await compute

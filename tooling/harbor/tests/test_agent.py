@@ -144,8 +144,16 @@ def test_headless_config_and_env(tmp_path):
         == str(subject.environment_logs_dir) + "/openscience/data"
     )
     assert all(env[key] == "1" for key in module.HEADLESS_ENV)
+    assert "OPENSCIENCE_DISABLE_BUNDLED_SKILLS" not in env
     assert "OPENSCIENCE_FAKE_VCS" not in env
     assert "JUDGE_API_KEY" not in env
+
+
+def test_skills_none_disables_bundled_catalog(tmp_path):
+    subject = agent(tmp_path, skills="none")
+    assert subject.run_env()["OPENSCIENCE_DISABLE_BUNDLED_SKILLS"] == "1"
+    with pytest.raises(ValueError, match="bundled or none"):
+        agent(tmp_path, skills="core")
 
 
 def test_trusted_title_override_does_not_mutate_headless_defaults(tmp_path):
@@ -167,6 +175,7 @@ def test_trusted_title_override_does_not_mutate_headless_defaults(tmp_path):
         {"version": "../../main"},
         {"version": "2.0.70", "cwd": "relative"},
         {"version": "2.0.70", "binary_sha256": "f" * 64},
+        {"version": "2.0.70", "skills": "core"},
     ],
 )
 def test_invalid_identity_and_cwd_fail_before_setup(tmp_path, kwargs):

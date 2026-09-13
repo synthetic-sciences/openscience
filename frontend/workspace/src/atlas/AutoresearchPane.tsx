@@ -76,6 +76,7 @@ export function AutoresearchPane(): JSX.Element {
   const [pointsVersion, setPointsVersion] = createSignal(0)
   const debounce = (fn: () => void, wait: number) => {
     let timer: ReturnType<typeof setTimeout> | undefined
+    onCleanup(() => clearTimeout(timer))
     return () => {
       if (timer) return
       timer = setTimeout(() => {
@@ -115,9 +116,14 @@ export function AutoresearchPane(): JSX.Element {
     () => (study() ? `${study()!.id}:${version()}` : undefined),
     (key) => read<StudyOverview>(`/experiments/studies/${key.split(":")[0]}`),
   )
+  // The study's own overview carries every run; the project-wide list is
+  // capped and only bridges the moment before the overview arrives.
   const runs = createMemo(() => {
     const current = study()
-    return current ? (allRuns.latest ?? []).filter((run) => run.studyID === current.id) : []
+    if (!current) return []
+    const own = overview.latest
+    if (own && own.study.id === current.id) return own.runs
+    return (allRuns.latest ?? []).filter((run) => run.studyID === current.id)
   })
   const loose = createMemo(() => (allRuns.latest ?? []).filter((run) => !run.studyID))
   const ordered = createMemo(() => [...runs()].sort((a, b) => a.createdAt - b.createdAt))

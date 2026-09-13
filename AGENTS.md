@@ -21,7 +21,7 @@ works inside `backend/cli` as a project); this file is about the repository.
 | `tooling/util`       | Small helpers shared by backend and frontend (`@synsci/util`)               |
 | `tooling/repo`       | Setup, SDK regeneration, test sharding, release scripts                     |
 | `tooling/harbor`     | Harbor / Terminal-Bench adapter for the headless `openscience run` contract |
-| `evals`              | Launch evals and the research-harness dev lab                               |
+| `evals`              | Launch evals, cadence lab, and Harbor science-benchmark campaigns           |
 | `docs/notes`         | Engineering notes: verification loop, release process, extension guides     |
 
 `ARCHITECTURE.md` explains how the pieces fit; `CONTRIBUTING.md` covers the

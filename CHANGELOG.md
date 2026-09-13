@@ -10,6 +10,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Added
 
+- Science-benchmark campaigns over the existing headless Research loop: Harbor
+  0.22.0 for Terminal-Bench Science, Terminal-Bench 4 science, and BiomniBench-DA
+  50; native adapters for BixBench3 and ResearchClawBench. Bundled skills stay
+  on unless `--ak skills=none`. See `evals/science-harness`.
 - Autoresearch: a pane beside Files, Terminal and Compute with one tab per
   study, tracking metrics from every run. A script imports
   `openscience_track` (or `wandb`, shimmed) and logs numbers; inside a compute
@@ -132,6 +136,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Autoresearch, from the pre-release audit: `study start` refuses a run once
+  the study's run budget is spent (live runs count, so parallel starts cannot
+  overshoot it) and refuses to share a GPU when every local GPU already has a
+  live run; a run whose compute job record disappears is marked failed after
+  two minutes instead of holding its slot forever; a study wake that fails to
+  reach the session keeps its news and spends neither the hourly cap nor the
+  turn tally; dispatch failures no longer count against the run budget; the
+  pane reads a study's complete run list from its overview rather than the
+  project-wide cap, and its charts release their resize observers.
 - A PDF opened from Results filled a fixed 560px box inside a scrolling pane,
   so a page showed clipped with blank space below it. The viewer now fills the
   pane and scrolls its pages itself, as in the Files tab.
