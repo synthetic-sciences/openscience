@@ -316,6 +316,37 @@ describe("parseTaskHandoff", () => {
     })
   })
 
+  test("reads the task envelope: summary note, findings, receipts and task_id stripped", () => {
+    const output = [
+      '<task id="ses_child" state="completed">',
+      "<summary>Completed with 1 failed tool attempt; review its limitations.</summary>",
+      "<task_result>",
+      "## Outcome",
+      "",
+      "Sources agree on the slope.",
+      "",
+      "Execution receipts: 1 shell calls, 1 with outer exit 0, 0 failed. Full receipts remain in the child trace.",
+      "",
+      "task_id: ses_child",
+      "</task_result>",
+      "</task>",
+    ].join("\n")
+    expect(parseTaskHandoff(output)).toEqual({
+      notes: ["Completed with 1 failed tool attempt; review its limitations."],
+      text: "## Outcome\n\nSources agree on the slope.",
+      outputs: [],
+      headed: true,
+    })
+    const failed = [
+      '<task id="ses_x" state="error">',
+      "<task_error>",
+      "Provider disconnected",
+      "</task_error>",
+      "</task>",
+    ]
+    expect(parseTaskHandoff(failed.join("\n")).text).toBe("Provider disconnected")
+  })
+
   test("keeps plain findings untouched and reports that they need a label", () => {
     expect(parseTaskHandoff("The comparison is ready; one source could not be retrieved.")).toEqual({
       notes: [],

@@ -175,11 +175,16 @@ export type TaskHandoff = {
 const sessionLine = /^Task session ses_\w+: .*Reuse this sessionId to continue the same worker\.$/
 const savedOutput = /^- "((?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*)": artifact_id=(\S+?),/
 const receipts = /^Execution receipts: /
+const envelope = /^<\/?(?:task(?:\s[^>]*)?|task_result|task_error)>$/
+const summaryLine = /^<summary>([\s\S]*?)<\/summary>$/
+const taskID = /^task_id: ses_\w+$/
 
 /**
- * The Task tool's output is written for the lead model: a session line to
- * continue the worker, bracketed stop notes, the findings, then evidence the
- * lead can act on. The card shows only what a reader needs.
+ * The Task tool's output is written for the lead model: the `<task>` envelope
+ * with an optional `<summary>` note, the worker's findings, evidence the lead
+ * can act on, and the id to continue the worker. Older transcripts carry a
+ * session line and bracketed notes instead. The card shows only what a reader
+ * needs.
  */
 export function parseTaskHandoff(value?: string): TaskHandoff {
   const lines = stripTaskMetadata(value).split("\n")
@@ -192,6 +197,12 @@ export function parseTaskHandoff(value?: string): TaskHandoff {
     const trimmed = line.trim()
     if (leading && trimmed === "") continue
     if (leading && sessionLine.test(trimmed)) continue
+    if (envelope.test(trimmed) || taskID.test(trimmed)) continue
+    const summary = summaryLine.exec(trimmed)
+    if (leading && summary) {
+      notes.push(summary[1].trim())
+      continue
+    }
     if (leading && /^\[.*\]$/.test(trimmed)) {
       notes.push(trimmed.slice(1, -1))
       continue

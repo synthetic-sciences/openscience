@@ -492,6 +492,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 const token = crypto.randomUUID()
                 timing.queuedMs = Math.max(0, Date.now() - started)
                 await TaskAttempt.activate({ ...identity, token })
+                const activatedAt = Date.now()
+                // `activeMs` present tells the UI the worker left the queue.
+                if (live) {
+                  await ctx.metadata({
+                    title: params.description,
+                    metadata: { ...metadata, queuedMs: timing.queuedMs, activeMs: timing.activeMs },
+                  })
+                }
                 const exists = initial.some(
                   (message) => message.info.role === "user" && message.info.id === reserved.childMessageID,
                 )
@@ -540,6 +548,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                           ...metadata,
                           summary: Object.values(observed).sort((a, b) => a.id.localeCompare(b.id)),
                           elapsedMs: Date.now() - started,
+                          queuedMs: timing.queuedMs,
+                          activeMs: timing.activeMs + Math.max(0, Date.now() - activatedAt),
                         },
                       })
                     })

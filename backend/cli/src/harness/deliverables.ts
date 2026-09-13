@@ -20,14 +20,24 @@ export namespace Deliverables {
     /\b(?:write|save|store|export|output|produce|create|emit|dump)\b[^.\n]{0,80}\b(?:to|as|in|at|into|named|called)\b/i
   const SHAPE = /\b(?:columns?|schema|keys?|fields?|header|format|rounded|decimal|units?|sorted by|one row per)\b/i
   const PLACEHOLDER = /\b(?:TODO|TBD|FIXME|placeholder|dummy|lorem ipsum|xxx+|fill me|to be filled|<insert)\b/i
+  const NEGATED =
+    /\b(?:skip|don'?t|do not|not|later|except|ignore|without|omit|leave|instead of|rather than|no need)\b/i
   const NAN = /(?:^|[,\t;\s])(?:nan|NaN|NAN|inf|-inf|Inf|-Inf|Infinity|-Infinity|#N\/A)(?=$|[,\t;\s])/
   const MAX_BYTES = 64 * 1024 * 1024
 
   /** File paths a request names as outputs, in order of appearance, when it
    * reads like an output specification at all. */
   export function detect(text: string): string[] {
+    // A path named in a sentence that waives it ("skip X for now") is the
+    // user's decision, not a missing deliverable.
+    const sentences = text.split(/(?<=[.!?;])\s+|\n+/)
+    const waived = new Set(
+      sentences
+        .filter((sentence) => NEGATED.test(sentence))
+        .flatMap((sentence) => [...sentence.matchAll(PATH)].map((match) => match[1])),
+    )
     const paths = [...new Set([...text.matchAll(PATH)].map((match) => match[1]))].filter(
-      (candidate) => !/^(?:https?|www\.)/i.test(candidate) && !candidate.endsWith(".py"),
+      (candidate) => !/^(?:https?|www\.)/i.test(candidate) && !candidate.endsWith(".py") && !waived.has(candidate),
     )
     if (!paths.length) return []
     if (!INTENT.test(text) && !SHAPE.test(text) && paths.length < 2) return []

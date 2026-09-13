@@ -19,6 +19,15 @@ describe("Deliverables.detect", () => {
     expect(Deliverables.detect("Explain what a p-value is.")).toEqual([])
     expect(Deliverables.detect("Have a look at notes.md and tell me what you think.")).toEqual([])
     expect(Deliverables.detect("See https://example.org/data.csv for context")).toEqual([])
+    // A waived output is the user's call, not a missing deliverable.
+    expect(
+      Deliverables.detect(
+        "Create results/table.csv with columns id,value and results/notes.md. Skip results/notes.md for now, I will write it later.",
+      ),
+    ).toEqual(["results/table.csv"])
+    expect(Deliverables.detect("Write results/out.csv (columns a,b); do not touch results/raw.csv.")).toEqual([
+      "results/out.csv",
+    ])
   })
 })
 

@@ -14,16 +14,22 @@ import { CostUnit } from "./cost"
  * truncation hint and the Task streaming, so they are switches here.
  */
 export namespace Harness {
-  const plugins: Partial<Record<HarnessState.Unit, Plugin>> = {
-    redirect: RedirectUnit,
-    deliverables: DeliverablesUnit,
-    budget: BudgetUnit,
-    cost: CostUnit,
+  // Resolved on call, not at module load: the units import session modules
+  // that import this namespace, so a module-level table would read them
+  // before their initialization in some import orders.
+  function plugins(): Partial<Record<HarnessState.Unit, Plugin>> {
+    return {
+      redirect: RedirectUnit,
+      deliverables: DeliverablesUnit,
+      budget: BudgetUnit,
+      cost: CostUnit,
+    }
   }
 
   export function units(config: Config.Info): Plugin[] {
+    const table = plugins()
     return HarnessState.UNITS.filter((unit) => HarnessState.enabled(config, unit)).flatMap((unit) => {
-      const plugin = plugins[unit]
+      const plugin = table[unit]
       return plugin ? [plugin] : []
     })
   }

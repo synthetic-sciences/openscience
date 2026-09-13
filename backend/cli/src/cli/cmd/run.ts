@@ -35,9 +35,15 @@ const TOOL: Record<string, [string, string]> = {
   websearch: ["Search", UI.Style.TEXT_DIM_BOLD],
   research_search: ["Search", UI.Style.TEXT_DIM_BOLD],
   literature: ["Literature", UI.Style.TEXT_DIM_BOLD],
+  recall: ["Recall", UI.Style.TEXT_DIM_BOLD],
+  task: ["Task", UI.Style.TEXT_INFO_BOLD],
+  apply_patch: ["Patch", UI.Style.TEXT_SUCCESS_BOLD],
+  python: ["Python", UI.Style.TEXT_DANGER_BOLD],
+  compute_job: ["Job", UI.Style.TEXT_DANGER_BOLD],
 }
 
-/** `run` has no question UI, so every session it creates denies the question tool. */
+/** Without --auto-approve, `run` has no way to answer a question, so the
+ * sessions it creates deny the question tool; auto-approve answers them. */
 const QUESTION_DENY = [{ permission: "question", pattern: "*", action: "deny" as const }]
 
 // After the prompt request settles, wait this long for the event stream to
