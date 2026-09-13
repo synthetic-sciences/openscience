@@ -21,6 +21,8 @@ import type {
   AppAgentsResponses,
   AppLogErrors,
   AppLogResponses,
+  AppSkillContentErrors,
+  AppSkillContentResponses,
   AppSkillDeleteResponses,
   AppSkillsResponses,
   AppSkillWriteResponses,
@@ -390,8 +392,14 @@ import type {
   SettingsScientificToolSetupErrors,
   SettingsScientificToolSetupResponses,
   SettingsScientificToolsResponses,
+  SettingsSkillsAddRootErrors,
+  SettingsSkillsAddRootResponses,
   SettingsSkillsInstallErrors,
   SettingsSkillsInstallResponses,
+  SettingsSkillsReloadResponses,
+  SettingsSkillsRemoveRootErrors,
+  SettingsSkillsRemoveRootResponses,
+  SettingsSkillsRootsResponses,
   SettingsStorageClearCacheResponses,
   SettingsStorageRelocateErrors,
   SettingsStorageRelocateResponses,
@@ -2128,6 +2136,121 @@ export class Wallet extends HeyApiClient {
 }
 
 export class Skills extends HeyApiClient {
+  /**
+   * Unregister a skill directory
+   *
+   * Remove a root registered at runtime, and with persist also drop it from skills.paths in that config. Only that root's skills leave the catalog.
+   */
+  public removeRoot<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      path: string
+      persist?: "global" | "project"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "path" },
+            { in: "query", key: "persist" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      SettingsSkillsRemoveRootResponses,
+      SettingsSkillsRemoveRootErrors,
+      ThrowOnError
+    >({
+      url: "/settings/skills/paths",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List skill roots
+   *
+   * Every directory contributing skills, with its kind (bundled, project, user, installed, config, runtime), the skills it won, and the same-named skills it lost to another root. The revision changes whenever the catalog is rebuilt.
+   */
+  public roots<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<SettingsSkillsRootsResponses, unknown, ThrowOnError>({
+      url: "/settings/skills/paths",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Register a skill directory
+   *
+   * Add a local directory as a skill root for this project. It is scanned recursively at once; no restart is needed. A missing or empty directory is rejected (400), and a root that is already active is rejected (409) instead of loading every skill twice.
+   */
+  public addRoot<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      path: string
+      persist?: "global" | "project"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "path" },
+            { in: "body", key: "persist" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SettingsSkillsAddRootResponses,
+      SettingsSkillsAddRootErrors,
+      ThrowOnError
+    >({
+      url: "/settings/skills/paths",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Rescan skill directories
+   *
+   * Rebuild the catalog so files changed outside the app are picked up without a restart.
+   */
+  public reload<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).post<SettingsSkillsReloadResponses, unknown, ThrowOnError>({
+      url: "/settings/skills/reload",
+      ...options,
+      ...params,
+    })
+  }
+
   /**
    * Install skill from git
    *
@@ -8473,6 +8596,36 @@ export class Command3 extends HeyApiClient {
 }
 
 export class Skill extends HeyApiClient {
+  /**
+   * Read a skill's instructions
+   *
+   * The SKILL.md text and location of one skill, for clients without filesystem access.
+   */
+  public content<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AppSkillContentResponses, AppSkillContentErrors, ThrowOnError>({
+      url: "/skill/{name}/content",
+      ...options,
+      ...params,
+    })
+  }
+
   /**
    * Delete user skill
    *

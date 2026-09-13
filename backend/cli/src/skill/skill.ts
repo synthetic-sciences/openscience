@@ -68,8 +68,31 @@ export namespace Skill {
      *  Driven by `openscience-skills.json` `entries[]` for URL-installed skills;
      *  bundled skills omit this and are always entries. */
     entry: z.boolean().optional(),
+    /** Locations of same-named skills this one won over, so a local edit that
+     *  had no effect is explained rather than silent. */
+    shadows: z.array(z.string()).optional(),
   })
   export type Info = z.infer<typeof Info>
+
+  export const Root = z
+    .object({
+      path: z.string(),
+      kind: z.enum(["bundled", "project", "user", "installed", "config", "runtime"]),
+      skills: z.number().int().nonnegative(),
+      shadowed: z.number().int().nonnegative(),
+    })
+    .meta({ ref: "SkillRoot" })
+  export type Root = z.infer<typeof Root>
+
+  export const Shadowed = z
+    .object({
+      name: z.string(),
+      location: z.string(),
+      origin: z.enum(["default", "installed", "user", "project"]),
+      by: z.string(),
+    })
+    .meta({ ref: "ShadowedSkill" })
+  export type Shadowed = z.infer<typeof Shadowed>
   export const CatalogEntry = Info.extend({
     permission_action: PermissionNext.Action,
     recommended: z.boolean(),
@@ -248,21 +271,48 @@ export namespace Skill {
     return skills
   })
 
+  type Meta = { roots: Root[]; shadowed: Shadowed[]; revision: number }
+  const meta = new WeakMap<Record<string, Info>, Meta>()
+  const revisions = { value: 0 }
+
   async function compute() {
     const skills: Record<string, Info> = {}
     const disabled = Flag.OPENSCIENCE_DISABLED_SKILLS
+    const shadowed: Shadowed[] = []
+    const roots: Root[] = []
+    /** Every scan below runs inside `scan(root, kind, ...)` so the catalog
+     * can say which directories contributed and how many skills each won. */
+    const scan = async (
+      root: string,
+      kind: Root["kind"],
+      work: (accept: (skill: Info) => boolean) => Promise<void>,
+    ) => {
+      const entry: Root = { path: root, kind, skills: 0, shadowed: 0 }
+      await work((skill) => {
+        const accepted = add(skill)
+        if (accepted) entry.skills += 1
+        return accepted
+      })
+      roots.push(entry)
+    }
 
-    const add = (skill: Info) => {
+    const add = (skill: Info): boolean => {
       const directory = path.basename(path.dirname(skill.location))
-      if (isRetiredProductSkillName(skill.name) || isRetiredProductSkillName(directory)) return
+      if (isRetiredProductSkillName(skill.name) || isRetiredProductSkillName(directory)) return false
       if (disabled.has(skill.name) || disabled.has(directory)) {
         log.info("Skipped skill disabled by operator policy", { name: skill.name, directory, path: skill.location })
-        return
+        return false
       }
       const existing = skills[skill.name]
       const origin = skill.origin
-      if (existing && priority[existing.origin] > priority[origin]) return
+      if (existing && priority[existing.origin] > priority[origin]) {
+        shadowed.push({ name: skill.name, location: skill.location, origin, by: existing.location })
+        existing.shadows = [...(existing.shadows ?? []), skill.location]
+        return false
+      }
       if (existing) {
+        shadowed.push({ name: skill.name, location: existing.location, origin: existing.origin, by: skill.location })
+        skill.shadows = [...(existing.shadows ?? []), existing.location]
         // The catalog is rebuilt on every invalidation; the same collision
         // warned once per build is log spam, so warn once per process per
         // pair and demote later builds to debug.
@@ -276,11 +326,12 @@ export namespace Skill {
         })
       }
       skills[skill.name] = skill
+      return true
     }
 
-    const addSkill = async (match: string, origin: Info["origin"]) => {
+    const addSkill = async (match: string, origin: Info["origin"], accept: (skill: Info) => boolean = add) => {
       const skill = await read(match, origin)
-      if (skill) add(skill)
+      if (skill) accept(skill)
     }
 
     // Scan .claude/skills/ directories (project-level)
@@ -316,25 +367,27 @@ export namespace Skill {
           return []
         })
 
-        for (const match of matches.toSorted()) {
-          await addSkill(match, "project")
-        }
+        await scan(path.join(dir, "skills"), "project", async (accept) => {
+          for (const match of matches.toSorted()) await addSkill(match, "project", accept)
+        })
       }
 
       if (await Filesystem.isDir(globalClaude)) {
-        for (const match of (
-          await Array.fromAsync(
-            CLAUDE_SKILL_GLOB.scan({
-              cwd: globalClaude,
-              absolute: true,
-              onlyFiles: true,
-              followSymlinks: true,
-              dot: true,
-            }),
-          )
-        ).toSorted()) {
-          await addSkill(match, "installed")
-        }
+        await scan(path.join(globalClaude, "skills"), "installed", async (accept) => {
+          for (const match of (
+            await Array.fromAsync(
+              CLAUDE_SKILL_GLOB.scan({
+                cwd: globalClaude,
+                absolute: true,
+                onlyFiles: true,
+                followSymlinks: true,
+                dot: true,
+              }),
+            )
+          ).toSorted()) {
+            await addSkill(match, "installed", accept)
+          }
+        })
       }
     }
 
@@ -360,7 +413,7 @@ export namespace Skill {
 
     // Scan .openscience/skill/ directories
     for (const dir of directories) {
-      for (const match of (
+      const matches = (
         await Array.fromAsync(
           OPENSCIENCE_SKILL_GLOB.scan({
             cwd: dir,
@@ -369,20 +422,28 @@ export namespace Skill {
             followSymlinks: true,
           }),
         )
-      ).toSorted()) {
-        await addSkill(match, projectSet.has(dir) ? "project" : "user")
-      }
+      ).toSorted()
+      if (!matches.length) continue
+      const origin = projectSet.has(dir) ? "project" : "user"
+      await scan(dir, origin, async (accept) => {
+        for (const match of matches) await addSkill(match, origin, accept)
+      })
     }
 
     // Default skills are an immutable release asset. Source builds scan the
     // repository tree; compiled releases materialize their embedded archive to
     // a versioned cache directory. Neither path needs Atlas or a network.
-    for (const skill of await defaults().catch((error) => {
+    const bundled = await defaults().catch((error) => {
       defaults.reset()
       State.clear(Instance.directory, compute)
       throw error
-    }))
-      add(skill)
+    })
+    if (bundled.length) {
+      const bundledRoot = path.dirname(path.dirname(path.dirname(bundled[0]!.location)))
+      await scan(bundledRoot, "bundled", async (accept) => {
+        for (const skill of bundled) accept(skill)
+      })
+    }
 
     // === User Skills: authored locally via openscience/web, private by default ===
     for (const name of RETIRED_PRODUCT_SKILL_NAMES) {
@@ -390,19 +451,21 @@ export namespace Skill {
     }
     if (await Filesystem.isDir(USER_SKILL_DIR)) {
       let userCount = 0
-      for (const match of (
-        await Array.fromAsync(
-          SKILL_GLOB.scan({
-            cwd: USER_SKILL_DIR,
-            absolute: true,
-            onlyFiles: true,
-            followSymlinks: true,
-          }),
-        )
-      ).toSorted()) {
-        await addSkill(match, "user")
-        userCount++
-      }
+      await scan(USER_SKILL_DIR, "user", async (accept) => {
+        for (const match of (
+          await Array.fromAsync(
+            SKILL_GLOB.scan({
+              cwd: USER_SKILL_DIR,
+              absolute: true,
+              onlyFiles: true,
+              followSymlinks: true,
+            }),
+          )
+        ).toSorted()) {
+          await addSkill(match, "user", accept)
+          userCount++
+        }
+      })
       if (userCount > 0) {
         log.info("Loaded user skills", { count: userCount })
       }
@@ -477,7 +540,7 @@ export namespace Skill {
         /* installedDir read failed — skip */
       }
 
-      for (const match of (
+      const installedMatches = (
         await Array.fromAsync(
           SKILL_GLOB.scan({
             cwd: installedDir,
@@ -486,8 +549,15 @@ export namespace Skill {
             followSymlinks: true,
           }),
         )
-      ).toSorted()) {
-        await addSkill(match, "installed")
+      ).toSorted()
+      const installedRoot: Root = { path: installedDir, kind: "installed", skills: 0, shadowed: 0 }
+      if (installedMatches.length) roots.push(installedRoot)
+      for (const match of installedMatches) {
+        await addSkill(match, "installed", (skill) => {
+          const accepted = add(skill)
+          if (accepted) installedRoot.skills += 1
+          return accepted
+        })
         installedCount++
         // SKILL_GLOB matches <installedDir>/<ns>/skills/<name>/SKILL.md.
         const rel = match.slice(installedDir.length + 1)
@@ -507,30 +577,151 @@ export namespace Skill {
       }
     }
 
-    // Scan additional skill paths from config
+    // Scan additional skill roots: `skills.paths` from config, then the roots
+    // registered through the API for this project (no restart needed). Both
+    // load as project skills, the highest precedence, because the user put
+    // them there on purpose.
     const config = await Config.getExecution()
-    for (const skillPath of config.skills?.paths ?? []) {
-      const expanded = skillPath.startsWith("~/") ? path.join(os.homedir(), skillPath.slice(2)) : skillPath
-      const resolved = path.isAbsolute(expanded) ? expanded : path.join(Instance.directory, expanded)
-      if (!(await Filesystem.isDir(resolved))) {
-        log.warn("skill path not found", { path: resolved })
+    const configured = (config.skills?.paths ?? []).map(resolveRoot)
+    const extra = [
+      ...configured.map((root) => ({ root, kind: "config" as const })),
+      ...[...runtimeRoots()]
+        .filter((root) => !configured.includes(root))
+        .map((root) => ({ root, kind: "runtime" as const })),
+    ]
+    for (const { root, kind } of extra) {
+      if (!(await Filesystem.isDir(root))) {
+        log.warn("skill path not found", { path: root })
         continue
       }
-      for (const match of (
-        await Array.fromAsync(
-          SKILL_GLOB.scan({
-            cwd: resolved,
-            absolute: true,
-            onlyFiles: true,
-            followSymlinks: true,
-          }),
-        )
-      ).toSorted()) {
-        await addSkill(match, "project")
-      }
+      await scan(root, kind, async (accept) => {
+        for (const match of (
+          await Array.fromAsync(
+            SKILL_GLOB.scan({
+              cwd: root,
+              absolute: true,
+              onlyFiles: true,
+              followSymlinks: true,
+            }),
+          )
+        ).toSorted()) {
+          await addSkill(match, "project", accept)
+        }
+      })
     }
 
+    // Counts are settled once every root has been scanned: a skill accepted
+    // early can still lose to a later root, and belongs to the winner's count
+    // only while it wins.
+    const within = (location: string) =>
+      roots
+        .filter((item) => location.startsWith(`${item.path}${path.sep}`))
+        .sort((a, b) => b.path.length - a.path.length)[0]
+    for (const root of roots) {
+      root.skills = 0
+      root.shadowed = 0
+    }
+    for (const skill of Object.values(skills)) {
+      const root = within(skill.location)
+      if (root) root.skills += 1
+    }
+    for (const entry of shadowed) {
+      const root = within(entry.location)
+      if (root) root.shadowed += 1
+    }
+    revisions.value += 1
+    meta.set(skills, { roots, shadowed, revision: revisions.value })
     return skills
+  }
+
+  /** Roots registered for this project through the API; never written to
+   * disk unless the caller asked to persist them. */
+  const runtimeRoots = Instance.state(() => new Set<string>())
+
+  function resolveRoot(raw: string) {
+    const expanded = raw.startsWith("~/") ? path.join(os.homedir(), raw.slice(2)) : raw
+    return path.normalize(path.isAbsolute(expanded) ? expanded : path.join(Instance.directory, expanded))
+  }
+
+  /** Every directory contributing to the catalog, with what each one won and
+   * what it lost to a same-named skill elsewhere. */
+  export async function roots(): Promise<{ roots: Root[]; shadowed: Shadowed[]; revision: number }> {
+    const current = await state()
+    const info = meta.get(current)
+    return info ?? { roots: [], shadowed: [], revision: revisions.value }
+  }
+
+  export const RootError = NamedError.create(
+    "SkillRootError",
+    z.object({ path: z.string(), code: z.enum(["missing", "empty", "duplicate", "unknown"]), message: z.string() }),
+  )
+
+  /**
+   * Register a directory as a skill root for this project. The directory must
+   * exist and hold at least one SKILL.md (a typo'd path is the failure people
+   * hit, and it must not be a silent no-op); a root that is already active is
+   * an error rather than a second copy of every skill. With `persist`, the
+   * absolute path is written to `skills.paths` in the global or project
+   * config so it survives a restart.
+   */
+  export async function addRoot(raw: string, options: { persist?: "global" | "project" } = {}): Promise<Root> {
+    const resolved = resolveRoot(raw)
+    if (!(await Filesystem.isDir(resolved))) {
+      throw new RootError({ path: resolved, code: "missing", message: `${resolved} is not a directory` })
+    }
+    const first = await Array.fromAsync(SKILL_GLOB.scan({ cwd: resolved, onlyFiles: true, followSymlinks: true }))
+    if (!first.length) {
+      throw new RootError({ path: resolved, code: "empty", message: `${resolved} contains no SKILL.md` })
+    }
+    const active = (await roots()).roots.some((root) => root.path === resolved)
+    if (active || runtimeRoots().has(resolved)) {
+      throw new RootError({ path: resolved, code: "duplicate", message: `${resolved} is already a skill root` })
+    }
+    if (options.persist) {
+      const current =
+        options.persist === "global" ? (await Config.getGlobal()).skills?.paths : (await Config.get()).skills?.paths
+      const paths = [...(current ?? []), resolved]
+      if (options.persist === "global") await Config.updateGlobal({ skills: { paths } })
+      else await Config.update({ skills: { paths } })
+    }
+    runtimeRoots().add(resolved)
+    await invalidate()
+    log.info("skill root added", { path: resolved, persist: options.persist ?? false })
+    const found = (await roots()).roots.find((root) => root.path === resolved)
+    return found ?? { path: resolved, kind: "runtime", skills: 0, shadowed: 0 }
+  }
+
+  /** Drop a root registered at runtime, and with `persist` also remove it
+   * from the config list it was written to. */
+  export async function removeRoot(raw: string, options: { persist?: "global" | "project" } = {}) {
+    const resolved = resolveRoot(raw)
+    const known = runtimeRoots().delete(resolved)
+    let persisted = false
+    if (options.persist) {
+      const current =
+        options.persist === "global" ? (await Config.getGlobal()).skills?.paths : (await Config.get()).skills?.paths
+      const paths = (current ?? []).filter((item) => resolveRoot(item) !== resolved)
+      if (paths.length !== (current ?? []).length) {
+        persisted = true
+        if (options.persist === "global") await Config.updateGlobal({ skills: { paths } })
+        else await Config.update({ skills: { paths } })
+      }
+    }
+    if (!known && !persisted) {
+      throw new RootError({ path: resolved, code: "unknown", message: `${resolved} is not a registered skill root` })
+    }
+    await invalidate()
+    log.info("skill root removed", { path: resolved, persist: options.persist ?? false })
+  }
+
+  /** The instructions of one skill, for clients without filesystem access. */
+  export async function content(
+    name: string,
+  ): Promise<{ name: string; location: string; content: string } | undefined> {
+    const skill = await get(name)
+    if (!skill) return
+    const text = await Bun.file(skill.location).text()
+    return { name: skill.name, location: skill.location, content: text }
   }
 
   export const state = Instance.state(compute)

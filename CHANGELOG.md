@@ -62,6 +62,16 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   after a short run the agent is told to wait for it in the same turn rather
   than end the turn and be woken.
 
+- Skill roots as an API, after the proposal in #608: `GET /settings/skills/paths`
+  lists every directory feeding the catalog with the skills it won and lost,
+  `POST` registers a local directory without a restart (scanned recursively,
+  optionally persisted to `skills.paths` in the global or project config,
+  missing or empty directories rejected, duplicates refused), `DELETE` removes
+  it, `POST /settings/skills/reload` rescans, and `GET /skill/{name}/content`
+  returns a skill's instructions for clients without filesystem access. A
+  skill that shadows a same-named one now carries `shadows` with the losing
+  paths, so a local edit that had no effect is explained.
+
 ### Changed
 
 - Skills that declare `allowed-tools` unlock those tools for whichever agent

@@ -82,6 +82,20 @@ Before model fitting:
 
 Use `openscience skill edit leakage-checks` to revise it. `validate --strict` also fails on warnings.
 
+## Register a local skill directory
+
+A team pack, a vendor's collection or an air-gapped mirror can join the library without editing a config file or restarting. Register the directory through the API (or the SDK) and its skills are scanned at once, nested category folders included:
+
+```bash
+curl -X POST http://127.0.0.1:4096/settings/skills/paths \
+  -H 'content-type: application/json' \
+  -d '{"path": "/data/team-skills", "persist": "global"}'
+```
+
+`persist` writes the absolute path to `skills.paths` in the global or the project `openscience.json` so it survives a restart; without it the root lives for this project's server process only. A missing or empty directory is rejected, and a directory that is already a root is refused rather than loaded twice. `GET /settings/skills/paths` lists every root feeding the catalog (bundled, project, user, installed, config, runtime) with the skills it won and the ones it lost to a same-named skill elsewhere; a skill that shadows another carries `shadows` with the losing paths, so a local edit that had no effect is explained. `DELETE /settings/skills/paths?path=…` removes a root, `POST /settings/skills/reload` rescans after files changed outside the app, and `GET /skill/{name}/content` returns a skill's instructions for clients without filesystem access.
+
+Custom roots load with project precedence: a same-named skill in a registered directory wins over the bundled and personal copies.
+
 ## Use project skills
 
 Add a skill under `.openscience/skills/<name>/SKILL.md`, or configure additional folders:

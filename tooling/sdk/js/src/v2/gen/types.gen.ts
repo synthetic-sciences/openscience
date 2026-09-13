@@ -2845,6 +2845,26 @@ export type McpAuthPending =
       pending: false
     }
 
+export type SkillRoot = {
+  path: string
+  kind: "bundled" | "project" | "user" | "installed" | "config" | "runtime"
+  skills: number
+  shadowed: number
+}
+
+export type ShadowedSkill = {
+  name: string
+  location: string
+  origin: "default" | "installed" | "user" | "project"
+  by: string
+}
+
+export type SkillRoots = {
+  roots: Array<SkillRoot>
+  shadowed: Array<ShadowedSkill>
+  revision: number
+}
+
 export type Path = {
   home: string
   state: string
@@ -18411,6 +18431,114 @@ export type McpDisconnectResponses = {
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
 
+export type SettingsSkillsRemoveRootData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    path: string
+    /**
+     * Write the path to skills.paths in the global or the project config so it survives a restart.
+     */
+    persist?: "global" | "project"
+  }
+  url: "/settings/skills/paths"
+}
+
+export type SettingsSkillsRemoveRootErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SettingsSkillsRemoveRootError = SettingsSkillsRemoveRootErrors[keyof SettingsSkillsRemoveRootErrors]
+
+export type SettingsSkillsRemoveRootResponses = {
+  /**
+   * Roots after the removal
+   */
+  200: SkillRoots
+}
+
+export type SettingsSkillsRemoveRootResponse =
+  SettingsSkillsRemoveRootResponses[keyof SettingsSkillsRemoveRootResponses]
+
+export type SettingsSkillsRootsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/settings/skills/paths"
+}
+
+export type SettingsSkillsRootsResponses = {
+  /**
+   * Skill roots
+   */
+  200: SkillRoots
+}
+
+export type SettingsSkillsRootsResponse = SettingsSkillsRootsResponses[keyof SettingsSkillsRootsResponses]
+
+export type SettingsSkillsAddRootData = {
+  body?: {
+    /**
+     * Absolute path, or relative to the project directory; ~ is expanded.
+     */
+    path: string
+    /**
+     * Write the path to skills.paths in the global or the project config so it survives a restart.
+     */
+    persist?: "global" | "project"
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/settings/skills/paths"
+}
+
+export type SettingsSkillsAddRootErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SettingsSkillsAddRootError = SettingsSkillsAddRootErrors[keyof SettingsSkillsAddRootErrors]
+
+export type SettingsSkillsAddRootResponses = {
+  /**
+   * The registered root
+   */
+  201: SkillRoot
+}
+
+export type SettingsSkillsAddRootResponse = SettingsSkillsAddRootResponses[keyof SettingsSkillsAddRootResponses]
+
+export type SettingsSkillsReloadData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/settings/skills/reload"
+}
+
+export type SettingsSkillsReloadResponses = {
+  /**
+   * Catalog size after the rescan
+   */
+  200: {
+    skills: number
+    revision: number
+  }
+}
+
+export type SettingsSkillsReloadResponse = SettingsSkillsReloadResponses[keyof SettingsSkillsReloadResponses]
+
 export type SettingsSkillsInstallData = {
   body?: {
     /**
@@ -18690,6 +18818,7 @@ export type AppSkillsResponses = {
     }
     origin: "default" | "installed" | "user" | "project"
     entry?: boolean
+    shadows?: Array<string>
     permission_action: PermissionAction
     recommended: boolean
     /**
@@ -18701,6 +18830,39 @@ export type AppSkillsResponses = {
 }
 
 export type AppSkillsResponse = AppSkillsResponses[keyof AppSkillsResponses]
+
+export type AppSkillContentData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/skill/{name}/content"
+}
+
+export type AppSkillContentErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type AppSkillContentError = AppSkillContentErrors[keyof AppSkillContentErrors]
+
+export type AppSkillContentResponses = {
+  /**
+   * Skill content
+   */
+  200: {
+    name: string
+    location: string
+    content: string
+  }
+}
+
+export type AppSkillContentResponse = AppSkillContentResponses[keyof AppSkillContentResponses]
 
 export type AppSkillDeleteData = {
   body?: never
@@ -18763,6 +18925,7 @@ export type AppSkillWriteResponses = {
     }
     origin: "default" | "installed" | "user" | "project"
     entry?: boolean
+    shadows?: Array<string>
   }
 }
 

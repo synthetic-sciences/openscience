@@ -25,6 +25,14 @@ keyed by skill `name`:
 4. **Project skills** — `.openscience/{skill,skills}` and `.claude/skills`
    directories committed to the current project, plus `skills.paths` entries.
 
+5. **Registered roots** — directories added at runtime through
+   `POST /settings/skills/paths` (`Skill.addRoot`), per project instance, loaded
+   with project precedence exactly like `skills.paths`; `persist` writes them
+   to the global or project config. `Skill.roots()` reports every root with
+   the skills it won and lost (`shadowed`), and each winning skill carries
+   `shadows` with the paths it beat. `GET /skill/:name/content` serves the
+   SKILL.md text for remote clients.
+
 `OPENSCIENCE_DISABLE_BUNDLED_SKILLS` disables only the default release library.
 `OPENSCIENCE_DISABLE_CLAUDE_CODE_SKILLS` disables compatible Claude skill paths.
 `OPENSCIENCE_DISABLED_SKILLS=vllm,tensorrt-llm` hides individual skills from

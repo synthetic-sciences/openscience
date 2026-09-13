@@ -53300,6 +53300,222 @@
         ]
       }
     },
+    "/settings/skills/paths": {
+      "get": {
+        "operationId": "settings.skills.roots",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List skill roots",
+        "description": "Every directory contributing skills, with its kind (bundled, project, user, installed, config, runtime), the skills it won, and the same-named skills it lost to another root. The revision changes whenever the catalog is rebuilt.",
+        "responses": {
+          "200": {
+            "description": "Skill roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRoots"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.skills.roots({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "settings.skills.addRoot",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Register a skill directory",
+        "description": "Add a local directory as a skill root for this project. It is scanned recursively at once; no restart is needed. A missing or empty directory is rejected (400), and a root that is already active is rejected (409) instead of loading every skill twice.",
+        "responses": {
+          "201": {
+            "description": "The registered root",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRoot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "description": "Absolute path, or relative to the project directory; ~ is expanded.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "persist": {
+                    "description": "Write the path to skills.paths in the global or the project config so it survives a restart.",
+                    "type": "string",
+                    "enum": [
+                      "global",
+                      "project"
+                    ]
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.skills.addRoot({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "settings.skills.removeRoot",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "persist",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "global",
+                "project"
+              ]
+            },
+            "description": "Write the path to skills.paths in the global or the project config so it survives a restart."
+          }
+        ],
+        "summary": "Unregister a skill directory",
+        "description": "Remove a root registered at runtime, and with persist also drop it from skills.paths in that config. Only that root's skills leave the catalog.",
+        "responses": {
+          "200": {
+            "description": "Roots after the removal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRoots"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.skills.removeRoot({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/skills/reload": {
+      "post": {
+        "operationId": "settings.skills.reload",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Rescan skill directories",
+        "description": "Rebuild the catalog so files changed outside the app are picked up without a restart.",
+        "responses": {
+          "200": {
+            "description": "Catalog size after the rescan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "skills": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "skills",
+                    "revision"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.skills.reload({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/skills/install": {
       "post": {
         "operationId": "settings.skills.install",
@@ -54022,6 +54238,12 @@
                       "entry": {
                         "type": "boolean"
                       },
+                      "shadows": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "permission_action": {
                         "$ref": "#/components/schemas/PermissionAction"
                       },
@@ -54058,6 +54280,74 @@
           {
             "lang": "js",
             "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.app.skills({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/skill/{name}/content": {
+      "get": {
+        "operationId": "app.skill.content",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Read a skill's instructions",
+        "description": "The SKILL.md text and location of one skill, for clients without filesystem access.",
+        "responses": {
+          "200": {
+            "description": "Skill content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "location",
+                    "content"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.app.skill.content({\n  ...\n})"
           }
         ]
       }
@@ -54195,6 +54485,12 @@
                     },
                     "entry": {
                       "type": "boolean"
+                    },
+                    "shadows": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -63118,6 +63414,97 @@
               "pending"
             ]
           }
+        ]
+      },
+      "SkillRoot": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "bundled",
+              "project",
+              "user",
+              "installed",
+              "config",
+              "runtime"
+            ]
+          },
+          "skills": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "shadowed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "skills",
+          "shadowed"
+        ]
+      },
+      "ShadowedSkill": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "default",
+              "installed",
+              "user",
+              "project"
+            ]
+          },
+          "by": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "location",
+          "origin",
+          "by"
+        ]
+      },
+      "SkillRoots": {
+        "type": "object",
+        "properties": {
+          "roots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkillRoot"
+            }
+          },
+          "shadowed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShadowedSkill"
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "roots",
+          "shadowed",
+          "revision"
         ]
       },
       "Path": {

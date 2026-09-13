@@ -639,6 +639,31 @@ export namespace Server {
             return c.json(skills.library)
           },
         )
+        .get(
+          "/skill/:name/content",
+          describeRoute({
+            summary: "Read a skill's instructions",
+            description: "The SKILL.md text and location of one skill, for clients without filesystem access.",
+            operationId: "app.skill.content",
+            responses: {
+              200: {
+                description: "Skill content",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.object({ name: z.string(), location: z.string(), content: z.string() })),
+                  },
+                },
+              },
+              ...errors(404),
+            },
+          }),
+          validator("param", z.object({ name: z.string() })),
+          async (c) => {
+            const result = await Skill.content(c.req.valid("param").name)
+            if (!result) return c.json({ error: "Skill not found" }, 404)
+            return c.json(result)
+          },
+        )
         .put(
           "/skill/:name",
           describeRoute({
