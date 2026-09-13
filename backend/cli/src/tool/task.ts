@@ -632,18 +632,39 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // Background: the child runs detached from this call and from the
       // parent's turn (whose abort fires when the turn ends); its completion
       // wakes the parent with a synthetic message carrying the same envelope.
+      const parentAgent = ctx.agent
+      const wake = async (output: string) => {
+        // Write the message first, then make sure a loop answers it: a wake
+        // that lands as the parent's turn is ending can slip past that loop's
+        // final read, so run the loop again until the message has a reply.
+        const message = await SessionPrompt.prompt({
+          sessionID: ctx.sessionID,
+          agent: parentAgent,
+          model: leadModel,
+          variant: typeof ctx.extra?.variant === "string" ? ctx.extra.variant : undefined,
+          noReply: true,
+          parts: [{ type: "text", synthetic: true, text: output }],
+        })
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await SessionPrompt.loop(ctx.sessionID).catch(() => undefined)
+          const messages = await Session.messages({ sessionID: ctx.sessionID })
+          const answered = messages.some(
+            (item) => item.info.role === "assistant" && item.info.parentID === message.info.id,
+          )
+          if (answered) return
+        }
+        log.warn("background task completion was recorded but the parent did not answer it", {
+          sessionID: ctx.sessionID,
+          child: session.id,
+        })
+      }
       if (!background.has(session.id)) {
-        const parentAgent = ctx.agent
         const pending = run(new AbortController().signal, false)
           .then(async (result) => {
             background.delete(session.id)
-            await SessionPrompt.prompt({
-              sessionID: ctx.sessionID,
-              agent: parentAgent,
-              model: leadModel,
-              variant: typeof ctx.extra?.variant === "string" ? ctx.extra.variant : undefined,
-              parts: [{ type: "text", synthetic: true, text: result.output }],
-            }).catch((error) => log.error("background task completion could not wake the parent", { error }))
+            await wake(result.output).catch((error) =>
+              log.error("background task completion could not wake the parent", { error }),
+            )
             return result
           })
           .catch(async (error: unknown) => {
@@ -659,12 +680,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 text: message,
               }),
             })
-            await SessionPrompt.prompt({
-              sessionID: ctx.sessionID,
-              agent: parentAgent,
-              model: leadModel,
-              parts: [{ type: "text", synthetic: true, text: result.output }],
-            }).catch((error) => log.error("background task failure could not wake the parent", { error }))
+            await wake(result.output).catch((error) =>
+              log.error("background task failure could not wake the parent", { error }),
+            )
             return result
           })
         background.set(session.id, pending)

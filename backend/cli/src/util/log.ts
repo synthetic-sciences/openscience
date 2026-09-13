@@ -178,6 +178,8 @@ export namespace Log {
           const prefix = `${key}=`
           if (value instanceof Error) return prefix + formatError(value)
           if (typeof value === "object") return prefix + JSON.stringify(value)
+          // An abort reason can be a Symbol; string concatenation would throw.
+          if (typeof value === "symbol") return prefix + value.toString()
           return prefix + value
         })
         .join(" ")

@@ -18,13 +18,16 @@ const AVAILABLE_TOOLS = [
   "read",
   "write",
   "edit",
-  "list",
   "glob",
   "grep",
   "webfetch",
+  "literature",
+  "python",
+  "compute_job",
+  "artifact",
   "task",
   "todowrite",
-  "todoread",
+  "question",
 ]
 
 const AgentCreateCommand = cmd({

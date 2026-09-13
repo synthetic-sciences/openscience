@@ -112,8 +112,8 @@ function provider(options: { secret: string; hold?: () => Promise<void> }) {
             })
       }
       if (prompt.includes("RUN_HOLD")) await options.hold?.()
-      // The lead delegates once; the child recognizes its own brief.
-      if (prompt.includes("CHILD_BRIEF")) return text("CHILD_DONE: two files inspected.")
+      // The lead delegates once; only the child's conversation lacks the
+      // lead's marker, so it is recognized by its brief alone (checked last).
       if (prompt.includes("RUN_DELEGATE")) {
         return done
           ? text("RUN_DELEGATE_DONE")
@@ -123,6 +123,17 @@ function provider(options: { secret: string; hold?: () => Promise<void> }) {
               subagent_type: "explore",
             })
       }
+      if (prompt.includes("RUN_BACKGROUND")) {
+        return done
+          ? text("RUN_BACKGROUND_DONE")
+          : call("task", {
+              description: "Inspect files later",
+              prompt: "CHILD_BRIEF inspect the files",
+              subagent_type: "explore",
+              background: true,
+            })
+      }
+      if (prompt.includes("CHILD_BRIEF")) return text("CHILD_DONE: two files inspected.")
       if (prompt.includes("RUN_DENIED")) {
         return done ? text("RUN_DENIED_DONE") : call("bash", { command: "echo blocked", description: "blocked" })
       }
@@ -537,6 +548,59 @@ describe("openscience run headless harness", () => {
         )
         // --deadline shows as the time budget in the environment block.
         expect(stub.requests.some((request) => /Time budget: 10m, elapsed \dm/.test(request))).toBe(true)
+      },
+    })
+  }, 30_000)
+
+  test("a background worker keeps the run alive until its result wakes the lead", async () => {
+    const stub = provider({ secret: "" })
+    servers.push(stub.server)
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(stub.baseURL) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        const client = sdk(tmp.path)
+        const sessionID = (await client.session.create({})).data!.id
+        const { out, code } = run({
+          sdk: client,
+          sessionID,
+          message: "RUN_BACKGROUND now",
+          policy: "allow",
+          delegation: "standard",
+        })
+        expect(await code).toBe(0)
+        const events = out.events()
+        const task = events.find((event) => event.type === "tool_use" && event.part.tool === "task")
+        expect(task?.type === "tool_use" && task.part.state.status === "completed" && task.part.state.output).toContain(
+          'state="running"',
+        )
+        // The child ran, and its completion reached the lead as a second turn
+        // that the run waited for: the lead's answer comes after the child's.
+        const childText = events.findIndex((event) => event.type === "text" && event.parentID === sessionID)
+        expect(childText).toBeGreaterThan(-1)
+        const woken = events.findIndex(
+          (event, index) =>
+            index > childText &&
+            event.type === "text" &&
+            !event.parentID &&
+            event.part.text.includes("RUN_BACKGROUND_DONE"),
+        )
+        expect(woken).toBeGreaterThan(childText)
+        const done = events.at(-1)
+        if (done?.type !== "done") throw new Error("missing done")
+        expect(done.status).toBe("completed")
+        expect(done.children).toHaveLength(1)
+        const messages = (await client.session.messages({ sessionID })).data ?? []
+        const woke = messages.some((message) =>
+          message.parts.some(
+            (part) => part.type === "text" && part.synthetic && part.text.includes('state="completed"'),
+          ),
+        )
+        expect(woke).toBe(true)
       },
     })
   }, 30_000)

@@ -340,6 +340,10 @@ export async function execute(input: RunInput): Promise<number> {
   // parts). Emit exactly one `tool_use` per part id: a Harbor trial rejects a
   // duplicated event part, and a compacted republish is not a new tool call.
   const emittedToolParts = new Set<string>()
+  // Background workers outlive the turn that started them: the root goes idle,
+  // the worker finishes, and its result wakes the root for another turn. The
+  // run ends only once no started worker is still pending.
+  const pendingBackground = new Set<string>()
 
   const processor = (async () => {
     for await (const event of events.stream) {
@@ -368,6 +372,10 @@ export async function execute(input: RunInput): Promise<number> {
 
         if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
           if (!claimToolPartEmission(emittedToolParts, part)) continue
+          if (part.tool === "task" && part.state.status === "completed") {
+            const job = part.state.metadata?.jobId
+            if (part.state.metadata?.background === true && typeof job === "string") pendingBackground.add(job)
+          }
           if (emit({ type: "tool_use", part })) continue
           const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
           const title =
@@ -438,6 +446,26 @@ export async function execute(input: RunInput): Promise<number> {
       }
 
       if (event.type === "session.idle" && event.properties.sessionID === sessionID) {
+        if (pendingBackground.size === 0) break
+        continue
+      }
+
+      if (event.type === "session.idle" && pendingBackground.has(event.properties.sessionID)) {
+        pendingBackground.delete(event.properties.sessionID)
+        if (pendingBackground.size > 0) continue
+        // The worker's completion is being injected into the root as a new
+        // turn. Keep reading events while that turn runs (its idle ends the
+        // run above); end here only if no wake-up ever reached the root.
+        await Bun.sleep(1_000)
+        const status = await sdk.session.status().then((result) => result.data ?? {})
+        if (status[sessionID]?.type === "busy") continue
+        const messages = (await sdk.session.messages({ sessionID })).data ?? []
+        const woke = messages.some(
+          (message) =>
+            message.info.role === "user" &&
+            message.parts.some((part) => part.type === "text" && part.synthetic && part.text.includes("<task id=")),
+        )
+        if (woke) continue
         break
       }
 

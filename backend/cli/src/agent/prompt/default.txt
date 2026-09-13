@@ -30,7 +30,7 @@ assistant: ls
 
 <example>
 user: how do I run the analysis pipeline in this project?
-assistant: [use the list tool to see the files in the project, then read the README or the relevant script to find out how the pipeline is run]
+assistant: [use the glob tool to see the files in the project, then read the README or the relevant script to find out how the pipeline is run]
 make analysis
 </example>
 
