@@ -24,7 +24,7 @@ import { Flag } from "@/flag/flag"
 import { Auth } from "@/auth"
 import { SessionHarness } from "./harness"
 import { SessionTraceStore } from "./trace-store"
-import { ToolSelection } from "./tool-selection"
+import { ToolVisibility } from "@/tool/visibility"
 import { InvalidCall } from "@/tool/invalid-call"
 import { resolveAccessRoute } from "./access-route"
 import { providerErrorMetadata } from "./provider-error"
@@ -46,10 +46,6 @@ export namespace LLM {
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
-    direct?: boolean
-    inspection?: boolean
-    /** A small ask: prefer the model's low reasoning variant unless the user chose one. */
-    quick?: boolean
     trace?: { messageID: string; attempt: number }
     route?: string
     onReasoningEffortResolved?: (effort: string | undefined) => void | Promise<void>
@@ -60,28 +56,18 @@ export namespace LLM {
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
 
-  // Share the exact header selection with context preflight. Codex sends its
-  // base instructions separately from the assembled conversation context.
-  export function prompts(input: Pick<StreamInput, "agent" | "model" | "direct" | "inspection">, codex = false) {
-    const minimal = ToolSelection.minimalResearchAgent(input.agent.name)
-    const instructions = codex
-      ? minimal && input.agent.prompt
-        ? input.agent.prompt
-        : SystemPrompt.instructions(input.direct, input.inspection)
-      : undefined
-    // Codex already receives this exact Research header as instructions.
-    // Keep distinct agent contracts and all caller context in their own slots.
-    const duplicate = codex && minimal && input.agent.prompt === instructions
-    return {
-      system: duplicate
-        ? []
-        : input.agent.prompt
-          ? [input.agent.prompt]
-          : codex
-            ? []
-            : SystemPrompt.provider(input.model, input.direct, input.inspection),
-      instructions,
-    }
+  // Share the exact header selection with context preflight. An agent with a
+  // prompt of its own replaces the model-family header. Codex sends the header
+  // through `instructions`, separately from the assembled conversation
+  // context, so the header never appears twice on that route.
+  export function prompts(input: Pick<StreamInput, "agent" | "model">, codex = false) {
+    const header = SystemPrompt.provider(input.model)
+    if (!codex) return { system: input.agent.prompt ? [input.agent.prompt] : header, instructions: undefined }
+    // A primary agent's own prompt is its header and travels in the
+    // instructions slot; a worker's contract stays in context beneath the
+    // family header so the header never appears twice.
+    if (input.agent.prompt && input.agent.mode !== "subagent") return { system: [], instructions: input.agent.prompt }
+    return { system: input.agent.prompt ? [input.agent.prompt] : [], instructions: header.join("\n") }
   }
 
   export async function repairToolCall(failed: Parameters<ToolCallRepairFunction<ToolSet>>[0], tools: ToolSet) {
@@ -143,8 +129,6 @@ export namespace LLM {
         ...input.system,
         // any custom prompt from last user message
         ...(input.user.system ? [input.user.system] : []),
-        // plan mode instructions (if enabled)
-        ...(ToolSelection.minimalResearchAgent(input.agent.name) ? [] : await SystemPrompt.planModeInstructions()),
       ]
         .filter((x) => x)
         .join("\n"),
@@ -167,7 +151,7 @@ export namespace LLM {
       system.push(header, rest.join("\n"))
     }
 
-    const chosen = input.user.variant ?? (input.quick ? quickVariant(input.model.variants) : undefined)
+    const chosen = input.user.variant
     const variant = !input.small && input.model.variants && chosen ? input.model.variants[chosen] : {}
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
@@ -389,13 +373,6 @@ export namespace LLM {
     return result
   }
 
-  /** The cheapest real reasoning variant a model offers; "none"/"minimal"
-   * stay opt-in because they change answer quality, not just latency. */
-  export function quickVariant(variants: Record<string, unknown> | undefined) {
-    if (!variants) return undefined
-    return ["low"].find((name) => name in variants)
-  }
-
   export async function modelTools(input: Pick<StreamInput, "tools" | "agent" | "model" | "user">) {
     if (!input.model.capabilities.toolcall) return {}
     return resolveTools(input)
@@ -424,7 +401,7 @@ export namespace LLM {
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
     for (const tool of Object.keys(input.tools)) {
-      if (!ToolSelection.enabled(tool, { permission: input.agent.permission, tools: input.user.tools }))
+      if (!ToolVisibility.enabled(tool, { permission: input.agent.permission, tools: input.user.tools }))
         delete input.tools[tool]
     }
     return input.tools

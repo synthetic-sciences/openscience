@@ -62,7 +62,7 @@ const scenarios: StressScenario[] = [
 ]
 
 describe("MCP tools at the provider boundary", () => {
-  test("advertises configured MCP tools only on eligible Research turns", async () => {
+  test("advertises configured MCP tools on every turn unless a permission or override denies them", async () => {
     const local = startStressProvider(scenarios)
     const collision = new URL("../fixture/mcp-native-collision.mjs", import.meta.url).pathname
     try {
@@ -153,22 +153,23 @@ await Instance.provide({
         throw new Error("Missing provider request")
 
       expect(normal.tools).toContain("research_echo")
+      // A server tool may not take a built-in tool's name, even one that is
+      // not offered this turn (no search provider is configured here).
       const providerTools = Array.isArray(normal.body.tools)
         ? (normal.body.tools as Array<{
             function?: { name?: unknown; description?: unknown }
           }>)
         : []
-      const researchSearch = providerTools.find((item) => item.function?.name === "research_search")
-      expect(normal.tools.filter((name) => name === "research_search")).toHaveLength(1)
-      expect(researchSearch?.function?.description).toContain("Search web, research, news")
-      expect(researchSearch?.function?.description).not.toContain("MCP collision fixture")
-      expect(direct.tools).not.toContain("research_echo")
-      expect(direct.tools).toEqual([])
+      expect(normal.tools.filter((name) => name === "research_search")).toHaveLength(0)
+      expect(JSON.stringify(providerTools)).not.toContain("MCP collision fixture")
+      // Visibility follows permissions, not the wording of the turn: a short
+      // question and a read-only inspection see the same connected servers.
+      expect(direct.tools).toContain("research_echo")
       expect(wildcardDisabled.tools).not.toContain("research_echo")
       expect(wildcardDisabled.tools).toEqual([])
       expect(toolDisabled.tools).not.toContain("research_echo")
       expect(permissionDenied.tools).not.toContain("research_echo")
-      expect(localInspection.tools).not.toContain("research_echo")
+      expect(localInspection.tools).toContain("research_echo")
       expect(localInspection.tools).toContain("read")
     } finally {
       local.stop()

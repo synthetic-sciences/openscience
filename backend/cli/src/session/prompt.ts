@@ -22,15 +22,6 @@ import { SystemPrompt } from "./system"
 import { InstructionPrompt } from "./instruction"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
-import PROMPT_WRITE from "../agent/prompt/write.txt"
-import PROMPT_ML from "../agent/prompt/ml.txt"
-import PROMPT_RESEARCH from "../agent/prompt/research.txt"
-import PROMPT_DIRECT from "../session/prompt/direct.txt"
-import PROMPT_QUICK from "../session/prompt/quick.txt"
-import PROMPT_INSPECTION from "../session/prompt/inspection.txt"
-import PROMPT_BIOLOGY from "../agent/prompt/biology.txt"
-import PROMPT_CHEMISTRY from "../agent/prompt/chemistry.txt"
-import PROMPT_PHYSICS from "../agent/prompt/physics.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
@@ -52,7 +43,7 @@ import { SessionSummary } from "./summary"
 import { NamedError } from "@synsci/util/error"
 import { fn } from "@synsci/util/fn"
 import { SessionProcessor } from "./processor"
-import { DELEGATION_PROFILES, DELEGATION_SPECIALISTS, normalizeTaskAttemptInput, TaskTool } from "@/tool/task"
+import { normalizeTaskAttemptInput, TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
@@ -79,10 +70,9 @@ import { RuntimeEvents } from "@/runtime/events"
 import { ComputeJobs } from "@/compute/jobs"
 import { KernelRuntime } from "@/science/kernel/registry"
 import { SessionCheckpoint } from "./checkpoint"
-import { ToolSelection } from "./tool-selection"
+import { ToolVisibility } from "@/tool/visibility"
 import { Experiments } from "@/experiments"
 import { SessionLoopState } from "./loop-state"
-import { ContractProgress } from "./contract-progress"
 import { FileLease } from "@/util/file-lease"
 import { Global } from "@/global"
 import { TaskAttempt } from "@/tool/task-attempt"
@@ -110,8 +100,6 @@ export namespace SessionPrompt {
     `Output truncated: only the last ${SHELL_OUTPUT_MAX} characters are retained`,
     "</metadata>",
   ].join("\n")
-  // Scientific agents can still consume session-scoped artifact references.
-  const SKILL_ROUTING_AGENTS = new Set(["research", "biology", "physics", "ml", "chemistry"])
 
   type TestHooks = {
     afterAttachmentAuthorization?: (input: { sessionID: string; path: string }) => void | Promise<void>
@@ -329,12 +317,6 @@ export namespace SessionPrompt {
     const session = await Session.get(input.sessionID)
     assertPreparing(input.sessionID)
     await SessionRevert.cleanup(session)
-    assertPreparing(input.sessionID)
-
-    // A runtime gate stops before the provider sees the next user message.
-    // Recognize an unambiguous continuation reply locally so the same session
-    // can start a fresh bounded epoch instead of repeating the gate forever.
-    if (SessionResearch.resumeIntent(input.parts)) await SessionResearch.resume(input.sessionID)
     assertPreparing(input.sessionID)
 
     const message = await createUserMessage(input).catch((e) => {
@@ -987,57 +969,6 @@ export namespace SessionPrompt {
       }
       if (lastAssistant?.finish !== "length") outputContinuations = 0
       if (lastAssistant?.finish && (!continuing || bareMode) && owned) {
-        const contract = ToolSelection.minimalResearchAgent(lastUser.agent)
-          ? undefined
-          : await SessionResearch.read(sessionID)
-        if (contract) {
-          // Reuse this step's transcript unless compaction trimmed it: the
-          // contract gates need every tool call, not only the retained tail.
-          const compacted = msgs.some((message) => message.parts.some((part) => part.type === "compaction"))
-          const trace = await import("./trace").then((mod) =>
-            mod.SessionTrace.build(sessionID, compacted ? undefined : { messages: msgs }),
-          )
-          const pending = trace.research.gates.filter((gate) => gate.id !== "runtime" && gate.status !== "passed")
-          const progress = ContractProgress.fingerprint(trace)
-          const prior = SessionLoopState.contractMarker(msgs)
-          const decision = ContractProgress.decide({
-            pending: pending.length,
-            progress,
-            prior,
-            terminal: ContractProgress.terminal(trace),
-          })
-          if ((decision === "continue" || decision === "repair") && !bareMode) {
-            const repair = decision === "repair"
-            await enqueue({
-              user: lastUser,
-              kind: "contract",
-              epoch: turn,
-              progress,
-              repair,
-              text: [
-                repair
-                  ? "The research contract made no semantic progress since the previous inspection. Perform one focused repair or state the exact blocker in your normal response; do not repeat completed computation."
-                  : "The durable research completion contract is not satisfied yet. Continue from the existing evidence without repeating completed work.",
-                `Resolve these gates without repeating completed work: ${pending.map((gate) => `${gate.label} (${gate.detail})`).join("; ")}.`,
-                "For active compute, wait until its state changes instead of polling on a fixed cadence. Save required Results, record checks and failed candidates truthfully, then return the verified or explicitly partial outcome.",
-              ].join(" "),
-            })
-            continue
-          }
-          if (pending.length && decision === "await_user") {
-            await Session.updatePart({
-              id: SessionLoopState.partID(lastAssistant.id, "contract-boundary"),
-              messageID: lastAssistant.id,
-              sessionID,
-              type: "text",
-              synthetic: true,
-              ignored: true,
-              metadata: SessionLoopState.boundary(ContractProgress.terminal(trace) ? "blocked" : "partial", progress),
-              text: "Research contract controller paused automatic continuation; the visible assistant response and durable evidence remain authoritative.",
-              time: { start: Date.now(), end: Date.now() },
-            } satisfies MessageV2.TextPart)
-          }
-        }
         log.info("exiting loop", { sessionID, bareMode })
         break
       }
@@ -1105,12 +1036,10 @@ export namespace SessionPrompt {
       // TODO: centralize "invoke tool" logic
       if (task?.type === "subtask") {
         step = nextStep
-        // Older saved command definitions may still name a domain-specific
-        // subagent. Keep those records runnable while funnelling all new work
-        // through the two bounded internal Research profiles.
-        const taskProfile = DELEGATION_PROFILES.includes(task.agent as (typeof DELEGATION_PROFILES)[number])
-          ? (task.agent as (typeof DELEGATION_PROFILES)[number])
-          : "execute"
+        // A command names the subagent that runs it. Older saved definitions
+        // may name a retired one; those run on the general data worker.
+        const taskProfile =
+          (await Agent.get(task.agent))?.mode !== "primary" && (await Agent.get(task.agent)) ? task.agent : "data"
         const taskTool = await TaskTool.init()
         const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
         const source = { messageID: lastUser.id, partID: task.id }
@@ -1417,12 +1346,9 @@ export namespace SessionPrompt {
       // Existing durable sessions may still contain a removed reviewer agent.
       // Resume them on the current default agent instead of crashing, while
       // keeping reviewer profiles and launch state fully retired.
-      const agent =
-        (await Agent.get(lastUser.agent)) ??
-        (lastUser.agent === "review" || lastUser.agent === "reviewer" || lastUser.agent === "artifact-reviewer"
-          ? await Agent.get(await Agent.defaultAgent())
-          : undefined)
-      if (!agent) throw new Error(`agent "${lastUser.agent}" not found`)
+      const resolved = (await Agent.get(lastUser.agent)) ?? (await retiredAgentFallback(lastUser.agent))
+      if (!resolved) throw new Error(`agent "${lastUser.agent}" not found`)
+      const agent = await SystemPrompt.render(resolved)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = nextStep >= maxSteps
       const reminders = await insertReminders({
@@ -1465,7 +1391,7 @@ export namespace SessionPrompt {
       using _ = defer(() => InstructionPrompt.clear(processor.message.id))
 
       // Check if user explicitly invoked an agent via @ in this turn
-      const route = request(msgs, agent.name)
+      const route = request(msgs)
       const lastUserMsg = route.user
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
       const delegationSettings = MessageV2.resolveDelegationSettings(lastUser.delegationSettings, {
@@ -1487,8 +1413,6 @@ export namespace SessionPrompt {
         delegation,
         messages: msgs,
         request: route.text,
-        direct: route.direct,
-        inspection: route.inspection,
       })
 
       const sessionMessages = clone(msgs)
@@ -1503,22 +1427,20 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
-      const narrow = route.direct || route.inspection
-      const minimal = ToolSelection.minimalResearchAgent(agent.name)
-      const contract = narrow || minimal ? undefined : await SessionResearch.prompt(sessionID, Instance.project.id)
+      const envLines: string[] = []
+      await Plugin.trigger("env.lines", { sessionID, model }, { lines: envLines })
+      const slash = SystemPrompt.slashInvocation(route.text)
+      const skillTool = !PermissionNext.disabled(["skill"], agent.permission).has("skill")
       const system = [
-        ...(await SystemPrompt.environment(model, sessionID)),
-        ...(narrow || minimal ? [] : await SystemPrompt.compute()),
+        ...(await SystemPrompt.environment(model, sessionID, envLines)),
         ...(await InstructionPrompt.system()),
-        ...(SKILL_ROUTING_AGENTS.has(agent.name) && !narrow && (!minimal || ToolSelection.slashInvocation(route.text))
-          ? [await SystemPrompt.availableSkills(agent.permission, route.text)]
-          : []),
-        // Research always carries the curated core index; the full catalog
-        // above appears only for an explicit /skill invocation.
-        ...(minimal && !narrow && !ToolSelection.slashInvocation(route.text)
+        // The lead carries the curated core index; the full catalog appears
+        // only for an explicit /skill invocation. Workers with a prompt of
+        // their own carry their domain index inside that prompt.
+        ...(skillTool && slash ? [await SystemPrompt.availableSkills(agent.permission, route.text)] : []),
+        ...(skillTool && !slash && !agent.prompt
           ? [await SystemPrompt.coreSkills(agent.permission)].filter((value): value is string => !!value)
           : []),
-        ...(contract ? [contract] : []),
         ...reminders.system,
         ...(displaced
           ? [
@@ -1535,12 +1457,11 @@ export namespace SessionPrompt {
       // estimate. Previous provider usage cannot see a newly attached document,
       // a large current prompt, or a tool/schema change.
       const codex = LLM.isCodexSubscriptionModel(model, await Auth.get(model.providerID))
-      const header = LLM.prompts({ agent, model, direct: route.direct, inspection: route.inspection }, codex)
+      const header = LLM.prompts({ agent, model }, codex)
       const providerSystem = [
         ...header.system,
         ...system,
         ...(lastUser.system ? [lastUser.system] : []),
-        ...(minimal ? [] : await SystemPrompt.planModeInstructions()),
         ...(header.instructions ? [header.instructions] : []),
       ]
       const tier = ProviderTransform.tier(model, lastUser.tier)
@@ -1668,9 +1589,6 @@ export namespace SessionPrompt {
       const result = await processor.process({
         user: lastUser,
         agent,
-        direct: route.direct,
-        inspection: route.inspection,
-        quick: route.quick,
         abort,
         sessionID,
         system,
@@ -1838,36 +1756,32 @@ export namespace SessionPrompt {
     return userEffort(await newestUser(sessionID))
   }
 
-  function request(messages: MessageV2.WithParts[], agent: string) {
+  /** Existing durable sessions may still name a retired built-in agent. Resume
+   * them on the current default agent instead of crashing. */
+  async function retiredAgentFallback(name: string) {
+    const retired = new Set([
+      "review",
+      "reviewer",
+      "artifact-reviewer",
+      "researchagent-test",
+      "write",
+      "execute",
+      "task",
+      "literature-review",
+      "critique",
+      "physics-critique",
+    ])
+    if (!retired.has(name)) return
+    return Agent.get(await Agent.defaultAgent())
+  }
+
+  function request(messages: MessageV2.WithParts[]) {
     const user = messages.findLast((message) => message.info.role === "user")
     const text = user?.parts
       .filter((part): part is MessageV2.TextPart => part.type === "text" && !part.ignored && !part.synthetic)
       .map((part) => part.text)
       .join("\n")
-    // Assistant tool-loop messages still belong to the first user turn. Keep
-    // its narrow route until a second user message actually starts a follow-up.
-    const fresh = ToolSelection.fresh(messages.map((message) => message.info.role))
-    const attachments = user?.parts.some((part) => part.type === "file") ?? false
-    const tools = user?.info.role === "user" ? user.info.tools : undefined
-    return {
-      user,
-      text,
-      direct: ToolSelection.direct({
-        agent,
-        message: text,
-        fresh,
-        attachments,
-        tools,
-      }),
-      inspection: ToolSelection.inspection({
-        agent,
-        message: text,
-        fresh,
-        attachments,
-        tools,
-      }),
-      quick: ToolSelection.quick({ agent, message: text, fresh, attachments }),
-    }
+    return { user, text }
   }
 
   export async function permissionAtExecution(input: {
@@ -1894,6 +1808,19 @@ export namespace SessionPrompt {
     }
   }
 
+  /** How many parents a session has: the lead is depth 0, its workers depth 1. */
+  export async function sessionDepth(session: Session.Info) {
+    let depth = 0
+    let current = session
+    while (current.parentID) {
+      depth++
+      const parent = await Session.get(current.parentID).catch(() => undefined)
+      if (!parent) break
+      current = parent
+    }
+    return depth
+  }
+
   async function resolveTools(input: {
     agent: Agent.Info
     model: Provider.Model
@@ -1907,12 +1834,9 @@ export namespace SessionPrompt {
     delegation: boolean
     messages: MessageV2.WithParts[]
     request?: string
-    direct: boolean
-    inspection: boolean
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
-    if (input.direct) return tools
     let accessAuthority = await ProjectAccess.status(Instance.project)
     let permission = PermissionNext.merge(input.agent.permission, input.session.permission ?? [])
 
@@ -1963,47 +1887,32 @@ export namespace SessionPrompt {
       },
     })
 
-    // Synthetic continuations carry no request text and would otherwise push
-    // the real prompt out of the routing window mid-task, dropping the editing,
-    // Python and skill-enabled tools the request needed. Skill loads count for
-    // the whole epoch, not only the span since the newest continuation.
-    const selectionRequest =
-      SessionLoopState.externalPrompts(input.messages) || SessionLoopState.routing(input.messages)
-    const activation = ToolSelection.activation(SessionLoopState.epochMessages(input.messages))
-    const loadedCapabilities = activation.capabilities
+    // Skill loads count for the whole task epoch, not only the span since the
+    // newest synthetic continuation, so a skill's tools stay on offer.
+    const activation = ToolVisibility.activation(SessionLoopState.epochMessages(input.messages))
     // A session driving a study keeps the study, experiments and compute
     // tools on offer regardless of how the latest wake-up is worded.
-    const study = input.direct ? undefined : await Experiments.studyForSession(input.session.id).catch(() => undefined)
-    const activatedTools = study
-      ? new Set([...activation.tools, "study", "experiments", "compute_job", "python", "edit", "write", "apply_patch"])
-      : activation.tools
+    const study = await Experiments.studyForSession(input.session.id).catch(() => undefined)
+    const activatedTools = study ? new Set([...activation.tools, "study", "experiments"]) : activation.tools
 
-    const extensions = await ToolRegistry.customIDs()
     const unlocked = new Set([
       ...activatedTools,
       ...Object.entries(input.tools ?? {})
         .filter(([, value]) => value === true)
         .map(([id]) => id),
     ])
+    const depth = await sessionDepth(input.session)
+    const canDelegate = input.delegation && depth < ((await Config.get()).subagent_depth ?? 1)
     const native = await ToolRegistry.tools(
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
       (id) =>
-        (id !== TaskTool.id || (input.delegation && !input.session.parentID)) &&
-        ToolSelection.enabled(id, { permission, tools: input.tools }) &&
+        (id !== TaskTool.id || canDelegate) &&
+        ToolVisibility.enabled(id, { permission, tools: input.tools }) &&
         // The provider boundary (LLM.modelTools) prunes with the agent ruleset
         // alone. Apply it here as well so the set batched calls resolve
         // against is exactly the set the model was offered.
-        ToolSelection.enabled(id, { permission: input.agent.permission, tools: input.tools }) &&
-        ToolSelection.relevant(id, {
-          agent: input.agent.name,
-          message: selectionRequest || input.request,
-          tools: input.tools,
-          direct: input.direct,
-          capabilities: loadedCapabilities,
-          activatedTools,
-          extensions,
-        }),
+        ToolVisibility.enabled(id, { permission: input.agent.permission, tools: input.tools }),
       input.request,
       unlocked,
     )
@@ -2041,7 +1950,7 @@ export namespace SessionPrompt {
     for (const item of gated) {
       tools[item.id] = tool({
         id: item.id as any,
-        description: ToolSelection.description(item.id, item.description, input.inspection),
+        description: item.description,
         // Provider-facing JSON Schema is only a description. Without a runtime
         // validator the AI SDK accepts any syntactically valid JSON (including
         // the `{}` fallback emitted by some streaming adapters), skips
@@ -2059,38 +1968,15 @@ export namespace SessionPrompt {
       })
     }
 
-    const nativeIDs = new Set(native.map((item) => item.id))
-    // Connected MCP servers are part of the normal user-facing Research
-    // workspace. Keep the schema-free direct and inspection routes lean, and
-    // keep the development-only thin agent opt-in, but do not require the
-    // composer to enumerate every configured server tool per turn.
-    const connectedResearchMcp = input.agent.name === "research" && !input.direct && !input.inspection
-    const explicitMcp =
-      ToolSelection.minimalResearchAgent(input.agent.name) && !connectedResearchMcp
-        ? new Set(
-            Object.entries(input.tools ?? {}).flatMap(([key, enabled]) =>
-              enabled && key !== "*" && !nativeIDs.has(key) ? [key] : [],
-            ),
-          )
-        : undefined
-    const mcp = input.tools?.["*"] === false || explicitMcp?.size === 0 ? {} : await MCP.tools()
+    // A server tool may not take a built-in tool's name, offered or not.
+    const nativeIDs = new Set(await ToolRegistry.ids())
+    // Connected MCP servers are part of the normal workspace: every tool a
+    // server exposes is offered unless a permission rule denies it.
+    const mcp = input.tools?.["*"] === false ? {} : await MCP.tools()
     for (const [key, item] of Object.entries(mcp)) {
       if (nativeIDs.has(key)) continue
-      if (explicitMcp && !explicitMcp.has(key)) continue
-      if (!ToolSelection.enabled(key, { permission, tools: input.tools })) continue
+      if (!ToolVisibility.enabled(key, { permission, tools: input.tools })) continue
       if (PermissionNext.evaluate("mcp", key, permission).action === "deny") continue
-      if (
-        !connectedResearchMcp &&
-        !ToolSelection.relevant(key, {
-          agent: input.agent.name,
-          message: selectionRequest || input.request,
-          tools: input.tools,
-          direct: input.direct,
-          capabilities: loadedCapabilities,
-          activatedTools,
-        })
-      )
-        continue
       const execute = item.execute
       if (!execute) continue
 
@@ -2207,19 +2093,6 @@ export namespace SessionPrompt {
       enabled: typeof value === "boolean" ? value : undefined,
     })
     return explicit || settings.level !== "off"
-  }
-
-  export function delegationTarget(name: string) {
-    if (DELEGATION_PROFILES.includes(name as (typeof DELEGATION_PROFILES)[number])) {
-      return { profile: name as (typeof DELEGATION_PROFILES)[number] }
-    }
-    if (DELEGATION_SPECIALISTS.includes(name as (typeof DELEGATION_SPECIALISTS)[number])) {
-      return {
-        profile: "execute" as const,
-        specialist: name as (typeof DELEGATION_SPECIALISTS)[number],
-      }
-    }
-    return { profile: "execute" as const }
   }
 
   export function decisionPolicy(autonomy: MessageV2.DelegationSettings["autonomy"]) {
@@ -2776,8 +2649,6 @@ export namespace SessionPrompt {
           // Check if this agent would be denied by task permission
           const perm = PermissionNext.evaluate("task", part.name, agent.permission)
           const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
-          const target = delegationTarget(part.name)
-          const specialist = target.specialist ? ` and specialist: ${target.specialist}` : ""
           return [
             {
               id: Identifier.ascending("part"),
@@ -2795,9 +2666,7 @@ export namespace SessionPrompt {
               // to user's last word; making a combined word
               text:
                 " Use the above message and context to generate a prompt and call the task tool with subagent_type: " +
-                target.profile +
-                specialist +
-                `. Preserve the requested ${part.name} capability in the child prompt` +
+                part.name +
                 hint,
             },
           ]
@@ -2933,37 +2802,19 @@ export namespace SessionPrompt {
       if (parts.length === message.parts.length) return message
       return { ...message, parts }
     })
-    const route = request(input.messages, input.agent.name)
+    const route = request(input.messages)
     const userMessage = route.user
     if (!userMessage) return { messages, system: legacy }
     const effort = userMessage.info.role === "user" ? userMessage.info.effort : undefined
     const delegationSettings = userMessage.info.role === "user" ? userMessage.info.delegationSettings : undefined
     const delegationEnabled = userMessage.info.role === "user" ? userMessage.info.delegation : undefined
-    const research = route.direct
-      ? PROMPT_DIRECT
-      : route.inspection
-        ? PROMPT_INSPECTION
-        : route.quick
-          ? [PROMPT_RESEARCH, PROMPT_QUICK].join("\n\n")
-          : [PROMPT_RESEARCH, researchEffortReminder(effort, delegationSettings, delegationEnabled)].join("\n\n")
-    const prompts = {
-      plan: PROMPT_PLAN,
-      write: PROMPT_WRITE,
-      ml: PROMPT_ML,
-      research,
-      biology: PROMPT_BIOLOGY,
-      physics: PROMPT_PHYSICS,
-      chemistry: PROMPT_CHEMISTRY,
-    } as const
-    const selected = ToolSelection.minimalResearchAgent(input.agent.name)
-      ? route.direct || route.inspection
-        ? undefined
-        : route.quick
-          ? PROMPT_QUICK
-          : researchEffortReminder(effort, delegationSettings, delegationEnabled)
-      : prompts[input.agent.name as keyof typeof prompts]
+    // The posture line is the one standing reminder: effort, delegation level
+    // and independence are runtime settings, so they live here rather than in
+    // any header. Plan keeps its own instructions below.
+    const posture =
+      input.agent.name === "plan" ? PROMPT_PLAN : researchEffortReminder(effort, delegationSettings, delegationEnabled)
     const study = await studyReminder(input.session.id)
-    const system = [...legacy, ...(selected ? [systemReminder(selected)] : []), ...(study ? [study] : [])]
+    const system = [...legacy, systemReminder(posture), ...(study ? [study] : [])]
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENSCIENCE_EXPERIMENTAL_PLAN_MODE) {
@@ -3473,21 +3324,11 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
 
     const config = await Config.get()
     const configured = config.command?.[input.command]
-    if (!configured && input.command === Command.Default.GOAL) {
-      const objective = input.arguments.trim()
-      if (!objective) return notice(input, "Describe the objective after `/goal`.")
-      await SessionResearch.define(input.sessionID, {
-        objective,
-        domain: "general",
-        template: "minimal",
-      })
+    if (!configured && input.command === Command.Default.GOAL && !input.arguments.trim()) {
+      return notice(input, "Describe the objective after `/goal`.")
     }
     if (!configured && input.command === Command.Default.STOP) return stop(input)
     if (!configured && input.command === Command.Default.CHECKPOINT) return checkpoint(input)
-    if (!configured && input.command === Command.Default.RESUME) {
-      const result = await SessionResearch.resume(input.sessionID)
-      if (!result.resumed) return notice(input, result.reason)
-    }
 
     // /compact is an action, not a prompt template: enqueue a compaction task
     // and run the loop to process it (same machinery as auto-compaction), then

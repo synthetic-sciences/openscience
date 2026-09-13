@@ -248,7 +248,6 @@ test.each(["search_unavailable", "search_output_unavailable"])(
       failedToolCalls: 1,
       partialToolCalls: 0,
       handoff: report,
-      handoffTruncated: false,
     })
     expect(result.output).toContain("1 failed tool attempt")
     expect(result.output).toContain(report)

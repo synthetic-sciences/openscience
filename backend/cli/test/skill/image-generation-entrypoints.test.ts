@@ -120,11 +120,9 @@ test("standalone wrappers direct OpenScience sessions to the native user-provide
 
 test("the image skill requires the native user-provider route", async () => {
   const skill = await Bun.file(path.join(root, "skills/llm-tools/generate-image/SKILL.md")).text()
-  const core = await Bun.file(path.join(root, "src/session/prompt/core.txt")).text()
   const registry = await Bun.file(path.join(root, "src/tool/registry.ts")).text()
 
   expect(skill).toContain("always call the native `generate_image` tool")
   expect(skill).toContain("connected Gemini or OpenRouter account")
-  expect(core).toContain("connected Gemini or OpenRouter account")
   expect(registry).toContain("GenerateImageTool")
 })

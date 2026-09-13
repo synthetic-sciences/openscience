@@ -117,6 +117,14 @@ const unavailable = (
   },
 })
 
+/** A search provider exists: a connected Firecrawl key or a signed-in Ace
+ * account. Without one the tool is not offered at all. */
+export async function researchSearchConfigured() {
+  const credential = await resolveCredentialFields("firecrawl", { required: ["api_key"] }).catch(() => undefined)
+  if (credential?.api_key) return true
+  return (await OpenScience.getRequestSnapshot().catch(() => null)) !== null
+}
+
 export const ResearchSearchTool = Tool.define<typeof ResearchSearchParameters, ResearchSearchMetadata>(
   "research_search",
   async () => ({

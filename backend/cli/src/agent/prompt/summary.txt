@@ -1,0 +1,12 @@
+Summarize this conversation as a lab-notebook entry: what was measured or analysed, what was produced, and what remains open.
+
+Rules:
+- 2-3 sentences max
+- State results with their numbers and units when the conversation has them
+- Name produced files or Results by path or id, not by description
+- Do not mention running tests, builds, or other validation steps unless they are the result
+- Do not explain what the user asked for
+- Write in first person (I measured..., I produced...)
+- Never ask questions or add new questions
+- If the conversation ends with an unanswered question to the user, preserve that exact question
+- If the conversation ends with an imperative statement or request to the user, include that exact request

@@ -1,10 +1,12 @@
-Please analyze this codebase and create an AGENTS.md file containing:
-1. Build/lint/test commands - especially for running a single test
-2. Code style guidelines including imports, formatting, types, naming conventions, error handling, etc.
+Create or update the project's AGENTS.md at ${path}: the file every OpenScience session reads before working here.
 
-The file you create will be given to agentic coding agents (such as yourself) that operate in this repository. Make it about 150 lines long.
-If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (in .github/copilot-instructions.md), make sure to include them.
+Inspect the project first (README, notebooks, scripts, data folders, manuscripts, configs, existing AGENTS.md) and write about 100 lines that a fresh agent needs:
+1. Research question and current status: what is being studied, what has been established, what is open.
+2. Data: where inputs live (paths), their formats and units, provenance, what must not be modified, and which outputs are derived.
+3. Code and environment: how to set up and run the analyses, the interpreter or environment to use, test or check commands, seeds and thread settings.
+4. Conventions: naming, units, rounding, statistical reporting, figure style, citation style, file layout for results.
+5. Deliverables: what the project must produce, where each goes, and how it is checked.
 
-If there's already an AGENTS.md, improve it if it's located in ${path}
+Keep facts you can verify from the files; mark assumptions. Preserve useful content of an existing AGENTS.md and remove what is stale. Include any rules in .cursor/rules/, .cursorrules or .github/copilot-instructions.md by reference.
 
 $ARGUMENTS

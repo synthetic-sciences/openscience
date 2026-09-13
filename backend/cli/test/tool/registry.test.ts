@@ -65,21 +65,24 @@ describe("tool.registry", () => {
         expect(ids.filter((id) => id === "r")).toHaveLength(1)
         expect(ids).not.toContain("notebook")
         expect(ids).not.toContain("rkernel")
-        expect(ids).toEqual(expect.arrayContaining(["webfetch", "science_search", "science_fetch", "research_search"]))
+        expect(ids).toEqual(expect.arrayContaining(["webfetch", "science_search", "science_fetch", "literature"]))
       },
     })
   })
 
-  test("advertises canonical research search independent of provider and keeps websearch as an alias", async () => {
+  test("offers research search only with a configured provider and keeps websearch as an alias", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        // No Firecrawl key and no Ace account in this fixture: the tool is
+        // withheld rather than advertised as something that cannot work.
         for (const providerID of ["anthropic", "openai", "openrouter"]) {
           const tools = await ToolRegistry.tools({ providerID, modelID: "test-model" })
-          expect(tools.map((tool) => tool.id)).toContain("research_search")
+          expect(tools.map((tool) => tool.id)).not.toContain("research_search")
           expect(tools.map((tool) => tool.id)).not.toContain("websearch")
         }
+        expect(await ToolRegistry.ids()).toContain("research_search")
         expect((await ToolRegistry.resolve("websearch", { providerID: "openai", modelID: "gpt-test" }))?.id).toBe(
           "research_search",
         )
@@ -92,7 +95,7 @@ describe("tool.registry", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        for (const profile of ["execute", "explore"]) {
+        for (const profile of ["data", "explore"]) {
           const agent = await Agent.get(profile)
           const patch = (await ToolRegistry.tools({ providerID: "openai", modelID: "gpt-5" }, agent)).find(
             (tool) => tool.id === "apply_patch",

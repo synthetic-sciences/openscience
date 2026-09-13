@@ -6,6 +6,9 @@ import { ConfigMarkdown } from "../config/markdown"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
+import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_REPRODUCE from "./template/reproduce.txt"
+import PROMPT_LITERATURE from "./template/literature.txt"
 import { MCP } from "../mcp"
 import { State } from "../project/state"
 import { BundledSkills } from "../skill/bundled"
@@ -75,8 +78,10 @@ export namespace Command {
     INIT: "init",
     PLAN: "plan",
     GOAL: "goal",
+    REVIEW: "review",
+    REPRODUCE: "reproduce",
+    LITERATURE: "literature",
     STOP: "stop",
-    RESUME: "resume",
     COMPACT: "compact",
     HANDOFF: "handoff",
     CHECKPOINT: "checkpoint",
@@ -91,10 +96,10 @@ export namespace Command {
     const result: Record<string, Info> = {
       [Default.INIT]: {
         name: Default.INIT,
-        description: "Create or update AGENTS.md for this project",
+        description: "Write this project's AGENTS.md: question, data, conventions, deliverables",
         source: "builtin",
         category: "project",
-        usage: "/init",
+        usage: "/init [notes]",
         get template() {
           return PROMPT_INITIALIZE.replace("${path}", Instance.worktree)
         },
@@ -122,7 +127,7 @@ export namespace Command {
         get template() {
           return [
             "The user set a persistent goal for this session.",
-            "Treat the durable research contract as the source of truth, begin pursuing the objective now, and continue until it is complete or genuinely blocked.",
+            "Treat it as binding: write the deliverables checklist first with the todo tool, begin now, and continue until every item is complete or genuinely blocked.",
             "Keep the user informed at meaningful milestones and verify the requested outcome before declaring completion.",
             "",
             "Objective:",
@@ -143,21 +148,38 @@ export namespace Command {
         },
         hints: [],
       },
-      [Default.RESUME]: {
-        name: Default.RESUME,
-        description: "Resume an exhausted research contract from its checkpoints",
+      [Default.REVIEW]: {
+        name: Default.REVIEW,
+        description: "Referee the current deliverables with the peer-review skill",
+        source: "builtin",
+        category: "evidence",
+        usage: "/review [focus]",
+        get template() {
+          return PROMPT_REVIEW
+        },
+        hints: hints(PROMPT_REVIEW),
+      },
+      [Default.REPRODUCE]: {
+        name: Default.REPRODUCE,
+        description: "Reproduce a stated result with the reproduce skill",
         source: "builtin",
         category: "research",
-        usage: "/resume",
-        menu: true,
+        usage: "/reproduce [claim, paper or result]",
         get template() {
-          return [
-            "The user explicitly authorized a fresh bounded runtime epoch for the existing research contract.",
-            "Continue from the preserved stages, evidence, Results, and checkpoints without repeating completed work.",
-            "Finish the genuine next incomplete gate, or return a clear verified partial result if the new bound is reached.",
-          ].join("\n")
+          return PROMPT_REPRODUCE
         },
-        hints: [],
+        hints: hints(PROMPT_REPRODUCE),
+      },
+      [Default.LITERATURE]: {
+        name: Default.LITERATURE,
+        description: "Focused literature review with the literature-review skill",
+        source: "builtin",
+        category: "research",
+        usage: "/literature [question]",
+        get template() {
+          return PROMPT_LITERATURE
+        },
+        hints: hints(PROMPT_LITERATURE),
       },
       // Action command, not a prompt template — SessionPrompt.command intercepts
       // it and runs SessionCompaction directly. The empty template is never used.

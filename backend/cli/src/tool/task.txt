@@ -1,17 +1,12 @@
-Delegate one independent branch per worker when it shortens the path to the result.
+Launch a subagent to handle one independent, self-contained piece of work.
 
-Profiles:
+Available subagents (pass the name as subagent_type):
 {agents}
 
-`explore` for evidence, `execute` for implementation or compute.
+Not for: reading a known file (read, glob), finding a string (grep), a few files (read), or checking your own output; that is your job. If no agent fits, use the tools directly.
 
-- Checking the lead's own output (compiling, reading a rendered file, confirming a number or a
-  reference) is the lead's job, not a task.
-- Issue independent calls together; Task waits for a decision-ready handoff.
-- Each brief: objective, inputs, constraints, allowed actions, expected output, validation, and
-  a bound (files, steps or minutes). Continue a `session_id` only for missing work.
-- Only the lead dispatches workers, asks questions, synthesizes and verifies. Children cannot
-  dispatch children.
-- No sequential work, small edits or duplicate retrieval.
-- Workers read your workspace but write only in their own; ask for outputs back as artifacts.
-- Preserve decisive handoff evidence; the child's transcript remains in `session_id`.
+1. A subagent starts fresh unless task_id resumes its earlier session. A fresh brief is self-contained: objective, inputs with exact paths, constraints, what to produce, how to verify it, what to return; say whether it may change files.
+2. Launch independent subagents together in one message; never duplicate delegated work.
+3. Subagents work in your project directory; their files are the deliverable. The result returns once in <task_result> with a reusable task_id; the user does not see it, so summarize what matters.
+4. Read the report's Verification (command, exit code, what it proves); without one it is a claim.
+5. background=true returns immediately and notifies you when done; do not sleep or poll. Only for work you do not need before continuing.

@@ -1,0 +1,7 @@
+Load skill({name:"peer-review"}) and review this session's current deliverables as an independent referee.
+
+Scope: the deliverables checklist kept with the todo tool and the files it names; if there is no checklist, review the files this session produced or changed. Check each against the request's binding clauses and the evidence in the trace: correctness of method, statistics, units and definitions; unsupported claims; placeholder or synthetic values; missing items; reproducibility of the commands. Read the files themselves; do not review from summaries.
+
+Return BLOCKING issues first, each with the file and line or cell, why it matters, and the smallest fix; then observations. Do not fix anything in this turn unless asked.
+
+$ARGUMENTS

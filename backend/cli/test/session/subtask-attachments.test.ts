@@ -131,9 +131,10 @@ test.each(["isolated", "project"] as const)(
         const children = (await Array.fromAsync(Session.list())).filter((session) => session.parentID === parent.id)
         expect(children).toHaveLength(1)
         const child = children[0]!
+        // A child works in its parent's directory: the same tool working
+        // directory, so the files it writes are the parent's deliverables.
         const workspace = await SessionFilesystem.workspace(child.id)
-        expect(workspace).not.toBe(tmp.path)
-        expect(workspace).not.toBe(await SessionFilesystem.workspace(parent.id))
+        expect(await SessionFilesystem.toolDirectory(child.id)).toBe(await SessionFilesystem.toolDirectory(parent.id))
         const read = await (
           await ReadTool.init()
         ).execute(

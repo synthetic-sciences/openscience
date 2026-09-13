@@ -51,13 +51,25 @@ test("returns default native agents when no config", async () => {
     directory: tmp.path,
     fn: async () => {
       const agents = await Agent.list()
-      const names = agents.map((a) => a.name)
-      expect(names).toContain("research")
-      expect(names).toContain("plan")
-      expect(names).toContain("task")
-      expect(names).toContain("explore")
-      expect(names).toContain("compaction")
-      expect(names).toContain("title")
+      // The exact built-in list, its modes, and its hidden flags.
+      expect(agents.map((a) => [a.name, a.mode, a.hidden === true])).toEqual([
+        ["research", "primary", false],
+        ["plan", "primary", true],
+        ["explore", "subagent", true],
+        ["ml", "subagent", true],
+        ["biology", "subagent", true],
+        ["physics", "subagent", true],
+        ["chemistry", "subagent", true],
+        ["data", "subagent", true],
+        ["compaction", "primary", true],
+        ["title", "primary", true],
+        ["summary", "primary", true],
+      ])
+      // No built-in agent carries a model; the user's configuration chooses.
+      for (const agent of agents) expect(agent.model, agent.name).toBeUndefined()
+      for (const name of ["execute", "task", "write", "critique", "physics-critique", "literature-review"]) {
+        expect(await Agent.get(name), name).toBeUndefined()
+      }
     },
   })
 })
@@ -102,55 +114,9 @@ test("Research is the only built-in user-facing primary", async () => {
         .map((agent) => agent.name)
       expect(visiblePrimary).toEqual(["research"])
       const research = await Agent.get("research")
-      expect(research?.prompt).toContain("collaborative research agent")
-      expect(evalPerm(research!, "research_contract")).toBe("deny")
+      // Research has no prompt of its own: it takes the model-family header.
+      expect(research?.prompt).toBeUndefined()
       expect((await Agent.get("plan"))?.hidden).toBe(true)
-    },
-  })
-})
-
-test("thin research profile is absent unless the explicit dev flag is enabled", async () => {
-  const previous = process.env.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST
-  try {
-    delete process.env.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST
-    await using production = await tmpdir()
-    await Instance.provide({
-      directory: production.path,
-      fn: async () => expect(await Agent.get("researchagent-test")).toBeUndefined(),
-    })
-
-    process.env.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST = "1"
-    await using laboratory = await tmpdir()
-    await Instance.provide({
-      directory: laboratory.path,
-      fn: async () => {
-        const thin = await Agent.get("researchagent-test")
-        expect(thin).toMatchObject({ name: "researchagent-test", mode: "primary", native: true })
-        expect(thin?.prompt).toContain("collaborative research agent")
-        expect(evalPerm(thin, "research_contract")).toBe("deny")
-      },
-    })
-  } finally {
-    if (previous === undefined) delete process.env.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST
-    else process.env.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST = previous
-  }
-})
-
-test("built-in delegation uses only Explore and Execute profiles", async () => {
-  await using tmp = await tmpdir()
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const profiles = (await Promise.all([Agent.get("execute"), Agent.get("explore")])).map((agent) => agent?.name)
-      expect(profiles).toEqual(["execute", "explore"])
-      expect((await Agent.get("execute"))?.hidden).toBe(true)
-      expect((await Agent.get("explore"))?.hidden).toBe(true)
-      expect(evalPerm(await Agent.get("execute"), "edit")).toBe("allow")
-      expect((await Agent.get("explore"))?.steps).toBeUndefined()
-      expect((await Agent.get("execute"))?.steps).toBeUndefined()
-      expect(await Agent.get("review")).toBeUndefined()
-      expect(await Agent.get("reviewer")).toBeUndefined()
-      expect(await Agent.get("artifact-reviewer")).toBeUndefined()
     },
   })
 })
@@ -209,21 +175,6 @@ test("explore agent denies edit and write", async () => {
   })
 })
 
-test("task agent denies todo tools", async () => {
-  await using tmp = await tmpdir()
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const task = await Agent.get("task")
-      expect(task).toBeDefined()
-      expect(task?.mode).toBe("subagent")
-      expect(task?.hidden).toBe(true)
-      expect(evalPerm(task, "todoread")).toBe("deny")
-      expect(evalPerm(task, "todowrite")).toBe("deny")
-    },
-  })
-})
-
 test("compaction agent denies all permissions", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
@@ -262,8 +213,7 @@ test("untrusted project agent configuration stays inert", async () => {
       await ProjectTrust.update(Instance.project, { trusted: false })
       expect(await Agent.get("repo-agent")).toBeUndefined()
       const research = await Agent.get("research")
-      expect(research?.prompt).toContain("collaborative research agent")
-      expect(research?.prompt).not.toContain("repository-controlled")
+      expect(research?.prompt).toBeUndefined()
       expect(research?.color).toBe("#d48765")
       expect(evalPerm(research, "bash")).toBe("ask")
       expect(await Agent.defaultAgent()).toBe("research")
@@ -965,6 +915,59 @@ test("OAuth configuration generation streams without provider telemetry", async 
       expect(stream.mock.calls[0]?.[0]).toMatchObject({
         experimental_telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
       })
+    },
+  })
+})
+
+test("specialists are one template plus their skill categories and domain tools", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const biology = await Agent.get("biology")
+      expect(biology?.skills).toEqual(["biology", "databases"])
+      expect(biology?.unlocks).toContain("query_uniprot")
+      expect(biology?.prompt).toContain("biology specialist")
+      expect(biology?.prompt).toContain("{{DOMAIN_SKILLS}}")
+      expect(evalPerm(biology, "todowrite")).toBe("deny")
+      expect(evalPerm(biology, "task")).toBe("deny")
+      expect(evalPerm(biology, "question")).toBe("deny")
+      expect(evalPerm(biology, "edit")).toBe("allow")
+      const data = await Agent.get("data")
+      expect(data?.skills).toEqual(["data-engineering", "coding", "visualization", "cloud-compute"])
+      expect(data?.unlocks).toEqual(["r"])
+      expect((await Agent.get("summary"))?.prompt).toContain("lab-notebook")
+    },
+  })
+})
+
+test("a configured agent model, variant and skill categories resolve for the child", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    config: {
+      agent: {
+        biology: { model: "openai/gpt-5.6-sol", variant: "high" },
+        geoscience: {
+          mode: "subagent",
+          description: "Geoscience specialist",
+          skills: ["physics"],
+          permission: { r: "allow" },
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: trustProject,
+    fn: async () => {
+      const biology = await Agent.get("biology")
+      expect(biology?.model).toEqual({ providerID: "openai", modelID: "gpt-5.6-sol" })
+      expect(biology?.variant).toBe("high")
+      const geoscience = await Agent.get("geoscience")
+      expect(geoscience?.mode).toBe("subagent")
+      expect(geoscience?.skills).toEqual(["physics"])
+      expect(geoscience?.unlocks).toEqual(["r"])
+      expect(geoscience?.model).toBeUndefined()
     },
   })
 })

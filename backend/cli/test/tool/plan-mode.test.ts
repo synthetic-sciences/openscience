@@ -8,15 +8,13 @@ import { SessionFilesystem } from "../../src/session/filesystem"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { ArtifactTool } from "../../src/tool/artifact"
 import { BashTool } from "../../src/tool/bash"
-import { BatchTool } from "../../src/tool/batch"
 import { PythonTool } from "../../src/tool/notebook"
 import { PlanExitTool } from "../../src/tool/plan"
 import { PlanMode } from "../../src/tool/plan-mode"
-import { PlanWriteTool } from "../../src/tool/planwrite"
 import { RTool } from "../../src/tool/rkernel"
 import { ReadTool } from "../../src/tool/read"
 import { TaskTool } from "../../src/tool/task"
-import { TodoReadTool, TodoWriteTool } from "../../src/tool/todo"
+import { TodoWriteTool } from "../../src/tool/todo"
 import { ToolRegistry } from "../../src/tool/registry"
 import { WriteTool } from "../../src/tool/write"
 import { executionSession, tmpdir } from "../fixture/fixture"
@@ -89,23 +87,11 @@ describe("tool.plan-mode", () => {
               context("plan"),
             ),
           async () =>
-            (await BatchTool.init()).execute(
-              {
-                tool_calls: [
-                  {
-                    tool: "bash",
-                    parameters: { command: "printf batch > owned", description: "Writes through a batch" },
-                  },
-                ],
-              },
-              context("plan"),
-            ),
-          async () =>
             (await TaskTool.init()).execute(
               {
                 description: "Bypass plan gate",
                 prompt: "Write the marker file.",
-                subagent_type: "execute",
+                subagent_type: "data",
               },
               context("plan"),
             ),
@@ -123,7 +109,6 @@ describe("tool.plan-mode", () => {
           "apply_patch",
           "python",
           "r",
-          "batch",
           "task",
           "artifact",
           "plan_exit",
@@ -184,15 +169,7 @@ describe("tool.plan-mode", () => {
         const read = await (await ReadTool.init()).execute({ filePath: file }, ctx)
         expect(read.output).toContain("already granted")
 
-        await (
-          await PlanWriteTool.init()
-        ).execute(
-          {
-            todos: [{ id: "step-1", content: "Inspect the input", status: "pending", priority: "high" }],
-          },
-          ctx,
-        )
-        await (
+        const written = await (
           await TodoWriteTool.init()
         ).execute(
           {
@@ -200,8 +177,7 @@ describe("tool.plan-mode", () => {
           },
           ctx,
         )
-        const todos = await (await TodoReadTool.init()).execute({}, ctx)
-        expect(todos.metadata.todos).toEqual([
+        expect(written.metadata.todos).toEqual([
           { id: "step-1", content: "Inspect the input", status: "in_progress", priority: "high" },
         ])
 

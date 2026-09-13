@@ -3,38 +3,113 @@ import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
 import { SessionFilesystem } from "./filesystem"
 
-import PROMPT_CORE from "./prompt/core.txt"
-import PROMPT_DIRECT from "./prompt/direct.txt"
-import PROMPT_INSPECTION from "./prompt/inspection.txt"
 import PROMPT_RESPONSE from "./prompt/response.txt"
-import type { Provider } from "@/provider/provider"
-import { Config } from "../config/config"
+import PROMPT_SCIENCE from "../agent/prompt/science.txt"
+import PROMPT_ANTHROPIC from "../agent/prompt/anthropic.txt"
+import PROMPT_ASTRA from "../agent/prompt/gpt-astra.txt"
+import PROMPT_GPT from "../agent/prompt/gpt.txt"
+import PROMPT_CODEX from "../agent/prompt/codex.txt"
+import PROMPT_GEMINI from "../agent/prompt/gemini.txt"
+import PROMPT_DEFAULT from "../agent/prompt/default.txt"
+import type { Agent } from "@/agent/agent"
 import { SkillCatalog } from "../skill/catalog"
 import { Skill } from "../skill"
 import { searchSkills } from "../skill/search"
 import { PermissionNext } from "../permission/next"
-import { ComputePrompt } from "../compute/prompt"
 import { ProjectAccess } from "../project/access"
 
 export namespace SystemPrompt {
   const skillPrompts = new WeakMap<Skill.Info[], Map<string, string>>()
 
-  export function instructions(direct = false, inspection = false) {
-    if (direct) return `You are OpenScience.\n\n${PROMPT_DIRECT.trim()}`
-    if (inspection) return `You are OpenScience.\n\n${PROMPT_INSPECTION.trim()}`
-    return response(PROMPT_CORE)
+  export type Family = "anthropic" | "gpt-astra" | "gpt" | "codex" | "gemini" | "default"
+
+  const FAMILY: Record<Family, string> = {
+    anthropic: PROMPT_ANTHROPIC,
+    "gpt-astra": PROMPT_ASTRA,
+    gpt: PROMPT_GPT,
+    codex: PROMPT_CODEX,
+    gemini: PROMPT_GEMINI,
+    default: PROMPT_DEFAULT,
+  }
+
+  /** The slot every family file and the specialist template carry; the shared
+   * science block is substituted at render time so it is identical everywhere. */
+  export const SCIENCE_SLOT = "{{SCIENCE}}"
+  export const DOMAIN_SKILLS_SLOT = "{{DOMAIN_SKILLS}}"
+
+  export function science() {
+    return PROMPT_SCIENCE.trim()
+  }
+
+  /** Header family by wire model id, in OpenCode's order. */
+  export function family(id: string): Family {
+    const lower = id.toLowerCase()
+    if (lower.includes("gpt-4") || lower.includes("o1") || lower.includes("o3")) return "gpt"
+    if (lower.includes("gpt")) {
+      if (lower.includes("gpt-6") || lower.includes("astra")) return "gpt-astra"
+      if (lower.includes("codex")) return "codex"
+      return "gpt"
+    }
+    if (lower.includes("gemini-")) return "gemini"
+    if (lower.includes("claude")) return "anthropic"
+    return "default"
   }
 
   export function response(prompt: string) {
     return `${prompt.trim()}\n\n${PROMPT_RESPONSE.trim()}`
   }
 
-  export function provider(_model: Provider.Model, direct = false, inspection = false) {
-    return [instructions(direct, inspection)]
+  /** The model-family header with the science block filled and the writing
+   * defaults appended: what an agent without a prompt of its own receives. */
+  export function header(model: { api: { id: string } }) {
+    return response(FAMILY[family(model.api.id)].replace(SCIENCE_SLOT, science()))
   }
 
-  export async function compute(value?: unknown) {
-    return [await ComputePrompt.system(value)]
+  export function provider(model: { api: { id: string } }) {
+    return [header(model)]
+  }
+
+  /** Fill an agent prompt's slots: the science block, and the agent's domain
+   * skill index when it declares skill categories. */
+  export async function render(agent: Agent.Info): Promise<Agent.Info> {
+    if (!agent.prompt) return agent
+    const withScience = agent.prompt.replace(SCIENCE_SLOT, science())
+    if (!withScience.includes(DOMAIN_SKILLS_SLOT)) return { ...agent, prompt: withScience }
+    const index = (await domainSkills(agent.skills ?? [], agent.permission)) ?? ""
+    return { ...agent, prompt: withScience.replace(DOMAIN_SKILLS_SLOT, index).trim() }
+  }
+
+  /** A slash token is an explicit request for a command or skill. */
+  export function slashInvocation(message?: string) {
+    return /(?:^|[\s([{'"])\/([a-z0-9][a-z0-9_-]*)(?=$|[^a-z0-9_/-])/i.test(message ?? "")
+  }
+
+  function sentence(text: string) {
+    const first = text.split(/(?<=[.!?])\s+/)[0] ?? text
+    return first.length > 140 ? `${first.slice(0, 137)}...` : first
+  }
+
+  /** The `<domain-skills>` index of a specialist: every skill in its
+   * categories, one line each, grouped by category. */
+  export async function domainSkills(categories: string[], permission: PermissionNext.Ruleset) {
+    if (!categories.length) return
+    const catalog = (await Skill.catalog(permission)).allowed
+    const groups = categories
+      .map((category) => ({
+        category,
+        skills: catalog.filter((skill) => skill.category === category).sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+      .filter((group) => group.skills.length)
+    if (!groups.length) return
+    return [
+      "<domain-skills>",
+      "Your domain library. Load a skill with skill({name}) when its procedure applies; load one at a time and do not narrate the load.",
+      ...groups.flatMap((group) => [
+        `${group.category}:`,
+        ...group.skills.map((skill) => `- ${skill.name}: ${skill.summary ?? sentence(skill.description)}`),
+      ]),
+      "</domain-skills>",
+    ].join("\n")
   }
 
   export async function availableSkills(permission: PermissionNext.Ruleset, message?: string) {
@@ -190,21 +265,12 @@ export namespace SystemPrompt {
     ].join("\n")
   }
 
-  export async function planModeInstructions(): Promise<string[]> {
-    const config = await Config.get()
-    if (config.experimental?.plan_mode !== true) return []
-    return [
-      `<plan-mode>
-Plan Mode is enabled. You have a PlanWrite tool instead of TodoWrite.
-Use PlanWrite to structure your work as a visible plan in the user's sidebar.
-The plan panel shows items in real-time. Treat each item as a step, not a task.
-Update status as you work: pending -> in_progress -> completed.
-Keep only one item in_progress at a time.
-</plan-mode>`,
-    ]
-  }
-
-  export async function environment(model: { api: { id: string }; providerID: string }, sessionID: string) {
+  export async function environment(
+    model: { api: { id: string }; providerID: string },
+    sessionID: string,
+    /** Lines the harness units add inside <env>: compute, time budget, spend. */
+    extra: string[] = [],
+  ) {
     const project = Instance.project
     const context = await Promise.all([SessionFilesystem.snapshot(sessionID), ProjectAccess.status(project)])
     const filesystem = context[0]
@@ -254,6 +320,7 @@ Keep only one item in_progress at a time.
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
+        ...extra.map((line) => `  ${line}`),
         `</env>`,
         `An OpenScience project is a durable research context that may aggregate multiple connected folders and files. ${isolated ? "Session scratch belongs only to this conversation." : "This session uses the project directory as its default tool working directory; its files are shared and remain when the session is deleted."} Results are immutable deliverables shared project-wide; a normal workspace file is not a Result until artifact save_file returns its Result ID and version.`,
         `${

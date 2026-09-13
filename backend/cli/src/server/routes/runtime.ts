@@ -6,7 +6,6 @@ import { Identifier } from "../../id/id"
 import { RuntimeEvents } from "../../runtime/events"
 import { Session } from "../../session"
 import { lazy } from "@synsci/util/lazy"
-import { Flag } from "../../flag/flag"
 
 import { RuntimeRuns } from "../../runtime/runs"
 import { RuntimeDecisions } from "../../runtime/decisions"
@@ -116,20 +115,14 @@ export const RuntimeRoutes = lazy(() => {
       validator("json", PromptInput),
       async (c) => {
         const input = c.req.valid("json")
-        // The public runtime remains Research-only. The isolated source lab
-        // may opt into the feature-gated thin agent without widening the
-        // generated API or making a hidden agent selectable in production.
-        const requestedAgent = c.req.header("x-openscience-dev-agent")
-        if (
-          requestedAgent &&
-          !(requestedAgent === "researchagent-test" && Flag.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST)
-        ) {
+        // The public runtime remains Research-only.
+        if (c.req.header("x-openscience-dev-agent")) {
           return c.json(
             { error: "dev_agent_unavailable", message: "The requested development agent is unavailable." },
             400,
           )
         }
-        const agent = requestedAgent ?? "research"
+        const agent = "research"
         try {
           return c.json(await RuntimeRuns.prompt(input, agent), 202)
         } catch (error) {

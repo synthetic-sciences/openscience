@@ -2,41 +2,27 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
 import { Session } from "../session"
-import { Bus } from "../bus"
 import { MessageV2 } from "../session/message-v2"
-import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
-import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
 import { observableToolStatus } from "@/session/tool-outcome"
-import { Truncate } from "./truncation"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Instance } from "@/project/instance"
-import fs from "fs/promises"
-import { constants as FS } from "fs"
-import path from "path"
-import { TaskAttempt, TaskCapacity } from "./task-attempt"
+import { TaskAttempt } from "./task-attempt"
 import { Storage } from "@/storage/storage"
-import { ToolSelection } from "@/session/tool-selection"
-import { availableParallelism } from "node:os"
 import { SubtaskAttachments } from "@/session/subtask-attachments"
-import { SessionWorkspace } from "@/session/workspace"
 import { TaskEvidence } from "./task-evidence"
 import { PayloadIntegrity } from "./payload-integrity"
 import { CredentialRevocation } from "@/credentials/revocation"
-import { Specialist } from "@/agent/specialist"
+import { Log } from "@/util/log"
 
-export const DELEGATION_PROFILES = ["explore", "execute"] as const
-export const DELEGATION_SPECIALISTS = Specialist.NAMES
-export function isComputeDelegationProfile(name: string) {
-  return name === "execute"
-}
+const log = Log.create({ service: "tool.task" })
 
-/** Placeholder session ids models eagerly emit for the optional `session_id`
+/** Placeholder session ids models eagerly emit for the optional `task_id`
  * field. Every one of them unambiguously means "start a new child". */
-const CONTINUATION_PLACEHOLDER = /^ses_(?:new|none|null|undefined|placeholder|current|parent)$/i
+const CONTINUATION_PLACEHOLDER = /^(?:ses_)?(?:new|none|null|undefined|placeholder|current|parent|fresh)$/i
 
 export type TaskContinuation = { kind: "new" } | { kind: "continue"; sessionID: string }
 
@@ -60,7 +46,7 @@ export function taskContinuationID(value: string | null | undefined, parentSessi
 }
 
 /** A pre-dispatch continuation failure. Its message is written for the model:
- * it never created a child and it names the exact recovery (omit `session_id`,
+ * it never created a child and it names the exact recovery (omit `task_id`,
  * or reuse one of this session's real child tasks). */
 export class TaskContinuationError extends Error {
   constructor(
@@ -74,13 +60,11 @@ export class TaskContinuationError extends Error {
 }
 
 /**
- * Resolve a model-supplied `session_id` to a reusable child, or fail before any
- * child work is dispatched. Placeholders and the calling session itself resolve
- * to a new child (undefined). A real id is accepted only when it is a direct
- * child of the calling session in this project; anything else — an invented
- * suffix, a bare `ses_`, a foreign or stale id — raises a typed error that tells
- * the model to omit `session_id` or reuse one of this session's actual children.
- * A stale id never silently spawns duplicate work.
+ * Resolve a model-supplied `task_id` to a reusable child, or fail before any
+ * child work is dispatched. A real id is accepted only when it is a direct
+ * child of the calling session in this project; anything else raises a typed
+ * error that tells the model to omit `task_id` or reuse one of this session's
+ * actual children. A stale id never silently spawns duplicate work.
  */
 export async function resolveTaskContinuation(input: {
   requested: unknown
@@ -101,43 +85,34 @@ export async function resolveTaskContinuation(input: {
   )
   const reusable = children.map((child) => `${child.id} (${child.title})`)
   const recovery = reusable.length
-    ? `Omit session_id to start a new task, or reuse one of: ${reusable.join("; ")}`
-    : "Omit session_id to start a new task. This session has started no child tasks to continue yet"
+    ? `Omit task_id to start a new task, or reuse one of: ${reusable.join("; ")}`
+    : "Omit task_id to start a new task. This session has started no child tasks to continue yet"
   throw new TaskContinuationError(
     input.parentSession.id,
     continuation.sessionID,
     `No child session ${continuation.sessionID} exists for this session. No child was started. ${recovery}.`,
   )
 }
-const configuredChildCap = Number(process.env.OPENSCIENCE_MAX_CHILD_AGENTS)
-export const MAX_CHILD_AGENTS =
-  Number.isFinite(configuredChildCap) && configuredChildCap >= 1
-    ? Math.floor(configuredChildCap)
-    : Math.max(2, availableParallelism())
-const configuredComputeCap = Number(process.env.OPENSCIENCE_MAX_COMPUTE_SUBAGENTS)
-const MAX_COMPUTE_SUBAGENTS =
-  Number.isFinite(configuredComputeCap) && configuredComputeCap >= 1
-    ? Math.floor(configuredComputeCap)
-    : MAX_CHILD_AGENTS
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
-  subagent_type: z.enum(DELEGATION_PROFILES).describe("The internal explore or execute profile"),
-  specialist: z
-    .enum(DELEGATION_SPECIALISTS)
-    .optional()
-    .describe("Specialist for a one-domain phase; critique is read-only."),
-  session_id: z
+  subagent_type: z.string().describe("The name of the subagent to use for this task"),
+  task_id: z
     .string()
     .trim()
-    .regex(/^(?:ses_.*)?$/, "Expected an exact child sessionId or an empty value for new work")
     .nullish()
     .overwrite((value) => value || undefined)
     .describe(
-      "Omit, null or empty for new work. Continue only an exact child sessionId returned by Task; never invent a suffix or use the parent ID.",
+      "Set only to resume a previous task: the task_id returned by an earlier call continues the same subagent session with its previous messages instead of starting fresh.",
     ),
   command: z.string().describe("The command that triggered this task").optional(),
+  background: z
+    .boolean()
+    .optional()
+    .describe(
+      "Run the agent in the background and return immediately. You will be notified when it completes; do not sleep, poll, or check on its progress.",
+    ),
 })
 
 /** Canonicalize model-supplied continuation placeholders before a Task attempt
@@ -148,110 +123,36 @@ export function normalizeTaskAttemptInput(
   parentSessionID: string,
   messages: MessageV2.WithParts[] = [],
 ) {
-  const parsed = parameters.parse(input)
+  const raw = (input && typeof input === "object" ? input : {}) as Record<string, unknown>
+  // Older persisted calls named the continuation `session_id`.
+  const parsed = parameters.parse({ ...raw, task_id: raw.task_id ?? raw.session_id })
   PayloadIntegrity.assert({ content: parsed.prompt, before: "", messages })
   return {
     ...parsed,
-    session_id: taskContinuationID(parsed.session_id, parentSessionID),
+    task_id: taskContinuationID(parsed.task_id, parentSessionID),
   }
 }
 
-export function childPermissionRules(primaryTools: string[] = []): PermissionNext.Ruleset {
+/** Denies a child inherits unless the subagent's own ruleset allows the tool:
+ * workers do not keep todo lists or dispatch further workers by default, and
+ * never ask the user directly. */
+export function childPermissionRules(agent: Agent.Info, primaryTools: string[] = []): PermissionNext.Ruleset {
+  const allows = (tool: string) => agent.permission.some((rule) => rule.permission === tool && rule.action !== "deny")
   return [
-    ...primaryTools.map((permission) => ({ permission, pattern: "*", action: "allow" as const })),
-    { permission: "task", pattern: "*", action: "deny" },
+    ...(allows("todowrite") ? [] : [{ permission: "todowrite", pattern: "*", action: "deny" as const }]),
+    ...(allows("task") ? [] : [{ permission: "task", pattern: "*", action: "deny" as const }]),
     { permission: "question", pattern: "*", action: "deny" },
-    { permission: "todowrite", pattern: "*", action: "deny" },
-    { permission: "todoread", pattern: "*", action: "deny" },
+    ...primaryTools.map((permission) => ({ permission, pattern: "*", action: "deny" as const })),
   ]
-}
-
-export function assertLeadDelegationSession(session: Session.Info) {
-  if (session.parentID) {
-    throw new Error(
-      `Only the lead Research session may dispatch Task workers. Child session ${session.id} must return follow-up recommendations to its lead.`,
-    )
-  }
-  return session
 }
 
 export function assertTaskContinuation(input: { session: Session.Info; parentSessionID: string; projectID: string }) {
   if (input.session.projectID !== input.projectID || input.session.parentID !== input.parentSessionID) {
     throw new Error(
-      `Task continuation session ${input.session.id} is not a direct child of the calling session ${input.parentSessionID}. Use only the exact sessionId returned by an earlier successful Task call from this session.`,
+      `Task continuation session ${input.session.id} is not a direct child of the calling session ${input.parentSessionID}. Use only the exact task_id returned by an earlier successful Task call from this session.`,
     )
   }
   return input.session
-}
-
-const TOOL_OUTPUT_NAME = /^tool_[A-Za-z0-9]{26}$/
-
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
-/**
- * Tool truncation output lives outside isolated session workspaces. A Task
- * prompt previously passed that host path to the child as plain text, but it
- * did not transfer filesystem authority. Copy only exact broker-owned
- * `tool_*` files named in the prompt into the child's scratch workspace and
- * rewrite those references. This keeps arbitrary external paths and sibling
- * workspaces outside the child boundary.
- */
-export async function materializeTaskToolOutputs(input: {
-  prompt: string
-  parentSessionID: string
-  childSessionID: string
-}) {
-  const root = await fs.realpath(Truncate.DIR).catch(() => undefined)
-  if (!root) return { prompt: input.prompt, files: [] as string[] }
-
-  const aliases = [...new Set([path.resolve(Truncate.DIR), root])]
-  const references = [
-    ...new Set(
-      aliases.flatMap((alias) =>
-        Array.from(
-          input.prompt.matchAll(new RegExp(`${escapeRegex(alias)}/tool_[A-Za-z0-9]{26}(?![A-Za-z0-9])`, "g")),
-          (match) => match[0],
-        ),
-      ),
-    ),
-  ]
-  if (references.length === 0) return { prompt: input.prompt, files: [] as string[] }
-
-  const sources = await Promise.all(
-    references.map(async (reference) => {
-      const name = path.basename(reference)
-      const info = await fs.lstat(reference).catch(() => undefined)
-      const source = await fs.realpath(reference).catch(() => undefined)
-      if (
-        !TOOL_OUTPUT_NAME.test(name) ||
-        !info?.isFile() ||
-        !source ||
-        path.dirname(source) !== root ||
-        path.basename(source) !== name ||
-        !(await SessionFilesystem.ownsToolOutput({ sessionID: input.parentSessionID, path: source }))
-      ) {
-        throw new Error(`Task input references an unavailable broker tool output: ${name}`)
-      }
-      return { reference, source, name }
-    }),
-  )
-
-  const workspace = await SessionFilesystem.workspace(input.childSessionID)
-  const directory = await fs.mkdtemp(path.join(workspace, ".task-handoff-"))
-  const destinations = new Map<string, string>()
-  for (const source of sources) {
-    if (destinations.has(source.source)) continue
-    const destination = path.join(directory, source.name)
-    await fs.copyFile(source.source, destination, FS.COPYFILE_EXCL)
-    destinations.set(source.source, destination)
-  }
-  const prompt = sources.reduce(
-    (result, source) => result.replaceAll(source.reference, destinations.get(source.source)!),
-    input.prompt,
-  )
-  return { prompt, files: [...destinations.values()] }
 }
 
 function taskToolStatus(part: MessageV2.ToolPart) {
@@ -387,20 +288,47 @@ export function publishingBrief(text: string) {
   )
 }
 
-export const TaskTool = Tool.define("task", async (ctx) => {
-  const agents = await Promise.all(DELEGATION_PROFILES.map((name) => Agent.get(name))).then((items) =>
-    items.filter((agent): agent is Agent.Info => agent !== undefined),
-  )
+export type TaskState = "running" | "completed" | "error"
 
-  // Filter agents by permissions if agent provided
+/** The model-facing result: OpenCode's `<task>` envelope. An error state still
+ * carries the child's partial text so the lead can continue from it. */
+export function renderTaskOutput(input: { sessionID: string; state: TaskState; summary?: string; text: string }) {
+  const tag = input.state === "error" ? "task_error" : "task_result"
+  return [
+    `<task id="${input.sessionID}" state="${input.state}">`,
+    ...(input.summary ? [`<summary>${input.summary}</summary>`] : []),
+    `<${tag}>`,
+    input.text,
+    `</${tag}>`,
+    "</task>",
+  ].join("\n")
+}
+
+const BACKGROUND_STARTED = [
+  "The task is working in the background. You will be notified automatically when it finishes.",
+  "Do not sleep, poll for progress, ask the task for status, or duplicate its work; avoid the files and topics it is using.",
+  "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
+].join("\n")
+
+/** Background children in flight, by child session id, so a completion can
+ * wake the parent exactly once and a second call can find the first. */
+const background = new Map<string, Promise<TaskAttempt.Result>>()
+
+export function backgroundTasks() {
+  return background.size
+}
+
+export const TaskTool = Tool.define("task", async (ctx) => {
+  const agents = (await Agent.list()).filter((agent) => agent.mode !== "primary")
+  // A caller's ruleset can forbid specific subagents.
   const caller = ctx?.agent
-  const accessibleAgents = caller
+  const accessible = caller
     ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
     : agents
 
   const description = DESCRIPTION.replace(
     "{agents}",
-    accessibleAgents
+    accessible
       .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
       .join("\n"),
   )
@@ -413,53 +341,43 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           "Publishing stays with the lead: pushes, releases and uploads use this session's approvals and credentials. Delegate preparation or verification if useful, then push or upload from here.",
         )
       }
-      const leadSession = assertLeadDelegationSession(await Session.get(ctx.sessionID))
       const config = await Config.get()
-      const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
-      const configured = MessageV2.resolveDelegationSettings(ctx.extra?.delegationSettings, { effort })
-      const settings =
-        configured.level === "off" && ctx.extra?.bypassAgentCheck
-          ? { ...configured, level: "light" as const }
-          : configured
-      // Some models eagerly fill every optional schema field with the current
-      // session or a `ses_new` placeholder. Those values unambiguously mean a
-      // new child; a real id must be a direct child of this session or dispatch
-      // fails with an actionable typed error rather than a raw storage failure.
+      const parent = await Session.get(ctx.sessionID)
+      const depth = await SessionPrompt.sessionDepth(parent)
+      const limit = config.subagent_depth ?? 1
+      if (depth >= limit) {
+        throw new Error(
+          `Subagent depth limit reached (${limit}). This session is already a worker; return your findings to the lead instead of dispatching further workers. Increase "subagent_depth" in openscience.json to allow nesting.`,
+        )
+      }
+
       const attemptInput = normalizeTaskAttemptInput(params, ctx.sessionID)
       const attachments = MessageV2.SubtaskAttachment.array().parse(ctx.extra?.attachments ?? [])
       const continuation = await resolveTaskContinuation({
-        requested: params.session_id,
-        parentSession: leadSession,
+        requested: params.task_id,
+        parentSession: parent,
         projectID: Instance.project.id,
       })
-      const continuationID = continuation?.id
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
         await ctx.ask({
           permission: "task",
-          patterns: [params.specialist ?? params.subagent_type],
+          patterns: [params.subagent_type],
           always: ["*"],
           metadata: {
             description: params.description,
             subagent_type: params.subagent_type,
-            specialist: params.specialist,
           },
         })
       }
 
-      const thinCaller = ToolSelection.minimalResearchAgent(ctx.agent)
-      const profile = await Agent.get(params.subagent_type)
-      if (!profile) throw new Error(`Internal delegation profile ${params.subagent_type} is unavailable`)
-      // Minimal Research parents delegate through the same minimal runtime.
-      // Specialist intent remains explicit in childGuidance and skill routing
-      // without restoring the legacy system prompt and eager tool catalog.
-      const agent = thinCaller
-        ? await Agent.get("research")
-        : params.specialist
-          ? await Agent.get(params.specialist)
-          : profile
-      if (!agent) throw new Error(`Delegation specialist ${params.specialist} is unavailable`)
+      const next = await Agent.get(params.subagent_type)
+      if (!next || next.mode === "primary") {
+        const names = accessible.map((a) => a.name).join(", ")
+        throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid subagent. Available: ${names}`)
+      }
+      const agent = next
 
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
@@ -472,207 +390,101 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         parentUserMessageID: assistant.parentID,
         callID: ctx.callID,
       }
+      const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
+      const settings = MessageV2.resolveDelegationSettings(ctx.extra?.delegationSettings, { effort })
       const leadModel = { modelID: assistant.modelID, providerID: assistant.providerID }
-      const configuredWorker = settings.workerModel ?? agent.model ?? leadModel
+      // The subagent's configured model wins; the composer's worker model is
+      // the user's override for agents without one; otherwise the lead's model.
+      const model = agent.model ?? settings.workerModel ?? leadModel
+      // A worker on the lead's model thinks as hard as the lead. On its own
+      // model it uses its own configured variant, or the model's default.
+      const variant =
+        model.providerID === leadModel.providerID && model.modelID === leadModel.modelID
+          ? typeof ctx.extra?.variant === "string"
+            ? ctx.extra.variant
+            : undefined
+          : agent.variant
+
       const reserved = await TaskAttempt.reserve({
         ...identity,
         fingerprint: TaskAttempt.fingerprint(attachments.length ? { ...attemptInput, attachments } : attemptInput),
-        ...(!attachments.length && { legacyFingerprint: TaskAttempt.legacyFingerprint(attemptInput) }),
-        childSessionID: continuationID,
+        childSessionID: continuation?.id,
       })
       const started = reserved.createdAt
 
-      await using attemptLease = await TaskAttempt.acquire(identity, Number.POSITIVE_INFINITY, ctx.abort)
-      return await attemptLease.during(async () => {
-        const current = await TaskAttempt.read(identity)
-        if (!current) throw new Error(`Durable Task attempt ${ctx.callID} disappeared after reservation`)
-        if (current.status === "completed" && current.result) return current.result
-        PayloadIntegrity.assert({ content: attemptInput.prompt, before: "", messages: ctx.messages })
-
-        const existing =
-          continuation ??
-          (await Session.get(reserved.childSessionID).catch((error) => {
-            if (Storage.NotFoundError.isInstance(error)) return
-            throw error
-          }))
-        const session = existing
-          ? assertTaskContinuation({
-              session: existing,
-              parentSessionID: ctx.sessionID,
-              projectID: Instance.project.id,
-            })
-          : await Session.createNext({
-              id: reserved.childSessionID,
-              parentID: ctx.sessionID,
-              directory: Instance.directory,
-              title:
-                params.description +
-                (params.specialist
-                  ? ` (@${params.specialist} specialist, ${params.subagent_type} phase)`
-                  : ` (@${params.subagent_type} subagent)`),
-              permission: childPermissionRules(config.experimental?.primary_tools),
-            })
-        // Project-mode parents have no private scratch to hand off. Their
-        // children keep isolated outputs and the existing project read policy.
-        if ((await SessionWorkspace.get(ctx.sessionID)).mode === "isolated") {
-          await SessionFilesystem.grantTaskHandoff({
-            parentSessionID: ctx.sessionID,
-            childSessionID: session.id,
+      const existing =
+        continuation ??
+        (await Session.get(reserved.childSessionID).catch((error) => {
+          if (Storage.NotFoundError.isInstance(error)) return
+          throw error
+        }))
+      const session = existing
+        ? assertTaskContinuation({ session: existing, parentSessionID: ctx.sessionID, projectID: Instance.project.id })
+        : await Session.createNext({
+            id: reserved.childSessionID,
+            parentID: ctx.sessionID,
+            directory: Instance.directory,
+            title: `${params.description} (@${agent.name} subagent)`,
+            permission: childPermissionRules(agent, config.experimental?.primary_tools),
           })
-        }
+      // The child keeps its own scratch for staged inputs and side outputs but
+      // works in the parent's directory: the files it writes there are the
+      // parent's deliverables.
+      await SessionFilesystem.shareWorkingDirectory({ parentSessionID: ctx.sessionID, childSessionID: session.id })
 
-        const model = configuredWorker
-        // A worker on the lead's own model thinks as hard as the lead; a
-        // different worker model keeps its own default depth.
-        const variant =
-          model.providerID === leadModel.providerID && model.modelID === leadModel.modelID
-            ? typeof ctx.extra?.variant === "string"
-              ? ctx.extra.variant
-              : undefined
-            : undefined
-        const initial = await Session.messages({ sessionID: session.id })
-        const bound = await TaskAttempt.bind({
-          ...identity,
-          previousMessageIDs: initial.map((message) => message.info.id),
-        })
-        const previous = new Set(bound.previousMessageIDs)
-        const timing = {
-          queuedMs: Math.max(0, Date.now() - started),
-          activeStartedAt: Date.now(),
-          activeMs: 0,
-        }
+      const metadata = {
+        sessionId: session.id,
+        model,
+        startedAt: started,
+        effort,
+        delegation: settings,
+        ...(params.background ? { background: true } : {}),
+      }
+      await ctx.metadata({ title: params.description, metadata })
 
-        // This is the durable parent→child binding. It must land before the
-        // child provider can run so a killed process leaves a discoverable,
-        // reusable child rather than an orphaned session.
-        await ctx.metadata({
-          title: params.description,
-          metadata: {
-            sessionId: session.id,
-            model,
-            startedAt: started,
-            effort,
-            delegation: settings,
-            maxConcurrentChildren: MAX_CHILD_AGENTS,
-            queuedMs: timing.queuedMs,
-            activeStartedAt: timing.activeStartedAt,
-          },
-        })
+      const run = async (signal: AbortSignal): Promise<TaskAttempt.Result> => {
+        await using attemptLease = await TaskAttempt.acquire(identity, Number.POSITIVE_INFINITY, signal)
+        return attemptLease.during(async () => {
+          const current = await TaskAttempt.read(identity)
+          if (!current) throw new Error(`Durable Task attempt ${ctx.callID} disappeared after reservation`)
+          if (current.status === "completed" && current.result) return current.result
+          PayloadIntegrity.assert({ content: attemptInput.prompt, before: "", messages: ctx.messages })
 
-        const messages = await Session.messages({ sessionID: session.id })
-        const turn = messages.filter((message) => !previous.has(message.info.id))
-        const terminal = turn
-          .filter(
-            (message): message is MessageV2.WithParts & { info: MessageV2.Assistant } =>
-              message.info.role === "assistant",
-          )
-          .findLast((message) => {
-            if (message.info.error) return true
-            if (!message.info.finish) return false
-            const hasTool = MessageV2.hasLocalToolResult(message.parts)
-            return !MessageV2.isContinuingTurn(message.info.finish, hasTool)
+          const initial = await Session.messages({ sessionID: session.id })
+          const bound = await TaskAttempt.bind({
+            ...identity,
+            previousMessageIDs: initial.map((message) => message.info.id),
           })
-        const settled = await TaskAttempt.settle(identity, terminal?.info.time.completed)
-        timing.activeMs = settled.activeMs ?? 0
+          const previous = new Set(bound.previousMessageIDs)
+          const turn = initial.filter((message) => !previous.has(message.info.id))
+          const terminal = turn
+            .filter(
+              (message): message is MessageV2.WithParts & { info: MessageV2.Assistant } =>
+                message.info.role === "assistant",
+            )
+            .findLast((message) => {
+              if (message.info.error) return true
+              if (!message.info.finish) return false
+              const hasTool = MessageV2.hasLocalToolResult(message.parts)
+              return !MessageV2.isContinuingTurn(message.info.finish, hasTool)
+            })
 
-        const execution = terminal
-          ? { result: terminal, error: undefined }
-          : await (async () => {
-              // Capacity queues and server downtime are not child execution.
-              // Start the durable active clock only after both global slots
-              // are held, immediately before resuming provider work.
-              await using childSlot = await TaskCapacity.acquire("child", MAX_CHILD_AGENTS, ctx.abort)
-              await using computeSlot = isComputeDelegationProfile(params.subagent_type)
-                ? await TaskCapacity.acquire("compute", MAX_COMPUTE_SUBAGENTS, ctx.abort)
-                : undefined
-              timing.activeStartedAt = Date.now()
-              timing.queuedMs = Math.max(0, timing.activeStartedAt - started)
-              const token = crypto.randomUUID()
-              const active = await TaskAttempt.activate({ ...identity, token })
-              timing.activeMs = active.activeMs ?? 0
-              const execute = async () => {
-                await ctx.metadata({
-                  title: params.description,
-                  metadata: {
-                    sessionId: session.id,
-                    model,
-                    startedAt: started,
-                    effort,
-                    delegation: settings,
-                    maxConcurrentChildren: MAX_CHILD_AGENTS,
-                    queuedMs: timing.queuedMs,
-                    activeStartedAt: timing.activeStartedAt,
-                    activeMs: timing.activeMs,
-                  },
-                })
-
-                const observed: Record<
-                  string,
-                  { id: string; tool: string; state: { status: string; title?: string } }
-                > = {}
-                const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-                  if (evt.properties.part.sessionID !== session.id) return
-                  if (evt.properties.part.messageID === reserved.childMessageID) return
-                  if (evt.properties.part.type !== "tool") return
-                  const part = evt.properties.part
-                  observed[part.id] = {
-                    id: part.id,
-                    tool: part.tool,
-                    state: {
-                      status: taskToolStatus(part),
-                      title: part.state.status === "completed" ? part.state.title : undefined,
-                    },
-                  }
-                  await ctx.metadata({
-                    title: params.description,
-                    metadata: {
-                      summary: Object.values(observed).sort((a, b) => a.id.localeCompare(b.id)),
-                      sessionId: session.id,
-                      model,
-                      startedAt: started,
-                      elapsedMs: Date.now() - started,
-                      activeMs: timing.activeMs + Math.max(0, Date.now() - timing.activeStartedAt),
-                      effort,
-                      delegation: settings,
-                      maxConcurrentChildren: MAX_CHILD_AGENTS,
-                      queuedMs: timing.queuedMs,
-                      activeStartedAt: timing.activeStartedAt,
-                    },
-                  })
-                })
-                using subscription = defer(unsub)
-
-                ctx.abort.throwIfAborted()
-                const exists = messages.some(
+          // A prior process may have died mid-turn; close its interval at its
+          // last heartbeat before this process opens its own. Time between
+          // reservation and activation is queueing, not child work.
+          const settled = await TaskAttempt.settle(identity, terminal?.info.time.completed)
+          const timing = { queuedMs: 0, activeMs: settled.activeMs ?? 0 }
+          const execution = terminal
+            ? { result: terminal, error: undefined }
+            : await (async () => {
+                const token = crypto.randomUUID()
+                timing.queuedMs = Math.max(0, Date.now() - started)
+                await TaskAttempt.activate({ ...identity, token })
+                const exists = initial.some(
                   (message) => message.info.role === "user" && message.info.id === reserved.childMessageID,
                 )
-                const specialist =
-                  params.specialist && Specialist.is(params.specialist)
-                    ? await Specialist.guidance(params.specialist, agent.permission)
-                    : undefined
-                const childGuidance = [
-                  `You own one ${params.subagent_type} phase${params.specialist ? ` as the ${Specialist.is(params.specialist) ? Specialist.profiles[params.specialist].label : params.specialist}` : ""} for the lead Research agent. The assignment in the user message is authoritative.`,
-                  ...(specialist ? [specialist] : []),
-                  "Work independently on that phase and load a domain skill only when useful. You cannot dispatch workers; recommend any worthwhile follow-up to the lead in your handoff.",
-                  "Publishing is the lead's: never push, release, or upload. Prepare and verify, then report what is ready.",
-                  "Do not return a diary of searches, reads, or commands. Your final response is a decision-ready handoff to the lead, not a second user-facing report.",
-                  "Use only the Markdown sections that carry substance: Outcome; Findings; Evidence; Changes / outputs; Limitations; Next action.",
-                  "Preserve exact paths, identifiers, numeric results, commands, and error strings when they matter. Distinguish observed evidence from inference. If blocked or partial, say exactly what remains.",
-                  'The lead\'s workspace is read-only for you: write under your own workspace. Save important scratch outputs with artifact(action="save_file", path=...) before returning. The lead receives immutable artifact/version handles and can read them without access to your private scratch. A saved file proves an output exists, not that its claims or tests passed.',
-                  "Do not wrap the response in XML or JSON and do not restate these instructions.",
-                  settings.autonomy === "interactive"
-                    ? "If the assignment contains a genuinely consequential ambiguity, return one precise question to the lead instead of guessing."
-                    : settings.autonomy === "autonomous"
-                      ? "Resolve ordinary ambiguities independently within the current permission boundary; surface only decisions that materially affect the result."
-                      : "Resolve routine ambiguities independently and flag consequential assumptions in the handoff.",
-                ].join("\n")
-                const run = async () => {
+                const dispatch = async () => {
                   if (exists) return SessionPrompt.loop(session.id)
-                  const transfer = await materializeTaskToolOutputs({
-                    prompt: params.prompt,
-                    parentSessionID: ctx.sessionID,
-                    childSessionID: session.id,
-                  })
                   return SessionPrompt.prompt({
                     messageID: reserved.childMessageID,
                     sessionID: session.id,
@@ -680,131 +492,150 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     variant,
                     agent: agent.name,
                     effort,
-                    delegation: false,
-                    delegationSettings: { ...settings, level: "off" },
-                    system: childGuidance,
-                    tools: {
-                      ...(params.specialist && Specialist.is(params.specialist)
-                        ? Specialist.tools(params.specialist)
-                        : {}),
-                      todowrite: false,
-                      todoread: false,
-                      question: false,
-                      task: false,
-                      ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((tool) => [tool, false])),
-                    },
+                    delegationSettings: settings,
                     parts: [
-                      ...(await SessionPrompt.resolvePromptParts(transfer.prompt)),
-                      ...(await SubtaskAttachments.materialize(attachments, session.id, ctx.abort)),
+                      ...(await SessionPrompt.resolvePromptParts(params.prompt)),
+                      ...(await SubtaskAttachments.materialize(attachments, session.id, signal)),
                     ],
                   })
                 }
-                // Keep progress and cancellation connected until the child settles.
-                return await SessionPrompt.withCancellation(session.id, run, ctx.abort).then(
-                  (result) => ({ result, error: undefined }),
-                  (error: unknown) => ({ result: undefined, error }),
-                )
-              }
-              const pulse = setInterval(() => {
-                void TaskAttempt.pulse({ ...identity, token }).catch(() => undefined)
-              }, 5_000)
-              try {
-                return await execute()
-              } finally {
-                clearInterval(pulse)
-                const ended = await TaskAttempt.deactivate({ ...identity, token })
-                timing.activeMs = ended.activeMs ?? timing.activeMs
-              }
-            })()
+                const pulse = setInterval(() => {
+                  void TaskAttempt.pulse({ ...identity, token }).catch(() => undefined)
+                }, 5_000)
+                try {
+                  // Keep progress and cancellation connected until the child settles.
+                  return await SessionPrompt.withCancellation(session.id, dispatch, signal).then(
+                    (result) => ({ result, error: undefined }),
+                    (error: unknown) => ({ result: undefined, error }),
+                  )
+                } finally {
+                  clearInterval(pulse)
+                  const ended = await TaskAttempt.deactivate({ ...identity, token })
+                  timing.activeMs = ended.activeMs ?? timing.activeMs
+                }
+              })()
 
-        await Session.flushPendingParts(session.id)
-        const complete = await Session.messages({ sessionID: session.id })
-        const { summary, usage } = summarizeTurn(complete, previous)
-        const text = taskText(complete, previous)
-        const evidence = await TaskEvidence.collect({
-          projectID: Instance.project.id,
-          sessionID: session.id,
-          messages: complete,
-          previous,
-        })
-        const child = execution.result?.info.role === "assistant" ? execution.result.info : terminal?.info
-        const failedToolCalls = summary.filter((part) => part.state.status === "error").length
-        const partialToolCalls = summary.filter((part) => part.state.status === "partial").length
-        const taskOutcome = classifyTaskOutcome({
-          finish: child?.finish,
-          error: execution.error ?? child?.error,
-          hasText: text.trim().length > 0,
-          toolCalls: summary.length,
-          failedToolCalls,
-          partialToolCalls,
-        })
-        const raw =
-          text ||
-          (taskOutcome.outcome === "error"
-            ? `The child failed before emitting textual findings after ${summary.length} tool calls in this turn.`
-            : `The child stopped before emitting textual findings after ${summary.length} tool calls in this turn.`)
-        const handoff = taskHandoff(raw)
-        const activeMs = timing.activeMs
-        // Surface the durable child id in the model-visible output (not only in
-        // metadata) so the lead can continue this exact worker via `session_id`.
-        // Compaction preserves it: MessageV2.toolSummary re-emits it from metadata.
-        const output = [
-          `Task session ${session.id}: ${taskOutcome.outcome} (${taskOutcome.stopReason}). Reuse this sessionId to continue the same worker.`,
-          ...(taskOutcome.stopReason === "max_steps"
-            ? ["[Child reached its bounded step limit; partial result follows.]"]
-            : taskOutcome.stopReason === "tool_failures"
-              ? ["[Every child tool call failed; treat the following as a partial, blocked result.]"]
-              : taskOutcome.stopReason === "tool_partial"
-                ? ["[One or more child tool operations remain partial or unsettled; treat this as a partial result.]"]
-                : taskOutcome.stopReason === "provider_error"
-                  ? [
-                      "[Child stopped on a provider error; its usable partial result follows. The worker's model or connection failed, not the task: finish this step yourself now rather than sending the same brief to the same worker again.]",
-                    ]
-                  : taskOutcome.stopReason === "cancelled"
-                    ? ["[Child was cancelled; completed actions and usable partial evidence follow.]"]
-                    : taskOutcome.stopReason === "empty_handoff"
-                      ? ["[Child ended without a textual handoff; treat this result as incomplete.]"]
-                      : failedToolCalls > 0
-                        ? [
-                            `[Child returned a completed handoff with ${failedToolCalls} failed tool ${failedToolCalls === 1 ? "attempt" : "attempts"}. Review its limitations; the failed attempts remain recorded in the child session.]`,
-                          ]
-                        : []),
-          handoff.text,
-          TaskEvidence.describe(evidence),
-        ]
-          .filter(Boolean)
-          .join("\n")
-        const result = TaskAttempt.Result.parse({
-          title: params.description,
-          metadata: {
-            summary,
-            sessionId: session.id,
-            model,
-            startedAt: started,
-            durationMs: Date.now() - started,
+          await Session.flushPendingParts(session.id)
+          const complete = await Session.messages({ sessionID: session.id })
+          const { summary, usage } = summarizeTurn(complete, previous)
+          const text = taskText(complete, previous)
+          const evidence = await TaskEvidence.collect({
+            projectID: Instance.project.id,
+            sessionID: session.id,
+            messages: complete,
+            previous,
+          })
+          const child = execution.result?.info.role === "assistant" ? execution.result.info : terminal?.info
+          const failedToolCalls = summary.filter((part) => part.state.status === "error").length
+          const partialToolCalls = summary.filter((part) => part.state.status === "partial").length
+          const taskOutcome = classifyTaskOutcome({
+            finish: child?.finish,
+            error: execution.error ?? child?.error,
+            hasText: text.trim().length > 0,
             toolCalls: summary.length,
             failedToolCalls,
             partialToolCalls,
-            usage,
-            effort,
-            delegation: settings,
-            profile: params.subagent_type,
-            ...(params.specialist && { specialist: params.specialist }),
-            maxConcurrentChildren: MAX_CHILD_AGENTS,
-            queuedMs: timing.queuedMs,
-            activeMs,
-            outcome: taskOutcome.outcome,
-            stopReason: taskOutcome.stopReason,
-            handoff: handoff.text,
-            handoffTruncated: handoff.truncated,
-            resultChars: raw.length,
-            evidence,
-          },
-          output,
+          })
+          const state: TaskState = taskOutcome.outcome === "error" ? "error" : "completed"
+          const note =
+            taskOutcome.stopReason === "max_steps"
+              ? "The subagent reached its step limit; partial result follows."
+              : taskOutcome.stopReason === "tool_failures"
+                ? "Every subagent tool call failed; treat this as a blocked partial result."
+                : taskOutcome.stopReason === "tool_partial"
+                  ? "One or more subagent operations remain partial or unsettled; treat this as a partial result."
+                  : taskOutcome.stopReason === "provider_error"
+                    ? "The subagent stopped on a provider error; its partial result follows. Finish this step yourself rather than re-sending the same brief."
+                    : taskOutcome.stopReason === "cancelled"
+                      ? "The subagent was cancelled; completed actions and partial evidence follow."
+                      : taskOutcome.stopReason === "empty_handoff"
+                        ? "The subagent ended without a textual handoff; treat this result as incomplete."
+                        : failedToolCalls > 0
+                          ? `Completed with ${failedToolCalls} failed tool ${failedToolCalls === 1 ? "attempt" : "attempts"}; review its limitations.`
+                          : undefined
+          const body = [
+            text || `(no text; ${summary.length} tool calls in this turn)`,
+            TaskEvidence.describe(evidence),
+            `task_id: ${session.id}`,
+          ]
+            .filter(Boolean)
+            .join("\n\n")
+          const result = TaskAttempt.Result.parse({
+            title: params.description,
+            metadata: {
+              ...metadata,
+              summary,
+              durationMs: Date.now() - started,
+              queuedMs: timing.queuedMs,
+              activeMs: timing.activeMs,
+              toolCalls: summary.length,
+              failedToolCalls,
+              partialToolCalls,
+              usage,
+              outcome: taskOutcome.outcome,
+              stopReason: taskOutcome.stopReason,
+              handoff: text,
+              evidence,
+            },
+            output: renderTaskOutput({ sessionID: session.id, state, summary: note, text: body }),
+          })
+          await TaskAttempt.complete({ ...identity, result })
+          return result
         })
-        await TaskAttempt.complete({ ...identity, result })
-        return result
-      })
+      }
+
+      if (!params.background) return run(ctx.abort)
+
+      // Background: the child runs detached from this call and from the
+      // parent's turn (whose abort fires when the turn ends); its completion
+      // wakes the parent with a synthetic message carrying the same envelope.
+      if (!background.has(session.id)) {
+        const parentAgent = ctx.agent
+        const pending = run(new AbortController().signal)
+          .then(async (result) => {
+            background.delete(session.id)
+            await SessionPrompt.prompt({
+              sessionID: ctx.sessionID,
+              agent: parentAgent,
+              model: leadModel,
+              variant: typeof ctx.extra?.variant === "string" ? ctx.extra.variant : undefined,
+              parts: [{ type: "text", synthetic: true, text: result.output }],
+            }).catch((error) => log.error("background task completion could not wake the parent", { error }))
+            return result
+          })
+          .catch(async (error: unknown) => {
+            background.delete(session.id)
+            const message = error instanceof Error ? error.message : String(error)
+            const result = TaskAttempt.Result.parse({
+              title: params.description,
+              metadata: { ...metadata, outcome: "error", stopReason: "provider_error" },
+              output: renderTaskOutput({
+                sessionID: session.id,
+                state: "error",
+                summary: `Background task failed: ${params.description}`,
+                text: message,
+              }),
+            })
+            await SessionPrompt.prompt({
+              sessionID: ctx.sessionID,
+              agent: parentAgent,
+              model: leadModel,
+              parts: [{ type: "text", synthetic: true, text: result.output }],
+            }).catch((error) => log.error("background task failure could not wake the parent", { error }))
+            return result
+          })
+        background.set(session.id, pending)
+      }
+      return {
+        title: params.description,
+        metadata: { ...metadata, background: true, jobId: session.id },
+        output: renderTaskOutput({
+          sessionID: session.id,
+          state: "running",
+          summary: `Background task started: ${params.description}`,
+          text: BACKGROUND_STARTED,
+        }),
+      }
     },
   }
 })

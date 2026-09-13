@@ -3,10 +3,11 @@ import z from "zod"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
+import { ToolVisibility } from "../../src/tool/visibility"
 import { tmpdir } from "../fixture/fixture"
 
 describe("tool registry agent boundaries", () => {
-  test("exposes canonical Python and R runtimes to every scientific primary agent", async () => {
+  test("the default set is shared; runtimes beyond python wait for a skill or an agent rule", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
@@ -17,16 +18,23 @@ describe("tool registry agent boundaries", () => {
           const ids = tools.map((tool) => tool.id)
 
           expect(ids).toContain("python")
-          expect(ids).toContain("r")
+          expect(ids).toContain("compute_job")
+          expect(ids).not.toContain("r")
           expect(ids).not.toContain("notebook")
           expect(ids).not.toContain("rkernel")
-          expect(ids).toContain("compute_job")
-          expect(ids).toContain("provider_compute")
-          expect(ids).toContain("scientific_capability")
-          expect(ids).toContain("research_contract")
+          expect(ids).not.toContain("provider_compute")
+          expect(ids).not.toContain("scientific_capability")
+          expect(ids).not.toContain("research_contract")
           expect(ids).not.toContain("modal")
           expect(ids).not.toContain("query_uniprot")
+          expect(ids).not.toContain("batch")
+          expect(ids).not.toContain("todoread")
         }
+        // The data specialist opts R in through its own ruleset.
+        const data = await Agent.get("data")
+        const ids = (await ToolRegistry.tools({ providerID: "test", modelID: "test" }, data)).map((tool) => tool.id)
+        expect(ids).toContain("r")
+        expect(data?.unlocks).toEqual(["r"])
       },
     })
   })
@@ -41,8 +49,6 @@ describe("tool registry agent boundaries", () => {
         const ids = advertised.map((tool) => tool.id)
 
         expect(ids.filter((id) => id === "compute_job")).toHaveLength(1)
-        expect(ids.filter((id) => id === "scientific_capability")).toHaveLength(1)
-        expect(ids.filter((id) => id === "provider_compute")).toHaveLength(1)
         expect(ids).not.toContain("modal")
         expect(await ToolRegistry.ids()).not.toContain("modal")
 
@@ -68,19 +74,31 @@ describe("tool registry agent boundaries", () => {
     })
   })
 
-  test("keeps database tools scoped to biology without hiding the runtimes", async () => {
-    await using tmp = await tmpdir({ git: true })
+  test("a specialist's domain tools come from its own allow rules, and a configured rule unlocks too", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: { agent: { geoscience: { mode: "subagent", permission: { r: "allow", generate_image: "allow" } } } },
+    })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const agent = await Agent.get("biology")
-        const tools = await ToolRegistry.tools({ providerID: "test", modelID: "test" }, agent)
-        const ids = tools.map((tool) => tool.id)
-
+        const biology = await Agent.get("biology")
+        const ids = (await ToolRegistry.tools({ providerID: "test", modelID: "test" }, biology)).map((tool) => tool.id)
         expect(ids).toContain("python")
-        expect(ids).toContain("r")
         expect(ids).toContain("query_uniprot")
-        expect(ids).toContain("research_contract")
+        expect(ids).toContain("science_search")
+        expect(ids).not.toContain("r")
+        // Untrusted project config is inert, so the configured agent is absent
+        // here; the unlock derivation itself is what the rule contributes.
+        expect(
+          ToolVisibility.unlocks([
+            { permission: "*", pattern: "*", action: "allow" },
+            { permission: "r", pattern: "*", action: "allow" },
+            { permission: "generate_image", pattern: "*", action: "allow" },
+            { permission: "modal", pattern: "*", action: "deny" },
+            { permission: "read", pattern: "*", action: "allow" },
+          ]),
+        ).toEqual(["r", "generate_image"])
       },
     })
   })

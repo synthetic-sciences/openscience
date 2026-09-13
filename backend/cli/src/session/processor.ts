@@ -24,12 +24,10 @@ import { ManagedPricing } from "@/provider/managed-pricing"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
 import { ToolRetryGuard } from "./tool-retry-guard"
-import { SessionResearch } from "./research"
 import { SearchDedupe } from "./search-dedupe"
 import { SessionLoopState } from "./loop-state"
 import type { Tool } from "@/tool/tool"
 import { InvalidCall } from "@/tool/invalid-call"
-import { ToolSelection } from "./tool-selection"
 import { Instance } from "@/project/instance"
 import { CredentialRevocation } from "@/credentials/revocation"
 import { abortedToolPart } from "./tool-outcome"
@@ -921,39 +919,7 @@ export namespace SessionProcessor {
               },
               ...(credentialSource === "managed" && funding ? { funding } : {}),
             }
-            // The conversation-first Research agent does not create or require
-            // legacy research contracts, so an old persisted contract must not
-            // silently reintroduce bounded-run finalization or block a turn.
-            // Keep the gate for specialist/legacy agents that still opt into
-            // that contract explicitly.
-            const runtime: SessionResearch.RuntimeDecision = ToolSelection.minimalResearchAgent(streamInput.agent.name)
-              ? ({ decision: "allow" } as const)
-              : await SessionResearch.runtimePreflight(input.sessionID)
-            if (runtime.decision === "block") {
-              throw new Error(SessionResearch.exhaustionMessage(runtime))
-            }
-
-            const finalizing = runtime.decision === "finalize"
-            const finalTurn = runtime.decision === "finalize" && runtime.finalizationCall === 2
-            const textOnly = runtime.textOnly === true || finalTurn
-            const request = finalizing
-              ? {
-                  ...streamInput,
-                  // The first reserved turn may save/checkpoint work. The last
-                  // one is deliberately text-only so an agent cannot consume
-                  // the entire reserve on another tool loop and strand the user
-                  // without a usable partial result.
-                  tools: textOnly ? {} : streamInput.tools,
-                  system: [
-                    ...streamInput.system,
-                    runtime.textOnly
-                      ? `Cumulative research-runtime usage jumped directly past its hard limit (${runtime.reason ?? "configured limit reached"}). This is the single emergency finalization response. No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
-                      : finalTurn
-                        ? `This is the last reserved finalization turn for the research runtime budget (${runtime.reason ?? "configured limit reached"}). No tools are available. Return the best verified result or explicit partial result now, with the exact checkpoint or continuation state.`
-                        : `The research contract runtime budget is at its finalization boundary (${runtime.reason ?? "configured limit reached"}). Do not open new branches or launch optional work. Preserve machine outputs and return the best verified result or explicit partial result now.`,
-                  ],
-                }
-              : streamInput
+            const request = streamInput
             const stream = await Provider.withRequestContext(requestContext, () =>
               LLM.stream({
                 ...request,

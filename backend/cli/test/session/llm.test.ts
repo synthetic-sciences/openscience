@@ -81,66 +81,49 @@ function questionTool() {
 }
 
 describe("session.llm.responseStructure", () => {
-  test("default Research carries the same response defaults in standard and Codex instructions", async () => {
+  test("default Research takes the model-family header, once, on both transports", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const research = await Agent.get("research")
         expect(research).toBeDefined()
-        const input = { agent: research!, model: testModel(true) }
+        expect(research!.prompt).toBeUndefined()
+        const model = testModel(true)
+        const input = { agent: research!, model }
         const standard = LLM.prompts(input)
         const codex = LLM.prompts(input, true)
+        const header = SystemPrompt.header(model)
 
-        expect(standard.system).toEqual([research!.prompt!])
+        expect(standard.system).toEqual([header])
         expect(standard.instructions).toBeUndefined()
         expect(codex.system).toEqual([])
-        expect(codex.instructions).toBe(research!.prompt)
-        const prompt = research!.prompt!.replace(/\s+/g, " ")
-        expect(prompt).toContain("collaborative research agent")
+        expect(codex.instructions).toBe(header)
+        const prompt = header.replace(/\s+/g, " ")
+        expect(prompt).toContain("You are OpenScience")
+        expect(prompt).not.toContain(SystemPrompt.SCIENCE_SLOT)
+        expect(prompt).toContain("# Methods and deliverables")
         expect(prompt.match(/## Response structure/g)).toHaveLength(1)
         expect(prompt).toContain("These are writing defaults, not length limits.")
-        expect(prompt).toContain("Follow the user's requested format and depth")
-        expect(prompt).toContain("the active agent's specific output contract")
-        expect(prompt).toContain("a complete document overrides the preference for a brief summary")
-        expect(prompt).toContain("deeper investigation does not require a longer final answer")
-        expect(prompt).toContain("Leave blank lines around headings, lists, tables, and fenced code")
-        expect(prompt).toContain("unless the user requests its full text there")
-        expect(prompt).toContain("only after a successful tool result confirms it")
-        expect(prompt).toContain("never invent a file link or completed action")
-        expect(prompt).toContain("Do not create files merely to shorten an answer")
-        expect(prompt).toContain("keep requested long-form content complete")
         expect(input.model.options).toEqual({})
       },
     })
   })
 
   test.each([
-    { label: "base", direct: false, inspection: false, required: "local-first Research agent" },
-    { label: "direct", direct: true, inspection: false, required: "Answer this short conceptual question directly" },
-    { label: "inspection", direct: false, inspection: true, required: "Do not modify files" },
-  ])("$label instructions preserve their scope and transport parity", ({ direct, inspection, required }) => {
-    const input = {
-      agent: { name: "write", mode: "subagent", options: {}, permission: [] } satisfies Agent.Info,
-      model: testModel(true),
-      direct,
-      inspection,
-    }
-    const standard = LLM.prompts(input)
-    const codex = LLM.prompts(input, true)
-    const expected = SystemPrompt.instructions(direct, inspection)
-
-    expect(standard.system).toEqual([expected])
-    expect(codex.system).toEqual([])
-    expect(codex.instructions).toBe(expected)
-    expect(expected).toContain(required)
-    if (direct || inspection) {
-      expect(expected.length).toBeLessThan(350)
-      expect(expected).not.toContain("## Response structure")
-      return
-    }
-    expect(expected.match(/## Response structure/g)).toHaveLength(1)
-    expect(expected).toContain("These are writing defaults, not length limits.")
+    ["anthropic/claude-fable-5.1", "anthropic"],
+    ["openai/gpt-6-astra", "gpt-astra"],
+    ["openai/gpt-5.6-sol", "gpt"],
+    ["openai/gpt-5.6-codex", "codex"],
+    ["openai/gpt-4.1", "gpt"],
+    ["google/gemini-3.8-flash", "gemini"],
+    ["moonshot/kimi-k3", "default"],
+  ] as const)("%s routes to the %s family with the shared science block", (id, family) => {
+    const apiID = id.split("/")[1]
+    expect(SystemPrompt.family(apiID)).toBe(family)
+    const header = SystemPrompt.header({ api: { id: apiID } })
+    expect(header).toContain(SystemPrompt.science())
+    expect(header).not.toContain(SystemPrompt.SCIENCE_SLOT)
   })
 
   test("explicit custom Research instructions replace the built-in defaults unchanged on both transports", async () => {
@@ -240,8 +223,9 @@ describe("session.llm.responseStructure", () => {
         init: trustProject,
         fn: async () => {
           const research = await Agent.get("research")
-          if (!research?.prompt) throw new Error("missing Research prompt")
+          if (!research) throw new Error("missing Research agent")
           const model = await Provider.getModel("openai-codex", "gpt-5.4")
+          const expected = SystemPrompt.header(model)
           const provider = await Provider.getProvider(model.providerID)
           // Fail before starting a stream if the fixture transport was not loaded.
           expect(provider.options.baseURL).toBe(`${server.url.href}v1`)
@@ -283,9 +267,9 @@ describe("session.llm.responseStructure", () => {
           expect(errors).toHaveLength(1)
           expect(String(errors[0])).toContain("local request captured")
           expect(captured).toHaveLength(1)
-          expect(captured[0].instructions).toBe(research.prompt)
+          expect(captured[0].instructions).toBe(expected)
           const conversation = JSON.stringify(captured[0].input)
-          expect(conversation).not.toContain("collaborative research agent")
+          expect(conversation).not.toContain("You are OpenScience")
           for (const marker of [
             "ENVIRONMENT_MARKER",
             "SKILL_MARKER",
@@ -301,7 +285,7 @@ describe("session.llm.responseStructure", () => {
             messages: [],
             model,
             tools: {},
-            system: [research.prompt, ...context, research.prompt],
+            system: [expected, ...context, expected],
           })
           const after = await SessionPrompt.contextPreflight({
             current,
@@ -310,7 +294,7 @@ describe("session.llm.responseStructure", () => {
             tools: {},
             system: [...header.system, ...context, header.instructions!],
           })
-          expect(before.total - after.total).toBe(Token.estimate(research.prompt))
+          expect(before.total - after.total).toBe(Token.estimate(expected))
           const manifest = await SessionHarness.snapshot({
             agent: research,
             provider: model.providerID,
@@ -320,8 +304,8 @@ describe("session.llm.responseStructure", () => {
             tools: {},
           })
           expect(manifest.systemBytes).toBe(Buffer.byteLength(context.join("\n")))
-          expect(manifest.instructionsBytes).toBe(Buffer.byteLength(research.prompt))
-          expect(manifest.contractBytes).toBe(Buffer.byteLength(assembled) + Buffer.byteLength(research.prompt))
+          expect(manifest.instructionsBytes).toBe(Buffer.byteLength(expected))
+          expect(manifest.contractBytes).toBe(Buffer.byteLength(assembled) + Buffer.byteLength(expected))
         },
       })
     } finally {

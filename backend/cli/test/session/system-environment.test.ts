@@ -51,17 +51,6 @@ describe("session environment prompt", () => {
     })
   })
 
-  test("core prompt requires durable state without model-invented research ceilings", () => {
-    const prompt = SystemPrompt.instructions()
-
-    expect(prompt).toContain("You are OpenScience, a local-first Research agent.")
-    expect(prompt).toContain("Before costly multi-stage work, define and maintain `research_contract`")
-    expect(prompt).toContain("save required Results")
-    expect(prompt).toContain("Never set a `max_*` field unless the user gave that exact numeric limit")
-    expect(prompt).toContain("Create user-visible provenance records only when explicitly requested")
-    expect(prompt).toContain("Use the default tool working directory described by the environment")
-  })
-
   test.each(["isolated", "project"] as const)(
     "%s workspace guidance reflects durable authority without changing trust or permissions",
     async (workspace) => {
@@ -88,7 +77,7 @@ describe("session environment prompt", () => {
             const before = await ExecutionAuthority.decide({ sessionID: session.id, capability: "shell" })
             const trust = await ProjectTrust.status(Instance.project)
             const prompt = [
-              SystemPrompt.instructions(),
+              SystemPrompt.header({ api: { id: "test" } }),
               ...(await SystemPrompt.environment({ api: { id: "test" }, providerID: "test" }, session.id)),
             ].join("\n")
 

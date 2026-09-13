@@ -1,0 +1,5 @@
+Load skill({name:"reproduce"}) and reproduce the result described below.
+
+Start from the stated claim, dataset and method; write the deliverables checklist first (the numbers or artifacts that would confirm the reproduction, with tolerances); implement the specified chain rather than a proxy; fix seeds and thread counts; record every deviation from the original setup; and report the reproduced values beside the originals with the difference and its likely cause. Partial reproduction is reported as partial with the gap named.
+
+$ARGUMENTS

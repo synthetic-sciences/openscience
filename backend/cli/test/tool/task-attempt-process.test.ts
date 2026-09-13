@@ -169,7 +169,7 @@ async function seed(directory: string, options?: { eagerParentPlaceholder?: bool
           input: {
             description: "Durable restart fixture",
             prompt: options?.prompt ?? "Return the deterministic child result.",
-            subagent_type: "execute",
+            subagent_type: "data",
             ...(options?.eagerParentPlaceholder ? { session_id: parent.id } : {}),
           },
           time: { start: Date.now() },
@@ -199,7 +199,7 @@ async function wrapped(directory: string, interrupted = false) {
         parts: [
           {
             type: "subtask",
-            agent: "execute",
+            agent: "data",
             description: "Durable wrapper fixture",
             prompt: "Return the deterministic parent continuation.",
             command: "fixture",
@@ -215,8 +215,8 @@ async function wrapped(directory: string, interrupted = false) {
         sessionID: session.id,
         parentID: user.info.id,
         role: "assistant",
-        mode: "execute",
-        agent: "execute",
+        mode: "data",
+        agent: "data",
         path: { cwd: directory, root: directory },
         modelID: STRESS_PROVIDER_MODEL,
         providerID: STRESS_PROVIDER_ID,
@@ -228,7 +228,7 @@ async function wrapped(directory: string, interrupted = false) {
       const input = {
         description: source.description,
         prompt: source.prompt,
-        subagent_type: "execute" as const,
+        subagent_type: "data" as const,
         command: source.command,
       }
       await Session.updatePart(
@@ -293,14 +293,14 @@ describe("durable Task attempts across Bun processes", () => {
     const params = {
       description: "Stable fingerprint fixture",
       prompt: "Keep this semantic input stable.",
-      subagent_type: "execute",
+      subagent_type: "data",
       specialist: "ml",
       session_id: "ses_stable_fingerprint_fixture",
     }
     const reordered = {
       session_id: "ses_stable_fingerprint_fixture",
       specialist: "ml",
-      subagent_type: "execute",
+      subagent_type: "data",
       prompt: "Keep this semantic input stable.",
       description: "Stable fingerprint fixture",
     }
@@ -533,7 +533,7 @@ describe("durable Task attempts across Bun processes", () => {
           const params = {
             description: "Durable restart fixture",
             prompt,
-            subagent_type: "execute" as const,
+            subagent_type: "data" as const,
           }
           await TaskAttempt.reserve({ ...identity, fingerprint: TaskAttempt.fingerprint(params) })
           await TaskAttempt.complete({
@@ -622,7 +622,7 @@ describe("durable Task attempts across Bun processes", () => {
           const normalized = {
             description: "Durable restart fixture",
             prompt: "Return the deterministic child result.",
-            subagent_type: "execute" as const,
+            subagent_type: "data" as const,
             session_id: undefined,
           }
           await TaskAttempt.reserve({ ...identity, fingerprint: TaskAttempt.fingerprint(normalized) })

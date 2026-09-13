@@ -1,0 +1,5 @@
+Load skill({name:"literature-review"}) and run a focused literature review of the question below.
+
+Size it to the request: two or three targeted literature searches, the three to five closest papers read by DOI or arXiv id, the concrete missing comparison named, one follow-up search only if that gap matters. Every attributed finding comes from a paper you read, linked by DOI or arXiv id, preprints marked. Close with what changes for the current work.
+
+$ARGUMENTS

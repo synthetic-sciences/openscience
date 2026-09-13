@@ -1,0 +1,3 @@
+Search this session's own past by regular expression: every earlier message and tool result, including turns that compaction summarized out of the current context, and the full text of tool outputs that were truncated and saved. Returns each match with where it occurred and its character offset, plus an excerpt.
+
+Use it to recover an exact number, path, command, identifier or error string you saw earlier instead of re-running the work or asking. It does not search the filesystem or the web; use grep, read, literature or webfetch for those.

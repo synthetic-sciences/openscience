@@ -616,6 +616,53 @@ export namespace SessionFilesystem {
   }
 
   /** Internal exact-file capability for app-managed truncated tool output. */
+  /**
+   * A delegated child works in its parent's directory: the same tool working
+   * directory, read and write, so the files it produces are the parent's
+   * deliverables without a handoff step. Only a direct child in the same
+   * project can receive the grant, and only for the parent's current working
+   * directory; no other session or external path can be named.
+   */
+  export async function shareWorkingDirectory(input: { parentSessionID: string; childSessionID: string }) {
+    const [parent, child] = await Promise.all([ensure(input.parentSessionID), ensure(input.childSessionID)])
+    if (parent.projectID !== child.projectID || parent.directory !== child.directory) {
+      throw new DeniedError({ sessionID: input.childSessionID, path: parent.directory, access: "write" })
+    }
+    const target = await toolDirectory(input.parentSessionID)
+    if (target === (await toolDirectory(input.childSessionID))) return
+    const grant: Grant = {
+      id: `fsg_${crypto.randomUUID()}`,
+      path: target,
+      access: "write",
+      scope: "session",
+      source: "api",
+      time: { created: Date.now() },
+    }
+    const result = await Storage.update<State>(key(input.childSessionID), (draft) => {
+      // Only an api-sourced grant can be the working root; a project-root
+      // grant on the same path does not qualify, so add ours beside it.
+      const duplicate = draft.grants.find(
+        (item) =>
+          item.source === "api" &&
+          item.path === target &&
+          item.access === "write" &&
+          item.scope === "session" &&
+          !item.time.revoked,
+      )
+      if (duplicate) {
+        grant.id = duplicate.id
+        grant.time = duplicate.time
+      } else {
+        draft.grants.push(grant)
+      }
+      draft.workingRoot = target
+      draft.revision++
+    })
+    const stored = result.grants.find((item) => item.id === grant.id) ?? grant
+    await changed(input.childSessionID, Instance.project.id, stored)
+    return stored
+  }
+
   export async function grantToolOutput(input: { sessionID: string; path: string }) {
     const state = await ensure(input.sessionID)
     const root = await canonical(input.path)

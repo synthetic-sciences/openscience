@@ -1,183 +1,83 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
+import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SystemPrompt } from "../../src/session/system"
-import { DELEGATION_PROFILES, MAX_CHILD_AGENTS, isComputeDelegationProfile } from "../../src/tool/task"
 import { tmpdir } from "../fixture/fixture"
 
 const root = new URL("../../src/", import.meta.url)
 const read = (path: string) => Bun.file(new URL(path, root)).text()
-const webFetchFolderDownload = 'output_path:"foo.pdf"'
-const webFetchFolderMove = "mkdir -p -- 'papers' && test ! -e 'papers/foo.pdf' && mv -- 'foo.pdf' 'papers/foo.pdf'"
 
-test("every WebFetch instruction teaches one root-download then sandboxed-move sequence", async () => {
-  const prompts = await Promise.all([
-    read("session/prompt/core.txt"),
-    read("agent/prompt/research.txt"),
-    read("tool/webfetch.txt"),
-  ])
-  for (const prompt of prompts) {
-    expect(prompt).toContain(webFetchFolderDownload)
-    expect(prompt).toContain(webFetchFolderMove)
-    expect(prompt).toContain("only after")
-    expect(prompt).toContain("live free disk")
-    expect(prompt).not.toContain("max_bytes")
-    expect(prompt).not.toContain("declared_size")
+/** Each family file may grow at most 25 lines over its OpenCode counterpart. */
+const BUDGET: Record<SystemPrompt.Family, number> = {
+  anthropic: 105 + 25,
+  "gpt-astra": 46 + 25,
+  gpt: 107 + 25,
+  codex: 79 + 25,
+  gemini: 155 + 25,
+  default: 95 + 25,
+}
+
+const FAMILIES = Object.keys(BUDGET) as SystemPrompt.Family[]
+
+test("every family file carries the science slot once and stays within its size budget", async () => {
+  for (const family of FAMILIES) {
+    const text = await read(`agent/prompt/${family}.txt`)
+    expect(text.split(SystemPrompt.SCIENCE_SLOT)).toHaveLength(2)
+    expect(text.split("\n").length).toBeLessThanOrEqual(BUDGET[family])
+    expect(text.startsWith("You are OpenScience")).toBe(true)
+    for (const forbidden of [/OpenCode/, /ctrl\+p/i, /GitHub issue/i, /frontend design/i]) {
+      expect(text).not.toMatch(forbidden)
+    }
   }
 })
 
-test("context overflow compacts into an explicit resume turn", async () => {
-  const [processor, compaction] = await Promise.all([read("session/processor.ts"), read("session/compaction.ts")])
-  expect(processor).toContain("SessionRetry.isContextOverflow(error)")
-  expect(processor).toContain('input.assistantMessage.finish = "compact"')
-  expect(compaction).toContain("Continue from the 'Next Move' in the handoff above")
-  expect(compaction).toContain('return "continue"')
+test.each([
+  ["claude-fable-5.1", "anthropic"],
+  ["gpt-6-astra", "gpt-astra"],
+  ["gpt-5.6-sol", "gpt"],
+  ["gpt-5.6-codex", "codex"],
+  ["gemini-3.8-flash", "gemini"],
+  ["unknown-model-x", "default"],
+] as const)("%s selects the %s header with the science block filled and response defaults appended", (id, family) => {
+  expect(SystemPrompt.family(id)).toBe(family)
+  const header = SystemPrompt.header({ api: { id } })
+  expect(header).not.toContain(SystemPrompt.SCIENCE_SLOT)
+  expect(header).toContain(SystemPrompt.science())
+  expect(header.match(/## Response structure/g)).toHaveLength(1)
 })
 
-test("every provider receives one compact product operating contract", async () => {
-  const instructions = SystemPrompt.instructions()
-  expect(SystemPrompt.provider(undefined as never)[0]?.trim()).toBe(instructions)
-  // Preserve the operating-core budget while accounting for the shared,
-  // separately bounded response-structure defaults.
-  expect((await read("session/prompt/core.txt")).length).toBeLessThan(4_000)
-  expect((await read("session/prompt/response.txt")).length).toBeLessThan(1_600)
-  expect(instructions.length).toBeLessThan(5_600)
-  expect(instructions).toContain("Keep simple work simple")
-  expect(instructions).toContain("Optional graph tools may help")
-  expect(instructions).toContain("Default to no children")
-  expect(instructions).toContain("Explore or Execute")
-  expect(instructions).not.toContain("Explore, Execute, or Review")
-  expect(instructions).toContain("large or binary scientific data")
-  expect(instructions).toContain("output_path")
-  expect(instructions).toContain("Group related file edits in one `apply_patch` call")
-  expect(instructions).toContain("preflights every file and rolls back on failure")
-  expect(instructions).toContain("qpdf or Tectonic")
-  expect(instructions).not.toContain("data once with Shell")
-  expect(instructions).toContain("immutable release")
-  expect(instructions).not.toContain("shared keys")
-  expect(instructions).not.toContain("project init")
-})
-
-test("direct answers receive a compact truth-preserving core", () => {
-  const instructions = SystemPrompt.instructions(true)
-  expect(SystemPrompt.provider(undefined as never, true)[0]?.trim()).toBe(instructions)
-  expect(instructions.length).toBeLessThan(350)
-  expect(instructions).toContain("You are OpenScience")
-  expect(instructions).toContain("requested format")
-  expect(instructions).toContain("Do not plan, use tools, delegate, search")
-  expect(instructions).toContain("uncertainty")
-})
-
-test("read-only inspections receive a compact evidence-preserving core", () => {
-  const instructions = SystemPrompt.instructions(false, true)
-  expect(SystemPrompt.provider(undefined as never, false, true)[0]?.trim()).toBe(instructions)
-  expect(instructions.length).toBeLessThan(350)
-  expect(instructions).toContain("You are OpenScience")
-  expect(instructions).toContain("requested local files")
-  expect(instructions).toContain("observed")
-  expect(instructions).toContain("Do not modify files")
-})
-
-test("the primary, domain, and specialist prompts stay adaptive instead of procedural", async () => {
-  const [research, direct, ml, biology, physics, write, explore] = await Promise.all([
-    read("agent/prompt/research.txt"),
-    read("session/prompt/direct.txt"),
-    read("agent/prompt/ml.txt"),
-    read("agent/prompt/biology.txt"),
-    read("agent/prompt/physics.txt"),
-    read("agent/prompt/write.txt"),
-    read("agent/prompt/explore.txt"),
-  ])
-  for (const prompt of [research, ml, biology, physics, write, explore]) {
-    expect(prompt.length).toBeLessThan(4_000)
-    expect(prompt).not.toContain("literature-review.md")
-    expect(prompt).not.toContain("reasoning.md")
-    expect(prompt).not.toContain("methodology.md")
-    expect(prompt).not.toContain("Create/link the graph")
+test("the science sections are byte-identical across families", () => {
+  const science = SystemPrompt.science()
+  for (const family of FAMILIES) {
+    const header = SystemPrompt.header({ api: { id: family === "default" ? "unknown" : `${family}-model` } })
+    expect(header.split(science)).toHaveLength(2)
   }
-  expect(research).toContain("Answer a direct question directly")
-  expect(research).toContain("Default to zero children")
-  expect(research).toContain("Optional graph state is never")
-  expect(research).toContain("lazy skills")
-  expect(research).toContain("bounded pages")
-  expect(research).toContain("claim/evidence matrix")
-  expect(research).toContain("output_path")
-  expect(research).toContain("Group related file edits in one `apply_patch` call")
-  expect(research).toContain("preflights every file and rolls back on failure")
-  expect(research).toContain("qpdf or Tectonic")
-  expect(research).toContain("optional binaries as capabilities")
-  expect(research).toContain("never\n  convert failed candidates to NaN")
-  expect(research).toContain("without a filtering pipeline")
-  expect(direct.length).toBeLessThan(300)
-  expect(direct).toContain("Do not plan, use tools, delegate, search")
-  expect(direct).toContain("requested format")
-  expect(research).not.toContain("data once to the workspace with Shell")
-  expect(research).toContain("immutable data release")
-  expect(ml).toContain("simplest method")
-  expect(biology).toContain("multiple testing")
-  expect(physics).toContain("dimensional consistency")
-  expect(write).toContain("Do not invent a report")
-  expect(write).toContain("format-only task")
-  expect(write).not.toContain("Every document MUST")
-  expect(write).not.toContain("minimum 5 figures")
-  expect(explore).toContain("Stay read-only")
-  expect(explore).not.toContain("copying, moving")
+  for (const section of ["# Evidence and files", "# Methods and deliverables", "# Manuscripts and figures"]) {
+    expect(science).toContain(section)
+  }
 })
 
-test("ordinary literature reviews stay conversational instead of becoming report pipelines", async () => {
-  const [skill, specialist] = await Promise.all([
-    Bun.file(new URL("../../skills/core/literature-review/SKILL.md", import.meta.url)).text(),
-    read("agent/prompt/literature-review.txt"),
-  ])
-  expect(skill).toContain("Systematic or scoping review** (only when asked)")
-  expect(skill).toContain("Stop there; depth is not requested")
-  expect(skill).toContain("Never hand the loop to a worker")
-  expect(skill).not.toContain("Every literature review MUST")
-  expect(specialist).toContain("Default to the narrative path")
-  expect(specialist).toContain("do not enter this workflow")
-  expect(specialist).not.toContain("Before ANY literature search")
-})
-
-test("delegation is lead-owned, capacity-bound, flat, and observable", async () => {
-  const [prompt, source, core, research, processor] = await Promise.all([
-    read("tool/task.txt"),
-    read("tool/task.ts"),
-    read("session/prompt/core.txt"),
-    read("agent/prompt/research.txt"),
-    read("session/processor.ts"),
-  ])
-  expect(DELEGATION_PROFILES).toEqual(["explore", "execute"])
-  expect(MAX_CHILD_AGENTS).toBeGreaterThanOrEqual(2)
-  expect(DELEGATION_PROFILES.filter(isComputeDelegationProfile)).toEqual(["execute"])
-  expect(["biology", "ml", "physics"].some(isComputeDelegationProfile)).toBe(false)
-  expect(prompt).toContain("one independent branch per worker")
-  expect(prompt).toContain("is the lead's job, not a task")
-  expect(prompt).toContain("a bound (files, steps or minutes)")
-  expect(prompt).toContain("Workers read your workspace but write only in their own")
-  expect(prompt).toContain("Issue independent calls together")
-  expect(prompt).toContain("Only the lead dispatches workers")
-  expect(prompt).toContain("Children cannot")
-  expect(prompt).toContain("decision-ready handoff")
-  expect(core).not.toMatch(/Normal .*(?:two|2).*Task/i)
-  expect(research).not.toMatch(/Ultra .*(?:four|4).*Task/i)
-  expect(prompt).not.toContain("trusted")
-  expect(source).toContain("durationMs")
-  expect(source).toContain("failedToolCalls")
-  expect(source).toContain("usage")
-  expect(source).not.toContain("taskDispatchBudget")
-  expect(source).not.toContain("TASK_WALL_CLOCK_MS")
-  expect(source).toContain("system: childGuidance")
-  expect(source).toContain("task: false")
-  expect(source).toContain("delegation: false")
-  expect(source).toContain("assertLeadDelegationSession")
-  expect(source).not.toContain("Delegation is unavailable")
-  expect(source).not.toContain("under 1,200 words")
-  expect(source).toContain("Your final response is a decision-ready handoff")
-  expect(source).toContain("handoff: handoff.text")
-  expect(processor).not.toContain("stopped after the same")
-  expect(source).not.toContain('"<system-reminder>",\n          `Research effort is')
-  expect(source).not.toContain("<task_result>")
+test("specialist prompts render the science block and their domain skill index", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const biology = await Agent.get("biology")
+      expect(biology?.prompt).toContain(SystemPrompt.SCIENCE_SLOT)
+      expect(biology?.prompt).toContain(SystemPrompt.DOMAIN_SKILLS_SLOT)
+      expect(biology?.skills).toEqual(["biology", "databases"])
+      const rendered = await SystemPrompt.render(biology!)
+      expect(rendered.prompt).not.toContain(SystemPrompt.SCIENCE_SLOT)
+      expect(rendered.prompt).not.toContain(SystemPrompt.DOMAIN_SKILLS_SLOT)
+      expect(rendered.prompt).toContain("# Methods and deliverables")
+      expect(rendered.prompt).toContain("biology specialist")
+      // An agent without a prompt is returned untouched: it takes the family header.
+      const research = await Agent.get("research")
+      expect(await SystemPrompt.render(research!)).toBe(research)
+    },
+  })
 })
 
 test("durable child prompts resolve referenced context into prompt parts", async () => {

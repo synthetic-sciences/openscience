@@ -11,12 +11,13 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { Todo } from "../../src/session/todo"
 import { tmpdir, trustProject } from "../fixture/fixture"
 
-const names = ["init", "plan", "goal", "stop", "resume", "compact", "handoff", "checkpoint"]
-const workflows = ["review", "compare", "export"]
+const names = ["init", "plan", "goal", "review", "reproduce", "literature", "stop", "compact", "handoff", "checkpoint"]
+// /review is a command again; compare and export stay library skills.
+const workflows = ["compare", "export"]
 // /verify, /reproduce and /sources became the sources and reproduce core skills.
-const coreWorkflows = { verify: "sources", reproduce: "reproduce", sources: "sources" }
+const coreWorkflows = { verify: "sources", sources: "sources" }
 const actions = ["init", "stop", "handoff", "checkpoint"]
-const primary = ["compact", "plan", "goal", "resume"]
+const primary = ["compact", "plan", "goal"]
 const retiredGraphSkills = ["initialize-atlas-graph", "initialize-research-graph"]
 
 async function seed(sessionID: string) {
@@ -63,8 +64,11 @@ describe("research slash commands", () => {
         expect(commands.has("status")).toBe(false)
         expect(commands.has("context")).toBe(false)
         expect(commands.get("stop")?.menu).toBe(true)
-        expect(commands.get("resume")?.menu).toBe(true)
-        expect(commands.get("resume")?.category).toBe("research")
+        expect(commands.has("resume")).toBe(false)
+        expect(await commands.get("review")?.template).toContain('skill({name:"peer-review"})')
+        expect(await commands.get("reproduce")?.template).toContain('skill({name:"reproduce"})')
+        expect(await commands.get("literature")?.template).toContain('skill({name:"literature-review"})')
+        expect(await commands.get("init")?.template).toContain("Deliverables")
         expect(commands.get("checkpoint")?.menu).toBe(true)
         expect(commands.get("checkpoint")?.category).toBe("session")
         expect(await commands.get("checkpoint")?.template).toBe("")
@@ -234,15 +238,6 @@ describe("research slash commands", () => {
         expect(goal.info.role === "assistant" ? goal.info.cost : -1).toBe(0)
         expect(goalText?.type === "text" ? goalText.ignored : false).toBe(true)
         expect(goalText?.type === "text" ? goalText.text : "").toContain("Describe the objective after `/goal`.")
-
-        const resume = await SessionPrompt.command({
-          sessionID: session.id,
-          command: "resume",
-          arguments: "",
-        })
-        const resumeText = resume.parts.find((part) => part.type === "text")
-        expect(resume.info.role === "assistant" ? resume.info.cost : -1).toBe(0)
-        expect(resumeText?.type === "text" ? resumeText.text : "").toContain("No research contract is active")
 
         const checkpoint = await SessionPrompt.command({
           sessionID: session.id,

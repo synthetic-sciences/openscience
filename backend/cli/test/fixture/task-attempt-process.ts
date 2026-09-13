@@ -53,7 +53,7 @@ if (mode === "loop-parent") {
       const params = {
         description: "Durable active budget fixture",
         prompt: "Exercise active-only budget accounting.",
-        subagent_type: "execute",
+        subagent_type: "data",
       }
       await TaskAttempt.reserve({
         ...identity,
@@ -130,7 +130,7 @@ if (mode === "loop-parent") {
         {
           description: "Durable restart fixture",
           prompt: "Return the deterministic child result.",
-          subagent_type: "execute",
+          subagent_type: "data",
         },
         {
           sessionID: parentID,

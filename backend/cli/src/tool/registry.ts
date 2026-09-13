@@ -3,11 +3,9 @@ import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
-import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
-import { TodoWriteTool, TodoReadTool } from "./todo"
-import { PlanWriteTool } from "./planwrite"
+import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
@@ -28,25 +26,25 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
 import { ApplyPatchTool } from "./apply_patch"
-import { BiologyTools, BIOLOGY_TOOL_IDS } from "./biology"
+import { BiologyTools } from "./biology"
 import { ArtifactTool } from "./artifact"
 import { ScienceTools } from "./science"
 import { LiteratureTool } from "./literature"
-import { ProvenanceTools } from "./provenance"
 import { NotebookTool, PythonTool } from "./notebook"
 import { RKernelTool, RTool } from "./rkernel"
 import { ModalTool } from "./modal"
 import { ComputeJobTool } from "./compute-job"
 import { ExperimentsTool } from "./experiments"
 import { StudyTool } from "./study"
-import { ScientificCapabilityTool } from "./scientific-capability"
-import { ResearchContractTool } from "./research-contract"
 import { State } from "@/project/state"
 import { ProjectTrust } from "@/project/trust"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { GenerateImageTool } from "./generate-image"
 import { ProviderComputeTool } from "./provider-compute"
 import { Identifier } from "../id/id"
+import { RecallTool } from "./recall"
+import { ToolVisibility } from "./visibility"
+import { researchSearchConfigured } from "./research-search"
 
 const pluginResult = z
   .object({
@@ -182,7 +180,6 @@ export namespace ToolRegistry {
 
   async function all(): Promise<Tool.Info[]> {
     const custom = await state().then((x) => x.custom)
-    const config = await Config.get()
 
     return [
       InvalidTool,
@@ -195,27 +192,23 @@ export namespace ToolRegistry {
       WriteTool,
       TaskTool,
       WebFetchTool,
-      ...(config.experimental?.plan_mode === true ? [PlanWriteTool] : [TodoWriteTool]),
-      TodoReadTool,
+      TodoWriteTool,
       ResearchSearchTool,
       CodeSearchTool,
       SkillTool,
       ApplyPatchTool,
+      RecallTool,
       ...(Flag.OPENSCIENCE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
-      ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENSCIENCE_EXPERIMENTAL_PLAN_MODE && Flag.OPENSCIENCE_CLIENT === "cli"
         ? [PlanExitTool, PlanEnterTool]
         : []),
       ...BiologyTools,
       ...ScienceTools,
       LiteratureTool,
-      ...ProvenanceTools,
       PythonTool,
       RTool,
       GenerateImageTool,
       ArtifactTool,
-      ResearchContractTool,
-      ScientificCapabilityTool,
       ComputeJobTool,
       ProviderComputeTool,
       ExperimentsTool,
@@ -223,11 +216,6 @@ export namespace ToolRegistry {
       ...custom.filter((tool) => !compatibility.has(tool.id) && tool.id !== PythonTool.id && tool.id !== RTool.id),
     ]
   }
-
-  const ARTIFACT_TOOL_ID = "artifact"
-  const ARTIFACT_AGENTS = ["research", "biology", "physics", "ml", "explore", "execute", "researchagent-test"]
-
-  const COMPUTE_AGENTS = ["research", "biology", "physics", "ml"]
 
   export async function ids() {
     return all().then((x) => x.map((t) => t.id))
@@ -264,6 +252,12 @@ export namespace ToolRegistry {
     return (await tools(model, agent)).find((tool) => tool.id === id)
   }
 
+  /** GPT-family models edit through `apply_patch`; everyone else through
+   * `edit` and `write`. OpenCode's rule, by wire model id. */
+  export function usesPatch(modelID: string) {
+    return modelID.includes("gpt-") && !modelID.includes("oss") && !modelID.includes("gpt-4")
+  }
+
   export async function tools(
     model: {
       providerID: string
@@ -277,7 +271,8 @@ export namespace ToolRegistry {
      * makes its query tools callable without switching agents. */
     unlocked: ReadonlySet<string> = new Set(),
   ) {
-    const tools = await all()
+    const [tools, extensions, searchable] = await Promise.all([all(), customIDs(), researchSearchConfigured()])
+    const usePatch = usesPatch(model.modelID)
     const result = await Promise.all(
       tools
         .filter((t) => {
@@ -285,46 +280,15 @@ export namespace ToolRegistry {
           // descriptions. Disabled tools should contribute neither that startup
           // work nor a model-facing contract.
           if (!enabled(t.id)) return false
-
-          // Biology database tools: the biology agent's by default, and any
-          // agent's once a skill that declares them has been loaded.
-          if (BIOLOGY_TOOL_IDS.has(t.id)) {
-            return agent?.name === "biology" || unlocked.has(t.id)
-          }
-
-          // Artifact tool: only for artifact-oriented scientific agents.
-          if (t.id === ARTIFACT_TOOL_ID) {
-            return !!agent?.name && ARTIFACT_AGENTS.includes(agent.name)
-          }
-
-          if (
-            t.id === "compute_job" ||
-            t.id === "scientific_capability" ||
-            t.id === "provider_compute" ||
-            t.id === "study" ||
-            t.id === "experiments"
-          ) {
-            return !!agent?.name && (COMPUTE_AGENTS.includes(agent.name) || agent.name === "researchagent-test")
-          }
-
-          if (t.id === "research_contract") {
-            return !!agent?.name && COMPUTE_AGENTS.includes(agent.name)
-          }
-
+          if (t.id === "apply_patch") return usePatch
+          if (t.id === "edit" || t.id === "write") return !usePatch
+          // Without a search provider the tool can only report that it is
+          // unavailable; a description the model cannot follow is noise.
+          if (t.id === "research_search") return searchable
           // Community code search retains its existing provider/flag rule.
-          // `research_search` uses Firecrawl BYOK or the selected Ace Wallet.
-          if (t.id === "codesearch") {
-            return Flag.OPENSCIENCE_ENABLE_EXA
-          }
-
-          // use apply tool in same format as codex
-          const usePatch =
-            model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
-          const thin = agent?.name === "researchagent-test"
-          if (t.id === "apply_patch") return thin || usePatch
-          if (t.id === "edit" || t.id === "write") return !thin && !usePatch
-
-          return true
+          if (t.id === "codesearch") return Flag.OPENSCIENCE_ENABLE_EXA
+          if (!agent) return true
+          return ToolVisibility.offered(t.id, { agent, unlocked, extensions })
         })
         .map(async (t) => {
           const started = Date.now()

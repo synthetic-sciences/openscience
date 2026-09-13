@@ -230,4 +230,32 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  /**
+   * Lines a plugin adds inside the `<env>` block of every provider request for
+   * this session (compute limits, time budget, spend). Keep each line short.
+   */
+  "env.lines"?: (input: { sessionID: string; model: Model }, output: { lines: string[] }) => Promise<void>
+  /**
+   * The model returned a final answer with no tool calls. A plugin may set
+   * `message` to inject it as a continuation and keep the loop running; the
+   * loop bounds how many times this can happen per turn.
+   */
+  "loop.before_finish"?: (
+    input: { sessionID: string; messageID: string; turn: number; injections: number },
+    output: { message?: string },
+  ) => Promise<void>
+  /**
+   * A repetition guard tripped: repeated text, an output-limit stall, or the
+   * same tool failing repeatedly. A plugin may set `message` to redirect the
+   * model instead of stopping; without one the loop stops as it always did.
+   */
+  "loop.guard"?: (
+    input: {
+      sessionID: string
+      kind: "text_loop" | "output_stall" | "tool_errors" | "repeated_call"
+      tool?: string
+      trips: number
+    },
+    output: { message?: string },
+  ) => Promise<void>
 }

@@ -1,241 +1,299 @@
 import { describe, expect, test } from "bun:test"
-import fs from "fs/promises"
-import path from "path"
+import { availableParallelism } from "node:os"
+import { Config } from "../../src/config/config"
 import { Identifier } from "../../src/id/id"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
-import { GrepTool } from "../../src/tool/grep"
-import { ReadTool } from "../../src/tool/read"
-import { materializeTaskToolOutputs } from "../../src/tool/task"
-import { Truncate } from "../../src/tool/truncation"
-import type { PermissionNext } from "../../src/permission/next"
+import type { MessageV2 } from "../../src/session/message-v2"
+import { TaskAttempt } from "../../src/tool/task-attempt"
+import { childPermissionRules, renderTaskOutput, TaskTool } from "../../src/tool/task"
+import { Agent } from "../../src/agent/agent"
 import { tmpdir } from "../fixture/fixture"
 
-describe("Task tool-output handoff", () => {
-  test("grants a direct child read-only access to parent artifacts only", async () => {
+const model = { providerID: "offline-fixture", modelID: "no-provider-called" }
+
+function assistant(sessionID: string, parentID: string, id: string, created: number) {
+  return {
+    id,
+    sessionID,
+    parentID,
+    role: "assistant" as const,
+    modelID: model.modelID,
+    providerID: model.providerID,
+    mode: "research",
+    agent: "research",
+    path: { cwd: "/", root: "/" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created },
+  }
+}
+
+/** A parent with one reserved Task call, and a child whose turn already
+ * finished with `text` (or a provider error), so no model is ever called. */
+async function seeded(input: {
+  parent: Session.Info
+  child?: Session.Info
+  text?: string
+  error?: MessageV2.Assistant["error"]
+  params: { description: string; prompt: string; subagent_type: string; task_id?: string; background?: boolean }
+}) {
+  const userID = Identifier.ascending("message")
+  const messageID = Identifier.ascending("message")
+  const callID = `call_${crypto.randomUUID()}`
+  await Session.updateMessage({
+    id: userID,
+    sessionID: input.parent.id,
+    role: "user",
+    agent: "research",
+    effort: "normal",
+    model,
+    time: { created: 1 },
+  })
+  await Session.updateMessage(assistant(input.parent.id, userID, messageID, 2))
+  const identity = {
+    projectID: Instance.project.id,
+    parentSessionID: input.parent.id,
+    parentMessageID: messageID,
+    parentUserMessageID: userID,
+    callID,
+  }
+  const child = input.child ?? (await Session.create({ parentID: input.parent.id }))
+  const attempt = await TaskAttempt.reserve({
+    ...identity,
+    fingerprint: TaskAttempt.fingerprint({ ...input.params, task_id: input.params.task_id }),
+    childSessionID: child.id,
+  })
+  const previous = (await Session.messages({ sessionID: child.id })).map((message) => message.info.id)
+  await TaskAttempt.bind({ ...identity, previousMessageIDs: previous })
+  await Session.updateMessage({
+    id: attempt.childMessageID,
+    sessionID: child.id,
+    role: "user",
+    agent: input.params.subagent_type,
+    effort: "normal",
+    model,
+    time: { created: 3 },
+  })
+  const finalID = Identifier.ascending("message")
+  await Session.updateMessage({
+    ...assistant(child.id, attempt.childMessageID, finalID, 4),
+    finish: "stop",
+    ...(input.error && { error: input.error }),
+    time: { created: 4, completed: 5 },
+  })
+  if (input.text) {
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      sessionID: child.id,
+      messageID: finalID,
+      type: "text",
+      text: input.text,
+      time: { start: 4, end: 5 },
+    })
+  }
+  await Session.flushPendingParts(child.id)
+  const ctx = {
+    sessionID: input.parent.id,
+    messageID,
+    callID,
+    agent: "research",
+    abort: new AbortController().signal,
+    messages: [] as MessageV2.WithParts[],
+    metadata: () => {},
+    ask: async () => {},
+    extra: { effort: "normal", bypassAgentCheck: true },
+  }
+  return { child, ctx, identity }
+}
+
+describe("Task tool contract", () => {
+  test("returns the child's final text inside a <task_result> envelope with a reusable task_id", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({})
+        const params = { description: "Compare sources", prompt: "Compare the two sources.", subagent_type: "explore" }
+        const { child, ctx } = await seeded({ parent, params, text: "## Outcome\nSources agree." })
+        const task = await TaskTool.init()
+        const result = await task.execute(params, ctx)
+        expect(result.output.startsWith(`<task id="${child.id}" state="completed">`)).toBe(true)
+        expect(result.output).toContain("<task_result>")
+        expect(result.output).toContain("Sources agree.")
+        expect(result.output).toContain(`task_id: ${child.id}`)
+        expect(result.output.trimEnd().endsWith("</task>")).toBe(true)
+        expect(result.metadata).toMatchObject({ sessionId: child.id, outcome: "completed" })
+        // The description lists every subagent by name for the model.
+        expect(task.description).toContain("- explore:")
+        expect(task.description).toContain("- data:")
+        expect(task.description).not.toContain("- research:")
+      },
+    })
+  })
+
+  test("a child provider error returns state=error with the partial text instead of failing the call", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({})
+        const params = { description: "Fit the model", prompt: "Fit and report.", subagent_type: "data" }
+        const { child, ctx } = await seeded({
+          parent,
+          params,
+          error: { name: "UnknownError", data: { message: "Provider disconnected" } },
+        })
+        const result = await (await TaskTool.init()).execute(params, ctx)
+        expect(result.output).toContain(`<task id="${child.id}" state="error">`)
+        expect(result.output).toContain("<task_error>")
+        expect(result.metadata).toMatchObject({ outcome: "error", stopReason: "provider_error" })
+      },
+    })
+  })
+
+  test("task_id resumes the same child session and a foreign id is refused before dispatch", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({})
+        const first = await Session.create({ parentID: parent.id })
+        const params = {
+          description: "Continue the review",
+          prompt: "Finish the remaining section.",
+          subagent_type: "explore",
+          task_id: first.id,
+        }
+        const { child, ctx } = await seeded({ parent, child: first, params, text: "Section finished." })
+        expect(child.id).toBe(first.id)
+        const result = await (await TaskTool.init()).execute(params, ctx)
+        expect(result.metadata.sessionId).toBe(first.id)
+
+        const stranger = await Session.create({})
+        await expect(
+          (await TaskTool.init()).execute({ ...params, task_id: stranger.id }, { ...ctx, callID: "call_other" }),
+        ).rejects.toThrow(/No child session .* exists for this session/)
+      },
+    })
+  })
+
+  test("the depth limit refuses a worker's worker and names the config key", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const lead = await Session.create({})
+        const worker = await Session.create({ parentID: lead.id })
+        const params = { description: "Nested", prompt: "Delegate again.", subagent_type: "explore" }
+        const { ctx } = await seeded({ parent: worker, params, text: "unused" })
+        await expect((await TaskTool.init()).execute(params, ctx)).rejects.toThrow(/subagent_depth/)
+        expect((await Config.get()).subagent_depth ?? 1).toBe(1)
+      },
+    })
+  })
+
+  test("primaries and unknown names are rejected as subagent types", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({})
+        for (const name of ["research", "plan", "nonexistent"]) {
+          const params = { description: "Bad type", prompt: "x", subagent_type: name }
+          const { ctx } = await seeded({ parent, params, text: "unused" })
+          await expect((await TaskTool.init()).execute(params, ctx)).rejects.toThrow(/not a valid subagent/)
+        }
+      },
+    })
+  })
+
+  test("children work in the parent's directory and inherit denies for todowrite, task and question", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const parent = await Session.create({})
         const child = await Session.create({ parentID: parent.id })
-        const sibling = await Session.create({})
-        const parentFile = path.join(await SessionFilesystem.workspace(parent.id), "result.json")
-        const siblingFile = path.join(await SessionFilesystem.workspace(sibling.id), "private.json")
-        await Bun.write(parentFile, "parent evidence")
-        await Bun.write(siblingFile, "sibling evidence")
-
-        try {
-          const grant = await SessionFilesystem.grantTaskHandoff({
-            parentSessionID: parent.id,
-            childSessionID: child.id,
-          })
-          expect(grant).toMatchObject({ path: path.dirname(parentFile), access: "read", source: "handoff" })
-          await expect(
-            SessionFilesystem.authorize({ sessionID: child.id, path: parentFile, access: "read" }),
-          ).resolves.toBeDefined()
-          // The refusal a worker reads names the cause and the way out; a bare
-          // class name once cost a worker seven minutes and the same write again.
-          const refused = await SessionFilesystem.authorize({
-            sessionID: child.id,
-            path: parentFile,
-            access: "write",
-          }).then(
-            () => undefined,
-            (error: unknown) => error,
-          )
-          expect(refused).toBeInstanceOf(SessionFilesystem.DeniedError)
-          expect((refused as Error).message).toContain(`No write access to ${parentFile}`)
-          expect((refused as Error).message).toContain("belongs to the lead session and is read-only here")
-          expect((refused as Error).message).toContain('artifact(action="save_file"')
-          expect((refused as Error).message).toContain(await SessionFilesystem.workspace(child.id))
-          await expect(
-            SessionFilesystem.authorize({ sessionID: child.id, path: siblingFile, access: "read" }),
-          ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
-          expect(await SessionFilesystem.processReadRoots(child.id)).toContain(path.dirname(parentFile))
-          expect(await SessionFilesystem.processWriteRoots(child.id)).not.toContain(path.dirname(parentFile))
-
-          const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
-          const ctx = {
-            sessionID: child.id,
-            messageID: "msg_handoff",
-            callID: "call_handoff",
-            agent: "execute",
-            abort: AbortSignal.any([]),
-            messages: [],
-            metadata: () => {},
-            ask: async (request: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
-              requests.push(request)
-            },
-          }
-          expect((await (await ReadTool.init()).execute({ filePath: parentFile }, ctx)).output).toContain(
-            "parent evidence",
-          )
-          expect(requests.some((request) => request.permission === "external_directory")).toBe(false)
-        } finally {
-          await Promise.all([Session.remove(child.id), Session.remove(sibling.id)])
-          await Session.remove(parent.id)
-        }
-      },
-    })
-  })
-
-  test("copies exact broker outputs into child scratch for Read and Grep", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const parent = await Session.create({})
-        const child = await Session.create({})
-        const name = Identifier.ascending("tool")
-        const source = path.join(Truncate.DIR, name)
-        await fs.mkdir(Truncate.DIR, { recursive: true })
-        await Bun.write(source, "alpha evidence\nbeta evidence\n")
-        await SessionFilesystem.grantToolOutput({ sessionID: parent.id, path: source })
-
-        try {
-          const physical = await fs.realpath(source)
-          const result = await materializeTaskToolOutputs({
-            parentSessionID: parent.id,
-            childSessionID: child.id,
-            prompt: `Inspect ${source}, then confirm the same file at ${physical}. Repeat ${source}.`,
-          })
-
-          expect(result.files).toHaveLength(1)
-          expect(result.prompt).not.toContain(source)
-          expect(result.prompt).not.toContain(physical)
-          expect(result.prompt.match(new RegExp(result.files[0], "g"))).toHaveLength(3)
-          expect(await Bun.file(result.files[0]).text()).toBe("alpha evidence\nbeta evidence\n")
-          expect(result.files[0].startsWith(await SessionFilesystem.workspace(child.id))).toBe(true)
-
-          const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
-          const ctx = {
-            sessionID: child.id,
-            messageID: "msg_handoff",
-            callID: "call_handoff",
-            agent: "explore",
-            abort: AbortSignal.any([]),
-            messages: [],
-            metadata: () => {},
-            ask: async (request: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
-              requests.push(request)
-            },
-          }
-          expect((await (await ReadTool.init()).execute({ filePath: result.files[0] }, ctx)).output).toContain(
-            "alpha evidence",
-          )
-          expect(
-            (await (await GrepTool.init()).execute({ path: result.files[0], pattern: "beta" }, ctx)).output,
-          ).toContain("beta evidence")
-          expect(requests.some((request) => request.permission === "external_directory")).toBe(false)
-        } finally {
-          await fs.rm(source, { force: true })
-          await Promise.all([Session.remove(parent.id), Session.remove(child.id)])
-        }
-      },
-    })
-  })
-
-  test("does not transfer arbitrary external or sibling-workspace paths", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await using external = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const parent = await Session.create({})
-        const child = await Session.create({})
-        const sibling = await Session.create({})
-        const externalPath = path.join(external.path, Identifier.ascending("tool"))
-        const siblingPath = path.join(await SessionFilesystem.workspace(sibling.id), Identifier.ascending("tool"))
-        await Bun.write(externalPath, "external secret")
-        await Bun.write(siblingPath, "sibling secret")
-
-        const prompt = `Leave ${externalPath}, ${siblingPath}, and ${Truncate.DIR} unchanged.`
-        const result = await materializeTaskToolOutputs({
-          prompt,
-          parentSessionID: parent.id,
-          childSessionID: child.id,
+        await SessionFilesystem.shareWorkingDirectory({ parentSessionID: parent.id, childSessionID: child.id })
+        expect(await SessionFilesystem.toolDirectory(child.id)).toBe(await SessionFilesystem.toolDirectory(parent.id))
+        const explore = await Agent.get("explore")
+        const rules = childPermissionRules(explore!)
+        expect(rules.map((rule) => rule.permission).sort()).toEqual(["question", "task", "todowrite"])
+        // An agent whose own ruleset allows todowrite keeps it.
+        const allowed = childPermissionRules({
+          ...explore!,
+          permission: [...explore!.permission, { permission: "todowrite", pattern: "*", action: "allow" }],
         })
-        expect(result).toEqual({ prompt, files: [] })
-
-        await expect(
-          SessionFilesystem.authorize({ sessionID: child.id, path: externalPath, access: "read" }),
-        ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
-        await expect(
-          SessionFilesystem.authorize({ sessionID: child.id, path: siblingPath, access: "read" }),
-        ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
-
-        await Promise.all([Session.remove(parent.id), Session.remove(child.id), Session.remove(sibling.id)])
+        expect(allowed.map((rule) => rule.permission).sort()).toEqual(["question", "task"])
       },
     })
   })
 
-  test("rejects broker entries that are missing or symlink outside the broker", async () => {
+  test("many children dispatch at once: there is no concurrency cap", async () => {
     await using tmp = await tmpdir({ git: true })
-    await using external = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const parent = await Session.create({})
-        const child = await Session.create({})
-        await fs.mkdir(Truncate.DIR, { recursive: true })
-        const missing = path.join(Truncate.DIR, Identifier.ascending("tool"))
-        const link = path.join(Truncate.DIR, Identifier.ascending("tool"))
-        const target = path.join(external.path, "secret.txt")
-        await Bun.write(target, "external secret")
-        await fs.symlink(target, link)
-
-        try {
-          await expect(
-            materializeTaskToolOutputs({
-              prompt: `Inspect ${missing}`,
-              parentSessionID: parent.id,
-              childSessionID: child.id,
-            }),
-          ).rejects.toThrow("unavailable broker tool output")
-          await expect(
-            materializeTaskToolOutputs({
-              prompt: `Inspect ${link}`,
-              parentSessionID: parent.id,
-              childSessionID: child.id,
-            }),
-          ).rejects.toThrow("unavailable broker tool output")
-        } finally {
-          await fs.rm(link, { force: true })
-          await Promise.all([Session.remove(parent.id), Session.remove(child.id)])
-        }
+        const count = availableParallelism() * 3
+        const runs = await Promise.all(
+          Array.from({ length: count }, async (_, index) => {
+            const params = { description: `Branch ${index}`, prompt: `Do branch ${index}.`, subagent_type: "explore" }
+            const { ctx } = await seeded({ parent, params, text: `branch ${index} done` })
+            return { params, ctx }
+          }),
+        )
+        const task = await TaskTool.init()
+        const results = await Promise.all(runs.map((run) => task.execute(run.params, run.ctx)))
+        expect(results).toHaveLength(count)
+        for (const [index, result] of results.entries()) expect(result.output).toContain(`branch ${index} done`)
       },
     })
   })
 
-  test("rejects a broker output owned by another session", async () => {
+  test("background dispatch returns state=running and later wakes the parent with the envelope", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const owner = await Session.create({})
         const parent = await Session.create({})
-        const child = await Session.create({})
-        const source = path.join(Truncate.DIR, Identifier.ascending("tool"))
-        await fs.mkdir(Truncate.DIR, { recursive: true })
-        await Bun.write(source, "session-private evidence")
-        await SessionFilesystem.grantToolOutput({ sessionID: owner.id, path: source })
-
-        try {
-          await expect(
-            materializeTaskToolOutputs({
-              prompt: `Inspect ${source}`,
-              parentSessionID: parent.id,
-              childSessionID: child.id,
-            }),
-          ).rejects.toThrow("unavailable broker tool output")
-          expect(await fs.readdir(await SessionFilesystem.workspace(child.id))).toEqual([])
-        } finally {
-          await fs.rm(source, { force: true })
-          await Promise.all([Session.remove(owner.id), Session.remove(parent.id), Session.remove(child.id)])
+        const params = {
+          description: "Long scan",
+          prompt: "Scan everything.",
+          subagent_type: "explore",
+          background: true,
         }
+        const { child, ctx } = await seeded({ parent, params, text: "Scan complete: 12 files." })
+        const result = await (await TaskTool.init()).execute(params, ctx)
+        expect(result.output).toContain(`<task id="${child.id}" state="running">`)
+        expect(result.output).toContain("Do not sleep, poll")
+        expect(result.metadata).toMatchObject({ background: true, jobId: child.id })
+        // The completion arrives as a synthetic user message in the parent.
+        const deadline = Date.now() + 10_000
+        while (Date.now() < deadline) {
+          const messages = await Session.messages({ sessionID: parent.id })
+          const injected = messages
+            .flatMap((message) => message.parts)
+            .find((part) => part.type === "text" && part.synthetic && part.text.includes("Scan complete: 12 files."))
+          if (injected) {
+            expect(injected.type === "text" && injected.text).toContain(`<task id="${child.id}" state="completed">`)
+            return
+          }
+          await Bun.sleep(50)
+        }
+        throw new Error("background completion never reached the parent session")
       },
     })
+  })
+
+  test("renderTaskOutput emits OpenCode's envelope for every state", () => {
+    expect(renderTaskOutput({ sessionID: "ses_x", state: "completed", text: "done" })).toBe(
+      '<task id="ses_x" state="completed">\n<task_result>\ndone\n</task_result>\n</task>',
+    )
+    expect(renderTaskOutput({ sessionID: "ses_x", state: "error", summary: "boom", text: "partial" })).toBe(
+      '<task id="ses_x" state="error">\n<summary>boom</summary>\n<task_error>\npartial\n</task_error>\n</task>',
+    )
   })
 })

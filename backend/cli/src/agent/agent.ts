@@ -10,11 +10,9 @@ import { ProviderTransform } from "../provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
-import PROMPT_CRITIQUE from "./prompt/critique.txt"
-import PROMPT_LITERATURE_REVIEW from "./prompt/literature-review.txt"
+import PROMPT_SPECIALIST from "./prompt/specialist.txt"
+import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
-import PROMPT_PHYSICS_CRITIQUE from "./prompt/physics-critique.txt"
-import PROMPT_RESEARCH_AGENT_TEST from "./prompt/researchagent-test.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -24,10 +22,11 @@ import { State } from "@/project/state"
 import { ProjectTrust } from "@/project/trust"
 import { ProjectAccess } from "@/project/access"
 import { randomUUID } from "node:crypto"
-import { Flag } from "@/flag/flag"
 import { OpenScience } from "@/openscience"
 import { BILLING_URL } from "@/endpoints"
 import { requiresWalletBalance, resolveCredentialSource } from "@/session/access-route"
+import { ToolVisibility } from "@/tool/visibility"
+import { BIOLOGY_TOOL_IDS } from "@/tool/biology"
 
 export namespace Agent {
   export const Info = z
@@ -47,9 +46,14 @@ export namespace Agent {
           providerID: z.string(),
         })
         .optional(),
+      variant: z.string().optional(),
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
+      /** Skill categories rendered into the agent's <domain-skills> index. */
+      skills: z.array(z.string()).optional(),
+      /** Tools offered without a skill unlock, beyond the shared default set. */
+      unlocks: z.array(z.string()).optional(),
     })
     .meta({
       ref: "Agent",
@@ -154,135 +158,52 @@ export namespace Agent {
     const safeAction = accessMode === "ask" ? "ask" : "allow"
     const externalAction = accessMode === "full" ? "allow" : "ask"
 
+    const specialist = (input: {
+      name: string
+      label: string
+      focus: string
+      description: string
+      color: string
+      skills: string[]
+      tools?: readonly string[]
+    }): Info => {
+      const own = PermissionNext.fromConfig({
+        question: "deny",
+        todowrite: "deny",
+        task: "deny",
+        ...Object.fromEntries((input.tools ?? []).map((tool) => [tool, "allow" as const])),
+      })
+      return {
+        name: input.name,
+        description: input.description,
+        options: {},
+        color: input.color,
+        prompt: PROMPT_SPECIALIST.replaceAll("{label}", input.label).replaceAll("{focus}", input.focus),
+        permission: PermissionNext.merge(defaults, own, user),
+        mode: "subagent",
+        native: true,
+        hidden: true,
+        skills: input.skills,
+        unlocks: ToolVisibility.unlocks(own),
+      }
+    }
+
     const result: Record<string, Info> = {
-      // --- Research modes (top) ---
       research: {
         name: "research",
         description: "Primary research agent for focused questions, analysis, synthesis, and durable outputs.",
         options: {},
         color: "#d48765",
-        prompt: SystemPrompt.response(PROMPT_RESEARCH_AGENT_TEST),
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
             question: "allow",
             plan_enter: "allow",
-            research_contract: "deny",
           }),
           user,
         ),
         mode: "primary",
         native: true,
-      },
-      ...(Flag.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST
-        ? {
-            "researchagent-test": {
-              name: "researchagent-test",
-              description: "Feature-gated thin Research profile for source-level trajectory evaluation.",
-              options: {},
-              color: "#7c8cff",
-              permission: PermissionNext.merge(
-                defaults,
-                PermissionNext.fromConfig({
-                  question: "allow",
-                  research_contract: "deny",
-                }),
-                user,
-              ),
-              mode: "primary" as const,
-              native: true,
-              prompt: SystemPrompt.response(PROMPT_RESEARCH_AGENT_TEST),
-            },
-          }
-        : {}),
-      // --- Domain agents ---
-      biology: {
-        name: "biology",
-        description: "Biology specialist for bioinformatics, biological databases, and evidence-backed data analysis.",
-        options: {},
-        color: "#10b981",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            question: "allow",
-          }),
-          user,
-        ),
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
-      // --- Physics ---
-      physics: {
-        name: "physics",
-        description:
-          "Physics specialist for simulation, numerical methods, dimensional analysis, and validated scientific computing.",
-        options: {},
-        color: "#8b5cf6",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            question: "allow",
-          }),
-          user,
-        ),
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
-      // --- Machine learning ---
-      ml: {
-        name: "ml",
-        description:
-          "Machine-learning specialist for data, training, evaluation, inference, and reproducible experiments.",
-        options: {},
-        color: "#6366f1",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            question: "allow",
-          }),
-          user,
-        ),
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
-      // --- Chemistry ---
-      chemistry: {
-        name: "chemistry",
-        description:
-          "Chemistry specialist for cheminformatics, molecular modeling, property prediction, and chemical databases.",
-        options: {},
-        color: "#f59e0b",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            question: "allow",
-          }),
-          user,
-        ),
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
-      // --- Utilities ---
-      write: {
-        name: "write",
-        description:
-          "Scientific & technical writing. Produces LaTeX papers, grants, literature reviews with verified citations and figures.",
-        options: {},
-        color: "#a78bfa",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            question: "allow",
-          }),
-          user,
-        ),
-        mode: "subagent",
-        native: true,
-        hidden: true,
       },
       plan: {
         name: "plan",
@@ -308,45 +229,6 @@ export namespace Agent {
         native: true,
         hidden: true,
       },
-      // --- Internal delegation profiles ---
-      // The product exposes capabilities and effort, not a catalog of domain
-      // personas. Research loads domain knowledge lazily through skills and
-      // delegates only by the kind of work that needs doing.
-      execute: {
-        name: "execute",
-        description:
-          "Implementation or computational work with the active project permissions. Returns concrete results to Research.",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            todoread: "deny",
-            todowrite: "deny",
-          }),
-          user,
-        ),
-        options: {},
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
-      // --- Compatibility aliases (retrievable, never advertised) ---
-      task: {
-        name: "task",
-        description:
-          "General-purpose child agent for one independent unit of work that can merge cleanly into the primary result.",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            todoread: "deny",
-            todowrite: "deny",
-          }),
-          user,
-        ),
-        options: {},
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
       explore: {
         name: "explore",
         permission: PermissionNext.merge(
@@ -356,6 +238,7 @@ export namespace Agent {
             grep: "allow",
             glob: "allow",
             list: "allow",
+            read: "allow",
             bash: safeAction,
             // WebFetch owns a narrowly scoped brokered transfer. Without this
             // explicit rule the profile's wildcard deny blocks the broker's
@@ -363,90 +246,66 @@ export namespace Agent {
             network: externalAction,
             webfetch: safeAction,
             websearch: safeAction,
+            literature: safeAction,
             codesearch: externalAction,
-            read: "allow",
           }),
           user,
         ),
-        description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
+        description:
+          'Fast scout for literature, data and code. Use it to find files by pattern, search file contents, locate a paper, definition or number, or answer a bounded question about the project without changing anything. Specify the thoroughness: "quick", "medium", or "very thorough".',
         prompt: PROMPT_EXPLORE,
         options: {},
         mode: "subagent",
         native: true,
         hidden: true,
       },
-      "literature-review": {
-        name: "literature-review",
+      ml: specialist({
+        name: "ml",
+        label: "machine-learning specialist",
+        focus: "training, fine-tuning, evaluation, inference, interpretability, and GPU compute setup",
         description:
-          "Full PRISMA literature review — systematic search, screening, eligibility, synthesis, verification.",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            "*": "deny",
-            bash: safeAction,
-            network: externalAction,
-            read: "allow",
-            glob: "allow",
-            grep: "allow",
-            webfetch: safeAction,
-            websearch: safeAction,
-            codesearch: externalAction,
-            skill: "allow",
-          }),
-          user,
-        ),
-        prompt: PROMPT_LITERATURE_REVIEW,
-        options: {},
-        color: "#818cf8",
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
-      critique: {
-        name: "critique",
+          "Machine-learning specialist for data, training, evaluation, inference, and reproducible experiments.",
+        color: "#6366f1",
+        skills: ["ml-training", "llm-tools", "ml-inference", "cloud-compute"],
+      }),
+      biology: specialist({
+        name: "biology",
+        label: "biology specialist",
+        focus: "sequences, omics, structures, pathways, and biological databases",
+        description: "Biology specialist for bioinformatics, biological databases, and evidence-backed data analysis.",
+        color: "#10b981",
+        skills: ["biology", "databases"],
+        tools: [...BIOLOGY_TOOL_IDS, "science_list_dbs", "science_search", "science_fetch"],
+      }),
+      physics: specialist({
+        name: "physics",
+        label: "physics specialist",
+        focus: "simulation, numerical methods, dynamical systems, and physical data analysis",
         description:
-          "Scientific critique specialist. Finds blocking errors — data leakage, wrong statistics, unsupported claims — in research artifacts before expensive or irreversible actions. Read-only.",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            "*": "deny",
-            read: "allow",
-            glob: "allow",
-            grep: "allow",
-            skill: "allow",
-          }),
-          user,
-        ),
-        prompt: PROMPT_CRITIQUE,
-        options: {},
-        color: "#ef4444",
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
-      "physics-critique": {
-        name: "physics-critique",
+          "Physics specialist for simulation, numerical methods, dimensional analysis, and validated scientific computing.",
+        color: "#8b5cf6",
+        skills: ["physics", "quantum"],
+      }),
+      chemistry: specialist({
+        name: "chemistry",
+        label: "chemistry specialist",
+        focus: "molecules, cheminformatics, docking, property prediction, and chemical databases",
         description:
-          "Physics critique specialist — validates computational physics results (PDE solutions, PINN outputs, fitted parameters) against rigorous physical and numerical criteria. Blind to generator reasoning (Aletheia pattern). Read-only.",
-        permission: PermissionNext.merge(
-          defaults,
-          PermissionNext.fromConfig({
-            "*": "deny",
-            read: "allow",
-            glob: "allow",
-            grep: "allow",
-            bash: safeAction,
-          }),
-          user,
-        ),
-        prompt: PROMPT_PHYSICS_CRITIQUE,
-        options: {},
-        color: "#c084fc",
-        mode: "subagent",
-        native: true,
-        hidden: true,
-      },
-      // --- Hidden system agents ---
+          "Chemistry specialist for cheminformatics, molecular modeling, property prediction, and chemical databases.",
+        color: "#f59e0b",
+        skills: ["chemistry", "databases"],
+        tools: ["science_list_dbs", "science_search", "science_fetch"],
+      }),
+      data: specialist({
+        name: "data",
+        label: "data specialist",
+        focus: "computational workflows: pipelines, data processing, coding, visualization, and cloud compute",
+        description:
+          "Data specialist for pipelines, data processing, coding, visualization, and cloud compute; the general execution worker.",
+        color: "#0ea5e9",
+        skills: ["data-engineering", "coding", "visualization", "cloud-compute"],
+        tools: ["r"],
+      }),
       compaction: {
         name: "compaction",
         mode: "primary",
@@ -478,12 +337,39 @@ export namespace Agent {
         ),
         prompt: PROMPT_TITLE,
       },
+      summary: {
+        name: "summary",
+        mode: "primary",
+        options: {},
+        native: true,
+        hidden: true,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+          }),
+          user,
+        ),
+        prompt: PROMPT_SUMMARY,
+      },
     }
 
-    const removed = new Set(["review", "reviewer", "artifact-reviewer"])
+    // Retired built-ins. A config that still tunes one must not resurrect it
+    // as an anonymous custom agent with the default ruleset.
+    const removed = new Set([
+      "review",
+      "reviewer",
+      "artifact-reviewer",
+      "researchagent-test",
+      "write",
+      "execute",
+      "task",
+      "literature-review",
+      "critique",
+      "physics-critique",
+    ])
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
       if (removed.has(key)) continue
-      if (key === "researchagent-test" && !Flag.OPENSCIENCE_ENABLE_RESEARCH_AGENT_TEST) continue
       if (value.disable) {
         delete result[key]
         continue
@@ -498,6 +384,8 @@ export namespace Agent {
           native: false,
         }
       if (value.model) item.model = Provider.parseModel(value.model)
+      item.variant = value.variant ?? item.variant
+      item.skills = value.skills ?? item.skills
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature
@@ -508,7 +396,10 @@ export namespace Agent {
       item.name = value.name ?? item.name
       item.steps = value.steps ?? item.steps
       item.options = mergeDeep(item.options, value.options ?? {})
-      item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
+      const own = PermissionNext.fromConfig(value.permission ?? {})
+      item.permission = PermissionNext.merge(item.permission, own)
+      // A rule that names a tool opts it in for this agent without a skill.
+      item.unlocks = [...new Set([...(item.unlocks ?? []), ...ToolVisibility.unlocks(own)])]
       // `docs` is reserved for delegated documentation work. Older synced
       // configs created it with mode `all`, which incorrectly exposed it as a
       // primary session mode. Preserve the custom prompt/model while restoring
@@ -624,7 +515,7 @@ export namespace Agent {
       defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth"
     const providerOptions = oauthStream
       ? ProviderTransform.providerOptions(model, {
-          instructions: SystemPrompt.instructions(),
+          instructions: SystemPrompt.header(model),
           store: false,
         })
       : undefined
