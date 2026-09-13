@@ -4,9 +4,10 @@ import "./Workspace.css"
 /* A pixel-faithful replica of the OpenScience workspace, in the product's
    own font, tokens, and icon set (Iconoir, as vendored by frontend/ui). The
    frame is 1440 × 810 and scales to its container. The sidebar's Files,
-   Terminal, and Compute rows open the right pane, as in the app, and the
-   agent's activity reveals in sequence on load. Replace with a screen
-   recording when one exists. */
+   Terminal, Compute and Autoresearch rows open the right pane, as in the
+   app, and the agent's trace reveals in sequence on load: thought rows,
+   exploration bursts, a delegated worker, a run, a generated result. Replace
+   with a screen recording when one exists. */
 
 const ICONS = {
   plus: ["M6 12H12M18 12H12M12 12V6M12 12V18"],
@@ -115,6 +116,13 @@ const ICONS = {
   square: [
     "M21 3.6V20.4C21 20.7314 20.7314 21 20.4 21H3.6C3.26863 21 3 20.7314 3 20.4V3.6C3 3.26863 3.26863 3 3.6 3H20.4C20.7314 3 21 3.26863 21 3.6Z",
   ],
+  activity: ["M3 12H6.5L9.5 4L14.5 20L17.5 12H21"],
+  chevronRight: ["M9 6L15 12L9 18"],
+  brain: [
+    "M12 4.5C12 3.11929 10.8807 2 9.5 2C8.11929 2 7 3.11929 7 4.5C7 4.55 7.00146 4.6 7.00435 4.64912C5.28428 5.03848 4 6.5757 4 8.4C4 9.2 4.24 9.95 4.66 10.58C3.66 11.24 3 12.38 3 13.68C3 15.2 3.9 16.51 5.2 17.11C5.07 17.44 5 17.8 5 18.18C5 19.74 6.26 21 7.82 21C8.7 21 9.49 20.6 10 19.97",
+    "M12 4.5C12 3.11929 13.1193 2 14.5 2C15.8807 2 17 3.11929 17 4.5C17 4.55 16.9985 4.6 16.9957 4.64912C18.7157 5.03848 20 6.5757 20 8.4C20 9.2 19.76 9.95 19.34 10.58C20.34 11.24 21 12.38 21 13.68C21 15.2 20.1 16.51 18.8 17.11C18.93 17.44 19 17.8 19 18.18C19 19.74 17.74 21 16.18 21C15.3 21 14.51 20.6 14 19.97",
+    "M12 4.5V20",
+  ],
 } as const
 
 type IconName = keyof typeof ICONS
@@ -148,24 +156,68 @@ function Dots() {
   )
 }
 
-type Pane = "files" | "terminal" | "compute"
-const PANE_LABEL: Record<Pane, string> = { files: "Files", terminal: "Terminal", compute: "Compute" }
-const PANE_ICON: Record<Pane, IconName> = { files: "folder", terminal: "terminal", compute: "cpu" }
+type Pane = "files" | "terminal" | "compute" | "autoresearch"
+const PANES: readonly Pane[] = ["files", "terminal", "compute", "autoresearch"]
+const PANE_LABEL: Record<Pane, string> = {
+  files: "Files",
+  terminal: "Terminal",
+  compute: "Compute",
+  autoresearch: "Autoresearch",
+}
+const PANE_ICON: Record<Pane, IconName> = {
+  files: "folder",
+  terminal: "terminal",
+  compute: "cpu",
+  autoresearch: "activity",
+}
 
-const TOOLS: readonly { icon: IconName; title: string; subject: string; arg?: string; time: string; body?: string }[] =
-  [
-    { icon: "book", title: "Searching", subject: "T4 lysozyme stabilizing mutations", arg: "literature", time: "1.8s" },
-    { icon: "database", title: "Querying", subject: "UniProt P00720", arg: "ProTherm · PDB 2LZM", time: "0.9s" },
-    {
-      icon: "terminal",
-      title: "Running",
-      subject: "python ddg_scan.py",
-      arg: "--pdb structures/2LZM.pdb",
-      time: "3.4s",
-      body: "scoring 26 point mutants against 2LZM\nwrote results/ddg_vs_protherm.png\nr = 0.71  (n = 26)",
-    },
-    { icon: "reports", title: "Writing", subject: "results/ddg_vs_protherm.png", time: "0.1s" },
-  ]
+/* The trace, one row per step, in the order the app shows them: a thought
+   with its summary, a loaded skill, a burst of exploration, a delegated
+   worker, a run with its output, and the generated result. */
+type Step =
+  | { kind: "thought"; label: string; text: string }
+  | { kind: "skill"; name: string }
+  | { kind: "burst"; label: string; items: { icon: IconName; text: string; detail?: string }[] }
+  | { kind: "agent"; title: string; agent: string; time: string }
+  | { kind: "run"; label: string; command: string; output: string }
+  | { kind: "generated"; name: string; kind2: string }
+
+const STEPS: readonly Step[] = [
+  {
+    kind: "thought",
+    label: "Thought 3s",
+    text: "ProTherm has measured ΔΔG for 2LZM point mutants; that is the comparison set. Score the same 26 mutants on the structure, then plot predicted against measured.",
+  },
+  { kind: "skill", name: "research-lookup" },
+  {
+    kind: "burst",
+    label: "Searched 2 sources, read 1 file",
+    items: [
+      { icon: "book", text: "ProTherm", detail: "T4 lysozyme ΔΔG entries · 26 mutants" },
+      { icon: "database", text: "PDB 2LZM", detail: "UniProt P00720 · 164 residues" },
+      { icon: "page", text: "structures/2LZM.pdb" },
+    ],
+  },
+  { kind: "agent", title: "Cross-check ProTherm entries", agent: "Explore agent", time: "42s" },
+  {
+    kind: "run",
+    label: "Ran python ddg_scan.py",
+    command: "python ddg_scan.py --pdb structures/2LZM.pdb",
+    output:
+      "scoring 26 point mutants against 2LZM\nwrote results/ddg_scores.csv\nwrote results/ddg_vs_protherm.png\nr = 0.71  (n = 26)",
+  },
+  { kind: "generated", name: "ddg_vs_protherm.png", kind2: "PNG · 1200 × 900" },
+]
+
+/* An autoresearch study over the same scan: one metric, a baseline, runs
+   ranked by expected value, verdicts. */
+const RUNS: readonly { name: string; value: number; verdict: "Baseline" | "Kept" | "Discarded" | "Running" }[] = [
+  { name: "Baseline scoring", value: 0.61, verdict: "Baseline" },
+  { name: "Add solvation term", value: 0.66, verdict: "Kept" },
+  { name: "Down-weight surface loops", value: 0.63, verdict: "Discarded" },
+  { name: "Weight helix C contacts", value: 0.71, verdict: "Kept" },
+  { name: "pH-corrected charges", value: 0.71, verdict: "Running" },
+]
 
 const FILES: readonly {
   name: string
@@ -287,6 +339,34 @@ function Plot() {
   )
 }
 
+function Hill() {
+  const points = RUNS.filter((run) => run.verdict !== "Running")
+  const width = 352
+  const height = 96
+  const x = (i: number) => 18 + (i / Math.max(1, points.length - 1)) * (width - 36)
+  const y = (v: number) => 84 - ((v - 0.58) / 0.16) * 70
+  let best = -Infinity
+  const climb = points.map((run, i) => {
+    best = Math.max(best, run.value)
+    return `${x(i)},${y(best)}`
+  })
+  return (
+    <svg className="os-hill" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Best r across runs">
+      <polyline points={climb.join(" ")} fill="none" stroke="var(--brand)" strokeWidth="1.5" />
+      {points.map((run, i) => (
+        <circle
+          key={run.name}
+          cx={x(i)}
+          cy={y(run.value)}
+          r={3}
+          fill={run.verdict === "Discarded" ? "var(--bg)" : "var(--brand)"}
+          stroke={run.verdict === "Discarded" ? "var(--text-weaker)" : "var(--brand)"}
+        />
+      ))}
+    </svg>
+  )
+}
+
 function useScale(ref: React.RefObject<HTMLDivElement>) {
   const [scale, setScale] = useState(1)
   useLayoutEffect(() => {
@@ -327,9 +407,9 @@ export default function Workspace() {
   const [expanded, setExpanded] = useState(true)
   const [filesTab, setFilesTab] = useState<"project" | "results">("project")
   const touched = useRef(false)
-  const stage = useReveal(TOOLS.length + 1)
-  const streaming = stage <= TOOLS.length
-  const done = stage > TOOLS.length
+  const stage = useReveal(STEPS.length + 1)
+  const streaming = stage <= STEPS.length
+  const done = stage > STEPS.length
 
   /* When the run finishes, the app surfaces the new result: open Files on
      the Results tab, unless the viewer already chose a pane. */
@@ -383,7 +463,7 @@ export default function Workspace() {
               </button>
             </div>
             <div className="os-side__label">Workspace</div>
-            {(["files", "terminal", "compute"] as Pane[]).map((item) => (
+            {PANES.map((item) => (
               <button
                 key={item}
                 type="button"
@@ -437,42 +517,108 @@ export default function Workspace() {
                       aria-expanded={expanded}
                       onClick={() => setExpanded((value) => !value)}
                     >
-                      {streaming ? <Dots /> : <i className="os-caret" />}
-                      <span>
-                        {streaming
-                          ? "Gathering context"
-                          : expanded
-                            ? "Hide reasoning and activity"
-                            : "Show reasoning and activity"}
-                      </span>
-                      <em>·</em>
-                      <em>{streaming ? `${(stage * 1.6).toFixed(0)}s` : "6.2s"}</em>
+                      {streaming ? <Dots /> : null}
+                      <span>{streaming ? "Working" : "Worked for 6s"}</span>
+                      {streaming ? <em>{`${(stage * 1.2).toFixed(0)}s`}</em> : null}
+                      {!streaming ? <Ic name="chevronDown" className={expanded ? "open" : ""} /> : null}
                     </button>
 
                     {expanded ? (
-                      <div className="os-activity">
-                        {TOOLS.map((tool, index) => {
+                      <div className="os-trace">
+                        {STEPS.map((step, index) => {
                           const shown = stage > index
                           const running = stage === index + 1 && streaming
-                          return (
-                            <div
-                              key={tool.title + tool.subject}
-                              className="os-tool"
-                              data-shown={shown ? "true" : "false"}
-                            >
-                              <div className="os-tool__head">
-                                <Ic name={tool.icon} />
-                                <span className="os-tool__title">{tool.title}</span>
-                                <span className="os-tool__subject">{tool.subject}</span>
-                                {tool.arg ? <span className="os-tool__arg">{tool.arg}</span> : null}
-                                <span className="os-tool__meta">
-                                  {running ? <Dots /> : <Ic name="checkCircle" data-ok="" />}
-                                  {tool.time}
+                          const key = `${step.kind}-${index}`
+                          if (step.kind === "thought") {
+                            return (
+                              <div key={key} className="os-trow" data-shown={shown ? "true" : "false"}>
+                                <div className="os-trow__head">
+                                  {running ? <Dots /> : null}
+                                  <span>{running ? "Thinking" : step.label}</span>
+                                  <Ic name="chevronDown" />
+                                </div>
+                                <div className="os-trow__body os-trow__body--thought">{step.text}</div>
+                              </div>
+                            )
+                          }
+                          if (step.kind === "skill") {
+                            return (
+                              <div key={key} className="os-trow" data-shown={shown ? "true" : "false"}>
+                                <div className="os-trow__head os-trow__head--quiet">
+                                  <span>
+                                    Loaded skill: <b>{step.name}</b>
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          }
+                          if (step.kind === "burst") {
+                            return (
+                              <div key={key} className="os-trow" data-shown={shown ? "true" : "false"}>
+                                <div className="os-trow__head">
+                                  {running ? <Dots /> : null}
+                                  <span>{running ? "Exploring" : step.label}</span>
+                                  <Ic name="chevronDown" />
+                                </div>
+                                {/* A finished burst folds to its label, as in the app; it opens while live. */}
+                                {running ? (
+                                  <div className="os-trow__body">
+                                    {step.items.map((item) => (
+                                      <div key={item.text} className="os-trow__item">
+                                        <Ic name={item.icon} />
+                                        <span>{item.text}</span>
+                                        {item.detail ? <small>{item.detail}</small> : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            )
+                          }
+                          if (step.kind === "agent") {
+                            return (
+                              <div key={key} className="os-agent" data-shown={shown ? "true" : "false"}>
+                                {running ? <Dots /> : null}
+                                <span className="os-agent__copy">
+                                  <span className="os-agent__title">{step.title}</span>
+                                  <span className="os-agent__sub">
+                                    <span>{running ? "Running" : "Completed"}</span>
+                                    <span>{step.time}</span>
+                                  </span>
+                                </span>
+                                <span className="os-agent__meta">
+                                  {step.agent}
+                                  <Ic name="chevronDown" />
                                 </span>
                               </div>
-                              {tool.body && shown && !running ? (
-                                <div className="os-tool__body mono">{tool.body}</div>
-                              ) : null}
+                            )
+                          }
+                          if (step.kind === "run") {
+                            return (
+                              <div key={key} className="os-trow" data-shown={shown ? "true" : "false"}>
+                                <div className="os-trow__head">
+                                  {running ? <Dots /> : null}
+                                  <span>
+                                    {running ? "Running" : "Ran"} <code className="mono">{step.command}</code>
+                                  </span>
+                                  <Ic name="chevronDown" />
+                                </div>
+                                {running ? (
+                                  <div className="os-trow__body os-trow__body--code mono">{step.output}</div>
+                                ) : null}
+                              </div>
+                            )
+                          }
+                          return (
+                            <div key={key} className="os-gen" data-shown={shown ? "true" : "false"}>
+                              <span className="os-gen__label">Generated · 1</span>
+                              <div className="os-gen__card">
+                                <span className="os-gen__thumb">
+                                  <Ic name="reports" />
+                                </span>
+                                <span className="os-gen__name">{step.name}</span>
+                                <span className="os-gen__kind">{step.kind2}</span>
+                              </div>
                             </div>
                           )
                         })}
@@ -547,7 +693,7 @@ export default function Workspace() {
                       </span>
                       <span className="os-composer__divider" />
                       <span className="os-chip">
-                        Provider default
+                        High
                         <Ic name="chevronDown" />
                       </span>
                       <span className="os-send" data-streaming={streaming ? "true" : "false"} aria-hidden>
@@ -696,6 +842,49 @@ export default function Workspace() {
                         <i className="os-composer__caret" />
                       </div>
                     </>
+                  ) : null}
+
+                  {pane === "autoresearch" ? (
+                    <div className="os-study">
+                      <div className="os-subtabs">
+                        <span className="os-subtab" data-active="true">
+                          ΔΔG scoring
+                        </span>
+                        <span className="os-subtab os-subtab--right">
+                          <Ic name="plus" />
+                          New
+                        </span>
+                      </div>
+                      <div className="os-study__score">
+                        <div>
+                          <div className="os-study__metric">r · maximize</div>
+                          <div className="os-study__value">
+                            0.71 <small>from 0.61</small>
+                          </div>
+                        </div>
+                        <div className="os-study__budget">
+                          <span>4 of 8 runs</span>
+                          <span>1 live</span>
+                        </div>
+                      </div>
+                      <Hill />
+                      <div className="os-study__runs">
+                        {RUNS.map((run) => (
+                          <div key={run.name} className="os-run" data-verdict={run.verdict}>
+                            <i />
+                            <span className="os-run__name">{run.name}</span>
+                            <span className="os-run__value mono">
+                              {run.verdict === "Running" ? "—" : run.value.toFixed(2)}
+                            </span>
+                            <span className="os-run__verdict">{run.verdict}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="os-study__queue">
+                        <span>Queue · 3</span>
+                        <span>Rotamer-aware packing · Salt-bridge bonus · Backbone flexibility</span>
+                      </div>
+                    </div>
                   ) : null}
 
                   {pane === "compute" ? (
