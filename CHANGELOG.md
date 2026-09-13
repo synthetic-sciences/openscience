@@ -74,11 +74,55 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- The `/` menu is one list in the agent's own tiers. It opens on Core: `/plan`,
+  `/goal`, the fifteen core skills in workflow order and `/compact`; pinned
+  skills and the Session actions (`/stop` while a turn runs, `/init`,
+  `/handoff`, `/checkpoint`, `/resume`) follow, then the whole library by
+  subject. Typing filters everything at once, prefix matches first and core
+  ahead on ties, with a library skill's subject on the right. Rows are one
+  line: icon, name, purpose. The separate "Browse all skills" dialog is gone;
+  the menu and Customize → Skills cover it.
+- `/status`, `/context` and `/undo` are removed from the menu and the command
+  catalog. The session header shows progress and context usage, and **Undo
+  from here** on a finished response reverts a turn.
+- Customize → Skills is organised the way the agent uses skills: Core first in
+  workflow order, then the skills you wrote, installed or keep in the project
+  (personal skills can be edited and deleted in place), then the library as
+  folded shelves by subject with a per-shelf Activate all / Turn off all, and
+  a Sources section listing every directory that feeds the catalog with the
+  names that lost a collision. Views are All, Core, Library, Personal and
+  Off; search is one flat list. Add skill gains "Add a local folder", which
+  registers a directory of skills without a restart and can persist it to the
+  global or project config. Badges, tags and the density toggle are gone; a
+  prevailing ask-first permission reads once in the summary.
+- A new session opens on the composer alone; the "What would you like to work
+  on?" heading and starter buttons are gone.
+- Delegation is scoped: a worker needs a clean boundary, a self-contained
+  brief with a definition of done, and one worker per independent branch.
+  Checking the lead's own output (compiling, reading the rendered pages,
+  confirming a number or a reference) is never delegated, and a report on the
+  session's own work is built from its evidence rather than a literature
+  review. The header, the delegation reminder, the Task tool and the
+  paper-writing skill all say so; built-in command descriptions are sentence
+  case.
+- A delegated worker is a closed line while it runs (title, agent, state,
+  elapsed) and streams nothing; its handoff, outputs and **Open agent** appear
+  when it finishes. The live operation list, activity groups, operation count
+  and model provenance are gone from the card.
+- Reasoning the provider kept entirely private no longer produces a "Thought"
+  row that only says the text is unavailable; the time still counts toward a
+  neighbouring readable thought.
 - Skills that declare `allowed-tools` unlock those tools for whichever agent
   loaded them; the biology database tools are no longer reserved for the
   biology agent.
 - The composer no longer shows a separate Independence chip; Independence
   stays in Tools next to Delegation, where it was already set.
+
+### Fixed
+
+- A PDF opened from Results filled a fixed 560px box inside a scrolling pane,
+  so a page showed clipped with blank space below it. The viewer now fills the
+  pane and scrolls its pages itself, as in the Files tab.
 
 ## v2.0.94 — 2026-09-12
 

@@ -492,7 +492,7 @@ describe("reasoning rows", () => {
     await ready(() => host.querySelector('[data-component="reasoning-part"]') === null)
   })
 
-  test("private-only steps show availability without exposing continuation or replacing readable text", async () => {
+  test("private-only steps render nothing and never expose continuation or replace readable text", async () => {
     const message = assistant(2_000)
     const visible = reasoning("prt_visible", { start: 1_000, end: 2_000 })
     const answer: TextPart = { id: "prt_answer", sessionID, messageID: message.id, type: "text", text: "Final answer." }
@@ -516,8 +516,9 @@ describe("reasoning rows", () => {
     )
     await ready(() => host.textContent?.includes(answer.text) === true)
     expect(host.querySelector('[data-slot="session-turn-collapsible-trigger-content"]')).not.toBeNull()
-    expect(host.querySelectorAll('[data-component="reasoning-part"]')).toHaveLength(3)
-    expect(host.querySelectorAll('[data-slot="reasoning-unavailable"]')).toHaveLength(2)
+    expect(host.querySelectorAll('[data-component="reasoning-part"]')).toHaveLength(1)
+    expect(host.querySelectorAll('[data-slot="reasoning-unavailable"]')).toHaveLength(0)
+    expect(host.textContent).not.toContain("isn’t available")
     expect(host.textContent).toContain(visible.text)
     expect(host.querySelector('[data-origin="provider-reasoning-unavailable"]')).toBeNull()
     expect(host.textContent).not.toContain("did not provide readable reasoning")
@@ -1217,7 +1218,7 @@ describe("execution inspection", () => {
     expect(host.querySelector('[data-slot="shell-output-actions"] button')?.getAttribute("aria-label")).toBe("Copy")
   })
 
-  test("an agent's completed operation is not labelled as its current activity, and manual collapse survives progress", async () => {
+  test("an agent card is a closed line while it runs, streams nothing, and keeps the user's open state across progress", async () => {
     const [part, setPart] = reactive.createStore<ToolPart>({
       id: "prt_agent",
       sessionID,
@@ -1240,12 +1241,16 @@ describe("execution inspection", () => {
     const host = mount(() => parts.Part({ part, message: assistant() }), empty())
     await settle()
     const card = host.querySelector<HTMLDetailsElement>('[data-component="delegation-card"]')!
-    expect(card.open).toBe(true)
+    expect(card.open).toBe(false)
     expect(card.querySelector('[data-slot="delegation-current"]')).toBeNull()
+    expect(card.querySelector('[data-slot="delegation-activity"]')).toBeNull()
     expect(card.querySelector('[data-slot="delegation-subline"]')?.textContent).toContain("8s")
+    expect(card.querySelector('[data-slot="delegation-subline"]')?.textContent).not.toContain("op")
     card.querySelector<HTMLElement>("summary")!.click()
     await settle()
-    expect(card.open).toBe(false)
+    expect(card.open).toBe(true)
+    expect(card.querySelector('[data-slot="delegation-quiet"]')?.textContent).toContain("own session")
+    expect(card.textContent).not.toContain("Read old paper")
     setPart("state", {
       ...part.state,
       status: "running",
@@ -1258,10 +1263,8 @@ describe("execution inspection", () => {
       },
     })
     await settle()
-    expect(card.open).toBe(false)
-    card.querySelector<HTMLElement>("summary")!.click()
-    await settle()
-    expect(card.querySelector('[data-slot="delegation-current"]')?.textContent).toContain("Read new paper")
+    expect(card.open).toBe(true)
+    expect(card.textContent).not.toContain("Read new paper")
     setPart("state", {
       status: "completed",
       input: part.state.input,
@@ -1273,7 +1276,9 @@ describe("execution inspection", () => {
     await settle()
     expect(card.getAttribute("data-outcome")).toBe("completed")
     expect(card.querySelector('[data-slot="delegation-status"]')?.textContent).toBe("Completed with tool errors")
-    // The status line carries the failure once; the provenance line does not repeat it.
+    expect(card.querySelector('[data-slot="delegation-quiet"]')).toBeNull()
+    expect(card.textContent).toContain("The comparison is ready")
+    // The status line carries the failure once; the footer does not repeat it.
     expect(card.querySelector('[data-slot="delegation-metrics"]')?.textContent ?? "").not.toContain("failed")
   })
 

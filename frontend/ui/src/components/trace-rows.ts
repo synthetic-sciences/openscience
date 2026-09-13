@@ -1,7 +1,7 @@
 import type { Part, ToolPart } from "@synsci/sdk/v2/client"
 import type { ResearchTraceEntry } from "./research-trace"
 import { collapsibleTracePart, traceFamily } from "./research-trace"
-import { toolChanges, writtenFiles } from "./tool-display"
+import { toolChanges, writtenFiles, reasoningDisplayText } from "./tool-display"
 
 /**
  * The activity trace as a list of rows, the way Cursor presents work: one
@@ -57,6 +57,10 @@ function thoughtSeconds(part: Part) {
   return Math.max(0, Math.round((time.end - time.start) / 1000))
 }
 
+const readable = (row: TraceRow) =>
+  row.kind !== "thought" ||
+  row.entries.some((entry) => entry.part.type === "reasoning" && !!reasoningDisplayText(entry.part.text ?? ""))
+
 export function buildTraceRows(entries: ResearchTraceEntry[]): TraceRow[] {
   const rows: TraceRow[] = []
   // Text that arrives before later work is narration: it belongs to the
@@ -79,6 +83,9 @@ export function buildTraceRows(entries: ResearchTraceEntry[]): TraceRow[] {
       rows.push({ kind: "thought", entries: [entry], seconds })
       return
     }
+    // A phase the provider kept entirely private has nothing to read. Drop it
+    // once the next step arrives so the work on either side groups as usual.
+    while (rows.length && !readable(rows[rows.length - 1]!)) rows.pop()
     if (part.type === "text") {
       rows.push({ kind: "text", entry, narration: index < lastWork && index < lastText })
       return
@@ -119,7 +126,7 @@ export function buildTraceRows(entries: ResearchTraceEntry[]): TraceRow[] {
     }
     rows.push({ kind: "tool", entry })
   })
-  return rows
+  return rows.filter(readable)
 }
 
 function plural(count: number, one: string, many: string) {

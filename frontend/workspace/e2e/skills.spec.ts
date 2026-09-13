@@ -98,16 +98,16 @@ test("skills can be authored from scratch", async ({ page, gotoSession }) => {
       .locator("code"),
   ).toHaveText(`/${name}`)
 
-  // FilterMenu shares the same portal mount helper as AddMenu.
-  await dialog.getByRole("button", { name: "Filters & view", exact: true }).click()
-  const source = dialog.getByRole("button", { name: "Filter skills by source", exact: true })
-  await source.click()
-  await dialog.getByRole("menuitem", { name: /^Personal/ }).click()
-  await expect(source).toContainText("Personal")
+  // The Personal view lists what the user wrote, installed, or keeps in the project.
+  await dialog.getByPlaceholder("Search skills").fill("")
+  const personal = dialog.getByRole("group", { name: "Skill library views" }).getByRole("button", { name: /^Personal/ })
+  await personal.click()
+  await expect(personal).toHaveAttribute("aria-pressed", "true")
   await expect(
     dialog
       .getByRole("listitem")
       .filter({ hasText: `/${name}` })
       .locator("code"),
   ).toHaveText(`/${name}`)
+  await expect(dialog.getByRole("button", { name: `Edit ${name}`, exact: true })).toBeAttached()
 })

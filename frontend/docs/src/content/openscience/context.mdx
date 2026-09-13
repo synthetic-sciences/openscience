@@ -7,11 +7,7 @@ A conversation has a finite context window. OpenScience can summarize earlier wo
 
 ## Inspect context usage
 
-Use `/context` to inspect the current context composition, available capacity, and compaction state. Large attachments, long tool outputs, instructions, and conversation history all contribute to the material available to the model.
-
-```text
-/context
-```
+The token counter in the session header shows how much of the model's context the conversation occupies; open it for the composition. Large attachments, long tool outputs, instructions, and conversation history all contribute to the material available to the model.
 
 Context capacity differs by model. Switching models can change how much material fits; see [Models](/openscience/models).
 

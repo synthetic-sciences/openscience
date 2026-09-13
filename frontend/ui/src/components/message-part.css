@@ -865,27 +865,11 @@
     }
   }
 
-  [data-slot="delegation-current"] {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 20px;
-    color: var(--text-weak);
-    font-size: var(--font-size-medium);
-    line-height: 20px;
-
-    [data-component="spinner"] {
-      width: 12px;
-      height: 12px;
-      flex-shrink: 0;
-    }
-
-    > span {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
+  [data-slot="delegation-quiet"] {
+    margin: 0;
+    color: var(--text-weaker);
+    font-size: var(--font-size-small);
+    line-height: 18px;
   }
 
   [data-slot="delegation-notes"] {
@@ -1004,46 +988,6 @@
     }
   }
 
-  [data-slot="delegation-activity"] {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  [data-slot="delegation-activity-row"] {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-    min-height: 20px;
-
-    > strong {
-      color: var(--text-weak);
-      font-size: var(--font-size-medium);
-      font-weight: var(--font-weight-regular);
-      white-space: nowrap;
-    }
-
-    > span {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: var(--text-weaker);
-      font-size: var(--font-size-medium);
-    }
-  }
-
-  [data-slot="delegation-activity-failed"] {
-    color: var(--text-weaker);
-    font-size: var(--font-size-small);
-    font-style: normal;
-    white-space: nowrap;
-  }
-
   [data-slot="delegation-footer"] {
     display: flex;
     align-items: center;
@@ -1077,71 +1021,6 @@
   [data-slot="delegation-link"] {
     flex-shrink: 0;
   }
-
-  [data-component="task-tools"] {
-    padding: 6px 0 0;
-    border-top: 1px solid var(--border-weaker-base);
-
-    [data-slot="task-tool-item"] {
-      min-height: 22px;
-    }
-
-    [data-slot="task-tool-title"],
-    [data-slot="task-tool-subtitle"] {
-      font-size: var(--font-size-small);
-      line-height: var(--line-height-large);
-    }
-  }
-}
-
-[data-component="task-tools"] {
-  padding: 2px 10px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-
-  [data-slot="task-tool-item"] {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 32px;
-    color: var(--text-weak);
-
-    [data-slot="icon-svg"] {
-      flex-shrink: 0;
-      color: var(--icon-weak);
-    }
-  }
-
-  [data-slot="task-tool-title"] {
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-medium);
-    font-weight: var(--font-weight-medium);
-    line-height: 20px;
-    color: var(--text-weak);
-  }
-
-  [data-slot="task-tool-subtitle"] {
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-medium);
-    font-weight: var(--font-weight-regular);
-    line-height: 20px;
-    color: var(--text-weaker);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  [data-slot="task-tool-status"] {
-    margin-left: auto;
-    flex-shrink: 0;
-    font-size: var(--font-size-x-small);
-    color: var(--text-weaker);
-  }
-
-  [data-slot="task-tool-item"][data-status="error"] [data-slot="task-tool-status"] {
-    color: var(--text-critical-base);
-  }
 }
 
 @media (max-width: 560px) {
@@ -1154,14 +1033,6 @@
       flex-direction: column;
       align-items: flex-start;
       gap: 6px;
-    }
-
-    [data-slot="delegation-activity-row"] {
-      grid-template-columns: minmax(0, 1fr) auto;
-
-      > span {
-        grid-column: 1 / -1;
-      }
     }
   }
 }
@@ -1721,6 +1592,7 @@
 
   [data-component="permission-prompt"] [data-slot="permission-actions"] [data-component="button"] {
     flex: 1 1 auto;
+    min-height: 32px;
   }
 }
 

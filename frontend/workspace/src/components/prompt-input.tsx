@@ -65,7 +65,6 @@ import {
   SKILL_PREFERENCES_EVENT,
 } from "@/atlas/skill-permissions"
 import { DialogSettings } from "./dialog-settings"
-import { SkillLibraryDialog } from "@/atlas/SkillsBrowser"
 import { WorkingFolderChip, type WorkingRootChoice } from "./working-folder"
 import "./prompt-input.css"
 import {
@@ -94,6 +93,7 @@ import { getNodeLength, isPillNode, setCursorPosition } from "./prompt-editor-cu
 import { submitComposerPrompt, type ComposerPromptInput } from "./prompt-runtime"
 import { requestFailure, requestStatus } from "@/utils/request-error"
 import {
+  slashBlurb,
   slashGroup,
   slashIcon,
   slashMode,
@@ -101,13 +101,12 @@ import {
   slashOptionId,
   slashActionSkill,
   slashEdit,
-  slashState,
   slashTokenAt,
-  compactSlashItems,
   SLASH_NATIVE,
+  SLASH_SESSION,
   SLASH_QUERY_LIMIT,
-  SLASH_SHORTLIST_LIMIT,
   sortSlash,
+  sortSlashGroups,
   type SlashCommand,
   type SlashMode,
 } from "./prompt-slash"
@@ -945,19 +944,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       pinned: preferences.pinned,
       recent: preferences.recent,
       loadedThisTurn: loadedSkills(),
-      shortlistLimit: SLASH_SHORTLIST_LIMIT,
     })
   })
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const usage: Record<string, string> = {
       compact: "/compact [focus]",
-      context: "/context",
-      plan: "/plan",
-      goal: "/goal",
-      status: "/status",
+      plan: "/plan [objective]",
+      goal: "/goal [objective]",
     }
     const catalog = new Map(sync.data.command.map((item) => [item.name, item]))
+    const permitted = (name: string) => skillAction(sync.data.config.permission, name) !== "deny"
     const local = command.options
       .filter((item) => item.slash && !item.disabled && (item.slash !== "stop" || working()))
       .map((item) => ({
@@ -973,9 +970,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "action" as const,
       }))
     const localTriggers = new Set(local.map((item) => item.trigger))
-    const builtin = SLASH_NATIVE.filter(
-      (name) => !localTriggers.has(name) && skillAction(sync.data.config.permission, name) !== "deny",
-    ).map((name) => {
+    const builtin = SLASH_NATIVE.filter((name) => !localTriggers.has(name) && permitted(name)).map((name) => {
       const item = catalog.get(name)
       return {
         id: `command.${name}`,
@@ -984,32 +979,64 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         description: item?.description,
         usage: usage[name],
         source: "builtin" as const,
-        category: ((["compact", "context", "status"] as string[]).includes(name) ? "session" : "research") as
-          "session" | "research",
+        category: (name === "compact" ? "session" : "research") as "session" | "research",
         type: slashMode({ trigger: name }) ? ("mode" as const) : ("action" as const),
       }
     })
+    // The rarer built-ins ride along as session actions. `stop` only makes
+    // sense while a turn is running, and a local action owns its trigger.
+    const session = SLASH_SESSION.filter(
+      (name) => name !== "stop" && !localTriggers.has(name) && catalog.has(name) && permitted(name),
+    ).map((name) => {
+      const item = catalog.get(name)!
+      return {
+        id: `command.${name}`,
+        trigger: name,
+        title: name,
+        description: item.description,
+        usage: item.usage,
+        source: "builtin" as const,
+        category: (item.category ?? "session") as SlashCommand["category"],
+        type: "action" as const,
+      }
+    })
+    const project = sync.data.command
+      .filter((item) => item.source !== "builtin" && !localTriggers.has(item.name) && permitted(item.name))
+      .map((item) => ({
+        id: `command.${item.name}`,
+        trigger: item.name,
+        title: item.name,
+        description: item.description,
+        usage: item.usage,
+        source: (item.source === "mcp" ? "mcp" : "project") as SlashCommand["source"],
+        category: (item.category ?? "project") as SlashCommand["category"],
+        type: "action" as const,
+      }))
 
-    const reserved = new Set<string>([...SLASH_NATIVE, ...local.map((item) => item.trigger)])
+    const reserved = new Set<string>([
+      ...builtin.map((item) => item.trigger),
+      ...local.map((item) => item.trigger),
+      ...session.map((item) => item.trigger),
+      ...project.map((item) => item.trigger),
+    ])
 
-    // Surface installed skills as slash entries. Selecting one prefills a
-    // "Use the <name> skill: " prompt that the agent matches against its
-    // built-in skill tool — lazy invocation, no new pipeline. A real command
-    // owns its trigger when names collide, so it is never repeated as a skill.
-    // Hide skills tagged `entry: false` (internal helpers).
+    // Every permitted, user-facing skill is a slash entry. Selecting one
+    // prefills `/<name> ` and the agent's skill tool takes it from there. A
+    // real command owns its trigger when names collide.
     const loaded = new Set(skillSnapshot().loadedThisTurn.map((skill) => skill.name))
     const pinned = new Set(skillSnapshot().pinned.map((skill) => skill.name))
     const recent = new Set(skillSnapshot().recent.map((skill) => skill.name))
-    const recommended = new Set(skillSnapshot().recommended.map((skill) => skill.name))
-    const shortlist = new Set(skillSnapshot().shortlist.map((skill) => skill.name))
+    // `stop` is also shipped as a skill so the agent can honour it; the menu
+    // only offers it while a turn is running.
     const skills = skillSnapshot()
-      .allowed.filter((skill) => !reserved.has(skill.name))
+      .allowed.filter((skill) => !reserved.has(skill.name) && (skill.name !== "stop" || working()))
       .map((s) => ({
         id: `skill.${s.name}`,
         trigger: s.name,
         title: s.name,
-        description: s.description?.slice(0, 120) ?? "",
+        description: slashBlurb(s.summary || s.description),
         usage: `/${s.name} [request]`,
+        searchText: [s.description, ...(s.tags ?? [])].filter(Boolean).join(" "),
         source: "skill" as const,
         category: "skill" as const,
         type: slashActionSkill(s.name) ? ("action" as const) : ("skill" as const),
@@ -1021,57 +1048,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             ? "pinned"
             : recent.has(s.name)
               ? "recent"
-              : recommended.has(s.name) && shortlist.has(s.name)
+              : s.recommended
                 ? "recommended"
                 : undefined) as SlashCommand["skillState"],
       }))
 
-    return [...builtin, ...local, ...skills].toSorted(sortSlash)
+    return [...builtin, ...local, ...session, ...project, ...skills].map((item) => ({
+      ...item,
+      description: slashBlurb(item.description),
+    }))
   })
 
   const slashItems = (query: string) => {
-    const items = slashCommands()
-    const browse = (searchText: string): SlashCommand => ({
-      id: "skill.browse-all",
-      trigger: searchText || "browse-skills",
-      title: "Browse all skills",
-      description: "Open the complete skill library",
-      searchText,
-      source: "skill",
-      category: "skill",
-      type: "browse",
-    })
-    if (!query.trim()) {
-      const compactSkillNames = new Set(skillSnapshot().shortlist.map((skill) => skill.name))
-      const compact = compactSlashItems(items, compactSkillNames)
-      return [...compact, browse("")]
-    }
-
-    const shown = new Set(items.map((item) => item.trigger))
-    const governed = new Set(skillSnapshot().library.map((skill) => skill.name))
-    const commands: SlashCommand[] = sync.data.command
-      .filter(
-        (item) =>
-          item.source === "builtin" &&
-          !shown.has(item.name) &&
-          ((!governed.has(item.name) && !SLASH_NATIVE.some((name) => name === item.name)) ||
-            skillAction(sync.data.config.permission, item.name) !== "deny"),
-      )
-      .map((item) => ({
-        id: `command.${item.name}`,
-        trigger: item.name,
-        title: item.name,
-        description: item.description,
-        usage: item.usage,
-        source: "builtin",
-        category: item.category ?? "session",
-        type: slashMode({ trigger: item.name }) ? "mode" : "action",
-      }))
-
-    const all = store.slashInline
-      ? items.filter((item) => item.type === "skill" || item.type === "mode")
-      : [...items, ...commands]
-    return [...slashMatches(all, query, SLASH_QUERY_LIMIT), browse(query.trim())]
+    const items = store.slashInline
+      ? slashCommands().filter((item) => item.type === "skill" || item.type === "mode")
+      : slashCommands()
+    return slashMatches(items, query, SLASH_QUERY_LIMIT)
   }
 
   const setIntent = (intent: SlashMode | null) => {
@@ -1138,37 +1130,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!cmd) return
     setStore("popover", null)
 
-    if (cmd.type === "browse") {
-      const cursor = getCursorPosition(editorRef)
-      const text = prompt
-        .current()
-        .map((part) => ("content" in part ? part.content : ""))
-        .join("")
-      const edit = slashEdit(text, cursor, "")
-      if (!edit || !replaceSlash("", false)) return
-
-      let restoreCursor = edit.cursor
-      dialog.show(
-        () => (
-          <SkillLibraryDialog
-            initialQuery={cmd.searchText}
-            onPick={(name) => {
-              recordRecentSkill(name, skillStorage)
-              restoreCursor = insertEditorText(restoreCursor, `/${name} `)
-            }}
-          />
-        ),
-        {
-          onClose: () => {
-            requestAnimationFrame(() => {
-              editorRef.focus({ preventScroll: true })
-              setCursorPosition(editorRef, restoreCursor)
-            })
-          },
-        },
-      )
-      return
-    }
     if (cmd.source === "skill") recordRecentSkill(cmd.trigger, skillStorage)
 
     const intent = slashMode(cmd)
@@ -1208,9 +1169,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     filterKeys: ["trigger", "title", "description", "usage", "searchText"],
     groupBy: slashGroup,
     sortBy: sortSlash,
-    sortGroupsBy: (a, b) => (a.category === "Commands" ? -1 : b.category === "Commands" ? 1 : 0),
+    sortGroupsBy: sortSlashGroups,
     onSelect: handleSlashSelect,
   })
+
+  // A bare `/` lists the whole library. Rows mount in slices so opening the
+  // menu stays cheap; the slice grows as the user scrolls or arrows past it.
+  const SLASH_SLICE = 48
+  const [slashRendered, setSlashRendered] = createSignal(SLASH_SLICE)
+  const slashVisible = createMemo(() => {
+    let remaining = slashRendered()
+    const result: Array<{ category: string; items: SlashCommand[] }> = []
+    for (const group of slashGrouped.latest ?? []) {
+      if (remaining <= 0) break
+      const items = group.items.slice(0, remaining)
+      result.push({ category: group.category, items })
+      remaining -= items.length
+    }
+    return result
+  })
+  const revealSlash = () => setSlashRendered((current) => Math.min(slashFlat().length, current + SLASH_SLICE))
+
+  // Keyboard navigation may land on a row that is not mounted yet.
+  createEffect(() => {
+    const activeId = slashActive()
+    if (!activeId) return
+    const index = slashFlat().findIndex((item) => item.id === activeId)
+    if (index >= slashRendered()) setSlashRendered(index + SLASH_SLICE)
+  })
+  createEffect(
+    on(
+      () => slashGrouped.latest,
+      () => setSlashRendered(SLASH_SLICE),
+      { defer: true },
+    ),
+  )
 
   const createPill = (part: FileAttachmentPart | AgentPart | ConversationAttachmentPart) => {
     const pill = document.createElement("span")
@@ -2628,13 +2621,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <Match when={store.popover === "slash"}>
               <Show
                 when={slashFlat().length > 0}
-                fallback={<div class="text-text-weak px-2 py-1">{language.t("prompt.popover.emptyCommands")}</div>}
+                fallback={
+                  <div class="workspace-composer__suggestion-empty">{language.t("prompt.popover.emptyCommands")}</div>
+                }
               >
                 {/* A suggestion refresh must not suspend the session and detach the focused editor. */}
-                <For each={slashGrouped.latest}>
+                <For each={slashVisible()}>
                   {(group) => (
-                    <section class="workspace-composer__slash-group" aria-label={group.category}>
-                      <header class="workspace-composer__slash-heading">{group.category}</header>
+                    <section class="workspace-composer__slash-group" aria-label={group.category || "Results"}>
+                      <Show when={group.category}>
+                        <header class="workspace-composer__slash-heading" aria-hidden="true">
+                          {group.category}
+                        </header>
+                      </Show>
                       <For each={group.items}>
                         {(cmd) => (
                           <button
@@ -2644,25 +2643,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             aria-selected={slashActive() === cmd.id}
                             data-slash-id={cmd.id}
                             classList={{
-                              "workspace-composer__suggestion workspace-composer__slash-row w-full": true,
-                              "bg-surface-raised-base-hover": slashActive() === cmd.id,
+                              "workspace-composer__slash-row": true,
+                              "is-active": slashActive() === cmd.id,
                             }}
                             onClick={() => handleSlashSelect(cmd)}
                             onMouseEnter={() => setSlashActive(cmd.id)}
                           >
-                            <span class="workspace-composer__slash-icon">
+                            <span class="workspace-composer__slash-icon" aria-hidden="true">
                               <Icon name={slashIcon(cmd)} size="small" />
                             </span>
-                            <span class="workspace-composer__slash-name">
-                              {cmd.type === "browse" ? cmd.title : `/${cmd.trigger}`}
-                            </span>
-                            <span class="workspace-composer__slash-detail truncate">
-                              {cmd.description || cmd.title}
-                            </span>
-                            <Show when={command.keybind(cmd.id) || slashState(cmd)}>
-                              <span class="workspace-composer__slash-meta">
-                                {command.keybind(cmd.id) || slashState(cmd)}
-                              </span>
+                            <span class="workspace-composer__slash-name">/{cmd.trigger}</span>
+                            <span class="workspace-composer__slash-detail">{cmd.description || cmd.title}</span>
+                            <Show when={command.keybind(cmd.id) || cmd.meta}>
+                              <span class="workspace-composer__slash-meta">{command.keybind(cmd.id) || cmd.meta}</span>
                             </Show>
                           </button>
                         )}
@@ -2670,6 +2663,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </section>
                   )}
                 </For>
+                <Show when={slashRendered() < slashFlat().length}>
+                  <div
+                    class="workspace-composer__slash-sentinel"
+                    ref={(el) => {
+                      const observer = new IntersectionObserver((entries) => {
+                        if (entries.some((entry) => entry.isIntersecting)) revealSlash()
+                      })
+                      observer.observe(el)
+                      onCleanup(() => observer.disconnect())
+                    }}
+                  />
+                </Show>
               </Show>
             </Match>
           </Switch>

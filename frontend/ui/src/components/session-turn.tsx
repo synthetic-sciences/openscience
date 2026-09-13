@@ -38,7 +38,6 @@ import {
   generatedArtifacts,
   sessionErrorDisplay,
   reasoningDisplayText,
-  privateReasoningOnly,
   stripRedactedReasoning,
   writtenFiles,
 } from "./tool-display"
@@ -488,8 +487,7 @@ export function SessionTurn(
       if (!msgParts) continue
       for (const p of msgParts) {
         if (p?.type === "tool") return true
-        if (p?.type === "reasoning" && (reasoningDisplayText(p.text ?? "") || privateReasoningOnly(p.text ?? "")))
-          return true
+        if (p?.type === "reasoning" && reasoningDisplayText(p.text ?? "")) return true
       }
     }
     return false

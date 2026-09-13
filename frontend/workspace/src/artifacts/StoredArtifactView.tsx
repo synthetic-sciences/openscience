@@ -354,7 +354,7 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
         </span>
       </header>
 
-      <div class="atlas-scroll" style={body()}>
+      <div class="atlas-scroll" style={body(previewData()?.kind === "pdf")}>
         <Show when={!detail.loading} fallback={<p style={empty()}>Loading immutable record…</p>}>
           <Show
             when={!detail.error && selected()}
@@ -457,7 +457,11 @@ function Preview(props: {
         {(data) => <img src={data().data} alt={props.version.filename} style={image()} />}
       </Match>
       <Match when={props.data?.kind === "pdf" ? props.data : undefined}>
-        {(data) => <PdfViewer kind="pdf" data={{ bytes: data().data, maxPages: 40 }} />}
+        {(data) => (
+          <div class="atlas-file-pdf">
+            <PdfViewer kind="pdf" data={{ bytes: data().data, maxPages: 40 }} />
+          </div>
+        )}
       </Match>
       <Match when={props.data?.kind === "text" ? props.data : undefined}>
         {(data) => (
@@ -561,7 +565,12 @@ const actionForm = (): JSX.CSSProperties => ({
   padding: "6px",
 })
 const dangerText = (): JSX.CSSProperties => ({ color: "var(--color-text-on-error)" })
-const body = (): JSX.CSSProperties => ({ flex: 1, "min-height": 0, overflow: "auto" })
+// A PDF brings its own scrolling body and fills the pane; everything else
+// scrolls here.
+const body = (pdf = false): JSX.CSSProperties =>
+  pdf
+    ? { flex: 1, "min-height": 0, display: "flex", "flex-direction": "column", overflow: "hidden" }
+    : { flex: 1, "min-height": 0, overflow: "auto" }
 const section = (): JSX.CSSProperties => ({
   margin: "0 auto",
   padding: "24px 18px",

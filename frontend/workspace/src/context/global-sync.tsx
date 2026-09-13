@@ -114,6 +114,7 @@ type ProjectMeta = {
 export interface Skill {
   name: string
   description: string
+  summary?: string
   location: string
   origin: "default" | "installed" | "user" | "project"
   category?: string

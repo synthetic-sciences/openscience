@@ -3,7 +3,7 @@ title: "Slash commands"
 description: "Use conversation controls and define reusable project requests."
 ---
 
-Type `/` in the composer to search commands and enabled skills. The picker reflects what is available in the current project.
+Type `/` in the composer. The menu opens on the **Core** toolkit: `/plan`, `/goal`, the core research skills in workflow order (lookup, literature review, brainstorming, hypotheses, reproduce, autoresearch, compute, delegation, figures, schematics, paper writing, citations, peer review, sources) and `/compact`. Pinned skills follow, then the **Session** actions, then the whole skill library by subject. Typing filters everything at once; a library skill shows its subject on the right.
 
 ## Conversation controls
 
@@ -11,17 +11,14 @@ Type `/` in the composer to search commands and enabled skills. The picker refle
 | --- | --- |
 | `/plan [objective]` | Plan the work before execution. |
 | `/goal [objective]` | Set an objective to pursue across steps. |
-| `/status` | Show current session progress. |
-| `/context` | Inspect conversation context usage. |
 | `/compact [focus]` | Summarize earlier conversation to free context. |
-| `/undo` | Revert the latest supported turn after it finishes. |
-| `/redo` | Restore reverted work. |
-| `/stop` | Stop active work in the session. |
+| `/stop` | Stop active work in the session (offered while a turn runs). |
 | `/checkpoint [label]` | Save a recovery point. |
 | `/handoff [path]` | Save a continuation note, then compact. |
 | `/init` | Create or update project instructions. |
+| `/resume` | Continue an exhausted research contract from its checkpoints. |
 
-Some workflow entries are surfaced as skills or context-sensitive actions. Search by name, and enable the relevant skill if it is not offered.
+Session state, context usage, and undo live in the workspace itself: the token counter in the session header shows context usage, and **Undo from here** on a finished response reverts a turn.
 
 Compaction summarizes conversation history; it is not a backup of project files. Save important methods and results as files before starting a different task.
 

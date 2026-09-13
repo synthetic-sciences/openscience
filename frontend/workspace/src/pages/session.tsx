@@ -47,9 +47,6 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconHome,
-  IconBookOpen,
-  IconFlask,
-  IconFolder,
   IconPlus,
   IconSearch,
   IconSettings,
@@ -812,7 +809,6 @@ export default function Page(): JSX.Element {
         title: language.t("command.session.undo"),
         description: language.t("command.session.undo.description"),
         category: language.t("command.category.session"),
-        slash: "undo",
         disabled: sessionBusy(),
         onSelect: () => void revertTo(last.id),
       })
@@ -823,7 +819,6 @@ export default function Page(): JSX.Element {
         title: language.t("command.session.redo"),
         description: language.t("command.session.redo.description"),
         category: language.t("command.category.session"),
-        slash: "redo",
         disabled: sessionBusy(),
         onSelect: () => void restoreRevert(),
       })
@@ -837,12 +832,10 @@ export default function Page(): JSX.Element {
       onSelect: () => sessionCommand(id, name),
     })
     list.push(
-      action("status", "Session status", "Show live plan, artifact, and workspace state"),
-      action("context", "Context usage", "Show context composition, capacity, and compaction state"),
       action("stop", "Stop active work", "Stop the active response in this session"),
-      action("compact", "Compact conversation", "Summarize the conversation to free up context"),
-      action("handoff", "Write handoff & compact", "Save a resumable handoff, then compact"),
-      action("checkpoint", "Save checkpoint", "Capture a local recovery packet from current session state"),
+      action("compact", "Compact conversation", "Summarize the conversation so far to free up context"),
+      action("handoff", "Write handoff & compact", "Save a resumable handoff.md for another agent, then compact"),
+      action("checkpoint", "Save checkpoint", "Capture a local recovery packet from the session state"),
     )
     return list
   })
@@ -1244,7 +1237,8 @@ export default function Page(): JSX.Element {
                   </div>
                 </Match>
                 <Match when={params.id && messages().length === 0}>
-                  <SessionEmptyState project={projectName()} />
+                  {/* A new session opens on the composer alone. */}
+                  <div class="session-empty" role="region" aria-label="Start a session" />
                 </Match>
                 <Match when={params.id && messages().length > 0}>
                   {/* Scoped to just the scroll area (not the revert banner / Composer
@@ -1529,51 +1523,6 @@ export default function Page(): JSX.Element {
               </div>
             </section>
           </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const EMPTY_SESSION_STARTERS = [
-  {
-    icon: IconBookOpen,
-    title: "Survey the literature",
-    prompt: "Survey the recent literature on ",
-  },
-  {
-    icon: IconFlask,
-    title: "Plan an experiment",
-    prompt: "Help me design an experiment to test whether ",
-  },
-  {
-    icon: IconFolder,
-    title: "Work with my files",
-    prompt: "Look through the files in this project and summarise what they contain, then ",
-  },
-] as const
-
-/** The first thing a new session shows: what this project is, and three ways
- *  to begin that seed the composer rather than sending on the user's behalf. */
-function SessionEmptyState(props: { project: string }) {
-  return (
-    <div class="session-empty" role="region" aria-label="Start a session">
-      <div class="session-empty__inner">
-        <p class="session-empty__eyebrow">{props.project}</p>
-        <h2 class="session-empty__title">What would you like to work on?</h2>
-        <p class="session-empty__hint">
-          Describe a research task below. OpenScience reads this project's files, searches sources, runs analyses, and
-          keeps the results here.
-        </p>
-        <div class="session-empty__starters">
-          <For each={EMPTY_SESSION_STARTERS}>
-            {(starter) => (
-              <button type="button" class="session-empty__starter" onClick={() => uiStore.setPrefill(starter.prompt)}>
-                <starter.icon size={14} strokeWidth={1.5} />
-                <span>{starter.title}</span>
-              </button>
-            )}
-          </For>
         </div>
       </div>
     </div>

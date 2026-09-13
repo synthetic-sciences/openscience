@@ -171,7 +171,7 @@ describe("delegation at the provider boundary", () => {
             expect(user).not.toContain("<system-reminder>")
             expect(user).not.toContain("Research effort:")
             expect(system).toContain("Research effort: NORMAL")
-            expect(system).toContain("as many useful workers as available machine capacity permits")
+            expect(system).toContain("is never a worker's job")
             expect(system).not.toContain("<system-reminder>")
           }
         },

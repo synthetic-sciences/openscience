@@ -11,12 +11,12 @@ import { SessionPrompt } from "../../src/session/prompt"
 import { Todo } from "../../src/session/todo"
 import { tmpdir, trustProject } from "../fixture/fixture"
 
-const names = ["init", "plan", "goal", "status", "context", "stop", "resume", "compact", "handoff", "checkpoint"]
+const names = ["init", "plan", "goal", "stop", "resume", "compact", "handoff", "checkpoint"]
 const workflows = ["review", "compare", "export"]
 // /verify, /reproduce and /sources became the sources and reproduce core skills.
 const coreWorkflows = { verify: "sources", reproduce: "reproduce", sources: "sources" }
 const actions = ["init", "stop", "handoff", "checkpoint"]
-const primary = ["compact", "context", "plan", "goal", "resume", "status"]
+const primary = ["compact", "plan", "goal", "resume"]
 const retiredGraphSkills = ["initialize-atlas-graph", "initialize-research-graph"]
 
 async function seed(sessionID: string) {
@@ -59,8 +59,9 @@ describe("research slash commands", () => {
         expect(commands.get("goal")?.menu).toBeUndefined()
         expect(await commands.get("goal")?.template).toContain("persistent goal")
         expect(await commands.get("goal")?.template).toContain("$ARGUMENTS")
-        expect(commands.get("status")?.menu).toBe(true)
-        expect(commands.get("context")?.menu).toBe(true)
+        // The session readouts were retired: the workspace shows state itself.
+        expect(commands.has("status")).toBe(false)
+        expect(commands.has("context")).toBe(false)
         expect(commands.get("stop")?.menu).toBe(true)
         expect(commands.get("resume")?.menu).toBe(true)
         expect(commands.get("resume")?.category).toBe("research")
@@ -194,48 +195,6 @@ describe("research slash commands", () => {
     })
   })
 
-  test("status and context are deterministic zero-cost session readouts", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({ title: "Long-horizon study" })
-        await seed(session.id)
-        await Todo.update({
-          sessionID: session.id,
-          todos: [
-            { id: "active", content: "Validate the primary result", status: "in_progress", priority: "high" },
-            { id: "next", content: "Export the report", status: "pending", priority: "medium" },
-          ],
-        })
-        const before = MessageV2.composition(await Session.messages({ sessionID: session.id }))
-
-        const status = await SessionPrompt.command({
-          sessionID: session.id,
-          command: "status",
-          arguments: "",
-        })
-        const statusText = status.parts.find((part) => part.type === "text")
-        expect(status.info.role).toBe("assistant")
-        expect(status.info.role === "assistant" ? status.info.cost : -1).toBe(0)
-        expect(statusText?.type === "text" ? statusText.ignored : false).toBe(true)
-        expect(statusText?.type === "text" ? statusText.text : "").toContain("1 active, 1 pending")
-        expect(statusText?.type === "text" ? statusText.text : "").toContain("Long-horizon study")
-
-        const context = await SessionPrompt.command({
-          sessionID: session.id,
-          command: "context",
-          arguments: "",
-        })
-        const contextText = context.parts.find((part) => part.type === "text")
-        expect(context.info.role === "assistant" ? context.info.cost : -1).toBe(0)
-        expect(contextText?.type === "text" ? contextText.text : "").toContain("Current conversation")
-        expect(contextText?.type === "text" ? contextText.text : "").toContain("complete assembled-input budget")
-        expect(MessageV2.composition(await Session.messages({ sessionID: session.id })).total).toBe(before.total)
-      },
-    })
-  })
-
   test("command dispatch preserves research effort and delegation controls", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
@@ -245,7 +204,7 @@ describe("research slash commands", () => {
         await seed(session.id)
         await SessionPrompt.command({
           sessionID: session.id,
-          command: "status",
+          command: "checkpoint",
           arguments: "",
           effort: "ultra",
           delegation: false,
@@ -264,23 +223,14 @@ describe("research slash commands", () => {
       directory: tmp.path,
       fn: async () => {
         const session = await Session.create({ title: "Empty study" })
-        const result = await SessionPrompt.command({
-          sessionID: session.id,
-          command: "status",
-          arguments: "",
-        })
-        const text = result.parts.find((part) => part.type === "text")
-        expect(result.info.role === "assistant" ? result.info.providerID : "").toBe("openscience")
-        expect(result.info.role === "assistant" ? result.info.modelID : "").toBe("local")
-        expect(text?.type === "text" ? text.ignored : false).toBe(true)
-        expect(text?.type === "text" ? text.text : "").toContain("Empty study")
-
         const goal = await SessionPrompt.command({
           sessionID: session.id,
           command: "goal",
           arguments: "",
         })
         const goalText = goal.parts.find((part) => part.type === "text")
+        expect(goal.info.role === "assistant" ? goal.info.providerID : "").toBe("openscience")
+        expect(goal.info.role === "assistant" ? goal.info.modelID : "").toBe("local")
         expect(goal.info.role === "assistant" ? goal.info.cost : -1).toBe(0)
         expect(goalText?.type === "text" ? goalText.ignored : false).toBe(true)
         expect(goalText?.type === "text" ? goalText.text : "").toContain("Describe the objective after `/goal`.")

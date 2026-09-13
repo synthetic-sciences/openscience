@@ -75,8 +75,6 @@ export namespace Command {
     INIT: "init",
     PLAN: "plan",
     GOAL: "goal",
-    STATUS: "status",
-    CONTEXT: "context",
     STOP: "stop",
     RESUME: "resume",
     COMPACT: "compact",
@@ -93,7 +91,7 @@ export namespace Command {
     const result: Record<string, Info> = {
       [Default.INIT]: {
         name: Default.INIT,
-        description: "create/update AGENTS.md",
+        description: "Create or update AGENTS.md for this project",
         source: "builtin",
         category: "project",
         usage: "/init",
@@ -104,7 +102,7 @@ export namespace Command {
       },
       [Default.PLAN]: {
         name: Default.PLAN,
-        description: "enter read-only plan mode and produce a decision-ready plan",
+        description: "Read-only plan mode; produce a decision-ready plan before doing",
         source: "builtin",
         category: "research",
         usage: "/plan [objective]",
@@ -117,7 +115,7 @@ export namespace Command {
       },
       [Default.GOAL]: {
         name: Default.GOAL,
-        description: "set a persistent objective and begin working toward it",
+        description: "Set a persistent objective and work toward it until done",
         source: "builtin",
         category: "research",
         usage: "/goal [objective]",
@@ -133,33 +131,9 @@ export namespace Command {
         },
         hints: ["$ARGUMENTS"],
       },
-      [Default.STATUS]: {
-        name: Default.STATUS,
-        description: "show live session, plan, artifact, and workspace state",
-        source: "builtin",
-        category: "session",
-        usage: "/status",
-        menu: true,
-        get template() {
-          return ""
-        },
-        hints: [],
-      },
-      [Default.CONTEXT]: {
-        name: Default.CONTEXT,
-        description: "show context composition, capacity, and compaction state",
-        source: "builtin",
-        category: "session",
-        usage: "/context",
-        menu: true,
-        get template() {
-          return ""
-        },
-        hints: [],
-      },
       [Default.STOP]: {
         name: Default.STOP,
-        description: "stop the active turn, compute, or everything in this session",
+        description: "Stop the active turn, compute, or everything in this session",
         source: "builtin",
         category: "session",
         usage: "/stop [turn|compute|all]",
@@ -171,7 +145,7 @@ export namespace Command {
       },
       [Default.RESUME]: {
         name: Default.RESUME,
-        description: "resume an exhausted research contract from its current checkpoints",
+        description: "Resume an exhausted research contract from its checkpoints",
         source: "builtin",
         category: "research",
         usage: "/resume",
@@ -189,7 +163,7 @@ export namespace Command {
       // it and runs SessionCompaction directly. The empty template is never used.
       [Default.COMPACT]: {
         name: Default.COMPACT,
-        description: "summarize the conversation so far to free up context",
+        description: "Summarize the conversation so far to free up context",
         source: "builtin",
         category: "session",
         usage: "/compact [focus]",
@@ -201,7 +175,7 @@ export namespace Command {
       },
       [Default.HANDOFF]: {
         name: Default.HANDOFF,
-        description: "write a self-contained handoff.md for another agent, then compact",
+        description: "Write a self-contained handoff.md for another agent, then compact",
         source: "builtin",
         category: "session",
         usage: "/handoff [project-relative path]",
@@ -213,7 +187,7 @@ export namespace Command {
       },
       [Default.CHECKPOINT]: {
         name: Default.CHECKPOINT,
-        description: "capture a local recovery packet from durable session state",
+        description: "Capture a local recovery packet from the session state",
         source: "builtin",
         category: "session",
         usage: "/checkpoint [label]",

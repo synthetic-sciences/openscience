@@ -57,40 +57,31 @@
   line-height: var(--settings-leading-helper);
 }
 
-/* Embedded Skills follows the same compact hierarchy as Compute and
-   Specialists. The standalone Skills workspace keeps its roomier catalog
-   scale in skills-page.css. */
+/* Embedded Skills follows the same compact hierarchy as Compute and the
+   other capability panels. */
 .settings-skills .skills-workspace__group-heading h3,
 .settings-skills .skills-workspace__identity strong,
+.settings-skills .skills-workspace__shelf-toggle strong,
 .settings-skills .skills-workspace__form-heading h3,
-.settings-skills .skills-workspace__state > strong {
+.settings-skills .skills-workspace__empty > strong {
   font-size: var(--settings-type-body);
   font-weight: var(--font-weight-medium);
   line-height: var(--settings-leading-body);
   letter-spacing: 0;
 }
 
-.settings-skills .skills-workspace__group-heading > span,
-.settings-skills .skills-workspace__identity-copy > span,
-.settings-skills .skills-workspace__identity code,
-.settings-skills .skills-workspace__details > p,
+.settings-skills .skills-workspace__group-heading p,
+.settings-skills .skills-workspace__details,
 .settings-skills .skills-workspace__form-heading p,
 .settings-skills .skills-workspace__form-fields > label > span,
 .settings-skills .skills-workspace__form-fields input,
 .settings-skills .skills-workspace__form-fields textarea,
-.settings-skills .skills-workspace__security-note,
-.settings-skills .skills-workspace__state > p,
-.settings-skills .skills-workspace__state > button,
+.settings-skills .skills-workspace__form-note,
+.settings-skills .skills-workspace__empty > p,
+.settings-skills .skills-workspace__empty > button,
 .settings-skills .skills-workspace__form-actions button {
   font-size: var(--settings-type-helper);
   line-height: var(--settings-leading-helper);
-}
-
-/* The shared Settings toolbar is flex-based. Restore the catalog's denser
-   search/filter/action grid so it stays one calm toolbar at dialog widths. */
-.settings-skills .skills-workspace__toolbar-controls {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) max-content max-content;
 }
 
 .settings-skills .skills-workspace .settings-control {
@@ -130,23 +121,29 @@
   color: currentColor;
 }
 
-.settings-skills .skills-workspace__list {
-  gap: var(--settings-space-5);
+.settings-skills .skills-workspace__views {
+  background: var(--settings-surface-muted);
 }
 
-.settings-skills .skills-workspace__group {
-  gap: 8px;
+.settings-skills .skills-workspace__views button[aria-pressed="true"] {
+  background: var(--settings-surface);
+}
+
+.settings-skills .skills-workspace__list {
+  gap: var(--settings-space-5);
 }
 
 .settings-skills .skills-workspace__rows {
   gap: 2px;
   padding: 4px;
   border: 0;
+  border-radius: var(--settings-radius-control);
   background: var(--settings-surface);
   box-shadow: var(--settings-shadow-card);
 }
 
-.settings-skills .skills-workspace__row {
+.settings-skills .skills-workspace__row,
+.settings-skills .skills-workspace__source {
   border: 0;
   border-radius: var(--settings-radius-control);
   background: transparent;
@@ -156,54 +153,44 @@
   background: var(--settings-surface-hover);
 }
 
-.settings-skills .skills-workspace__form-icon,
-.settings-skills .skills-workspace__state-icon {
-  border: 0;
+.settings-skills .skills-workspace__shelf {
+  background: var(--settings-surface);
+  box-shadow: var(--settings-shadow-card);
 }
 
-.settings-skills .skills-workspace__form-icon,
-.settings-skills .skills-workspace__state-icon,
-.settings-skills .skills-workspace__tags .settings-chip {
-  background: var(--settings-surface-active);
+.settings-skills .skills-workspace__shelf > .skills-workspace__rows {
+  padding: 0 4px;
+  box-shadow: none;
 }
 
-.settings-skills .skills-workspace__tags .settings-chip {
-  min-height: 20px;
-  padding: 1px 7px;
-  border: 0;
-  border-radius: var(--settings-radius-pill);
-  color: var(--color-text);
-  font-size: var(--settings-type-helper);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--settings-leading-helper);
-}
-
-.settings-skills .skills-workspace__form-fields {
-  border: 0;
+.settings-skills .skills-workspace__shelf > .skills-workspace__rows .skills-workspace__row {
   background: var(--settings-surface-muted);
 }
 
-.settings-skills .skills-workspace__form-fields .settings-field,
-.settings-skills .skills-workspace__security-note {
-  border-color: transparent;
+.settings-skills .skills-workspace__shelf > .skills-workspace__rows .skills-workspace__row:hover {
+  background: var(--settings-surface-hover);
+}
+
+.settings-skills .skills-workspace__form-icon,
+.settings-skills .skills-workspace__empty-icon {
+  border: 0;
+  background: var(--settings-surface-active);
+}
+
+.settings-skills .skills-workspace__form {
   background: var(--settings-surface);
+  box-shadow: var(--settings-shadow-card);
+}
+
+.settings-skills .skills-workspace__form-fields .settings-field {
+  border-color: transparent;
+  background: var(--settings-surface-muted);
 }
 
 .settings-skills .skills-workspace__form-fields input.settings-field {
   min-height: 32px;
   height: 32px;
   padding-block: 5px;
-}
-
-.settings-skills .skills-workspace__form-fields textarea.settings-field {
-  min-height: 88px;
-}
-
-.settings-skills .skills-workspace__state > .settings-button {
-  min-height: 32px;
-  padding-inline: 12px;
-  border: 0;
-  background: var(--settings-surface-muted);
 }
 
 .settings-skills .skills-workspace__form-actions .settings-button {
@@ -225,26 +212,5 @@
 
   .settings-skills .skills-workspace__body {
     padding: 16px 20px 36px;
-  }
-}
-
-@container skills-workspace (max-width: 800px) {
-  .settings-skills .skills-workspace__toolbar-controls {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@container skills-workspace (max-width: 640px) {
-  /* Tags remain useful metadata in a resizable Settings pane. The base
-     workspace previously hid them at this width, which made the embedded
-     catalog look incomplete. */
-  .settings-skills .skills-workspace__tags {
-    display: flex;
-  }
-}
-
-@container skills-workspace (max-width: 460px) {
-  .settings-skills .skills-workspace__toolbar-controls {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

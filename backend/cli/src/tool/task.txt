@@ -1,17 +1,17 @@
-Delegate independent work when parallelism materially improves the result.
+Delegate one independent branch per worker when it shortens the path to the result.
 
 Profiles:
 {agents}
 
-Use `explore` for evidence and `execute` for implementation or compute.
+`explore` for evidence, `execute` for implementation or compute.
 
-- Use as many independent workers as useful; posture is guidance, not a quota.
-- Issue independent calls together. Task waits for a decision-ready handoff.
-- Only the lead dispatches workers, asks questions, synthesizes and verifies. Children cannot dispatch children.
-- Avoid sequential work, small edits and duplicate retrieval.
-- Verify setup and imports before dependent work; pass tested, authorized paths, not installation
-  promises. Workers read your workspace but write only in their own; ask for outputs back as
-  saved artifacts.
-- Continue a `session_id` only for missing work. Include objective, inputs, references, constraints,
-  allowed actions, expected output and validation.
+- Checking the lead's own output (compiling, reading a rendered file, confirming a number or a
+  reference) is the lead's job, not a task.
+- Issue independent calls together; Task waits for a decision-ready handoff.
+- Each brief: objective, inputs, constraints, allowed actions, expected output, validation, and
+  a bound (files, steps or minutes). Continue a `session_id` only for missing work.
+- Only the lead dispatches workers, asks questions, synthesizes and verifies. Children cannot
+  dispatch children.
+- No sequential work, small edits or duplicate retrieval.
+- Workers read your workspace but write only in their own; ask for outputs back as artifacts.
 - Preserve decisive handoff evidence; the child's transcript remains in `session_id`.

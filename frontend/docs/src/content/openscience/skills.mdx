@@ -21,7 +21,7 @@ Use the directory to discover a procedure, then check the entry available in you
 
 ## Find and use a skill
 
-Open **Customize → Skills** and search by task or subject. Enable the skills you want available. In a conversation, type `/` and search the skill picker, or ask for the procedure in your request.
+Open **Customize → Skills**. The catalog is organised the way the agent uses it: **Core** first, in workflow order; **Personal** for the skills you wrote, installed or keep in the project; the **Library** as shelves by subject, each folded until you open it, with Activate all / Turn off all per shelf; and **Sources**, every directory feeding the catalog and any name that lost a collision. The views at the top (All, Core, Library, Personal, Off) narrow the list; search is one flat list across everything. In a conversation, type `/` for the same tiers, or ask for the procedure in your request.
 
 ```text
 Use the appropriate single-cell analysis skill to inspect this dataset.
@@ -33,7 +33,7 @@ A skill supplies guidance. It does not guarantee that every referenced package, 
 
 OpenScience searches the enabled library when it does not know an exact skill name. Search results are suggestions; instructions load only after selecting an available name. If a request includes both an unavailable name and a search query, OpenScience uses the query to find candidates instead of loading a guessed substitute.
 
-Choose **Browse all skills** in the conversation picker to open the searchable library. The list scrolls independently of the search and count controls. Selecting a skill prepares its slash command in the composer; it does not send your request.
+The `/` menu opens on Core, then pinned skills, the session actions, and the whole library by subject; typing filters all of it, and a library skill shows its subject on the right. Selecting a skill prepares its slash command in the composer; it does not send your request. Pin a skill in Customize → Skills to keep it near the top of the menu.
 
 A successful tool load appears in the conversation as **Loaded skill: name**, even when reasoning and activity are collapsed. Expand it to inspect the saved instructions, then **Load details** for the source and instruction hash. Searches and failed loads are labeled separately.
 
@@ -84,7 +84,7 @@ Use `openscience skill edit leakage-checks` to revise it. `validate --strict` al
 
 ## Register a local skill directory
 
-A team pack, a vendor's collection or an air-gapped mirror can join the library without editing a config file or restarting. Register the directory through the API (or the SDK) and its skills are scanned at once, nested category folders included:
+A team pack, a vendor's collection or an air-gapped mirror can join the library without editing a config file or restarting. In **Customize → Skills**, choose **Add skill → Add a local folder**, enter the path and whether to keep it always (your config), for this project (the project config) or until the server restarts; the folder then appears under Sources with a remove control. The same is available through the API and SDK; the skills are scanned at once, nested category folders included:
 
 ```bash
 curl -X POST http://127.0.0.1:4096/settings/skills/paths \

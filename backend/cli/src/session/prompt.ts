@@ -2263,10 +2263,10 @@ export namespace SessionPrompt {
       settings.level === "off"
         ? "Automatic delegation is off. Work in the lead conversation unless the user explicitly attached an agent."
         : settings.level === "light"
-          ? "Delegation is Low. Delegate when clearly useful, especially for one genuinely independent branch."
+          ? "Delegation is Low. Delegate at most one genuinely independent branch, and only when it clearly shortens the path to the result."
           : settings.level === "high"
-            ? "Delegation is High. Aggressively parallelize independent research and verification when useful."
-            : "Delegation is Normal. Naturally parallelize genuinely independent work when it improves the result."
+            ? "Delegation is High. Parallelize independent branches freely, one worker per branch."
+            : "Delegation is Normal. Delegate a genuinely independent branch when it shortens the path to the result; otherwise do the work here."
     const interaction = decisionPolicy(settings.autonomy)
     // Only the lead runs Fusion; a worker inherits the settings with level off
     // and must not be told it has a worker of its own.
@@ -2276,7 +2276,7 @@ export namespace SessionPrompt {
         : []
     return [
       `Research effort: ${effort.toUpperCase()}. ${posture}`,
-      `${delegationPosture} The model may use as many useful workers as available machine capacity permits, and must integrate their findings in the lead response.`,
+      `${delegationPosture} A worker needs a clean boundary, a self-contained brief with a definition of done, and its findings integrated in the lead response. Verifying the lead's own output (compiling, reading a rendered file, checking a number or a reference) is never a worker's job.`,
       ...fusionPosture,
       `Independence: ${settings.autonomy}. ${interaction.instruction} Apply this posture to the lead and workers. It never overrides the permission mode.`,
     ].join("\n")
@@ -3441,85 +3441,6 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     return { info: assistant, parts: [part] }
   }
 
-  async function status(input: CommandInput) {
-    const [session, messages, todos, artifacts, diff] = await Promise.all([
-      Session.get(input.sessionID),
-      Session.messages({ sessionID: input.sessionID }),
-      Todo.get(input.sessionID),
-      File.artifacts({ sessionID: input.sessionID }).catch(() => []),
-      Session.diff(input.sessionID).catch(() => []),
-    ])
-    const plan = Object.fromEntries(
-      ["in_progress", "pending", "completed", "cancelled"].map((state) => [
-        state,
-        todos.filter((todo) => todo.status === state).length,
-      ]),
-    )
-    const latest = messages.findLast((message) => message.info.role === "user")
-    const model = latest?.info.role === "user" ? `${latest.info.model.providerID}/${latest.info.model.modelID}` : "none"
-    const state = SessionStatus.get(input.sessionID).type
-    const changes = diff.reduce(
-      (total, file) => ({ additions: total.additions + file.additions, deletions: total.deletions + file.deletions }),
-      { additions: 0, deletions: 0 },
-    )
-    return notice(
-      input,
-      [
-        "### Session status",
-        "",
-        `- State: **${state}**`,
-        `- Session: ${session.title}`,
-        `- Plan: ${plan.in_progress ?? 0} active, ${plan.pending ?? 0} pending, ${plan.completed ?? 0} complete`,
-        `- Conversation: ${messages.length} messages`,
-        `- Model: ${model}`,
-        `- Artifacts: ${artifacts.length}`,
-        `- Workspace changes: ${diff.length} files (+${changes.additions} / -${changes.deletions})`,
-        `- Updated: ${new Date(session.time.updated).toISOString()}`,
-      ].join("\n"),
-    )
-  }
-
-  async function context(input: CommandInput) {
-    const messages = await Session.messages({ sessionID: input.sessionID })
-    const composition = MessageV2.composition(messages)
-    const assembled = SessionTelemetry.context(input.sessionID)
-    const selected = await commandModel(input)
-    const model = await Provider.getModel(selected.providerID, selected.modelID).catch(() => undefined)
-    const capacity = model?.limit.context
-    const budget = assembled?.hard ?? capacity
-    const used = assembled?.total ?? composition.total
-    const percent = budget ? Math.min(999, Math.round((used / budget) * 100)) : undefined
-    const summaries = messages.filter((message) => message.info.role === "assistant" && message.info.summary).length
-    return notice(
-      input,
-      [
-        "### Context",
-        "",
-        `- Current conversation: **${composition.total.toLocaleString()} estimated tokens**`,
-        ...(assembled
-          ? [
-              `- Last assembled provider input: **${assembled.total.toLocaleString()} / ${assembled.hard.toLocaleString()} safe tokens (${percent}%)**`,
-              `- Protected newest request: ${assembled.newest.toLocaleString()}`,
-              `- Reducible history: ${assembled.history.toLocaleString()}`,
-            ]
-          : capacity
-            ? [`- Model context: ${capacity.toLocaleString()} tokens`]
-            : []),
-        `- Text: ${composition.text.toLocaleString()}`,
-        `- Reasoning: ${composition.reasoning.toLocaleString()}`,
-        `- Tool results: ${composition.tool.toLocaleString()}`,
-        `- Skills: ${composition.skills.toLocaleString()}`,
-        `- Images: ${composition.images} (${composition.image.toLocaleString()} estimated tokens)`,
-        `- Compaction summaries: ${summaries}`,
-        "",
-        assembled
-          ? "The assembled figure is the exact local preflight from the last provider call, including instructions, tool schemas, file payloads, and media allowances."
-          : "Start a model turn to record the complete assembled-input budget, including instructions and tool schemas.",
-        ...(percent && percent >= 75 ? ["Use `/compact [focus]` before the next long research phase."] : []),
-      ].join("\n"),
-    )
-  }
-
   async function stop(input: CommandInput) {
     const scope = input.arguments.trim().toLowerCase() || "turn"
     if (!["turn", "compute", "all"].includes(scope)) {
@@ -3572,8 +3493,6 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
         template: "minimal",
       })
     }
-    if (!configured && input.command === Command.Default.STATUS) return status(input)
-    if (!configured && input.command === Command.Default.CONTEXT) return context(input)
     if (!configured && input.command === Command.Default.STOP) return stop(input)
     if (!configured && input.command === Command.Default.CHECKPOINT) return checkpoint(input)
     if (!configured && input.command === Command.Default.RESUME) {

@@ -56,7 +56,6 @@ import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import {
   reasoningDisplayText,
-  privateReasoningOnly,
   runningLabel,
   savedArtifact,
   scienceTaskLabel,
@@ -71,14 +70,7 @@ import {
   toolSummary,
 } from "./tool-display"
 import { ToolRegistry, type ToolProps } from "./tool-registry"
-import {
-  elapsedLabel,
-  formatTaskDuration,
-  parseTaskHandoff,
-  pluralize,
-  summarizeTaskActivity,
-  traceFamily,
-} from "./research-trace"
+import { elapsedLabel, formatTaskDuration, parseTaskHandoff, traceFamily } from "./research-trace"
 
 export { ARTIFACT_TOOL, ToolRegistry, type ToolComponent, type ToolProps } from "./tool-registry"
 
@@ -782,18 +774,14 @@ function completedAt(message: MessageType) {
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = props.part as ReasoningPart
   const text = () => reasoningDisplayText(part.text)
-  const privateOnly = () => privateReasoningOnly(part.text)
   const live = () => !part.time?.end && !completedAt(props.message)
+  // A private-only continuation renders nothing; its time still counts in the
+  // row label, and the persisted provider text is never shown.
   return (
-    <Show when={text() || privateOnly()}>
+    <Show when={text()}>
       <div data-component="reasoning-part" data-origin="provider-reasoning" data-live={live() ? "true" : undefined}>
         <div data-slot="reasoning-part-body">
-          <Show
-            when={text()}
-            fallback={<span data-slot="reasoning-unavailable">Reasoning text isn’t available for this step.</span>}
-          >
-            <Markdown text={text()} cacheKey={part.id} />
-          </Show>
+          <Markdown text={text()} cacheKey={part.id} />
         </div>
       </div>
     </Show>
@@ -1355,11 +1343,7 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const summary = () =>
-      (props.metadata.summary ?? []) as { id: string; tool: string; state: { status: string; title?: string } }[]
-
     const childSessionId = () => props.metadata.sessionId as string | undefined
-    const activity = createMemo(() => summarizeTaskActivity(summary()))
     const handoff = createMemo(() => parseTaskHandoff(props.output ?? props.error))
     const live = () => props.status === "running" || props.status === "pending"
     const now = useClock(() => live() && !!props.time?.start)
@@ -1367,10 +1351,6 @@ ToolRegistry.register({
       if (live() && props.time?.start) return elapsedLabel(now() - props.time.start)
       const measured = props.time?.end === undefined ? undefined : props.time.end - props.time.start
       return formatTaskDuration((props.metadata.durationMs as number | undefined) ?? measured)
-    }
-    const model = () => {
-      const value = props.metadata.model as { providerID?: string; modelID?: string } | undefined
-      return [value?.providerID, value?.modelID].filter(Boolean).join(" / ") || undefined
     }
     // Phases come from the part state and the Task metadata the backend
     // recorded, never from the pending placeholder alone: a delegation that
@@ -1402,7 +1382,6 @@ ToolRegistry.register({
       }
     }
     const [expanded, setExpanded] = createSignal<boolean>()
-    const current = () => summary().findLast((item) => item.state.status === "running")
     const fusion = () => {
       const value = props.metadata.fusion as { generation?: number; handoff?: number } | undefined
       return value && typeof value.handoff === "number" ? value : undefined
@@ -1428,9 +1407,10 @@ ToolRegistry.register({
 
     const childRequest = createMemo(() => childPermission() ?? childQuestion())
     const attention = () => (childPermission() ? "permission" : childQuestion() ? "question" : undefined)
-    // A worker waiting on the user must stay visible; otherwise the card
-    // follows the user's last choice and defaults to open while it runs.
-    const open = () => (attention() ? true : (expanded() ?? live()))
+    // A worker waiting on the user must stay visible; otherwise the card is a
+    // closed line until the user opens it. Nothing streams from the worker:
+    // its transcript is one click away and its handoff lands here when done.
+    const open = () => (attention() ? true : (expanded() ?? false))
     const statusLabel = () =>
       attention() === "permission"
         ? i18n.t("ui.tool.task.needsApproval")
@@ -1496,8 +1476,6 @@ ToolRegistry.register({
       )
     }
 
-    const [operations, setOperations] = createSignal(false)
-
     return (
       <div data-component="tool-part-wrapper" data-permission={!!childPermission()} data-question={!!childQuestion()}>
         <details
@@ -1528,9 +1506,6 @@ ToolRegistry.register({
               <span data-slot="delegation-subline">
                 <span data-slot="delegation-status">{statusLabel()}</span>
                 <Show when={duration()}>{(value) => <span>{value()}</span>}</Show>
-                <Show when={props.metadata.toolCalls !== undefined}>
-                  <span>{pluralize(Number(props.metadata.toolCalls), "op")}</span>
-                </Show>
               </span>
             </span>
             <span data-slot="delegation-summary-meta">
@@ -1560,15 +1535,6 @@ ToolRegistry.register({
                 </Show>
                 <Show when={childQuestion()}>{(request) => <QuestionPrompt request={request()} />}</Show>
               </div>
-            </Show>
-
-            <Show when={phase() === "running" && !attention() && current()}>
-              {(item) => (
-                <div data-slot="delegation-current">
-                  <Spinner />
-                  <span>{item().state.title || getToolInfo(item().tool).title}</span>
-                </div>
-              )}
             </Show>
 
             <Show when={handoff().notes.length > 0}>
@@ -1615,54 +1581,11 @@ ToolRegistry.register({
               </div>
             </Show>
 
-            <Show when={activity().length > 0}>
-              <ol data-slot="delegation-activity" aria-label="Worker activity">
-                <For each={activity()}>
-                  {(group) => (
-                    <li data-slot="delegation-activity-row" data-family={group.family}>
-                      <strong>{group.label}</strong>
-                      <span>{group.detail === group.family ? "" : group.detail}</span>
-                      <Show when={group.failed > 0}>
-                        <em data-slot="delegation-activity-failed">{group.failed} failed</em>
-                      </Show>
-                    </li>
-                  )}
-                </For>
-              </ol>
+            <Show when={live() && !attention()}>
+              <p data-slot="delegation-quiet">Working in its own session; the handoff appears here when it finishes.</p>
             </Show>
-
-            <Show when={operations() && summary().length > 0}>
-              <div data-component="task-tools">
-                <For each={summary()}>
-                  {(item) => {
-                    const info = getToolInfo(item.tool)
-                    return (
-                      <div data-slot="task-tool-item" data-status={item.state.status}>
-                        <Icon name={info.icon} size="small" />
-                        <span data-slot="task-tool-title">{info.title}</span>
-                        <Show when={item.state.title}>
-                          <span data-slot="task-tool-subtitle">{item.state.title}</span>
-                        </Show>
-                        <span data-slot="task-tool-status">
-                          {i18n.t(
-                            item.state.status === "completed"
-                              ? "ui.tool.status.done"
-                              : item.state.status === "error"
-                                ? "ui.tool.status.error"
-                                : "ui.tool.status.running",
-                          )}
-                        </span>
-                      </div>
-                    )
-                  }}
-                </For>
-              </div>
-            </Show>
-            {/* One quiet line of provenance and two things that look like what
-                they are: buttons. Failures already read in the activity rows. */}
             <div data-slot="delegation-footer">
               <span data-slot="delegation-metrics" aria-label="Delegated research details">
-                <Show when={model()}>{(value) => <span>{value()}</span>}</Show>
                 <Show when={fusion()}>
                   {(value) => (
                     <span>
@@ -1675,18 +1598,6 @@ ToolRegistry.register({
                 </Show>
               </span>
               <span data-slot="delegation-actions">
-                <Show when={summary().length > 0}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="small"
-                    data-slot="delegation-link"
-                    aria-expanded={operations()}
-                    onClick={() => setOperations(!operations())}
-                  >
-                    {operations() ? "Hide operations" : pluralize(summary().length, "operation")}
-                  </Button>
-                </Show>
                 <Show when={childSessionId() && data.navigateToSession}>
                   <Button
                     type="button"

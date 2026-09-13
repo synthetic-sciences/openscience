@@ -45,7 +45,7 @@ limits after one read, and cannot find a sentence the results do not support.
 - [ ] Inventory the evidence: results, figures, data, methods, prior drafts, notes.
 - [ ] Write the argument in one paragraph before the sections.
 - [ ] Draft sections in evidence order: methods, results, discussion, introduction, abstract.
-- [ ] Verify every number and citation against its source; compile; read the PDF.
+- [ ] Verify every number and citation against its source; compile; read the PDF yourself.
 - [ ] Hand over with the open questions listed.
 
 **Target.** Ask once if the venue or document type is unknown and it changes the shape;
@@ -55,7 +55,9 @@ without one, `assets/report-template.tex` and `assets/scientific_report.sty` com
 cleanly for a report or preprint.
 
 **Evidence.** Read the results files, notebooks, tracked runs and figures before writing a
-sentence about them. Build a short table of the claims the evidence supports, each with
+sentence about them. A report on work done in this session is built from that evidence and
+cites outside work only where the text needs it; a literature review belongs to a
+manuscript for submission, not to every write-up. Build a short table of the claims the evidence supports, each with
 its source path. Anything the user asserts that the evidence does not show is flagged, not
 written as fact.
 
@@ -74,9 +76,9 @@ figures skill builds plots, the schematics skill builds diagrams. Tables carry t
 the prose cites, with uncertainty and n. Reference every figure and table in the text
 before it appears.
 
-**Verification.** Compile (`latexmk -pdf` or `pdflatex` twice with `bibtex`), fix every
-error, then read the PDF: figure sizes, overfull lines, orphaned headings, broken refs
-(`??`). `scripts/validate_format.py --file paper.pdf --venue "<venue>" --check-all` checks
+**Verification.** This is part of writing, done here, not handed to a worker. Compile
+(`latexmk -pdf` or `pdflatex` twice with `bibtex`), fix every error, then read the PDF:
+figure sizes, overfull lines, orphaned headings, broken refs (`??`). `scripts/validate_format.py --file paper.pdf --venue "<venue>" --check-all` checks
 page count, margins and font size against the venue's rules where it knows them. Run the
 citations skill's `validate_bib.py` on the `.bib`. Re-read the abstract against the
 results table.

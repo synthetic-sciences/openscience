@@ -283,9 +283,7 @@ describe("native provider system and continuation boundaries", () => {
           expect(userText(adapter, request.body)).not.toContain("Research effort:")
           expect(userText(adapter, request.body)).not.toContain("<system-reminder>")
           expect(systemText(adapter, request.body)).toContain("Research effort: NORMAL")
-          expect(systemText(adapter, request.body)).toContain(
-            "as many useful workers as available machine capacity permits",
-          )
+          expect(systemText(adapter, request.body)).toContain("is never a worker's job")
           expect(systemText(adapter, request.body)).not.toContain("<system-reminder>")
         }
 
