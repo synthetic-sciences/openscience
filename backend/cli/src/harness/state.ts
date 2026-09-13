@@ -1,4 +1,4 @@
-import { Config } from "@/config/config"
+import type { Config } from "@/config/config"
 
 /**
  * Per-session facts the harness units share: what the loop told them about
@@ -76,5 +76,28 @@ export namespace HarnessState {
   export function costCeiling(config: Config.Info) {
     const value = config.harness?.cost
     return typeof value === "object" ? value.max_usd : undefined
+  }
+
+  /** A headless run registers its root session: denied tool calls continue
+   * the loop instead of ending it. */
+  export function headless(sessionID: string, input: { continueOnDeny: boolean }) {
+    get(sessionID).continueOnDeny = input.continueOnDeny
+  }
+
+  export function continueOnDeny(config: Config.Info, sessionID: string) {
+    if (!enabled(config, "headless-policy")) return false
+    return get(sessionID).continueOnDeny === true
+  }
+
+  /** The loop records whether this session may delegate this turn so tool
+   * hints (truncation) can offer Task only when it is actually available. */
+  export function delegation(sessionID: string, enabled: boolean) {
+    get(sessionID).delegation = enabled
+  }
+
+  export function delegates(config: Config.Info, sessionID: string | undefined) {
+    if (!sessionID) return true
+    if (!enabled(config, "durable-jobs")) return true
+    return get(sessionID).delegation !== false
   }
 }

@@ -12,7 +12,7 @@ import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
-import { Harness } from "@/harness"
+import { HarnessState } from "@/harness/state"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
@@ -871,7 +871,7 @@ export namespace SessionProcessor {
           const funding = await fundingSnapshot(source)
           const config = await Config.get()
           const shouldBreak =
-            config.experimental?.continue_loop_on_deny !== true && !Harness.continueOnDeny(config, input.sessionID)
+            config.experimental?.continue_loop_on_deny !== true && !HarnessState.continueOnDeny(config, input.sessionID)
           return { source, funding, shouldBreak }
         })().catch((error) => {
           progress("error")

@@ -38,26 +38,11 @@ export namespace Harness {
     return HarnessState.enabled(config, unit)
   }
 
-  /** A headless run registers its root session: denied tool calls continue
-   * the loop instead of ending it. */
-  export function headless(sessionID: string, input: { continueOnDeny: boolean }) {
-    HarnessState.get(sessionID).continueOnDeny = input.continueOnDeny
-  }
-
-  export function continueOnDeny(config: Config.Info, sessionID: string) {
-    if (!HarnessState.enabled(config, "headless-policy")) return false
-    return HarnessState.get(sessionID).continueOnDeny === true
-  }
-
-  /** The loop records whether this session may delegate this turn so tool
-   * hints (truncation) can offer Task only when it is actually available. */
-  export function delegation(sessionID: string, enabled: boolean) {
-    HarnessState.get(sessionID).delegation = enabled
-  }
-
-  export function delegates(config: Config.Info, sessionID: string | undefined) {
-    if (!sessionID) return true
-    if (!HarnessState.enabled(config, "durable-jobs")) return true
-    return HarnessState.get(sessionID).delegation !== false
-  }
+  // The per-session predicates the loop, the processor and the truncation
+  // hint consult live on the leaf HarnessState module so those modules never
+  // import the units (and, through them, the session modules) themselves.
+  export const headless = HarnessState.headless
+  export const continueOnDeny = HarnessState.continueOnDeny
+  export const delegation = HarnessState.delegation
+  export const delegates = HarnessState.delegates
 }

@@ -26,7 +26,7 @@ import { OpenScience } from "@/openscience"
 import { BILLING_URL } from "@/endpoints"
 import { requiresWalletBalance, resolveCredentialSource } from "@/session/access-route"
 import { ToolVisibility } from "@/tool/visibility"
-import { BIOLOGY_TOOL_IDS } from "@/tool/biology"
+import { BIOLOGY_TOOL_IDS } from "@/tool/biology/ids"
 
 export namespace Agent {
   export const Info = z

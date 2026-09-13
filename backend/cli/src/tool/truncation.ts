@@ -6,7 +6,7 @@ import type { Agent } from "../agent/agent"
 import { Scheduler } from "../scheduler"
 import { SessionFilesystem } from "../session/filesystem"
 import { ToolOutputPath } from "./tool-output-path"
-import { Harness } from "@/harness"
+import { HarnessState } from "@/harness/state"
 import { Config } from "@/config/config"
 
 export namespace Truncate {
@@ -134,7 +134,7 @@ export namespace Truncate {
     // Tool output can be truncated outside a project instance (tests, CLI
     // helpers); the hint then keeps its default form.
     const config = await Config.get().catch(() => undefined)
-    const delegation = config ? Harness.delegates(config, options.sessionID) : true
+    const delegation = config ? HarnessState.delegates(config, options.sessionID) : true
     return {
       content: message({ preview, removed, unit, filepath, direction }, agent, delegation),
       truncated: true,

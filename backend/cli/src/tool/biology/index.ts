@@ -28,12 +28,4 @@ export const BiologyTools = [
   QueryPdbTool,
 ]
 
-export const BIOLOGY_TOOL_IDS = new Set([
-  "query_uniprot",
-  "query_ensembl",
-  "query_kegg",
-  "query_pubmed",
-  "query_ncbi_gene",
-  "query_string",
-  "query_pdb",
-])
+export { BIOLOGY_TOOL_IDS } from "./ids"

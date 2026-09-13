@@ -69,7 +69,7 @@ import { KernelRuntime } from "@/science/kernel/registry"
 import { SessionCheckpoint } from "./checkpoint"
 import { ToolVisibility } from "@/tool/visibility"
 import { Experiments } from "@/experiments"
-import { Harness } from "@/harness"
+import { HarnessState } from "@/harness/state"
 import { SessionLoopState } from "./loop-state"
 import { FileLease } from "@/util/file-lease"
 import { Global } from "@/global"
@@ -1443,7 +1443,7 @@ export namespace SessionPrompt {
         enabled: lastUser.delegation,
       })
       const delegation = allowsDelegation(delegationSettings, bypassAgentCheck)
-      Harness.delegation(sessionID, delegation && !session.parentID)
+      HarnessState.delegation(sessionID, delegation && !session.parentID)
 
       const tools = await resolveTools({
         agent,
