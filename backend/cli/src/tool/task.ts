@@ -669,10 +669,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         })
       }
       if (!background.has(session.id)) {
-        const pending = run(new AbortController().signal, false)
+        // Detached from the dispatching turn's admission context: the child
+        // and the wake-up run after that turn has finished.
+        const pending = SessionPrompt.detached(() => run(new AbortController().signal, false))
           .then(async (result) => {
             background.delete(session.id)
-            await wake(result.output).catch((error) =>
+            await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
               log.error("background task completion could not wake the parent", { error }),
             )
             return result
@@ -690,7 +692,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 text: message,
               }),
             })
-            await wake(result.output).catch((error) =>
+            await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
               log.error("background task failure could not wake the parent", { error }),
             )
             return result

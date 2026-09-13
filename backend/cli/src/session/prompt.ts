@@ -236,6 +236,14 @@ export namespace SessionPrompt {
     preparation(sessionID)?.signal.throwIfAborted()
   }
 
+  /** Run work outside the calling turn's admission context. Background
+   * workers outlive the turn that dispatched them; a wake-up issued from
+   * inside that turn's async context would otherwise see the finished turn's
+   * aborted reservation and refuse to start. */
+  export function detached<T>(fn: () => Promise<T>) {
+    return admission.exit(fn)
+  }
+
   // The loop aborts its controller during disposal to stop any remaining
   // background work. That cleanup is not a cancellation of the completed
   // prompt returned to its caller.
