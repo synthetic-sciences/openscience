@@ -26,6 +26,13 @@ export namespace StudyDriver {
   /** How long a session may stay idle with free capacity and queued ideas
    * before the driver reminds it. */
   export const IDLE_NUDGE_MS = 4 * 60_000
+  /** Keep the agent ahead of its slots: fewer queued ideas than this earns a
+   * reminder to propose more, in the autoresearcherUI spirit. */
+  export const BACKLOG_MIN = 3
+  /** Consecutive non-improving runs before the driver asks for a change of kind. */
+  export const STUCK_WINDOW = 4
+  /** Completed runs between "step back" reviews. */
+  export const STEP_BACK_EVERY = 6
 
   type Runtime = {
     followers: Map<string, Tracker.Follower>
@@ -33,6 +40,8 @@ export namespace StudyDriver {
     turnsAt: number[]
     lastNudgeAt: number
     nudgedRuns: number
+    stuckReportedAt: number
+    stepBackAt: number
     ticking: boolean
   }
 
@@ -69,6 +78,8 @@ export namespace StudyDriver {
       turnsAt: [],
       lastNudgeAt: 0,
       nudgedRuns: -1,
+      stuckReportedAt: 0,
+      stepBackAt: 0,
       ticking: false,
     }
     entry.runtimes.set(studyID, created)
@@ -270,6 +281,39 @@ export namespace StudyDriver {
           `${free} of ${study.concurrency} slot${study.concurrency === 1 ? "" : "s"} free and ${queued.length} idea${queued.length === 1 ? "" : "s"} queued (next: ${queued[0]!.title}). Implement and start the next idea with study start, or drop it with a reason.`,
         )
       }
+      // The loop is only as good as its backlog and its self-review. These
+      // ride along with news that is already going out, never on their own.
+      if (current.pending.length) {
+        const done = (await Experiments.listRuns({ studyID, limit: 2000 }))
+          .filter((run) => run.status !== "running")
+          .sort((a, b) => (a.endedAt ?? 0) - (b.endedAt ?? 0))
+        if (queued.length < BACKLOG_MIN && done.length) {
+          current.pending.push(
+            `Backlog is thin (${queued.length} queued). Before the next start, propose at least ${BACKLOG_MIN} ideas of different kinds (a different component, objective or data choice each), ranked by expected value, so a free slot never waits on an idea.`,
+          )
+        }
+        if (done.length >= STUCK_WINDOW && done.length >= current.stuckReportedAt + STUCK_WINDOW) {
+          const recent = done.slice(-STUCK_WINDOW)
+          const fresh = (await Experiments.getStudy(study.id)) ?? study
+          const ideas = await Experiments.listIdeas(study.id)
+          // Progress is a run that became the best or was kept; a verdict may
+          // not be recorded yet when the run has just settled.
+          const progress = (run: Experiments.Run) =>
+            run.id === fresh.bestRunID || ideas.find((idea) => idea.runID === run.id)?.status === "kept"
+          if (!recent.some(progress)) {
+            current.stuckReportedAt = done.length
+            current.pending.push(
+              `No progress in the last ${STUCK_WINDOW} runs. Change the kind of thing you vary (a different component, objective, data treatment or search strategy), not its magnitude, and reconsider the baseline's assumptions before proposing more of the same.`,
+            )
+          }
+        }
+        if (done.length > 0 && done.length % STEP_BACK_EVERY === 0 && done.length > current.stepBackAt) {
+          current.stepBackAt = done.length
+          current.pending.push(
+            `Step back (${done.length} runs done): re-read the lessons, list the kinds of change tried so far and what each taught, check the queue for near-duplicates, and re-rank it. Then continue.`,
+          )
+        }
+      }
       await wake(study, current, now, false)
     } finally {
       current.ticking = false
@@ -357,6 +401,19 @@ export namespace StudyDriver {
       new Tracker.Follower(run.id, await logPath(run.jobID, study.sessionID), study.projectID),
     )
     current.nudgedRuns = -1
+  }
+
+  /** A directive from the user: stored on the study, then delivered as its
+   * own wake-up, ahead of any cap. */
+  export async function directive(studyID: string, text: string) {
+    const added = await Experiments.addDirective(studyID, text)
+    if (!added) return
+    const current = runtime(studyID)
+    current.pending.push(
+      `Directive from the user: ${added.directive.text}. Treat it as a standing rule for the rest of the study; adjust the queue and your next run accordingly.`,
+    )
+    await wake(added.study, current, deps().now?.() ?? Date.now(), true)
+    return added
   }
 
   /** Halt cancels every live run; pause only stops the wake-ups. */

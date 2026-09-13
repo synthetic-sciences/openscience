@@ -2905,6 +2905,15 @@ export namespace SessionPrompt {
           ]
         : []),
       `Loop: pick the top queued idea, implement it in the training script, start exactly one run for it with study start, and when a study update reports the run ended, read its numbers with the experiments tool, record the verdict with study record (analysis, lessons), then queue or start the next idea. Keep ${study.concurrency} run${study.concurrency === 1 ? "" : "s"} live while ideas remain. Never re-run an idea that already has a run; propose a new idea instead. Do not ask whether to continue while budget remains; ask only when input or authority is missing. Study updates arrive as user messages that begin "Study update".`,
+      ...(study.directives.some((directive) => directive.active)
+        ? [
+            `Standing directives from the user (rules for the rest of the study):\n${study.directives
+              .filter((directive) => directive.active)
+              .map((directive) => `- ${directive.text}`)
+              .join("\n")}`,
+          ]
+        : []),
+      `Keep at least 3 ideas queued, of different kinds; propose in batches. When a run finishes within a few minutes, wait for it in the same turn (compute_job wait) rather than ending the turn.`,
       ...(study.lessons ? [`Lessons so far:\n${study.lessons.split("\n").slice(-6).join("\n")}`] : []),
     ].join("\n")
   }

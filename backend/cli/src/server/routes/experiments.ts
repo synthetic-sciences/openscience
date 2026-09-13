@@ -194,6 +194,45 @@ export const ExperimentsRoutes = lazy(() =>
         return c.json((await Experiments.getStudy(studyID))!)
       },
     )
+    .post(
+      "/studies/:studyID/directives",
+      describeRoute({
+        summary: "Add a standing directive; the session is woken with it",
+        operationId: "experiments.directive",
+        responses: {
+          200: { description: "Study", content: { "application/json": { schema: resolver(Experiments.Study) } } },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ studyID: z.string() })),
+      validator("json", z.object({ text: z.string().trim().min(1).max(2_000) })),
+      async (c) => {
+        const { studyID } = c.req.valid("param")
+        const study = await Experiments.getStudy(studyID)
+        if (!study) return c.json({ error: "Study not found" }, 404)
+        const added = await StudyDriver.directive(studyID, c.req.valid("json").text)
+        StudyDriver.start()
+        return c.json(added?.study ?? study)
+      },
+    )
+    .post(
+      "/studies/:studyID/directives/:directiveID/retire",
+      describeRoute({
+        summary: "Retire a standing directive",
+        operationId: "experiments.retireDirective",
+        responses: {
+          200: { description: "Study", content: { "application/json": { schema: resolver(Experiments.Study) } } },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ studyID: z.string(), directiveID: z.string() })),
+      async (c) => {
+        const { studyID, directiveID } = c.req.valid("param")
+        const updated = await Experiments.retireDirective(studyID, directiveID)
+        if (!updated) return c.json({ error: "Study not found" }, 404)
+        return c.json(updated)
+      },
+    )
     .patch(
       "/studies/:studyID/ideas/:ideaID",
       describeRoute({

@@ -46,10 +46,15 @@ describe("study and experiments tools", () => {
               metric: "val_loss",
               direction: "minimize",
               kill_criteria: "gibberish here",
+              budget: { maxRuns: 3 },
             },
             ctx,
           ),
         ).rejects.toThrow("Could not read kill criteria")
+
+        await expect(
+          study.execute({ action: "create", name: "s", purpose: "p", metric: "val_loss", direction: "minimize" }, ctx),
+        ).rejects.toThrow("needs a budget")
 
         const created = await study.execute(
           {
@@ -95,7 +100,17 @@ describe("study and experiments tools", () => {
           ctx,
         )
         expect(proposed.title).toBe("2 ideas queued")
-        const ideas = JSON.parse(proposed.output) as Array<{ idea_id: string; title: string }>
+        expect(proposed.output).toContain("keep at least 3 ahead")
+        const ideas = JSON.parse(proposed.output.split("\n\n")[0]!) as Array<{ idea_id: string; title: string }>
+        await expect(
+          study.execute(
+            {
+              action: "propose",
+              ideas: [{ title: "momentum again", description: "d", why: "w", ev: 0.1, config: { momentum: 0.9 } }],
+            },
+            ctx,
+          ),
+        ).rejects.toThrow("repeats a configuration")
 
         const status = await study.execute({ action: "status" }, ctx)
         const parsed = JSON.parse(status.output)

@@ -6,7 +6,7 @@ category: core
 role: workflow
 allowed-tools: [Read, Write, Edit, Bash, python, study, experiments, compute_job, task]
 license: MIT
-version: 1.1.0
+version: 1.2.0
 author: Synthetic Sciences
 metadata:
   skill-author: Synthetic Sciences
@@ -22,16 +22,21 @@ ledger, and wakes this session with a "Study update" whenever there is news.
 
 ## Before the study
 
-1. Agree the objective with the user: one metric, its direction, the budget (runs, hours,
-   or spend), the compute target, how many runs may be live at once, and the kill criteria.
-   Confirm with one question if any of these would change the outcome; otherwise proceed.
+1. Agree the objective with the user: one metric, its direction, the budget, the compute
+   target, how many runs may be live at once, and the kill criteria. The budget is a spend
+   decision and belongs to this study alone: never carry one over from an earlier study or
+   an earlier instruction in the session. If the request names no budget, ask once, with a
+   recommendation (a time budget such as 2 hours with a per-run kill rule, or a target
+   value), even under an autonomous setting. Everything else, infer or default.
 2. Read the code and data first. A study needs a training or analysis script the harness
    can run repeatedly with different configuration, and a fixed evaluation that computes
    the metric. The evaluation does not change once the baseline has run.
-3. Create the study with `study create`. Propose the baseline with priority 1000 and the
-   first ideas with `study propose`. An idea has a title, what it changes, why it should
-   help, an expected improvement in metric units times your confidence, and the
-   configuration it needs. The hypotheses skill is the tool for turning a vague direction
+3. Create the study with `study create`. Propose the baseline with priority 1000 and at
+   least three first ideas with `study propose`, of different kinds (a different component,
+   objective, data treatment or search strategy each), not three magnitudes of one knob. An
+   idea has a title, what it changes, why it should help, an expected improvement in metric
+   units times your confidence, and the configuration it needs; a configuration already in
+   the study is rejected. The hypotheses skill is the tool for turning a vague direction
    into ideas worth queueing.
 4. If the review gate is on (the default), delegate a read-only critique of the training
    and evaluation code to the critique reviewer (Task tool, `specialist: "critique"`) before
@@ -47,14 +52,26 @@ ledger, and wakes this session with a "Study update" whenever there is news.
 - Start exactly one run per idea with `study start`, passing the command and the
   configuration the idea needs. Never start a second run for the same idea; propose a
   new idea if a variant is worth trying.
-- Keep up to the study's concurrency live. While runs are live, implement the next idea or
-  wait with `compute_job wait`; never poll with shell sleeps.
+- Keep up to the study's concurrency live, and keep at least three ideas queued so a free
+  slot never waits on you; propose in batches when the queue thins.
+- When runs finish within a few minutes, stay in the turn: `compute_job wait` for the run,
+  record it, start the next. Wake-ups are for runs that outlast a turn. While a long run is
+  live, implement the next idea rather than idling.
 - When a "Study update" reports a run ended, read its numbers with `experiments compare`
   (or `experiments series` when the curve matters), decide keep or revert against the
   baseline and the best, and record the verdict with `study record`: the analysis, a
   conclusion, and any lesson that should shape later ideas. Mark the first reference run
   with `baseline: true`.
 - A killed run is data, not an error: record why it diverged and what that rules out.
+
+## Steering
+
+The user can add a directive from the Autoresearch pane or in chat while the study runs.
+A directive is a standing rule for the rest of the study (it appears in your study
+reminder): re-rank the queue and change the next run to honour it, and say what changed.
+Every sixth run, and whenever four runs in a row fail to beat the best, step back: re-read
+the lessons, name the kinds of change tried, drop near-duplicates, and change the kind of
+idea rather than its magnitude.
 
 ## Judgement
 

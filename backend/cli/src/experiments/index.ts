@@ -78,6 +78,18 @@ export namespace Experiments {
   ])
   export type Target = z.infer<typeof Target>
 
+  /** A standing instruction from the user, added mid-study from the pane or
+   * chat. Directives stay in the study reminder until retired. */
+  export const Directive = z
+    .object({
+      id: z.string(),
+      text: z.string(),
+      createdAt: z.number(),
+      active: z.boolean(),
+    })
+    .meta({ ref: "StudyDirective" })
+  export type Directive = z.infer<typeof Directive>
+
   export const Study = z
     .object({
       id: z.string(),
@@ -99,6 +111,7 @@ export namespace Experiments {
       turns: z.number().int().nonnegative(),
       costUSD: z.number().nonnegative(),
       lessons: z.string(),
+      directives: z.array(Directive),
       conclusion: z.string().optional(),
       createdAt: z.number(),
       updatedAt: z.number(),
@@ -181,6 +194,7 @@ export namespace Experiments {
       turns INTEGER NOT NULL DEFAULT 0,
       cost_usd REAL NOT NULL DEFAULT 0,
       lessons TEXT NOT NULL DEFAULT '',
+      directives TEXT NOT NULL DEFAULT '[]',
       conclusion TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -263,6 +277,10 @@ export namespace Experiments {
     database.exec("PRAGMA journal_mode = WAL")
     database.exec("PRAGMA synchronous = NORMAL")
     database.exec(schema)
+    const columns = database.query("PRAGMA table_info(study)").all() as Array<{ name: string }>
+    if (!columns.some((column) => column.name === "directives")) {
+      database.exec("ALTER TABLE study ADD COLUMN directives TEXT NOT NULL DEFAULT '[]'")
+    }
     databases.set(projectID, database)
     return database
   }
@@ -358,6 +376,7 @@ export namespace Experiments {
     turns: number
     cost_usd: number
     lessons: string
+    directives: string
     conclusion: string | null
     created_at: number
     updated_at: number
@@ -384,6 +403,7 @@ export namespace Experiments {
       turns: row.turns,
       costUSD: row.cost_usd,
       lessons: row.lessons,
+      directives: Directive.array().catch([]).parse(parse(row.directives, [])),
       conclusion: row.conclusion ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -1057,6 +1077,38 @@ export namespace Experiments {
     )
     await refreshStudy(target.id, project)
     return getStudy(target.id, { projectID: project })
+  }
+
+  /** Add a standing directive; the driver wakes the session with it. */
+  export async function addDirective(studyID: string, text: string, input?: { projectID?: string }) {
+    const project = projectID(input)
+    const database = await db(project)
+    const current = await getStudy(studyID, { projectID: project })
+    if (!current) return
+    const directive: Directive = {
+      id: `dir_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      text: text.trim(),
+      createdAt: Date.now(),
+      active: true,
+    }
+    const next = [...current.directives, directive]
+    database.query(`UPDATE study SET directives = ?, updated_at = ? WHERE id = ?`).run(json(next), Date.now(), studyID)
+    await addEvent(studyID, "directive", `Directive: ${directive.text}`, { projectID: project })
+    const updated = (await getStudy(studyID, { projectID: project }))!
+    await publish(Event.StudyUpdated, { study: updated })
+    return { study: updated, directive }
+  }
+
+  export async function retireDirective(studyID: string, directiveID: string, input?: { projectID?: string }) {
+    const project = projectID(input)
+    const database = await db(project)
+    const current = await getStudy(studyID, { projectID: project })
+    if (!current) return
+    const next = current.directives.map((item) => (item.id === directiveID ? { ...item, active: false } : item))
+    database.query(`UPDATE study SET directives = ?, updated_at = ? WHERE id = ?`).run(json(next), Date.now(), studyID)
+    const updated = (await getStudy(studyID, { projectID: project }))!
+    await publish(Event.StudyUpdated, { study: updated })
+    return updated
   }
 
   export function format(value: number) {

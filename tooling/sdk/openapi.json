@@ -33290,6 +33290,145 @@
         ]
       }
     },
+    "/experiments/studies/{studyID}/directives": {
+      "post": {
+        "operationId": "experiments.directive",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "studyID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Add a standing directive; the session is woken with it",
+        "responses": {
+          "200": {
+            "description": "Study",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Study"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.directive({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/experiments/studies/{studyID}/directives/{directiveID}/retire": {
+      "post": {
+        "operationId": "experiments.retireDirective",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "studyID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "directiveID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Retire a standing directive",
+        "responses": {
+          "200": {
+            "description": "Study",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Study"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.experiments.retireDirective({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experiments/studies/{studyID}/ideas/{ideaID}": {
       "patch": {
         "operationId": "experiments.idea",
@@ -53785,6 +53924,9 @@
                       "description": {
                         "type": "string"
                       },
+                      "summary": {
+                        "type": "string"
+                      },
                       "location": {
                         "type": "string"
                       },
@@ -53954,6 +54096,9 @@
                       "type": "string"
                     },
                     "description": {
+                      "type": "string"
+                    },
+                    "summary": {
                       "type": "string"
                     },
                     "location": {
@@ -57829,6 +57974,29 @@
           }
         }
       },
+      "StudyDirective": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "createdAt",
+          "active"
+        ]
+      },
       "Study": {
         "type": "object",
         "properties": {
@@ -57948,6 +58116,12 @@
           "lessons": {
             "type": "string"
           },
+          "directives": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StudyDirective"
+            }
+          },
           "conclusion": {
             "type": "string"
           },
@@ -57976,6 +58150,7 @@
           "turns",
           "costUSD",
           "lessons",
+          "directives",
           "createdAt",
           "updatedAt"
         ]

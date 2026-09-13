@@ -1006,6 +1006,13 @@ export type StudyBudget = {
   runMinutes?: number
 }
 
+export type StudyDirective = {
+  id: string
+  text: string
+  createdAt: number
+  active: boolean
+}
+
 export type Study = {
   id: string
   projectID: string
@@ -1037,6 +1044,7 @@ export type Study = {
   turns: number
   costUSD: number
   lessons: string
+  directives: Array<StudyDirective>
   conclusion?: string
   createdAt: number
   updatedAt: number
@@ -13137,6 +13145,72 @@ export type ExperimentsStudyControlResponses = {
 
 export type ExperimentsStudyControlResponse = ExperimentsStudyControlResponses[keyof ExperimentsStudyControlResponses]
 
+export type ExperimentsDirectiveData = {
+  body?: {
+    text: string
+  }
+  path: {
+    studyID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/studies/{studyID}/directives"
+}
+
+export type ExperimentsDirectiveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ExperimentsDirectiveError = ExperimentsDirectiveErrors[keyof ExperimentsDirectiveErrors]
+
+export type ExperimentsDirectiveResponses = {
+  /**
+   * Study
+   */
+  200: Study
+}
+
+export type ExperimentsDirectiveResponse = ExperimentsDirectiveResponses[keyof ExperimentsDirectiveResponses]
+
+export type ExperimentsRetireDirectiveData = {
+  body?: never
+  path: {
+    studyID: string
+    directiveID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/studies/{studyID}/directives/{directiveID}/retire"
+}
+
+export type ExperimentsRetireDirectiveErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ExperimentsRetireDirectiveError = ExperimentsRetireDirectiveErrors[keyof ExperimentsRetireDirectiveErrors]
+
+export type ExperimentsRetireDirectiveResponses = {
+  /**
+   * Study
+   */
+  200: Study
+}
+
+export type ExperimentsRetireDirectiveResponse =
+  ExperimentsRetireDirectiveResponses[keyof ExperimentsRetireDirectiveResponses]
+
 export type ExperimentsIdeaData = {
   body?: {
     priority?: number
@@ -18595,6 +18669,7 @@ export type AppSkillsResponses = {
   200: Array<{
     name: string
     description: string
+    summary?: string
     location: string
     category?: string
     tags?: Array<string>
@@ -18667,6 +18742,7 @@ export type AppSkillWriteResponses = {
   200: {
     name: string
     description: string
+    summary?: string
     location: string
     category?: string
     tags?: Array<string>

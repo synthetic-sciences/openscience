@@ -189,6 +189,24 @@ export function AutoresearchPane(): JSX.Element {
     const gain = improvement()
     return gain ? (gain.percent >= 0 ? "up" : "down") : undefined
   }
+  const [steering, setSteering] = createSignal(false)
+  const [directive, setDirective] = createSignal("")
+  const steer = async (current: Study) => {
+    const text = directive().trim()
+    if (!text) return
+    await sdk.request(`/experiments/studies/${current.id}/directives`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text }),
+    })
+    setDirective("")
+    setSteering(false)
+    bump()
+  }
+  const retire = async (current: Study, id: string) => {
+    await sdk.request(`/experiments/studies/${current.id}/directives/${id}/retire`, { method: "POST" })
+    bump()
+  }
   const statusTitle = (current: Study) =>
     [
       targetLabel(current.target),
@@ -470,7 +488,55 @@ export function AutoresearchPane(): JSX.Element {
                   >
                     about
                   </button>
+                  <Show when={current().status === "running" || current().status === "paused"}>
+                    <button
+                      type="button"
+                      class="ar-link"
+                      aria-expanded={steering()}
+                      onClick={() => setSteering(!steering())}
+                    >
+                      steer
+                    </button>
+                  </Show>
                 </p>
+                <Show when={steering()}>
+                  <form
+                    class="ar-steer"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      void steer(current())
+                    }}
+                  >
+                    <input
+                      type="text"
+                      value={directive()}
+                      placeholder="A standing rule for the rest of the study, e.g. only vary the optimizer"
+                      aria-label="Directive"
+                      onInput={(event) => setDirective(event.currentTarget.value)}
+                    />
+                    <button type="submit" disabled={!directive().trim()}>
+                      Send
+                    </button>
+                  </form>
+                </Show>
+                <Show when={current().directives.some((item) => item.active)}>
+                  <ul class="ar-directives" aria-label="Standing directives">
+                    <For each={current().directives.filter((item) => item.active)}>
+                      {(item) => (
+                        <li>
+                          <span>{item.text}</span>
+                          <button
+                            type="button"
+                            aria-label="Retire directive"
+                            onClick={() => void retire(current(), item.id)}
+                          >
+                            ×
+                          </button>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </Show>
                 <Show when={panel() === "about"}>
                   <div class="ar-about">
                     <p>{current().purpose}</p>

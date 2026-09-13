@@ -52,6 +52,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   `pdf`, `docx`, `pptx`, `xlsx`, ...), 357 skills in total.
 - `generate_image` takes `image_size` (1K, 2K, 4K) and up to 14
   `reference_paths`, and sends Gemini the documented `imageConfig` request.
+- Autoresearch steering and loop discipline, after autoresearcherUI: a
+  `steer` input on the study adds a standing directive that wakes the agent
+  at once and stays in its study reminder until retired; the driver asks for
+  more ideas when fewer than three are queued, for a change of kind after
+  four runs without progress, and for a step-back review every six runs;
+  `study create` requires a budget agreed for this study rather than one
+  carried over; `study propose` rejects configurations already tried; and
+  after a short run the agent is told to wait for it in the same turn rather
+  than end the turn and be woken.
 
 ### Changed
 

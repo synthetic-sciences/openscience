@@ -305,6 +305,95 @@
   cursor: default;
 }
 
+/* Steering: a directive becomes a standing rule in the agent's reminder. */
+.ar-steer {
+  display: flex;
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+
+.ar-steer input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--radius-xs);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-small);
+}
+
+.ar-steer input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -1px;
+}
+
+.ar-steer button {
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--color-border-weak);
+  border-radius: var(--radius-xs);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-x-small);
+  cursor: pointer;
+}
+
+.ar-steer button:disabled {
+  color: var(--color-border);
+  cursor: default;
+}
+
+.ar-directives {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ar-directives li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-x-small);
+}
+
+.ar-directives li::before {
+  content: "→";
+  color: var(--color-text-faint);
+}
+
+.ar-directives li span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ar-directives button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ar-directives button:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
 .ar-about {
   display: flex;
   flex-direction: column;

@@ -41,6 +41,8 @@ import type {
   EventSubscribeResponse,
   EventSubscribeResponses,
   ExperimentalResourceListResponses,
+  ExperimentsDirectiveErrors,
+  ExperimentsDirectiveResponses,
   ExperimentsGpusResponses,
   ExperimentsIdeaErrors,
   ExperimentsIdeaResponses,
@@ -52,6 +54,8 @@ import type {
   ExperimentsIngestSummaryErrors,
   ExperimentsIngestSummaryResponses,
   ExperimentsKeysResponses,
+  ExperimentsRetireDirectiveErrors,
+  ExperimentsRetireDirectiveResponses,
   ExperimentsRunErrors,
   ExperimentsRunResponses,
   ExperimentsRunsResponses,
@@ -5054,6 +5058,79 @@ export class Experiments extends HeyApiClient {
       ThrowOnError
     >({
       url: "/experiments/studies/{studyID}/{action}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Add a standing directive; the session is woken with it
+   */
+  public directive<ThrowOnError extends boolean = false>(
+    parameters: {
+      studyID: string
+      directory?: string
+      text: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "studyID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentsDirectiveResponses,
+      ExperimentsDirectiveErrors,
+      ThrowOnError
+    >({
+      url: "/experiments/studies/{studyID}/directives",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Retire a standing directive
+   */
+  public retireDirective<ThrowOnError extends boolean = false>(
+    parameters: {
+      studyID: string
+      directiveID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "studyID" },
+            { in: "path", key: "directiveID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentsRetireDirectiveResponses,
+      ExperimentsRetireDirectiveErrors,
+      ThrowOnError
+    >({
+      url: "/experiments/studies/{studyID}/directives/{directiveID}/retire",
       ...options,
       ...params,
     })

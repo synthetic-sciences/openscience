@@ -179,6 +179,76 @@ describe("study driver", () => {
     })
   })
 
+  test("a thin backlog, a stuck streak and a step-back ride along with run news, and a directive wakes at once", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const h = harness(tmp.path)
+        const study = await Experiments.createStudy({
+          sessionID: "ses_loop",
+          name: "loop",
+          purpose: "test",
+          metric: "score",
+          direction: "maximize",
+          root: path.join(tmp.path, "study"),
+          concurrency: 1,
+          budget: { maxHours: 4 },
+        })
+        const ideas = await Experiments.proposeIdeas(
+          study.id,
+          Array.from({ length: 7 }, (_, index) => ({ title: `idea ${index}`, description: "d", why: "w", ev: 0.1 })),
+        )
+        // Baseline, then six runs that never beat it.
+        const baseline = await Experiments.createRun({
+          name: "idea 0",
+          source: "job",
+          studyID: study.id,
+          ideaID: ideas[0]!.id,
+          jobID: "job_0",
+        })
+        h.jobs.set("job_0", { status: "succeeded" })
+        await h.record("job_0", [{ t: "log", step: 1, m: { score: 1.0 } }])
+        await StudyDriver.tick(study.id)
+        await Experiments.setBaseline(study.id, baseline.id)
+        await Experiments.recordResult({ studyID: study.id, runID: baseline.id, kept: true, analysis: "ref" })
+        expect(h.prompts).toHaveLength(1)
+        expect(h.prompts[0]).not.toContain("Backlog is thin")
+        for (let index = 1; index <= 5; index++) {
+          const run = await Experiments.createRun({
+            name: `idea ${index}`,
+            source: "job",
+            studyID: study.id,
+            ideaID: ideas[index]!.id,
+            jobID: `job_${index}`,
+          })
+          h.jobs.set(`job_${index}`, { status: "succeeded" })
+          await h.record(`job_${index}`, [{ t: "log", step: 1, m: { score: 0.9 } }])
+          await StudyDriver.tick(study.id)
+          await Experiments.recordResult({ studyID: study.id, runID: run.id, kept: false, analysis: "worse" })
+        }
+        const all = h.prompts.join("\n")
+        // One queued idea left after five reverts: the backlog warning appears.
+        expect(all).toContain("Backlog is thin (1 queued)")
+        // Four reverts in a row: asked to change the kind of idea, once.
+        expect(all.split("No progress in the last 4 runs").length - 1).toBe(1)
+        // Six completed runs: one step-back review.
+        expect(all.split("Step back (6 runs done)").length - 1).toBe(1)
+
+        // A directive is stored on the study and delivered as its own wake-up.
+        const before = h.prompts.length
+        await StudyDriver.directive(study.id, "Only vary the optimizer from now on")
+        expect(h.prompts).toHaveLength(before + 1)
+        expect(h.prompts.at(-1)).toContain("Directive from the user: Only vary the optimizer from now on")
+        const updated = (await Experiments.getStudy(study.id))!
+        expect(updated.directives).toHaveLength(1)
+        expect(updated.directives[0]!.active).toBe(true)
+        await Experiments.retireDirective(study.id, updated.directives[0]!.id)
+        expect((await Experiments.getStudy(study.id))!.directives[0]!.active).toBe(false)
+      },
+    })
+  })
+
   test("a cost budget reads the session's spend and pauses when it is exceeded", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

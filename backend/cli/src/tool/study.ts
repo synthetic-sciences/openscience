@@ -93,6 +93,17 @@ export const StudyTool = Tool.define("study", {
       if (!params.name || !params.purpose || !params.metric || !params.direction) {
         throw new Error("create needs name, purpose, metric and direction")
       }
+      const budget = params.budget ?? {}
+      if (
+        budget.maxRuns === undefined &&
+        budget.maxHours === undefined &&
+        budget.maxCostUSD === undefined &&
+        budget.target === undefined
+      ) {
+        throw new Error(
+          "create needs a budget the user agreed to for this study (maxHours, maxRuns, maxCostUSD or target). Do not reuse a budget from an earlier study or instruction; if the request names none, ask once and recommend a time budget (for example maxHours 2 with a per-run kill rule).",
+        )
+      }
       const base = await SessionFilesystem.toolDirectory(ctx.sessionID)
       const root = params.root ? path.resolve(base, params.root) : base
       if (path.relative(base, root).startsWith("..")) throw new Error("root must stay inside the working folder")
@@ -114,7 +125,7 @@ export const StudyTool = Tool.define("study", {
         target: params.target ?? { kind: "local" },
         concurrency,
         killCriteria: params.kill_criteria ?? "",
-        budget: params.budget ?? {},
+        budget,
         review: params.review,
       })
       await TrackingSDK.materialize(root, { shim: true })
@@ -176,14 +187,40 @@ export const StudyTool = Tool.define("study", {
 
     if (params.action === "propose") {
       if (!params.ideas?.length) throw new Error("propose needs ideas")
-      const created = await Experiments.proposeIdeas(current.id, params.ideas)
+      // A configuration that already has an idea is not a new idea.
+      const canonical = (config: Record<string, unknown> | undefined) =>
+        JSON.stringify(Object.fromEntries(Object.entries(config ?? {}).sort(([a], [b]) => a.localeCompare(b))))
+      const seen = new Map((await Experiments.listIdeas(current.id)).map((idea) => [canonical(idea.config), idea]))
+      const fresh: NonNullable<typeof params.ideas> = []
+      const duplicates: string[] = []
+      for (const idea of params.ideas) {
+        const key = canonical(idea.config)
+        const match = Object.keys(idea.config ?? {}).length ? seen.get(key) : undefined
+        if (match) {
+          duplicates.push(`${idea.title} (same configuration as "${match.title}", ${match.status})`)
+          continue
+        }
+        seen.set(key, { title: idea.title, status: "queued" } as Experiments.Idea)
+        fresh.push(idea)
+      }
+      if (!fresh.length) {
+        throw new Error(
+          `Every proposed idea repeats a configuration already in this study: ${duplicates.join("; ")}. Propose ideas that change something else.`,
+        )
+      }
+      const created = await Experiments.proposeIdeas(current.id, fresh)
       await StudyLedger.render(current.id)
+      const queuedNow = (await Experiments.listIdeas(current.id, { status: ["queued"] })).length
       return {
         title: `${created.length} idea${created.length === 1 ? "" : "s"} queued`,
         metadata: { study: current, ideas: created } satisfies Metadata as Metadata,
-        output: json(
-          created.map((idea) => ({ idea_id: idea.id, title: idea.title, ev: idea.ev, priority: idea.priority })),
-        ),
+        output: [
+          json(created.map((idea) => ({ idea_id: idea.id, title: idea.title, ev: idea.ev, priority: idea.priority }))),
+          ...(duplicates.length ? [`Skipped as duplicates: ${duplicates.join("; ")}.`] : []),
+          ...(queuedNow < 3
+            ? [`${queuedNow} idea${queuedNow === 1 ? "" : "s"} queued; keep at least 3 ahead of the slots.`]
+            : []),
+        ].join("\n\n"),
       }
     }
 
@@ -261,10 +298,20 @@ export const StudyTool = Tool.define("study", {
       await StudyDriver.follow(bound, current)
       StudyDriver.start()
       await StudyLedger.render(current.id)
+      const finished = (await Experiments.listRuns({ studyID: current.id, limit: 200 })).filter(
+        (item) => item.status !== "running" && item.startedAt && item.endedAt,
+      )
+      const durations = finished.map((item) => (item.endedAt! - item.startedAt!) / 1000).sort((a, b) => a - b)
+      const median = durations.length ? durations[Math.floor(durations.length / 2)]! : undefined
+      const queuedNow = (await Experiments.listIdeas(current.id, { status: ["queued"] })).length
+      const waiting =
+        median !== undefined && median < 180
+          ? `Runs here finish in about ${Math.max(5, Math.round(median))} s: wait for this one now with compute_job wait (job ${job.id}, seconds ${Math.max(60, Math.round(median * 3))}) instead of ending the turn, then record it and start the next.`
+          : `You will receive a study update when it ends or is killed; meanwhile implement the next queued idea if a slot is free, or wait with compute_job wait.`
       return {
         title: `Run started: ${idea.title}`,
         metadata: { study: current, run: bound, job } satisfies Metadata as Metadata,
-        output: `Run ${run.id} for idea ${idea.id} is live as compute job ${job.id}${slot !== undefined && bound.slot !== null ? ` on slot ${bound.slot}` : ""}. You will receive a study update when it ends or is killed; meanwhile implement the next queued idea if a slot is free, or wait with compute_job wait.`,
+        output: `Run ${run.id} for idea ${idea.id} is live as compute job ${job.id}${slot !== undefined && bound.slot !== null ? ` on slot ${bound.slot}` : ""}. ${waiting}${queuedNow < 3 ? ` Queue has ${queuedNow} idea${queuedNow === 1 ? "" : "s"}; propose more so it never runs dry.` : ""}`,
       }
     }
 
