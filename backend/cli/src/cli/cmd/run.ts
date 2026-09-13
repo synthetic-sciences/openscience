@@ -15,6 +15,7 @@ import { createOpenScienceClient, type OpenScienceClient, type PermissionRequest
 import { NamedError } from "@synsci/util/error"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
+import { Harness } from "@/harness"
 import { RunEvents } from "../run-events"
 import { SafeFileIO } from "../../file/safe-io"
 import { SubtaskAttachments } from "../../session/subtask-attachments"
@@ -66,11 +67,21 @@ export type RunInput = {
   bare: boolean
   format: "default" | "json"
   policy: RunPolicy
+  /** Delegation level for the lead; omitted keeps the user's default. */
+  delegation?: "off" | "light" | "standard" | "high"
+  /** Model workers run on, provider/model. */
+  workerModel?: string
+  /** How the lead treats decision points; auto-approve defaults to autonomous. */
+  autonomy?: "interactive" | "balanced" | "autonomous"
+  /** Wall-clock budget for the work, in seconds. */
+  deadline?: number
+  /** Stream child-session events and roll their usage into done (default true). */
+  workers?: boolean
   /** Sink for JSON events; defaults to the process stdout. */
   stdout?: { write(text: string): unknown }
 }
 
-type Payload<T> = T extends unknown ? Omit<T, "timestamp" | "sessionID"> : never
+type Payload<T> = T extends unknown ? Omit<T, "timestamp" | "sessionID"> & { sessionID?: string } : never
 
 /** Find or create the session `run` drives; both the local and `--attach` paths share it. */
 export async function session(
@@ -81,6 +92,8 @@ export async function session(
     title?: string
     message: string
     workspace?: "isolated" | "project"
+    /** The run answers questions itself, so the question tool may be offered. */
+    answersQuestions?: boolean
   },
 ) {
   const verify = async (sessionID: string) => {
@@ -106,7 +119,11 @@ export async function session(
         ? input.message.slice(0, 50) + (input.message.length > 50 ? "..." : "")
         : input.title
   const result = await sdk.session.create(
-    { ...(title ? { title } : {}), permission: QUESTION_DENY, workspace: input.workspace },
+    {
+      ...(title ? { title } : {}),
+      ...(input.answersQuestions ? {} : { permission: QUESTION_DENY }),
+      workspace: input.workspace,
+    },
     { throwOnError: true },
   )
   // An older attached server can accept the request while stripping an
@@ -169,6 +186,20 @@ export async function execute(input: RunInput): Promise<number> {
     out.write(JSON.stringify({ type, timestamp: Date.now(), sessionID, ...data }) + EOL)
     return true
   }
+  // Child sessions created by delegation: their events carry their own id and
+  // their parent's, and their usage rolls into the final `done`.
+  const children = new Map<
+    string,
+    { parentID: string; agent?: string; model?: string; tokens: RunEvents.Tokens; cost: number }
+  >()
+  const parentOf = new Map<string, string>()
+  const child = (id: string) => {
+    const parentID = parentOf.get(id)
+    if (!parentID) return
+    const current = children.get(id) ?? { parentID, tokens: RunEvents.tokens(), cost: 0 }
+    children.set(id, current)
+    return current
+  }
 
   const usage = (message: string) => {
     if (!emit({ type: "error", error: new NamedError.Unknown({ message }).toObject() })) UI.error(message)
@@ -178,9 +209,19 @@ export async function execute(input: RunInput): Promise<number> {
       exitCode: RunEvents.ExitCode.usage,
       tokens: RunEvents.tokens(),
       cost: 0,
+      children: [],
     })
     return RunEvents.ExitCode.usage
   }
+  const rollup = () =>
+    [...children.entries()].map(([id, record]) => ({
+      sessionID: id,
+      parentID: record.parentID,
+      agent: record.agent,
+      model: record.model,
+      tokens: record.tokens,
+      cost: record.cost,
+    }))
 
   // Preflight the model so an unknown or disconnected one is a usage error
   // instead of a silent fallback to whichever provider has a key.
@@ -243,6 +284,7 @@ export async function execute(input: RunInput): Promise<number> {
     const info = await sdk.session.get({ sessionID: id }).then((result) => result.data)
     const ok = !!info?.parentID && (await related(info.parentID))
     ;(ok ? family : foreign).add(id)
+    if (ok && info?.parentID) parentOf.set(id, info.parentID)
     return ok
   }
 
@@ -304,7 +346,24 @@ export async function execute(input: RunInput): Promise<number> {
       if (finished) break
       if (event.type === "message.part.updated") {
         const part = event.properties.part
-        if (part.sessionID !== sessionID) continue
+        if (part.sessionID !== sessionID) {
+          if (input.workers === false || !(await related(part.sessionID))) continue
+          const record = child(part.sessionID)
+          if (!record) continue
+          const tag = { sessionID: part.sessionID, parentID: record.parentID }
+          if (part.type === "step-finish") {
+            record.tokens = RunEvents.add(record.tokens, part.tokens)
+            record.cost += part.cost
+            emit({ type: "step_finish", part, ...tag })
+          }
+          if (part.type === "step-start") emit({ type: "step_start", part, ...tag })
+          if (part.type === "text" && part.time?.end) emit({ type: "text", part, ...tag })
+          if (part.type === "reasoning" && part.time.end) emit({ type: "reasoning", part, ...tag })
+          if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
+            if (claimToolPartEmission(emittedToolParts, part)) emit({ type: "tool_use", part, ...tag })
+          }
+          continue
+        }
         started = true
 
         if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
@@ -394,9 +453,28 @@ export async function execute(input: RunInput): Promise<number> {
         await reply(permission, input.policy === "allow" ? "once" : "reject")
       }
 
+      if (event.type === "message.updated") {
+        const info = event.properties.info
+        if (info.role !== "assistant" || info.sessionID === sessionID) continue
+        if (input.workers === false || !(await related(info.sessionID))) continue
+        const record = child(info.sessionID)
+        if (!record) continue
+        record.agent = info.agent
+        record.model = `${info.providerID}/${info.modelID}`
+      }
+
       if (event.type === "question.asked") {
         const question = event.properties
         if (!(await related(question.sessionID))) continue
+        if (input.policy === "allow") {
+          // Headless policy: take the recommended (first) option of every
+          // question so a question can never end the run.
+          const answers = question.questions.map((item) => [item.options[0]?.label ?? ""])
+          await sdk.question.reply({ requestID: question.id, answers })
+          if (emit({ type: "question", request: { id: question.id, sessionID: question.sessionID }, answers })) continue
+          printEvent(UI.Style.TEXT_WARNING_BOLD, "Question", `answered with the recommended option`)
+          continue
+        }
         await sdk.question.reject({ requestID: question.id })
         rejected = true
         if (!json)
@@ -408,9 +486,28 @@ export async function execute(input: RunInput): Promise<number> {
   const parts: RunEvents.User["parts"] = [...input.files, { type: "text", text: input.message }]
   emit({ type: "user", parts, command: input.command })
 
-  // Auto-approve implies a single visible session: delegated children would
-  // otherwise run outside the stream this run reports on.
-  const delegation = input.policy === "allow" ? false : undefined
+  // Headless runs keep delegation: child sessions stream into this run with
+  // their parent ids and their usage rolls into `done`. A denied tool call
+  // continues the loop instead of ending it.
+  if (input.policy === "allow") Harness.headless(sessionID, { continueOnDeny: true })
+  const autonomy = input.autonomy ?? (input.policy === "allow" ? "autonomous" : undefined)
+  const level = input.delegation === "standard" ? ("standard" as const) : input.delegation
+  const delegationSettings =
+    level || autonomy || input.workerModel
+      ? {
+          ...(level ? { level } : {}),
+          ...(autonomy ? { autonomy } : {}),
+          ...(input.workerModel ? { workerModel: Provider.parseModel(input.workerModel) } : {}),
+        }
+      : undefined
+  const deadline = input.deadline ? Date.now() + input.deadline * 1000 : undefined
+  const controls = {
+    effort: input.effort,
+    variant: input.variant,
+    ...(input.delegation === "off" ? { delegation: false } : {}),
+    ...(delegationSettings ? { delegationSettings } : {}),
+    ...(deadline ? { deadline } : {}),
+  }
   const result = input.command
     ? await sdk.session.command({
         sessionID,
@@ -419,18 +516,14 @@ export async function execute(input: RunInput): Promise<number> {
         command: input.command,
         arguments: input.message,
         parts: input.files,
-        effort: input.effort,
-        variant: input.variant,
-        delegation,
+        ...controls,
       })
     : await sdk.session.prompt({
         sessionID,
         agent,
         model,
-        variant: input.variant,
-        effort: input.effort,
-        delegation,
         parts,
+        ...controls,
         ...(input.bare ? { tools: { "*": false } } : {}),
       })
 
@@ -451,6 +544,7 @@ export async function execute(input: RunInput): Promise<number> {
         exitCode: RunEvents.ExitCode.usage,
         tokens,
         cost,
+        children: rollup(),
       })
       return RunEvents.ExitCode.usage
     }
@@ -459,7 +553,7 @@ export async function execute(input: RunInput): Promise<number> {
 
   const status: RunEvents.Status = errorMsg ? "error" : rejected ? "rejected" : "completed"
   const code = RunEvents.ExitCode[status]
-  emit({ type: "done", status, exitCode: code, tokens, cost })
+  emit({ type: "done", status, exitCode: code, tokens, cost, children: rollup() })
   return code
 }
 
@@ -525,7 +619,8 @@ export const RunCommand = cmd({
       .option("auto-approve", {
         type: "boolean",
         alias: ["dangerously-skip-permissions"],
-        describe: "approve every permission request for this run without persisting anything (disables delegation)",
+        describe:
+          "approve every permission request, answer questions with their recommended option, and continue past denied tool calls; nothing is persisted",
       })
       .option("deny-prompts", {
         type: "boolean",
@@ -540,6 +635,24 @@ export const RunCommand = cmd({
         choices: ["normal", "ultra"] as const,
         default: "normal" as const,
         describe: "research effort: normal or ultra",
+      })
+      .option("delegation", {
+        type: "string",
+        choices: ["off", "light", "standard", "high"] as const,
+        describe: "how freely the lead dispatches workers (default: the saved preference)",
+      })
+      .option("worker-model", {
+        type: "string",
+        describe: "model workers run on, provider/model (default: the agent's or the lead's model)",
+      })
+      .option("autonomy", {
+        type: "string",
+        choices: ["interactive", "balanced", "autonomous"] as const,
+        describe: "how the lead treats decision points (default: autonomous with --auto-approve)",
+      })
+      .option("deadline", {
+        type: "number",
+        describe: "wall-clock budget in seconds; shown to the agent as its time budget",
       })
       .option("bare", {
         type: "boolean",
@@ -628,6 +741,7 @@ export const RunCommand = cmd({
         title: args.title,
         workspace: args.workspace,
         message,
+        answersQuestions: policy === "allow",
       })
       if (!sessionID) {
         UI.error("Session not found")
@@ -646,6 +760,10 @@ export const RunCommand = cmd({
         bare: args.bare,
         format: args.format === "json" ? "json" : "default",
         policy,
+        delegation: args.delegation,
+        workerModel: args.workerModel,
+        autonomy: args.autonomy,
+        deadline: args.deadline,
       })
     }
 

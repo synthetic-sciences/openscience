@@ -30652,6 +30652,11 @@
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
                   },
+                  "deadline": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -31088,6 +31093,11 @@
                     "type": "string"
                   },
                   "context": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "deadline": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
@@ -55028,51 +55038,6 @@
           "properties"
         ]
       },
-      "Event.lsp.client.diagnostics": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "lsp.client.diagnostics"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "serverID": {
-                "type": "string"
-              },
-              "path": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "serverID",
-              "path"
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
-      "Event.lsp.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "lsp.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
       "Event.file.watcher.updated": {
         "type": "object",
         "properties": {
@@ -55208,149 +55173,26 @@
           "properties"
         ]
       },
-      "Event.project.access.changed": {
+      "Event.lsp.client.diagnostics": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "project.access.changed"
+            "const": "lsp.client.diagnostics"
           },
           "properties": {
             "type": "object",
             "properties": {
-              "status": {
-                "type": "object",
-                "properties": {
-                  "projectID": {
-                    "type": "string"
-                  },
-                  "root": {
-                    "type": "string"
-                  },
-                  "revision": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "trustRevision": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "mode": {
-                    "type": "string",
-                    "enum": [
-                      "ask",
-                      "approve",
-                      "full"
-                    ]
-                  },
-                  "requestedMode": {
-                    "type": "string",
-                    "enum": [
-                      "ask",
-                      "approve",
-                      "full"
-                    ]
-                  },
-                  "source": {
-                    "type": "string",
-                    "enum": [
-                      "default",
-                      "legacy",
-                      "persisted"
-                    ]
-                  },
-                  "trusted": {
-                    "type": "boolean"
-                  },
-                  "managed": {
-                    "type": "boolean"
-                  },
-                  "sandbox": {
-                    "type": "object",
-                    "properties": {
-                      "enabled": {
-                        "type": "boolean"
-                      },
-                      "network": {
-                        "type": "string",
-                        "enum": [
-                          "allow",
-                          "deny"
-                        ]
-                      },
-                      "allowWrite": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "onUnavailable": {
-                        "type": "string",
-                        "enum": [
-                          "warn",
-                          "error",
-                          "allow"
-                        ]
-                      },
-                      "requireProjectTrust": {
-                        "type": "boolean"
-                      }
-                    },
-                    "required": [
-                      "enabled",
-                      "network",
-                      "allowWrite",
-                      "onUnavailable",
-                      "requireProjectTrust"
-                    ]
-                  },
-                  "sandboxStatus": {
-                    "type": "object",
-                    "properties": {
-                      "available": {
-                        "type": "boolean"
-                      },
-                      "backend": {
-                        "type": "string",
-                        "enum": [
-                          "seatbelt",
-                          "bubblewrap",
-                          "none"
-                        ]
-                      },
-                      "reason": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "available",
-                      "backend"
-                    ]
-                  }
-                },
-                "required": [
-                  "projectID",
-                  "root",
-                  "revision",
-                  "trustRevision",
-                  "mode",
-                  "requestedMode",
-                  "source",
-                  "trusted",
-                  "managed",
-                  "sandbox",
-                  "sandboxStatus"
-                ]
+              "serverID": {
+                "type": "string"
               },
-              "narrowing": {
-                "type": "boolean"
+              "path": {
+                "type": "string"
               }
             },
             "required": [
-              "status",
-              "narrowing"
+              "serverID",
+              "path"
             ]
           }
         },
@@ -55359,20 +55201,16 @@
           "properties"
         ]
       },
-      "Event.vcs.branch.updated": {
+      "Event.lsp.updated": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "const": "vcs.branch.updated"
+            "const": "lsp.updated"
           },
           "properties": {
             "type": "object",
-            "properties": {
-              "branch": {
-                "type": "string"
-              }
-            }
+            "properties": {}
           }
         },
         "required": [
@@ -55523,7 +55361,8 @@
                       "review-summary",
                       "compaction",
                       "task",
-                      "context"
+                      "context",
+                      "harness"
                     ]
                   },
                   "text": {
@@ -55702,6 +55541,11 @@
               "source",
               "effort"
             ]
+          },
+          "deadline": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [
@@ -57063,6 +56907,9 @@
               "overflow",
               "manual"
             ]
+          },
+          "rootID": {
+            "type": "string"
           }
         },
         "required": [
@@ -57168,6 +57015,178 @@
               "messageID",
               "partID"
             ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "Event.project.access.changed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "project.access.changed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "object",
+                "properties": {
+                  "projectID": {
+                    "type": "string"
+                  },
+                  "root": {
+                    "type": "string"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "trustRevision": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "ask",
+                      "approve",
+                      "full"
+                    ]
+                  },
+                  "requestedMode": {
+                    "type": "string",
+                    "enum": [
+                      "ask",
+                      "approve",
+                      "full"
+                    ]
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "default",
+                      "legacy",
+                      "persisted"
+                    ]
+                  },
+                  "trusted": {
+                    "type": "boolean"
+                  },
+                  "managed": {
+                    "type": "boolean"
+                  },
+                  "sandbox": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "network": {
+                        "type": "string",
+                        "enum": [
+                          "allow",
+                          "deny"
+                        ]
+                      },
+                      "allowWrite": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "onUnavailable": {
+                        "type": "string",
+                        "enum": [
+                          "warn",
+                          "error",
+                          "allow"
+                        ]
+                      },
+                      "requireProjectTrust": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "network",
+                      "allowWrite",
+                      "onUnavailable",
+                      "requireProjectTrust"
+                    ]
+                  },
+                  "sandboxStatus": {
+                    "type": "object",
+                    "properties": {
+                      "available": {
+                        "type": "boolean"
+                      },
+                      "backend": {
+                        "type": "string",
+                        "enum": [
+                          "seatbelt",
+                          "bubblewrap",
+                          "none"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "available",
+                      "backend"
+                    ]
+                  }
+                },
+                "required": [
+                  "projectID",
+                  "root",
+                  "revision",
+                  "trustRevision",
+                  "mode",
+                  "requestedMode",
+                  "source",
+                  "trusted",
+                  "managed",
+                  "sandbox",
+                  "sandboxStatus"
+                ]
+              },
+              "narrowing": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "status",
+              "narrowing"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "Event.vcs.branch.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "vcs.branch.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              }
+            }
           }
         },
         "required": [
@@ -57902,6 +57921,30 @@
             },
             "required": [
               "sessionID"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "Event.file.edited": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.edited"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "file"
             ]
           }
         },
@@ -58989,30 +59032,6 @@
           "properties"
         ]
       },
-      "Event.file.edited": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.edited"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "file"
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
       "Pty": {
         "type": "object",
         "properties": {
@@ -59461,22 +59480,16 @@
             "$ref": "#/components/schemas/Event.account.login"
           },
           {
-            "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
-          },
-          {
-            "$ref": "#/components/schemas/Event.lsp.updated"
-          },
-          {
             "$ref": "#/components/schemas/Event.file.watcher.updated"
           },
           {
             "$ref": "#/components/schemas/Event.session.filesystem.changed"
           },
           {
-            "$ref": "#/components/schemas/Event.project.access.changed"
+            "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
           },
           {
-            "$ref": "#/components/schemas/Event.vcs.branch.updated"
+            "$ref": "#/components/schemas/Event.lsp.updated"
           },
           {
             "$ref": "#/components/schemas/Event.message.updated"
@@ -59489,6 +59502,12 @@
           },
           {
             "$ref": "#/components/schemas/Event.message.part.removed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.project.access.changed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.vcs.branch.updated"
           },
           {
             "$ref": "#/components/schemas/Event.permission.asked"
@@ -59533,6 +59552,9 @@
             "$ref": "#/components/schemas/Event.session.compacted"
           },
           {
+            "$ref": "#/components/schemas/Event.file.edited"
+          },
+          {
             "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
@@ -59573,9 +59595,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.error"
-          },
-          {
-            "$ref": "#/components/schemas/Event.file.edited"
           },
           {
             "$ref": "#/components/schemas/Event.pty.created"
@@ -60226,6 +60245,17 @@
         "properties": {
           "model": {
             "type": "string"
+          },
+          "variant": {
+            "description": "Model variant (reasoning effort) used when this agent runs on its own configured model",
+            "type": "string"
+          },
+          "skills": {
+            "description": "Skill categories indexed in this agent's <domain-skills> block (specialist agents)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "temperature": {
             "type": "number"
@@ -61079,6 +61109,53 @@
           "default_agent": {
             "description": "Default agent to use when none is specified. Must be a primary agent. Falls back to 'research' if not set or if the specified agent is invalid.",
             "type": "string"
+          },
+          "subagent_depth": {
+            "description": "How many levels of subagents a session may nest (default 1: only the lead dispatches workers)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "harness": {
+            "description": "Harness units, each on by default; set one to false to remove its behaviour",
+            "type": "object",
+            "properties": {
+              "headless-policy": {
+                "type": "boolean"
+              },
+              "redirect": {
+                "type": "boolean"
+              },
+              "deliverables": {
+                "type": "boolean"
+              },
+              "budget": {
+                "type": "boolean"
+              },
+              "cost": {
+                "description": "Spend visibility beside the time budget; an optional soft ceiling injects a wrap-up reminder",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "max_usd": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    }
+                  }
+                ]
+              },
+              "durable-jobs": {
+                "type": "boolean"
+              },
+              "workers": {
+                "type": "boolean"
+              }
+            }
           },
           "billing": {
             "description": "Provider access configuration for Ace or user-owned credentials.",
@@ -63600,6 +63677,9 @@
               "providerID"
             ]
           },
+          "variant": {
+            "type": "string"
+          },
           "prompt": {
             "type": "string"
           },
@@ -63614,6 +63694,18 @@
             "type": "integer",
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unlocks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [

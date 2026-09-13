@@ -12,6 +12,8 @@ export namespace RunEvents {
   const Base = z.object({
     timestamp: z.number(),
     sessionID: z.string(),
+    /** Present on events from a delegated child session: the session that dispatched it. */
+    parentID: z.string().optional(),
   })
 
   export const ToolUse = Base.extend({ type: z.literal("tool_use"), part: MessageV2.ToolPart })
@@ -47,19 +49,40 @@ export namespace RunEvents {
   })
   export type Permission = z.infer<typeof Permission>
 
+  /** A question the run answered on the model's behalf with the recommended option. */
+  export const Question = Base.extend({
+    type: z.literal("question"),
+    request: z.object({ id: z.string(), sessionID: z.string() }),
+    answers: z.array(z.array(z.string())),
+  })
+  export type Question = z.infer<typeof Question>
+
   export const Status = z.enum(["completed", "error", "rejected"])
   export type Status = z.infer<typeof Status>
 
   export const Tokens = MessageV2.StepFinishPart.shape.tokens
   export type Tokens = z.infer<typeof Tokens>
 
-  /** Terminal event: status, the process exit code, and usage summed over every step. */
+  /** One delegated child's identity and usage, rolled into `done`. */
+  export const Child = z.object({
+    sessionID: z.string(),
+    parentID: z.string(),
+    agent: z.string().optional(),
+    model: z.string().optional(),
+    tokens: Tokens,
+    cost: z.number(),
+  })
+  export type Child = z.infer<typeof Child>
+
+  /** Terminal event: status, the process exit code, usage summed over every
+   * root step, and every child session's usage beside it. */
   export const Done = Base.extend({
     type: z.literal("done"),
     status: Status,
     exitCode: z.number().int(),
     tokens: Tokens,
     cost: z.number(),
+    children: z.array(Child).default([]),
   })
 
   export const Event = z.discriminatedUnion("type", [
@@ -71,6 +94,7 @@ export namespace RunEvents {
     User,
     Reasoning,
     Permission,
+    Question,
     Done,
   ])
   export type Event = z.infer<typeof Event>

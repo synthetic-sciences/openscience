@@ -3990,6 +3990,7 @@ export class Session extends HeyApiClient {
       variant?: string
       tier?: string
       context?: number
+      deadline?: number
       parts: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -4013,6 +4014,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
             { in: "body", key: "context" },
+            { in: "body", key: "deadline" },
             { in: "body", key: "parts" },
           ],
         },
@@ -4095,6 +4097,7 @@ export class Session extends HeyApiClient {
       variant?: string
       tier?: string
       context?: number
+      deadline?: number
       parts: Array<TextPartInput | FilePartInput | AgentPartInput | ConversationPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -4118,6 +4121,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "variant" },
             { in: "body", key: "tier" },
             { in: "body", key: "context" },
+            { in: "body", key: "deadline" },
             { in: "body", key: "parts" },
           ],
         },

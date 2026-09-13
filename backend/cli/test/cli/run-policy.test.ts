@@ -112,6 +112,20 @@ function provider(options: { secret: string; hold?: () => Promise<void> }) {
             })
       }
       if (prompt.includes("RUN_HOLD")) await options.hold?.()
+      // The lead delegates once; the child recognizes its own brief.
+      if (prompt.includes("CHILD_BRIEF")) return text("CHILD_DONE: two files inspected.")
+      if (prompt.includes("RUN_DELEGATE")) {
+        return done
+          ? text("RUN_DELEGATE_DONE")
+          : call("task", {
+              description: "Inspect files",
+              prompt: "CHILD_BRIEF inspect the files",
+              subagent_type: "explore",
+            })
+      }
+      if (prompt.includes("RUN_DENIED")) {
+        return done ? text("RUN_DENIED_DONE") : call("bash", { command: "echo blocked", description: "blocked" })
+      }
       return text("RUN_TEXT_DONE", "Thinking about the request.")
     },
   })
@@ -316,7 +330,7 @@ describe("openscience run policy loop", () => {
     })
   }, 20_000)
 
-  test("a stray question is rejected instead of hanging the run", async () => {
+  test("under auto-approve a question is answered with its recommended option and the run completes", async () => {
     const stub = provider({ secret: "" })
     servers.push(stub.server)
     await using tmp = await tmpdir({ git: true, config: stressProviderConfig(stub.baseURL) })
@@ -331,10 +345,36 @@ describe("openscience run policy loop", () => {
         // No question rule on purpose: the tool is offered and the model asks.
         const sessionID = (await client.session.create({})).data!.id
         const { out, code } = run({ sdk: client, sessionID, message: "RUN_QUESTION now", policy: "allow" })
-        expect(await code).toBe(3)
+        expect(await code).toBe(0)
         const tool = out.events().find((event) => event.type === "tool_use")
         expect(tool?.type === "tool_use" && tool.part.tool).toBe("question")
-        expect(tool?.type === "tool_use" && tool.part.state.status).toBe("error")
+        // A consequential question under the autonomous posture resolves to its
+        // recommended option inside the runtime; the run never sees a request
+        // and never ends the turn over it.
+        expect(tool?.type === "tool_use" && tool.part.state.status).toBe("completed")
+        expect(tool?.type === "tool_use" && tool.part.state.status === "completed" && tool.part.state.output).toContain(
+          "Yes (Recommended)",
+        )
+        expect(out.events().at(-1)).toMatchObject({ type: "done", status: "completed", exitCode: 0, children: [] })
+      },
+    })
+  }, 20_000)
+
+  test("under deny-prompts a stray question is rejected instead of hanging the run", async () => {
+    const stub = provider({ secret: "" })
+    servers.push(stub.server)
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(stub.baseURL) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        const client = sdk(tmp.path)
+        const sessionID = (await client.session.create({})).data!.id
+        const { out, code } = run({ sdk: client, sessionID, message: "RUN_QUESTION now", policy: "deny" })
+        expect(await code).toBe(3)
         expect(out.events().at(-1)).toMatchObject({ type: "done", status: "rejected", exitCode: 3 })
       },
     })
@@ -445,4 +485,87 @@ describe("openscience run policy loop", () => {
       },
     })
   }, 20_000)
+})
+
+describe("openscience run headless harness", () => {
+  test("--delegation standard streams child events with parentID and rolls child usage into done", async () => {
+    const stub = provider({ secret: "" })
+    servers.push(stub.server)
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(stub.baseURL) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        const client = sdk(tmp.path)
+        const sessionID = (await client.session.create({})).data!.id
+        const { out, code } = run({
+          sdk: client,
+          sessionID,
+          message: "RUN_DELEGATE the inspection",
+          policy: "allow",
+          delegation: "standard",
+          deadline: 600,
+        })
+        expect(await code).toBe(0)
+        const events = out.events()
+        const childSteps = events.filter((event) => event.type === "step_finish" && event.parentID === sessionID)
+        expect(childSteps.length).toBeGreaterThan(0)
+        for (const step of childSteps) expect(step.sessionID).not.toBe(sessionID)
+        const childText = events.find((event) => event.type === "text" && event.parentID === sessionID)
+        expect(childText?.type === "text" && childText.part.text).toContain("CHILD_DONE")
+        const done = events.at(-1)
+        if (done?.type !== "done") throw new Error("missing done")
+        expect(done.children).toHaveLength(1)
+        expect(done.children[0]).toMatchObject({ parentID: sessionID, agent: "explore" })
+        const summed = childSteps.reduce(
+          (total, step) => (step.type === "step_finish" ? total + step.part.tokens.input : total),
+          0,
+        )
+        expect(done.children[0].tokens.input).toBe(summed)
+        // The lead's own usage excludes the child's.
+        const rootSteps = events.filter((event) => event.type === "step_finish" && !event.parentID)
+        expect(done.tokens.input).toBe(
+          rootSteps.reduce((total, step) => (step.type === "step_finish" ? total + step.part.tokens.input : total), 0),
+        )
+        // The task result reached the lead in the OpenCode envelope.
+        const task = events.find((event) => event.type === "tool_use" && event.part.tool === "task")
+        expect(task?.type === "tool_use" && task.part.state.status === "completed" && task.part.state.output).toContain(
+          "<task_result>",
+        )
+        // --deadline shows as the time budget in the environment block.
+        expect(stub.requests.some((request) => /Time budget: 10m, elapsed \dm/.test(request))).toBe(true)
+      },
+    })
+  }, 30_000)
+
+  test("a denied tool call does not end an auto-approved run", async () => {
+    const stub = provider({ secret: "" })
+    servers.push(stub.server)
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(stub.baseURL) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        const client = sdk(tmp.path)
+        // bash is denied for the session; the tool is hidden, so the model's
+        // call is repaired into the invalid tool and the loop continues.
+        const sessionID = (
+          await client.session.create({ permission: [{ permission: "bash", pattern: "*", action: "deny" }] })
+        ).data!.id
+        const { out, code } = run({ sdk: client, sessionID, message: "RUN_DENIED now", policy: "allow" })
+        expect(await code).toBe(0)
+        const events = out.events()
+        const schema = stub.requests[0]
+        expect(schema).not.toContain('"name":"bash"')
+        expect(events.some((event) => event.type === "tool_use" && event.part.tool === "invalid")).toBe(true)
+        expect(events.at(-1)).toMatchObject({ type: "done", status: "completed", exitCode: 0 })
+      },
+    })
+  }, 30_000)
 })
