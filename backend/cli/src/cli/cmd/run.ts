@@ -525,7 +525,7 @@ export async function execute(input: RunInput): Promise<number> {
   // continues the loop instead of ending it.
   if (input.policy === "allow") Harness.headless(sessionID, { continueOnDeny: true })
   const autonomy = input.autonomy ?? (input.policy === "allow" ? "autonomous" : undefined)
-  const level = input.delegation === "standard" ? ("standard" as const) : input.delegation
+  const level = input.delegation
   const delegationSettings =
     level || autonomy || input.workerModel
       ? {

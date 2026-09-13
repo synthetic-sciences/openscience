@@ -1,7 +1,7 @@
 // Tool definitions do not expose machine-readable side-effect or cost metadata.
 // Keep Plan mode fail-closed: unknown, custom, and MCP tools stay blocked until
 // their complete execution path is explicitly audited as read-only and free.
-const SAFE = new Set(["invalid", "read", "list", "glob", "grep", "question", "planwrite", "todoread", "todowrite"])
+const SAFE = new Set(["invalid", "read", "list", "glob", "grep", "question", "recall", "todowrite"])
 const REASON = "Plan mode is read-only and cannot execute, write, start jobs, upload, spend, or mutate state."
 const ACTION = "Switch to Act/build mode, then retry the tool and approve any required permission."
 

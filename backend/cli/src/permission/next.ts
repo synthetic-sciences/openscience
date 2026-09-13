@@ -36,7 +36,7 @@ export namespace PermissionNext {
   export const Risk = z.enum(["passive", "contained", "risky", "unknown"])
   export type Risk = z.infer<typeof Risk>
 
-  const PASSIVE = new Set(["experiments", "glob", "grep", "list", "question", "read", "skill", "todoread"])
+  const PASSIVE = new Set(["experiments", "glob", "grep", "list", "question", "read", "recall", "skill", "todoread"])
   const CONTAINED = new Set([
     "artifact",
     "batch",

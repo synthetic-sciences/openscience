@@ -53,20 +53,20 @@ dependencies: ["anndata>=0.10.0", "numpy>=1.25.0"]
 ---
 ```
 
-| Field                                                      | Required | Meaning                                                                                                                               |
-| ---------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`                                                     | yes      | Skill id; must match the directory name.                                                                                              |
-| `description`                                              | yes      | One paragraph the model reads to decide when to load the skill. Say what it is for and when _not_ to use it.                          |
-| `summary`                                                  | no       | One line under 120 characters for always-visible indexes (the core index, a specialist's domain index). Quote it if it has a colon.   |
-| `category`                                                 | no       | Catalog grouping; use the directory name.                                                                                             |
-| `tags`                                                     | no       | Free-form list used for search.                                                                                                       |
-| `role`                                                     | no       | `workflow` (user-facing task) or `support` (helper loaded by other skills).                                                           |
-| `capability`                                               | no       | Scientific capability id this skill fronts, if any.                                                                                   |
-| `allowed_tools`                                            | no       | Tools the skill may request after loading; permissions still apply.                                                                   |
-| `requirements`                                             | no       | `{ all: [...], any: [...] }` runtime requirements.                                                                                    |
-| `entry`                                                    | no       | `false` hides the skill from `/` autocomplete; bundled skills leave it unset.                                                         |
-| `disabled`                                                 | no       | `true` keeps this copy out of the catalog.                                                                                            |
-| `license`, `version`, `author`, `metadata`, `dependencies` | no       | Conventions in the bundled tree; passed through unchanged. Keep `dependencies` as scalar pip specs (`ray[train]`, not a nested list). |
+| Field                                                      | Required | Meaning                                                                                                                                                                                    |
+| ---------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`                                                     | yes      | Skill id; must match the directory name.                                                                                                                                                   |
+| `description`                                              | yes      | One paragraph the model reads to decide when to load the skill. Say what it is for and when _not_ to use it.                                                                               |
+| `summary`                                                  | no       | One line under 120 characters for always-visible indexes (the core index, a specialist's domain index). Quote it if it has a colon.                                                        |
+| `category`                                                 | no       | Catalog grouping; use the directory name.                                                                                                                                                  |
+| `tags`                                                     | no       | Free-form list used for search.                                                                                                                                                            |
+| `role`                                                     | no       | `workflow` (user-facing task) or `support` (helper loaded by other skills).                                                                                                                |
+| `capability`                                               | no       | Scientific capability id this skill fronts, if any.                                                                                                                                        |
+| `allowed_tools`                                            | no       | Tools the session offers for the rest of the task once the skill is loaded (the way domain tools such as `r`, `science_search` or `experiments` reach the model); permissions still apply. |
+| `requirements`                                             | no       | `{ all: [...], any: [...] }` runtime requirements.                                                                                                                                         |
+| `entry`                                                    | no       | `false` hides the skill from `/` autocomplete; bundled skills leave it unset.                                                                                                              |
+| `disabled`                                                 | no       | `true` keeps this copy out of the catalog.                                                                                                                                                 |
+| `license`, `version`, `author`, `metadata`, `dependencies` | no       | Conventions in the bundled tree; passed through unchanged. Keep `dependencies` as scalar pip specs (`ray[train]`, not a nested list).                                                      |
 
 The body is plain Markdown: an overview, when to use it, the workflow, and the
 pitfalls. Reference helper scripts by path relative to the skill directory.

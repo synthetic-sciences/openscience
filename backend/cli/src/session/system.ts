@@ -204,6 +204,7 @@ export namespace SystemPrompt {
     "reproduce",
     "autoresearch",
     "compute",
+    "execution-hygiene",
     "delegation",
     "figures",
     "schematics",

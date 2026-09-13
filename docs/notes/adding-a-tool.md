@@ -42,8 +42,14 @@ export const HelloTool = Tool.define("hello", {
   prompt or deny. `ctx.abort` is the session's abort signal.
 - Output is truncated automatically; return `metadata.truncated` yourself only
   if the tool manages its own limits.
-- Add it to the `all()` list in `backend/cli/src/tool/registry.ts`; agent
-  permissions and client flags filter that list per session.
+- Add it to the `all()` list in `backend/cli/src/tool/registry.ts`. Whether a
+  session then offers it follows `backend/cli/src/tool/visibility.ts`: a tool
+  is offered when the agent's ruleset does not deny it and it is in the shared
+  default set (`ToolVisibility.DEFAULT`), a loaded skill names it in
+  `allowed-tools`, or an agent's own rule names it. A domain tool belongs in the
+  `allowed-tools` of the skills that need it, not in the default set.
+- Its description may name only tools that can be offered in the same session;
+  say "the durable job tool when it is offered" rather than `compute_job`.
 
 Plan mode is fail-closed: `backend/cli/src/tool/plan-mode.ts` blocks every tool
 the `plan` agent calls unless its id is in the `SAFE` set. Leave a new tool out
