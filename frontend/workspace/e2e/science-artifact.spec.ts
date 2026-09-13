@@ -229,6 +229,8 @@ test("classic per-turn disclosure preserves full reasoning and results despite l
     }, userID)
     await gotoSession(sessionID)
     const artifact = page.locator('[data-component="science-artifact"][data-kind="sequence"]')
+    // Private continuations render nothing of their own: only the two
+    // readable passages become reasoning parts, and no placeholder sentence.
     const reasoningRows = page.locator('[data-component="reasoning-part"]')
     const unavailable = page.locator('[data-slot="reasoning-unavailable"]')
     const readableRows = reasoningRows.filter({ hasNot: unavailable })
@@ -239,12 +241,10 @@ test("classic per-turn disclosure preserves full reasoning and results despite l
     await expect(reasoningRows).toHaveCount(0)
     await expect(artifact).toBeVisible()
     await toggle.click()
-    await expect(reasoningRows).toHaveCount(4)
+    await expect(reasoningRows).toHaveCount(2)
     await expect(readableRows).toHaveCount(2)
-    await expect(unavailable).toHaveText([
-      "Reasoning text isn’t available for this step.",
-      "Reasoning text isn’t available for this step.",
-    ])
+    await expect(unavailable).toHaveCount(0)
+    await expect(page.getByText("isn’t available for this step")).toHaveCount(0)
     await expect(reasoningRows.locator("button")).toHaveCount(0)
     await expect(readableRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
     await expect(reasoningRows.locator("strong")).toHaveText("same evaluation conditions")
@@ -253,11 +253,11 @@ test("classic per-turn disclosure preserves full reasoning and results despite l
     await expect(artifact).toBeVisible()
     await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
     await page.reload()
-    await expect(reasoningRows).toHaveCount(4)
+    await expect(reasoningRows).toHaveCount(2)
     await expect(readableRows).toHaveCount(2)
-    await expect(unavailable).toHaveCount(2)
+    await expect(unavailable).toHaveCount(0)
     await expect(readableRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
-    await expect(page.locator('[data-component="reasoning-part"], [data-component="science-artifact"]')).toHaveCount(5)
+    await expect(page.locator('[data-component="reasoning-part"], [data-component="science-artifact"]')).toHaveCount(3)
     expect(
       await page
         .locator('[data-component="reasoning-part"], [data-component="science-artifact"]')
@@ -268,13 +268,7 @@ test("classic per-turn disclosure preserves full reasoning and results despite l
               : row.getAttribute("data-component"),
           ),
         ),
-    ).toEqual([
-      "reasoning-part",
-      "reasoning-unavailable",
-      "reasoning-part",
-      "reasoning-unavailable",
-      "science-artifact",
-    ])
+    ).toEqual(["reasoning-part", "reasoning-part", "science-artifact"])
     await expect(artifact).toBeVisible()
     await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
 
@@ -297,11 +291,11 @@ test("classic per-turn disclosure preserves full reasoning and results despite l
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     await toggle.click()
     await expect(readableRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
-    await expect(unavailable).toHaveCount(2)
+    await expect(unavailable).toHaveCount(0)
     await expect(toggle).toHaveAttribute("aria-label", "Hide reasoning and activity")
     await page.reload()
     await expect(readableRows.locator('[data-slot="reasoning-part-body"]')).toHaveText(prose)
-    await expect(unavailable).toHaveCount(2)
+    await expect(unavailable).toHaveCount(0)
     await expect(artifact).toBeVisible()
     await expect(artifact.locator('[data-slot="sequence-residues"]')).toHaveText("ACGTACGT")
     // A finished thought is folded behind its "Thought" row; open it to read.
