@@ -91,16 +91,12 @@ const LABELS: Record<string, string> = {
   physics: "Physics",
   ml: "ML",
   chemistry: "Chemistry",
-  write: "Scientific writing",
+  data: "Data",
   docs: "Documentation",
-  task: "General",
   explore: "Exploration",
-  "literature-review": "Literature review",
-  critique: "Scientific critique",
-  "physics-critique": "Physics critique",
 }
 
-const CORE_SPECIALISTS = ["biology", "physics", "ml", "chemistry"] as const
+const CORE_SPECIALISTS = ["biology", "physics", "ml", "chemistry", "data"] as const
 
 export function isCoreSpecialist(name: string) {
   return CORE_SPECIALISTS.some((specialist) => specialist === name)

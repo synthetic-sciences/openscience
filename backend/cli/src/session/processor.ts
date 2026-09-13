@@ -1424,10 +1424,14 @@ export namespace SessionProcessor {
               (part): part is MessageV2.ToolPart => part.type === "tool" && part.state.status === "error",
             )
             if (lastError && lastError.state.status === "error") {
-              const history = turnParts(
-                await Array.fromAsync(MessageV2.stream(input.sessionID)),
-                input.assistantMessage.parentID,
+              const all = await Array.fromAsync(MessageV2.stream(input.sessionID))
+              // A harness redirect opens a fresh window: failures before it were
+              // already answered, so only those after it count toward the next trip.
+              const redirect = all.find(
+                (message) => message.info.role === "user" && SessionLoopState.messageKind(message.info) === "harness",
               )
+              const scoped = redirect ? all.filter((message) => message.info.id > redirect.info.id) : all
+              const history = turnParts(scoped, input.assistantMessage.parentID)
               const action = toolErrorLoopAction(history, lastError.tool)
               if (action !== "none" && !lastError.state.error.includes(toolErrorGuidance(lastError.tool))) {
                 await Session.updatePart({

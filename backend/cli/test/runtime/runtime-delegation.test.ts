@@ -69,7 +69,7 @@ for (const cancellation of ["runtime", "session", "runtime-shell"] as const) {
             args: {
               description: "Read the fixture",
               prompt: `Read ${file}, then report.`,
-              subagent_type: cancellation === "runtime-shell" ? "execute" : "explore",
+              subagent_type: cancellation === "runtime-shell" ? "data" : "explore",
               session_id: null,
             },
           })
@@ -127,7 +127,7 @@ for (const cancellation of ["runtime", "session", "runtime-shell"] as const) {
           delegation: true,
           parts: [
             { type: "text", text: "Delegate this bounded inspection." },
-            { type: "agent", name: cancellation === "runtime-shell" ? "execute" : "explore" },
+            { type: "agent", name: cancellation === "runtime-shell" ? "data" : "explore" },
           ],
         })
         try {
@@ -224,7 +224,7 @@ for (const cancellation of ["runtime", "session", "runtime-shell"] as const) {
   }, 30_000)
 }
 
-test("serial provider failures stop on the third error even after recovery guidance is persisted", async () => {
+test("serial task failures get one redirect after the third error instead of a stop", async () => {
   let requests = 0
   using provider = Bun.serve({
     hostname: "127.0.0.1",
@@ -270,12 +270,18 @@ test("serial provider failures stop on the third error even after recovery guida
       const errors = parts.filter(
         (part) => part.type === "tool" && part.tool === "task" && part.state.status === "error",
       )
-      expect(requests).toBe(3)
-      expect(errors).toHaveLength(3)
+      // Three same-cause failures trip the guard; the redirect unit turns the
+      // first trip into a strategy-change message instead of a stop, so the
+      // model gets two more calls before it changes approach on its own.
+      expect(requests).toBe(6)
+      expect(errors).toHaveLength(5)
       expect(await Session.children(session.id)).toHaveLength(0)
       expect(
-        parts.some((part) => part.type === "text" && part.text.includes(SessionProcessor.toolErrorStopMessage("task"))),
+        parts.some((part) => part.type === "text" && part.synthetic && part.text.includes("Diagnose the root cause")),
       ).toBe(true)
+      expect(
+        parts.some((part) => part.type === "text" && part.text.includes(SessionProcessor.toolErrorStopMessage("task"))),
+      ).toBe(false)
     },
   })
 }, 30_000)

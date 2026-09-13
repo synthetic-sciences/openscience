@@ -54,15 +54,36 @@ These settings guide collaboration. They do not replace your action-approval set
 
 ### Workers
 
-Each delegated task starts its own worker in its own session, and independent workers run at the same time. A worker runs on the **Worker model** from **Customize → Models** when one is set, otherwise on the lead's model. The lead writes a self-contained brief with a definition of done, waits for the handoff, and integrates it; checking the lead's own output (compiling, reading a rendered file, confirming a number or a reference) is never delegated.
+The built-in workers are `explore` (a read-only scout for files, data, code and papers) and five specialists built from one template: `ml`, `biology`, `physics`, `chemistry` and `data` (pipelines, processing, coding, visualization; the general execution worker). Each specialist carries an index of its skill categories and the domain tools those need; the lead dispatches one by name through the Task tool, and independent workers run at the same time with no fixed cap.
 
-A delegated task shows as one line (what it is doing, which agent, its state and elapsed time) and streams nothing while it runs; open it for the handoff, its saved Results and **Open agent**, which shows the worker's own conversation. Continued workers keep their earlier conversation. Stopping the lead also cancels its active delegated work, including workers preparing to start. A stopped task's saved files and recorded tool results remain available.
+A worker runs on its own configured model when the agent has one, otherwise on the **Worker model** from **Customize → Models**, otherwise on the lead's model. No built-in agent has a model in code; the recommended configuration is documented below. Workers work in the lead's own directory: the files they write there are the deliverables, and the lead reads them directly. The lead writes a self-contained brief with a definition of done, waits for the result (returned once, in a `<task_result>` envelope with a `task_id` that can resume the same worker), and integrates it; checking the lead's own output is never delegated. A worker started in the background returns immediately and wakes the lead with its result when it finishes. Workers cannot dispatch workers unless `subagent_depth` in `openscience.json` allows deeper nesting (default 1).
 
-Saved worker Results carry immutable artifact and version IDs back to the lead.
-The lead can read these versions without access to the worker's private scratch.
+A delegated task shows as one line (what it is doing, which agent, its state and elapsed time) and streams nothing while it runs; open it for the result, its saved Results and **Open agent**, which shows the worker's own conversation. Stopping the lead also cancels its active delegated work. A stopped task's saved files and recorded tool results remain available.
+
 Only the latest assistant message's text after its final tool call counts as the
-handoff; earlier progress text cannot make an unfinished worker look complete.
-An empty handoff remains incomplete, even if the worker saved files.
+result; earlier progress text cannot make an unfinished worker look complete. A
+result without a Verification section (the command, its exit code, what it
+proves) is a claim, and the lead is told so.
+
+#### Recommended models
+
+Put the models you want each agent to use in `openscience.json`; nothing is hard-coded:
+
+```json
+{
+  "model": "openai/gpt-6-astra",
+  "agent": {
+    "explore": { "model": "google/gemini-3.8-flash" },
+    "ml": { "model": "openai/gpt-5.6-sol", "variant": "high" },
+    "biology": { "model": "openai/gpt-5.6-sol" },
+    "physics": { "model": "openai/gpt-5.6-sol" },
+    "chemistry": { "model": "openai/gpt-5.6-sol" },
+    "data": { "model": "openai/gpt-5.6-sol" }
+  }
+}
+```
+
+A worker on a different model than the lead uses its own `variant` (reasoning effort); on the lead's model it inherits the lead's. Add your own specialist the same way, with `mode: "subagent"`, `skills: ["<category>", ...]` for its domain index and a `permission` rule per domain tool it may use without a skill.
 
 Handoffs retain command receipt references and failures. A shell exit of zero
 describes the outer process; it does not establish that nested tests passed or

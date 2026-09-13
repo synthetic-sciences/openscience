@@ -15,8 +15,10 @@ Type `/` in the composer. The menu opens on the **Core** toolkit: `/plan`, `/goa
 | `/stop` | Stop active work in the session (offered while a turn runs). |
 | `/checkpoint [label]` | Save a recovery point. |
 | `/handoff [path]` | Save a continuation note, then compact. |
-| `/init` | Create or update project instructions. |
-| `/resume` | Continue an exhausted research contract from its checkpoints. |
+| `/init [notes]` | Write the project's `AGENTS.md`: research question, data locations, conventions, deliverables. |
+| `/review [focus]` | Referee the current deliverables with the peer-review skill; blocking issues first. |
+| `/reproduce [claim]` | Reproduce a stated result with the reproduce skill, deviations recorded. |
+| `/literature [question]` | A focused literature review: two or three searches, the closest papers read. |
 
 Session state, context usage, and undo live in the workspace itself: the token counter in the session header shows context usage, and **Undo from here** on a finished response reverts a turn.
 

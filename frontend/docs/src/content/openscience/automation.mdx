@@ -13,17 +13,31 @@ openscience run --deny-prompts --format json "Summarize the project README" > ru
 
 This emits newline-delimited JSON. A rejected permission request can stop the run with exit code 3.
 
-For work you have already reviewed and authorized, `--auto-approve` approves the run's permission requests and disables delegation. It is mutually exclusive with `--deny-prompts`.
+For work you have already reviewed and authorized, `--auto-approve` approves the run's permission requests, answers any question the agent asks with its recommended option, and continues past a denied tool call instead of ending the run. Delegation stays on: worker sessions stream into the same output. It is mutually exclusive with `--deny-prompts`.
 
 ```bash
 openscience run --auto-approve --format json "Run the existing data validation script and report failures" > run.jsonl
+```
+
+Four flags shape a headless run:
+
+| Flag | Effect |
+| --- | --- |
+| `--delegation off\|light\|standard\|high` | How freely the lead dispatches workers; the default is the saved preference. |
+| `--worker-model provider/model` | The model workers run on when their agent has none configured. |
+| `--autonomy interactive\|balanced\|autonomous` | How the lead treats decision points; `--auto-approve` defaults to `autonomous`. |
+| `--deadline <seconds>` | A wall-clock budget. The agent sees `Time budget` and `elapsed` in its environment, gets reminders at 50% and 85%, and is asked to continue when time remains and named outputs are missing. |
+
+```bash
+openscience run --format json --auto-approve --workspace project \
+  --delegation standard --deadline 600 -- "Fit the model; write results/fit.csv and results/report.md"
 ```
 
 Use a clearly scoped project and request. The command's ability to run still depends on installed tools, account access, and applicable policy.
 
 ## Read events
 
-Each event has `type`, `timestamp` in milliseconds, and `sessionID`.
+Each event has `type`, `timestamp` in milliseconds, and `sessionID`. Events from a worker session carry that session's id and a `parentID` naming the session that dispatched it; root events have no `parentID`.
 
 | Event | Main content |
 | --- | --- |
@@ -31,10 +45,11 @@ Each event has `type`, `timestamp` in milliseconds, and `sessionID`.
 | `step_start` / `step_finish` | A model step; finished steps include usage. |
 | `text` | A completed text part. |
 | `reasoning` | A completed readable reasoning part, when available. |
-| `tool_use` | A completed or failed tool call; inspect `part.state.status`. |
+| `tool_use` | A completed or failed tool call; inspect `part.state.status`. A `task` result carries the worker's answer in a `<task_result>` envelope. |
 | `permission` | The permission request and reply. |
+| `question` | A question the run answered on the agent's behalf, with the answers. |
 | `error` | An error name and data. |
-| `done` | Final `status`, `exitCode`, `tokens`, and `cost`. |
+| `done` | Final `status`, `exitCode`, the root session's `tokens` and `cost`, and `children`: one entry per worker session with its `agent`, `model`, `tokens` and `cost`. |
 
 Example completion event:
 

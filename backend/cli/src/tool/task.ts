@@ -2,6 +2,7 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
 import { Session } from "../session"
+import { Bus } from "../bus"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
@@ -335,6 +336,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
   return {
     description,
     parameters,
+    // Older callers named the continuation `session_id`; keep honouring it so
+    // an invented id under the old name is refused rather than ignored.
+    normalizeInput(args: unknown) {
+      if (!args || typeof args !== "object" || Array.isArray(args)) return args
+      const record = args as Record<string, unknown>
+      if (!("session_id" in record)) return args
+      const { session_id, ...rest } = record
+      return { ...rest, task_id: rest.task_id ?? session_id }
+    },
     async execute(params: z.infer<typeof parameters>, ctx) {
       if (publishingBrief(`${params.description}\n${params.prompt}`)) {
         throw new Error(
@@ -353,8 +363,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const attemptInput = normalizeTaskAttemptInput(params, ctx.sessionID)
       const attachments = MessageV2.SubtaskAttachment.array().parse(ctx.extra?.attachments ?? [])
+      // The normalized input also honours the retired `session_id` name, so an
+      // invented id under either name is refused before any child starts.
       const continuation = await resolveTaskContinuation({
-        requested: params.task_id,
+        requested: attemptInput.task_id,
         parentSession: parent,
         projectID: Instance.project.id,
       })
@@ -442,7 +454,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
       await ctx.metadata({ title: params.description, metadata })
 
-      const run = async (signal: AbortSignal): Promise<TaskAttempt.Result> => {
+      const run = async (signal: AbortSignal, live: boolean): Promise<TaskAttempt.Result> => {
         await using attemptLease = await TaskAttempt.acquire(identity, Number.POSITIVE_INFINITY, signal)
         return attemptLease.during(async () => {
           const current = await TaskAttempt.read(identity)
@@ -502,6 +514,36 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 const pulse = setInterval(() => {
                   void TaskAttempt.pulse({ ...identity, token }).catch(() => undefined)
                 }, 5_000)
+                // While the child runs, its tool progress is mirrored into this
+                // call's metadata so the parent's UI and the runtime API can show
+                // what the worker is doing and cancel it knowingly.
+                const observed: Record<
+                  string,
+                  { id: string; tool: string; state: { status: string; title?: string } }
+                > = {}
+                const unsubscribe = live
+                  ? Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+                      const part = evt.properties.part
+                      if (part.sessionID !== session.id || part.type !== "tool") return
+                      if (part.messageID === reserved.childMessageID) return
+                      observed[part.id] = {
+                        id: part.id,
+                        tool: part.tool,
+                        state: {
+                          status: taskToolStatus(part),
+                          title: part.state.status === "completed" ? part.state.title : undefined,
+                        },
+                      }
+                      await ctx.metadata({
+                        title: params.description,
+                        metadata: {
+                          ...metadata,
+                          summary: Object.values(observed).sort((a, b) => a.id.localeCompare(b.id)),
+                          elapsedMs: Date.now() - started,
+                        },
+                      })
+                    })
+                  : undefined
                 try {
                   // Keep progress and cancellation connected until the child settles.
                   return await SessionPrompt.withCancellation(session.id, dispatch, signal).then(
@@ -510,6 +552,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                   )
                 } finally {
                   clearInterval(pulse)
+                  unsubscribe?.()
                   const ended = await TaskAttempt.deactivate({ ...identity, token })
                   timing.activeMs = ended.activeMs ?? timing.activeMs
                 }
@@ -584,14 +627,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         })
       }
 
-      if (!params.background) return run(ctx.abort)
+      if (!params.background) return run(ctx.abort, true)
 
       // Background: the child runs detached from this call and from the
       // parent's turn (whose abort fires when the turn ends); its completion
       // wakes the parent with a synthetic message carrying the same envelope.
       if (!background.has(session.id)) {
         const parentAgent = ctx.agent
-        const pending = run(new AbortController().signal)
+        const pending = run(new AbortController().signal, false)
           .then(async (result) => {
             background.delete(session.id)
             await SessionPrompt.prompt({

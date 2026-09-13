@@ -3,7 +3,9 @@ title: "Built-in research tools"
 description: "See the operations available to the agent and learn how to request useful, checkable work."
 ---
 
-You normally use these tools through a conversation rather than calling them yourself. State the input, intended output, and limits. Tool availability depends on the agent, model, configuration, and project permissions.
+You normally use these tools through a conversation rather than calling them yourself. State the input, intended output, and limits.
+
+Which tools the agent sees follows permissions, not the wording of your request. Research starts from a default set (`bash`, `read`, `glob`, `grep`, `edit` and `write` or `apply_patch` for GPT-family models, `webfetch`, `research_search` when a search provider is connected, `literature`, `recall`, `todowrite`, `task`, `skill`, `question` in interactive clients, `python`, `compute_job`, `artifact`). Everything else appears when a loaded skill declares it in `allowed-tools`, when the agent's configuration allows it by name, or when a specialist worker carries it: `r`, the biological query tools, the `science_*` connectors, `experiments` and `study`, `generate_image`, `lsp`, `codesearch`, and remote compute.
 
 ## Read, search, and edit files
 
@@ -24,7 +26,6 @@ Give exact paths for important inputs, and preserve original data. Use [Code and
 | --- | --- | --- |
 | Python execution | `python` | [Run calculations, inspect values, and save plots](/openscience/python-r). |
 | R execution | `r` | [Analyze with R and save reproducible scripts](/openscience/python-r). |
-| Scientific readiness and supported execution | `scientific_capability` | [Check the scientific catalog and setup state](/openscience/tool-catalog). |
 | Planned and detached compute jobs | `compute_job` | [Plan, start, inspect, cancel, and recover outputs](/openscience/jobs). |
 | Supported provider account/status checks | `provider_compute` | [Connect remote resources and understand scope](/openscience/remote-compute). |
 
@@ -41,6 +42,7 @@ wait for approval before launching the job.
 | Web, research, news, and developer search | `research_search` | [Choose source, filters, and content depth](/openscience/research-search). |
 | Read a known web URL | `webfetch` | [Read and verify source documents](/openscience/documents). |
 | Find and read papers | `literature` | [Search OpenAlex and arXiv together, then read the full text by DOI or arXiv id](/openscience/literature-review#how-papers-are-found-and-read). |
+| Recover something seen earlier in this session | `recall` | Searches every earlier message, tool result and saved tool output by regular expression, including turns compaction summarized away. |
 | Search technical reference material | `codesearch` | [Use source-grounded code and repository workflows](/openscience/code). |
 | Discover scientific databases | `science_list_dbs` | [Choose a source by domain](/openscience/database-workflows). |
 | Search a scientific database | `science_search` | [Use native queries and source identifiers](/openscience/database-workflows). |

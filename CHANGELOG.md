@@ -8,6 +8,63 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Changed
+
+- The harness is OpenCode's Build path with science in skills, agents, headers
+  and switchable units. Tool visibility follows permissions: Research is offered
+  a fixed default set and everything else is unlocked by a loaded skill's
+  `allowed-tools` or an agent rule; keyword-based tool selection and the
+  quick/direct/inspection routes are gone. `apply_patch` replaces `edit`/`write`
+  for GPT-family models, `research_search` is offered only with a search
+  provider, `question` only where a client can ask.
+- Research takes a model-family header (`anthropic`, `gpt-astra`, `gpt`,
+  `codex`, `gemini`, `default`) selected by wire model id, each carrying the same
+  science sections: evidence and files, methods and deliverables (named outputs
+  become a checklist that is checked before finishing; every clause of the
+  question is binding; no placeholder values), manuscripts and figures.
+- Agents are `research`, `plan`, `explore`, the specialists `ml`, `biology`,
+  `physics`, `chemistry`, `data` (one template plus a domain skill index), and
+  the internal `compaction`, `title`, `summary`. No built-in agent has a model;
+  `agent.<name>.model`, `.variant` and `.skills` configure one. The `execute`,
+  `task`, `write`, `critique`, `physics-critique` and `literature-review`
+  profiles are retired; review is the `/review` command.
+- The Task tool follows OpenCode's contract: `subagent_type` is an agent name,
+  `task_id` resumes a worker, `subagent_depth` (default 1) bounds nesting,
+  workers work in the lead's directory, results return in a `<task_result>`
+  envelope (a failing worker returns its partial text as `<task_error>`), and
+  `background: true` runs a worker detached and wakes the lead when it ends.
+  There is no worker concurrency cap and no isolated worker workspace.
+- Compaction pins the session's first user message verbatim ahead of every
+  summary, adds Deliverables (verbatim) and Findings so far to the handoff, and
+  never prunes `todowrite` results.
+- `openscience run` gains `--delegation`, `--worker-model`, `--autonomy` and
+  `--deadline`; under `--auto-approve` delegation stays on, worker events stream
+  with a `parentID`, worker usage rolls into `done.children`, questions are
+  answered with their recommended option and a denied tool call continues the
+  loop.
+- `/init` writes the project's research context (question, data, conventions,
+  deliverables); `/review`, `/reproduce` and `/literature` are new commands;
+  `/resume` and the research-contract, scientific-capability, batch, todoread and
+  planwrite tools leave the model surface.
+
+### Added
+
+- Harness units behind `harness.<unit>` switches (all on): `redirect` (a tripped
+  repetition guard becomes one strategy-change message), `deliverables`
+  (mechanical checks of named outputs before the turn ends), `budget` (CPUs,
+  memory and time budget in the environment, reminders at 50% and 85%), `cost`
+  (spend so far and an optional soft ceiling), `headless-policy`,
+  `durable-jobs`, `workers`. Plugins get two new hook points, `loop.before_finish`
+  and `loop.guard`, plus `env.lines`.
+- `recall`: search this session's earlier messages, tool results and saved tool
+  outputs by regular expression, including turns compaction summarized away.
+- The `execution-hygiene` core skill and eleven convention skills
+  (statistics, Lean 4, Coq, cheminformatics definitions, structure analysis,
+  patents, geoscience data, energy systems, astronomy inference, atomistic
+  workflows, analysis reports), authored from public documentation with sources.
+- Harbor adapter kwargs `delegation`, `worker_model`, `autonomy`, `deadline`;
+  trajectories include worker steps and usage.
+
 ## v2.0.96 — 2026-09-13
 
 ### Added

@@ -21,75 +21,83 @@ In this guide, `src/...` paths are relative to `backend/cli`; prompt paths such 
 `agent/prompt/...` and `session/prompt/...` are relative to `backend/cli/src`.
 
 The Research loop is shared across providers. Prompt selection, scientific context,
-model options and API serialization are separate steps. Do not infer active routing
-from a prompt filename: several files serve hidden compatibility profiles.
+model options and API serialization are separate steps. The harness is OpenCode's
+Build path with science in skills, agents, headers and a few switchable units;
+the loop itself knows nothing about science, deliverables or budgets.
 
 ```text
 Agent registry + selected model + current user message
-    -> select agent header, otherwise generic fallback
-    -> environment, project instructions, applicable skills and mode reminders
+    -> agent prompt, otherwise the model-family header with the science block
+    -> environment (+ harness env lines), project instructions, core-skills index, posture reminder
     -> system-transform plugin, then parameter/header hooks
     -> provider message/tool normalization and inference options
     -> provider API
+    -> on a final answer or a tripped guard, the harness units may continue or redirect
 ```
 
 ### Header selection
 
-`src/agent/agent.ts` currently assigns the default `research` agent
-`SystemPrompt.response(PROMPT_RESEARCH_AGENT_TEST)`: the short
-`agent/prompt/researchagent-test.txt` plus `session/prompt/response.txt`.
-Despite its historical filename, this is the active default Research header.
-`agent/prompt/research.txt` is a longer compatibility workflow; it is not the
-ordinary Research header.
-
 `LLM.prompts` in `src/session/llm.ts` selects an explicit `agent.prompt` first.
-If none exists, `SystemPrompt.provider(model, direct, inspection)` supplies a
-fallback. That fallback currently ignores model identity and selects the common
-core/direct/inspection contract. Adding model routing only inside
-`SystemPrompt.provider` would therefore **not affect default Research**.
+An agent without one (`research`, `plan`) receives the model-family header:
+`SystemPrompt.provider(model)` in `src/session/system.ts` routes by wire model
+id in OpenCode's order (`gpt-4`/`o1`/`o3` and other `gpt` → `gpt.txt`;
+`gpt-6`/`astra` → `gpt-astra.txt`; `codex` → `codex.txt`; `gemini-` →
+`gemini.txt`; `claude` → `anthropic.txt`; otherwise `default.txt`). Each family
+file carries one `{{SCIENCE}}` slot that the runtime fills with
+`agent/prompt/science.txt` (Evidence and files; Methods and deliverables;
+Manuscripts and figures), so the science text is byte-identical across
+families. `session/prompt/response.txt` is appended to every header.
 
-An agent's configured `prompt` replaces its built-in header. Preserve this
-behavior for custom agents and internal title/compaction agents. The
-[OpenCode harness comparison](docs/notes/opencode-harness-comparison.md) documents
-upstream prompt selection and contrasts it with this current behavior.
+Specialist agents (`ml`, `biology`, `physics`, `chemistry`, `data`) have their
+own prompt: `agent/prompt/specialist.txt` with the same `{{SCIENCE}}` slot and
+a `{{DOMAIN_SKILLS}}` slot that `SystemPrompt.render` fills from the agent's
+skill categories at prompt time. An agent's configured `prompt` replaces its
+built-in header, as before. On the `openai-codex` OAuth route a primary agent's
+header travels in `options.instructions`; a worker's prompt stays in context
+beneath the family header.
 
 ### Context and reminders
 
-`src/session/prompt.ts` assembles the current environment, project instructions,
-and applicable reminder context before invoking `LLM.stream`. The filesystem
-snapshot determines whether tools work in isolated scratch or the durable project.
-Minimal Research avoids the generic compute and research-contract preambles.
-Its system skill catalog is included for an explicit slash-skill invocation;
-skill/tool discovery remains available through the existing tool layer.
+`src/session/prompt.ts` assembles the environment (`SystemPrompt.environment`,
+including lines the harness units add through the `env.lines` hook: compute,
+time budget, spend), project instructions, the `<core-skills>` index for the
+lead (or the full catalog on an explicit `/skill` invocation), and the system
+reminders before invoking `LLM.stream`. The one standing reminder is the
+posture line from `researchEffortReminder` (effort, delegation level,
+independence); Plan receives `session/prompt/plan.txt` instead. There is no
+keyword-based tool selection and no quick/direct/inspection routing.
 
-`insertReminders` supplies ordinary mode/effort guidance in system context and
-moves old synthetic user reminders into that context when reading saved sessions.
-It preserves the durable history. Domain compatibility profiles can receive their
-longer workflow reminder; default Research receives only its applicable effort
-reminder. This is not a universal second prompt injected as a user message.
+### Tool surface
 
-Direct and inspection routing also change tool/context selection. Because
-`agent.prompt` wins header selection, those routes do not replace the default
-Research header with `direct.txt` or `inspection.txt`.
+`ToolRegistry.tools` in `src/tool/registry.ts` offers a tool when the agent's
+ruleset does not deny it (`ToolVisibility.enabled`) and it is in the shared
+default set, unlocked by a skill loaded in the current task epoch
+(`allowed-tools`), or named by an explicit allow rule of the agent
+(`Agent.Info.unlocks`). `apply_patch` replaces `edit`/`write` for GPT-family
+wire ids; `research_search` needs a configured search provider; `question`
+needs a client that can ask. `src/tool/visibility.ts` holds the rules.
+
+### Harness units and hook points
+
+`src/harness/*` are internal plugins registered at boot behind
+`harness.<unit>` config switches (all on by default): `redirect`,
+`deliverables`, `budget`, `cost`, plus the switches `headless-policy`,
+`durable-jobs`, `workers`. The loop offers two hook points: `loop.before_finish`
+(the model returned a final answer; a unit may inject a bounded continuation)
+and `loop.guard` (a repetition guard tripped; a unit may redirect instead of
+stopping). Injected continuations are durable synthetic user messages of kind
+`harness`.
 
 ### Provider transport and plugins
 
 On ordinary routes, `LLM.stream` joins the selected header, caller system context,
-last-user custom system context and applicable plan instructions into a system
-block. `experimental.chat.system.transform` can transform or append blocks. An
+last-user custom system context into a system block.
+`experimental.chat.system.transform` can transform or append blocks. An
 empty replacement restores the original; appended blocks are regrouped when the
 first block is unchanged. `chat.params` and `chat.headers` then adjust inference
 parameters and request headers. `ProviderTransform.message` normalizes both
 streaming and non-streaming SDK requests, including media, tool IDs, reasoning
 replay, cache annotations and provider-option namespaces.
-
-The `openai-codex` OAuth route uses a distinct transport: default Research's header
-is sent once through `options.instructions`, and the remaining assembled context
-is sent as a user-role message. For a non-Research agent with its own prompt, that
-agent contract stays in context while the generic instructions occupy the API
-instructions field. Do not duplicate either field or apply this rule to every
-OpenAI-compatible provider. An explicit `chat.params` plugin can change options;
-the actual serialized request remains the evidence.
 
 Inference settings follow provider defaults, model options, tier options, agent
 options and the selected variant, followed by plugin adjustments. A tier may route
@@ -98,24 +106,26 @@ not only the displayed model name or an effort label.
 
 ### Active prompt files
 
-| File                                                                                        | Role                                                             |
-| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `agent/prompt/researchagent-test.txt` + `session/prompt/response.txt`                       | Default Research header and writing defaults                     |
-| `session/prompt/core.txt`                                                                   | Generic fallback for agents without their own header             |
-| `session/prompt/direct.txt`, `inspection.txt`                                               | Narrow generic fallbacks and compatibility routing inputs        |
-| `agent/prompt/research.txt`, `biology.txt`, `physics.txt`, `ml.txt`, `write.txt`            | Longer compatibility workflows selected through reminder routing |
-| `agent/prompt/explore.txt`, `literature-review.txt`, `critique.txt`, `physics-critique.txt` | Explicit hidden-agent headers                                    |
-| `agent/prompt/compaction.txt`, `title.txt`                                                  | Internal summarization and UI-label agents                       |
-| `session/prompt/plan.txt`, `build-switch.txt`, `max-steps.txt`                              | Plan, mode-transition and step-limit guidance                    |
+| File                                                                                              | Role                                                                |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `agent/prompt/{anthropic,gpt-astra,gpt,codex,gemini,default}.txt` + `session/prompt/response.txt` | Model-family headers for research and plan, with writing defaults   |
+| `agent/prompt/science.txt`                                                                        | The shared science block filled into every `{{SCIENCE}}` slot       |
+| `agent/prompt/specialist.txt`                                                                     | The specialist worker template (`{{SCIENCE}}`, `{{DOMAIN_SKILLS}}`) |
+| `agent/prompt/explore.txt`                                                                        | The scout worker                                                    |
+| `agent/prompt/compaction.txt`, `title.txt`, `summary.txt`                                         | Internal summarization, UI-label and lab-notebook agents            |
+| `session/prompt/plan.txt`, `build-switch.txt`, `max-steps.txt`                                    | Plan, mode-transition and step-limit guidance                       |
+| `tool/task.txt`, `tool/recall.txt`, `tool/literature.txt`                                         | Tool contracts the model reads                                      |
 
 ## Agent registry
 
-`src/agent/agent.ts` defines built-in profiles and merges configured overrides.
-`research` is the user-facing default and plan-exit target. Explore and Execute
-are hidden task profiles; `plan` is read-only. Domain and older task profiles
-remain hidden compatibility routes. `compaction` and `title` are internal agents.
-A custom agent can be configured under `openscience.json` -> `agent` or created
-through the agent CLI.
+`src/agent/agent.ts` defines the built-in profiles and merges configured
+overrides: `research` (primary, default), `plan` (primary, hidden), `explore`
+(subagent), the specialists `ml`, `biology`, `physics`, `chemistry`, `data`
+(subagents built from one template plus their skill categories), and the
+internal `compaction`, `title`, `summary`. No built-in agent carries a model;
+`agent.<name>.model`, `.variant` and `.skills` in `openscience.json` configure
+one, and a configured `permission` rule that names a tool unlocks it for that
+agent. Recommended models live in the documentation.
 
 ## Trace a behavior problem
 

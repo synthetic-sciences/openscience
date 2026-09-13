@@ -8,21 +8,21 @@ works inside `backend/cli` as a project); this file is about the repository.
 
 ## Map
 
-| Path                 | What lives there                                                            |
-| -------------------- | --------------------------------------------------------------------------- |
-| `backend/cli`        | The `openscience` CLI and local server: sessions, tools, providers, skills  |
-| `frontend/workspace` | The browser workspace (SolidJS), embedded into the CLI at build time        |
-| `frontend/ui`        | Shared components, themes, icons (`@synsci/ui`)                             |
-| `frontend/desktop`   | The Electron shell and its signed self-updater                              |
-| `frontend/docs`      | The documentation site                                                      |
-| `frontend/landing`   | openscience.sh (own lockfile, not a workspace member)                       |
-| `tooling/sdk/js`     | The TypeScript SDK, generated from the server's OpenAPI contract            |
-| `tooling/plugin`     | The plugin runtime (`@synsci/plugin`)                                       |
-| `tooling/util`       | Small helpers shared by backend and frontend (`@synsci/util`)               |
-| `tooling/repo`       | Setup, SDK regeneration, test sharding, release scripts                     |
-| `tooling/harbor`     | Harbor / Terminal-Bench adapter for the headless `openscience run` contract |
-| `evals`              | Launch evals and the research-harness dev lab                               |
-| `docs/notes`         | Engineering notes: verification loop, release process, extension guides     |
+| Path                 | What lives there                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `backend/cli`        | The `openscience` CLI and local server: sessions, tools, providers, skills, and the harness units in `src/harness` |
+| `frontend/workspace` | The browser workspace (SolidJS), embedded into the CLI at build time                                               |
+| `frontend/ui`        | Shared components, themes, icons (`@synsci/ui`)                                                                    |
+| `frontend/desktop`   | The Electron shell and its signed self-updater                                                                     |
+| `frontend/docs`      | The documentation site                                                                                             |
+| `frontend/landing`   | openscience.sh (own lockfile, not a workspace member)                                                              |
+| `tooling/sdk/js`     | The TypeScript SDK, generated from the server's OpenAPI contract                                                   |
+| `tooling/plugin`     | The plugin runtime (`@synsci/plugin`)                                                                              |
+| `tooling/util`       | Small helpers shared by backend and frontend (`@synsci/util`)                                                      |
+| `tooling/repo`       | Setup, SDK regeneration, test sharding, release scripts                                                            |
+| `tooling/harbor`     | Harbor / Terminal-Bench adapter for the headless `openscience run` contract                                        |
+| `evals`              | Launch evals, cadence lab, and Harbor science-benchmark campaigns                                                  |
+| `docs/notes`         | Engineering notes: verification loop, release process, extension guides                                            |
 
 `ARCHITECTURE.md` explains how the pieces fit; `CONTRIBUTING.md` covers the
 dev loops and PR expectations; `docs/notes/release-process.md` is how releases

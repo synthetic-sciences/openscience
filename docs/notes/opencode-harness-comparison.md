@@ -319,3 +319,24 @@ study driver: the driver watches runs, enforces kill criteria and budgets, wakes
 the session with "Study update" user messages, and the study reminder in system
 context carries the objective, baseline, best, queue, budget, directives and
 lessons every turn, so the loop survives compaction.
+
+## State after the harness refinement (13 September 2026)
+
+The refinement described in `opencode-core-for-science.md` closed most of the
+gaps this note recorded, against OpenCode commit
+`95daf90670b7c039c436c85537da5fbfe2205b41`:
+
+| Concern          | OpenCode                                                                                               | OpenScience now                                                                                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Header selection | `SystemPrompt.provider` by wire model id, one file per family                                          | The same routing (`anthropic`, `gpt-astra`, `gpt`, `codex`, `gemini`, `default`) with the coding sections replaced by one shared `{{SCIENCE}}` block; `research` and `plan` carry no prompt of their own |
+| Tool visibility  | Permission ruleset only                                                                                | Permission ruleset plus a shared default set, skill `allowed-tools` unlocks and per-agent allow rules; no keyword selection                                                                              |
+| Agents           | build, plan, general, explore, compaction, title, summary                                              | research, plan, explore, five specialists from one template plus a `<domain-skills>` index, compaction, title, summary; no models in code                                                                |
+| Task tool        | `subagent_type` = agent name, `task_id`, `subagent_depth`, same directory, `<task_result>`, background | The same contract, keeping the restart-safe attempt record and structured execution receipts                                                                                                             |
+| Compaction       | Template with Objective / Work State / Next Move                                                       | The same shape plus Deliverables (verbatim) and Findings so far; the root user message is pinned ahead of every summary; `todowrite` results are never pruned                                            |
+| Loop extensions  | None                                                                                                   | `loop.before_finish` and `loop.guard` hooks; the switchable units `redirect`, `deliverables`, `budget`, `cost`, `headless-policy`, `durable-jobs`, `workers`                                             |
+| Headless run     | n/a                                                                                                    | `--delegation`, `--worker-model`, `--autonomy`, `--deadline`; child events tagged with `parentID`; usage rolled into `done.children`                                                                     |
+
+What still differs deliberately: the `<core-skills>` index in the lead's
+context, the `literature` and `recall` tools, the Results store and the
+autoresearch tools (skill-unlocked), and the posture reminder as a runtime
+setting rather than header text.

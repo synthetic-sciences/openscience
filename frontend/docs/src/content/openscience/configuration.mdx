@@ -51,10 +51,27 @@ Use `/check-data data/samples.csv` in the workspace, or `openscience run --comma
 | `mcp` | External tool connections. |
 | `plugin` | Plugin packages or local module URLs. |
 | `permission` | Action rules such as `ask`, `allow`, and `deny`. |
+| `agent.<name>` | Per-agent `model`, `variant`, `skills` (categories for a specialist's domain index), `prompt`, `permission`. A rule that names a tool offers it to that agent without a skill. |
+| `subagent_depth` | How many levels of workers may nest; default `1` (only the lead dispatches). |
+| `harness` | Switches for the harness units, all on by default: `redirect`, `deliverables`, `budget`, `cost` (or `{ "max_usd": n }` for a soft spend ceiling), `headless-policy`, `durable-jobs`, `workers`. |
 | `server.port` | Port for the local workspace or server. |
 | `autoupdate` | Update preference: `true`, `false`, or `"notify"`. |
 
 Provider and model identifiers must match the configured catalog. Use `openscience models --flat` to find them.
+
+### Harness units
+
+Each unit delivers one piece of context at a precise point in the loop and can be switched off with `"harness": { "<unit>": false }`:
+
+| Unit | What it does |
+| --- | --- |
+| `redirect` | When the same tool failure repeats three times (or the model loops on text), inject one strategy-change message instead of stopping; a second trip stops the turn. |
+| `deliverables` | When the first request names its output files, check each named file before the turn ends (present, non-empty, parses, no NaN/Inf, no placeholder text, no duplicate ids) and list the failures once; two rounds at most. |
+| `budget` | Show CPUs and memory (from the container's cgroup) and, with a deadline, the time budget and elapsed time in the environment block; remind at 50% and 85%; ask to continue when time remains and deliverables fail. |
+| `cost` | Show spend so far beside the time budget; an optional soft ceiling adds a wrap-up reminder, never a hard stop. |
+| `headless-policy` | In `openscience run --auto-approve`, continue past denied tool calls and answer questions with their recommended option. |
+| `durable-jobs` | Keep tool hints consistent with what is offered: the truncation hint suggests a worker only when delegation is on. |
+| `workers` | Stream child-session events in headless runs and roll their usage into `done`. |
 
 ## Scope and overrides
 

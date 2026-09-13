@@ -123,10 +123,7 @@ describe("science harness campaign", () => {
     await mkdir(path.join(dataset, "skip-me"), { recursive: true })
     await mkdir(harness, { recursive: true })
     await Bun.write(path.join(dataset, "keep-me", "task.toml"), 'domain = "science"\n')
-    await Bun.write(
-      path.join(dataset, "also-science", "task.toml"),
-      '[metadata]\ncategory = "science"\n',
-    )
+    await Bun.write(path.join(dataset, "also-science", "task.toml"), '[metadata]\ncategory = "science"\n')
     await Bun.write(path.join(dataset, "skip-me", "task.toml"), 'domain = "software"\n')
     await Bun.write(path.join(harness, "campaign.py"), await Bun.file(path.join(root, "campaign.py")).text())
     await Bun.write(path.join(harness, "tb4-science-tasks.json"), '{"tasks":null}\n')
